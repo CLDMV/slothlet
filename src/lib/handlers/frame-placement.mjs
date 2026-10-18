@@ -556,33 +556,36 @@ export function isForeignScript(frame) {
 /**
  * The SHA-256 of each file's source as it is on disk, by comparable path, with the modification time it was read at
  * (#597). A file is read once; it is read again only when a frame's script differs from it and the file has changed
- * since.
- * @type {Map<string, {mtimeMs: number, hashes: Set<string>}|null>}
+ * since — or, for one that could not be read, has appeared or changed since.
+ * @type {Map<string, {mtimeMs: number, hashes: Set<string>}>}
  * @private
  */
 const FILE_SOURCE_HASHES = new Map();
 
 /**
- * The SHA-256 hashes a file's source as it is on disk can be compiled under: of its bytes, and of its text without a
- * byte-order mark (Node's CommonJS loader drops one before compiling).
+ * The SHA-256 hashes a file's source as it is on disk can be compiled under. V8 hashes the text it compiles, which
+ * the loaders decode from the file as UTF-8 — a byte that is not UTF-8 becomes U+FFFD — without a byte-order mark;
+ * the hash of the bytes themselves (with and without a byte-order mark) is accepted as well.
  * @param {string} path - A comparable path.
- * @returns {{mtimeMs: number, hashes: Set<string>}|null} The hashes, or null when the file cannot be read.
+ * @returns {{mtimeMs: number, hashes: Set<string>}} The hashes, none when the file cannot be read, with the
+ *   modification time read (-1 when the file cannot be found).
  * @private
  */
 function runtime_readFileSourceHashes(path) {
+	const fs = globalThis.process.getBuiltinModule("node:fs");
+	let mtimeMs = -1;
 	try {
-		const fs = globalThis.process.getBuiltinModule("node:fs");
 		const crypto = globalThis.process.getBuiltinModule("node:crypto");
-		const { mtimeMs } = fs.statSync(path);
+		mtimeMs = fs.statSync(path).mtimeMs;
 		const source = fs.readFileSync(path);
-		const hashes = new Set([crypto.createHash("sha256").update(source).digest("hex")]);
-		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) {
-			hashes.add(crypto.createHash("sha256").update(source.subarray(3)).digest("hex"));
-		}
+		const sha256 = (data) => crypto.createHash("sha256").update(data).digest("hex");
+		const hashes = new Set([sha256(source), sha256(new TextDecoder().decode(source))]);
+		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) hashes.add(sha256(source.subarray(3)));
 		return { mtimeMs, hashes };
 	} catch {
-		// A file that is not there (a name code was compiled under), or cannot be read, runs nothing of its own.
-		return null;
+		// A file that is not there (a name code was compiled under), or cannot be read, runs nothing of its own — until
+		// it is there, or changes: its modification time is checked again then.
+		return { mtimeMs, hashes: new Set() };
 	}
 }
 
@@ -598,6 +601,8 @@ function runtime_readFileSourceHashes(path) {
  */
 function runtime_runsFileSource(frame) {
 	if (!isNode || !frame.hash) return true;
+	// The scripts loaded since the last look, a CommonJS file's among them, are its own code's (#597).
+	runtime_readLoadedSources();
 	if (frame.key && SCRIPT_HASHES.get(frame.key)?.has(frame.hash)) return true;
 	let known = FILE_SOURCE_HASHES.get(frame.path);
 	if (known === undefined) {
@@ -605,7 +610,6 @@ function runtime_runsFileSource(frame) {
 		if (FILE_SOURCE_HASHES.size >= 4096) FILE_SOURCE_HASHES.clear();
 		FILE_SOURCE_HASHES.set(frame.path, known);
 	}
-	if (!known) return false;
 	if (known.hashes.has(frame.hash)) return true;
 	// The file may have changed since it was read (an edit before a reload): it is read again only then.
 	let mtimeMs;
@@ -617,7 +621,7 @@ function runtime_runsFileSource(frame) {
 	if (mtimeMs === known.mtimeMs) return false;
 	const fresh = runtime_readFileSourceHashes(frame.path);
 	FILE_SOURCE_HASHES.set(frame.path, fresh);
-	return Boolean(fresh?.hashes.has(frame.hash));
+	return fresh.hashes.has(frame.hash);
 }
 
 /**

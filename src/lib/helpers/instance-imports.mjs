@@ -599,6 +599,8 @@ function loadInstanceModule(url, context, nextLoad) {
 	if (!url.startsWith("file:")) return result;
 	const [base, query = ""] = splitQuery(url);
 	const params = new URLSearchParams(query);
+	// A CommonJS file's source is recorded as it is loaded, as an ES module's is below (#597).
+	if (isCommonJSLoad(result)) recordLoadedSource(url, result.source);
 	if (params.has(REQUIRE_PARAM)) {
 		// require() of a file in an instance scope: an ES module is served the instance's copy;
 		// anything else is CommonJS (or JSON/addon) and already served by the scope's private cache.
@@ -622,10 +624,23 @@ function loadInstanceModule(url, context, nextLoad) {
 }
 
 /**
- * Record the hash of the source an instance's ES module is compiled from (#597): the SHA-256 V8 reports for every
- * frame of that module (`CallSite#getScriptHash()`), so code compiled elsewhere under the module's URL — whose script
- * has another hash — is not taken for it. Appended to a log the frame placer reads; best effort, since a hook
- * registered after this one could still change the source, which only makes such frames fail closed.
+ * Whether a load result is a CommonJS file's: its format says so, or — for a `require()` of a file with an extension
+ * Node does not know, which it compiles as CommonJS — it names no format and carries the source text.
+ * @param {object|undefined} result - The load result.
+ * @returns {boolean} True for a CommonJS file's source.
+ * @private
+ */
+function isCommonJSLoad(result) {
+	return result?.format === "commonjs" || (result?.format == null && typeof result?.source === "string");
+}
+
+/**
+ * Record the hash of the source an instance's ES module, or any CommonJS file, is compiled from (#597): the SHA-256
+ * V8 reports for every frame of that script (`CallSite#getScriptHash()`), so code compiled elsewhere under the file's
+ * name — whose script has another hash — is not taken for it. V8 hashes the text it compiles: the source decoded as
+ * UTF-8 (a byte that is not UTF-8 becomes U+FFFD) without a byte-order mark, which both loaders drop. Appended to a
+ * log the frame placer reads; best effort, since a hook registered after this one could still change the source,
+ * which only makes such frames fail closed.
  * @param {string} url - The module URL, query included.
  * @param {string|ArrayBufferView|ArrayBuffer|undefined} source - The source the load hook returned.
  * @returns {void}
@@ -634,7 +649,7 @@ function loadInstanceModule(url, context, nextLoad) {
 function recordLoadedSource(url, source) {
 	if (source === undefined || source === null) return;
 	let text;
-	if (typeof source === "string") text = source;
+	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
 	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = new TextDecoder().decode(source);
 	else return;
 	const hash = nodeBuiltin("node:crypto").createHash("sha256").update(text, "utf8").digest("hex");
@@ -737,8 +752,14 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 				}
 				return applyToResult(specifier, context, nextResolve(specifier, context));
 			},
-			// Only instance-marked URLs are touched; every other load passes straight through.
-			load: (url, context, nextLoad) => (url.includes(MARKER) ? loadInstanceModule(url, context, nextLoad) : nextLoad(url, context))
+			// Only instance-marked URLs are touched; every other load passes straight through, a CommonJS file's
+			// source hash recorded on the way (#597).
+			load: (url, context, nextLoad) => {
+				if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
+				const result = nextLoad(url, context);
+				if (url.startsWith("file:") && isCommonJSLoad(result)) recordLoadedSource(url, result.source);
+				return result;
+			}
 		});
 	} else {
 		return false;
