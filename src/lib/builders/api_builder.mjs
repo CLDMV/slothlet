@@ -117,13 +117,21 @@ function runTeardownAsHost(slothlet, fn) {
  *
  * @param {object} slothlet - The instance.
  * @param {object} currentStore - The store the scope descends from.
- * @returns {{currentWrapper: object|null|undefined, currentCeiling: object|null}} The scope's identity.
+ * @returns {{currentWrapper: object|null|undefined, currentCeiling: object|null, record: object|null}} The scope's identity,
+ *   with the running call's record when the scope is that call's own.
  * @private
  */
 function runtime_scopeIdentity(slothlet, currentStore) {
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-	if (identity?.ceiling) return { currentWrapper: identity.currentWrapper, currentCeiling: identity.ceiling };
-	return { currentWrapper: currentStore.currentWrapper, currentCeiling: currentStore.currentCeiling ?? null };
+	if (identity?.ceiling) return { currentWrapper: identity.currentWrapper, currentCeiling: identity.ceiling, record: null };
+	// The scope stays inside the running call: code that call was handed and runs inside the scope is still told
+	// apart from the call's own (#597).
+	const record = identity?.record ?? currentStore.record ?? null;
+	return {
+		currentWrapper: currentStore.currentWrapper,
+		currentCeiling: currentStore.currentCeiling ?? null,
+		record: record && record.wrapper === currentStore.currentWrapper ? record : null
+	};
 }
 
 /**

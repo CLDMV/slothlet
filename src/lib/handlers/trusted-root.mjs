@@ -232,25 +232,51 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// for an existing claim.
 	if (!owners || !Object.prototype.hasOwnProperty.call(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
-	// The writer's identity is the currently-executing module's apiPath (same derivation the call
-	// gate uses); host writes have no currentWrapper.
-	// Ownership stays with the running leaf: a scope opened by code a caller supplied to it carries the leaf as
-	// its ceiling (#597), and the leaf is the writer.
-	const writer = (writerCtx.currentCeiling ?? writerCtx.currentWrapper)?.____slothletInternal?.apiPath ?? null;
+	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
+	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
+	// key, so supplied code can write a key only where both it and the leaf it runs inside could. Host writes have no
+	// writer.
+	const writers = writersOf(writerCtx).map((wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
+	const writer = writers[0] ?? null;
 	if (owner === PROTECT_SENTINEL) {
 		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
 			validationError: true
 		});
 	}
-	// The writer identity is the executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
+	// A writer identity is an executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
 	// An owner name matches that leaf exactly OR as a module prefix (`callers.dataReader` owns every
 	// leaf under it), so a module can own a key without naming each of its functions.
-	const owned = writer !== null && (writer === owner || writer.startsWith(owner + "."));
-	if (!owned) {
-		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: String(owner), writer: writer ?? "host" }, null, {
-			validationError: true
-		});
+	const refused = writers.length ? writers.find((path) => !(path !== null && (path === owner || path.startsWith(owner + ".")))) : null;
+	if (!writers.length || refused !== undefined) {
+		throw new SlothletError(
+			"CONTEXT_KEY_PROTECTED",
+			{ key: pathKey, owner: String(owner), writer: (writers.length ? refused : null) ?? "host" },
+			null,
+			{ validationError: true }
+		);
 	}
+}
+
+/**
+ * Who writes from a store: the identity executing in it, as the context manager resolves it, followed by every call
+ * of the ceiling it runs under (#597). Empty for the host. A store with no instance to ask (a view used after its
+ * scope ended) answers from its own fields.
+ *
+ * @param {object} store - The store the write is made from.
+ * @returns {Array<object>} The writing wrappers, the executing one first.
+ * @throws {SlothletError} PERMISSION_DENIED when who is executing cannot be told.
+ * @internal
+ */
+export function writersOf(store) {
+	const slothlet = store?.slothlet;
+	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID) ?? {
+		currentWrapper: store?.currentWrapper ?? null,
+		ceiling: store?.currentCeiling ?? null
+	};
+	// A writer that cannot be told apart is no one's, and not the host either.
+	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (!identity.currentWrapper) return [];
+	return [identity.currentWrapper, ...identityCeilings(identity)];
 }
 
 /**

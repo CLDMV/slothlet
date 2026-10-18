@@ -56,6 +56,7 @@ import {
 	isFrameworkReservedKey
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
+import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -86,23 +87,6 @@ import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
 
 const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
-
-/**
- * A member's value when the member holds data, read from its descriptor; `undefined` for an accessor.
- *
- * A walk over what was just mounted looks for wrappers still loading, and a getter holds none: it is the module's
- * own code, which runs when something reads it, as that reader — never as a side effect of mounting (#597).
- *
- * @param {object} owner - The object holding the member.
- * @param {string} key - The member.
- * @returns {*} Its value, or `undefined` for an accessor.
- * @private
- */
-function runtime_dataMember(owner, key) {
-	const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-	if (!descriptor) return owner[key];
-	return Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
-}
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -510,7 +494,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
 	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
-	 * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+	 * @param {object|Array<object>|null} callerWrapper - Caller's wrapper from ALS (may be null for external code); a list,
+	 *   the executing wrapper first, when the writer acts for several modules (#597) — each has to own the path.
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
@@ -562,12 +547,58 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
-		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
-		// point is `lib.config` — that whole subtree is the module's domain. We look
-		// up the mount point (endpoint) via the ownership handler.
+		// Code a caller supplied to another module's call writes as every module it acts for (#597): a list of
+		// wrappers, the executing one first, each of which has to own the path. The first owns what is created.
+		const writers = (Array.isArray(callerWrapper) ? callerWrapper : [callerWrapper]).filter(Boolean);
+		callerWrapper = writers[0] ?? null;
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
-		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
+		for (const writer of writers) this.#assertOwnsPath(writer, parts);
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: callerSourceFolder
+		});
+		const finalKey = parts[parts.length - 1];
+
+		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
+		// they get the same hook / permission / lifecycle treatment that
+		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
+		if (isWrappable) {
+			const wrapper = new UnifiedWrapper(this.slothlet, {
+				mode: this.____config.mode,
+				apiPath: parts.join("."),
+				moduleID: callerModuleID,
+				isCallable: typeof value === "function",
+				sourceFolder: callerSourceFolder
+			});
+			wrapper.___setImpl(value, callerModuleID);
+			parent[finalKey] = wrapper.createProxy();
+		} else {
+			parent[finalKey] = value;
+		}
+	}
+
+	/**
+	 * Throw unless a writer's module owns an api path: the path lies under the module's mount point. A base-loaded
+	 * module (mounted at the root) and the host own the whole tree.
+	 *
+	 * Ownership root = the caller module's MOUNT POINT, not its function-level apiPath. The wrapper for
+	 * `lib.config.foo` may belong to a module whose entire mount point is `lib.config` — that whole subtree is the
+	 * module's domain. The mount point (endpoint) is looked up via the ownership handler.
+	 *
+	 * @param {object} writer - The writing wrapper.
+	 * @param {string[]} parts - The path's segments.
+	 * @returns {void}
+	 * @throws {SlothletError} LOOSE_SET_NOT_OWNED when the path is outside the module's mount.
+	 * @private
+	 */
+	#assertOwnsPath(writer, parts) {
+		const callerModuleID = writer?.____slothletInternal?.moduleID ?? null;
+		const callerWrapperPath = writer?.____slothletInternal?.apiPath ?? null;
 		let ownedRoot = null;
 		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
 			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
@@ -600,33 +631,6 @@ export class ApiManager extends ComponentBase {
 					validationError: true
 				});
 			}
-		}
-
-		// Walk to the parent container, creating namespace wrappers as needed.
-		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
-		const root = this.slothlet.boundApi;
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: callerModuleID,
-			sourceFolder: callerSourceFolder
-		});
-		const finalKey = parts[parts.length - 1];
-
-		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
-		// they get the same hook / permission / lifecycle treatment that
-		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
-		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
-		if (isWrappable) {
-			const wrapper = new UnifiedWrapper(this.slothlet, {
-				mode: this.____config.mode,
-				apiPath: parts.join("."),
-				moduleID: callerModuleID,
-				isCallable: typeof value === "function",
-				sourceFolder: callerSourceFolder
-			});
-			wrapper.___setImpl(value, callerModuleID);
-			parent[finalKey] = wrapper.createProxy();
-		} else {
-			parent[finalKey] = value;
 		}
 	}
 
@@ -2615,7 +2619,7 @@ export class ApiManager extends ComponentBase {
 					// Check wrapper child properties for nested wrappers that might be materializing
 					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
-						collectPendingMaterializations(runtime_dataMember(wrapper, key), depth + 1);
+						collectPendingMaterializations(dataMemberOf(wrapper, key), depth + 1);
 					}
 					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
 					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
@@ -2629,7 +2633,7 @@ export class ApiManager extends ComponentBase {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
 					if (key !== "____slothletInternal") {
-						collectPendingMaterializations(runtime_dataMember(obj, key), depth + 1);
+						collectPendingMaterializations(dataMemberOf(obj, key), depth + 1);
 					}
 				}
 			};

@@ -42,7 +42,7 @@
 
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -185,9 +185,9 @@ export const self = new Proxy(
 				// the writer for ownership purposes.
 				// Per-flow identity: the writer decides ownership of owner-locked keys, so a stale
 				// shared field would attribute this write to another module.
-				// Ownership stays with the running leaf: code a caller supplied to it writes under the leaf (#597).
-				const writer = liveRuntime.getCallerIdentity?.();
-				apiManager.setOwnedProperty(String(prop), value, writer?.ceiling ?? writer?.currentWrapper ?? ctx.currentWrapper ?? null);
+				// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
+				// and each of them has to own the path (#597).
+				apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;

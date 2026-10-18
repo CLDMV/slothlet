@@ -44,7 +44,7 @@
 
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -150,8 +150,9 @@ export const self = new Proxy(
 				// `currentWrapper` is the module currently executing (the one
 				// doing `self.X = …`); `callerWrapper` is who *called* it.
 				// Ownership is anchored to the currently executing module.
-				// Ownership stays with the running leaf, which a scope opened by supplied code carries as its ceiling (#597).
-				apiManager.setOwnedProperty(String(prop), value, ctx.currentCeiling ?? ctx.currentWrapper ?? null);
+				// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
+				// and each of them has to own the path (#597).
+				apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;
