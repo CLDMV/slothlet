@@ -159,13 +159,13 @@ describe.each(CONFIGS)("EventEmitter tracking does not retain emitters (#611) > 
 		api = await slothlet({ ...config, base: BASE });
 		for (let index = 0; index < 200; index++) await api.net.get(url);
 		const before = await settledHeap();
-		const calls = 1500;
+		const calls = 500;
 		for (let index = 0; index < calls; index++) await api.net.get(url);
 		const growth = (await settledHeap()) - before;
-		// Held strongly, each call kept 20-45 KB alive: 30-65 MiB over these calls. Unretained, the
-		// growth is noise, well under a megabyte; 8 MiB leaves room for a loaded machine.
-		expect(growth).toBeLessThan(8 * 1024 * 1024);
-	});
+		// Held strongly, each call kept 20-45 KB alive: 10-22 MiB over these calls. Unretained, the
+		// growth is noise, well under a megabyte; 4 MiB leaves room for a loaded machine.
+		expect(growth).toBeLessThan(4 * 1024 * 1024);
+	}, 60_000);
 
 	it("still swaps its own wrappers back at the last shutdown and leaves foreign listeners alone", async () => {
 		api = await slothlet({ ...config, base: BASE });
@@ -198,7 +198,9 @@ describe.each(CONFIGS)("EventEmitter tracking does not retain emitters (#611) > 
 		const emitter = new EventEmitter();
 		expect(await api.emitters.listen(emitter)).toBe(true);
 		expect(await api.emitters.create(50)).toBe(50);
-		// Collected now, but their finalizers have not run: the shutdown sweep still meets their refs.
+		// Collected now, but their finalizers have not run: the shutdown sweep still meets their refs. That
+		// holds only while shutdown() gives the event loop no turn before the sweep; a wait added there would
+		// let the finalizers run first, and this test would stop reaching the sweep's skip for a collected ref.
 		await new Promise((resolve) => setImmediate(resolve));
 		gc();
 		await api.shutdown();

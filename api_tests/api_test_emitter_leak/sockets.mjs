@@ -55,17 +55,18 @@ function watch(target) {
  */
 export function request(url) {
 	return new Promise((resolve, reject) => {
+		let length = 0;
 		const req = http.get(url, { agent: false, headers: { connection: "close" } }, (res) => {
-			let length = 0;
 			res.on("data", (chunk) => {
 				length += chunk.length;
 			});
-			res.on("end", () => resolve(length));
 			watch(res);
 		});
 		req.on("error", reject);
+		// Settled once the socket has closed, not at the response's end: a socket still closing is still
+		// reachable, and the test counts on every one being collectable when the calls return.
 		req.on("socket", (socket) => {
-			socket.on("close", () => {});
+			socket.on("close", () => resolve(length));
 			watch(socket);
 		});
 		watch(req);
