@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,6 +37,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
@@ -52,6 +53,127 @@ export const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
  * @internal
  */
 export const genuineWrappers = new WeakSet();
+
+/**
+ * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
+ * call as a value — imported raw from its file rather than read from `self` — is recognised as that api node.
+ * @type {WeakMap<Function, object>}
+ * @internal
+ */
+export const implWrappers = new WeakMap();
+
+/**
+ * Every ceiling chain {@link combineCeilings} built: a frozen list of the calls code supplied to another call
+ * runs under (#597), told apart from a single call's wrapper by membership here.
+ * @type {WeakSet<ReadonlyArray<object>>}
+ * @private
+ */
+const CEILING_CHAINS = new WeakSet();
+
+/**
+ * A number for each call that has been part of a ceiling, so a chain's members can be put in one order.
+ * @type {WeakMap<object, number>}
+ * @private
+ */
+const CEILING_ORDER = new WeakMap();
+
+/**
+ * The next number {@link CEILING_ORDER} hands out.
+ * @type {number}
+ * @private
+ */
+let nextCeilingOrder = 0;
+
+/**
+ * The chains already built, as a trie over their members in {@link CEILING_ORDER} order, so one set of calls
+ * is always the same chain: a chain is a cache key (a per-reader view, a captured function).
+ * @type {{next: WeakMap<object, object>, chain: ReadonlyArray<object>|null}}
+ * @private
+ */
+const CEILING_TRIE = { next: new WeakMap(), chain: null };
+
+/**
+ * No ceiling.
+ * @type {ReadonlyArray<object>}
+ * @private
+ */
+const NO_CEILING = Object.freeze([]);
+
+/**
+ * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
+ *
+ * @param {object|ReadonlyArray<object>|null|undefined} ceiling - A ceiling.
+ * @returns {ReadonlyArray<object>} Its calls.
+ * @internal
+ *
+ * @example
+ * ceilingMembers(null); // []
+ * ceilingMembers(wrapper); // [wrapper]
+ */
+export function ceilingMembers(ceiling) {
+	if (!ceiling) return NO_CEILING;
+	return CEILING_CHAINS.has(ceiling) ? ceiling : [ceiling];
+}
+
+/**
+ * One ceiling holding every call of the ceilings given (#597). Ceilings only accumulate: code supplied to a
+ * call keeps the call it runs inside, every call that call ran inside, and any ceiling those already carried.
+ *
+ * The answer is `null` for no call, the call itself for one, and otherwise a frozen chain that is the same
+ * object for the same set of calls in whatever order they are given.
+ *
+ * @param {...(object|ReadonlyArray<object>|null|undefined)} parts - Calls and ceilings.
+ * @returns {object|ReadonlyArray<object>|null} The combined ceiling.
+ * @internal
+ *
+ * @example
+ * combineCeilings(leaf, null, record.ceiling); // leaf, or a chain of leaf and record.ceiling's calls
+ */
+export function combineCeilings(...parts) {
+	let single = null;
+	let members = null;
+	for (const part of parts) {
+		for (const member of ceilingMembers(part)) {
+			if (member === single || members?.includes(member)) continue;
+			if (single === null && members === null) single = member;
+			else (members ??= [single]).push(member);
+		}
+	}
+	if (members === null) return single;
+	for (const member of members) if (!CEILING_ORDER.has(member)) CEILING_ORDER.set(member, nextCeilingOrder++);
+	members.sort((a, b) => CEILING_ORDER.get(a) - CEILING_ORDER.get(b));
+	let node = CEILING_TRIE;
+	for (const member of members) {
+		let child = node.next.get(member);
+		if (!child) {
+			child = { next: new WeakMap(), chain: null };
+			node.next.set(member, child);
+		}
+		node = child;
+	}
+	if (!node.chain) {
+		node.chain = Object.freeze(members);
+		CEILING_CHAINS.add(node.chain);
+	}
+	return node.chain;
+}
+
+/**
+ * The ceiling an identity runs under, without the identity's own call: the calls that have to allow what its
+ * `currentWrapper` does as well (#597). Empty for the host and for an identity with no ceiling.
+ *
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null}|null|undefined} identity - A caller identity.
+ * @returns {ReadonlyArray<object>} The other calls.
+ * @internal
+ *
+ * @example
+ * for (const call of identityCeilings(identity)) enforce(call);
+ */
+export function identityCeilings(identity) {
+	if (!identity?.currentWrapper || !identity.ceiling) return NO_CEILING;
+	const members = ceilingMembers(identity.ceiling);
+	return members.includes(identity.currentWrapper) ? members.filter((member) => member !== identity.currentWrapper) : members;
+}
 
 /**
  * Sentinel owner for write-once/unowned ("protected") context keys.
@@ -111,23 +233,51 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// for an existing claim.
 	if (!owners || !Object.prototype.hasOwnProperty.call(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
-	// The writer's identity is the currently-executing module's apiPath (same derivation the call
-	// gate uses); host writes have no currentWrapper.
-	const writer = writerCtx.currentWrapper?.____slothletInternal?.apiPath ?? null;
+	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
+	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
+	// key, so supplied code can write a key only where both it and the leaf it runs inside could. Host writes have no
+	// writer.
+	const writers = writersOf(writerCtx).map((wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
+	const writer = writers[0] ?? null;
 	if (owner === PROTECT_SENTINEL) {
 		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
 			validationError: true
 		});
 	}
-	// The writer identity is the executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
+	// A writer identity is an executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
 	// An owner name matches that leaf exactly OR as a module prefix (`callers.dataReader` owns every
 	// leaf under it), so a module can own a key without naming each of its functions.
-	const owned = writer !== null && (writer === owner || writer.startsWith(owner + "."));
-	if (!owned) {
-		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: String(owner), writer: writer ?? "host" }, null, {
-			validationError: true
-		});
+	const refused = writers.length ? writers.find((path) => !(path !== null && (path === owner || path.startsWith(owner + ".")))) : null;
+	if (!writers.length || refused !== undefined) {
+		throw new SlothletError(
+			"CONTEXT_KEY_PROTECTED",
+			{ key: pathKey, owner: String(owner), writer: (writers.length ? refused : null) ?? "host" },
+			null,
+			{ validationError: true }
+		);
 	}
+}
+
+/**
+ * Who writes from a store: the identity executing in it, as the context manager resolves it, followed by every call
+ * of the ceiling it runs under (#597). Empty for the host. A store with no instance to ask (a view used after its
+ * scope ended) answers from its own fields.
+ *
+ * @param {object} store - The store the write is made from.
+ * @returns {Array<object>} The writing wrappers, the executing one first.
+ * @throws {SlothletError} PERMISSION_DENIED when who is executing cannot be told.
+ * @internal
+ */
+export function writersOf(store) {
+	const slothlet = store?.slothlet;
+	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID) ?? {
+		currentWrapper: store?.currentWrapper ?? null,
+		ceiling: store?.currentCeiling ?? null
+	};
+	// A writer that cannot be told apart is no one's, and not the host either.
+	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (!identity.currentWrapper) return [];
+	return [identity.currentWrapper, ...identityCeilings(identity)];
 }
 
 /**
@@ -208,28 +358,30 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	if (!cache) caches.set(ownerKey, (cache = new WeakMap()));
 	const cached = cache.get(value);
 	if (cached) return cached;
-	const view = new Proxy(value, {
-		get(target, prop, receiver) {
-			// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
-			return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
-		},
-		set(target, prop, newValue, receiver) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			// Forward `receiver` (the view), matching the get-trap, so an accessor setter runs with
-			// `this` = the view and its internal writes stay routed through these traps. Not a security
-			// requirement — enforcement is keyed on the top-level owner, who owns every nested path, so
-			// the write that triggers a setter is already gated — but it keeps proxy semantics correct.
-			return Reflect.set(target, prop, newValue, receiver);
-		},
-		defineProperty(target, prop, descriptor) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			return Reflect.defineProperty(target, prop, descriptor);
-		},
-		deleteProperty(target, prop) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			return Reflect.deleteProperty(target, prop);
-		}
-	});
+	const view = markSlothletProxy(
+		new Proxy(value, {
+			get(target, prop, receiver) {
+				// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
+				return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
+			},
+			set(target, prop, newValue, receiver) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				// Forward `receiver` (the view), matching the get-trap, so an accessor setter runs with
+				// `this` = the view and its internal writes stay routed through these traps. Not a security
+				// requirement — enforcement is keyed on the top-level owner, who owns every nested path, so
+				// the write that triggers a setter is already gated — but it keeps proxy semantics correct.
+				return Reflect.set(target, prop, newValue, receiver);
+			},
+			defineProperty(target, prop, descriptor) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				return Reflect.defineProperty(target, prop, descriptor);
+			},
+			deleteProperty(target, prop) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				return Reflect.deleteProperty(target, prop);
+			}
+		})
+	);
 	cache.set(value, view);
 	return view;
 }
@@ -265,7 +417,7 @@ export function readProtectedContextValue(ctx, prop, getContext) {
  *
  * @param {Map<string, object>} instances - The context manager's instance-store registry.
  * @param {string} instanceID - The instance to replay against.
- * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, contextOwners, trusted }`).
+ * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, ceiling, callerCeiling, contextOwners, trusted }`).
  * @returns {object} The child store (not yet registered).
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
@@ -287,6 +439,9 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		parentInstanceID: instanceID,
 		currentWrapper: captured.currentWrapper,
 		callerWrapper: captured.callerWrapper,
+		// A supplier's identity keeps the call it ran inside as its ceiling when replayed (#597).
+		currentCeiling: captured.ceiling ?? null,
+		callerCeiling: captured.callerCeiling ?? null,
 		slothlet: baseStore.slothlet,
 		__contextOwners: captured.contextOwners
 	};

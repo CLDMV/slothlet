@@ -1,4 +1,46 @@
 /**
+ * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
+ *
+ * @param {object|ReadonlyArray<object>|null|undefined} ceiling - A ceiling.
+ * @returns {ReadonlyArray<object>} Its calls.
+ * @internal
+ *
+ * @example
+ * ceilingMembers(null); // []
+ * ceilingMembers(wrapper); // [wrapper]
+ */
+export function ceilingMembers(ceiling: object | ReadonlyArray<object> | null | undefined): ReadonlyArray<object>;
+/**
+ * One ceiling holding every call of the ceilings given (#597). Ceilings only accumulate: code supplied to a
+ * call keeps the call it runs inside, every call that call ran inside, and any ceiling those already carried.
+ *
+ * The answer is `null` for no call, the call itself for one, and otherwise a frozen chain that is the same
+ * object for the same set of calls in whatever order they are given.
+ *
+ * @param {...(object|ReadonlyArray<object>|null|undefined)} parts - Calls and ceilings.
+ * @returns {object|ReadonlyArray<object>|null} The combined ceiling.
+ * @internal
+ *
+ * @example
+ * combineCeilings(leaf, null, record.ceiling); // leaf, or a chain of leaf and record.ceiling's calls
+ */
+export function combineCeilings(...parts: (object | ReadonlyArray<object> | null | undefined)[]): object | ReadonlyArray<object> | null;
+/**
+ * The ceiling an identity runs under, without the identity's own call: the calls that have to allow what its
+ * `currentWrapper` does as well (#597). Empty for the host and for an identity with no ceiling.
+ *
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null}|null|undefined} identity - A caller identity.
+ * @returns {ReadonlyArray<object>} The other calls.
+ * @internal
+ *
+ * @example
+ * for (const call of identityCeilings(identity)) enforce(call);
+ */
+export function identityCeilings(identity: {
+    currentWrapper?: object | null;
+    ceiling?: object | ReadonlyArray<object> | null;
+} | null | undefined): ReadonlyArray<object>;
+/**
  * Enforce owner-locking on a top-level runtime `context` set-trap write. If `prop` is an owner-locked
  * key on the active store, the write is allowed only when the writing caller matches the declared
  * owner: a `PROTECT_SENTINEL` owner is write-once/unowned (never writable via the set trap), and a
@@ -11,6 +53,17 @@
  * @internal
  */
 export function enforceContextKeyWrite(ctx: object, prop: string | symbol): void;
+/**
+ * Who writes from a store: the identity executing in it, as the context manager resolves it, followed by every call
+ * of the ceiling it runs under (#597). Empty for the host. A store with no instance to ask (a view used after its
+ * scope ended) answers from its own fields.
+ *
+ * @param {object} store - The store the write is made from.
+ * @returns {Array<object>} The writing wrappers, the executing one first.
+ * @throws {SlothletError} PERMISSION_DENIED when who is executing cannot be told.
+ * @internal
+ */
+export function writersOf(store: object): Array<object>;
 /**
  * Resolve a runtime `context` get-trap read. For an owner-locked key (declared via
  * `scope({ protect, owners })`) whose value is a plain object or array, returns a recursive protected
@@ -35,7 +88,7 @@ export function readProtectedContextValue(ctx: object, prop: string | symbol, ge
  *
  * @param {Map<string, object>} instances - The context manager's instance-store registry.
  * @param {string} instanceID - The instance to replay against.
- * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, contextOwners, trusted }`).
+ * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, ceiling, callerCeiling, contextOwners, trusted }`).
  * @returns {object} The child store (not yet registered).
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
@@ -54,6 +107,13 @@ export const TRUSTED_ROOT: symbol;
  * @internal
  */
 export const genuineWrappers: WeakSet<object>;
+/**
+ * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
+ * call as a value — imported raw from its file rather than read from `self` — is recognised as that api node.
+ * @type {WeakMap<Function, object>}
+ * @internal
+ */
+export const implWrappers: WeakMap<Function, object>;
 /**
  * Sentinel owner for write-once/unowned ("protected") context keys.
  * @type {symbol}

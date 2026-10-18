@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:20:27-07:00 (1791764427)
+ *	@Last modified time: 2026-10-17T19:09:17-07:00 (1792289357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@
 import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { markFrameworkInternal } from "#handlers/framework-internals";
+import { identityCeilings } from "#handlers/trusted-root";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -733,12 +734,21 @@ export class VersionManager extends ComponentBase {
 			// Build discriminator arguments
 			// currentWrapper = the module currently executing (the one calling into the dispatcher)
 			// Per-flow identity: the discriminator routes on who is calling.
-			const callerWrapper = manager.slothlet?.contextManager?.getCallerIdentity?.()?.currentWrapper ?? ctx?.currentWrapper ?? null;
+			const identity = manager.slothlet?.contextManager?.getCallerIdentity?.();
+			const callerWrapper = identity?.currentWrapper ?? ctx?.currentWrapper ?? null;
 			const allVersions = manager.buildAllVersionsArg(logicalPath);
 			const caller = manager.buildCallerArg(callerWrapper);
 
 			// Run discriminator
 			let tag = manager.resolveForPath(logicalPath, allVersions, caller);
+			// Code supplied to another module's call is routed as its caller only where every call of its ceiling would
+			// be routed the same way (#597); where they disagree, none of their routings is taken and the default
+			// applies. Routing decides no access: the version reached is gated for the supplier and every call of the
+			// ceiling alike, so a version none of them may call is refused there.
+			for (const ceiling of identityCeilings(identity)) {
+				if (tag == null) break;
+				if (manager.resolveForPath(logicalPath, allVersions, manager.buildCallerArg(ceiling)) !== tag) tag = null;
+			}
 
 			if (tag == null) {
 				// Fall through to default

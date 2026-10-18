@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-17T17:14:15-07:00 (1792282455)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,8 @@
 
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -150,7 +151,9 @@ export const self = new Proxy(
 				// `currentWrapper` is the module currently executing (the one
 				// doing `self.X = …`); `callerWrapper` is who *called* it.
 				// Ownership is anchored to the currently executing module.
-				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+				// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
+				// and each of them has to own the path (#597).
+				apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;
@@ -283,3 +286,6 @@ export const instanceID = new Proxy(
 		}
 	}
 );
+
+// The runtime's own Proxies are slothlet's, never a module's (#597).
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);

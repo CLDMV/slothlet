@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:58:29-07:00 (1792213109)
+ *	@Last modified time: 2026-10-17T20:16:46-07:00 (1792293406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,8 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { identityCeilings } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -433,10 +435,20 @@ export class HookManager extends ComponentBase {
 		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
 		// Per-flow identity: this owner decides what the hook may do, so reading the live runtime's
 		// shared field could pin a concurrently-suspended module as the owner instead.
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+		const ownerIdentity = this.slothlet.contextManager?.getCallerIdentity?.();
+		const ownerWrapper = ownerIdentity?.currentWrapper ?? null;
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+		// A hook registered by code supplied to another module's call keeps that call as its ceiling (#597): the
+		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
+		// Every call of the ceiling, as `{ path, filePath }` (#597).
+		const ownerCeilings = replayIdentity
+			? (replayIdentity.ownerCeilings ?? [])
+			: identityCeilings(ownerIdentity).map((call) => ({
+					path: call.____slothletInternal?.apiPath ?? null,
+					filePath: call.____slothletInternal?.filePath ?? null
+				}));
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -532,6 +544,17 @@ export class HookManager extends ComponentBase {
 					target: `${pattern}:${type}`
 				});
 			}
+			for (const ceiling of ownerCeilings) {
+				if (
+					ceiling.path !== null &&
+					!permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, null, runtimeContext)
+				) {
+					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
+						caller: ceiling.path,
+						target: `${pattern}:${type}`
+					});
+				}
+			}
 		}
 
 		// Caller-identity pinning (opt-out, default on): attribute the handler's
@@ -568,6 +591,8 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
+			// The calls the registering code ran inside, when they were other modules' (#597); empty otherwise.
+			ownerCeilings,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -630,14 +655,17 @@ export class HookManager extends ComponentBase {
 		// targets the current instance, never a torn-down one.
 		const slothlet = this.slothlet;
 		// Per-flow identity: the pin must name *this* module, not whichever entered last.
-		const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+		const capturedIdentity = slothlet.contextManager?.getCallerIdentity?.();
+		const capturedWrapper = capturedIdentity?.currentWrapper ?? null;
 		// Registered outside a module — no caller identity to capture.
 		if (!capturedWrapper) return handler;
+		// Registered by code supplied to another call: that call stays its ceiling (#597).
+		const capturedCeiling = capturedIdentity.ceiling ?? null;
 
 		const pinned = function slothlet_pinnedHook(...args) {
 			// rawErrors: a hook handler must surface its own errors unchanged so the
 			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
-			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true);
+			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true, false, capturedCeiling);
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;
@@ -945,8 +973,15 @@ export class HookManager extends ComponentBase {
 		const permissionManager = this.slothlet.handlers?.permissionManager;
 		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			return hooks.filter((hook) =>
-				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
+			return hooks.filter(
+				(hook) =>
+					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext) &&
+					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
+					(hook.ownerCeilings ?? []).every(
+						(ceiling) =>
+							ceiling.path === null ||
+							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
+					)
 			);
 		}
 
@@ -1402,25 +1437,27 @@ export class HookManager extends ComponentBase {
 			return thenable;
 		}
 		const bound = new Map();
-		return new Proxy(thenable, {
-			get(target, key) {
-				const value = Reflect.get(target, key, target);
-				if (typeof value !== "function" || fixed(key)) return value;
-				if (key === "then") {
-					return (onFulfilled, onRejected) =>
-						Reflect.apply(value, target, [
-							onFulfilled,
-							(error) => {
-								record(error);
-								if (typeof onRejected === "function") return onRejected(error);
-								throw error;
-							}
-						]);
+		return markSlothletProxy(
+			new Proxy(thenable, {
+				get(target, key) {
+					const value = Reflect.get(target, key, target);
+					if (typeof value !== "function" || fixed(key)) return value;
+					if (key === "then") {
+						return (onFulfilled, onRejected) =>
+							Reflect.apply(value, target, [
+								onFulfilled,
+								(error) => {
+									record(error);
+									if (typeof onRejected === "function") return onRejected(error);
+									throw error;
+								}
+							]);
+					}
+					if (!bound.has(key)) bound.set(key, value.bind(target));
+					return bound.get(key);
 				}
-				if (!bound.has(key)) bound.set(key, value.bind(target));
-				return bound.get(key);
-			}
-		});
+			})
+		);
 	}
 
 	/**
@@ -1970,6 +2007,8 @@ export class HookManager extends ComponentBase {
 				version: hook.version,
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
+				// A registration's ceiling (#597) travels with its owner, through the same private channel.
+				ownerCeilings: hook.ownerCeilings ?? [],
 				enabled: hook.enabled
 			});
 		}
@@ -1990,7 +2029,11 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				[REPLAY_IDENTITY]: {
+					ownerPath: reg.ownerPath ?? null,
+					ownerFilePath: reg.ownerFilePath ?? null,
+					ownerCeilings: reg.ownerCeilings ?? []
+				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).
 				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})

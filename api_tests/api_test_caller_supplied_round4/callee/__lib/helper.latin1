@@ -1,0 +1,38 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_caller_supplied_round4/callee/__lib/helper.latin1
+ *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A CommonJS helper the callee requires, with a byte that is not UTF-8 in this comment: café (#597).
+ * Node decodes it to U+FFFD before compiling, so the script V8 runs hashes as the decoded text, not as the bytes on
+ * disk. The extension keeps formatters from rewriting the byte; `require` loads an unknown extension as CommonJS.
+ *
+ * @module api_tests/api_test_caller_supplied_round4/callee/__lib/helper.latin1
+ */
+
+"use strict";
+
+/**
+ * Call a function.
+ * @param {function(): *} fn - The function.
+ * @returns {*} What it returned.
+ * @public
+ * @example
+ * apply(() => 1); // 1
+ */
+function apply(fn) {
+	return fn();
+}
+
+module.exports = { apply };

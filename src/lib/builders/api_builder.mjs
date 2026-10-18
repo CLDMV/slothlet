@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:07:41-07:00 (1791806861)
+ *	@Last modified time: 2026-10-18T11:48:13-07:00 (1792349293)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,8 @@ import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platfor
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
+import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -111,6 +112,49 @@ function runTeardownAsHost(slothlet, fn) {
 }
 
 /**
+ * The identity a `run()` / `scope()` store opened from the current flow carries (#597): the store's own
+ * `currentWrapper`, unless the code opening the scope was supplied to the running call by a call above it —
+ * then that supplier, with the running call as its ceiling.
+ *
+ * @param {object} slothlet - The instance.
+ * @param {object} currentStore - The store the scope descends from.
+ * @returns {{currentWrapper: object|null|undefined, currentCeiling: object|null, record: object|null}} The scope's identity,
+ *   with the running call's record when the scope is that call's own.
+ * @private
+ */
+function runtime_scopeIdentity(slothlet, currentStore) {
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.ceiling) return { currentWrapper: identity.currentWrapper, currentCeiling: identity.ceiling, record: null };
+	// The scope stays inside the running call: code that call was handed and runs inside the scope is still told
+	// apart from the call's own (#597).
+	const record = identity?.record ?? currentStore.record ?? null;
+	return {
+		currentWrapper: currentStore.currentWrapper,
+		currentCeiling: currentStore.currentCeiling ?? null,
+		record: record && record.wrapper === currentStore.currentWrapper ? record : null
+	};
+}
+
+/**
+ * The module ids an ownership decision is taken for (#597): the caller's, and — for code supplied to another
+ * module's call — the module of every call of its ceiling as well, first. Any of them may be refused, so the
+ * decision holds for all of them.
+ *
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null}|undefined} identity - The caller identity.
+ * @returns {string|string[]|null} One module id, several (the ceiling's first), or `null` for the host.
+ * @private
+ */
+function runtime_ownerModuleIDs(identity) {
+	const supplier = identity?.currentWrapper?.____slothletInternal?.moduleID ?? null;
+	const ids = new Set();
+	for (const ceiling of identityCeilings(identity)) {
+		const moduleID = ceiling.____slothletInternal?.moduleID ?? null;
+		if (moduleID !== null && moduleID !== supplier) ids.add(moduleID);
+	}
+	return ids.size ? [...ids, supplier] : supplier;
+}
+
+/**
  * Describe a value's shape for a `scope()`/`run()` validation error's `received` context field.
  *
  * @description
@@ -132,6 +176,38 @@ function describeScopeReceived(value) {
 		return "array";
 	}
 	return typeof value;
+}
+
+/**
+ * Resolve the folder (or folders) an add names against where the add was asked for, as the build would (#597): resolved
+ * here, before the build runs, the build and the folders told apart from the host's code are the same absolute paths.
+ * Anything not a non-empty string path — inline content, or what the build rejects — is passed on as it is.
+ * @param {object} slothlet - The instance.
+ * @param {*} folderPath - What the add was given.
+ * @returns {*} The folder resolved, the folders resolved, or what was given.
+ * @private
+ */
+function runtime_resolveAddFolder(slothlet, folderPath) {
+	const resolver = slothlet.helpers?.resolver;
+	if (!resolver || slothlet.envTarget === "browser") return folderPath;
+	const resolve = (entry) => (typeof entry === "string" && entry ? resolver.resolvePathFromCaller(entry) : entry);
+	return Array.isArray(folderPath) ? folderPath.map(resolve) : resolve(folderPath);
+}
+
+/**
+ * Run work that builds modules — an add or a reload — as no module's code (#597): what runs while modules are built
+ * (their top level, and their exports' getters and Proxy traps as slothlet reads them) is the code being built, never
+ * the code of a module that asked for the build. Outside any module's call it runs as it is.
+ * @param {object} slothlet - The instance.
+ * @param {function(): Promise<*>} build - The work.
+ * @param {*} [folderPath] - The folder (or folders) being added, whose code is the instance's while it is built.
+ * @returns {Promise<*>} What it resolves to.
+ * @private
+ */
+function runtime_buildAsNoModule(slothlet, build, folderPath) {
+	const contextManager = slothlet.contextManager;
+	const roots = (Array.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string" && root);
+	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build, { slothlet, roots }) : build();
 }
 
 /**
@@ -167,57 +243,84 @@ function describeScopeReceived(value) {
 function makeCopyOnWriteSelf(parentSelf) {
 	const overlay = new Map(); // prop → value written inside this scope
 	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
-	return new Proxy(
-		{},
-		{
-			get(_t, prop) {
-				if (overlay.has(prop)) return overlay.get(prop);
-				const real = parentSelf[prop];
-				// Wrap object children in their own COW so deep-path writes are
-				// captured. Memoized so `self.X` returns the same view each time
-				// and in-scope writes to it are read back consistently.
-				if (real !== null && typeof real === "object") {
-					let view = childViews.get(prop);
-					if (view === undefined) {
-						view = makeCopyOnWriteSelf(real);
-						childViews.set(prop, view);
+	return markSlothletProxy(
+		new Proxy(
+			{},
+			{
+				get(_t, prop) {
+					if (overlay.has(prop)) return overlay.get(prop);
+					const real = parentSelf[prop];
+					// Wrap object children in their own COW so deep-path writes are
+					// captured. Memoized so `self.X` returns the same view each time
+					// and in-scope writes to it are read back consistently.
+					if (real !== null && typeof real === "object") {
+						let view = childViews.get(prop);
+						if (view === undefined) {
+							view = makeCopyOnWriteSelf(real);
+							childViews.set(prop, view);
+						}
+						return view;
 					}
-					return view;
+					return real;
+				},
+				set(_t, prop, value) {
+					overlay.set(prop, value);
+					childViews.delete(prop);
+					return true;
+				},
+				has(_t, prop) {
+					return overlay.has(prop) || prop in parentSelf;
+				},
+				/* v8 ignore next 5 */
+				deleteProperty(_t, prop) {
+					// Defensive completeness — the runtime `self` proxy has no
+					// deleteProperty trap, so `delete self.X` never reaches here.
+					overlay.delete(prop);
+					childViews.delete(prop);
+					return true;
+				},
+				ownKeys() {
+					const keys = new Set(Reflect.ownKeys(parentSelf));
+					for (const k of overlay.keys()) keys.add(k);
+					return [...keys];
+				},
+				getOwnPropertyDescriptor(_t, prop) {
+					if (overlay.has(prop)) {
+						return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+					}
+					const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
+					// Always configurable — the proxy target is an empty object, so a
+					// non-configurable descriptor would violate proxy invariants.
+					return desc ? { ...desc, configurable: true } : undefined;
 				}
-				return real;
-			},
-			set(_t, prop, value) {
-				overlay.set(prop, value);
-				childViews.delete(prop);
-				return true;
-			},
-			has(_t, prop) {
-				return overlay.has(prop) || prop in parentSelf;
-			},
-			/* v8 ignore next 5 */
-			deleteProperty(_t, prop) {
-				// Defensive completeness — the runtime `self` proxy has no
-				// deleteProperty trap, so `delete self.X` never reaches here.
-				overlay.delete(prop);
-				childViews.delete(prop);
-				return true;
-			},
-			ownKeys() {
-				const keys = new Set(Reflect.ownKeys(parentSelf));
-				for (const k of overlay.keys()) keys.add(k);
-				return [...keys];
-			},
-			getOwnPropertyDescriptor(_t, prop) {
-				if (overlay.has(prop)) {
-					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
-				}
-				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
-				// Always configurable — the proxy target is an empty object, so a
-				// non-configurable descriptor would violate proxy invariants.
-				return desc ? { ...desc, configurable: true } : undefined;
 			}
-		}
+		)
 	);
+}
+
+/**
+ * A target for the Proxy a module's view of a slothlet function is (#597), of the same kind as the function: a plain
+ * function when it has its own `prototype`, a bound one — constructible, with no `prototype` — when it can be
+ * constructed without one, and an arrow function otherwise. What a Proxy reports about its target's fixed members
+ * (`prototype`) and constructibility then agrees with the function's own.
+ * @param {Function} fn - The function captured.
+ * @returns {Function} An empty function of its kind.
+ * @private
+ *
+ * @example
+ * runtime_captureShell(async () => {}); // an arrow function
+ */
+function runtime_captureShell(fn) {
+	if (Object.hasOwn(fn, "prototype")) return function slothlet_capturedFunction() {};
+	let constructible = true;
+	try {
+		// A construct trap answers without running or reading the function: `new` refuses a target that cannot be constructed.
+		new new Proxy(fn, { construct: () => ({}) })();
+	} catch {
+		constructible = false;
+	}
+	if (constructible) return Function.prototype.bind.call(function slothlet_capturedFunction() {}, null);
+	return () => {};
 }
 
 /**
@@ -395,7 +498,8 @@ export class ApiBuilder extends ComponentBase {
 		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
 		 *
 		 * @param {string} targetPath - Synthetic target path used for rule matching.
-		 * @returns {void}
+		 * @returns {object|null|undefined} The module identity the access was allowed for (#597), or null/undefined
+		 *   for the host.
 		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
 		 * @example
 		 * enforceInternalPermission("slothlet.permissions.addRule");
@@ -414,7 +518,7 @@ export class ApiBuilder extends ComponentBase {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
 			}
 			const callerWrapper = identity?.currentWrapper;
-			if (!callerWrapper) return;
+			if (!callerWrapper) return null;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
@@ -439,6 +543,20 @@ export class ApiBuilder extends ComponentBase {
 					target: targetPath
 				});
 			}
+			// Code a caller supplied to another call: every call of its ceiling has to be allowed as well (#597).
+			for (const ceiling of identityCeilings(identity)) {
+				/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
+				const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
+				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
+				/* v8 ignore stop */
+				if (
+					!genuineWrappers.has(ceiling) ||
+					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
+				) {
+					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
+				}
+			}
+			return identity;
 		};
 
 		// The root routine entry points (`api.shutdown()`, a default routine's root cascade) live outside
@@ -474,6 +592,23 @@ export class ApiBuilder extends ComponentBase {
 				return false;
 			}
 
+			// Code supplied to another module's call traverses only where every call of its ceiling may as well (#597).
+			if (!canTraverseAs(targetPath, callerWrapper, ctx, permissionManager)) return false;
+			return identityCeilings(identity).every((ceiling) => canTraverseAs(targetPath, ceiling, ctx, permissionManager));
+		};
+
+		/**
+		 * Whether one caller's rules may reach a descendant of a denied internal namespace — the check behind
+		 * {@link canTraverseInternalNamespace}.
+		 *
+		 * @param {string} targetPath - Namespace route that was denied.
+		 * @param {object} callerWrapper - The caller to check.
+		 * @param {object|null|undefined} ctx - The caller's context store.
+		 * @param {object} permissionManager - The instance's PermissionManager.
+		 * @returns {boolean} True when traversal should be permitted for this caller.
+		 * @private
+		 */
+		const canTraverseAs = (targetPath, callerWrapper, ctx, permissionManager) => {
 			// callerWrapper.____slothletInternal is always set by UnifiedWrapper — the ?? fallbacks are
 			// defensive guards that are structurally unreachable through the public API.
 			/* v8 ignore start */
@@ -524,6 +659,203 @@ export class ApiBuilder extends ComponentBase {
 		};
 
 		/**
+		 * Functions of the namespace as each module read them (#597), by function, reading module and ceiling: one per
+		 * reader, so `self.slothlet.event.on === self.slothlet.event.on` holds within a module.
+		 * @type {WeakMap<Function, WeakMap<object, WeakMap<object, Function>>>}
+		 */
+		const capturedRouteFunctions = new WeakMap();
+
+		/**
+		 * The value each route proxy {@link createInternalRouteProxy} built is over.
+		 * @type {WeakMap<object, object>}
+		 */
+		const routeProxyTargets = new WeakMap();
+
+		/**
+		 * Every function {@link captureRouteFunction} built.
+		 * @type {WeakSet<Function>}
+		 */
+		const capturedRouteFunctionSet = new WeakSet();
+
+		/**
+		 * The function a module reads out of the slothlet namespace, kept as that module's (#597).
+		 *
+		 * A slothlet function decides from who is calling it: `event.on` and `hook.on` whose subscription it makes,
+		 * `principal.register` whose principal, `scope` whose scope. Handed to another module — bound to its arguments,
+		 * say — and called there, it would decide as that module, which could then be made to subscribe, hook or
+		 * register what the reader may not. The function a module reads therefore runs as that module: its identity
+		 * when it read it, with whoever is calling it now as a ceiling as well, so it can never do more than either.
+		 * Called by the module that read it, as it normally is, it runs exactly as before.
+		 *
+		 * The host reads functions as they are. Properties read off a captured function are read as the module
+		 * reading them, so `lockCaller.caller` taken from a captured `lockCaller` is captured too.
+		 *
+		 * @param {*} value - A value the namespace proxy is returning.
+		 * @param {object|null|undefined} identity - Who read it.
+		 * @returns {*} The value, or the reader's function.
+		 */
+		const captureRouteFunction = (value, identity) => {
+			const reader = identity?.currentWrapper;
+			if (typeof value !== "function" || !reader || capturedRouteFunctionSet.has(value)) return value;
+			const readerCeiling = combineCeilings(...identityCeilings(identity));
+			let byReader = capturedRouteFunctions.get(value);
+			if (!byReader) capturedRouteFunctions.set(value, (byReader = new WeakMap()));
+			let byCeiling = byReader.get(reader);
+			if (!byCeiling) byReader.set(reader, (byCeiling = new WeakMap()));
+			const existing = byCeiling.get(readerCeiling ?? reader);
+			if (existing) return existing;
+			const readerCalls = ceilingMembers(readerCeiling);
+			const callerWrapper = identity.callerWrapper ?? null;
+			const callerCeiling = identity.callerCeiling ?? null;
+			const liveIdentity = () => slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			// Run `invoke` as the reader, under whoever is calling now as well — or, for the reader calling it itself under no
+			// ceiling it did not already have, as it always ran.
+			const asReader = (invoke) => {
+				const live = liveIdentity();
+				if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
+				const liveCalls = identityCeilings(live);
+				if (live?.currentWrapper === reader && readerCalls.every((call) => liveCalls.includes(call))) return invoke();
+				const ceiling = combineCeilings(
+					...ceilingMembers(combineCeilings(readerCeiling, live?.currentWrapper ?? null, ...liveCalls)).filter((call) => call !== reader)
+				);
+				return slothlet.contextManager.runAsIdentity(
+					slothlet.instanceID,
+					{ currentWrapper: reader, ceiling, callerWrapper, callerCeiling },
+					invoke
+				);
+			};
+			// A target of its own: the function's own properties include ones a Proxy of it would have to report as they
+			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead. The shell is the same kind of
+			// function as the one it captures, so what a Proxy has to report from its target agrees with the function: a
+			// plain function when it has its own `prototype`, a bound one (constructible, with none) when it can be
+			// constructed without one, and an arrow otherwise.
+			// Decided on the function the route proxy is over: asking the route proxy would run its permission checks.
+			const underlying = routeProxyTargets.get(value) ?? value;
+			const shell = runtime_captureShell(underlying);
+			// The shell inherits what the function does (an async function's `AsyncFunction.prototype`), so a Proxy over it
+			// reports the function's prototype even once the shell is fixed.
+			Reflect.setPrototypeOf(shell, Reflect.getPrototypeOf(underlying));
+			// Whether the shell holds a member the Proxy has to report as the shell holds it: one it cannot reconfigure, or
+			// any once it is no longer extensible.
+			const fixedOnShell = (prop) => {
+				const own = Reflect.getOwnPropertyDescriptor(shell, prop);
+				return own !== undefined && (!own.configurable || !Reflect.isExtensible(shell));
+			};
+			// Put the function's member on the shell as the function holds it, a function value as this reader's.
+			const mirror = (prop) => {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+				if (!descriptor) return Reflect.deleteProperty(shell, prop);
+				if ("value" in descriptor) descriptor.value = captureRouteFunction(descriptor.value, identity);
+				return Reflect.defineProperty(shell, prop, descriptor);
+			};
+			// A function made non-extensible since the shell was made (by the host, or by another reader) is followed: the
+			// shell takes its members as it holds them and stops taking new ones, so what the Proxy reports agrees with it.
+			const followIntegrity = () => {
+				if (Reflect.isExtensible(value) || !Reflect.isExtensible(shell)) return;
+				for (const key of Reflect.ownKeys(shell)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(shell, key);
+				for (const key of Reflect.ownKeys(value)) mirror(key);
+				Reflect.preventExtensions(shell);
+			};
+			// A member the function holds fixed is fixed on the shell from the start, so it is reported as the function holds it —
+			// one the reader may read: a member it may not stays off the shell, and describing it is refused as before.
+			for (const key of Reflect.ownKeys(underlying)) {
+				if (Reflect.getOwnPropertyDescriptor(underlying, key)?.configurable !== false || Object.hasOwn(shell, key)) continue;
+				try {
+					mirror(key);
+				} catch (error) {
+					if (!(error instanceof slothlet.SlothletError)) throw error;
+				}
+			}
+			const captured = new Proxy(shell, {
+				apply(_target, thisArg, args) {
+					return asReader(() => Reflect.apply(value, thisArg, args));
+				},
+				construct(_target, args, newTarget) {
+					return asReader(() => Reflect.construct(value, args, newTarget === captured ? value : newTarget));
+				},
+				get(target, prop) {
+					// A member the shell fixed is read as it holds it (the Proxy must report it so).
+					if (fixedOnShell(prop)) {
+						const own = Reflect.getOwnPropertyDescriptor(target, prop);
+						if ("value" in own && !own.writable) return own.value;
+					}
+					return captureRouteFunction(Reflect.get(value, prop), liveIdentity());
+				},
+				has(target, prop) {
+					return Reflect.has(value, prop) || fixedOnShell(prop);
+				},
+				ownKeys(target) {
+					followIntegrity();
+					if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+					const keys = Reflect.ownKeys(value);
+					for (const key of Reflect.ownKeys(target)) if (fixedOnShell(key) && !keys.includes(key)) keys.push(key);
+					return keys;
+				},
+				getOwnPropertyDescriptor(target, prop) {
+					followIntegrity();
+					if (fixedOnShell(prop)) {
+						const own = Reflect.getOwnPropertyDescriptor(target, prop);
+						// A writable member the shell fixed reports the function's current value.
+						if ("value" in own && own.writable) {
+							const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+							if (descriptor && "value" in descriptor) return { ...own, value: descriptor.value };
+						}
+						return own;
+					}
+					if (!Reflect.isExtensible(target)) return undefined;
+					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+					// Reported as configurable: the shell does not hold it, so it cannot be reported otherwise.
+					return descriptor ? { ...descriptor, configurable: true } : undefined;
+				},
+				defineProperty(target, prop, descriptor) {
+					followIntegrity();
+					if (!Reflect.defineProperty(value, prop, descriptor)) return false;
+					// What the shell has to report as the function now holds it: a member the definition left non-configurable
+					// (one that names only a value is), or one the shell already fixed.
+					if (
+						Reflect.getOwnPropertyDescriptor(value, prop)?.configurable === false ||
+						Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false
+					) {
+						return mirror(prop);
+					}
+					return true;
+				},
+				getPrototypeOf(target) {
+					// The function's own, which the shell keeps up with while it can still change.
+					if (Reflect.isExtensible(target)) Reflect.setPrototypeOf(target, Reflect.getPrototypeOf(value));
+					return Reflect.getPrototypeOf(target);
+				},
+				setPrototypeOf(target, prototype) {
+					if (!Reflect.setPrototypeOf(value, prototype)) return false;
+					return Reflect.setPrototypeOf(target, prototype);
+				},
+				isExtensible(target) {
+					followIntegrity();
+					return Reflect.isExtensible(target);
+				},
+				preventExtensions(target) {
+					if (!Reflect.preventExtensions(value)) return false;
+					// The shell takes every member as the function holds it before it stops taking new ones, so the Proxy reports
+					// the function's members and nothing else.
+					for (const key of Reflect.ownKeys(target)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(target, key);
+					for (const key of Reflect.ownKeys(value)) mirror(key);
+					return Reflect.preventExtensions(target);
+				},
+				set(_target, prop, newValue) {
+					return Reflect.set(value, prop, newValue);
+				},
+				deleteProperty(target, prop) {
+					if (fixedOnShell(prop) && Reflect.getOwnPropertyDescriptor(target, prop).configurable === false) return false;
+					if (!Reflect.deleteProperty(value, prop)) return false;
+					return Reflect.deleteProperty(target, prop);
+				}
+			});
+			capturedRouteFunctionSet.add(markSlothletProxy(captured));
+			byCeiling.set(readerCeiling ?? reader, captured);
+			return captured;
+		};
+
+		/**
 		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
 		 * property route is permission-gated, including primitives on objects.
 		 *
@@ -559,8 +891,9 @@ export class ApiBuilder extends ComponentBase {
 
 					const childRoutePath = `${routePath}.${prop}`;
 					let deniedError = null;
+					let reader = null;
 					try {
-						enforceInternalPermission(childRoutePath);
+						reader = enforceInternalPermission(childRoutePath);
 					} catch (error) {
 						deniedError = error;
 					}
@@ -569,7 +902,10 @@ export class ApiBuilder extends ComponentBase {
 						if (canTraverseInternalNamespace(childRoutePath)) {
 							const result = Reflect.get(target, prop, receiver);
 							if (result && (typeof result === "object" || typeof result === "function")) {
-								return createInternalRouteProxy(result, childRoutePath, seen);
+								return captureRouteFunction(
+									createInternalRouteProxy(result, childRoutePath, seen),
+									slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)
+								);
 							}
 						}
 						throw deniedError;
@@ -588,7 +924,8 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor.value;
 					}
 
-					return createInternalRouteProxy(result, childRoutePath, seen);
+					// A function read by a module keeps the module as who calls it, whoever calls it later (#597).
+					return captureRouteFunction(createInternalRouteProxy(result, childRoutePath, seen), reader);
 				},
 
 				getOwnPropertyDescriptor(target, prop) {
@@ -654,12 +991,12 @@ export class ApiBuilder extends ComponentBase {
 						(typeof descriptorValue !== "object" && typeof descriptorValue !== "function") ||
 						typeof descriptorValue === "function"
 					) {
-						enforceInternalPermission(childRoutePath);
+						const reader = enforceInternalPermission(childRoutePath);
 
 						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
 							return {
 								...descriptor,
-								value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+								value: captureRouteFunction(createInternalRouteProxy(descriptorValue, childRoutePath, seen), reader)
 							};
 						}
 
@@ -717,7 +1054,8 @@ export class ApiBuilder extends ComponentBase {
 				}
 			});
 
-			routeCache.set(routePath, proxy);
+			routeCache.set(routePath, markSlothletProxy(proxy));
+			routeProxyTargets.set(proxy, value);
 			return proxy;
 		};
 
@@ -852,12 +1190,17 @@ export class ApiBuilder extends ComponentBase {
 					}
 					// When allowed (or none passed) forward options as-is so a per-call override is honored;
 					// forceOverwrite / moduleID / metadata pass through in every case.
-					const addResult = await slothlet.handlers.apiManager.addApiComponent({
-						apiPath,
-						folderPath,
-						options: effectiveOptions,
-						versionConfig: versionConfig || null
-					});
+					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
+					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
+					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
+					const build = () =>
+						slothlet.handlers.apiManager.addApiComponent({
+							apiPath,
+							folderPath: resolvedFolder,
+							options: effectiveOptions,
+							versionConfig: versionConfig || null
+						});
+					const addResult = await runtime_buildAsNoModule(slothlet, build, resolvedFolder);
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
@@ -1257,7 +1600,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
-						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options });
+						return runtime_buildAsNoModule(slothlet, () => slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options }));
 					}
 
 					if (typeof pathOrModuleId !== "string") {
@@ -1273,7 +1616,9 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
-						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options });
+						return runtime_buildAsNoModule(slothlet, () =>
+							slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options })
+						);
 					}
 
 					// Treat as API path - validate it exists in the user-facing API
@@ -1298,7 +1643,9 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
-					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
+					return runtime_buildAsNoModule(slothlet, () =>
+						slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options })
+					);
 				},
 
 				/**
@@ -1497,7 +1844,11 @@ export class ApiBuilder extends ComponentBase {
 				// the live runtime's shared field could pin whichever module happened to enter last.
 				// Scoped to this instance, as enforcement is: with another instance in flight the live
 				// runtime's shared active-instance field can name that one instead (#592).
-				const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
+				const capturedIdentity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+				const capturedWrapper = capturedIdentity?.currentWrapper ?? null;
+				// Code a caller supplied to another call pins as that caller under the call as its ceiling, so
+				// the pin cannot carry it past what the call it ran inside may do (#597).
+				const capturedCeiling = capturedIdentity?.ceiling ?? null;
 				// No wrapper to capture — return `fn` itself so this is a true no-op
 				// passthrough. Wrapping would still route through runInContext(), which
 				// creates/switches to this instance's context instead of leaving `fn`'s
@@ -1509,7 +1860,7 @@ export class ApiBuilder extends ComponentBase {
 					// instanceID/contextManager are resolved live off the long-lived
 					// slothlet object so a callback held across a reload() (which swaps
 					// both) still targets the current instance.
-					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true);
+					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true, false, capturedCeiling);
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;
@@ -2693,8 +3044,8 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
 							}
 							/* v8 ignore stop */
-							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+							// Code supplied to another module's call removes for both modules (#597).
+							const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
@@ -2932,8 +3283,8 @@ export class ApiBuilder extends ComponentBase {
 					// Per-flow identity: this moduleID decides whether the caller owns the rule it is
 					// removing, so attributing it to a concurrently-suspended module would let one
 					// module drop another's rule.
-					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+					// Code supplied to another module's call removes for both modules (#597).
+					const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 					// Record in operationHistory for replay on reload
@@ -2994,15 +3345,22 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: the registrant becomes the name's owner, so attributing it to a
 						// concurrently-suspended module would hand that module the name.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const ownerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper ?? null;
+						// Code supplied to another module's call registers for both modules, and the call it runs
+						// inside owns a new name (#597).
+						const claimants = runtime_ownerModuleIDs(identity);
+						const ownerModuleID = Array.isArray(claimants) ? claimants[0] : claimants;
 						// A module's resolver runs AS that module: whatever it calls is attributed to the owner, not
-						// to the module whose call happened to trigger the resolve. `slothlet.instanceID` is read at
+						// to the module whose call happened to trigger the resolve — under the call it was registered
+						// inside as its ceiling, when that was another module's (#597). `slothlet.instanceID` is read at
 						// invocation time because a full reload rotates it.
+						const ceiling = currentWrapper && identity.ceiling && identity.ceiling !== currentWrapper ? identity.ceiling : null;
 						const invoke = currentWrapper
-							? (fn, args) => slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true)
+							? (fn, args) =>
+									slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true, false, ceiling)
 							: null;
-						permissionManager.registerPrincipal(name, definition, ownerModuleID, invoke);
+						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
 						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 							slothlet.handlers.apiManager.state.operationHistory.push({
@@ -3040,8 +3398,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						// Code supplied to another module's call has to own the name as both modules (#597).
+						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
 						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
@@ -3077,8 +3435,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						// Code supplied to another module's call has to own the name as both modules (#597).
+						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 						return permissionManager.invalidatePrincipal(name, identityKey, callerModuleID);
 					}
 				},
@@ -3111,11 +3469,22 @@ export class ApiBuilder extends ComponentBase {
 
 						const ctx = slothlet.contextManager?.tryGetContext?.();
 						// Per-flow identity — otherwise this answers for whichever module entered last.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
-						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext);
+						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
+						// Code supplied to another module's call may reach only what every call of its ceiling may as well (#597).
+						return identityCeilings(identity).every((ceiling) =>
+							slothlet.handlers.permissionManager.checkAccess(
+								ceiling.____slothletInternal.apiPath,
+								target,
+								ceiling.____slothletInternal.filePath ?? null,
+								null,
+								runtimeContext
+							)
+						);
 					},
 
 					/**
@@ -3139,9 +3508,20 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: this returns the caller's own rules, so mis-attribution would
 						// disclose another module's rule set.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
-						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
+						const rules = slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
+						// Code supplied to another module's call sees only the rules that apply to that call as well
+						// (#597), so it discloses neither module's rules beyond what both share.
+						let shared = rules;
+						for (const ceiling of identityCeilings(identity)) {
+							const ids = new Set(
+								slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath).map((rule) => rule.id)
+							);
+							shared = shared.filter((rule) => ids.has(rule.id));
+						}
+						return shared;
 					}
 				},
 
@@ -3648,11 +4028,15 @@ export class ApiBuilder extends ComponentBase {
 			// The identity metadata.caller() reports right now — null when the current leaf was
 			// called from outside any module, which pins "no module caller" (run as the host).
 			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			// A caller that was code supplied to another call keeps that call as its ceiling (#597).
+			const capturedCeiling = capturedCaller
+				? (slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.callerCeiling ?? null)
+				: null;
 			const locked = function slothlet_lockedCallerCaller(...args) {
 				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
 				// so a callback held across a reload() targets the current instance.
 				return capturedCaller
-					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true)
+					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true, false, capturedCeiling)
 					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
 			};
 			// Parity with lockCaller / the EventEmitter patch metadata.
@@ -3947,7 +4331,9 @@ export class ApiBuilder extends ComponentBase {
 						// call inside the run()/scope() callback is still attributed to
 						// the module that invoked it. run()/scope() isolate context
 						// data, not caller identity.
-						currentWrapper: currentStore.currentWrapper,
+						// Code a caller supplied to the running call scopes as that caller, under the call as its
+						// ceiling (#597); otherwise the store's own caller identity carries over as it is.
+						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
@@ -4047,7 +4433,9 @@ export class ApiBuilder extends ComponentBase {
 						// call inside the run()/scope() callback is still attributed to
 						// the module that invoked it. run()/scope() isolate context
 						// data, not caller identity.
-						currentWrapper: currentStore.currentWrapper,
+						// Code a caller supplied to the running call scopes as that caller, under the call as its
+						// ceiling (#597); otherwise the store's own caller identity carries over as it is.
+						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.

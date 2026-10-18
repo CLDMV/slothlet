@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:01:49-07:00 (1791763309)
+ *	@Last modified time: 2026-10-18T12:56:19-07:00 (1792353379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,6 +93,15 @@ export const TEST_DIRS = {
 	API_TEST_CROSS_INSTANCE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cross_instance`),
 	API_TEST_LOCK_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller`),
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
+	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
+	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
+	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
+	API_TEST_CALLER_SUPPLIED_ROUND2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round2`),
+	API_TEST_CALLER_SUPPLIED_ROUND3: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round3`),
+	API_TEST_CALLER_SUPPLIED_ROUND4: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round4`),
+	API_TEST_CALLER_SUPPLIED_ROUND5: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round5`),
+	API_TEST_CALLER_SUPPLIED_ROUND7: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round7`),
+	API_TEST_CALLER_SUPPLIED_ROUND9: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round9`),
 	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`),
 	API_TEST_MULTI_ROOT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_multi_root_fn`),
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),

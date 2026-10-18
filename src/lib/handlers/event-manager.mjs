@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-17T17:14:08-07:00 (1792282448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,6 +50,7 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { identityCeilings } from "#handlers/trusted-root";
 
 /**
  * Envelope → its private delivery record `{ slothlet, meta, flow, subs }`. Module-level (not per
@@ -83,6 +84,13 @@ function ownerIdOf(wrapper) {
 }
 
 /**
+ * Delivery levels by how much they deliver, so two can be compared (#597).
+ * @type {Readonly<Record<string, number>>}
+ * @private
+ */
+const EVENT_LEVEL_RANK = Object.freeze({ deny: 0, notify: 1, allow: 2 });
+
+/**
  * Instance-wide event manager (#407).
  * @extends ComponentBase
  * @public
@@ -96,7 +104,7 @@ export class EventManager extends ComponentBase {
 
 	/**
 	 * Event name → Set of subscription records. Each record:
-	 * `{ listener, once, subscriberPath, ownerWrapper, ownerID, id, level, levelEpoch }`.
+	 * `{ listener, once, subscriberPath, ceilingPaths, ownerWrapper, ownerCeiling, ownerID, id, level, levelEpoch }`.
 	 * @type {Map<string, Set<object>>}
 	 * @private
 	 */
@@ -181,8 +189,15 @@ export class EventManager extends ComponentBase {
 		// caller and pin every delivery to it, denying the host-only re-resolution at emit. Passing the
 		// instance id reports no caller (host) for a foreign flow while still capturing the real module
 		// for this instance's own — the same instance-scoping the read-gate (#290) already uses.
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
+		const ownerIdentity = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID);
+		const ownerWrapper = ownerIdentity?.currentWrapper ?? null;
+		// A subscription made by code supplied to another call delivers under that call as its ceiling (#597).
+		const ownerCeiling = ownerWrapper ? (ownerIdentity.ceiling ?? null) : null;
 		const subscriberPath = ownerWrapper?.____slothletInternal?.apiPath ?? null;
+		// Its level is the strictest of the subscriber's and those of every call of its ceiling (#597).
+		const ceilingPaths = identityCeilings(ownerIdentity)
+			.map((call) => call.____slothletInternal?.apiPath ?? null)
+			.filter((path) => path !== null);
 		const ownerID = ownerIdOf(ownerWrapper);
 		const id = `${ownerID}:${event}:${key === undefined ? this.#nextOrdinal(ownerID, event) : String(key)}`;
 		for (const existing of this.#subscribers.get(event) ?? []) {
@@ -199,7 +214,9 @@ export class EventManager extends ComponentBase {
 			listener,
 			once: options.once === true,
 			subscriberPath,
+			ceilingPaths,
 			ownerWrapper,
+			ownerCeiling,
 			ownerID,
 			id,
 			level: null,
@@ -352,7 +369,7 @@ export class EventManager extends ComponentBase {
 	 */
 	#invoke(sub, callArgs, cm) {
 		return sub.ownerWrapper && cm?.runInContext
-			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true)
+			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
 			: sub.listener(...callArgs);
 	}
 
@@ -631,7 +648,13 @@ export class EventManager extends ComponentBase {
 
 		// The emitter's USER context, as in resolveLevel (#511).
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-		const level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
+		let level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
+		// A subscription made under another module's call as its ceiling is delivered at no more than that call
+		// would be (#597).
+		for (const ceilingPath of sub.ceilingPaths ?? []) {
+			const ceilingLevel = pm.resolveEventLevel(ceilingPath, event, runtimeContext);
+			if (EVENT_LEVEL_RANK[ceilingLevel] < EVENT_LEVEL_RANK[level]) level = ceilingLevel;
+		}
 		// Only memoize the stable (non-conditional) case; conditional levels are recomputed each emit.
 		sub.level = conditional ? null : level;
 		sub.levelEpoch = epoch;

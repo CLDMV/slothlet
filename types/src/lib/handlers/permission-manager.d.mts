@@ -45,13 +45,14 @@ export class PermissionManager extends ComponentBase {
      * A module cannot remove rules it owns (immutability).
      *
      * @param {string} ruleId - The rule ID to remove.
-     * @param {string|null} [callerModuleID=null] - Module ID of the caller attempting removal.
+     * @param {string|string[]|null} [callerModuleID=null] - Module ID of the caller attempting removal; a list when
+     *   the caller acts for several modules (#597), none of which may own the rule.
      * @returns {boolean} True if the rule was removed.
      * @throws {SlothletError} PERMISSION_SELF_MODIFY if caller owns the rule.
      * @example
      * pm.removeRule("perm-3", "mod_other");
      */
-    removeRule(ruleId: string, callerModuleID?: string | null): boolean;
+    removeRule(ruleId: string, callerModuleID?: string | string[] | null): boolean;
     /**
      * Add an event rule (#407). Separate three-level construct from {@link addRule}: `effect` is
      * "deny" | "notify" | "allow". Matched most-specific-wins with the same layered tiebreak; the
@@ -81,11 +82,12 @@ export class PermissionManager extends ComponentBase {
      * mirroring {@link removeRule}.
      *
      * @param {string} ruleId - The event-rule id.
-     * @param {string|null} [callerModuleID=null] - Module id attempting removal.
+     * @param {string|string[]|null} [callerModuleID=null] - Module id attempting removal; a list when the caller
+     *   acts for several modules (#597), none of which may own the rule.
      * @returns {boolean} True if a rule was removed.
      * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
      */
-    removeEventRule(ruleId: string, callerModuleID?: string | null): boolean;
+    removeEventRule(ruleId: string, callerModuleID?: string | string[] | null): boolean;
     /**
      * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
      * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
@@ -126,7 +128,8 @@ export class PermissionManager extends ComponentBase {
      *   rules requiring this principal do not match for that call.
      * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
      * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
-     * @param {string|null} [ownerModuleID=null] - Registering module's id; `null` for the host.
+     * @param {string|string[]|null} [ownerModuleID=null] - Registering module's id; `null` for the host. A list when the
+     *   registrant acts for several modules (#597): each has to own an existing name, the first owns a new one.
      * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
      *   module, so anything the resolver calls is attributed to that module rather than to whichever
      *   caller's call triggered the resolve. `null` (host registrations) calls `resolve` directly.
@@ -141,20 +144,20 @@ export class PermissionManager extends ComponentBase {
         key: (arg0: object) => any;
         resolve: (arg0: any) => any;
         maxAge?: number | undefined;
-    }, ownerModuleID?: string | null, invoke?: (arg0: Function, arg1: Array<any>) => any): void;
+    }, ownerModuleID?: string | string[] | null, invoke?: (arg0: Function, arg1: Array<any>) => any): void;
     /**
      * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
      * matching (their calls fall to `defaultPolicy`).
      *
      * @param {string} name - Principal name.
-     * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+     * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
      * @returns {boolean} True when a principal was removed.
      * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
      * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
      * @example
      * pm.unregisterPrincipal("roles");
      */
-    unregisterPrincipal(name: string, callerModuleID?: string | null): boolean;
+    unregisterPrincipal(name: string, callerModuleID?: string | string[] | null): boolean;
     /**
      * Invalidate a principal's cached facts — for one identity, or for every identity when
      * `identityKey` is omitted. The next call needing it re-resolves. Only the owner or the host may
@@ -166,13 +169,13 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {string} name - Principal name.
      * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
-     * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+     * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
      * @returns {boolean} True when the principal exists.
      * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
      * @example
      * pm.invalidatePrincipal("roles", "user-42");
      */
-    invalidatePrincipal(name: string, identityKey?: any, callerModuleID?: string | null): boolean;
+    invalidatePrincipal(name: string, identityKey?: any, callerModuleID?: string | string[] | null): boolean;
     /**
      * Whether a principal with this name is registered.
      *
