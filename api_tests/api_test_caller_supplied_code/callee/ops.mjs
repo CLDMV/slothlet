@@ -146,3 +146,15 @@ export function useSecret() {
 export function pick(holder, path) {
 	return invoke(holder, path);
 }
+
+/**
+ * Call the vault on this module's own account, after being handed an options object.
+ * @param {object} _options - Options; plain data.
+ * @returns {string|null} The caller the vault reports: this module.
+ * @public
+ * @example
+ * api.callee.ops.whoamiWith({ a: 1 }); // "callee.ops.whoamiWith"
+ */
+export function whoamiWith(_options) {
+	return self.vault.secret.whoami();
+}

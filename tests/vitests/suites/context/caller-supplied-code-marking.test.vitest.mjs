@@ -64,14 +64,38 @@ describe("Caller-supplied code (#597) > marking a call", () => {
 		expect(carriesCallerCode(undefined, undefined)).toBe(false);
 	});
 
-	it("an object, an array or a function argument marks the call", () => {
-		expect(carriesCallerCode(undefined, [{}])).toBe(true);
-		expect(carriesCallerCode(undefined, [1, []])).toBe(true);
+	it("a function argument marks the call", () => {
 		expect(carriesCallerCode(undefined, [() => {}])).toBe(true);
+		expect(carriesCallerCode(undefined, [1, function named() {}])).toBe(true);
 	});
 
-	it("a receiver marks the call", () => {
-		expect(carriesCallerCode({}, [])).toBe(true);
+	it("plain data — objects and arrays of primitives, nested — does not mark the call", () => {
+		expect(carriesCallerCode(undefined, [{}])).toBe(false);
+		expect(carriesCallerCode(undefined, [1, []])).toBe(false);
+		expect(carriesCallerCode(undefined, [{ a: 1, b: "x", c: [true, null, { d: 2n }] }])).toBe(false);
+		expect(carriesCallerCode(undefined, [Object.assign(Object.create(null), { a: 1 })])).toBe(false);
+		expect(carriesCallerCode({ plain: true }, [])).toBe(false);
+	});
+
+	it("data that can run code still marks the call", () => {
+		const getter = {};
+		Object.defineProperty(getter, "value", { get: () => 1, enumerable: true });
+		expect(carriesCallerCode(undefined, [getter])).toBe(true);
+		expect(carriesCallerCode(undefined, [{ toString: () => "x" }])).toBe(true);
+		expect(carriesCallerCode(undefined, [{ options: { nested: { onDone() {} } } }])).toBe(true);
+		expect(carriesCallerCode(undefined, [{ [Symbol.toPrimitive]: () => 1 }])).toBe(true);
+		expect(carriesCallerCode(undefined, [[1, [2, [() => {}]]]])).toBe(true);
+		expect(carriesCallerCode(undefined, [new Proxy({}, {})])).toBe(true);
+		expect(carriesCallerCode(undefined, [new Date(0)])).toBe(true);
+		expect(carriesCallerCode(undefined, [new (class Options {})()])).toBe(true);
+		expect(carriesCallerCode({ run() {} }, [])).toBe(true);
+	});
+
+	it("data nested deeper than the bound, or wider than it, marks the call", () => {
+		let deep = 1;
+		for (let level = 0; level < 10; level++) deep = { deep };
+		expect(carriesCallerCode(undefined, [deep])).toBe(true);
+		expect(carriesCallerCode(undefined, [Array.from({ length: 10_000 }, (_, index) => index)])).toBe(true);
 	});
 
 	it("deciding never runs the value's code", () => {
@@ -80,6 +104,11 @@ describe("Caller-supplied code (#597) > marking a call", () => {
 		};
 		const hostile = new Proxy({}, { get: trap, has: trap, getPrototypeOf: trap, ownKeys: trap, getOwnPropertyDescriptor: trap });
 		expect(carriesCallerCode(hostile, [hostile])).toBe(true);
+		// Nested inside plain data, and behind a getter, it is never reached either.
+		expect(carriesCallerCode(undefined, [{ a: { b: [hostile] } }])).toBe(true);
+		const behindGetter = {};
+		Object.defineProperty(behindGetter, "x", { get: trap, enumerable: true });
+		expect(carriesCallerCode(undefined, [behindGetter])).toBe(true);
 	});
 
 	it("an unmarked call, or one with no module above it, resolves no supplier", () => {
@@ -114,6 +143,22 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 		const { captures, result } = await countCaptures(() => api.supplier.probe.direct("whoami"));
 		expect(result).toEqual({ ok: true, value: "supplier.probe.direct" });
 		expect(captures).toBe(0);
+	});
+
+	it("a call handed a plain options object never reads the stack", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		await api.supplier.probe.withPlainOptions();
+		const { captures, result } = await countCaptures(() => api.supplier.probe.withPlainOptions());
+		expect(result).toEqual({ ok: true, value: "callee.ops.whoamiWith" });
+		expect(captures).toBe(0);
+	});
+
+	it("a call handed a callback reads the stack when the callback makes a call", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		await api.supplier.probe.viaCallback("whoami");
+		const { captures, result } = await countCaptures(() => api.supplier.probe.viaCallback("whoami"));
+		expect(result).toEqual({ ok: true, value: "supplier.probe.viaCallback" });
+		expect(captures).toBeGreaterThan(0);
 	});
 
 	it("a call handed code reads the stack when that code makes a call", async () => {

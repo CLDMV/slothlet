@@ -315,3 +315,14 @@ export async function viaSharedHelper(target = "secret") {
 	const path = target === "whoami" ? "s.vault.secret.whoami" : "s.vault.secret.secret";
 	return attempt(() => self.callee.ops.run(invoke.bind(null, { s: self }, path)));
 }
+
+/**
+ * Hand the callee a plain options object, which carries no code, and report who the vault saw the callee as.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.withPlainOptions(); // { ok: true, value: "callee.ops.whoamiWith" }
+ */
+export async function withPlainOptions() {
+	return attempt(() => self.callee.ops.whoamiWith({ retries: 3, labels: ["a", "b"], nested: { flag: true, limit: null } }));
+}
