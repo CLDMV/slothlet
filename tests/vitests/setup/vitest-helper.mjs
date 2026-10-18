@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:01:49-07:00 (1791763309)
+ *	@Last modified time: 2026-10-17T21:23:09-07:00 (1792297389)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,9 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_SELF_PEER2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_peer2`),
 	API_TEST_ROUTINES_PERM: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_perm`),
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
-	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`)
+	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`),
+	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
+	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`)
 };
 
 /**
