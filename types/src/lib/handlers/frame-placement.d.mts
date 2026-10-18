@@ -203,7 +203,9 @@ export function createFramePlacer(candidates: Array<{
 };
 /**
  * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
- * nothing of its own below it.
+ * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
+ * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
+ * `processImmediate`) below the runner's.
  * @param {{path: string, head: string}} frame - A frame.
  * @returns {boolean} True for a runner frame.
  * @internal
@@ -219,7 +221,7 @@ export function isRunnerFrame(frame: {
  * @returns {void}
  * @internal
  */
-export function setApiValueCheck(check: (arg0: any) => boolean): void;
+export function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: null): void;
 /**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
  * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
