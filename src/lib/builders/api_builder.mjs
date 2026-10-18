@@ -264,20 +264,6 @@ function makeCopyOnWriteSelf(parentSelf) {
 }
 
 /**
- * Builds final API with built-in methods attached
- * @class ApiBuilder
- * @extends ComponentBase
- * @package
- *
- * @description
- * Class-based builder for final API construction with built-in namespace attachment.
- * Extends ComponentBase for common Slothlet property access.
- *
- * @example
- * const builder = new ApiBuilder(slothlet);
- * const api = await builder.buildFinalAPI(userApi);
- */
-/**
  * A target for the Proxy a module's view of a slothlet function is (#597), of the same kind as the function: a plain
  * function when it has its own `prototype`, a bound one — constructible, with no `prototype` — when it can be
  * constructed without one, and an arrow function otherwise. What a Proxy reports about its target's fixed members
@@ -302,6 +288,20 @@ function runtime_captureShell(fn) {
 	return () => {};
 }
 
+/**
+ * Builds final API with built-in methods attached
+ * @class ApiBuilder
+ * @extends ComponentBase
+ * @package
+ *
+ * @description
+ * Class-based builder for final API construction with built-in namespace attachment.
+ * Extends ComponentBase for common Slothlet property access.
+ *
+ * @example
+ * const builder = new ApiBuilder(slothlet);
+ * const api = await builder.buildFinalAPI(userApi);
+ */
 export class ApiBuilder extends ComponentBase {
 	static slothletProperty = "apiBuilder";
 
