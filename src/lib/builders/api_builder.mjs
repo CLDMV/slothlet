@@ -277,6 +277,31 @@ function makeCopyOnWriteSelf(parentSelf) {
  * const builder = new ApiBuilder(slothlet);
  * const api = await builder.buildFinalAPI(userApi);
  */
+/**
+ * A target for the Proxy a module's view of a slothlet function is (#597), of the same kind as the function: a plain
+ * function when it has its own `prototype`, a bound one — constructible, with no `prototype` — when it can be
+ * constructed without one, and an arrow function otherwise. What a Proxy reports about its target's fixed members
+ * (`prototype`) and constructibility then agrees with the function's own.
+ * @param {Function} fn - The function captured.
+ * @returns {Function} An empty function of its kind.
+ * @private
+ *
+ * @example
+ * runtime_captureShell(async () => {}); // an arrow function
+ */
+function runtime_captureShell(fn) {
+	if (Object.hasOwn(fn, "prototype")) return function slothlet_capturedFunction() {};
+	let constructible = true;
+	try {
+		// A construct trap answers without running or reading the function: `new` refuses a target that cannot be constructed.
+		new new Proxy(fn, { construct: () => ({}) })();
+	} catch {
+		constructible = false;
+	}
+	if (constructible) return Function.prototype.bind.call(function slothlet_capturedFunction() {}, null);
+	return () => {};
+}
+
 export class ApiBuilder extends ComponentBase {
 	static slothletProperty = "apiBuilder";
 
@@ -606,6 +631,12 @@ export class ApiBuilder extends ComponentBase {
 		const capturedRouteFunctions = new WeakMap();
 
 		/**
+		 * The value each route proxy {@link createInternalRouteProxy} built is over.
+		 * @type {WeakMap<object, object>}
+		 */
+		const routeProxyTargets = new WeakMap();
+
+		/**
 		 * Every function {@link captureRouteFunction} built.
 		 * @type {WeakSet<Function>}
 		 */
@@ -659,9 +690,25 @@ export class ApiBuilder extends ComponentBase {
 				);
 			};
 			// A target of its own: the function's own properties include ones a Proxy of it would have to report as they
-			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead. A plain function, so the
-			// captured one can be constructed when the function can (`new slothlet.diag.SlothletWarning(…)`).
-			const shell = function slothlet_capturedFunction() {};
+			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead. The shell is the same kind of
+			// function as the one it captures, so what a Proxy has to report from its target agrees with the function: a
+			// plain function when it has its own `prototype`, a bound one (constructible, with none) when it can be
+			// constructed without one, and an arrow otherwise.
+			// Decided on the function the route proxy is over: asking the route proxy would run its permission checks.
+			const shell = runtime_captureShell(routeProxyTargets.get(value) ?? value);
+			// Whether the shell holds a member the Proxy has to report as the shell holds it: one it cannot reconfigure, or
+			// any once it is no longer extensible.
+			const fixedOnShell = (prop) => {
+				const own = Reflect.getOwnPropertyDescriptor(shell, prop);
+				return own !== undefined && (!own.configurable || !Reflect.isExtensible(shell));
+			};
+			// Put the function's member on the shell as the function holds it, a function value as this reader's.
+			const mirror = (prop) => {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+				if (!descriptor) return Reflect.deleteProperty(shell, prop);
+				if ("value" in descriptor) descriptor.value = captureRouteFunction(descriptor.value, identity);
+				return Reflect.defineProperty(shell, prop, descriptor);
+			};
 			const captured = new Proxy(shell, {
 				apply(_target, thisArg, args) {
 					return asReader(() => Reflect.apply(value, thisArg, args));
@@ -669,32 +716,62 @@ export class ApiBuilder extends ComponentBase {
 				construct(_target, args, newTarget) {
 					return asReader(() => Reflect.construct(value, args, newTarget === captured ? value : newTarget));
 				},
-				get(_target, prop) {
+				get(target, prop) {
+					// A member the shell fixed is read as it holds it (the Proxy must report it so).
+					if (fixedOnShell(prop)) {
+						const own = Reflect.getOwnPropertyDescriptor(target, prop);
+						if ("value" in own && !own.writable) return own.value;
+					}
 					return captureRouteFunction(Reflect.get(value, prop), liveIdentity());
 				},
-				has(_target, prop) {
-					return Reflect.has(value, prop);
+				has(target, prop) {
+					return Reflect.has(value, prop) || fixedOnShell(prop);
 				},
-				ownKeys() {
+				ownKeys(target) {
+					if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 					const keys = Reflect.ownKeys(value);
-					return keys.includes("prototype") ? keys : [...keys, "prototype"];
+					for (const key of Reflect.ownKeys(target)) if (fixedOnShell(key) && !keys.includes(key)) keys.push(key);
+					return keys;
 				},
 				getOwnPropertyDescriptor(target, prop) {
-					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
-					// The shell's own `prototype` cannot be reconfigured, so it is reported as the shell holds it, with the
-					// function's value when it has one.
-					if (prop === "prototype") {
+					if (fixedOnShell(prop)) {
 						const own = Reflect.getOwnPropertyDescriptor(target, prop);
-						return { ...own, value: descriptor && "value" in descriptor ? descriptor.value : own.value };
+						// A writable member the shell fixed reports the function's current value.
+						if ("value" in own && own.writable) {
+							const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+							if (descriptor && "value" in descriptor) return { ...own, value: descriptor.value };
+						}
+						return own;
 					}
-					// Reported as configurable: the shell holds none of them, so none can be reported otherwise.
+					if (!Reflect.isExtensible(target)) return undefined;
+					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+					// Reported as configurable: the shell does not hold it, so it cannot be reported otherwise.
 					return descriptor ? { ...descriptor, configurable: true } : undefined;
+				},
+				defineProperty(target, prop, descriptor) {
+					if (!Reflect.defineProperty(value, prop, descriptor)) return false;
+					// What the shell has to report as the function now holds it: a member made non-configurable, or one the
+					// shell already fixed.
+					if (descriptor.configurable === false || Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false) {
+						return mirror(prop);
+					}
+					return true;
+				},
+				preventExtensions(target) {
+					if (!Reflect.preventExtensions(value)) return false;
+					// The shell takes every member as the function holds it before it stops taking new ones, so the Proxy reports
+					// the function's members and nothing else.
+					for (const key of Reflect.ownKeys(target)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(target, key);
+					for (const key of Reflect.ownKeys(value)) mirror(key);
+					return Reflect.preventExtensions(target);
 				},
 				set(_target, prop, newValue) {
 					return Reflect.set(value, prop, newValue);
 				},
-				deleteProperty(_target, prop) {
-					return Reflect.deleteProperty(value, prop);
+				deleteProperty(target, prop) {
+					if (fixedOnShell(prop) && Reflect.getOwnPropertyDescriptor(target, prop).configurable === false) return false;
+					if (!Reflect.deleteProperty(value, prop)) return false;
+					return Reflect.deleteProperty(target, prop);
 				}
 			});
 			capturedRouteFunctionSet.add(captured);
@@ -902,6 +979,7 @@ export class ApiBuilder extends ComponentBase {
 			});
 
 			routeCache.set(routePath, proxy);
+			routeProxyTargets.set(proxy, value);
 			return proxy;
 		};
 
