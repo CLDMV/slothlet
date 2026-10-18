@@ -869,9 +869,10 @@ const MAX_CHAIN = 64;
  *
  * Only a flagged call with a module above it is resolved: everything else answers without reading the stack.
  *
- * The ceiling is cumulative (#597): the leaf, every call between it and the supplier (the supplier's code runs
- * inside each of them), and every ceiling those calls and the supplier's own call already carried. A ceiling
- * only ever accumulates, so a nested resolution cannot shed one an earlier resolution imposed.
+ * The ceiling is the leaf the code is running inside. With `permissions.ceilingChain` it is cumulative instead: the
+ * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
+ * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
+ * resolution imposed.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}|null|undefined} record - The running call.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The supplier's wrapper and the ceiling it
@@ -929,14 +930,18 @@ export function resolveSupplier(record) {
 }
 
 /**
- * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under every call from
- * the leaf up to it and every ceiling those calls and its own call carried.
+ * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under the leaf — or, with
+ * `permissions.ceilingChain`, under every call from the leaf up to it and every ceiling those calls and its own call
+ * carried.
  * @param {{wrapper: object, parent: object|null, ceiling?: object|null}} record - The leaf's call.
  * @param {{currentWrapper: object, record: object}} supplier - The supplier's call.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}} The answer.
  * @private
  */
 function runtime_supplierAnswer(record, supplier) {
+	// By default the supplier is held to the leaf its code is running inside; `permissions.ceilingChain` carries every
+	// call it was handed through, and the ceilings they carried, as well.
+	if (record.wrapper.slothlet?.config?.permissions?.ceilingChain !== true) return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
 		parts.push(current.wrapper, current.ceiling);

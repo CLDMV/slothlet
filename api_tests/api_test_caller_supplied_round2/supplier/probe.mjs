@@ -352,6 +352,17 @@ export async function nestedPin() {
 }
 
 /**
+ * Hand the second callee code that calls what the supplier and the second callee may, from the supplier's own call.
+ * @returns {Promise<object>} The outcome of that call.
+ * @public
+ * @example
+ * await api.supplier.probe.ownCallThroughCallee2(); // { ok: true, value: "supplied" }
+ */
+export async function ownCallThroughCallee2() {
+	return self.callee2.ops.run(() => attempt(() => self.vault.secret.forSupplier()));
+}
+
+/**
  * Assign a member under the callee's mount from code run inside the callee's call.
  * @returns {Promise<object>} The outcome of the assignment.
  * @public

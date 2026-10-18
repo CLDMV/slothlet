@@ -1970,6 +1970,9 @@ export default slothlet;
  *   by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
  *   wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
  *   gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+ * @property {boolean} [permissions.ceilingChain=false] - Code a caller hands to a leaf runs as that caller, under the leaf
+ *   it is running inside as its ceiling (#597); `true` keeps every leaf the code was handed through as its ceiling instead.
+ *   See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.

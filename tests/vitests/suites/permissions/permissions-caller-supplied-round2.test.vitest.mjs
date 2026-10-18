@@ -90,12 +90,12 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 	 * Build the base and mount the callee and the supplier as modules of their own.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async () => {
+	const build = async (permissions = {}) => {
 		api = await slothlet({
 			...config,
 			base: path.join(DIR, "base"),
 			hook: true,
-			permissions: { defaultPolicy: "deny", rules: RULES, events: { default: "allow" } }
+			permissions: { defaultPolicy: "deny", rules: RULES, events: { default: "allow" }, ...permissions }
 		});
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
@@ -182,9 +182,25 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 	});
 
 	describe("a ceiling taken inside the callee's call", () => {
-		it("survives a pin and a second callee the pinned code hands code to", async () => {
+		it("by default, code handed on to a second callee is held to the supplier and that callee", async () => {
 			await build();
+			expect(await api.supplier.probe.nestedPin()).toEqual({ ok: true, value: "supplied" });
+		});
+
+		it("with ceilingChain, it survives a pin and a second callee the pinned code hands code to", async () => {
+			await build({ ceilingChain: true });
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.nestedPin())).toEqual(DENIED);
+		});
+
+		it("ceilingChain must be a boolean", async () => {
+			await expect(
+				slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", ceilingChain: "yes" } })
+			).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		});
+
+		it("with ceilingChain, the module's own code is not held to anything", async () => {
+			await build({ ceilingChain: true });
+			expect(await api.supplier.probe.ownCallThroughCallee2()).toEqual({ ok: true, value: "supplied" });
 		});
 	});
 
