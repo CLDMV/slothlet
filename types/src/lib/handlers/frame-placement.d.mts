@@ -95,6 +95,23 @@ export function runtime_captureFrames(limit: number): Iterable<{
     truncated: boolean;
 };
 /**
+ * How many locations have scripts learned (see {@link SCRIPT_HASHES}).
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * learnedScriptCount(); // 8
+ */
+export function learnedScriptCount(): number;
+/**
+ * Forget the scripts learned for an instance's own copies of its files, when it shuts down (#597).
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * forgetInstanceScripts(instanceID);
+ */
+export function forgetInstanceScripts(instanceID: string): void;
+/**
  * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under
  * that location by someone else (`vm.runInThisContext`, `new vm.Script`, `vm.compileFunction`, `Module#_compile`),
  * which can name any file it likes (#597). A location with no script known, or an engine that reports no hash, says

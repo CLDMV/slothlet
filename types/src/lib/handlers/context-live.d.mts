@@ -107,6 +107,19 @@ export class LiveContextManager {
      */
     public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;
     /**
+     * Run `fn` attributed to no module (#597), as the async manager does: inside a module's call, neither the call nor
+     * the host is executing while `fn` runs — nor, for a promise `fn` returns, until it settles — so a permission check
+     * made from it fails closed instead of reading the store's emptied fields as the host. Tracked as suspended like a
+     * host-pinned call, so a module call resuming meanwhile is resolved from its own stack. Outside any module's call
+     * `fn` runs as it is.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runUnattributed(instanceID: string, fn: () => any): any;
+    /**
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
@@ -138,13 +151,15 @@ export class LiveContextManager {
      *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
      * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
      *   (#597): the call is always checked for code another module made running inside it.
+     * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
+     *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean, madeCode?: boolean): any;
+    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *

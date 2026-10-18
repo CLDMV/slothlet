@@ -1,4 +1,24 @@
 /**
+ * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
+ * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {string} [moduleID] - The module, or every module of the instance when omitted.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseModuleMakers(slothlet, "plugins-core");
+ */
+export function releaseModuleMakers(slothlet: object, moduleID?: string): void;
+/**
+ * How many module records an instance holds (see {@link runtime_makerOf}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * moduleMakerCount(slothlet); // 3
+ */
+export function moduleMakerCount(slothlet: object): number;
+/**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
  * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
