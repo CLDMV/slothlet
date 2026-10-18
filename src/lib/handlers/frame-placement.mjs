@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T11:48:15-07:00 (1792349295)
+ *	@Last modified time: 2026-10-18T12:55:48-07:00 (1792353348)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1112,6 +1112,36 @@ export function isRunnerFrame(frame) {
 }
 
 /**
+ * The comparable spellings of a folder being built (#597): its comparable form with `.` and `..` segments collapsed, as a
+ * frame names the files inside it, and its real path when it is reached through a symlink.
+ * @param {*} root - The folder as the build was given it.
+ * @returns {Array<string>} Its spellings; none for an empty or non-string folder, or one naming the filesystem root.
+ * @private
+ */
+function runtime_rootSpellings(root) {
+	if (typeof root !== "string" || !root) return [];
+	const comparable = toComparablePath(root);
+	const absolute = comparable.startsWith("/");
+	const segments = [];
+	for (const segment of comparable.split("/")) {
+		if (segment === "" || segment === ".") continue;
+		if (segment === "..") {
+			if (segments.length && segments[segments.length - 1] !== "..") segments.pop();
+			else if (!absolute) segments.push(segment);
+			continue;
+		}
+		segments.push(segment);
+	}
+	const collapsed = (absolute ? "/" : "") + segments.join("/");
+	const spellings = [];
+	// An empty root (or `/`) would own every absolute path; it owns nothing.
+	if (collapsed && collapsed !== "/") spellings.push(collapsed);
+	const real = runtime_realComparablePath(root);
+	if (real && real !== collapsed) spellings.push(real);
+	return spellings;
+}
+
+/**
  * Whether the current stack holds code of an instance's own (#597): a frame carrying the instance's import tag, in one
  * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
  * folders or a folder being built for it. A stack with none of these is the host's.
@@ -1134,7 +1164,7 @@ export function stackHoldsInstanceCode(sources) {
 		if (loader) locations.push(runtime_loadedLocations(loader));
 		const cache = slothlet?.handlers?.apiCacheManager;
 		if (cache) for (const { root } of runtime_moduleRoots(cache)) roots.push(root);
-		for (const root of building) if (root) roots.push(root);
+		for (const root of building) roots.push(...runtime_rootSpellings(root));
 	}
 	const holds = (frames) => {
 		for (const frame of frames) {
