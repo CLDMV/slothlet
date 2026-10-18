@@ -642,25 +642,32 @@ export class ApiBuilder extends ComponentBase {
 			const callerWrapper = identity.callerWrapper ?? null;
 			const callerCeiling = identity.callerCeiling ?? null;
 			const liveIdentity = () => slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			// Run `invoke` as the reader, under whoever is calling now as well — or, for the reader calling it itself under no
+			// ceiling it did not already have, as it always ran.
+			const asReader = (invoke) => {
+				const live = liveIdentity();
+				if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
+				const liveCalls = identityCeilings(live);
+				if (live?.currentWrapper === reader && readerCalls.every((call) => liveCalls.includes(call))) return invoke();
+				const ceiling = combineCeilings(
+					...ceilingMembers(combineCeilings(readerCeiling, live?.currentWrapper ?? null, ...liveCalls)).filter((call) => call !== reader)
+				);
+				return slothlet.contextManager.runAsIdentity(
+					slothlet.instanceID,
+					{ currentWrapper: reader, ceiling, callerWrapper, callerCeiling },
+					invoke
+				);
+			};
 			// A target of its own: the function's own properties include ones a Proxy of it would have to report as they
-			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead.
-			const captured = new Proxy(() => {}, {
+			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead. A plain function, so the
+			// captured one can be constructed when the function can (`new slothlet.diag.SlothletWarning(…)`).
+			const shell = function slothlet_capturedFunction() {};
+			const captured = new Proxy(shell, {
 				apply(_target, thisArg, args) {
-					const live = liveIdentity();
-					if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
-					const liveCalls = identityCeilings(live);
-					// The reader calling it itself, under no ceiling it did not already have: as it always ran.
-					if (live?.currentWrapper === reader && readerCalls.every((call) => liveCalls.includes(call))) {
-						return Reflect.apply(value, thisArg, args);
-					}
-					const ceiling = combineCeilings(
-						...ceilingMembers(combineCeilings(readerCeiling, live?.currentWrapper ?? null, ...liveCalls)).filter((call) => call !== reader)
-					);
-					return slothlet.contextManager.runAsIdentity(
-						slothlet.instanceID,
-						{ currentWrapper: reader, ceiling, callerWrapper, callerCeiling },
-						() => Reflect.apply(value, thisArg, args)
-					);
+					return asReader(() => Reflect.apply(value, thisArg, args));
+				},
+				construct(_target, args, newTarget) {
+					return asReader(() => Reflect.construct(value, args, newTarget === captured ? value : newTarget));
 				},
 				get(_target, prop) {
 					return captureRouteFunction(Reflect.get(value, prop), liveIdentity());
@@ -669,11 +676,18 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.has(value, prop);
 				},
 				ownKeys() {
-					return Reflect.ownKeys(value);
+					const keys = Reflect.ownKeys(value);
+					return keys.includes("prototype") ? keys : [...keys, "prototype"];
 				},
-				getOwnPropertyDescriptor(_target, prop) {
+				getOwnPropertyDescriptor(target, prop) {
 					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
-					// Reported as configurable: the target holds none of them, so none can be reported otherwise.
+					// The shell's own `prototype` cannot be reconfigured, so it is reported as the shell holds it, with the
+					// function's value when it has one.
+					if (prop === "prototype") {
+						const own = Reflect.getOwnPropertyDescriptor(target, prop);
+						return { ...own, value: descriptor && "value" in descriptor ? descriptor.value : own.value };
+					}
+					// Reported as configurable: the shell holds none of them, so none can be reported otherwise.
 					return descriptor ? { ...descriptor, configurable: true } : undefined;
 				},
 				set(_target, prop, newValue) {
