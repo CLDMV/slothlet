@@ -39,6 +39,7 @@ import {
 	releaseInstanceScope
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { learnedScriptCount } from "#handlers/frame-placement";
+import { moduleMakerCount, resolveWrapper } from "#handlers/unified-wrapper";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND5;
 
@@ -54,6 +55,12 @@ const RULES = [
 ];
 
 const DENIED = "PERMISSION_DENIED";
+
+/**
+ * How a module's code is refused while it is built as no module's: refused as unattributable, or — in the live
+ * runtime, whose `self` names no instance outside a call — refused any context at all.
+ */
+const BUILD_REFUSALS = new Set([DENIED, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
 
 /**
  * Whether this engine gives a stack frame the hash of the script it runs in, which is what tells a file's own code
@@ -225,7 +232,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			await expect(api.callee.ops.addPlug(path.join(DIR, "plug"))).resolves.toBeUndefined();
 			const answers = await api.plug.probe.taken();
 			expect(answers.length).toBeGreaterThan(0);
-			expect(answers.filter((answer) => answer !== DENIED)).toEqual([]);
+			expect(answers.filter((answer) => !BUILD_REFUSALS.has(answer))).toEqual([]);
 		});
 
 		it("a module the callee reloads is reloaded, and does not run as the callee while it is rebuilt", async () => {
@@ -235,7 +242,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			await expect(api.callee.ops.reloadPlug()).resolves.toBeUndefined();
 			const answers = await api.plug.probe.taken();
 			expect(answers.length).toBeGreaterThan(0);
-			expect(answers.filter((answer) => answer !== DENIED)).toEqual([]);
+			expect(answers.filter((answer) => !BUILD_REFUSALS.has(answer))).toEqual([]);
 		});
 	});
 
@@ -272,6 +279,17 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			const tag = `round5-${probe}-${Math.random()}`;
 			expect(await unhandledDuring(() => api.callee.ops[probe](tag))).toEqual([]);
 		});
+	});
+
+	it("a module removed whole drops the record of what it made", async () => {
+		await build({ defaultPolicy: "allow", rules: [] });
+		const instance = resolveWrapper(api.callee).slothlet;
+		await api.supplier.bag.klass();
+		await api.callee.ops.makeClient();
+		const before = moduleMakerCount(instance);
+		expect(before).toBeGreaterThanOrEqual(2);
+		await api.slothlet.api.remove("supplier-mod");
+		expect(moduleMakerCount(instance)).toBe(before - 1);
 	});
 
 	describe("control: values keep their plain-JavaScript identity and shape", () => {
