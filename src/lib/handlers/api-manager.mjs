@@ -88,6 +88,23 @@ import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
+ * A member's value when the member holds data, read from its descriptor; `undefined` for an accessor.
+ *
+ * A walk over what was just mounted looks for wrappers still loading, and a getter holds none: it is the module's
+ * own code, which runs when something reads it, as that reader — never as a side effect of mounting (#597).
+ *
+ * @param {object} owner - The object holding the member.
+ * @param {string} key - The member.
+ * @returns {*} Its value, or `undefined` for an accessor.
+ * @private
+ */
+function runtime_dataMember(owner, key) {
+	const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+	if (!descriptor) return owner[key];
+	return Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+}
+
+/**
  * Manages runtime API component lifecycle (add/remove/reload).
  * @class ApiManager
  * @extends ComponentBase
@@ -2598,7 +2615,7 @@ export class ApiManager extends ComponentBase {
 					// Check wrapper child properties for nested wrappers that might be materializing
 					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
-						collectPendingMaterializations(wrapper[key], depth + 1);
+						collectPendingMaterializations(runtime_dataMember(wrapper, key), depth + 1);
 					}
 					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
 					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
@@ -2612,7 +2629,7 @@ export class ApiManager extends ComponentBase {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
 					if (key !== "____slothletInternal") {
-						collectPendingMaterializations(obj[key], depth + 1);
+						collectPendingMaterializations(runtime_dataMember(obj, key), depth + 1);
 					}
 				}
 			};
