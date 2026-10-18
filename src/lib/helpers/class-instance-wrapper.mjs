@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:41-07:00 (1791821801)
+ *	@Last modified time: 2026-10-18T00:59:40-07:00 (1792310380)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,6 +52,13 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
  * @private
  */
 const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
+
+/**
+ * The instance behind each Proxy {@link runtime_wrapClassInstance} produced.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const WRAPPED_INSTANCES = new WeakMap();
 
 /**
  * Abstract %TypedArray% base constructor (the shared prototype of every
@@ -239,5 +246,24 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 	});
 
 	instanceCache.set(instance, wrappedInstance);
+	WRAPPED_INSTANCES.set(wrappedInstance, instance);
 	return wrappedInstance;
+}
+
+/**
+ * @function runtime_unwrapClassInstance
+ * @package
+ * @param {*} value - A value that may be a Proxy {@link runtime_wrapClassInstance} produced.
+ * @returns {*} The instance the Proxy wraps, or `value` when it is not one.
+ *
+ * @description
+ * The class instance a context-preserving Proxy stands for, so code that keeps track of instances by
+ * identity (#625) can tell the Proxy and the instance are the same value.
+ *
+ * @example
+ * runtime_unwrapClassInstance(runtime_wrapClassInstance(instance, manager, id, new WeakMap())) === instance; // true
+ */
+export function runtime_unwrapClassInstance(value) {
+	if (value === null || typeof value !== "object") return value;
+	return WRAPPED_INSTANCES.get(value) ?? value;
 }

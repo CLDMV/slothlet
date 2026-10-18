@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:23:51-07:00 (1792308231)
+ *	@Last modified time: 2026-10-18T00:59:38-07:00 (1792310378)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -591,7 +591,8 @@ export class ApiManager extends ComponentBase {
 	 * is a top-level `self.X = …` ({@link setOwnedProperty}) or an assignment below it,
 	 * `self.X.Y = …`, which the wrapper at `self.X` receives (#625). A caller whose module is
 	 * mounted at `P` may write only under `P.*`; the base module (endpoint `"."`), a caller with no
-	 * recorded endpoint, and code outside any module (no `callerWrapper`) own the whole tree.
+	 * module, and code outside any module (no `callerWrapper`) own the whole tree. A module no longer
+	 * mounted owns nothing.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -614,8 +615,8 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
-	 * base module (endpoint `"."`), a caller with no recorded endpoint, and code outside any module (no
-	 * `callerWrapper`) own the whole tree. The rule {@link ApiManager#assertOwnedWrite} enforces.
+	 * base module (endpoint `"."`), a caller with no module, and code outside any module (no
+	 * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.
 	 *
 	 * @param {string[]} parts - Segments of the api path.
 	 * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
@@ -627,6 +628,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	ownsPath(parts, callerWrapper) {
 		const ownedRoot = this.#ownedRoot(callerWrapper);
+		// A module no longer mounted (removed, or gone with the instance it belonged to) owns nothing (#625).
+		if (ownedRoot === null) return false;
 		// External code (no callerWrapper) and base-module code (endpoint "." or "") own the whole tree.
 		if (!ownedRoot || ownedRoot === ".") return true;
 		const ownedParts = String(ownedRoot).split(".").filter(Boolean);
@@ -634,26 +637,27 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * The mount point a caller owns: its module's endpoint, or `"."` (the whole tree) when it has none.
+	 * The mount point a caller owns: its module's endpoint, `"."` (the whole tree) when it has no module, or
+	 * null (nothing) when its module is no longer mounted.
 	 *
 	 * Ownership root = the caller module's MOUNT POINT, not its function-level apiPath. The wrapper for
 	 * `lib.config.foo` may belong to a module whose entire mount point is `lib.config` — that whole subtree
 	 * is the module's domain.
 	 *
 	 * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
-	 * @returns {string} The owned root.
+	 * @returns {string|null} The owned root, or null when the caller owns nothing.
 	 * @private
 	 */
 	#ownedRoot(callerWrapper) {
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
 			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
-			// The endpoint is always recorded when a module is registered; the
-			// nullish guard is defensive against an unregistered moduleID.
-			/* v8 ignore next */
 			if (endpoint != null) return endpoint;
+			// The endpoint is recorded when a module is mounted and dropped when it is removed: code of a module
+			// that is no longer mounted (a call still in flight, a function it handed out) owns nothing (#625).
+			return null;
 		}
-		// No recorded endpoint (base-loaded modules use "."; unknown modules) implies
+		// No module (host-assigned code; base-loaded modules record ".") implies
 		// root-ownership: the base module owns the whole tree, same as external code.
 		// Falling back to the wrapper's function-level apiPath would over-restrict
 		// (e.g. a base-module function wouldn't be able to write to its own siblings).

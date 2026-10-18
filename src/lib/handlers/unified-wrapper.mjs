@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:23:53-07:00 (1792308233)
+ *	@Last modified time: 2026-10-18T00:59:39-07:00 (1792310379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@ import {
 } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { runtime_unwrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
@@ -99,6 +100,18 @@ export function runtime_frameworkWrite(node, write) {
 const SELF_VIEWS = new WeakMap();
 /** @type {WeakMap<object, object>} */
 const SELF_VIEW_NODES = new WeakMap();
+/**
+ * The reader each view {@link runtime_selfView} built belongs to.
+ * @type {WeakMap<object, object>}
+ */
+const SELF_VIEW_READERS = new WeakMap();
+/**
+ * The node each live-identity value (a class instance, an EventEmitter) was called on as `this`, kept
+ * when the wrapper hands the value itself to a method as its receiver (#590, #340), so the value coming
+ * back through `self` is held to the node's rule ({@link runtime_selfView}).
+ * @type {WeakMap<object, object>}
+ */
+const SELF_INSTANCE_NODES = new WeakMap();
 
 /**
  * Reader of a node read through `self` by host code: a host `run()` / `scope()` callback, which owns the
@@ -165,6 +178,20 @@ function runtime_selfWriteHasStanding(slothlet) {
 }
 
 /**
+ * A view handed to another reader: that reader's view of the same node. Anything that is not a view is
+ * returned as is.
+ *
+ * @param {*} value - A receiver or an argument.
+ * @param {object} reader - The reader it is handed to.
+ * @returns {*} The reader's view, or `value`.
+ * @private
+ */
+function runtime_selfViewFor(value, reader) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	return SELF_VIEW_NODES.has(value) ? runtime_selfView(value, reader) : value;
+}
+
+/**
  * What a call made through a view hands back, as the reader that made it sees it: a node comes back as a
  * view, also once a promise of one settles, so a module cannot take the node itself from a method's return
  * value (its receiver, for one).
@@ -195,10 +222,15 @@ function runtime_selfViewResult(result, reader) {
  * way. While a module is executing the write reaches the node, whose own rule then applies.
  *
  * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
- * a property descriptor's value, what a method returns — comes back as a view for the same reader. A method
- * called through it gets the view as its receiver. The same node reached through the host's `api` is not a
- * view and is not affected. One view per node and reader, so a module comparing what it read twice sees
- * the same object.
+ * a property descriptor's value, what a method returns — comes back as a view for the same reader, also a
+ * view another reader handed back (a module returning its own node). A method called through it runs as
+ * its own module: a view among its receiver and arguments is handed over as that module's view, the one it
+ * reads through `self` itself, so it can keep its receiver and write its own node later, but a node of a
+ * third module lent to it stays held to its own rule. A class instance or EventEmitter a method gets as
+ * its receiver (#590, #340) comes back as a view of the node it was called on. The same node reached
+ * through the host's `api` is not a view and is not affected. One view per node and reader, so a module
+ * comparing what it read twice sees the same object. A node inside a plain object or array a module
+ * returns is handed over as it is: the module chose to share it.
  *
  * @param {*} node - Value read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
@@ -211,7 +243,14 @@ function runtime_selfViewResult(result, reader) {
  */
 export function runtime_selfView(node, reader) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
-	if (SELF_VIEW_NODES.has(node)) return node;
+	// A view already keeps its reader. Handed to another reader, it is that reader's view of the same node.
+	if (SELF_VIEW_NODES.has(node)) {
+		if (reader === undefined) return node;
+		node = SELF_VIEW_NODES.get(node);
+	}
+	// A live-identity instance a method got as its receiver stands for the node it was called on.
+	// The async runtime hands such a value back in a context-preserving Proxy: the same value.
+	node = SELF_INSTANCE_NODES.get(runtime_unwrapClassInstance(node)) ?? node;
 	const inner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
 	if (inner === null) return node;
 	const slothlet = inner.slothlet;
@@ -253,11 +292,14 @@ export function runtime_selfView(node, reader) {
 		ownKeys(target) {
 			return Reflect.ownKeys(target);
 		},
-		// A call reaches the node as one made on it would, with the view as its receiver when it was called
-		// on one, and what it returns is viewed for the same reader. Construction never sees the view as the
-		// new target.
+		// A call reaches the node as one made on it would. The method runs as its own module: a view among
+		// its receiver and arguments is that module's view of the node, the one it reads through `self`
+		// itself, and what it returns is viewed for the reader that called it. Construction never sees the
+		// view as the new target.
 		apply(target, thisArg, args) {
-			return runtime_selfViewResult(Reflect.apply(target, thisArg, args), reader);
+			const ownThis = runtime_selfViewFor(thisArg, inner);
+			const ownArgs = args.map((arg) => runtime_selfViewFor(arg, inner));
+			return runtime_selfViewResult(Reflect.apply(target, ownThis, ownArgs), reader);
 		},
 		construct(target, args, newTarget) {
 			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
@@ -286,6 +328,7 @@ export function runtime_selfView(node, reader) {
 	});
 	byReader.set(reader, view);
 	SELF_VIEW_NODES.set(view, node);
+	SELF_VIEW_READERS.set(view, reader);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions).
 	_proxyRegistry.set(view, inner);
 	return view;
@@ -1698,13 +1741,21 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
  * a method reached through a held reference runs against the live node rather than the old one.
  *
  * @param {unknown} value - The `this` argument (or `new.target`).
- * @returns {unknown} The live node when `value` is a stale wrapper proxy, otherwise `value`.
+ * @returns {unknown} The live node when `value` is a stale wrapper proxy, the same reader's view of it when
+ *   `value` is a view of one, otherwise `value`.
  * @private
  *
  * @example
  * Reflect.apply(live, runtime_liveThis(thisArg), args);
  */
 function runtime_liveThis(value) {
+	// A view `self` handed out stays a view, of the live node, for the same reader (#625): the method
+	// never gets the node itself.
+	if (SELF_VIEW_NODES.has(value)) {
+		const node = SELF_VIEW_NODES.get(value);
+		const live = runtime_liveThis(node);
+		return live === node ? value : runtime_selfView(live, SELF_VIEW_READERS.get(value));
+	}
 	const wrapper = _proxyRegistry.get(value);
 	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper);
 	return value;
@@ -6372,6 +6423,8 @@ export class UnifiedWrapper extends ComponentBase {
 					(EventEmitter && thisArgImpl instanceof EventEmitter) ||
 					isClassInstance(thisArgImpl));
 			const effectiveThisArg = thisArgIsLiveIdentity ? thisArgImpl : thisArg;
+			// The value stands for its node when it comes back through `self` (#625).
+			if (thisArgIsLiveIdentity) SELF_INSTANCE_NODES.set(thisArgImpl, runtime_unwrapSelfView(thisArg));
 
 			// Permission enforcement: check before hooks or function execution.
 			// Only applies to inter-module calls (caller context exists); external calls
