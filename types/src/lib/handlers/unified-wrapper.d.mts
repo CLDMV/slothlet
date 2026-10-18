@@ -28,19 +28,25 @@ export function runtime_frameworkWrite(node: object, write: () => any): any;
  */
 export function runtime_unwrapSelfView(value: any): any;
 /**
- * Hand out a node of the api reached through `self` as a view that writes only while a module is
- * executing (#625).
+ * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
  * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
- * own the write. A node a module took through `self` and wrote into later from outside any call, such as
- * `const ops = self.callee.ops; return () => { ops.x = … }`, would otherwise reach the node with no caller,
- * which is the host's standing. The view reads, calls, and enumerates as the node does, and nodes read
- * through it come back as views too; an assignment, definition, deletion, prototype change, or seal through
- * it is refused while no module is executing and otherwise reaches the node, whose own rule then applies. The
- * same node reached through the host's `api` is not a view and is not affected. One view per node, so a
- * module comparing what it read twice sees the same object.
+ * own the write. A node a module took through `self` and wrote into later from outside any call would
+ * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
+ * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
+ * the node: it goes through when that module owns the node's path, and is refused when it does not. A
+ * module's own node therefore stays writable from a callback it hands the host, and the host can write
+ * through a node a module handed back from its own subtree; another module's node cannot be written that
+ * way. While a module is executing the write reaches the node, whose own rule then applies.
+ *
+ * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
+ * a property descriptor's value, what a method returns — comes back as a view for the same reader. A method
+ * called through it gets the view as its receiver. The same node reached through the host's `api` is not a
+ * view and is not affected. One view per node and reader, so a module comparing what it read twice sees
+ * the same object.
  *
  * @param {*} node - Value read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -48,7 +54,7 @@ export function runtime_unwrapSelfView(value: any): any;
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node: any): any;
+export function runtime_selfView(node: any, reader?: object): any;
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain

@@ -183,6 +183,20 @@ export class ApiManager extends ComponentBase {
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null): void;
     /**
+     * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
+     * base module (endpoint `"."`), a caller with no recorded endpoint, and code outside any module (no
+     * `callerWrapper`) own the whole tree. The rule {@link ApiManager#assertOwnedWrite} enforces.
+     *
+     * @param {string[]} parts - Segments of the api path.
+     * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
+     * @returns {boolean} Whether the caller owns the path.
+     * @public
+     *
+     * @example
+     * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
+     */
+    public ownsPath(parts: string[], callerWrapper: object | null): boolean;
+    /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
      * @returns {boolean} True when value looks like a wrapper proxy.
