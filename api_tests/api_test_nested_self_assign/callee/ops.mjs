@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T01:51:33-07:00 (1792313493)
+ *	@Last modified time: 2026-10-18T02:33:11-07:00 (1792315991)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -212,4 +212,13 @@ export function boxThis() {
  */
 export function callWith(cb) {
 	cb(this);
+}
+
+/**
+ * Write the receiver's `secret`.
+ * @param {string} value - Value to write.
+ * @returns {void}
+ */
+export function setSecret(value) {
+	this.secret = value;
 }

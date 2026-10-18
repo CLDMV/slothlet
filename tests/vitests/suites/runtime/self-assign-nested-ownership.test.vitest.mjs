@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T01:54:29-07:00 (1792313669)
+ *	@Last modified time: 2026-10-18T02:34:43-07:00 (1792316083)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * rule allows untouched: writes under the module's own subtree, host writes, base-module writes, two
  * modules sharing a mount point, and the framework's own `api.add` invoked by a module.
  *
- * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`.
+ * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -534,6 +534,115 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		api.supplier.ref.hostNote = "through-the-stored-node";
 		expect(api.callee.ops.hostNote).toBe("through-the-stored-node");
 	});
+
+	/**
+	 * Mount the modules, `svc`, and `evil`, give `svc` a grafted object, and load every `svc` node.
+	 * @param {object} [options] - Further slothlet options.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	async function mountSideChannels(options = {}) {
+		await mountModules(options);
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
+		await api.slothlet.api.add("evil", path.join(FIXTURE, "evil"), { moduleID: "evil" });
+		api.svc.state = {
+			secret: "state-secret",
+			read() {
+				return this.secret;
+			}
+		};
+		for (const name of ["store", "bus", "state"]) expect(await api.svc[name].read()).toBe(`${name}-secret`);
+		return api;
+	}
+
+	it.each([
+		["go", "store"],
+		["go", "bus"],
+		["go", "state"],
+		["steer", "store"],
+		["steer", "bus"],
+		["steer", "state"]
+	])("refuses a module's %s writing through another module's %s steered in as a receiver", async (how, name) => {
+		await mountSideChannels();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect((async () => api.evil.x[how](name))()).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(await api.svc[name].read()).toBe(`${name}-secret`);
+	});
+
+	it.each([
+		["before", "box", false],
+		["before", "box", true],
+		["after", "ownNode", false],
+		["always", "ownNode", false],
+		["around", "ownNode", false]
+	])(
+		"refuses later writes through what a module's %s hook on callee.ops.%s is handed (host argument: %s)",
+		async (type, method, hostArg) => {
+			await mountSideChannels({ hook: true });
+			const hook = await api.evil.x.keepHook(`callee.ops.${method}`, type);
+			const returned = await api.callee.ops[method](hostArg ? api.callee.ops : 1);
+			const kept = hook.get();
+			const targets = [kept.api.callee.ops];
+			if (hostArg) targets.push(kept.args[0]);
+			if (method === "ownNode") targets.push(await kept.result);
+			withSuppressedSlothletErrorOutputSync(() => {
+				for (const node of targets) {
+					expect(() => {
+						node.useSecret = () => "pwned-by-hook";
+					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}
+				expect(() => {
+					kept.api.callee = { pwned: true };
+				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+			expect(await api.callee.ops.useSecret()).toBe("callee-original");
+			// What the hook handed back unchanged is what the call returned: the host may still write through it.
+			if (method === "ownNode") {
+				returned.hostNote = "through-the-returned-node";
+				expect(api.callee.ops.hostNote).toBe("through-the-returned-node");
+			}
+			// The module's own subtree stays writable to it through the hook's api.
+			kept.api.evil.note = "own-later";
+			expect(api.evil.note).toBe("own-later");
+		}
+	);
+
+	it.each([["describe"], ["getAPI"]])("refuses a later write through another module's node a module took from diag.%s", async (how) => {
+		await mountSideChannels({ diagnostics: true });
+		const later = await api.evil.x.keepDiag(how);
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+		// The host still gets the api itself.
+		expect(api.slothlet.diag.describe(true).callee).toBe(api.callee);
+	});
+
+	it.each([["impl:created"], ["impl:changed"]])(
+		"refuses a later write through the impl %s hands a module that subscribed, a view of the node or null",
+		async (event) => {
+			await mountSideChannels();
+			const subscription = await api.evil.x.keepLifecycle(event, "vault2");
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "callee"), { moduleID: "vault2" });
+			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
+			await api.slothlet.api.reload("vault2");
+			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const kept = subscription.get();
+			expect(kept.length).toBeGreaterThan(0);
+			// A node already in the tree (a reload's impl:changed) is handed over as the module's view of it.
+			if (event === "impl:changed") expect(kept.some((impl) => impl !== null)).toBe(true);
+			withSuppressedSlothletErrorOutputSync(() => {
+				for (const impl of kept) {
+					if (impl === null) continue;
+					expect(() => {
+						impl.useSecret = () => "pwned-by-lifecycle";
+					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}
+			});
+			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
+		}
+	);
 });
 
 describe.each([
