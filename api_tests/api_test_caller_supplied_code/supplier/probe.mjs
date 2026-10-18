@@ -26,6 +26,7 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import { invoke } from "../__lib/invoke.mjs";
 
 /**
  * Start a call and capture its outcome, whether it throws synchronously or rejects.
@@ -276,4 +277,41 @@ export async function viaCallbackAfterAwait(target = "secret") {
  */
 export async function viaDeputy() {
 	return attempt(() => self.callee.ops.useSecret());
+}
+
+/**
+ * A `toString` built with `new Function`: evaluated code, whose frame names no file, calls the vault directly
+ * while the callee converts the value.
+ * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.viaEvaluated();
+ */
+export async function viaEvaluated(target = "secret") {
+	const leaf = target === "whoami" ? "whoami" : "secret";
+	const value = {
+		s: self,
+		// The result is kept on the value and any rejection is observed here, so nothing of the supplier's own
+		// file runs between the evaluated frame and the callee's.
+		toString: new Function(
+			`const result = this.s.vault.secret.${leaf}(); if (result && typeof result.then === "function") result.then(null, () => {}); this.out = result; return "x";`
+		)
+	};
+	const outer = await attempt(() => self.callee.ops.echo(value));
+	if (!outer.ok) return outer;
+	return attempt(() => value.out);
+}
+
+/**
+ * A callback bound from a helper the callee imports too: its frame is shared by both modules.
+ * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.viaSharedHelper();
+ */
+export async function viaSharedHelper(target = "secret") {
+	const path = target === "whoami" ? "s.vault.secret.whoami" : "s.vault.secret.secret";
+	return attempt(() => self.callee.ops.run(invoke.bind(null, { s: self }, path)));
 }

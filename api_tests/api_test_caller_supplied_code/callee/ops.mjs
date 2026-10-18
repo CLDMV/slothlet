@@ -22,6 +22,7 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import { invoke } from "../__lib/invoke.mjs";
 
 /**
  * Convert the value to a string and return its length (`String(v)`), as in the issue's repro.
@@ -131,4 +132,17 @@ export async function runAfterAwait(fn) {
  */
 export function useSecret() {
 	return self.vault.secret.secret();
+}
+
+/**
+ * Call the function at a dotted path of an object, through the helper the supplier imports as well.
+ * @param {object} holder - The object to walk.
+ * @param {string} path - Dotted path of the function.
+ * @returns {*} The function's result.
+ * @public
+ * @example
+ * api.callee.ops.pick({ a: { b: () => 1 } }, "a.b"); // 1
+ */
+export function pick(holder, path) {
+	return invoke(holder, path);
 }

@@ -62,7 +62,9 @@ const CHANNELS = [
 	["viaProxyGet", "reading a property runs a Proxy get trap"],
 	["viaProxyHas", "`in` runs a Proxy has trap"],
 	["viaCallback", "a callback called synchronously"],
-	["viaCallbackAfterAwait", "a callback called after the callee awaits"]
+	["viaCallbackAfterAwait", "a callback called after the callee awaits"],
+	["viaEvaluated", "a toString built with new Function, whose frame names no file"],
+	["viaSharedHelper", "a callback bound from a helper both modules import"]
 ];
 
 describe.each(getMatrixConfigs())("Permissions > caller-supplied code (#597) > $name", ({ config }) => {
