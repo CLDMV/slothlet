@@ -40,13 +40,15 @@ export class AsyncContextManager {
      * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
      *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
      *   again. Ignored for another store.
+     * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+     *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null): any;
+    } | null, attribute?: boolean): any;
     /**
      * Capture the executing async flow's slothlet store so it can be re-entered later.
      *

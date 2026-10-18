@@ -223,6 +223,22 @@ export function isRunnerFrame(frame: {
  */
 export function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: null): void;
 /**
+ * Register how a module call's result is attributed to the module (see {@link attributeResult}).
+ * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @returns {void}
+ * @internal
+ */
+export function setResultAttributor(attributor: (arg0: object, arg1: any) => any): void;
+/**
+ * What a module call's result is handed back as: a function or iterator the module made runs as that module, with
+ * whoever runs it as its ceiling (#597).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {*} What the caller gets.
+ * @internal
+ */
+export function attributeResult(wrapper: object, value: any): any;
+/**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
  * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
  * count (see {@link runtime_isPlainData}). Only such a call ever reads the stack to find who supplied the code
