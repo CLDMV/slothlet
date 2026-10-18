@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:30:52-07:00 (1792305052)
+ *	@Last modified time: 2026-10-18T00:23:58-07:00 (1792308238)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,9 +102,9 @@ function runtime_resolveExecutingContext() {
 const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
 
 /**
- * What a read of `self` hands a module: a node of the api comes back as a view that writes only while a
- * module is executing (#625), so a node a module keeps and writes into later, outside any call, is refused as
- * `self` itself would be. The framework's own members, and everything that is not a node, are returned as is.
+ * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
+ * so a node a module keeps and writes into later, outside any call, is held to that module's ownership rather
+ * than taking the host's. The framework's own members, and everything that is not a node, are returned as is.
  *
  * @param {string|symbol} prop - Member read.
  * @param {*} value - Its value.

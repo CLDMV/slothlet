@@ -99,6 +99,8 @@
 		"HINT_OWNERSHIP_CONFLICT": "路径已被另一个模块拥有。选项：(1) 在 api.add() 选项中使用 forceOverwrite: true；(2) 将冲突配置设置为 'merge' 或 'replace'；(3) 先调用 api.slothlet.api.remove() 清除路径。",
 		"LOOSE_SET_NOT_OWNED": "模块 {callerApiPath} 无法写入 {apiPath}。模块只能在自己的 apiPath 下写入；要在其他路径注册，请使用 api.slothlet.api.add()。",
 		"HINT_LOOSE_SET_NOT_OWNED": "apiPath 为 \"P\" 的模块只能在 \"P.*\" 下写入。要在其他命名空间注册代码，请调用 api.slothlet.api.add()。",
+		"LOOSE_SET_UNATTRIBUTED": "无法将对 {apiPath} 的写入归属于单个模块：正在运行的代码与多个挂起的调用匹配，因此写入被拒绝。",
+		"HINT_LOOSE_SET_UNATTRIBUTED": "在 live 运行时中，在多个进行中调用共享的文件里恢复执行的代码无法区分。请在写入前等待该调用完成，或在只有一个 apiPath 导入的文件中执行写入。",
 		"LOOSE_SET_RESERVED_KEY": "无法在 apiPath '{apiPath}' 中分配给保留键段 '{segment}'。__proto__、prototype 和 constructor 等名称已被阻止，以防止 API 树受到原型污染。",
 		"HINT_LOOSE_SET_RESERVED_KEY": "段 __proto__、prototype 和 constructor 不能用作 apiPath 名称，因为写入它们将更改 JavaScript 原型链。请选择其他名称。",
 		"INVALID_DIRECTORY": "无效目录 '{dir}'：{error}。请确保目录存在且可访问。",

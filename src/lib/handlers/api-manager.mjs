@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:30:36-07:00 (1792305036)
+ *	@Last modified time: 2026-10-18T00:23:51-07:00 (1792308231)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -600,45 +600,64 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper) {
-		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
-		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
-		// point is `lib.config` — that whole subtree is the module's domain. We look
-		// up the mount point (endpoint) via the ownership handler.
+		if (this.ownsPath(parts, callerWrapper)) return;
+		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
+		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
+		/* v8 ignore next */
+		const callerApiPath = callerWrapper?.____slothletInternal?.apiPath ?? this.#ownedRoot(callerWrapper);
+		throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
+			apiPath: parts.join("."),
+			callerApiPath,
+			validationError: true
+		});
+	}
+
+	/**
+	 * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
+	 * base module (endpoint `"."`), a caller with no recorded endpoint, and code outside any module (no
+	 * `callerWrapper`) own the whole tree. The rule {@link ApiManager#assertOwnedWrite} enforces.
+	 *
+	 * @param {string[]} parts - Segments of the api path.
+	 * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
+	 * @returns {boolean} Whether the caller owns the path.
+	 * @public
+	 *
+	 * @example
+	 * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
+	 */
+	ownsPath(parts, callerWrapper) {
+		const ownedRoot = this.#ownedRoot(callerWrapper);
+		// External code (no callerWrapper) and base-module code (endpoint "." or "") own the whole tree.
+		if (!ownedRoot || ownedRoot === ".") return true;
+		const ownedParts = String(ownedRoot).split(".").filter(Boolean);
+		return ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
+	}
+
+	/**
+	 * The mount point a caller owns: its module's endpoint, or `"."` (the whole tree) when it has none.
+	 *
+	 * Ownership root = the caller module's MOUNT POINT, not its function-level apiPath. The wrapper for
+	 * `lib.config.foo` may belong to a module whose entire mount point is `lib.config` — that whole subtree
+	 * is the module's domain.
+	 *
+	 * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
+	 * @returns {string} The owned root.
+	 * @private
+	 */
+	#ownedRoot(callerWrapper) {
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
-		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
-		let ownedRoot = null;
 		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
 			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
 			// The endpoint is always recorded when a module is registered; the
 			// nullish guard is defensive against an unregistered moduleID.
 			/* v8 ignore next */
-			if (endpoint != null) {
-				ownedRoot = endpoint;
-			}
+			if (endpoint != null) return endpoint;
 		}
 		// No recorded endpoint (base-loaded modules use "."; unknown modules) implies
 		// root-ownership: the base module owns the whole tree, same as external code.
 		// Falling back to the wrapper's function-level apiPath would over-restrict
 		// (e.g. a base-module function wouldn't be able to write to its own siblings).
-		if (ownedRoot === null) ownedRoot = ".";
-		// Apply validation only when the owned root is a real subtree.
-		// External code (no callerWrapper) and base-module code (endpoint="." or "")
-		// own the whole tree and can write anywhere.
-		if (ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
-			const ownedParts = String(ownedRoot).split(".").filter(Boolean);
-			const isUnderOwn = ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
-			if (!isUnderOwn) {
-				// callerWrapperPath is always set when callerModuleID is set; the
-				// `?? ownedRoot` fallback guards an inconsistent caller object.
-				/* v8 ignore next */
-				const callerApiPath = callerWrapperPath ?? ownedRoot;
-				throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
-					apiPath: parts.join("."),
-					callerApiPath,
-					validationError: true
-				});
-			}
-		}
+		return ".";
 	}
 
 	/**

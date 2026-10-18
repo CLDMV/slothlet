@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:30:40-07:00 (1792305040)
+ *	@Last modified time: 2026-10-18T00:23:53-07:00 (1792308233)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,13 +92,29 @@ export function runtime_frameworkWrite(node, write) {
 }
 
 /**
- * The view {@link runtime_selfView} built for each node, and the node behind each view.
- * @type {WeakMap<object, object>}
+ * The views {@link runtime_selfView} built, per node and per reader, and the node behind each view.
+ * @type {WeakMap<object, WeakMap<object, object>>}
  * @private
  */
 const SELF_VIEWS = new WeakMap();
 /** @type {WeakMap<object, object>} */
 const SELF_VIEW_NODES = new WeakMap();
+
+/**
+ * Reader of a node read through `self` by host code: a host `run()` / `scope()` callback, which owns the
+ * whole tree.
+ * @type {object}
+ * @private
+ */
+const HOST_READER = Object.freeze({ reader: "host" });
+
+/**
+ * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
+ * nothing.
+ * @type {object}
+ * @private
+ */
+const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
 
 /**
  * The node behind a value: a view `self` handed out ({@link runtime_selfView}) stands for its node, which is
@@ -117,19 +133,75 @@ export function runtime_unwrapSelfView(value) {
 }
 
 /**
- * Hand out a node of the api reached through `self` as a view that writes only while a module is
- * executing (#625).
+ * Who is reading the api through `self` right now: the executing module's wrapper, or one of the two
+ * readers that are no module ({@link HOST_READER}, {@link UNATTRIBUTED_READER}).
+ *
+ * @param {object} slothlet - Instance the node belongs to.
+ * @returns {object} The reader.
+ * @private
+ */
+function runtime_selfReader(slothlet) {
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper) return identity.currentWrapper;
+	return identity?.unresolved ? UNATTRIBUTED_READER : HOST_READER;
+}
+
+/**
+ * Whether a write through a view `self` handed out is made with standing of its own: while a module is
+ * executing (the node's own rule then decides, see {@link runtime_assertOwnedWrite}), or inside a `run()` /
+ * `scope()` the host opened, where `self` itself writes as the host. The same test the live `self` applies
+ * before it resolves at all.
+ *
+ * @param {object} slothlet - Instance the node belongs to.
+ * @returns {boolean} Whether the write stands on the code running now.
+ * @private
+ */
+function runtime_selfWriteHasStanding(slothlet) {
+	const contextManager = slothlet.contextManager;
+	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper || identity?.unresolved) return true;
+	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
+	return Boolean(store?.parentInstanceID) && store[TRUSTED_ROOT] === true;
+}
+
+/**
+ * What a call made through a view hands back, as the reader that made it sees it: a node comes back as a
+ * view, also once a promise of one settles, so a module cannot take the node itself from a method's return
+ * value (its receiver, for one).
+ *
+ * @param {*} result - What the call returned.
+ * @param {object} reader - The reader the view belongs to.
+ * @returns {*} The result, a view of it, or a promise of either.
+ * @private
+ */
+function runtime_selfViewResult(result, reader) {
+	// Only a plain native promise is followed: any other thenable is handed back exactly as it is.
+	if (result instanceof Promise && Object.getPrototypeOf(result) === Promise.prototype) {
+		return result.then((value) => runtime_selfView(value, reader));
+	}
+	return runtime_selfView(result, reader);
+}
+
+/**
+ * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
  * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
- * own the write. A node a module took through `self` and wrote into later from outside any call, such as
- * `const ops = self.callee.ops; return () => { ops.x = … }`, would otherwise reach the node with no caller,
- * which is the host's standing. The view reads, calls, and enumerates as the node does, and nodes read
- * through it come back as views too; an assignment, definition, deletion, prototype change, or seal through
- * it is refused while no module is executing and otherwise reaches the node, whose own rule then applies. The
- * same node reached through the host's `api` is not a view and is not affected. One view per node, so a
- * module comparing what it read twice sees the same object.
+ * own the write. A node a module took through `self` and wrote into later from outside any call would
+ * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
+ * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
+ * the node: it goes through when that module owns the node's path, and is refused when it does not. A
+ * module's own node therefore stays writable from a callback it hands the host, and the host can write
+ * through a node a module handed back from its own subtree; another module's node cannot be written that
+ * way. While a module is executing the write reaches the node, whose own rule then applies.
+ *
+ * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
+ * a property descriptor's value, what a method returns — comes back as a view for the same reader. A method
+ * called through it gets the view as its receiver. The same node reached through the host's `api` is not a
+ * view and is not affected. One view per node and reader, so a module comparing what it read twice sees
+ * the same object.
  *
  * @param {*} node - Value read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -137,63 +209,82 @@ export function runtime_unwrapSelfView(value) {
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node) {
+export function runtime_selfView(node, reader) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	if (SELF_VIEW_NODES.has(node)) return node;
 	const inner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
 	if (inner === null) return node;
-	const cached = SELF_VIEWS.get(node);
+	const slothlet = inner.slothlet;
+	if (reader === undefined) reader = runtime_selfReader(slothlet);
+	let byReader = SELF_VIEWS.get(node);
+	if (!byReader) {
+		byReader = new WeakMap();
+		SELF_VIEWS.set(node, byReader);
+	}
+	const cached = byReader.get(reader);
 	if (cached) return cached;
 
-	const slothlet = inner.slothlet;
-	// Refused only when no module is executing at all. Code the live runtime cannot attribute among several
-	// suspended calls is still module code: the node's own rule decides for it.
-	const refuseOutsideModule = () => {
-		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-		if (!identity?.currentWrapper && !identity?.unresolved) {
-			throw new inner.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+	// A write made with no standing of its own is the reader's: it goes through only under a path the
+	// reader owns. The host owns the whole tree; code that could not be attributed owns none of it.
+	const refuseWithoutStanding = (prop) => {
+		if (runtime_selfWriteHasStanding(slothlet)) return;
+		if (reader === HOST_READER) return;
+		if (reader !== UNATTRIBUTED_READER) {
+			const parts = String(inner.____slothletInternal.apiPath).split(".").filter(Boolean);
+			if (typeof prop === "string") parts.push(prop);
+			if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return;
 		}
+		throw new inner.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 	};
+	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
+	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
 	const view = new Proxy(node, {
 		get(target, prop) {
 			const value = Reflect.get(target, prop);
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-			// A member the node holds read-only and non-configurable must be read as it is (proxy invariant).
-			const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
-			return runtime_selfView(value);
+			if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
+			return runtime_selfView(value, reader);
 		},
-		// A call or construction reaches the node exactly as one made on it would: a view never stands in as
-		// the receiver or the new target.
+		getOwnPropertyDescriptor(target, prop) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (!descriptor || !("value" in descriptor) || isFixed(descriptor)) return descriptor;
+			return { ...descriptor, value: runtime_selfView(descriptor.value, reader) };
+		},
+		ownKeys(target) {
+			return Reflect.ownKeys(target);
+		},
+		// A call reaches the node as one made on it would, with the view as its receiver when it was called
+		// on one, and what it returns is viewed for the same reader. Construction never sees the view as the
+		// new target.
 		apply(target, thisArg, args) {
-			return Reflect.apply(target, runtime_unwrapSelfView(thisArg), args);
+			return runtime_selfViewResult(Reflect.apply(target, thisArg, args), reader);
 		},
 		construct(target, args, newTarget) {
 			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
 		},
 		set(target, prop, value) {
-			refuseOutsideModule();
+			refuseWithoutStanding(prop);
 			return Reflect.set(target, prop, runtime_unwrapSelfView(value));
 		},
 		defineProperty(target, prop, descriptor) {
-			refuseOutsideModule();
+			refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
 		deleteProperty(target, prop) {
-			refuseOutsideModule();
+			refuseWithoutStanding(prop);
 			return Reflect.deleteProperty(target, prop);
 		},
 		setPrototypeOf(target, proto) {
-			refuseOutsideModule();
+			refuseWithoutStanding(null);
 			return Reflect.setPrototypeOf(target, proto);
 		},
 		preventExtensions(target) {
-			refuseOutsideModule();
+			refuseWithoutStanding(null);
 			return Reflect.preventExtensions(target);
 		}
 	});
-	SELF_VIEWS.set(node, view);
+	byReader.set(reader, view);
 	SELF_VIEW_NODES.set(view, node);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions).
 	_proxyRegistry.set(view, inner);
@@ -206,28 +297,32 @@ export function runtime_selfView(node) {
  * `self.X.Y = …` reaches the wrapper at `self.X`, not the runtime `self` set trap, so the ownership rule
  * the top-level write follows ({@link ApiManager#assertOwnedWrite}) is applied here to the member's full
  * api path — or, for a change to the node itself (its prototype, its extensibility), to the node's own
- * path. The caller is the module executing now, resolved as the runtime `self` set trap resolves it.
- * Host code owns the whole tree, and a write the framework makes itself ({@link runtime_frameworkWrite})
+ * path. The caller is the module executing now. Host code owns the whole tree, and a write the framework makes itself ({@link runtime_frameworkWrite})
  * is not the module's. A symbol key is never an api path, as at the top level.
  *
  * @param {object} wrapper - Wrapper receiving the change.
  * @param {string|symbol|null} prop - Member being written, or null for a change to the node itself.
  * @returns {void}
- * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the executing module does not own the path.
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the executing module does not own the path, and
+ *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
  * @private
  */
 function runtime_assertOwnedWrite(wrapper, prop) {
 	if (typeof prop === "symbol") return;
 	if (FRAMEWORK_WRITES.has(wrapper)) return;
 	const slothlet = wrapper.slothlet;
-	const instanceID = slothlet.instanceID;
-	// Resolved as the runtime `self` set trap resolves it: the executing call's identity, else the store's.
-	const caller =
-		slothlet.contextManager?.getCallerIdentity(instanceID)?.currentWrapper ??
-		slothlet.contextManager?.tryGetContext(instanceID)?.currentWrapper;
-	if (!caller) return;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
 	if (prop !== null) parts.push(prop);
+	// The executing call's identity, never the store's own caller field: under the live runtime that field
+	// names whichever call entered last, which is not who is running once calls overlap.
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	// Code the live runtime cannot attribute to one of several suspended calls is module code with no
+	// owner to check against: refused, rather than handed the host's standing.
+	if (identity?.unresolved) {
+		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+	}
+	const caller = identity?.currentWrapper;
+	if (!caller) return;
 	slothlet.handlers.apiManager.assertOwnedWrite(parts, caller);
 }
 

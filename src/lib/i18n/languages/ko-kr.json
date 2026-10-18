@@ -99,6 +99,8 @@
 		"HINT_OWNERSHIP_CONFLICT": "경로가 이미 다른 모듈에 의해 소유되고 있습니다. 옵션: (1) api.add() 옵션에서 forceOverwrite: true 사용, (2) 충돌 설정을 'merge' 또는 'replace'로 설정, (3) 먼저 api.slothlet.api.remove()를 호출하여 경로를 삭제.",
 		"LOOSE_SET_NOT_OWNED": "모듈 {callerApiPath}은(는) {apiPath}에 쓸 수 없습니다. 모듈은 자신의 apiPath 아래에서만 쓸 수 있습니다. 다른 경로에 등록하려면 api.slothlet.api.add()를 사용하세요.",
 		"HINT_LOOSE_SET_NOT_OWNED": "apiPath가 \"P\"인 모듈은 \"P.*\" 아래에만 쓸 수 있습니다. 다른 네임스페이스에 코드를 등록하려면 api.slothlet.api.add()를 호출하세요.",
+		"LOOSE_SET_UNATTRIBUTED": "{apiPath}에 대한 쓰기를 하나의 모듈로 귀속할 수 없습니다. 실행 중인 코드가 일시 중단된 여러 호출과 일치하므로 쓰기가 거부됩니다.",
+		"HINT_LOOSE_SET_UNATTRIBUTED": "live 런타임에서는 진행 중인 여러 호출이 공유하는 파일에서 재개된 코드를 구별할 수 없습니다. 쓰기 전에 호출을 기다리거나, 하나의 apiPath만 가져오는 파일에서 쓰기를 수행하세요.",
 		"LOOSE_SET_RESERVED_KEY": "apiPath '{apiPath}'의 예약된 키 세그먼트 '{segment}'에 할당할 수 없습니다. __proto__, prototype, constructor와 같은 이름은 API 트리의 프로토타입 오염을 방지하기 위해 차단됩니다.",
 		"HINT_LOOSE_SET_RESERVED_KEY": "__proto__, prototype, constructor 세그먼트는 이들에 쓰면 JavaScript 프로토타입 체인이 변경되므로 apiPath 이름으로 사용할 수 없습니다. 다른 이름을 선택하세요.",
 		"INVALID_DIRECTORY": "유효하지 않은 디렉토리 '{dir}': {error}. 디렉토리가 존재하고 액세스 가능한지 확인하십시오.",

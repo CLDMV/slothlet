@@ -99,6 +99,8 @@
 		"HINT_OWNERSHIP_CONFLICT": "パスは既に別のモジュールによって所有されています。オプション: (1) api.add() のオプションで forceOverwrite: true を使用する、(2) 衝突構成を 'merge' または 'replace' に設定する、(3) 先に api.slothlet.api.remove() を呼び出してパスをクリアする。",
 		"LOOSE_SET_NOT_OWNED": "モジュール {callerApiPath} は {apiPath} に書き込めません。モジュールは自身の apiPath 配下にのみ書き込めます。別のパスに登録するには api.slothlet.api.add() を使用してください。",
 		"HINT_LOOSE_SET_NOT_OWNED": "apiPath が \"P\" のモジュールは \"P.*\" の下にのみ書き込めます。別の名前空間にコードを登録するには api.slothlet.api.add() を呼び出してください。",
+		"LOOSE_SET_UNATTRIBUTED": "{apiPath} への書き込みを 1 つのモジュールに帰属できません。実行中のコードが複数の中断中の呼び出しに一致するため、書き込みは拒否されます。",
+		"HINT_LOOSE_SET_UNATTRIBUTED": "live ランタイムでは、実行中の複数の呼び出しが共有するファイルで再開したコードは区別できません。書き込む前に呼び出しを待機するか、1 つの apiPath だけがインポートするファイルで書き込んでください。",
 		"LOOSE_SET_RESERVED_KEY": "apiPath '{apiPath}' の予約キーセグメント '{segment}' に代入できません。__proto__、prototype、constructor などの名前は API ツリーのプロトタイプ汚染を防ぐためブロックされています。",
 		"HINT_LOOSE_SET_RESERVED_KEY": "__proto__、prototype、constructor のセグメントは、それらに書き込むと JavaScript のプロトタイプチェーンが変更されてしまうため、apiPath 名として使用できません。別の名前を選んでください。",
 		"INVALID_DIRECTORY": "無効なディレクトリ '{dir}' です: {error}。ディレクトリが存在し、アクセス可能であることを確認してください。",

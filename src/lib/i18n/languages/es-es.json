@@ -99,6 +99,8 @@
 		"HINT_OWNERSHIP_CONFLICT": "La ruta ya pertenece a otro módulo. Opciones: (1) Usa forceOverwrite: true en las opciones de api.add(), (2) Establece la configuración de colisión en 'merge' o 'replace', (3) Llama a api.slothlet.api.remove() primero para limpiar la ruta.",
 		"LOOSE_SET_NOT_OWNED": "El módulo {callerApiPath} no puede escribir en {apiPath}. Un módulo solo puede escribir debajo de su propio apiPath; use api.slothlet.api.add() para registrar otra ruta.",
 		"HINT_LOOSE_SET_NOT_OWNED": "Un módulo cuyo apiPath es \"P\" solo puede escribir bajo \"P.*\". Para registrar código en otro espacio de nombres, llame a api.slothlet.api.add().",
+		"LOOSE_SET_UNATTRIBUTED": "Una escritura en {apiPath} no se puede atribuir a un único módulo: el código en ejecución coincide con varias llamadas suspendidas, por lo que se rechaza.",
+		"HINT_LOOSE_SET_UNATTRIBUTED": "Con el runtime live, el código que se reanuda en un archivo compartido por varias llamadas en curso no se puede distinguir. Espere a que termine la llamada antes de escribir, o haga la escritura en un archivo que importe un solo apiPath.",
 		"LOOSE_SET_RESERVED_KEY": "No se puede asignar al segmento de clave reservada '{segment}' en apiPath '{apiPath}'. Nombres como __proto__, prototype y constructor están bloqueados para prevenir la contaminación del prototipo del árbol de la API.",
 		"HINT_LOOSE_SET_RESERVED_KEY": "Los segmentos __proto__, prototype y constructor no pueden usarse como nombres de apiPath porque escribir en ellos mutaría la cadena de prototipos de JavaScript. Elija otro nombre.",
 		"INVALID_DIRECTORY": "Directorio no válido '{dir}': {error}. Asegúrate de que el directorio existe y es accesible.",
