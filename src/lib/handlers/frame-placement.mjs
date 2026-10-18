@@ -1094,6 +1094,42 @@ export function isRunnerFrame(frame) {
 }
 
 /**
+ * Whether the current stack holds code of an instance's own (#597): a frame carrying the instance's import tag, in one
+ * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
+ * folders or a folder being built for it. A stack with none of these is the host's.
+ *
+ * Read in full: a stack too deep to read to its end is taken to hold such code.
+ *
+ * @param {Array<{family: string, slothlet: object|null, roots: Array<string>}>} sources - The instances, each with the
+ *   folders being built for it.
+ * @returns {boolean} True when a frame is code of one of them.
+ * @internal
+ */
+export function stackHoldsInstanceCode(sources) {
+	const families = new Set(sources.map(({ family }) => family));
+	const locations = [];
+	const roots = [];
+	for (const { family, slothlet, roots: building } of sources) {
+		locations.push(runtime_commonJSLocations(family), runtime_importGraphEntry(family).files);
+		const loader = slothlet?.processors?.loader;
+		if (loader) locations.push(runtime_loadedLocations(loader));
+		const cache = slothlet?.handlers?.apiCacheManager;
+		if (cache) for (const { root } of runtime_moduleRoots(cache)) roots.push(root);
+		for (const root of building) if (root) roots.push(root);
+	}
+	const frames = runtime_captureFrames(200);
+	for (const frame of frames) {
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		const tag = runtime_frameInstanceTag(frame.line);
+		if (tag && families.has(tag)) return true;
+		if (locations.some((set) => set.has(frame.path))) return true;
+		// A folder being built may be given relative to where it was asked for: it then matches as whole segments.
+		if (roots.some((root) => frame.path.startsWith(root + "/") || frame.path.includes("/" + root.replace(/^\.?\/+/, "") + "/"))) return true;
+	}
+	return Boolean(frames.truncated);
+}
+
+/**
  * Whether a value handed to a call can carry code of the caller's: a non-null object or function that is
  * not one of slothlet's own api nodes. Decided from `typeof` and slothlet's registries alone — reading a
  * property or a prototype would run the caller's own traps and getters.

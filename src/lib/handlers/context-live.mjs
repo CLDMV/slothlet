@@ -39,6 +39,7 @@ import {
 	resolveSupplier,
 	runtime_captureFrames,
 	runtime_namesEntry,
+	stackHoldsInstanceCode,
 	toComparablePath
 } from "#handlers/frame-placement";
 
@@ -90,11 +91,39 @@ const PROMISE_HOOKS = (() => {
 })();
 
 /**
- * The promises being followed (see {@link runtime_followSettled}), with what to run once each settles.
- * @type {Map<Promise<unknown>, Array<function(): void>>}
+ * The promises being followed (see {@link runtime_followSettled}), with what to run once each settles and the instance
+ * each follow is for. Held weakly: a promise nothing else holds can never settle, and is let go with what it would run.
+ * @type {WeakMap<Promise<unknown>, Array<{family: string|null, onSettled: function(): void}> & {ref: WeakRef<Promise<unknown>>|null, families: Set<string>}>}
  * @private
  */
-const FOLLOWED = new Map();
+const FOLLOWED = new WeakMap();
+
+/**
+ * How many promises are being followed: the settle hook is installed while any is.
+ * @type {number}
+ * @private
+ */
+let followedCount = 0;
+
+/**
+ * The promises followed for each instance, so its follows are dropped when it shuts down.
+ * @type {Map<string, Set<WeakRef<Promise<unknown>>>>}
+ * @private
+ */
+const FOLLOWED_BY_FAMILY = new Map();
+
+/**
+ * A followed promise collected before it settled: it never will, so it stops counting.
+ * @type {FinalizationRegistry<{families: Set<string>, ref: WeakRef<Promise<unknown>>|null}>|null}
+ * @private
+ */
+const FOLLOWED_COLLECTED =
+	typeof FinalizationRegistry === "function"
+		? new FinalizationRegistry(({ families, ref }) => {
+				runtime_forgetRef(families, ref);
+				runtime_unfollowed();
+			})
+		: null;
 
 /**
  * Stops the settle hook; installed only while a promise is followed.
@@ -104,13 +133,67 @@ const FOLLOWED = new Map();
 let stopFollowing = null;
 
 /**
- * Whether a native promise is still pending, read without reacting to it.
- * @param {Promise<unknown>} promise - The promise.
- * @returns {boolean} True while it is pending.
+ * Count one followed promise as no longer followed, stopping the settle hook once none is.
+ * @returns {void}
  * @private
  */
-function runtime_isPending(promise) {
-	return /^Promise \{\s*<pending>/.test(util.inspect(promise, { depth: 0 }));
+function runtime_unfollowed() {
+	followedCount = Math.max(0, followedCount - 1);
+	if (followedCount === 0 && stopFollowing) {
+		const stop = stopFollowing;
+		stopFollowing = null;
+		stop();
+	}
+}
+
+/**
+ * Stop following promises for an instance that shut down: what they would run belongs to it, and a promise that never
+ * settles would otherwise keep the settle hook installed, and the instance's stores alive, for the life of the process.
+ * @param {string} family - The instance.
+ * @returns {void}
+ * @private
+ */
+function runtime_unfollowInstance(family) {
+	const refs = FOLLOWED_BY_FAMILY.get(family);
+	if (!refs) return;
+	FOLLOWED_BY_FAMILY.delete(family);
+	for (const ref of refs) {
+		const promise = ref.deref();
+		const follows = promise && FOLLOWED.get(promise);
+		if (!follows) continue;
+		follows.families.delete(family);
+		const kept = follows.filter((follow) => follow.family !== family);
+		if (kept.length) {
+			follows.splice(0, follows.length, ...kept);
+			continue;
+		}
+		FOLLOWED.delete(promise);
+		runtime_forgetRef(follows.families, follows.ref);
+		FOLLOWED_COLLECTED?.unregister(follows);
+		runtime_unfollowed();
+	}
+}
+
+/**
+ * A promise's state, read without reacting to it and without running code of anyone's: `"unknown"` for one whose state
+ * cannot be read that way — not a plain `Promise.prototype` promise, one carrying properties of its own, or one whose
+ * prototype's tag was changed, any of which would have the inspector run or print code of someone else's.
+ * @param {Promise<unknown>} promise - A native promise.
+ * @returns {"pending"|"settled"|"unknown"} Its state.
+ * @private
+ */
+function runtime_promiseState(promise) {
+	try {
+		if (Object.getPrototypeOf(promise) !== Promise.prototype || Reflect.ownKeys(promise).length) return "unknown";
+		const tag = Object.getOwnPropertyDescriptor(Promise.prototype, Symbol.toStringTag);
+		if (!tag || tag.get || tag.set || tag.value !== "Promise") return "unknown";
+		const text = util.inspect(promise, { depth: 0, customInspect: false, showProxy: false });
+		if (/^Promise \{\s*<pending>\s*\}$/.test(text)) return "pending";
+		return text.startsWith("Promise {") ? "settled" : "unknown";
+	} catch {
+		// An inspector that cannot read it says nothing of its state.
+		return "unknown";
+	}
 }
 
 /**
@@ -119,29 +202,61 @@ function runtime_isPending(promise) {
  * the code handled its own. Uses the engine's promise hooks, installed only while something is followed.
  * @param {Promise<unknown>} promise - The promise.
  * @param {function(): void} onSettled - Runs in a microtask after it settles.
- * @returns {boolean} False where the platform cannot follow a promise without reacting to it.
+ * @param {string|null} [family=null] - The instance the follow is for: dropped when it shuts down.
+ * @returns {boolean} False where the platform cannot follow a promise without reacting to it, or the promise's state
+ *   cannot be read without running code of someone else's.
  * @private
  */
-function runtime_followSettled(promise, onSettled) {
+function runtime_followSettled(promise, onSettled, family = null) {
 	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
-	if (!runtime_isPending(promise)) {
+	const state = runtime_promiseState(promise);
+	if (state === "unknown") return false;
+	if (state === "settled") {
 		queueMicrotask(onSettled);
 		return true;
 	}
-	let callbacks = FOLLOWED.get(promise);
-	if (!callbacks) FOLLOWED.set(promise, (callbacks = []));
-	callbacks.push(onSettled);
+	let follows = FOLLOWED.get(promise);
+	if (!follows) {
+		const ref = typeof WeakRef === "function" ? new WeakRef(promise) : null;
+		follows = Object.assign([], { ref, families: new Set() });
+		FOLLOWED.set(promise, follows);
+		followedCount++;
+		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref }, follows);
+	}
+	follows.push({ family, onSettled });
+	if (follows.ref && family !== null && !follows.families.has(family)) {
+		follows.families.add(family);
+		let refs = FOLLOWED_BY_FAMILY.get(family);
+		if (!refs) FOLLOWED_BY_FAMILY.set(family, (refs = new Set()));
+		refs.add(follows.ref);
+	}
 	stopFollowing ??= PROMISE_HOOKS.onSettled((settled) => {
 		const done = FOLLOWED.get(settled);
 		if (!done) return;
 		FOLLOWED.delete(settled);
-		if (FOLLOWED.size === 0) {
-			stopFollowing?.();
-			stopFollowing = null;
-		}
-		for (const callback of done) queueMicrotask(callback);
+		FOLLOWED_COLLECTED?.unregister(done);
+		runtime_forgetRef(done.families, done.ref);
+		runtime_unfollowed();
+		for (const { onSettled: callback } of done) queueMicrotask(callback);
 	});
 	return true;
+}
+
+/**
+ * Drop a followed promise's reference from the instances it was followed for.
+ * @param {Set<string>} families - The instances.
+ * @param {WeakRef<Promise<unknown>>|null} ref - The reference.
+ * @returns {void}
+ * @private
+ */
+function runtime_forgetRef(families, ref) {
+	if (!ref) return;
+	for (const family of families) {
+		const refs = FOLLOWED_BY_FAMILY.get(family);
+		if (!refs) continue;
+		refs.delete(ref);
+		if (!refs.size) FOLLOWED_BY_FAMILY.delete(family);
+	}
 }
 
 /**
@@ -433,10 +548,11 @@ export class LiveContextManager {
 		// A lone suspended call is not assumed to be what is executing. Host code can run while it is
 		// suspended — after the host's own `await`, or in a callback the host registered while nothing
 		// was in flight, which nothing pinned — so it is resolved from the stack like any other (#601).
-		// A host-pinned entry has no frame to match and keeps its own answer.
+		// A host-pinned entry has no frame to match and keeps its own answer. Code running as no module is told from the
+		// host's by the stack below.
 		if (suspended.size === 1) {
 			const [only] = suspended;
-			if (!only.filePath) return this.#entryIdentity(only);
+			if (!only.filePath && !only.unattributed) return this.#entryIdentity(only);
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
@@ -453,8 +569,9 @@ export class LiveContextManager {
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
 		// inherited caller — never whichever call the field happens to name. While code that runs as no module is
-		// in flight (a module being built at a module's request), it may be that code: who is calling cannot be told.
-		if (this.#hasUnattributed(suspended)) return UNATTRIBUTED_IDENTITY;
+		// in flight (a module being built at a module's request), a stack holding the instance's code may be that code:
+		// who is calling cannot be told. A stack holding none of it is the host's.
+		if (this.#unattributedOnStack(suspended)) return UNATTRIBUTED_IDENTITY;
 		return this.#baselineIdentity(store);
 	}
 
@@ -467,6 +584,27 @@ export class LiveContextManager {
 	#hasUnattributed(suspended) {
 		for (const entry of suspended) if (entry.unattributed) return true;
 		return false;
+	}
+
+	/**
+	 * Whether code that runs as no module may be what is executing: such code is suspended on a store, and the stack
+	 * holds code of its instance's own — a frame of a module, or of a folder being built (see
+	 * {@link LiveContextManager#runUnattributed}). Code the stack shows to be none of the instance's is the host's.
+	 * @param {Set<object>} suspended - The store's suspended calls.
+	 * @returns {boolean} True when it may be.
+	 * @private
+	 */
+	#unattributedOnStack(suspended) {
+		if (!this.#hasUnattributed(suspended)) return false;
+		const sources = new Map();
+		for (const entry of suspended) {
+			if (!entry.unattributed) continue;
+			const source = sources.get(entry.family) ?? { family: entry.family, slothlet: entry.slothlet ?? null, roots: [] };
+			source.slothlet ??= entry.slothlet ?? null;
+			source.roots.push(...(entry.roots ?? []));
+			sources.set(entry.family, source);
+		}
+		return stackHoldsInstanceCode([...sources.values()]);
 	}
 
 	/**
@@ -566,7 +704,7 @@ export class LiveContextManager {
 		const resolved = this.#resolveSuspendedFromStack(suspended);
 		if (resolved === AMBIGUOUS) return { wrapper: null, inFlight, ambiguous: true };
 		// Code running as no module registers as no one, never as the host (#597).
-		if (!resolved) return this.#hasUnattributed(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
+		if (!resolved) return this.#unattributedOnStack(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
 		if (resolved.unattributed) return { wrapper: null, inFlight, ambiguous: true };
 		const identity = this.#entryIdentity(resolved);
 		return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
@@ -896,12 +1034,16 @@ export class LiveContextManager {
 	 * host-pinned call, so a module call resuming meanwhile is resolved from its own stack. Outside any module's call
 	 * `fn` runs as it is.
 	 *
+	 * While it is suspended, code it runs is told from the host's by the stack: a stack holding the instance's code — a
+	 * frame of one of its modules, or of a folder being built — fails closed, and one holding none of it is the host's.
+	 *
 	 * @param {string} instanceID - Instance to run against.
 	 * @param {function(): *} fn - What to run.
+	 * @param {{slothlet?: object, roots?: Array<string>}} [building] - The instance, and the folders being built for it.
 	 * @returns {*} What `fn` returned.
 	 * @internal
 	 */
-	runUnattributed(instanceID, fn) {
+	runUnattributed(instanceID, fn, building = {}) {
 		const currentID = this.currentInstanceID;
 		const targetInstanceID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
 		const store = this.instances.get(targetInstanceID);
@@ -958,7 +1100,10 @@ export class LiveContextManager {
 			record: null,
 			callerWrapper: null,
 			callerCeiling: null,
-			unattributed: true
+			unattributed: true,
+			// What its code is told apart from the host's by.
+			slothlet: building.slothlet ?? null,
+			roots: (building.roots ?? []).filter((root) => typeof root === "string" && root).map(toComparablePath)
 		};
 		this.#suspendedFor(store).add(entry);
 		this.#busyStores.add(store);
@@ -1225,7 +1370,7 @@ export class LiveContextManager {
 					restore();
 				};
 				// A pinned callback's promise is its own: followed to settle the call, never reacted to (#597).
-				if (!follow && runtime_followSettled(result, settle)) return result;
+				if (!follow && runtime_followSettled(result, settle, store.parentInstanceID ?? store.instanceID)) return result;
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
 				try {
 					return nativeThen(
@@ -1522,6 +1667,8 @@ export class LiveContextManager {
 
 		// Remove from instances map
 		this.instances.delete(instanceID);
+		// A promise followed for one of its callbacks that never settles would keep the settle hook installed (#597).
+		runtime_unfollowInstance(store.parentInstanceID ?? instanceID);
 		// A call still suspended when its instance shut down never settles here: its store would otherwise
 		// stay among the busy ones for the life of the process, and every later identity read would pay a
 		// stack read for it (#601 review). Its run()/scope() stores go with it.

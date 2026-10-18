@@ -184,12 +184,14 @@ function describeScopeReceived(value) {
  * the code of a module that asked for the build. Outside any module's call it runs as it is.
  * @param {object} slothlet - The instance.
  * @param {function(): Promise<*>} build - The work.
+ * @param {*} [folderPath] - The folder (or folders) being added, whose code is the instance's while it is built.
  * @returns {Promise<*>} What it resolves to.
  * @private
  */
-function runtime_buildAsNoModule(slothlet, build) {
+function runtime_buildAsNoModule(slothlet, build, folderPath) {
 	const contextManager = slothlet.contextManager;
-	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build) : build();
+	const roots = (Array.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string");
+	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build, { slothlet, roots }) : build();
 }
 
 /**
@@ -1181,7 +1183,7 @@ export class ApiBuilder extends ComponentBase {
 							options: effectiveOptions,
 							versionConfig: versionConfig || null
 						});
-					const addResult = await runtime_buildAsNoModule(slothlet, build);
+					const addResult = await runtime_buildAsNoModule(slothlet, build, folderPath);
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
