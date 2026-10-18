@@ -20,7 +20,23 @@
  * @module api_tests/api_test_caller_supplied_round4/callee/ops
  */
 
+import { createRequire } from "node:module";
 import { self } from "@cldmv/slothlet/runtime";
+
+const latin = createRequire(import.meta.url)("./__lib/helper.latin1");
+
+/**
+ * The secret, called from a closure the callee's CommonJS helper (whose source is not valid UTF-8) runs; handed an
+ * object, so the call is checked for supplied code.
+ * @param {object} _ - Anything.
+ * @returns {string} The secret.
+ * @public
+ * @example
+ * api.callee.ops.ownViaLatin({}); // "s3cret"
+ */
+export function ownViaLatin(_) {
+	return latin.apply(() => self.vault.secret.secret());
+}
 
 /**
  * Write a member of a member of a value.

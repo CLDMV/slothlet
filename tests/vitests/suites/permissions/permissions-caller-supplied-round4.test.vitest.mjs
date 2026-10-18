@@ -43,6 +43,19 @@ const RULES = [
 
 const DENIED = "PERMISSION_DENIED";
 
+/**
+ * Whether this engine gives a stack frame the hash of the script it runs in, which is what tells a file's own code
+ * from code compiled under its name.
+ * @type {boolean}
+ */
+const HAS_SCRIPT_HASH = (() => {
+	const previous = Error.prepareStackTrace;
+	Error.prepareStackTrace = (_error, sites) => sites;
+	const sites = new Error().stack;
+	Error.prepareStackTrace = previous;
+	return typeof sites?.[0]?.getScriptHash === "function";
+})();
+
 describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth round (#597) > $name", ({ config }) => {
 	let api;
 
@@ -67,6 +80,11 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 	it("control: the callee's own call is its own", async () => {
 		await build();
 		expect(await api.callee.ops.secretDirect()).toBe("s3cret");
+	});
+
+	it.runIf(HAS_SCRIPT_HASH)("control: the callee's CommonJS helper whose source is not valid UTF-8 is the callee's code", async () => {
+		await build();
+		expect(await api.supplier.probe.ownLatinControl()).toEqual({ ok: true, value: "s3cret" });
 	});
 
 	describe("code nested on the supplier's api objects, run by the callee", () => {

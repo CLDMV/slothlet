@@ -134,3 +134,15 @@ export async function madeThroughCallee() {
 export async function genThroughCallee() {
 	return attempt(() => self.callee.ops.spreadMember({ gen: self.supplier.bag.gen() }, "gen"));
 }
+
+/**
+ * Control: the callee's own CommonJS helper, whose source is not valid UTF-8, is the callee's code in a call handed
+ * an object.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.ownLatinControl(); // { ok: true, value: "s3cret" }
+ */
+export async function ownLatinControl() {
+	return attempt(() => self.callee.ops.ownViaLatin({}));
+}
