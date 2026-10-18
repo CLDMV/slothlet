@@ -33,6 +33,9 @@ import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7;
 
+/** The fifth round's fixture, whose supplier exports a Proxy whose traps call the vault. */
+const DIR5 = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND5;
+
 /** Deny by default; the secret is the callee's alone. */
 const RULES = [
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
@@ -182,5 +185,73 @@ describe.each(getMatrixConfigs({ runtime: "live" }))("Live runtime > a promise f
 			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
 		expect(active).toBe(0);
+	});
+});
+
+describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))("Live runtime > reload with a module exporting a Proxy (#597) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Run something, collecting the errors left uncaught or unhandled while its deferred work settles.
+	 * @param {function(): Promise<void>} run - What to run.
+	 * @returns {Promise<Array<string>>} Their codes.
+	 */
+	const uncaughtDuring = async (run) => {
+		const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
+		const reported = [];
+		const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
+		process.removeAllListeners("unhandledRejection");
+		process.removeAllListeners("uncaughtException");
+		process.on("unhandledRejection", listener);
+		process.on("uncaughtException", listener);
+		try {
+			await run();
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		} finally {
+			process.removeListener("unhandledRejection", listener);
+			process.removeListener("uncaughtException", listener);
+			for (const handler of previous.rejection) process.on("unhandledRejection", handler);
+			for (const handler of previous.exception) process.on("uncaughtException", handler);
+		}
+		return reported;
+	};
+
+	it("callbacks the Proxy's traps left pending run through the reload without anything left uncaught", async () => {
+		api = await slothlet({
+			...config,
+			base: path.join(DIR5, "base"),
+			hook: true,
+			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
+		});
+		await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+		const reported = await uncaughtDuring(async () => {
+			expect((await api.supplier.trap.p).x).toBe(1);
+			await api.slothlet.reload();
+		});
+		expect(reported).toEqual([]);
+		const answers = await api.supplier.trap.taken();
+		expect(answers.length).toBeGreaterThan(0);
+		expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);
+	});
+
+	it("the Proxy held past shutdown no longer runs its traps", async () => {
+		api = await slothlet({ ...config, base: path.join(DIR5, "base"), hook: true });
+		await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+		const held = await api.supplier.trap.p;
+		expect(held.x).toBe(1);
+		await api.shutdown();
+		api = null;
+		let code = null;
+		try {
+			void held.x;
+		} catch (error) {
+			code = error?.code ?? String(error);
+		}
+		expect(code).toBe("CONTEXT_NOT_FOUND");
 	});
 });
