@@ -777,7 +777,7 @@ function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute
  */
 function runtime_makerInstanceID(slothlet) {
 	const instances = slothlet.contextManager.instances;
-	for (let id = slothlet.instanceID; id; ) {
+	for (let id = slothlet.instanceID; id;) {
 		if (instances.has(id)) return id;
 		const reloaded = id.lastIndexOf("_reload_");
 		id = reloaded > 0 ? id.slice(0, reloaded) : null;

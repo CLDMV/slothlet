@@ -1142,7 +1142,8 @@ export function stackHoldsInstanceCode(sources) {
 		if (tag && families.has(tag)) return true;
 		if (locations.some((set) => set.has(frame.path))) return true;
 		// A folder being built may be given relative to where it was asked for: it then matches as whole segments.
-		if (roots.some((root) => frame.path.startsWith(root + "/") || frame.path.includes("/" + root.replace(/^\.?\/+/, "") + "/"))) return true;
+		if (roots.some((root) => frame.path.startsWith(root + "/") || frame.path.includes("/" + root.replace(/^\.?\/+/, "") + "/")))
+			return true;
 	}
 	return Boolean(frames.truncated);
 }
