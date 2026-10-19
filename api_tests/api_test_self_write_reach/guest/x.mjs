@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:41:58-07:00 (1792388518)
+ *	@Last modified time: 2026-10-19T00:44:42-07:00 (1792395882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -541,4 +541,85 @@ export function addKeptRule() {
  */
 export function changeKeptRule(target) {
 	keptRule.target = target;
+}
+
+/**
+ * Mount a folder from this module's code.
+ * @param {string} apiPath - Where to mount it.
+ * @param {string} folder - Folder to mount.
+ * @param {object} [options] - `api.add` options.
+ * @returns {Promise<string>} `"done"`, or the error code the mount was refused with.
+ * @example
+ * await addAt("guest.sub", "/abs/guest");
+ */
+export async function addAt(apiPath, folder, options = {}) {
+	try {
+		await self.slothlet.api.add(apiPath, folder, options);
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Remove a mount from this module's code.
+ * @param {string} target - Api path or moduleID.
+ * @param {string} [scopedApiPath] - With a moduleID, the path to remove only its share of.
+ * @returns {Promise<*>} What `api.remove` returned, or the error code it was refused with.
+ * @example
+ * await removeAt("guest.sub");
+ */
+export async function removeAt(target, scopedApiPath) {
+	try {
+		return scopedApiPath === undefined ? await self.slothlet.api.remove(target) : await self.slothlet.api.remove(target, scopedApiPath);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Call the function at `apiPath`, read through `self`, with no arguments.
+ * @param {string} apiPath - Dotted path of the function.
+ * @returns {Promise<*>} What it returned, or the error code the call was refused with.
+ * @example
+ * await callAt("outer.x.listSelf");
+ */
+export async function callAt(apiPath) {
+	try {
+		return await apiPath.split(".").reduce((value, key) => value[key], self)();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * A conditional rule this module added and kept, to change after the add.
+ * @type {object|null}
+ */
+let keptConditionalRule = null;
+
+/**
+ * Add a rule granting `other` writes into this module's subtree in tenant `a`, and keep the object.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addKeptConditionalRule();
+ */
+export function addKeptConditionalRule() {
+	keptConditionalRule = { caller: "other.**", target: "guest.**:write", effect: "allow", condition: { tenant: "a" } };
+	try {
+		return self.slothlet.permissions.addRule(keptConditionalRule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Change the tenant of the condition of the rule this module kept.
+ * @param {string} tenant - The new tenant.
+ * @returns {void}
+ * @example
+ * changeKeptCondition("b");
+ */
+export function changeKeptCondition(tenant) {
+	keptConditionalRule.condition.tenant = tenant;
 }

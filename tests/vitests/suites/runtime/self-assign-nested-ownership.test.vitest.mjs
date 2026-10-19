@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:54-07:00 (1792384554)
+ *	@Last modified time: 2026-10-19T00:46:52-07:00 (1792396012)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,6 +61,17 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
 		return api;
 	}
+
+	/**
+	 * Host write rules granting `supplier` the path `at` and everything under it: a module's `api.add` and
+	 * `api.remove` write there (#625).
+	 * @param {string} at - Dotted api path.
+	 * @returns {object[]} The rules.
+	 */
+	const grantMount = (at) => [
+		{ caller: "supplier.**", target: `${at}:write`, effect: "allow" },
+		{ caller: "supplier.**", target: `${at}.**:write`, effect: "allow" }
+	];
 
 	it("refuses a module replacing a member of another module's subtree", async () => {
 		await mountModules();
@@ -243,19 +254,28 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(api.callee.ops.peerNote).toBe("shared");
 	});
 
-	it("lets a module's own api.add mount under another module's mount point", async () => {
+	it("refuses a module's own api.add under another module's mount point: it writes there", async () => {
 		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.supplier.attack.addUnderCallee(path.join(FIXTURE, "vault"))).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(api.callee.extra).toBeUndefined();
+	});
+
+	it("lets a module's own api.add mount under another module's mount point a host rule grants it", async () => {
+		await mountModules({ permissions: { rules: grantMount("callee.extra") } });
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(await api.supplier.attack.addUnderCallee(path.join(FIXTURE, "vault"))).not.toBe("undefined");
 		});
 		expect(api.callee.extra).toBeDefined();
+		// The framework's writes that mount it are not the module's: the grant reaches no further.
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => api.supplier.attack.replaceCalleeMember()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 	});
 
-	it("lets a module's own api.add, reload, and remove work below another module's mount point", async () => {
-		await mountModules();
+	it("lets a module's own api.add, reload, and remove work below another module's mount point a host rule grants it", async () => {
+		await mountModules({ permissions: { rules: grantMount("callee.extra") } });
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(await api.supplier.attack.addReloadRemoveUnderCallee(path.join(FIXTURE, "vault"))).toEqual(["object", "object", "undefined"]);
 		});
@@ -263,8 +283,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("lets a module's own api.add, reload, and remove work at another module's mount point", async () => {
-		await mountModules();
+	it("lets a module's own api.add, reload, and remove work at another module's mount point a host rule grants it", async () => {
+		await mountModules({ permissions: { rules: grantMount("callee") } });
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(await api.supplier.attack.addReloadRemoveUnderCallee(path.join(FIXTURE, "callee_peer"), "callee")).toEqual([
 				"object",
@@ -285,6 +305,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			stackRoutines: true,
 			routines: [{ name: "initialize", mode: "manual" }]
 		});
+		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.addRule(rule);
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
 		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
@@ -301,9 +322,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["callee.deep.extra2", true, true],
 		["callee.deep.extra2", true, false]
 	])(
-		"mounts a module's own api.add at %s below another module's mount point (permissions: %s, awaited by the module: %s)",
+		"mounts a module's own api.add at %s below another module's mount point a host rule grants it (permissions: %s, awaited by the module: %s)",
 		async (at, permissions, awaited) => {
 			await mountModules(permissions ? { permissions: { defaultPolicy: "allow" } } : {});
+			for (const rule of grantMount(at)) api.slothlet.permissions.addRule(rule);
 			const folder = path.join(FIXTURE, "vault");
 			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
 			else await (await api.supplier.attack.addAtUnawaited(at, folder, "k4")).done;
