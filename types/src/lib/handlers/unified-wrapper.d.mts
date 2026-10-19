@@ -103,8 +103,8 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  * A module never changes them (#625): they are shared by every module and the host, so an assignment,
  * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
  * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
- * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is no api path
- * and is left to plain JS, as it is for the api's own nodes.
+ * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is held to the
+ * same rules as a string key: a change under one meets the rules of the member it is made on.
  *
  * @param {*} member - A root member read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
@@ -117,8 +117,9 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  */
 export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
 /**
- * Refuse a module replacing, defining, or deleting one of the framework's root members (`self.slothlet`,
- * `self.shutdown`, `self.destroy`) through the runtime `self` (#625). Host code is left as it was.
+ * Refuse a module replacing one of the framework's root members (`self.slothlet`, `self.shutdown`,
+ * `self.destroy`) through the runtime `self` (#625); a definition or deletion goes through
+ * {@link runtime_selfChangeTarget}. Host code is left as it was.
  *
  * @param {object} slothlet - Instance the change is made on.
  * @param {string|symbol} prop - Member of `self` changed.
@@ -131,6 +132,28 @@ export function runtime_selfFrameworkView(member: any, reader?: object, slothlet
  * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
  */
 export function runtime_assertFrameworkRootChange(slothlet: object, prop: string | symbol): void;
+/**
+ * Where a change to `self` itself lands, once the code running now may make it (#625): defining or deleting a
+ * member of `self`, or a symbol-keyed member of it.
+ *
+ * `self` is one object shared by every module of every instance; it stands for the api of the instance the
+ * running code belongs to. A change to it follows the rule a top-level `self.X = …` does: a module changes
+ * only what it owns (the framework's own members never, by the built-in write rules), a symbol key or a change
+ * to `self` as a whole is held to the root of the tree, and code the live runtime cannot attribute is refused.
+ * The change is made on that instance's api — or on the isolated scope's own view of it — never on the object
+ * behind `self`.
+ *
+ * @param {object} ctx - The active context store (`self`, `slothlet`).
+ * @param {string|symbol|null} prop - Member of `self` changed, or null for `self` as a whole.
+ * @returns {object} The object the change is made on.
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` / `PERMISSION_DENIED` when module code changes a member it may
+ *   not, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ * @internal
+ *
+ * @example
+ * return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
+ */
+export function runtime_selfChangeTarget(ctx: object, prop: string | symbol | null): object;
 /**
  * The module a framework view runs the executing code as, when that view was used with no caller of its
  * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).

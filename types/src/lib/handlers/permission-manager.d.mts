@@ -315,6 +315,23 @@ export class PermissionManager extends ComponentBase {
         via?: string;
     } | null): boolean;
     /**
+     * Refuse module code granting a write (#625): a rule with a write target (`pattern:write`) and effect `allow`.
+     *
+     * A write rule that allows can only lift a denial — the ownership rule still applies to what it lets
+     * through — and the denials are the host's or the framework's own (the built-in write rules), which only
+     * the host lifts. Code of a module executing now (or code the live runtime cannot attribute) adding such a
+     * rule, through `slothlet.permissions.addRule` or the `permissions` option of an `api.add` it makes, is
+     * refused; a module's manifest is refused the same at mount. A deny write rule only tightens and is left as
+     * it is, and host code is unaffected.
+     *
+     * @param {object} rule - The rule about to be added (`{ target, effect }`).
+     * @returns {void}
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code grants a write.
+     * @example
+     * pm.assertHostWriteGrant({ caller: "**", target: "slothlet.**:write", effect: "allow" }); // throws inside a module call
+     */
+    assertHostWriteGrant(rule: object): void;
+    /**
      * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
      * or deleting a member at `targetPath`, or changing the prototype or extensibility of the node there.
      *
