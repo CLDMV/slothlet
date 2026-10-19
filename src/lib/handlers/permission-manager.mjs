@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T10:10:49-07:00 (1792429849)
+ *	@Last modified time: 2026-10-19T11:34:02-07:00 (1792434842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,6 +72,12 @@ const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "around
  * @private
  */
 const WRITE_TARGET_SUFFIX = ":write";
+
+/**
+ * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
+ * @type {string}
+ */
+const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
@@ -259,6 +265,14 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#reachRuleId = null;
+
+	/**
+	 * Id of the built-in deny on `slothlet.metadata.setGlobal` for modules (#625), which
+	 * {@link PermissionManager#assertGlobalMetadataWrite} applies rather than the call gate.
+	 * @type {string|null}
+	 * @private
+	 */
+	#globalMetadataRuleId = null;
 
 	/**
 	 * Default policy when no rule matches: "allow" or "deny".
@@ -514,6 +528,11 @@ export class PermissionManager extends ComponentBase {
 		// specificity (an exact target, `slothlet.permissions.global.checkCall`), which outranks this one.
 		this.addRule({ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }, "__builtin__");
 
+		// Global metadata (#625): `metadata.setGlobal` changes the metadata every node reports, every other module's
+		// included, so it is the host's. An allow for a module lifts it. Checked by assertGlobalMetadataWrite once the
+		// call's arguments are valid, never by the call gate.
+		this.#globalMetadataRuleId = this.addRule({ caller: "**", target: GLOBAL_METADATA_TARGET, effect: "deny" }, "__builtin__");
+
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
 		// global-effect methods (remove/off/clear, enable/disable, enablePattern/disablePattern/reset).
@@ -539,7 +558,7 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.event.off", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.event.emit", effect: "allow" }, "__builtin__");
 
-		// Built-in write rules (#625), evaluated whether or not permissions are configured or enabled. The
+		// Built-in write rules (#625), evaluated like every other rule only while the permission system is on. The
 		// framework's namespace and root functions are shared by every module and the host, so no module
 		// assigns, defines, or deletes anything at or under them, or changes the prototype or extensibility
 		// of what is there; nor does a module touch the framework's own keys on any api node — the wrapper's
@@ -1704,7 +1723,46 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#mayReachBeyondOwn(callerPath) {
-		const targetPath = "slothlet.permissions.addRule";
+		return this.#defaultWinner(callerPath, "slothlet.permissions.addRule").effect === "allow";
+	}
+
+	/**
+	 * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+	 * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
+	 * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
+	 * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
+	 * check, and weighs every other rule on the target as usual. Host code is not checked.
+	 *
+	 * @param {object|null} module - The calling module's wrapper ({@link runtime_selfModuleReader}), or null.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_DENIED` when no allow lifts the built-in deny for the module.
+	 * @example
+	 * pm.assertGlobalMetadataWrite(runtime_selfModuleReader(slothlet));
+	 */
+	assertGlobalMetadataWrite(module) {
+		if (module === null || !this.#enabled) return;
+		const callerPath = String(module.____slothletInternal?.apiPath ?? "");
+		const winner = this.#defaultWinner(callerPath, GLOBAL_METADATA_TARGET);
+		if (winner.effect === "allow") return;
+		this.#emitAuditEvent("permission:denied", {
+			caller: callerPath,
+			target: GLOBAL_METADATA_TARGET,
+			rule: this.#serializeRule(winner),
+			conditionMatched: winner.condition != null
+		});
+		throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: GLOBAL_METADATA_TARGET });
+	}
+
+	/**
+	 * The call rule that wins for `callerPath` on `targetPath` where a built-in default deny always matches: most
+	 * specific first, then the higher layer, then the last registered. The default policy plays no part.
+	 *
+	 * @param {string} callerPath - The module's api path.
+	 * @param {string} targetPath - The target the built-in default covers.
+	 * @returns {object} The winning rule entry.
+	 * @private
+	 */
+	#defaultWinner(callerPath, targetPath) {
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
 		const conditioned = [];
 		for (const entry of this.#callRules.values()) {
@@ -1719,8 +1777,8 @@ export class PermissionManager extends ComponentBase {
 			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
 			return b.registrationSeq - a.registrationSeq;
 		});
-		// The built-in reach default always matches, so there is a winner.
-		return conditioned[0].effect === "allow";
+		// The built-in default always matches, so there is a winner.
+		return conditioned[0];
 	}
 
 	/**
@@ -1784,21 +1842,22 @@ export class PermissionManager extends ComponentBase {
 	 * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
 	 * the prototype or extensibility of the node there.
 	 *
-	 * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
-	 * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-	 * instance. An allow is a grant, a lift of a built-in rule included: the write goes through whatever the module
-	 * owns. With no matching write
-	 * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+	 * Write rules are part of the permission system: with the system off (no `permissions` config, `enabled: false`,
+	 * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
+	 * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
+	 * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
+	 * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
 	 * A denial is audited like any other.
 	 *
 	 * @param {string} callerPath - Api path of the module writing.
 	 * @param {string} targetPath - Api path written.
 	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-	 * @returns {"deny"|"grant"|null} The decision; null when no write rule matches.
+	 * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
 	 * @example
 	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
+		if (!this.#enabled) return null;
 		const winner = this.#decideWrite(callerPath, targetPath, runtimeContext);
 		if (winner === null) return null;
 		if (winner.effect === "allow") return "grant";
@@ -1823,6 +1882,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
 	 */
 	isWriteGranted(callerPath, targetPath, runtimeContext = null) {
+		if (!this.#enabled) return false;
 		return this.#decideWrite(callerPath, targetPath, runtimeContext)?.effect === "allow";
 	}
 
@@ -2584,7 +2644,7 @@ export class PermissionManager extends ComponentBase {
 			// Hook-target rules (pattern:type) gate interception, never plain calls — skip them here. So is the built-in
 			// reach default (see placeModuleRule), which decides only what rules module code may add, never the call to
 			// `addRule` itself. Write rules are kept apart and never scanned here.
-			if (entry.hookType != null || entry.id === this.#reachRuleId) continue;
+			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 

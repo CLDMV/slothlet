@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T10:10:49-07:00 (1792429849)
+ *	@Last modified time: 2026-10-19T11:34:02-07:00 (1792434842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -317,9 +317,13 @@ export class ModuleManager extends ComponentBase {
 	 * @param {string} name - Package name.
 	 * @param {object} [opts]
 	 * @param {string} [opts.version] - Disambiguator when more than one mounted entry shares the name.
+	 * @param {object|null} [writer] - The calling module's wrapper, or null for host code; read where the call enters,
+	 *   before any await, as the live runtime no longer knows the caller after one (#625).
 	 * @returns {Promise<boolean>} `true` when something was unmounted, `false` when no matching mount was found.
+	 * @throws {SlothletError} What {@link ApiManager#assertModuleRemovalOf} throws: module code removes every match or
+	 *   none.
 	 */
-	async removeModule(name, opts = {}) {
+	async removeModule(name, opts = {}, writer = runtime_selfModuleReader(this.slothlet)) {
 		const matches = [];
 		for (const [key, mountResult] of this.#mounted) {
 			if (mountResult.packageName !== name) continue;
@@ -327,8 +331,11 @@ export class ModuleManager extends ComponentBase {
 			matches.push({ key, mountResult });
 		}
 		if (matches.length === 0) return false;
+		// Module code: every match is checked before any is removed, so the removal is all or nothing (#625).
+		const apiManager = this.slothlet.handlers.apiManager;
+		if (writer !== null) for (const { mountResult } of matches) apiManager.assertModuleRemovalOf(mountResult.moduleID, writer);
 		for (const { key, mountResult } of matches) {
-			await this.slothlet.handlers.apiManager.removeApiComponent(mountResult.moduleID);
+			await apiManager.removeApiComponent(mountResult.moduleID, { writer });
 			this.#mounted.delete(key);
 		}
 		return true;

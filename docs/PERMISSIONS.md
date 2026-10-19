@@ -518,7 +518,7 @@ Module code removes only the rules its own module owns. A module allowed to mana
 
 A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` does not write into a module mounted at `outer.inner`, and does not register a rule whose target's literal prefix lies in it (`outer.inner.**`). Modules mounted at the same point share that point's subtree, not each other's other mounts. The base module keeps the whole tree. A rule a module registers for its subtree matches its pattern as written, so `outer.**` covers everything mounted under `outer`, other modules mounted below it included, as a host rule would.
 
-`api.add` and `api.remove` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. A removal reaches every path it would delete — every mount and path of a module removed by its moduleID, every registered path under a removed path — and is checked whole before anything changes: if one path is refused, nothing is removed. Each needs the module to own the path, a `:write` allow naming it, or to be inside a mount the module itself performed, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. An `api.add` from module code also writes at every path its content creates or merges into below the mount, whatever the collision mode, so content cannot land in a module mounted below it or past a write deny there; in lazy mode the content is loaded for that check. A path is checked as it is mounted (trimmed). The framework's setters are writes too when module code calls them: `metadata.set` / `remove` / `setFor` / `removeFor` / `setForVersion`, `versioning.setDefault` / `setVersionMetadata`, and `api.reload` (at every path it rebuilds). A versioned `api.add` writes at both the version-tagged mount path (`<versionTag>.<apiPath>`) and the path where its version dispatcher sits, and module code needs both. A module mounting below its own path hands that path to the module it mounts, and its code may always remove that mount, or part of it, without a grant; the mounted module may remove itself. A mount the host made below a module's path is not that module's to remove without a grant. Host code mounts and removes anywhere, as before. Module code mounts with its own moduleID or one not in use; a moduleID of another mounted module is refused (`MODULE_ID_IN_USE`). The host may re-use a moduleID.
+`api.add`, `api.remove`, and `api.modules.addModule` / `addModules` / `addDiscovered` / `removeModule` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. A removal reaches every path it would delete — every mount and path of a module removed by its moduleID, every registered path under a removed path — and is checked whole before anything changes: if one path is refused, nothing is removed. `api.modules.removeModule` checks every mount matching the name (and version) before removing any. A refused `api.add` leaves nothing behind: what it registered, what loading lazy content for its checks registered included, is reverted. Each needs the module to own the path, a `:write` allow naming it, or to be inside a mount the module itself performed, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. An `api.add` from module code also writes at every path its content creates or merges into below the mount, whatever the collision mode, so content cannot land in a module mounted below it or past a write deny there; in lazy mode the content is loaded for that check. A path is checked as it is mounted (trimmed). The framework's setters are writes too when module code calls them: `metadata.set` / `remove` / `setFor` / `removeFor` / `setForVersion`, `versioning.setDefault` / `setVersionMetadata`, and `api.reload` (at every path it rebuilds). A versioned `api.add` writes at both the version-tagged mount path (`<versionTag>.<apiPath>`) and the path where its version dispatcher sits, and module code needs both. A module mounting below its own path hands that path to the module it mounts, and its code may always remove that mount, or part of it, without a grant; the mounted module may remove itself. A mount the host made below a module's path is not that module's to remove without a grant. Host code mounts and removes anywhere, as before. Module code mounts with its own moduleID or one not in use; a moduleID of another mounted module is refused (`MODULE_ID_IN_USE`). The host may re-use a moduleID.
 
 A manifest's rules apply as declared only when the host mounts its module. When module code mounts one (`api.modules.addModule` / `addModules` / `addDiscovered`), the manifest's rules, event rules included, are that module's rules and placed like its `addRule`'s: a rule beyond its subtree refuses the whole mount with `INVALID_PERMISSION_RULE`. A manifest the host mounts is not restricted this way: its rules apply at mount, at the `manifest` layer, whatever they target. Mounting a module is the consumer's choice to accept them.
 
@@ -747,7 +747,9 @@ See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating an
 
 ## Write Permissions
 
-A module writes into the api only under the subtree it owns (a module mounted at `P` writes under `P.*`). Writing is a permission like calling, and a `:write` rule grants or refuses it: a target with the `pattern:write` **suffix** matches a module assigning, defining, or deleting a member at that path, or changing the prototype or extensibility of the node there (`Object.setPrototypeOf`, `Object.preventExtensions`, `Object.freeze`, `Object.seal`).
+A module writes into the api only under the subtree it owns (a module mounted at `P` writes under `P.*`). This **ownership rule is not part of the permission system**: it applies with or without a `permissions` config, enabled or not. The base module (loaded from `base`) owns the whole tree, as in the released 3.x line; a module mounted with `api.add` or `api.modules.*` owns its own subtree only, so it cannot write another module's paths or the framework namespace (`LOOSE_SET_NOT_OWNED`).
+
+While the permission system is on (a `permissions` config whose `enabled` is not `false`, or after `control.enable()`), writing is a permission like calling, and a `:write` rule grants or refuses it: a target with the `pattern:write` **suffix** matches a module assigning, defining, or deleting a member at that path, or changing the prototype or extensibility of the node there (`Object.setPrototypeOf`, `Object.preventExtensions`, `Object.freeze`, `Object.seal`).
 
 - A denying write rule refuses the write with `PERMISSION_DENIED`, whatever the module owns.
 - An allowing write rule **grants** the write to the callers it names: another module's subtree, or a member a built-in write rule protects (below), becomes writable for them, and the ownership rule is not applied to that write.
@@ -782,7 +784,7 @@ export function initialize() {
 }
 ```
 
-Write rules are evaluated **whether or not a `permissions` block is configured or enabled**, so the built-in ones protect every instance by default:
+Write rules belong to the permission system, so they are evaluated **only while it is on**. With it off (no `permissions` config, `enabled: false`, or after `control.disable()`) no write rule refuses or grants anything, the built-in ones below included, and ownership alone decides: nothing grants a write past it. The limits on what rules module code may register stay on regardless (see [Declaring Permissions](#3-programmatically-via-apislothletpermissions)), and a rule registered while the system is off takes effect once the host turns it on. While the system is on, the built-in rules protect the framework:
 
 | Built-in rule                                                              | What it keeps modules from changing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -803,6 +805,8 @@ const api = await slothlet({
 	}
 });
 ```
+
+**Known limitation.** Module code the host invokes inside its own `context.run()` — a function, thenable, or getter a module returned — currently runs with the host's standing, so its writes are not held to that module's ownership or write rules.
 
 ---
 
@@ -1022,6 +1026,16 @@ A module without the grant gets `PERMISSION_DENIED`. See [`lockCaller.caller`](H
 ```
 
 `slothlet.metadata.get(path)` — which reads arbitrary metadata — is **not** covered and stays gated. As with the other built-ins, a user rule of equal or higher specificity overrides them (e.g. `{ caller: "untrusted.**", target: "slothlet.metadata.caller", effect: "deny" }`).
+
+`slothlet.metadata.setGlobal` is **denied to modules by default**: global metadata is what every node reports, every other module's included, so it is the host's. The deny is checked once the call's arguments are valid, so a malformed call still reports what is wrong with it. A host or manifest allow lifts it for the modules it names:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.metadata.setGlobal", effect: "deny" }
+
+// Host grant — let the `config` module set global metadata:
+{ caller: "config.**", target: "slothlet.metadata.setGlobal", effect: "allow" }
+```
 
 ---
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T10:10:47-07:00 (1792429847)
+ *	@Last modified time: 2026-10-19T11:34:00-07:00 (1792434840)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1400,7 +1400,8 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.removeModule(name, opts);
+						// The calling module, read before any await (#625): see ModuleManager#removeModule.
+						return slothlet.handlers.moduleManager.removeModule(name, opts, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -2051,6 +2052,8 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
 				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
+					// The calling module, checked once the arguments are valid (#625).
+					const caller = runtime_selfModuleReader(slothlet);
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if setGlobal is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
@@ -2136,6 +2139,7 @@ export class ApiBuilder extends ComponentBase {
 
 					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
 						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
+						slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
 						for (const [key, nestedValue] of Object.entries(normalizedMetadata)) {
 							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
 						}
@@ -2152,6 +2156,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					validateGlobalMetadataKeyPath(keyOrObj);
+					slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
 
 					return slothlet.handlers.metadata.setGlobalMetadata(keyOrObj, value);
 				},

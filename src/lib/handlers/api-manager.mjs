@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T10:10:48-07:00 (1792429848)
+ *	@Last modified time: 2026-10-19T11:34:01-07:00 (1792434841)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -632,9 +632,10 @@ export class ApiManager extends ComponentBase {
 	 * mounted owns nothing.
 	 *
 	 * The write rules of the permission system answer first ({@link PermissionManager#decideWrite}), for module
-	 * code only: a denying rule refuses the write whatever the module owns, and an allowing one grants it whatever
-	 * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
-	 * the framework's own keys on api nodes, until an allow lifts one for the callers it names.
+	 * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
+	 * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
+	 * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
+	 * callers it names. With the system off, the ownership rule alone decides.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -1739,7 +1740,9 @@ export class ApiManager extends ComponentBase {
 				return false;
 			}
 			stack.push({ parent: current, key: part });
-			current = current[part];
+			// The node itself, never the view a read under a module's identity hands back: a removal a module
+			// started is the framework's write, not the module's (#625).
+			current = readApiMember(current, part);
 		}
 
 		const finalKey = parts[parts.length - 1];
@@ -1751,7 +1754,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Get the impl being removed and its metadata before deletion
-		const removedImpl = current[finalKey];
+		const removedImpl = readApiMember(current, finalKey);
 		const apiPath = parts.join(".");
 
 		// Emit lifecycle event for removal BEFORE deletion
@@ -2050,6 +2053,24 @@ export class ApiManager extends ComponentBase {
 	assertModuleWrite(apiPath) {
 		const writer = runtime_selfModuleReader(this.slothlet);
 		if (writer !== null) this.#assertModuleMountWrite(this.#modulePathParts(apiPath), writer);
+	}
+
+	/**
+	 * Refuse module code removing a module by its moduleID when it may not write every path the removal reaches
+	 * (#625), as {@link ApiManager#removeApiComponent} checks it. Lets a caller removing several modules check them
+	 * all before removing any.
+	 *
+	 * @param {string} moduleID - The module removed.
+	 * @param {object} writer - The removing module's wrapper.
+	 * @returns {void}
+	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+	 * @public
+	 *
+	 * @example
+	 * apiManager.assertModuleRemovalOf("victim", guestWrapper); // throws: the guest may not remove it
+	 */
+	assertModuleRemovalOf(moduleID, writer) {
+		this.#assertModuleRemoval(writer, moduleID, null, null);
 	}
 
 	/**
@@ -2964,21 +2985,22 @@ export class ApiManager extends ComponentBase {
 		// this block (both the root-level per-key loop and the nested single-value branch below) —
 		// revert the same speculative ownership/raw state buildAPI's construction already created for
 		// moduleID before this decision ran, mirroring the buildAPI() try/catch above (#372 review).
-		try {
-			// Module code: every path the content writes, checked before any of it is placed (#625).
-			if (writer !== null) {
-				// A root add's keys are set first, so a refusal reverts what the add registered for them.
-				if (parts.length === 0) {
-					rootSource = isSynthetic ? apiToMerge : newApi;
-					rootKeys = Object.keys(rootSource);
-				}
-				await this.#assertModuleContent(
-					parts.length === 0 ? [] : effectiveParts,
-					parts.length === 0 ? rootSource : apiToMerge,
-					writer,
-					moduleID
-				);
+		// Module code: every path the content writes, checked before any of it is placed (#625). Nothing of the add is
+		// live yet, so a refusal reverts everything it registered, what loading lazy content for the check registered
+		// included: the instance is left as a reload would rebuild it.
+		if (writer !== null) {
+			const content = parts.length === 0 ? (isSynthetic ? apiToMerge : newApi) : apiToMerge;
+			try {
+				await this.#assertModuleContent(parts.length === 0 ? [] : effectiveParts, content, writer, moduleID);
+			} catch (err) {
+				// A live node handed in as content is left alone: only what the add built is dropped.
+				this.invalidateSpeculativeWrappers(content, new WeakSet(), []);
+				revertSpeculativeState();
+				throw err;
 			}
+		}
+
+		try {
 			if (parts.length === 0) {
 				// Root level - merge each key from newApi directly into api
 				// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
@@ -3725,6 +3747,8 @@ export class ApiManager extends ComponentBase {
 	 *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
 	 *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
 	 * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
+	 * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
+	 *   it before an await; read from the runtime otherwise (#625).
 	 * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
 	 * @throws {SlothletError} When inputs are invalid.
 	 * @package
@@ -3831,7 +3855,7 @@ export class ApiManager extends ComponentBase {
 		// Module code removing writes at every path the removal reaches, all checked before anything changes (#625). A
 		// replay, or the framework undoing its own failed add, records no history and is not the module's.
 		if (recordHistory) {
-			const writer = runtime_selfModuleReader(this.slothlet);
+			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
 			if (writer !== null) this.#assertModuleRemoval(writer, moduleID, apiPath, scopedApiPath);
 		}
 
