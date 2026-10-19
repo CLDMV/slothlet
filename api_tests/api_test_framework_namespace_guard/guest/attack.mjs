@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:33:25-07:00 (1792366405)
+ *	@Last modified time: 2026-10-18T19:50:38-07:00 (1792378238)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,4 +91,22 @@ export function plantPermissionsSetter() {
  */
 export function readAndCall() {
 	return attacks.readAndCall();
+}
+
+/**
+ * @returns {Function} `self.slothlet.materialize.get` as the module read it.
+ * @example
+ * keepMaterializeGet()();
+ */
+export function keepMaterializeGet() {
+	return attacks.keepMaterializeGet();
+}
+
+/**
+ * @returns {boolean} Whether a member the host fixed on the namespace reads the same twice.
+ * @example
+ * readHostFixed(); // true
+ */
+export function readHostFixed() {
+	return attacks.readHostFixed();
 }

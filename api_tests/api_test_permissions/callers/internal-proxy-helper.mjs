@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T18:17:40-07:00 (1792372660)
+ *	@Last modified time: 2026-10-18T19:50:55-07:00 (1792378255)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,16 +41,16 @@ export const readPermissionsSymbolDescriptor = () => {
 };
 
 /**
- * Define and then read a symbol-keyed descriptor on permissions namespace.
- * Ensures descriptor lookup path handles non-string keys with an existing descriptor.
+ * Read a symbol-keyed descriptor the host set on the permissions namespace.
+ * Ensures descriptor lookup path handles non-string keys with an existing descriptor; a module only reads
+ * the namespace, it never writes to it (#625).
  *
  * @returns {boolean} True when symbol descriptor is resolved with expected value.
  * @example
- * const ok = api.internalProxyHelper.defineAndReadPermissionsSymbolDescriptor();
+ * const ok = api.internalProxyHelper.readPermissionsSymbolProbeDescriptor();
  */
-export const defineAndReadPermissionsSymbolDescriptor = () => {
+export const readPermissionsSymbolProbeDescriptor = () => {
 	const probe = Symbol.for("slothlet.internalProxyHelper.probe");
-	self.slothlet.permissions[probe] = 123;
 	const descriptor = Object.getOwnPropertyDescriptor(self.slothlet.permissions, probe);
 	return descriptor?.value === 123;
 };
@@ -196,20 +196,32 @@ export const deletePermissionsStringKey = (key) => {
 };
 
 /**
- * Perform symbol-keyed mutations on the permissions namespace.
- * Symbol keys should bypass string-path permission checks in mutation traps.
+ * Try symbol-keyed mutations on the permissions namespace. A symbol key is held to the write rules a string key
+ * is (#625), so each is refused.
  *
- * @returns {boolean} True when symbol set/define/delete operations complete.
+ * @returns {{set: string, define: string, remove: string}} The outcome of each mutation: `"done"`, or the error code.
  * @example
- * const ok = api.internalProxyHelper.mutatePermissionsSymbolKey();
+ * const report = api.internalProxyHelper.mutatePermissionsSymbolKey();
  */
 export const mutatePermissionsSymbolKey = () => {
 	const probe = Symbol.for("slothlet.internalProxyHelper.mutationSymbol");
-	self.slothlet.permissions[probe] = 1;
-	Object.defineProperty(self.slothlet.permissions, probe, {
-		configurable: true,
-		value: 2
-	});
-	const deleted = delete self.slothlet.permissions[probe];
-	return deleted === true;
+	const attempt = (change) => {
+		try {
+			change();
+			return "done";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return {
+		set: attempt(() => {
+			self.slothlet.permissions[probe] = 1;
+		}),
+		define: attempt(() => {
+			Object.defineProperty(self.slothlet.permissions, probe, { configurable: true, value: 2 });
+		}),
+		remove: attempt(() => {
+			delete self.slothlet.permissions[probe];
+		})
+	};
 };

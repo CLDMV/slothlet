@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:33:26-07:00 (1792366406)
+ *	@Last modified time: 2026-10-18T19:50:38-07:00 (1792378238)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -123,6 +123,27 @@ export function changeNested() {
 		}),
 		metadataProto: attempt(() => {
 			Object.setPrototypeOf(self.slothlet.metadata, null);
+		}),
+		materializeGetPlant: attempt(() => {
+			self.slothlet.materialize.get.planted = 1;
+		}),
+		materializeGetProto: attempt(() => {
+			Object.setPrototypeOf(self.slothlet.materialize.get, null);
+		}),
+		materializeWaitPlant: attempt(() => {
+			self.slothlet.materialize.wait.planted = 1;
+		}),
+		materializedGetterPlant: attempt(() => {
+			Object.getOwnPropertyDescriptor(self.slothlet.materialize, "materialized").get.planted = 1;
+		}),
+		permissionsSymbol: attempt(() => {
+			self.slothlet.permissions[Symbol.for("slothlet.test.i625.namespace")] = 1;
+		}),
+		permissionsSymbolDefine: attempt(() => {
+			Object.defineProperty(self.slothlet.permissions, Symbol.for("slothlet.test.i625.namespace"), { value: 1, configurable: true });
+		}),
+		hookSymbolDelete: attempt(() => {
+			delete self.slothlet.hook[Symbol.for("slothlet.test.i625.namespace")];
 		})
 	};
 }
@@ -146,8 +167,21 @@ export function changeRootFunctions() {
 		}),
 		destroyAssign: attempt(() => {
 			self.destroy = () => "FAKE";
+		}),
+		shutdownSymbol: attempt(() => {
+			self.shutdown[Symbol.for("slothlet.test.i625.namespace")] = 1;
 		})
 	};
+}
+
+/**
+ * Keep `self.slothlet.materialize.get` and hand it back, for the host to call later from outside any call.
+ * @returns {Function} The function as the module read it.
+ * @example
+ * keepMaterializeGet()(); // runs as the module that read it
+ */
+export function keepMaterializeGet() {
+	return self.slothlet.materialize.get;
 }
 
 /**
@@ -219,4 +253,14 @@ export function plantPermissionsSetter() {
 			set() {}
 		});
 	});
+}
+
+/**
+ * Read a member the host fixed on `self.slothlet.permissions` twice.
+ * @returns {boolean} Whether both reads gave the same value.
+ * @example
+ * readHostFixed(); // true
+ */
+export function readHostFixed() {
+	return self.slothlet.permissions.hostFixed === self.slothlet.permissions.hostFixed && self.slothlet.permissions.hostFixed.level === 1;
 }

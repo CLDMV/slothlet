@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T18:18:48-07:00 (1792372728)
+ *	@Last modified time: 2026-10-18T19:52:13-07:00 (1792378333)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,9 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 		});
 
-		const ok = await api.internalProxyHelper.defineAndReadPermissionsSymbolDescriptor();
+		// The host sets the symbol-keyed member; a module may not write to the namespace (#625), only read through it.
+		api.slothlet.permissions[Symbol.for("slothlet.internalProxyHelper.probe")] = 123;
+		const ok = await api.internalProxyHelper.readPermissionsSymbolProbeDescriptor();
 		expect(ok).toBe(true);
 	});
 
@@ -186,7 +188,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
-	it("allows symbol-key mutations without string-route enforcement", async () => {
+	it("refuses symbol-key mutations as it refuses string-key ones", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -196,8 +198,12 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 		});
 
-		const ok = await api.internalProxyHelper.mutatePermissionsSymbolKey();
-		expect(ok).toBe(true);
+		// The host sets the symbol-keyed member; a module's set, definition, and deletion of it are each refused (#625).
+		const probe = Symbol.for("slothlet.internalProxyHelper.mutationSymbol");
+		api.slothlet.permissions[probe] = "host";
+		const report = await withSuppressedSlothletErrorOutput(() => api.internalProxyHelper.mutatePermissionsSymbolKey());
+		expect(report).toEqual({ set: "PERMISSION_DENIED", define: "PERMISSION_DENIED", remove: "PERMISSION_DENIED" });
+		expect(api.slothlet.permissions[probe]).toBe("host");
 	});
 
 	it("denies namespace read with unrelated allow rule present (descendant pre-check continues)", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:58-07:00 (1792366498)
+ *	@Last modified time: 2026-10-18T19:52:19-07:00 (1792378339)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -131,6 +131,8 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			const on = api.slothlet.hook.on;
 			const add = api.slothlet.api.add;
 			const metadataProto = Object.getPrototypeOf(api.slothlet.metadata);
+			const materializeGet = api.slothlet.materialize.get;
+			const symbol = Symbol.for("slothlet.test.i625.namespace");
 			for (const [label, attack] of modules()) {
 				const report = await withSuppressedSlothletErrorOutputSync(() => attack.changeNested());
 				expect({ label, report: markRefused(report, refusals) }).toEqual({ label, report: allRefused(report) });
@@ -142,6 +144,12 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			expect(Object.isFrozen(api.slothlet.hook)).toBe(false);
 			expect(api.slothlet.api.add).toBe(add);
 			expect(Object.getPrototypeOf(api.slothlet.metadata)).toBe(metadataProto);
+			expect(api.slothlet.materialize.get).toBe(materializeGet);
+			expect(api.slothlet.materialize.get.planted).toBeUndefined();
+			expect(Object.getPrototypeOf(api.slothlet.materialize.get)).toBe(Function.prototype);
+			expect(api.slothlet.materialize.wait.planted).toBeUndefined();
+			expect(Object.getOwnPropertyDescriptor(api.slothlet.materialize, "materialized").get.planted).toBeUndefined();
+			expect(api.slothlet.permissions[symbol]).toBeUndefined();
 		});
 
 		it("refuses a module planting a setter accessor on self.slothlet.permissions", async () => {
@@ -164,6 +172,30 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			expect(api.shutdown).toBe(shutdown);
 			expect(api.destroy).toBe(destroy);
 			expect(api.shutdown.planted).toBeUndefined();
+			expect(api.shutdown[Symbol.for("slothlet.test.i625.namespace")]).toBeUndefined();
+		});
+
+		it("runs a kept self.slothlet.materialize.get as the module that read it", async () => {
+			if (!options.permissions) return;
+			await load();
+			for (const [label, attack, caller] of [
+				["base module", api.attack, "attack.**"],
+				["guest module", api.guest.attack, "guest.**"]
+			]) {
+				const kept = await attack.keepMaterializeGet();
+				expect(typeof kept()).toBe("object");
+				api.slothlet.permissions.addRule({ caller, target: "slothlet.materialize.get", effect: "deny" });
+				let code = null;
+				withSuppressedSlothletErrorOutputSync(() => {
+					try {
+						kept();
+					} catch (error) {
+						code = error?.code;
+					}
+				});
+				expect({ label, code }).toEqual({ label, code: REFUSED });
+			}
+			expect(typeof api.slothlet.materialize.get()).toBe("object");
 		});
 
 		it("refuses a write through a namespace a module kept, made later from outside any call", async () => {
@@ -211,6 +243,15 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			expect(api.slothlet.hostGranted).toBe(1);
 			// Only the member the rule names is lifted.
 			expect(withSuppressedSlothletErrorOutputSync(() => api.attack.writeMember("lockCaller", 1))).toBe(REFUSED);
+		});
+
+		it("hands a module a member the host fixed on the namespace as the namespace holds it, as the engine requires", async () => {
+			await load();
+			const fixed = { level: 1 };
+			Object.defineProperty(api.slothlet.permissions, "hostFixed", { value: fixed, configurable: false, writable: false, enumerable: true });
+			for (const [label, attack] of modules()) {
+				expect({ label, same: await attack.readHostFixed() }).toEqual({ label, same: true });
+			}
 		});
 
 		it("leaves the host's own changes to api.slothlet as they were", async () => {

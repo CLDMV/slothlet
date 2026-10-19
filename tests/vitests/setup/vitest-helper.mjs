@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:21-07:00 (1792366461)
+ *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,7 +128,9 @@ export const TEST_DIRS = {
 	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
 	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`),
 	// #625 — a module cannot change the framework namespace `self.slothlet`.
-	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`)
+	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
+	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
 };
 
 /**
