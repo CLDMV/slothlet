@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
+ *	@Last modified time: 2026-10-19T12:23:51-07:00 (1792437831)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,9 +19,9 @@
  * Every api node carries keys that are the framework's, not the module's: the wrapper's own state
  * (`____slothletInternal`, `_materialize`, `___setImpl`, …), what the node reports about itself (`__metadata`,
  * `__type`, `__apiPath`, …), and impl metadata (`__childFilePaths`, …). The built-in write rules of the
- * permission system refuse a module defining any of them, on another module's node and on its own, and
- * assigning or deleting the ones a node does not already absorb, with `PERMISSION_DENIED`. A write a node
- * absorbs (it reports success and changes nothing, so the key's existence does not leak) stays absorbed.
+ * permission system refuse a module defining, assigning, or deleting any of them, on another module's node and on
+ * its own, with `PERMISSION_DENIED`. A write the host makes is absorbed (it reports success and changes nothing, so
+ * the key's existence does not leak).
  * Either way the framework's state is unchanged: with the defaults and with `defaultPolicy: "deny"`, in all four
  * mode / runtime configurations. With the permission system off (no `permissions` config) the built-in rules are
  * off too, and the ownership rule alone keeps a module off another module's node.
@@ -80,9 +80,6 @@ const INTERNAL_KEYS = [
 	"__childFilePathsPreMaterialize"
 ];
 
-// Keys no node holds or absorbs on assignment, so an assignment would otherwise land as a member.
-const UNABSORBED_ON_SET = ["_materialize", "__childFilePaths", "__childFilePathsPreMaterialize"];
-
 /**
  * What the framework holds for every internal key of a node: the wrapper's own descriptor, the proxy
  * target's, and the impl's.
@@ -138,11 +135,8 @@ describe.each(CONFIGS)("module writes to a node's framework-internal keys (#625)
 					const report = withSuppressedSlothletErrorOutputSync(() => attacker().changeInternals(apiPath));
 					for (const key of INTERNAL_KEYS) {
 						expect({ apiPath, key, outcome: report[`define ${key}`] }).toEqual({ apiPath, key, outcome: "PERMISSION_DENIED" });
-						expect(["done", "PERMISSION_DENIED"]).toContain(report[`set ${key}`]);
-						expect(["done", "PERMISSION_DENIED"]).toContain(report[`delete ${key}`]);
-					}
-					for (const key of UNABSORBED_ON_SET) {
 						expect({ apiPath, key, outcome: report[`set ${key}`] }).toEqual({ apiPath, key, outcome: "PERMISSION_DENIED" });
+						expect({ apiPath, key, outcome: report[`delete ${key}`] }).toEqual({ apiPath, key, outcome: "PERMISSION_DENIED" });
 					}
 					expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
 				}
@@ -158,10 +152,14 @@ describe.each(CONFIGS)("module writes to a node's framework-internal keys (#625)
 				const before = snapshot(nodeAt(apiPath));
 				const report = withSuppressedSlothletErrorOutputSync(() => later());
 				for (const key of INTERNAL_KEYS) {
-					expect({ apiPath, key, outcome: report[`define ${key}`] }).toEqual({ apiPath, key, outcome: "PERMISSION_DENIED" });
-				}
-				for (const key of UNABSORBED_ON_SET) {
-					expect({ apiPath, key, outcome: report[`set ${key}`] }).toEqual({ apiPath, key, outcome: "PERMISSION_DENIED" });
+					for (const change of ["define", "set", "delete"]) {
+						expect({ apiPath, key, change, outcome: report[`${change} ${key}`] }).toEqual({
+							apiPath,
+							key,
+							change,
+							outcome: "PERMISSION_DENIED"
+						});
+					}
 				}
 				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
 			}
@@ -189,10 +187,14 @@ describe.each(CONFIGS)(
 				const before = snapshot(nodeAt(apiPath));
 				const report = withSuppressedSlothletErrorOutputSync(() => api.intruder.x.changeInternals(apiPath));
 				for (const key of INTERNAL_KEYS) {
-					expect({ apiPath, key, outcome: report[`define ${key}`] }).toEqual({ apiPath, key, outcome: "LOOSE_SET_NOT_OWNED" });
-				}
-				for (const key of UNABSORBED_ON_SET) {
-					expect({ apiPath, key, outcome: report[`set ${key}`] }).toEqual({ apiPath, key, outcome: "LOOSE_SET_NOT_OWNED" });
+					for (const change of ["define", "set", "delete"]) {
+						expect({ apiPath, key, change, outcome: report[`${change} ${key}`] }).toEqual({
+							apiPath,
+							key,
+							change,
+							outcome: "LOOSE_SET_NOT_OWNED"
+						});
+					}
 				}
 				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
 			}

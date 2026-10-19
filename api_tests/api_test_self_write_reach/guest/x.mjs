@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:33:24-07:00 (1792434804)
+ *	@Last modified time: 2026-10-19T12:22:12-07:00 (1792437732)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -725,4 +725,21 @@ export async function removeModuleNamed(name, opts) {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Store the node at `target`, read through `self`, as a member `key` of the node at `at`: an alias in this module's
+ * own subtree.
+ * @param {string} at - Dotted path of the node the alias is stored on.
+ * @param {string} key - The member name.
+ * @param {string} target - Dotted path of the node aliased.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * storeAlias("guest.x", "ref", "victim.v");
+ */
+export function storeAlias(at, key, target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	return attempt(() => {
+		read(at)[key] = read(target);
+	});
 }
