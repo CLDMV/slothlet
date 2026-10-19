@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:58:08-07:00 (1792360688)
+ *	@Last modified time: 2026-10-18T21:35:54-07:00 (1792384554)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * rule allows untouched: writes under the module's own subtree, host writes, base-module writes, two
  * modules sharing a mount point, and the framework's own `api.add` invoked by a module.
  *
- * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`, `front/`.
+ * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`, `front/`, `bystander/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -117,9 +117,98 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("leaves a symbol-keyed member to plain JS, as at the top level (a symbol is never an api path)", async () => {
-		await mountModules();
-		expect(await api.supplier.attack.writeCalleeSymbol()).toBe(true);
+	describe("symbol-keyed writes into another module follow the write permissions", () => {
+		const SYMBOL = Symbol.for("slothlet.test.i625");
+		const SUPPLIER_WRITES_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "allow" };
+		const SUPPLIER_DENIED_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "deny" };
+		const FRONT_MANAGES = { caller: "front.**", target: "slothlet.permissions.addRule", effect: "allow" };
+		const DONE = { assign: "done", define: "done", remove: "done" };
+		const NOT_OWNED = { assign: "LOOSE_SET_NOT_OWNED", define: "LOOSE_SET_NOT_OWNED", remove: "LOOSE_SET_NOT_OWNED" };
+		const DENIED = { assign: "PERMISSION_DENIED", define: "PERMISSION_DENIED", remove: "PERMISSION_DENIED" };
+
+		/**
+		 * Mount the modules, with `front` as a module that may manage rules when the host lets it, and `bystander`
+		 * as one no grant names.
+		 * @param {object} [options] - Further slothlet options.
+		 * @returns {Promise<object>} The composed api.
+		 */
+		async function mountAll(options = {}) {
+			await mountModules(options);
+			await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
+			await api.slothlet.api.add("bystander", path.join(FIXTURE, "bystander"), { moduleID: "bystander" });
+			return api;
+		}
+
+		it("refuses another module's symbol write with no rule, and the callee sees nothing", async () => {
+			await mountAll();
+			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(NOT_OWNED);
+			expect(api.callee.ops[SYMBOL]).toBeUndefined();
+		});
+
+		it("refuses a well-known symbol from another module, leaving what the host sees unchanged", async () => {
+			await mountAll();
+			const before = api.callee.ops[Symbol.toPrimitive];
+			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol("callee.ops", "toPrimitive"))).toEqual(
+				NOT_OWNED
+			);
+			expect(api.callee.ops[Symbol.toPrimitive]).toBe(before);
+		});
+
+		it("refuses it under defaultPolicy allow with no matching rule", async () => {
+			await mountAll({ permissions: { defaultPolicy: "allow" } });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(NOT_OWNED);
+		});
+
+		it("lets a module write symbols on its own nodes", async () => {
+			await mountAll();
+			expect(await api.supplier.attack.writeCalleeSymbol("supplier")).toEqual(DONE);
+			expect(await api.supplier.attack.writeCalleeSymbol("supplier.attack")).toEqual(DONE);
+		});
+
+		it("lets the root module write symbols anywhere", async () => {
+			api = await slothlet({ base: path.join(FIXTURE, "supplier"), mode, runtime, silent: true });
+			await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+			expect(await api.attack.writeCalleeSymbol()).toEqual(DONE);
+			expect(await api.attack.writeCalleeSymbol("callee.ops", "toPrimitive")).toEqual(DONE);
+		});
+
+		it("lets a host grant allow it, and only for the caller it names", async () => {
+			await mountAll({ permissions: { rules: [SUPPLIER_WRITES_CALLEE] } });
+			expect(await api.supplier.attack.writeCalleeSymbol()).toEqual(DONE);
+			expect(await api.supplier.attack.writeCalleeSymbol("callee.ops", "toPrimitive")).toEqual(DONE);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.bystander.writer.writeCalleeSymbol())).toEqual(NOT_OWNED);
+		});
+
+		it("lets the callee's own grant from its code allow it", async () => {
+			await mountAll();
+			expect(await api.callee.ops.grant(SUPPLIER_WRITES_CALLEE)).toMatch(/^perm-/);
+			expect(await api.supplier.attack.writeCalleeSymbol()).toEqual(DONE);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.bystander.writer.writeCalleeSymbol())).toEqual(NOT_OWNED);
+		});
+
+		it("lets a manager the host allowed add the grant, and refuses again once it is removed", async () => {
+			await mountAll({ permissions: { rules: [FRONT_MANAGES] } });
+			const ruleId = await api.front.relay.addRuleFor(SUPPLIER_WRITES_CALLEE);
+			expect(ruleId).toMatch(/^perm-/);
+			expect(await api.supplier.attack.writeCalleeSymbol()).toEqual(DONE);
+			expect(await api.front.relay.removeRuleFor(ruleId)).toBe(true);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(NOT_OWNED);
+		});
+
+		it("refuses a module that is no manager adding the grant", async () => {
+			await mountAll();
+			expect(withSuppressedSlothletErrorOutputSync(() => api.front.relay.addRuleFor(SUPPLIER_WRITES_CALLEE))).toBe(
+				"INVALID_PERMISSION_RULE"
+			);
+		});
+
+		it("lets a host deny win over the callee's allow and over a manager's allow", async () => {
+			await mountAll({ permissions: { rules: [FRONT_MANAGES, SUPPLIER_DENIED_CALLEE] } });
+			await api.callee.ops.grant(SUPPLIER_WRITES_CALLEE);
+			await api.front.relay.addRuleFor(SUPPLIER_WRITES_CALLEE);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(DENIED);
+			expect(api.callee.ops[SYMBOL]).toBeUndefined();
+		});
 	});
 
 	it("allows a module writing below its own mount point", async () => {

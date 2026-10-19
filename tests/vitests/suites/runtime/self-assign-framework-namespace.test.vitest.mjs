@@ -248,7 +248,12 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		it("hands a module a member the host fixed on the namespace as the namespace holds it, as the engine requires", async () => {
 			await load();
 			const fixed = { level: 1 };
-			Object.defineProperty(api.slothlet.permissions, "hostFixed", { value: fixed, configurable: false, writable: false, enumerable: true });
+			Object.defineProperty(api.slothlet.permissions, "hostFixed", {
+				value: fixed,
+				configurable: false,
+				writable: false,
+				enumerable: true
+			});
 			for (const [label, attack] of modules()) {
 				expect({ label, same: await attack.readHostFixed() }).toEqual({ label, same: true });
 			}

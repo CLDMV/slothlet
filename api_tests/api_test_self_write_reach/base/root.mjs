@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:09-07:00 (1792378269)
+ *	@Last modified time: 2026-10-18T21:34:51-07:00 (1792384491)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -169,4 +169,16 @@ export function addOtherRules() {
 			self.slothlet.permissions.addRule({ caller: "**", effect: "allow" });
 		})
 	};
+}
+
+/**
+ * Write a member of the framework namespace a rule manager granted this module.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * writeManaged(); // "done"
+ */
+export function writeManaged() {
+	return attempt(() => {
+		self.slothlet.managed = 1;
+	});
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:09-07:00 (1792378269)
+ *	@Last modified time: 2026-10-18T21:34:51-07:00 (1792384491)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -271,4 +271,154 @@ export function changeSelf() {
  */
 export function listSelf() {
 	return Object.keys(self).length;
+}
+
+/**
+ * Write the victim's node and a member reached through it, by name and by symbol key: assign, define, and
+ * delete, then the changes to a node itself.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * writeVictim();
+ */
+export function writeVictim() {
+	const node = self.victim.v;
+	const key = Symbol.for("slothlet.test.i625.grant");
+	return {
+		assignName: attempt(() => {
+			node.note = 1;
+		}),
+		defineName: attempt(() => {
+			Object.defineProperty(node, "noteDefined", { value: 2, configurable: true, writable: true, enumerable: true });
+		}),
+		deleteName: attempt(() => {
+			if (!delete node.note) throw new Error("NOT_DELETED");
+		}),
+		assignSymbol: attempt(() => {
+			node[key] = 1;
+		}),
+		defineSymbol: attempt(() => {
+			Object.defineProperty(node, key, { value: 2, configurable: true, writable: true });
+		}),
+		deleteSymbol: attempt(() => {
+			if (!delete node[key]) throw new Error("NOT_DELETED");
+		}),
+		prototypeMember: attempt(() => {
+			node.Account.prototype.granted = 1;
+		}),
+		setPrototypeOf: attempt(() => {
+			Object.setPrototypeOf(node.conf, Object.prototype);
+		}),
+		preventExtensions: attempt(() => {
+			Object.preventExtensions(node.conf);
+		}),
+		seal: attempt(() => {
+			Object.seal(node.conf);
+		}),
+		freeze: attempt(() => {
+			Object.freeze(node.conf);
+		})
+	};
+}
+
+/**
+ * Keep the victim's node and hand back a function that writes it later, from outside any call.
+ * @returns {function(): string} Writes the kept node and reports the outcome.
+ * @example
+ * keepVictimNode()();
+ */
+export function keepVictimNode() {
+	const node = self.victim.v;
+	return function writeKept() {
+		return attempt(() => {
+			node.keptNote = 1;
+		});
+	};
+}
+
+/**
+ * Write the node at `apiPath`, read through `self`, by name and by symbol key: assign, define, and delete.
+ * @param {string} apiPath - Dotted path of the node.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * writeAt("victim.v");
+ */
+export function writeAt(apiPath) {
+	const node = apiPath.split(".").reduce((value, key) => value[key], self);
+	const key = Symbol.for("slothlet.test.i625.module-grant");
+	return {
+		assignName: attempt(() => {
+			node.granted = 1;
+		}),
+		defineName: attempt(() => {
+			Object.defineProperty(node, "grantedDefined", { value: 2, configurable: true, writable: true, enumerable: true });
+		}),
+		deleteName: attempt(() => {
+			if (!delete node.granted) throw new Error("NOT_DELETED");
+		}),
+		assignSymbol: attempt(() => {
+			node[key] = 1;
+		}),
+		defineSymbol: attempt(() => {
+			Object.defineProperty(node, key, { value: 2, configurable: true, writable: true });
+		}),
+		deleteSymbol: attempt(() => {
+			if (!delete node[key]) throw new Error("NOT_DELETED");
+		})
+	};
+}
+
+/**
+ * Add a permission rule from this module's code.
+ * @param {object} rule - The rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addRuleFor({ caller: "guest.**", target: "victim.**:write", effect: "allow" });
+ */
+export function addRuleFor(rule) {
+	try {
+		return self.slothlet.permissions.addRule(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Write the framework's metadata key on the victim's node.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * writeVictimMetadata(); // "PERMISSION_DENIED"
+ */
+export function writeVictimMetadata() {
+	return attempt(() => {
+		Object.defineProperty(self.victim.v, "__metadata", { value: {}, configurable: true });
+	});
+}
+
+/**
+ * Remove a permission rule from this module's code.
+ * @param {string} ruleId - The rule's id.
+ * @returns {*} What `removeRule` returned, or the error code it was refused with.
+ * @example
+ * removeRuleFor("perm-12");
+ */
+export function removeRuleFor(ruleId) {
+	try {
+		return self.slothlet.permissions.removeRule(ruleId);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Call a member of the victim.
+ * @returns {*} What it returned, or the error code the call was refused with.
+ * @example
+ * callVictim(); // 100
+ */
+export function callVictim() {
+	try {
+		return self.victim.v.balanceOfNew();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }

@@ -45,7 +45,10 @@ const CONFIGS = [
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }] } } }
+	{
+		label: "permissions defaultPolicy deny",
+		options: { permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }] } }
+	}
 ];
 
 const INTERNAL_KEYS = [

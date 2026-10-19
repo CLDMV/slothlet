@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:48:51-07:00 (1792360131)
+ *	@Last modified time: 2026-10-18T21:34:35-07:00 (1792384475)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,4 +23,30 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export function keepCallerPin() {
 	return self.evil.x.keepCallerPin();
+}
+
+/**
+ * Add a permission rule from this module's code (#625).
+ * @param {object} rule - The rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ */
+export function addRuleFor(rule) {
+	try {
+		return self.slothlet.permissions.addRule(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Remove a permission rule from this module's code (#625).
+ * @param {string} ruleId - The rule's id.
+ * @returns {*} What `removeRule` returned, or the error code it was refused with.
+ */
+export function removeRuleFor(ruleId) {
+	try {
+		return self.slothlet.permissions.removeRule(ruleId);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }

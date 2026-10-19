@@ -256,7 +256,14 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		});
 
 		it("keeps a change base-module code makes to self inside a fully isolated scope in that scope", async () => {
-			const isolated = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, scope: { isolation: "full" }, ...options });
+			const isolated = await slothlet({
+				base: path.join(FIXTURE, "base"),
+				mode,
+				runtime,
+				silent: true,
+				scope: { isolation: "full" },
+				...options
+			});
 			instances.push(isolated);
 			let report;
 			await isolated.slothlet.run({}, async () => {

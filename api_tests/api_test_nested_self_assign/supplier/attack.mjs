@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:48:53-07:00 (1792360133)
+ *	@Last modified time: 2026-10-18T21:34:35-07:00 (1792384475)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,6 +17,7 @@
 // Each export tries a write below the top level of `self`: into another module's subtree (refused for
 // an `api.add`ed module), or into its own (allowed).
 import { self } from "@cldmv/slothlet/runtime";
+import * as symbolWrites from "../shared/symbol-writes.mjs";
 
 /**
  * Replace a member of the callee module's subtree.
@@ -94,13 +95,13 @@ export async function addUnderCallee(folderPath) {
 }
 
 /**
- * Write a symbol-keyed member on the callee module's node: a symbol is never an api path.
- * @returns {boolean} Whether the member reads back.
+ * Assign, define, and delete a symbol-keyed member on the node at `apiPath` (#625); see `../shared/symbol-writes.mjs`.
+ * @param {string} [apiPath="callee.ops"] - Dotted path of the node.
+ * @param {"member"|"toPrimitive"} [which="member"] - A registered symbol, or `Symbol.toPrimitive`.
+ * @returns {{assign: string, define: string, remove: string}} Outcome of each change.
  */
-export function writeCalleeSymbol() {
-	const key = Symbol.for("slothlet.test.i625");
-	self.callee.ops[key] = "symbol-member";
-	return self.callee.ops[key] === "symbol-member";
+export function writeCalleeSymbol(apiPath = "callee.ops", which = "member") {
+	return symbolWrites.writeSymbol(apiPath, which);
 }
 
 /**

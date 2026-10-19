@@ -1,30 +1,30 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-write-rules-host-only.test.vitest.mjs
+ *	@Filename: /tests/vitests/suites/permissions/permissions-framework-write-rules.test.vitest.mjs
  *	@Date: 2026-10-18T18:47:58-07:00 (1792374478)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:52:16-07:00 (1792378336)
+ *	@Last modified time: 2026-10-18T21:35:49-07:00 (1792384549)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Only the host lifts a built-in write rule (#625).
+ * @fileoverview Who lifts the built-in write rules (#625).
  *
  * The built-in write rules (`slothlet.**:write`, `**.__metadata:write`, …) keep every module off the framework's
- * namespace and the framework's own keys on api nodes, with or without a permissions config. A rule granting a
- * write can only ever lift a denial — the ownership rule still applies to what it lets through — so a grant is
- * the host's to make. A module's manifest that grants a write is refused at mount, and module code adding such a
- * rule at runtime, directly or through the options of an `api.add` it makes, is refused too. The host still lifts
- * a built-in rule with a rule of its own.
+ * namespace and the framework's own keys on api nodes, with or without a permissions config. They are defaults:
+ * the host lifts one with a rule of its own, and so does a module's manifest — mounting it is the consumer's
+ * choice. Module code may not lift one through `addRule` or the options of an `api.add` it makes, even the base
+ * module, which owns the rest of the tree, unless the host or its manifest let it manage rules beyond its subtree.
+ * A lifted write still meets the ownership rule.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/` (owns the whole tree), `victim/`, and the module
- * `modules/lifter`, whose manifest grants writes to `slothlet.**` and `**.__metadata`.
+ * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.__metadata`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -48,7 +48,7 @@ const PERMISSIONS = [
 	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [CALL_NAMESPACE] } } }
 ];
 
-describe.each(CONFIGS)("built-in write rules are lifted only by the host (#625) — $mode / $runtime", ({ mode, runtime }) => {
+describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $runtime", ({ mode, runtime }) => {
 	describe.each(PERMISSIONS)("$label", ({ options }) => {
 		let api;
 
@@ -67,38 +67,31 @@ describe.each(CONFIGS)("built-in write rules are lifted only by the host (#625) 
 			return api;
 		}
 
-		it("refuses mounting a module whose manifest grants writes", async () => {
+		it("lets a module's manifest lift a built-in write rule", async () => {
 			await load();
-			let caught = null;
-			await withSuppressedSlothletErrorOutput(async () => {
-				try {
-					await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules") } });
-				} catch (error) {
-					caught = error;
-				}
-			});
-			expect(caught?.code).toBe("MODULE_MANIFEST_INVALID");
-			expect(caught.message).toContain("permissions[0]");
-			expect(api.lifter).toBeUndefined();
-			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
-			expect(api.slothlet.lifted).toBeUndefined();
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			expect(api.lifter.info.name()).toBe("lifter");
+			expect(await api.root.writeNamespace()).toBe("done");
+			expect(api.slothlet.lifted).toBe(1);
 		});
 
-		it("refuses module code adding a rule that grants writes", async () => {
+		it("refuses module code lifting a built-in write rule with addRule", async () => {
 			await load();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 			expect(api.slothlet.lifted).toBeUndefined();
 		});
 
-		it("refuses module code mounting a folder with a rule that grants writes", async () => {
+		it("refuses module code lifting a built-in write rule through the options of an api.add", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe("INVALID_PERMISSION_RULE");
+			expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
+				"INVALID_PERMISSION_RULE"
+			);
 			expect(api.granted).toBeUndefined();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 		});
 
-		it("lets module code add rules that grant no write", async () => {
+		it("lets base-module code add rules for the tree it owns", async () => {
 			await load();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.addOtherRules())).toEqual({
 				deny: "done",
@@ -119,7 +112,7 @@ describe.each(CONFIGS)("built-in write rules are lifted only by the host (#625) 
 describe.each([
 	{ mode: "eager", runtime: "live" },
 	{ mode: "lazy", runtime: "live" }
-])("built-in write rules are lifted only by the host (#625), unattributable live code — $mode", ({ mode, runtime }) => {
+])("lifting the built-in write rules (#625), unattributable live code — $mode", ({ mode, runtime }) => {
 	let api;
 
 	afterEach(async () => {
@@ -143,7 +136,7 @@ describe.each([
 	 */
 	const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-	it("refuses a write grant from code the live runtime cannot attribute to one call", async () => {
+	it("refuses a rule from code the live runtime cannot attribute to one call", async () => {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
 		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
 		const [goGate, releaseGo] = gate();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:09-07:00 (1792378269)
+ *	@Last modified time: 2026-10-18T21:34:52-07:00 (1792384492)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -260,4 +260,51 @@ export function useOwnMembers() {
 	class Savings extends proto.constructor {}
 	out.subclassed = new Savings().balance();
 	return out;
+}
+
+/**
+ * Add a permission rule from the victim's code.
+ * @param {object} rule - The rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * grant({ caller: "guest.**", target: "victim.**:write", effect: "allow" });
+ */
+export function grant(rule) {
+	try {
+		return self.slothlet.permissions.addRule(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Mount a folder at `victim.helper` with the given permission rules, from the victim's code.
+ * @param {string} folder - Folder to mount.
+ * @param {object} permissions - The `permissions` option (`{ allow, deny }`).
+ * @returns {Promise<string>} `"done"`, or the error code it was refused with.
+ * @example
+ * await mountHelper("/abs/guest", { allow: ["victim.**:write"] });
+ */
+export async function mountHelper(folder, permissions) {
+	try {
+		await self.slothlet.api.add("victim.helper", folder, { moduleID: "helper", permissions });
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Remove a permission rule from the victim's code.
+ * @param {string} ruleId - The rule's id.
+ * @returns {*} What `removeRule` returned, or the error code it was refused with.
+ * @example
+ * revoke("perm-12");
+ */
+export function revoke(ruleId) {
+	try {
+		return self.slothlet.permissions.removeRule(ruleId);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }
