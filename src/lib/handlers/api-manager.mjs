@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T08:45:16-07:00 (1792424716)
+ *	@Last modified time: 2026-10-19T09:18:28-07:00 (1792426708)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2016,6 +2016,27 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Refuse module code a replacing `api.add` (`forceOverwrite`, `replace`, `merge-replace`) at `parts` that would
+	 * replace a registered path it may not write (#625): every registered path at or below the mount is a write.
+	 *
+	 * @param {string[]} parts - Segments of the mount path.
+	 * @param {object} writer - The adding module's wrapper.
+	 * @param {object} options - The add's options.
+	 * @returns {void}
+	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+	 * @private
+	 */
+	#assertModuleReplace(parts, writer, options) {
+		if (options.forceOverwrite !== true && options.collisionMode !== "replace" && options.collisionMode !== "merge-replace") return;
+		const mountPath = parts.join(".");
+		for (const registered of this.slothlet.handlers.ownership.pathToModule.keys()) {
+			if (mountPath === "" || registered === mountPath || registered.startsWith(`${mountPath}.`)) {
+				this.#assertModuleMountWrite(registered.split("."), writer);
+			}
+		}
+	}
+
+	/**
 	 * Refuse module code a removal it may not make, before anything changes (#625). The removal writes at every path
 	 * it reaches — every mount and path of the module removed by its moduleID, every registered path at or below a
 	 * removed path, the module's paths at or below a scoped path — and each must be one the caller owns, one a write
@@ -2291,9 +2312,12 @@ export class ApiManager extends ComponentBase {
 		// The module performing the add, kept with the mount: it may remove what it mounted (#625).
 		const mountedBy = replaying ? (restOptions[MOUNTED_BY] ?? null) : (writer?.____slothletInternal?.moduleID ?? null);
 		if (writer !== null) {
-			const mountParts = String(apiPath ?? "")
-				.split(".")
-				.filter(Boolean);
+			// An array path names its segments as given; a string path splits on ".".
+			const mountParts = Array.isArray(apiPath)
+				? apiPath.map(String)
+				: String(apiPath ?? "")
+						.split(".")
+						.filter(Boolean);
 			this.#assertModuleMountWrite(mountParts, writer);
 			// Module code mounts with its own moduleID or one not in use: taking over another mounted module's id would
 			// hand the new mount that module's ownership and rules. The host may re-use an id (one module at several
@@ -2305,16 +2329,7 @@ export class ApiManager extends ComponentBase {
 					throw new this.SlothletError("MODULE_ID_IN_USE", { moduleID: requested, validationError: true });
 				}
 			}
-			const replacing =
-				restOptions.forceOverwrite === true || restOptions.collisionMode === "replace" || restOptions.collisionMode === "merge-replace";
-			if (replacing) {
-				const mountPath = mountParts.join(".");
-				for (const registered of this.slothlet.handlers.ownership.pathToModule.keys()) {
-					if (mountPath === "" || registered === mountPath || registered.startsWith(`${mountPath}.`)) {
-						this.#assertModuleMountWrite(registered.split("."), writer);
-					}
-				}
-			}
+			this.#assertModuleReplace(mountParts, writer, restOptions);
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
@@ -2399,6 +2414,13 @@ export class ApiManager extends ComponentBase {
 					validationError: true
 				});
 			}
+		}
+
+		// A versioned add mounts at `<versionTag>.<apiPath>` too, besides the dispatcher at `apiPath` checked above:
+		// module code needs that path as well, checked before anything changes (#625).
+		if (writer !== null && effectivePath !== normalizedPath) {
+			this.#assertModuleMountWrite(effectiveParts, writer);
+			this.#assertModuleReplace(effectiveParts, writer, restOptions);
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
