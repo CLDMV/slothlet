@@ -36,6 +36,12 @@ export class ApiManager extends ComponentBase {
         replaceShadows: Map<string, object[]>;
     };
     /**
+     * The module whose code performed each module's `api.add`, by the added moduleID; null for the host (#625).
+     * That module may remove the mount, and scoped-remove within it, without a grant.
+     * @type {Map<string, string|null>}
+     */
+    mountedBy: Map<string, string | null>;
+    /**
      * Normalize and validate an API path.
      * @param {string|string[]} apiPath - Dot-delimited API path, array of path segments, or empty/null for root.
      * @returns {{ apiPath: string, parts: string[] }} Normalized path data.
