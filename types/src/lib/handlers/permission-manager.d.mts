@@ -183,8 +183,8 @@ export class PermissionManager extends ComponentBase {
      */
     hasPrincipal(name: string): boolean;
     /**
-     * Drop every principal owned by a removed module (#459). Called when a whole module is removed
-     * (`api.slothlet.api.remove(moduleID)`), so a resolver never outlives the code that defined it.
+     * Drop every principal (#459) and every rule (#625) owned by a removed module. Called when a whole module is
+     * removed (`api.slothlet.api.remove(moduleID)`), so neither a resolver nor a grant outlives the module.
      *
      * @param {string} moduleID - The removed module's id.
      * @returns {void}
@@ -344,15 +344,35 @@ export class PermissionManager extends ComponentBase {
         layer: string | null;
     };
     /**
-     * Refuse module code removing a rule it could not have added ({@link placeModuleRule}); host code may remove any.
+     * Refuse module code removing a rule it may not (#625). Host code removes any rule.
+     *
+     * A module removes the rules owned by its own module — those its code added; the ones registered on its behalf
+     * (its manifest's, an `api.add`'s) then meet the self-modification guard of {@link removeRule}. A module allowed
+     * to manage rules beyond its subtree (see {@link placeModuleRule}) also removes other modules' rules, never the
+     * host's (instance or runtime layer) or the framework's: to override one, it adds a rule of its own, which
+     * normal precedence then weighs.
      *
      * @param {string} ruleId - The rule about to be removed.
      * @returns {void}
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
      * @example
      * pm.assertModuleRuleRemoval("perm-12");
      */
     assertModuleRuleRemoval(ruleId: string): void;
+    /**
+     * A rule as it is registered: its own data fields, read once into a frozen copy (#625).
+     *
+     * The copy, not the object handed in, is what is checked, registered, and replayed on a reload, so a field that
+     * answers differently on a later read, or a change to the object afterwards, changes nothing. A field that is an
+     * accessor is refused. Anything that is no object is handed back for the rule validation to refuse.
+     *
+     * @param {*} rule - The rule handed in.
+     * @returns {*} The frozen copy, or `rule` when it is no object.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @example
+     * const rule = pm.snapshotRule(input);
+     */
+    snapshotRule(rule: any): any;
     /**
      * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
      * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing

@@ -203,7 +203,8 @@ export class ApiManager extends ComponentBase {
      */
     public mayWrite(parts: string[], callerWrapper: object): boolean;
     /**
-     * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
+     * Whether a caller owns an api path: the caller's module is on the ownership stack of the path, or of its
+     * nearest registered ancestor. The
      * base module (endpoint `"."`), a caller with no module, and code outside any module (no
      * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.
      *
