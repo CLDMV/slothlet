@@ -75,6 +75,8 @@
 		"HINT_MODULE_THENABLE_EXPORT": "slothlet hace await de los nodos de la API y de los valores de los módulos (await api.x resuelve el nodo, y el modo lazy carga mediante await), así que se llamaría a un método o accesor then en su lugar. Un then que contiene datos no es problema. Cambia el nombre del método o deja el thenable fuera del valor exportado.",
 		"MODULE_ID_RESERVED_SEPARATOR": "El ID de módulo '{moduleID}' contiene el separador reservado '{separator}' y no puede usarse.",
 		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet une internamente el ID y la ruta de API de un módulo con este token; un ID de módulo que lo contenga corrompería esa clave. Elige otro ID.",
+		"MODULE_ID_IN_USE": "El ID de módulo '{moduleID}' pertenece a otro módulo montado; el código de un módulo solo puede montar con su propio ID de módulo o con uno que no esté en uso.",
+		"HINT_MODULE_ID_IN_USE": "Elige un ID de módulo que no esté en uso, o el del módulo que llama.",
 		"MODULE_IMPORT_FAILED": "Error al importar el módulo '{modulePath}': {error}. Comprueba que el fichero existe y tiene una sintaxis válida.",
 		"HINT_MODULE_IMPORT_FAILED": "Asegúrate de que el fichero del módulo existe y puede ser importado. Comprueba si hay errores de sintaxis o dependencias faltantes.",
 		"CONTEXT_ALREADY_EXISTS": "El contexto para la instancia '{instanceID}' ya existe. No se puede inicializar dos veces.",

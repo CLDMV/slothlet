@@ -160,6 +160,8 @@ An empty array `[]` is rejected at `addRule()` time.
 
 ---
 
+A condition is stored by value with its rule: editing the object after the rule is added changes nothing, and a function condition is kept as the same function, evaluated on every check against that call's context. See [Rules are stored by value](PERMISSIONS.md#rules-are-stored-by-value).
+
 ## Behavior Reference
 
 | Situation                                                | Result                                                                                           |

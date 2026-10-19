@@ -75,6 +75,8 @@
 		"HINT_MODULE_THENABLE_EXPORT": "slothlet wartet mit await auf API-Knoten und Modulwerte (await api.x liefert den Knoten, und der Lazy-Modus lädt per await), daher würde stattdessen eine then-Methode oder ein then-Accessor aufgerufen. Ein then mit Daten ist unproblematisch. Benennen Sie die Methode um oder halten Sie das Thenable vom exportierten Wert fern.",
 		"MODULE_ID_RESERVED_SEPARATOR": "Die Modul-ID '{moduleID}' enthält das reservierte Trennzeichen '{separator}' und kann nicht verwendet werden.",
 		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet verbindet die ID und den API-Pfad eines Moduls intern mit diesem Token; eine Modul-ID, die es enthält, würde diesen Schlüssel beschädigen. Wählen Sie eine andere ID.",
+		"MODULE_ID_IN_USE": "Die Modul-ID '{moduleID}' gehört zu einem anderen eingebundenen Modul; Modulcode darf nur mit der eigenen Modul-ID oder einer unbenutzten einbinden.",
+		"HINT_MODULE_ID_IN_USE": "Wählen Sie eine unbenutzte Modul-ID oder die des aufrufenden Moduls.",
 		"MODULE_IMPORT_FAILED": "Fehler beim Importieren des Moduls '{modulePath}': {error}. Überprüfen Sie, ob die Datei existiert und eine gültige Syntax hat.",
 		"HINT_MODULE_IMPORT_FAILED": "Stellen Sie sicher, dass die Moduldatei existiert und importiert werden kann. Prüfen Sie auf Syntaxfehler oder fehlende Abhängigkeiten.",
 		"CONTEXT_ALREADY_EXISTS": "Kontext für Instanz '{instanceID}' existiert bereits. Initialisierung kann nicht zweimal erfolgen.",

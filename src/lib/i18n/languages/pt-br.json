@@ -75,6 +75,8 @@
 		"HINT_MODULE_THENABLE_EXPORT": "O slothlet faz await dos nós da API e dos valores dos módulos (await api.x resolve o nó, e o modo lazy carrega com await), então um método ou acessor then seria chamado no lugar. Um then que contém dados não é problema. Renomeie o método ou mantenha o thenable fora do valor exportado.",
 		"MODULE_ID_RESERVED_SEPARATOR": "O ID do módulo '{moduleID}' contém o separador reservado '{separator}' e não pode ser usado.",
 		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet une internamente o ID e o caminho de API de um módulo com este token; um ID de módulo que o contenha corromperia essa chave. Escolha outro ID.",
+		"MODULE_ID_IN_USE": "O ID de módulo '{moduleID}' pertence a outro módulo montado; o código de um módulo só pode montar com o próprio ID de módulo ou com um que não esteja em uso.",
+		"HINT_MODULE_ID_IN_USE": "Escolha um ID de módulo que não esteja em uso, ou o do módulo que chama.",
 		"MODULE_IMPORT_FAILED": "Falha ao importar o módulo '{modulePath}': {error}. Verifique se o arquivo existe e possui sintaxe válida.",
 		"HINT_MODULE_IMPORT_FAILED": "Certifique-se de que o arquivo do módulo existe e pode ser importado. Verifique se há erros de sintaxe ou dependências ausentes.",
 		"CONTEXT_ALREADY_EXISTS": "O contexto para a instância '{instanceID}' já existe. Não é possível inicializar duas vezes.",

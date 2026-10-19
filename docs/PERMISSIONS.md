@@ -78,7 +78,7 @@ const api = await slothlet({
 | `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement).                                                                                                                                                                                                         |
 | `references.capture`     | `boolean` | `true`      | When `true` (the default), a function read out of the api carries the identity of the module that read it, so it stays enforced as that module wherever it is later invoked. Costs a per-reader object per wrapper read — see the measured overhead below. Set `false` to restore the older behavior, where a reference invoked with no active caller was treated as host-initiated. See [Captured references remember who captured them](#captured-references-remember-who-captured-them). |
 | `owner`                  | `boolean` | `false`     | When `true`, a module may access every leaf it currently owns — across its own subdirectories — wherever `defaultPolicy` would otherwise deny. An explicit deny rule still wins. See [Owner Grant](#owner-grant).                                                                                                                                                                                                                                                                           |
-| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order); each is stored by value (see [Rules are stored by value](#rules-are-stored-by-value))                                                                                                                                                                                                                                                                                                                            |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
 
@@ -496,18 +496,29 @@ Module code can call the same `addRule` / `removeRule`, and pass `permissions` t
 That default is the built-in rule `{ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }`. It decides only what module code may register beyond its own subtree; calling `addRule` for the module's own subtree is not gated by it. An explicit allow on that target for a module — the host's, or the module's own manifest's — lifts it, and the module then manages rules for any target, as the host does (`defaultPolicy: "allow"` alone lifts nothing):
 
 ```javascript
-permissions: {
-	rules: [{ caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" }];
-}
+const api = await slothlet({
+	dir: "./api",
+	permissions: { rules: [{ caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" }] }
+});
 ```
 
-A rule is read once when it is registered, its `condition` copied deeply into frozen data: module code that hands in an object whose fields are accessors is refused, and the copy taken then is what is checked, registered, and replayed on a reload, so changing the object afterwards changes nothing. The same holds for the `permissions` option of an `api.add`.
+#### Rules are stored by value
+
+`addRule(rule)`, the config's `permissions.rules`, a manifest's rules, and the `permissions` option of an `api.add` each store their own copy of the rule, its `condition` included (copied deeply into frozen data). Editing the object afterwards does not change the installed rule, and a reload replays the copy. To change a rule, remove it and add the new one. A function condition is kept as the same function, and it is still evaluated on every check, against that call's context. A rule whose fields are accessors is refused.
+
+```javascript
+const rule = { caller: "reports.**", target: "billing.**", effect: "deny" };
+const id = api.slothlet.permissions.addRule(rule);
+rule.effect = "allow"; // no effect: the installed rule still denies
+api.slothlet.permissions.removeRule(id);
+api.slothlet.permissions.addRule({ ...rule }); // now it allows
+```
 
 Module code removes only the rules its own module owns. A module allowed to manage rules beyond its subtree also removes other modules' rules, but never a host rule (config or runtime) or a built-in one; to override one, it adds a rule of its own, which normal precedence weighs. A module's rules — its manifest's, its code's, and those registered with its `api.add` — are removed with the module, and do not come back on a reload. The host's own rules naming the module's paths stay.
 
 A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` does not write into a module mounted at `outer.inner`, and does not register a rule whose target's literal prefix lies in it (`outer.inner.**`). Modules mounted at the same point share it. The base module keeps the whole tree. A rule a module registers for its subtree matches its pattern as written, so `outer.**` covers everything mounted under `outer`, other modules mounted below it included, as a host rule would.
 
-`api.add` and `api.remove` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. Each needs the module to own the path or a `:write` allow naming it, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. A module mounting below its own path hands that path to the module it mounts. Host code mounts and removes anywhere, as before.
+`api.add` and `api.remove` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. Each needs the module to own the path or a `:write` allow naming it, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. A module mounting below its own path hands that path to the module it mounts, and its code may always remove that mount, or part of it, without a grant; the mounted module may remove itself. A mount the host made below a module's path is not that module's to remove without a grant. Host code mounts and removes anywhere, as before. Module code mounts with its own moduleID or one not in use; a moduleID of another mounted module is refused (`MODULE_ID_IN_USE`). The host may re-use a moduleID.
 
 A manifest is not restricted this way: its rules apply at mount, at the `manifest` layer, whatever they target. Mounting a module is the consumer's choice to accept them.
 

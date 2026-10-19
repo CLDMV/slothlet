@@ -75,6 +75,8 @@
 		"HINT_MODULE_THENABLE_EXPORT": "slothlet awaits api nodes and module values (await api.x resolves the node, and lazy mode loads by awaiting), so a then method or then accessor would be called instead. A then holding data is fine. Rename the method, or keep the thenable off the exported value.",
 		"MODULE_ID_RESERVED_SEPARATOR": "Module ID '{moduleID}' contains the reserved separator '{separator}' and cannot be used.",
 		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet joins a module's id and api path with this token internally; a module id containing it would corrupt that key. Choose a different id.",
+		"MODULE_ID_IN_USE": "Module ID '{moduleID}' belongs to another module that is mounted; module code may mount only with its own moduleID or one not in use.",
+		"HINT_MODULE_ID_IN_USE": "Choose a moduleID that is not in use, or the calling module's own.",
 		"MODULE_IMPORT_FAILED": "Failed to import module '{modulePath}': {error}. Check that the file exists and has valid syntax.",
 		"HINT_MODULE_IMPORT_FAILED": "Ensure the module file exists and can be imported. Check for syntax errors or missing dependencies.",
 		"CONTEXT_ALREADY_EXISTS": "Context for instance '{instanceID}' already exists. Cannot initialize twice.",
