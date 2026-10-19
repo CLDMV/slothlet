@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:33-07:00 (1792378293)
+ *	@Last modified time: 2026-10-18T21:35:14-07:00 (1792384514)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -584,7 +584,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 		},
 		preventExtensions() {
 			assertWrite(null);
-				// A value that is itself a proxy may decline.
+			// A value that is itself a proxy may decline.
 			if (!Reflect.preventExtensions(raw)) return false;
 			mirrorClosed();
 			return true;
@@ -687,7 +687,7 @@ export function runtime_selfView(node, reader) {
 				const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
 				if (typeof prop === "string") parts.push(prop);
 				// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
-				if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
+				if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 			}
 		}
 		throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
@@ -1131,7 +1131,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 	}
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER) return null;
-	if (reader !== UNATTRIBUTED_READER && slothlet.handlers.apiManager.ownsPath(parts, reader)) return reader;
+	if (reader !== UNATTRIBUTED_READER && slothlet.handlers.apiManager.mayWrite(parts, reader)) return reader;
 	throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 }
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:33:56-07:00 (1792316036)
+ *	@Last modified time: 2026-10-18T21:35:17-07:00 (1792384517)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1337,7 +1337,8 @@ class Slothlet {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
 				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+					// A module's write rule keeps the module layer it was added at (#625).
+					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
 				}
 			} else if (operation.type === "removePermissionRule") {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.

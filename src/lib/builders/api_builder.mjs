@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:31-07:00 (1792378291)
+ *	@Last modified time: 2026-10-18T21:35:12-07:00 (1792384512)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2913,17 +2913,19 @@ export class ApiBuilder extends ComponentBase {
 					}
 					/* v8 ignore stop */
 
-					// Granting a write is the host's alone (#625).
-					permissionManager.assertHostWriteGrant(rule);
-					const ruleId = permissionManager.addRule(rule, null);
+					// A rule module code adds is held to its own subtree unless an explicit allow lifts the built-in reach
+					// default, and is that module's rule, at the module layer, below the host's (#625).
+					const { ownerModuleID, layer } = permissionManager.placeModuleRule(rule);
+					const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
 
 					// Record in operationHistory for replay on reload
 					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 						slothlet.handlers.apiManager.state.operationHistory.push({
 							type: "addPermissionRule",
 							rule,
-							ownerModuleID: null,
+							ownerModuleID,
 							ruleId,
+							layer,
 							timestamp: Date.now()
 						});
 					}
@@ -2965,6 +2967,8 @@ export class ApiBuilder extends ComponentBase {
 					// module drop another's rule.
 					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+					// Module code removes only the rules it could add (#625).
+					permissionManager.assertModuleRuleRemoval(ruleId);
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 					// Record in operationHistory for replay on reload

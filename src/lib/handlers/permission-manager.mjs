@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:33-07:00 (1792378293)
+ *	@Last modified time: 2026-10-18T21:35:14-07:00 (1792384514)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,12 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
-import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import {
+	WRAPPER_INTERNAL_KEYS,
+	IMPL_METADATA_KEYS,
+	isFrameworkWriteTarget,
+	writeTargetLiteralPrefix
+} from "@cldmv/slothlet/helpers/reserved-keys";
 import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 
 /**
@@ -80,7 +85,7 @@ const WRITE_TARGET_SUFFIX = ":write";
  * an equally-specific host rule always overrides the module's.
  * @type {Readonly<Record<string, number>>}
  */
-const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, instance: 2, runtime: 3 });
+const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
 
 /**
  * Enforcement options for the call-gate query {@link PermissionManager#checkCall} (#508): the supplied
@@ -225,6 +230,13 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#rules = new Map();
+
+	/**
+	 * Id of the built-in reach default (`slothlet.permissions.addRule` for rules beyond a module's own subtree, #625).
+	 * @type {string|null}
+	 * @private
+	 */
+	#reachRuleId = null;
 
 	/**
 	 * Default policy when no rule matches: "allow" or "deny".
@@ -456,6 +468,12 @@ export class PermissionManager extends ComponentBase {
 		// grants it to the modules that should define principals, exactly like any other rule.
 		this.addRule({ caller: "**", target: "slothlet.permissions.principal.**", effect: "deny" }, "__builtin__");
 
+		// Built-in reach default (#625): module code manages rules (adds and removes them) for its own subtree only. A
+		// rule on any other target, the framework's own among them, takes an explicit allow on this target for the
+		// module — the host's or a manifest's — which outranks this deny. It decides only that reach; calling `addRule`
+		// for the module's own subtree is not gated by it (see placeModuleRule).
+		this.#reachRuleId = this.addRule({ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }, "__builtin__");
+
 		// Call-gate query (#508): `global.checkCall` answers "may caller X call target Y with these args"
 		// for a SUPPLIED caller identity, exactly like `event.resolveLevel` answers for a supplied
 		// subscriber — so it is host-only by the same mechanism (a built-in deny), not merely gatable like
@@ -585,12 +603,17 @@ export class PermissionManager extends ComponentBase {
 		const entry = this.#rules.get(ruleId);
 		if (!entry) return false;
 
-		// Self-modification protection: module cannot remove its own rules
-		// ownerModuleID is only set when addRule is called from within an internal module
-		// context (not from the public api.slothlet.permissions.addRule surface which always
-		// passes null). Reachable only via direct addRule(rule, moduleID) calls.
+		// Self-modification protection: a module cannot remove the rules registered on its behalf (its manifest's,
+		// an api.add's). A rule its own code added (the module layer, #625) is its to remove. The guarded rules are
+		// registered with an owner only internally, and their ids are not handed to the module.
 		/* v8 ignore start */
-		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
+		if (
+			callerModuleID &&
+			entry.ownerModuleID &&
+			callerModuleID === entry.ownerModuleID &&
+			entry.layer !== "module" &&
+			entry.layer !== "manager"
+		) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", {
 				ruleId,
 				moduleID: callerModuleID
@@ -1475,58 +1498,127 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Refuse module code granting a write (#625): a rule with a write target (`pattern:write`) and effect `allow`.
+	 * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+	 * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
 	 *
-	 * A write rule that allows can only lift a denial — the ownership rule still applies to what it lets
-	 * through — and the denials are the host's or the framework's own (the built-in write rules), which only
-	 * the host lifts. Code of a module executing now (or code the live runtime cannot attribute) adding such a
-	 * rule, through `slothlet.permissions.addRule` or the `permissions` option of an `api.add` it makes, is
-	 * refused; a module's manifest is refused the same at mount. A deny write rule only tightens and is left as
-	 * it is, and host code is unaffected.
+	 * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
+	 * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
+	 * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
+	 * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
+	 * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+	 * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
+	 * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
 	 *
-	 * @param {object} rule - The rule about to be added (`{ target, effect }`).
-	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code grants a write.
+	 * A rule module code adds is that module's rule, at the module layer (`module` for its own subtree, `manager`
+	 * for a rule beyond it), ranked with a manifest's: a host rule outranks it at equal specificity. A `module`
+	 * rule never lifts a built-in rule; a `manager` rule may, as a manifest's may. Host code is not placed: its
+	 * rules keep their usual owner and layer. Code the live runtime cannot attribute is refused.
+	 *
+	 * @param {object} rule - The rule (`{ target, … }`).
+	 * @returns {{ownerModuleID: string|null, layer: string|null}} Owner and layer to register the rule with; both null
+	 *   for host code.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
 	 * @example
-	 * pm.assertHostWriteGrant({ caller: "**", target: "slothlet.**:write", effect: "allow" }); // throws inside a module call
+	 * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
+	 * pm.addRule(rule, ownerModuleID, null, layer);
 	 */
-	assertHostWriteGrant(rule) {
-		if (rule?.effect !== "allow" || typeof rule.target !== "string" || this.#parseWriteTarget(rule.target) === null) return;
-		if (runtime_selfModuleReader(this.slothlet) === null) return;
-		throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-			reason: translate("PERM_RULE_WRITE_GRANT_HOST_ONLY"),
-			received: rule.target,
-			validationError: true
-		});
+	placeModuleRule(rule) {
+		const module = runtime_selfModuleReader(this.slothlet);
+		if (module === null) return { ownerModuleID: null, layer: null };
+		const internal = module.____slothletInternal;
+		const refuse = () => {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_TARGET_NOT_OWNED"),
+				received: typeof rule?.target === "string" ? rule.target : typeof rule?.target,
+				validationError: true
+			});
+		};
+		// Code the live runtime cannot attribute has no module to register for. Unreachable through the routes that
+		// call this: the framework's call gate refuses such code on `slothlet.*` before the rule is looked at.
+		/* v8 ignore next */
+		if (!internal) refuse();
+		// A malformed rule is left to the rule validation, which refuses it.
+		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module" };
+		const pattern = this.#parseWriteTarget(rule.target) ?? this.#parseHookTarget(rule.target)?.pathPattern ?? rule.target;
+		const prefix = writeTargetLiteralPrefix(pattern);
+		const own = prefix.length > 0 && !isFrameworkWriteTarget(pattern) && this.slothlet.handlers.apiManager.ownsPath(prefix, module);
+		if (own) return { ownerModuleID: internal.moduleID, layer: "module" };
+		if (!this.#mayReachBeyondOwn(String(internal.apiPath))) refuse();
+		return { ownerModuleID: internal.moduleID, layer: "manager" };
 	}
 
 	/**
-	 * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
-	 * or deleting a member at `targetPath`, or changing the prototype or extensibility of the node there.
+	 * Refuse module code removing a rule it could not have added ({@link placeModuleRule}); host code may remove any.
 	 *
-	 * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
-	 * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-	 * instance. Most-specific-wins, then the higher layer, then the last registered, as for call rules. With
-	 * no matching write rule the rules say nothing, and the ownership rule alone decides the write. A denial
-	 * is audited like any other.
+	 * @param {string} ruleId - The rule about to be removed.
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+	 * @example
+	 * pm.assertModuleRuleRemoval("perm-12");
+	 */
+	assertModuleRuleRemoval(ruleId) {
+		const entry = this.#rules.get(ruleId);
+		if (entry) this.placeModuleRule(entry);
+	}
+
+	/**
+	 * Whether a module may manage rules beyond its own subtree: the call rules for `slothlet.permissions.addRule`,
+	 * the built-in reach default among them, decide for its caller path, and the winner allows. The default
+	 * policy plays no part.
+	 *
+	 * @param {string} callerPath - The module's api path.
+	 * @returns {boolean} Whether a rule lifts the built-in default for it.
+	 * @private
+	 */
+	#mayReachBeyondOwn(callerPath) {
+		const targetPath = "slothlet.permissions.addRule";
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const conditioned = [];
+		for (const entry of this.#rules.values()) {
+			if (entry.hookType != null || entry.writePathPattern != null) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
+			if (this.#conditionMatches(entry, runtimeContext, null)) conditioned.push(entry);
+		}
+		conditioned.sort((a, b) => {
+			const specA = this.#computeSpecificity(a, callerPath, targetPath);
+			const specB = this.#computeSpecificity(b, callerPath, targetPath);
+			if (specA !== specB) return specB - specA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+		// The built-in reach default always matches, so there is a winner.
+		return conditioned[0].effect === "allow";
+	}
+
+	/**
+	 * The write rule that decides a module's write, with no audit.
+	 *
+	 * Most-specific-wins, then the higher layer, then the last registered, as for call rules. A rule module code
+	 * added for its own subtree never lifts a built-in rule, so where a built-in deny matches, such allows are
+	 * left out; the host, a manifest, and a module the host or its manifest let manage rules may lift one.
 	 *
 	 * @param {string} callerPath - Api path of the module writing.
 	 * @param {string} targetPath - Api path written.
-	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-	 * @returns {boolean|null} False when a write rule denies the write, true when one allows it, null when none matches.
-	 * @example
-	 * pm.enforceWrite("payments.charge", "slothlet.lockCaller"); // false — the built-in rule denies it
+	 * @param {object|null} runtimeContext - Per-request context for condition evaluation.
+	 * @returns {{winner: object, builtinDenied: boolean}|null} The deciding rule, whether a built-in deny matched;
+	 *   null when no write rule matches.
+	 * @private
 	 */
-	enforceWrite(callerPath, targetPath, runtimeContext = null) {
-		const matches = [];
+	#decideWrite(callerPath, targetPath, runtimeContext) {
+		let conditioned = [];
+		let builtinDenied = false;
 		for (const entry of this.#rules.values()) {
 			if (entry.writePathPattern == null) continue;
-			if (this.#getCompiledPattern(entry.caller)(callerPath) && this.#getCompiledPattern(entry.writePathPattern)(targetPath)) matches.push(entry);
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.writePathPattern)(targetPath)) continue;
+			// A write has no call arguments — function conditions receive null callMeta.
+			if (!this.#conditionMatches(entry, runtimeContext, null)) continue;
+			conditioned.push(entry);
+			if (entry.layer === "builtin" && entry.effect === "deny") builtinDenied = true;
 		}
-		// A write has no call arguments — function conditions receive null callMeta.
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) return null;
-		const spec = (entry) => this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath);
+		if (builtinDenied) conditioned = conditioned.filter((entry) => entry.effect !== "allow" || entry.layer !== "module");
+		const spec = (entry) =>
+			this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath);
 		conditioned.sort((a, b) => {
 			const specA = spec(a);
 			const specB = spec(b);
@@ -1534,15 +1626,56 @@ export class PermissionManager extends ComponentBase {
 			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
 			return b.registrationSeq - a.registrationSeq;
 		});
-		const winner = conditioned[0];
-		if (winner.effect === "allow") return true;
+		return { winner: conditioned[0], builtinDenied };
+	}
+
+	/**
+	 * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
+	 * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
+	 * the prototype or extensibility of the node there.
+	 *
+	 * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
+	 * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
+	 * instance. An allow is a grant: the write goes through whatever the module owns. The one exception is an
+	 * allow lifting a built-in rule, which leaves the write to the ownership rule. With no matching write
+	 * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+	 * A denial is audited like any other.
+	 *
+	 * @param {string} callerPath - Api path of the module writing.
+	 * @param {string} targetPath - Api path written.
+	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+	 * @returns {"deny"|"grant"|"lift"|null} The decision; null when no write rule matches.
+	 * @example
+	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
+	 */
+	decideWrite(callerPath, targetPath, runtimeContext = null) {
+		const decision = this.#decideWrite(callerPath, targetPath, runtimeContext);
+		if (decision === null) return null;
+		const { winner, builtinDenied } = decision;
+		if (winner.effect === "allow") return builtinDenied ? "lift" : "grant";
 		this.#emitAuditEvent("permission:denied", {
 			caller: callerPath,
 			target: `${targetPath}${WRITE_TARGET_SUFFIX}`,
 			rule: this.#serializeRule(winner),
 			conditionMatched: winner.condition != null
 		});
-		return false;
+		return "deny";
+	}
+
+	/**
+	 * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
+	 * `"grant"`), with no audit.
+	 *
+	 * @param {string} callerPath - Api path of the module writing.
+	 * @param {string} targetPath - Api path written.
+	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+	 * @returns {boolean} Whether the write is granted.
+	 * @example
+	 * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
+	 */
+	isWriteGranted(callerPath, targetPath, runtimeContext = null) {
+		const decision = this.#decideWrite(callerPath, targetPath, runtimeContext);
+		return decision !== null && decision.winner.effect === "allow" && !decision.builtinDenied;
 	}
 
 	/**
@@ -2299,8 +2432,9 @@ export class PermissionManager extends ComponentBase {
 
 		for (const entry of this.#rules.values()) {
 			// Hook-target rules (pattern:type) gate interception, and write-target rules (pattern:write) module
-			// writes, never plain calls — skip them here.
-			if (entry.hookType != null || entry.writePathPattern != null) continue;
+			// writes, never plain calls — skip them here. So is the built-in reach default (see placeModuleRule),
+			// which decides only what rules module code may add, never the call to `addRule` itself.
+			if (entry.hookType != null || entry.writePathPattern != null || entry.id === this.#reachRuleId) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 

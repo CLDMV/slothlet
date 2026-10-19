@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:32-07:00 (1792378292)
+ *	@Last modified time: 2026-10-18T21:35:13-07:00 (1792384513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,6 +95,14 @@ const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
  * @private
  */
 const FRAMEWORK_ROOT_SEGMENTS = new Set(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * Where an `api.add`'s history record keeps the layer each of its `permissions` rules was placed at (#625), so a
+ * reload replays the rules module code mounted with at the module layer it added them at. A symbol no caller can pass.
+ * @type {symbol}
+ * @private
+ */
+const PERMISSION_RULE_LAYERS = Symbol("permissionRuleLayers");
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -623,9 +631,12 @@ export class ApiManager extends ComponentBase {
 			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
 			const targetPath = parts.join(".");
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
-			if (this.slothlet.handlers.permissionManager?.enforceWrite(callerPath, targetPath, runtimeContext) === false) {
+			const decision = this.slothlet.handlers.permissionManager.decideWrite(callerPath, targetPath, runtimeContext);
+			if (decision === "deny") {
 				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: `${targetPath}:write` });
 			}
+			// An allowing write rule grants the write, whatever the module owns.
+			if (decision === "grant") return;
 		}
 		if (this.ownsPath(parts, callerWrapper)) return;
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
@@ -637,6 +648,24 @@ export class ApiManager extends ComponentBase {
 			callerApiPath,
 			validationError: true
 		});
+	}
+
+	/**
+	 * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
+	 * Used where a write is held to a module that read a node rather than the code running now.
+	 *
+	 * @param {string[]} parts - Segments of the api path.
+	 * @param {object} callerWrapper - The module's wrapper.
+	 * @returns {boolean} Whether the module owns the path or is granted the write.
+	 * @public
+	 *
+	 * @example
+	 * apiManager.mayWrite(["victim", "v", "note"], guestWrapper); // true when a write rule grants it
+	 */
+	mayWrite(parts, callerWrapper) {
+		if (this.ownsPath(parts, callerWrapper)) return true;
+		const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
+		return this.slothlet.handlers.permissionManager.isWriteGranted(callerPath, parts.join("."));
 	}
 
 	/**
@@ -1987,12 +2016,16 @@ export class ApiManager extends ComponentBase {
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		this.#assertSafeSegments(normalizedPath, parts, true);
 
-		// Granting a write is the host's alone (#625): module code mounting with a write grant is refused before
-		// anything is mounted.
-		if (Array.isArray(restOptions.permissions?.allow)) {
-			for (const entry of restOptions.permissions.allow) {
-				const { target } = this.#normalizePermissionShorthandEntry(entry);
-				this.slothlet.handlers.permissionManager.assertHostWriteGrant({ target, effect: "allow" });
+		// A rule module code mounts with is held to the module's own subtree unless an explicit allow lifts the
+		// built-in reach default, and sits at the module layer (#625): checked before anything is mounted. A replay
+		// keeps the layers the original add placed them at.
+		const ruleLayers = restOptions[PERMISSION_RULE_LAYERS] ?? { deny: [], allow: [] };
+		if (!restOptions[PERMISSION_RULE_LAYERS]) {
+			for (const effect of ["deny", "allow"]) {
+				for (const entry of Array.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
+					const { target } = this.#normalizePermissionShorthandEntry(entry);
+					ruleLayers[effect].push(this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }).layer);
+				}
 			}
 		}
 
@@ -2863,7 +2896,7 @@ export class ApiManager extends ComponentBase {
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
-					options: { ...restOptions, metadata, moduleID },
+					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers },
 					moduleID,
 					versionConfig: versionConfig || null
 				});
@@ -2874,7 +2907,7 @@ export class ApiManager extends ComponentBase {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
-					options: { ...restOptions, metadata, moduleID },
+					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers },
 					moduleID,
 					versionConfig: versionConfig || null
 				});
@@ -2911,16 +2944,26 @@ export class ApiManager extends ComponentBase {
 			const callerPattern = `${normalizedPath}.**`;
 
 			if (Array.isArray(perms.deny)) {
-				for (const entry of perms.deny) {
+				perms.deny.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
-					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "deny", condition }, moduleID);
-				}
+					this.slothlet.handlers.permissionManager.addRule(
+						{ caller: callerPattern, target, effect: "deny", condition },
+						moduleID,
+						null,
+						ruleLayers.deny[i]
+					);
+				});
 			}
 			if (Array.isArray(perms.allow)) {
-				for (const entry of perms.allow) {
+				perms.allow.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
-					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "allow", condition }, moduleID);
-				}
+					this.slothlet.handlers.permissionManager.addRule(
+						{ caller: callerPattern, target, effect: "allow", condition },
+						moduleID,
+						null,
+						ruleLayers.allow[i]
+					);
+				});
 			}
 		}
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:35-07:00 (1792378295)
+ *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,13 +73,6 @@ const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
 		"metadata"
 	])
 );
-
-/**
- * Suffix that makes a permission target a write target (`pattern:write`, #625).
- * @type {string}
- * @private
- */
-const WRITE_TARGET_SUFFIX = ":write";
 
 /**
  * Allowed effect values for permission rules.
@@ -566,20 +559,6 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					packageName,
 					manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
-				},
-				null,
-				{ validationError: true }
-			);
-		}
-		// A write rule that allows can only lift a denial, the host's or the framework's own (the built-in write
-		// rules), and only the host lifts those (#625).
-		if (rule.effect === "allow" && rule.target.endsWith(WRITE_TARGET_SUFFIX)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_PERMISSION_WRITE_GRANT", { index: i })
 				},
 				null,
 				{ validationError: true }
