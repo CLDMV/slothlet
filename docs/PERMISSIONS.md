@@ -731,7 +731,7 @@ See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating an
 A module writes into the api only under the subtree it owns (a module mounted at `P` writes under `P.*`). Writing is a permission like calling, and a `:write` rule grants or refuses it: a target with the `pattern:write` **suffix** matches a module assigning, defining, or deleting a member at that path, or changing the prototype or extensibility of the node there (`Object.setPrototypeOf`, `Object.preventExtensions`, `Object.freeze`, `Object.seal`).
 
 - A denying write rule refuses the write with `PERMISSION_DENIED`, whatever the module owns.
-- An allowing write rule **grants** the write: another module's subtree becomes writable for the callers it names, and the ownership rule is not applied to that write. The exception is an allow that lifts a built-in write rule (below): the write it lets through still meets the ownership rule.
+- An allowing write rule **grants** the write to the callers it names: another module's subtree, or a member a built-in write rule protects (below), becomes writable for them, and the ownership rule is not applied to that write.
 - With no matching write rule, ownership alone decides (`LOOSE_SET_NOT_OWNED`). `defaultPolicy: "allow"` grants nothing here.
 - Precedence is the usual one: most specific first, then the higher layer (host over module rules), then the last registered. A more specific deny beats a broader grant.
 - A **symbol-keyed** member is matched against the path of the node it is written on: `self.victim.v[sym] = …` is a write to `victim.v`. A plain value reached through a node — a class's `prototype`, a method of it, an object a prototype holds — is matched against the path it was reached at: `self.billing.Account.prototype.balance = …` is a write to `billing.Account.prototype.balance`. An instance another module's method returns is data that module chose to share, and is handed out as it is; so are the realm's built-ins (`Object`, `Map.prototype.get`, …) and built-in objects whose methods work only on the object itself (a `Map`, a `Date`, a `Promise`).
@@ -771,15 +771,15 @@ Write rules are evaluated **whether or not a `permissions` block is configured o
 | `shutdown:write`, `shutdown.**:write`, `destroy:write`, `destroy.**:write` | The framework's root functions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `<key>:write`, `**.<key>:write` for each framework-internal key            | The framework's own keys on any api node: wrapper state (`____slothletInternal`, `____slothlet`, `___setImpl`, `___getState`, `___resetLazy`, `___invalidate`, `_impl`, `_materialize`), what a node reports about itself (`__state`, `__invalid`, `__mode`, `__apiPath`, `__slothletPath`, `__isCallable`, `__materializeOnCreate`, `__displayName`, `__type`, `__metadata`, `__filePath`, `__sourceFolder`, `__moduleID`, `__materialized`, `__inFlight`, `__impl`), and impl metadata (`__childFilePaths`, `__childFilePathsPreMaterialize`) |
 
-They are defaults. The host lifts one with a rule of equal or higher specificity, and so may a module's manifest, or module code the host or its manifest let manage rules beyond its subtree. A rule module code adds for its own subtree never lifts one. A write a node already absorbs silently (assigning or deleting most of its internal keys reports success and changes nothing) stays absorbed.
+They are defaults. The host lifts one with a rule of equal or higher specificity, and so may a module's manifest, or module code the host or its manifest let manage rules beyond its subtree. A rule module code adds for its own subtree never lifts one. A lift grants the write to the callers it names, as any write allow does. A write a node already absorbs silently (assigning or deleting most of its internal keys reports success and changes nothing) stays absorbed.
 
 ```javascript
 const api = await slothlet({
 	dir: "./api",
 	permissions: {
 		rules: [
-			// The base module (which owns the whole tree) may set one extra member on the namespace.
-			{ caller: "**", target: "slothlet.featureFlags:write", effect: "allow" }
+			// Only the `config` module may set one extra member on the namespace.
+			{ caller: "config.**", target: "slothlet.featureFlags:write", effect: "allow" }
 		]
 	}
 });

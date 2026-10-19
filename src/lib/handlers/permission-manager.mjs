@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:14-07:00 (1792384514)
+ *	@Last modified time: 2026-10-18T22:00:21-07:00 (1792386021)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -512,8 +512,9 @@ export class PermissionManager extends ComponentBase {
 		// framework's namespace and root functions are shared by every module and the host, so no module
 		// assigns, defines, or deletes anything at or under them, or changes the prototype or extensibility
 		// of what is there; nor does a module touch the framework's own keys on any api node — the wrapper's
-		// state, what a node reports about itself, and impl metadata. A host rule lifts any of these as it
-		// lifts any built-in rule (equal or higher specificity); a lifted write still meets the ownership rule.
+		// state, what a node reports about itself, and impl metadata. They are defaults: the host, a manifest, or a
+		// module allowed to manage rules lifts one with an allow of equal or higher specificity, which grants the write
+		// to the callers it names.
 		for (const root of FRAMEWORK_ROOTS) {
 			this.addRule({ caller: "**", target: `${root}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 			this.addRule({ caller: "**", target: `${root}.**${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
@@ -1600,8 +1601,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} callerPath - Api path of the module writing.
 	 * @param {string} targetPath - Api path written.
 	 * @param {object|null} runtimeContext - Per-request context for condition evaluation.
-	 * @returns {{winner: object, builtinDenied: boolean}|null} The deciding rule, whether a built-in deny matched;
-	 *   null when no write rule matches.
+	 * @returns {object|null} The deciding rule; null when no write rule matches.
 	 * @private
 	 */
 	#decideWrite(callerPath, targetPath, runtimeContext) {
@@ -1626,7 +1626,7 @@ export class PermissionManager extends ComponentBase {
 			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
 			return b.registrationSeq - a.registrationSeq;
 		});
-		return { winner: conditioned[0], builtinDenied };
+		return conditioned[0];
 	}
 
 	/**
@@ -1636,23 +1636,22 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
 	 * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-	 * instance. An allow is a grant: the write goes through whatever the module owns. The one exception is an
-	 * allow lifting a built-in rule, which leaves the write to the ownership rule. With no matching write
+	 * instance. An allow is a grant, a lift of a built-in rule included: the write goes through whatever the module
+	 * owns. With no matching write
 	 * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
 	 * A denial is audited like any other.
 	 *
 	 * @param {string} callerPath - Api path of the module writing.
 	 * @param {string} targetPath - Api path written.
 	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-	 * @returns {"deny"|"grant"|"lift"|null} The decision; null when no write rule matches.
+	 * @returns {"deny"|"grant"|null} The decision; null when no write rule matches.
 	 * @example
 	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
-		const decision = this.#decideWrite(callerPath, targetPath, runtimeContext);
-		if (decision === null) return null;
-		const { winner, builtinDenied } = decision;
-		if (winner.effect === "allow") return builtinDenied ? "lift" : "grant";
+		const winner = this.#decideWrite(callerPath, targetPath, runtimeContext);
+		if (winner === null) return null;
+		if (winner.effect === "allow") return "grant";
 		this.#emitAuditEvent("permission:denied", {
 			caller: callerPath,
 			target: `${targetPath}${WRITE_TARGET_SUFFIX}`,
@@ -1674,8 +1673,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
 	 */
 	isWriteGranted(callerPath, targetPath, runtimeContext = null) {
-		const decision = this.#decideWrite(callerPath, targetPath, runtimeContext);
-		return decision !== null && decision.winner.effect === "allow" && !decision.builtinDenied;
+		return this.#decideWrite(callerPath, targetPath, runtimeContext)?.effect === "allow";
 	}
 
 	/**
