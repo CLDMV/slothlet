@@ -36,8 +36,9 @@ export class ApiManager extends ComponentBase {
         replaceShadows: Map<string, object[]>;
     };
     /**
-     * The module whose code performed each module's `api.add`, by the added moduleID; null for the host (#625).
-     * That module may remove the mount, and scoped-remove within it, without a grant.
+     * The module whose code performed each `api.add`, by the mount it made (moduleID and mount point, see
+     * {@link ApiManager#mountKey}); null for the host (#625). That module may remove the mount, and scoped-remove
+     * within it, without a grant. Cleared with the mount, and when the mounting module is removed.
      * @type {Map<string, string|null>}
      */
     mountedBy: Map<string, string | null>;
@@ -392,6 +393,18 @@ export class ApiManager extends ComponentBase {
      * await this.restoreApiPath("plugins", "plugins-core");
      */
     private restoreApiPath;
+    /**
+     * The key of one mount in {@link ApiManager#mountedBy}: the moduleID and the mount point.
+     *
+     * @param {string} moduleID - The mounted module's id.
+     * @param {string} mount - Its mount point.
+     * @returns {string} The key.
+     * @public
+     *
+     * @example
+     * apiManager.mountKey("kid", "guest.kid");
+     */
+    public mountKey(moduleID: string, mount: string): string;
     /**
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
