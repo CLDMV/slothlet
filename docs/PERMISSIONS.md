@@ -501,11 +501,13 @@ permissions: {
 }
 ```
 
-A rule is read once when it is registered: module code that hands in an object whose fields are accessors is refused, and the copy taken then is what is checked, registered, and replayed on a reload, so changing the object afterwards changes nothing. The same holds for the `permissions` option of an `api.add`.
+A rule is read once when it is registered, its `condition` copied deeply into frozen data: module code that hands in an object whose fields are accessors is refused, and the copy taken then is what is checked, registered, and replayed on a reload, so changing the object afterwards changes nothing. The same holds for the `permissions` option of an `api.add`.
 
 Module code removes only the rules its own module owns. A module allowed to manage rules beyond its subtree also removes other modules' rules, but never a host rule (config or runtime) or a built-in one; to override one, it adds a rule of its own, which normal precedence weighs. A module's rules — its manifest's, its code's, and those registered with its `api.add` — are removed with the module, and do not come back on a reload. The host's own rules naming the module's paths stay.
 
-A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` neither writes into nor registers rules for a module mounted at `outer.inner`. Modules mounted at the same point share it. The base module keeps the whole tree.
+A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` does not write into a module mounted at `outer.inner`, and does not register a rule whose target's literal prefix lies in it (`outer.inner.**`). Modules mounted at the same point share it. The base module keeps the whole tree. A rule a module registers for its subtree matches its pattern as written, so `outer.**` covers everything mounted under `outer`, other modules mounted below it included, as a host rule would.
+
+`api.add` and `api.remove` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. Each needs the module to own the path or a `:write` allow naming it, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. A module mounting below its own path hands that path to the module it mounts. Host code mounts and removes anywhere, as before.
 
 A manifest is not restricted this way: its rules apply at mount, at the `manifest` layer, whatever they target. Mounting a module is the consumer's choice to accept them.
 

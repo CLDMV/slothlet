@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:42:42-07:00 (1792388562)
+ *	@Last modified time: 2026-10-19T00:45:22-07:00 (1792395922)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -565,6 +565,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} rule.effect - "allow" or "deny".
 	 * @param {string|null} [ownerModuleID=null] - Module ID that owns this rule.
 	 * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
+	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
 	 * @returns {string} The rule ID (generated or reused).
 	 * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
 	 * @example
@@ -1651,7 +1652,42 @@ export class PermissionManager extends ComponentBase {
 					validationError: true
 				});
 			}
-			copy[key] = key === "requires" && Array.isArray(descriptor.value) ? Object.freeze([...descriptor.value]) : descriptor.value;
+			if (key === "condition") copy[key] = this.#snapshotCondition(descriptor.value, new Map());
+			else copy[key] = key === "requires" && Array.isArray(descriptor.value) ? Object.freeze([...descriptor.value]) : descriptor.value;
+		}
+		return Object.freeze(copy);
+	}
+
+	/**
+	 * A rule's condition, copied once and deeply into frozen plain data (#625): arrays and plain objects are copied
+	 * member by member, a function (a condition the grammar allows) is kept as it is, and so is any other value. A
+	 * member that is an accessor is refused.
+	 *
+	 * @param {*} value - The condition, or a part of it.
+	 * @param {Map<object, object>} seen - Copies made so far, so a shared or cyclic part is copied once.
+	 * @returns {*} The frozen copy.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a member is an accessor.
+	 * @private
+	 */
+	#snapshotCondition(value, seen) {
+		if (value === null || typeof value !== "object") return value;
+		if (seen.has(value)) return seen.get(value);
+		const isArray = Array.isArray(value);
+		const proto = Reflect.getPrototypeOf(value);
+		if (!isArray && proto !== Object.prototype && proto !== null) return value;
+		const copy = isArray ? [] : Object.create(proto);
+		seen.set(value, copy);
+		for (const key of Reflect.ownKeys(value)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			if (!descriptor.enumerable) continue;
+			if (!("value" in descriptor)) {
+				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
+					received: `condition.${String(key)}`,
+					validationError: true
+				});
+			}
+			copy[key] = this.#snapshotCondition(descriptor.value, seen);
 		}
 		return Object.freeze(copy);
 	}
