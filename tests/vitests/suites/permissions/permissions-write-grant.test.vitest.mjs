@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:52-07:00 (1792384552)
+ *	@Last modified time: 2026-10-18T23:11:31-07:00 (1792390291)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,6 +113,18 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 		expect(report.assignName).toBe("PERMISSION_DENIED");
 		expect(report.assignSymbol).toBe("done");
 		expect(api.victim.v.note).toBeUndefined();
+	});
+
+	it("decides a conditional grant on every write, by the context it is made in", async () => {
+		await load({ permissions: { rules: GRANT.map((rule) => ({ ...rule, condition: { tenant: "a" } })) } });
+		const inside = await api.slothlet.context.run({ tenant: "a" }, () => api.guest.x.writeVictim());
+		expect(inside).toEqual(every(inside, "done"));
+		const outside = await api.slothlet.context.run({ tenant: "b" }, () =>
+			withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeVictim())
+		);
+		expect(outside.assignName).toBe("LOOSE_SET_NOT_OWNED");
+		const again = await api.slothlet.context.run({ tenant: "a" }, () => api.guest.x.writeAt("victim.v"));
+		expect(again).toEqual(every(again, "done"));
 	});
 
 	it("grants only the caller the rule names", async () => {

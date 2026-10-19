@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:34:52-07:00 (1792384492)
+ *	@Last modified time: 2026-10-18T22:41:59-07:00 (1792388519)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -307,4 +307,14 @@ export function revoke(ruleId) {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Something only the host lets others call.
+ * @returns {string} `"SECRET"`.
+ * @example
+ * secret(); // "SECRET"
+ */
+export function secret() {
+	return "SECRET";
 }

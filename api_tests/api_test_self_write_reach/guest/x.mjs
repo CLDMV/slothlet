@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:59:56-07:00 (1792385996)
+ *	@Last modified time: 2026-10-18T22:41:58-07:00 (1792388518)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -435,4 +435,110 @@ export function writeNamespaceMember(name, value) {
 	return attempt(() => {
 		self.slothlet[name] = value;
 	});
+}
+
+/**
+ * Call the victim's secret.
+ * @returns {string} What it returned, or the error code the call was refused with.
+ * @example
+ * callVictimSecret(); // "PERMISSION_DENIED"
+ */
+export function callVictimSecret() {
+	try {
+		return self.victim.v.secret();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Add a rule whose target answers `early` for its first `reads` reads and `late` after, from this module's code.
+ * @param {string} early - The target read first.
+ * @param {string} late - The target read later.
+ * @param {string} [effect="allow"] - The rule's effect.
+ * @param {number} [reads=4] - How many reads answer `early`.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addShiftingRule("guest.**", "victim.v.secret");
+ */
+export function addShiftingRule(early, late, effect = "allow", reads = 4) {
+	let n = 0;
+	const rule = {
+		caller: "guest.**",
+		effect,
+		get target() {
+			return n++ < reads ? early : late;
+		}
+	};
+	try {
+		return self.slothlet.permissions.addRule(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Mount a folder at `guest.sub` whose `permissions` option answers differently on later reads.
+ * @param {string} folder - Folder to mount.
+ * @param {string} how - `"array"` (the `allow` array grows), or `"entry"` (an entry's target shifts).
+ * @returns {Promise<string>} `"done"`, or the error code the mount was refused with.
+ * @example
+ * await mountShifting("/abs/guest", "array");
+ */
+export async function mountShifting(folder, how) {
+	let n = 0;
+	const permissions =
+		how === "array"
+			? {
+					get allow() {
+						return n++ < 2 ? ["guest.**"] : ["guest.**", "victim.**"];
+					}
+				}
+			: {
+					allow: [
+						{
+							get target() {
+								return n++ < 2 ? "guest.**" : "victim.**";
+							}
+						}
+					]
+				};
+	try {
+		await self.slothlet.api.add("guest.sub", folder, { moduleID: "guest-sub", permissions });
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * A rule this module added and kept, to change after the add.
+ * @type {object|null}
+ */
+let keptRule = null;
+
+/**
+ * Add a rule for this module's own subtree and keep the object.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addKeptRule();
+ */
+export function addKeptRule() {
+	keptRule = { caller: "guest.**", target: "guest.**", effect: "allow" };
+	try {
+		return self.slothlet.permissions.addRule(keptRule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Change the target of the rule this module kept.
+ * @param {string} target - The new target.
+ * @returns {void}
+ * @example
+ * changeKeptRule("victim.v.secret");
+ */
+export function changeKeptRule(target) {
+	keptRule.target = target;
 }
