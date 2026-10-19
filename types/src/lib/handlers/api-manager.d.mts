@@ -176,10 +176,16 @@ export class ApiManager extends ComponentBase {
      * module, and code outside any module (no `callerWrapper`) own the whole tree. A module no longer
      * mounted owns nothing.
      *
+     * The write rules of the permission system answer first ({@link PermissionManager#enforceWrite}), for
+     * module code only: a denying rule refuses the write whatever the module owns. The built-in ones keep
+     * every module off the framework's namespace and root functions and off the framework's own keys on api
+     * nodes; a host rule lifting one leaves the write to the ownership rule.
+     *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
      * @returns {void}
-     * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
+     *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null): void;

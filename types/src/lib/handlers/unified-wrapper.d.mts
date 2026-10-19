@@ -81,13 +81,14 @@ export function runtime_selfView(node: any, reader?: object): any;
  *
  * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
  * @param {object} slothlet - Instance it belongs to.
+ * @param {string} name - The name it is served under on the api.
  * @returns {object|Function} `member`.
  * @internal
  *
  * @example
- * runtime_registerFrameworkMember(slothletNamespace, this.slothlet);
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-export function runtime_registerFrameworkMember(member: object | Function, slothlet: object): object | Function;
+export function runtime_registerFrameworkMember(member: object | Function, slothlet: object, name: string): object | Function;
 /**
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).
@@ -99,6 +100,12 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
  * behaves as the member itself. The host is handed the member itself.
  *
+ * A module never changes them (#625): they are shared by every module and the host, so an assignment,
+ * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
+ * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
+ * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is no api path
+ * and is left to plain JS, as it is for the api's own nodes.
+ *
  * @param {*} member - A root member read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
  * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
@@ -109,6 +116,21 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
  */
 export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
+/**
+ * Refuse a module replacing, defining, or deleting one of the framework's root members (`self.slothlet`,
+ * `self.shutdown`, `self.destroy`) through the runtime `self` (#625). Host code is left as it was.
+ *
+ * @param {object} slothlet - Instance the change is made on.
+ * @param {string|symbol} prop - Member of `self` changed.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
+ *   rules protect, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ * @internal
+ *
+ * @example
+ * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
+ */
+export function runtime_assertFrameworkRootChange(slothlet: object, prop: string | symbol): void;
 /**
  * The module a framework view runs the executing code as, when that view was used with no caller of its
  * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).

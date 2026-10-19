@@ -315,6 +315,24 @@ export class PermissionManager extends ComponentBase {
         via?: string;
     } | null): boolean;
     /**
+     * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
+     * or deleting a member at `targetPath`, or changing the prototype or extensibility of the node there.
+     *
+     * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
+     * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
+     * instance. Most-specific-wins, then the higher layer, then the last registered, as for call rules. With
+     * no matching write rule the rules say nothing, and the ownership rule alone decides the write. A denial
+     * is audited like any other.
+     *
+     * @param {string} callerPath - Api path of the module writing.
+     * @param {string} targetPath - Api path written.
+     * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+     * @returns {boolean|null} False when a write rule denies the write, true when one allows it, null when none matches.
+     * @example
+     * pm.enforceWrite("payments.charge", "slothlet.lockCaller"); // false — the built-in rule denies it
+     */
+    enforceWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): boolean | null;
+    /**
      * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
      * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate
      * evaluates, for a supplied caller identity, without invoking anything.
