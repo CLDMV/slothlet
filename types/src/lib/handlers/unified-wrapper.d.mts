@@ -330,6 +330,17 @@ export function resolveWrapper(value: unknown): UnifiedWrapper | null;
  */
 export function isWrapperAnsweredName(key: string): boolean;
 /**
+ * The node behind a value read out of the api: a per-reader view a read under a module's identity hands back stands
+ * for the node it was built over; anything else is the value itself (#625).
+ * @param {*} value - A value read out of the api.
+ * @returns {*} The node behind it.
+ * @internal
+ *
+ * @example
+ * runtime_nodeBehind(heldReference) === api.victim.v; // true for a view of victim.v
+ */
+export function runtime_nodeBehind(value: any): any;
+/**
  * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
  * is no member of that name.
  *
