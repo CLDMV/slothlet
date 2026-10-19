@@ -30,6 +30,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string} rule.effect - "allow" or "deny".
      * @param {string|null} [ownerModuleID=null] - Module ID that owns this rule.
      * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
+     * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
      * @returns {string} The rule ID (generated or reused).
      * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
      * @example
@@ -39,7 +40,7 @@ export class PermissionManager extends ComponentBase {
         caller: string;
         target: string;
         effect: string;
-    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: null): string;
+    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: string | null): string;
     /**
      * Remove a permission rule by ID.
      * A module cannot remove rules it owns (immutability).
