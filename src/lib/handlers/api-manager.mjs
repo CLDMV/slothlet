@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:00:20-07:00 (1792386020)
+ *	@Last modified time: 2026-10-18T22:42:41-07:00 (1792388561)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -669,7 +669,8 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
+	 * Whether a caller owns an api path: the caller's module is on the ownership stack of the path, or of its
+	 * nearest registered ancestor. The
 	 * base module (endpoint `"."`), a caller with no module, and code outside any module (no
 	 * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.
 	 *
@@ -687,8 +688,22 @@ export class ApiManager extends ComponentBase {
 		if (ownedRoot === null) return false;
 		// External code (no callerWrapper) and base-module code (endpoint "." or "") own the whole tree.
 		if (!ownedRoot || ownedRoot === ".") return true;
-		const ownedParts = String(ownedRoot).split(".").filter(Boolean);
-		return ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
+		// Every api path records who owns it (the ownership registry). The path, or for a key not registered yet its
+		// nearest registered ancestor, belongs to every module on that path's ownership stack (the modules a merge
+		// stacked there among them), and to every module mounted at the same point as one of them: modules mounted at
+		// one point share it. A module mounted below another module's mount point is its own (#625). The registry
+		// records who registered each path, not where a module was mounted, so the same-point test reads the mount
+		// points.
+		const ownership = this.slothlet.handlers.ownership;
+		const moduleID = String(callerWrapper.____slothletInternal.moduleID);
+		for (let length = parts.length; length > 0; length--) {
+			const stack = ownership.getPathHistory(parts.slice(0, length).join("."));
+			if (stack.length === 0) continue;
+			return stack.some(
+				(entry) => String(entry.moduleID) === moduleID || ownership.getModuleEndpoint(String(entry.moduleID)) === ownedRoot
+			);
+		}
+		return false;
 	}
 
 	/**
@@ -1864,6 +1879,55 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Drop the recorded rules a removed module's code added from the operation history, so a reload does not add
+	 * them again (#625). The module's other rules come back only with its add, which the reload replays together
+	 * with its removal.
+	 *
+	 * @param {string} moduleID - The removed module's id.
+	 * @returns {void}
+	 * @private
+	 */
+	#dropRuleHistory(moduleID) {
+		const base = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		const history = this.state.operationHistory;
+		for (let i = history.length - 1; i >= 0; i--) {
+			const operation = history[i];
+			if (operation.type === "addPermissionRule" && String(operation.ownerModuleID).split(MODULE_ID_SEPARATOR)[0] === base)
+				history.splice(i, 1);
+		}
+	}
+
+	/**
+	 * The `permissions` option of an `api.add`, read once into a frozen copy (#625): each of `deny` / `allow` is
+	 * read once, its array copied once, and each object entry copied as a rule is ({@link PermissionManager#snapshotRule}).
+	 * A field that is an accessor is refused.
+	 *
+	 * @param {object} permissions - The option.
+	 * @returns {object} The frozen copy.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when `deny` / `allow` or an entry's field is an accessor.
+	 * @private
+	 */
+	#snapshotPermissionsOption(permissions) {
+		const permissionManager = this.slothlet.handlers.permissionManager;
+		const copy = {};
+		for (const effect of ["deny", "allow"]) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(permissions, effect);
+			if (descriptor === undefined) continue;
+			if (!("value" in descriptor)) {
+				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
+					received: effect,
+					validationError: true
+				});
+			}
+			copy[effect] = Array.isArray(descriptor.value)
+				? Object.freeze(Array.from(descriptor.value, (entry) => permissionManager.snapshotRule(entry)))
+				: descriptor.value;
+		}
+		return Object.freeze(copy);
+	}
+
+	/**
 	 * Normalize one `options.permissions` shorthand entry from `api.add()`.
 	 * Accepts either a plain string target or an object with `{ target, condition }`.
 	 *
@@ -2021,6 +2085,10 @@ export class ApiManager extends ComponentBase {
 		// keeps the layers the original add placed them at.
 		const ruleLayers = restOptions[PERMISSION_RULE_LAYERS] ?? { deny: [], allow: [] };
 		if (!restOptions[PERMISSION_RULE_LAYERS]) {
+			// The option is read once: its copy is what is placed, registered, and recorded for a reload.
+			if (restOptions.permissions !== null && typeof restOptions.permissions === "object") {
+				restOptions.permissions = this.#snapshotPermissionsOption(restOptions.permissions);
+			}
 			for (const effect of ["deny", "allow"]) {
 				for (const entry of Array.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
 					const { target } = this.#normalizePermissionShorthandEntry(entry);
@@ -3401,8 +3469,9 @@ export class ApiManager extends ComponentBase {
 			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
 			if (isFullRemoval) {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
-				// The module is going away entirely, so its principals (#459) go with it.
+				// The module is going away entirely, so its principals (#459) and rules (#625) go with it.
 				this.slothlet.handlers.permissionManager?.onModuleRemoved?.(scopedModuleIDKey);
+				if (recordHistory) this.#dropRuleHistory(scopedModuleIDKey);
 				// ...and so do its event listeners (#497): they are closures over code that is gone.
 				this.slothlet.handlers.eventManager?.onModuleRemoved?.(scopedModuleIDKey);
 			}
@@ -3606,8 +3675,10 @@ export class ApiManager extends ComponentBase {
 			// Captured wrappers still live in the tree are left to the restore/delete passes below and
 			// invalidated after them, once it is known which of them those passes detached (#555).
 			const capturedLive = this.slothlet.handlers.routineManager.pruneModule(moduleIDKey);
-			// Principals (#459) the module registered go with it — a resolver never outlives its code.
+			// Principals (#459) and rules (#625) the module registered go with it — neither a resolver nor a grant
+			// outlives its module.
 			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
+			if (recordHistory) this.#dropRuleHistory(moduleIDKey);
 			// So do its event listeners (#497), for the same reason.
 			this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleIDKey);
 

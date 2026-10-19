@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller muss eine nicht-leere Zeichenkette sein",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target muss eine nicht-leere Zeichenkette sein",
 		"PERM_RULE_TARGET_NOT_OWNED": "Modulcode verwaltet Regeln nur für den Teilbaum, der seinem Modul gehört, nie für den Namensraum, die Wurzelfunktionen oder die internen Schlüssel des Frameworks, es sei denn, eine ausdrückliche Erlaubnis auf \"slothlet.permissions.addRule\" hebt diese Vorgabe auf",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "Modulcode entfernt nur die Regeln, die seinem eigenen Modul gehören; ein Modul, das Regeln verwalten darf, entfernt auch die Regeln anderer Module, nie die des Hosts oder des Frameworks",
+		"PERM_RULE_FIELD_ACCESSOR": "Regelfelder müssen einfache Dateneigenschaften sein, keine Accessoren",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect muss 'allow' oder 'deny' sein",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event muss eine nicht-leere Zeichenkette sein",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect muss 'deny', 'notify' oder 'allow' sein",

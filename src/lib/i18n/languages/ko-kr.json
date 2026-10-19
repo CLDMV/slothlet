@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller는 비어 있지 않은 문자열이어야 합니다",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target은 비어 있지 않은 문자열이어야 합니다",
 		"PERM_RULE_TARGET_NOT_OWNED": "모듈 코드는 자기 모듈이 소유한 하위 트리의 규칙만 관리하며, 프레임워크의 네임스페이스, 루트 함수, 내부 키의 규칙은 관리하지 않습니다. \"slothlet.permissions.addRule\"에 대한 명시적 허용이 있으면 이 기본값이 해제됩니다",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "모듈 코드는 자기 모듈이 소유한 규칙만 제거합니다. 규칙 관리가 허용된 모듈은 다른 모듈의 규칙도 제거하지만, 호스트나 프레임워크의 규칙은 제거하지 않습니다",
+		"PERM_RULE_FIELD_ACCESSOR": "규칙 필드는 접근자가 아닌 단순 데이터 속성이어야 합니다",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect는 'allow' 또는 'deny'여야 합니다",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event는 비어 있지 않은 문자열이어야 합니다",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect는 'deny', 'notify' 또는 'allow'여야 합니다",

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:12-07:00 (1792384512)
+ *	@Last modified time: 2026-10-18T22:42:40-07:00 (1792388560)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2913,8 +2913,10 @@ export class ApiBuilder extends ComponentBase {
 					}
 					/* v8 ignore stop */
 
-					// A rule module code adds is held to its own subtree unless an explicit allow lifts the built-in reach
-					// default, and is that module's rule, at the module layer, below the host's (#625).
+					// The rule is read once, and that copy is what is placed, registered, and replayed (#625). A rule module
+					// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
+					// that module's rule, at the module layer, below the host's.
+					rule = permissionManager.snapshotRule(rule);
 					const { ownerModuleID, layer } = permissionManager.placeModuleRule(rule);
 					const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
 

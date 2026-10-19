@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller debe ser una cadena no vacía",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target debe ser una cadena no vacía",
 		"PERM_RULE_TARGET_NOT_OWNED": "el código de un módulo gestiona reglas solo para el subárbol que pertenece a su módulo, nunca para el espacio de nombres, las funciones raíz ni las claves internas del framework, salvo que un permiso explícito sobre \"slothlet.permissions.addRule\" levante ese valor predeterminado",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "el código de un módulo solo elimina las reglas que pertenecen a su propio módulo; un módulo autorizado a gestionar reglas también elimina las de otros módulos, nunca las del host ni las del framework",
+		"PERM_RULE_FIELD_ACCESSOR": "los campos de una regla deben ser propiedades de datos simples, no descriptores de acceso",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect debe ser 'allow' o 'deny'",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event debe ser una cadena no vacía",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect debe ser 'deny', 'notify' o 'allow'",

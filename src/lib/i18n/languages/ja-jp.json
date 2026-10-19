@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.callerは空でない文字列である必要があります",
 		"PERM_RULE_TARGET_REQUIRED": "rule.targetは空でない文字列である必要があります",
 		"PERM_RULE_TARGET_NOT_OWNED": "モジュールのコードが管理できるのは、そのモジュールが所有するサブツリーのルールだけです。フレームワークの名前空間、ルート関数、内部キーのルールは管理できません。\"slothlet.permissions.addRule\" への明示的な許可があれば、この既定は解除されます",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "モジュールのコードが削除できるのは自分のモジュールが所有するルールだけです。ルールの管理を許可されたモジュールは他のモジュールのルールも削除できますが、ホストやフレームワークのルールは削除できません",
+		"PERM_RULE_FIELD_ACCESSOR": "ルールのフィールドはアクセサーではなく単純なデータプロパティでなければなりません",
 		"PERM_RULE_EFFECT_INVALID": "rule.effectは'allow'または'deny'である必要があります",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event は空でない文字列である必要があります",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect は 'deny'、'notify'、または 'allow' である必要があります",

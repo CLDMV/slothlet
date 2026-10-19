@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERM_RULE_TARGET_NOT_OWNED": "मॉड्यूल का कोड केवल अपने मॉड्यूल के उप-वृक्ष के नियम प्रबंधित करता है, फ़्रेमवर्क के नेमस्पेस, मूल फ़ंक्शन या आंतरिक कुंजियों के कभी नहीं, जब तक कि \"slothlet.permissions.addRule\" पर स्पष्ट अनुमति यह डिफ़ॉल्ट न हटा दे",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "मॉड्यूल का कोड केवल अपने मॉड्यूल के नियम हटाता है; नियम प्रबंधित करने की अनुमति वाला मॉड्यूल अन्य मॉड्यूल के नियम भी हटाता है, होस्ट या फ़्रेमवर्क के कभी नहीं",
+		"PERM_RULE_FIELD_ACCESSOR": "नियम के फ़ील्ड सामान्य डेटा गुण होने चाहिए, एक्सेसर नहीं",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect 'allow' या 'deny' होना चाहिए",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event एक गैर-रिक्त स्ट्रिंग होनी चाहिए",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect 'deny', 'notify', या 'allow' होना चाहिए",

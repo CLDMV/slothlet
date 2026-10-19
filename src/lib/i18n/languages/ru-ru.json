@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller должно быть непустой строкой",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
 		"PERM_RULE_TARGET_NOT_OWNED": "код модуля управляет правилами только для поддерева своего модуля, но не для пространства имён, корневых функций или внутренних ключей фреймворка, если явное разрешение на \"slothlet.permissions.addRule\" не снимает это ограничение по умолчанию",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "код модуля удаляет только правила своего модуля; модуль, которому разрешено управлять правилами, удаляет и правила других модулей, но никогда — правила хоста или фреймворка",
+		"PERM_RULE_FIELD_ACCESSOR": "поля правила должны быть простыми свойствами данных, а не аксессорами",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect должно быть 'allow' или 'deny'",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event должен быть непустой строкой",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect должен быть 'deny', 'notify' или 'allow'",

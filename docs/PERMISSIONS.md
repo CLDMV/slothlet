@@ -501,6 +501,12 @@ permissions: {
 }
 ```
 
+A rule is read once when it is registered: module code that hands in an object whose fields are accessors is refused, and the copy taken then is what is checked, registered, and replayed on a reload, so changing the object afterwards changes nothing. The same holds for the `permissions` option of an `api.add`.
+
+Module code removes only the rules its own module owns. A module allowed to manage rules beyond its subtree also removes other modules' rules, but never a host rule (config or runtime) or a built-in one; to override one, it adds a rule of its own, which normal precedence weighs. A module's rules — its manifest's, its code's, and those registered with its `api.add` — are removed with the module, and do not come back on a reload. The host's own rules naming the module's paths stay.
+
+A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` neither writes into nor registers rules for a module mounted at `outer.inner`. Modules mounted at the same point share it. The base module keeps the whole tree.
+
 A manifest is not restricted this way: its rules apply at mount, at the `manifest` layer, whatever they target. Mounting a module is the consumer's choice to accept them.
 
 ---

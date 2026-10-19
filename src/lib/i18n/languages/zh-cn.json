@@ -455,6 +455,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller 必须是非空字符串",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target 必须是非空字符串",
 		"PERM_RULE_TARGET_NOT_OWNED": "模块代码只能管理其模块所拥有子树的规则，不能管理框架的命名空间、根函数或内部键的规则，除非对 \"slothlet.permissions.addRule\" 的显式允许解除了这一默认限制",
+		"PERM_RULE_REMOVAL_NOT_OWNED": "模块代码只能删除其自身模块拥有的规则；获准管理规则的模块也可以删除其他模块的规则，但绝不能删除宿主或框架的规则",
+		"PERM_RULE_FIELD_ACCESSOR": "规则字段必须是普通数据属性，而不是访问器",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect 必须是 'allow' 或 'deny'",
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event 必须是非空字符串",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect 必须是 'deny'、'notify' 或 'allow'",
