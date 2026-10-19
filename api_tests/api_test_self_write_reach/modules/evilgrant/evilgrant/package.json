@@ -1,0 +1,5 @@
+{
+	"name": "@local/evilgrant",
+	"version": "0.1.0",
+	"description": "Test fixture: a module whose manifest declares rules, mounted from module code (#625)."
+}

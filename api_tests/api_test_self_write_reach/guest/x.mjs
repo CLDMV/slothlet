@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T09:18:05-07:00 (1792426685)
+ *	@Last modified time: 2026-10-19T10:10:03-07:00 (1792429803)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -637,6 +637,72 @@ export function changeKeptCondition(tenant) {
 export async function addAtVersion(apiPath, folder, options, version) {
 	try {
 		await self.slothlet.api.add(apiPath, folder, options, { version });
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Mount inline content `{ [key]: { injected() } }` at `apiPath`, from this module's code.
+ * @param {string} apiPath - Where to mount it.
+ * @param {string} key - The member the content holds.
+ * @param {object} [options] - `api.add` options.
+ * @returns {Promise<string>} `"done"`, or the error code the mount was refused with.
+ * @example
+ * await addInjected("guest", "hostmount");
+ */
+export async function addInjected(apiPath, key, options = {}) {
+	try {
+		await self.slothlet.api.add(apiPath, { exports: { [key]: { injected: () => "injected" } } }, options);
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Call a module-manager entry point from this module's code.
+ * @param {"addModule"|"addModules"|"addDiscovered"} entry - The entry point.
+ * @param {*} arg - Its first argument.
+ * @param {object} [options] - Its options.
+ * @returns {Promise<string>} `"done"`, or the error code it was refused with.
+ * @example
+ * await mountModule("addDiscovered", { scanRoot: "/abs/modules" });
+ */
+export async function mountModule(entry, arg, options = {}) {
+	try {
+		await self.slothlet.api.modules[entry](arg, options);
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Call one of the framework's setters on a path from this module's code.
+ * @param {string} what - `"setFor"`, `"removeFor"`, `"setForVersion"`, `"set"`, `"setDefault"`, `"setVersionMetadata"`, or `"reload"`.
+ * @param {string} target - The path, moduleID, or (for `"set"`) the path of the node passed.
+ * @param {string} [tag] - The version tag, where the setter takes one.
+ * @returns {Promise<string>} `"done"`, or the error code it was refused with.
+ * @example
+ * await callSetter("setFor", "victim.v", undefined);
+ */
+export async function callSetter(what, target, tag) {
+	try {
+		const slothlet = self.slothlet;
+		if (what === "setFor") slothlet.metadata.setFor(target, "planted", 1);
+		else if (what === "removeFor") slothlet.metadata.removeFor(target, "planted");
+		else if (what === "setForVersion") slothlet.metadata.setForVersion(target, tag, "planted", 1);
+		else if (what === "set")
+			slothlet.metadata.set(
+				target.split(".").reduce((node, key) => node[key], self),
+				"planted",
+				1
+			);
+		else if (what === "setDefault") slothlet.versioning.setDefault(target, tag);
+		else if (what === "setVersionMetadata") slothlet.versioning.setVersionMetadata(target, tag, { planted: 1 });
+		else await slothlet.api.reload(target);
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);
