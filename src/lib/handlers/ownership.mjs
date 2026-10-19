@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:04:41-07:00 (1791835481)
+ *	@Last modified time: 2026-10-19T06:53:40-07:00 (1792418020)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -219,6 +219,7 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
 		this.moduleEndpoints = new Map(); // moduleID → mount endpoint (e.g. ".", "lib.config")
+		this.moduleMounts = new Map(); // moduleID → every live mount endpoint (a host may mount one id at several paths, #625)
 		// moduleID → Map<endpoint, "replace"|"merge-replace"> — the winning collision mode each of the
 		// module's api.add() calls placed its content under (#524). See setPlacementMode().
 		this.placementModes = new Map();
@@ -516,7 +517,43 @@ export class OwnershipManager extends ComponentBase {
 		/* v8 ignore next */
 		if (typeof moduleID === "string" && moduleID) {
 			this.moduleEndpoints.set(moduleID, endpoint);
+			let mounts = this.moduleMounts.get(moduleID);
+			if (!mounts) {
+				mounts = new Set();
+				this.moduleMounts.set(moduleID, mounts);
+			}
+			mounts.add(endpoint);
 		}
+	}
+
+	/**
+	 * Every live mount endpoint of a module (#625): one id may be mounted at several paths.
+	 * @param {string} moduleID - Module identifier.
+	 * @returns {string[]} The endpoints; empty when the module is not mounted.
+	 * @public
+	 */
+	getModuleMounts(moduleID) {
+		return [...(this.moduleMounts.get(moduleID) ?? [])];
+	}
+
+	/**
+	 * Forget one mount endpoint of a module (#625). When another mount remains and the recorded endpoint was this
+	 * one, the recorded endpoint becomes a remaining mount.
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} endpoint - The mount endpoint removed.
+	 * @returns {number} How many mounts the module has left.
+	 * @public
+	 */
+	releaseMount(moduleID, endpoint) {
+		const mounts = this.moduleMounts.get(moduleID);
+		if (!mounts) return 0;
+		mounts.delete(endpoint);
+		if (mounts.size === 0) {
+			this.moduleMounts.delete(moduleID);
+			return 0;
+		}
+		if (this.moduleEndpoints.get(moduleID) === endpoint) this.moduleEndpoints.set(moduleID, [...mounts].at(-1));
+		return mounts.size;
 	}
 
 	/**
@@ -890,6 +927,7 @@ export class OwnershipManager extends ComponentBase {
 
 		this.moduleToPath.delete(moduleID);
 		this.moduleEndpoints.delete(moduleID);
+		this.moduleMounts.delete(moduleID);
 		this.placementModes.delete(moduleID);
 
 		return { removed, rolledBack };
@@ -923,6 +961,7 @@ export class OwnershipManager extends ComponentBase {
 	markUnregistered(moduleID) {
 		this._unregisteredModules.add(moduleID);
 		this.moduleEndpoints.delete(moduleID);
+		this.moduleMounts.delete(moduleID);
 		this.placementModes.delete(moduleID);
 	}
 
@@ -1521,6 +1560,7 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule.clear();
 		this._unregisteredModules.clear();
 		this.moduleEndpoints.clear();
+		this.moduleMounts.clear();
 		this.placementModes.clear();
 		this.exportIndex.clear();
 	}

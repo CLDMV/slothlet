@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T05:52:55-07:00 (1792414375)
+ *	@Last modified time: 2026-10-19T06:53:39-07:00 (1792418019)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -158,8 +158,9 @@ export class ApiManager extends ComponentBase {
 			replaceShadows: new Map()
 		};
 		/**
-		 * The module whose code performed each module's `api.add`, by the added moduleID; null for the host (#625).
-		 * That module may remove the mount, and scoped-remove within it, without a grant.
+		 * The module whose code performed each `api.add`, by the mount it made (moduleID and mount point, see
+		 * {@link ApiManager#mountKey}); null for the host (#625). That module may remove the mount, and scoped-remove
+		 * within it, without a grant. Cleared with the mount, and when the mounting module is removed.
 		 * @type {Map<string, string|null>}
 		 */
 		this.mountedBy = new Map();
@@ -727,8 +728,11 @@ export class ApiManager extends ComponentBase {
 		for (let length = parts.length; length > 0; length--) {
 			const stack = ownership.getPathHistory(parts.slice(0, length).join("."));
 			if (stack.length === 0) continue;
+			const ownMounts = ownership.getModuleMounts(moduleID);
 			return stack.some(
-				(entry) => String(entry.moduleID) === moduleID || ownership.getModuleEndpoint(String(entry.moduleID)) === ownedRoot
+				(entry) =>
+					String(entry.moduleID) === moduleID ||
+					ownership.getModuleMounts(String(entry.moduleID)).some((mount) => ownMounts.includes(mount))
 			);
 		}
 		return false;
@@ -1935,10 +1939,103 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#forgetRemovedModule(moduleID, recordHistory) {
+		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
 		this.slothlet.handlers.permissionManager.onModuleRemoved(moduleID);
 		this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleID);
-		this.mountedBy.delete(String(moduleID));
+		// Its mounts' records go, and so does every record naming it as the mounting module: a module that later takes
+		// the freed id inherits no right to remove what it mounted, live or after a reload.
+		for (const [key, mounter] of [...this.mountedBy]) {
+			if (key.startsWith(`${id}\u0000`) || mounter === id) this.mountedBy.delete(key);
+		}
+		for (const operation of this.state.operationHistory) {
+			if (operation.type === "add" && operation.options?.[MOUNTED_BY] === id) operation.options[MOUNTED_BY] = null;
+		}
 		if (recordHistory) this.#dropRuleHistory(moduleID);
+	}
+
+	/**
+	 * The key of one mount in {@link ApiManager#mountedBy}: the moduleID and the mount point.
+	 *
+	 * @param {string} moduleID - The mounted module's id.
+	 * @param {string} mount - Its mount point.
+	 * @returns {string} The key.
+	 * @public
+	 *
+	 * @example
+	 * apiManager.mountKey("kid", "guest.kid");
+	 */
+	mountKey(moduleID, mount) {
+		return `${String(moduleID).split(MODULE_ID_SEPARATOR)[0]}\u0000${mount}`;
+	}
+
+	/**
+	 * Release every mount at or below `path` (#625) — of every module, or only of `onlyModuleID` — as its removal
+	 * does: see {@link ApiManager#releaseMount}. Removing a path removes the paths under it, so a mount inside it is
+	 * gone.
+	 *
+	 * @param {string} path - The removed api path.
+	 * @param {boolean} recordHistory - Whether the removal records history (not a replay).
+	 * @param {string|null} [onlyModuleID=null] - Release only this module's mounts.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseMountsUnder(path, recordHistory, onlyModuleID = null) {
+		const ownership = this.slothlet.handlers.ownership;
+		for (const [id, mounts] of [...ownership.moduleMounts]) {
+			if (onlyModuleID !== null && id !== onlyModuleID) continue;
+			for (const mount of [...mounts]) {
+				if (mount === "." || mount === "" || (mount !== path && !mount.startsWith(`${path}.`))) continue;
+				this.#releaseMount(id, mount, recordHistory);
+			}
+		}
+	}
+
+	/**
+	 * Whether a module other than `moduleID` that is still mounted owns a path strictly below `path` (#625): the
+	 * registry scan {@link ApiManager#_hasForeignOwnedDescendant} makes for a root mount, limited to modules with a
+	 * live mount so a stale post-reload entry never keeps a container. A removal by moduleID keeps such a container
+	 * as the other module's, and prunes it once nothing of another module is left in it.
+	 *
+	 * @param {string} path - An api path of the removed module.
+	 * @param {string} moduleID - The removed module.
+	 * @returns {boolean} Whether another mounted module owns something below it.
+	 * @private
+	 */
+	#hasLiveForeignContent(path, moduleID) {
+		const ownership = this.slothlet.handlers.ownership;
+		const prefix = path === "" ? "" : `${path}.`;
+		for (const owned of ownership.pathToModule.keys()) {
+			if (!owned.startsWith(prefix) || owned === path) continue;
+			const owner = String(ownership.getCurrentOwner(owned)?.moduleID ?? "");
+			if (owner !== moduleID && ownership.moduleMounts.has(owner)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Release one mount of a module (#625). Its paths under that mount are no longer the module's, and the record of
+	 * who mounted it goes. When it was the module's last mount, the module is gone: its registrations, rules, rule
+	 * history, principals, and listeners go too, and its id becomes free.
+	 *
+	 * @param {string} moduleID - The module's id.
+	 * @param {string} mount - The mount point released.
+	 * @param {boolean} recordHistory - Whether the removal records history (not a replay).
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseMount(moduleID, mount, recordHistory) {
+		const ownership = this.slothlet.handlers.ownership;
+		this.mountedBy.delete(this.mountKey(moduleID, mount));
+		if (ownership.releaseMount(moduleID, mount) > 0) {
+			for (const owned of ownership.getModulePaths(moduleID)) {
+				if (owned === mount || owned.startsWith(`${mount}.`)) ownership.removePath(owned, moduleID);
+			}
+			return;
+		}
+		// unregister() drops its remaining paths; markUnregistered() its mount point, also when no path is left.
+		ownership.unregister(moduleID);
+		ownership.markUnregistered(moduleID);
+		this.#forgetRemovedModule(moduleID, recordHistory);
 	}
 
 	/**
@@ -3014,7 +3111,10 @@ export class ApiManager extends ComponentBase {
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
-			this.mountedBy.set(String(moduleID), mountedBy === null ? null : String(mountedBy).split(MODULE_ID_SEPARATOR)[0]);
+			this.mountedBy.set(
+				this.mountKey(moduleID, effectivePath),
+				mountedBy === null ? null : String(mountedBy).split(MODULE_ID_SEPARATOR)[0]
+			);
 		}
 		// Nothing of this add went live (skip/warn), so the placement it recorded does not apply (#524).
 		if (!anyAssignmentSucceeded) restorePlacementMode();
@@ -3542,11 +3642,16 @@ export class ApiManager extends ComponentBase {
 			if (writer !== null) {
 				const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(String(moduleID));
 				const removed = String(scopedApiPath ?? apiPath ?? (endpoint === "." ? "" : endpoint) ?? "");
-				// The module that mounted this one removes it, or a part of it, without a grant (#625).
-				const mounter = this.mountedBy.get(String(moduleID).split(MODULE_ID_SEPARATOR)[0]) ?? null;
+				// The module that mounted this one removes that mount, or a part of it, without a grant (#625).
 				const own = String(writer.____slothletInternal?.moduleID ?? "").split(MODULE_ID_SEPARATOR)[0];
-				const withinMount = endpoint !== undefined && endpoint !== "." && (removed === endpoint || removed.startsWith(`${endpoint}.`));
-				if (!(mounter !== null && mounter === own && withinMount)) {
+				const mounts = this.slothlet.handlers.ownership.getModuleMounts(String(moduleID));
+				const mountedByOwn = (mount) => mount !== "." && mount !== "" && this.mountedBy.get(this.mountKey(moduleID, mount)) === own;
+				const target = scopedApiPath ?? apiPath;
+				const withinMount =
+					target === null
+						? mounts.length > 0 && mounts.every(mountedByOwn)
+						: mounts.some((mount) => (target === mount || String(target).startsWith(`${mount}.`)) && mountedByOwn(mount));
+				if (!withinMount) {
 					this.#assertModuleMountWrite(removed.split(".").filter(Boolean), writer);
 				}
 			}
@@ -3584,11 +3689,8 @@ export class ApiManager extends ComponentBase {
 			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
 			if (isFullRemoval) {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
-				// The module is going away entirely, so its principals (#459) and rules (#625) go with it.
-				this.slothlet.handlers.permissionManager?.onModuleRemoved?.(scopedModuleIDKey);
-				if (recordHistory) this.#dropRuleHistory(scopedModuleIDKey);
-				// ...and so do its event listeners (#497): they are closures over code that is gone.
-				this.slothlet.handlers.eventManager?.onModuleRemoved?.(scopedModuleIDKey);
+				// The module is going away entirely: its principals (#459), rules (#625), and event listeners (#497) with it.
+				this.#forgetRemovedModule(scopedModuleIDKey, recordHistory);
 			}
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
@@ -3634,6 +3736,8 @@ export class ApiManager extends ComponentBase {
 					}
 				}
 			}
+			// A mount of this module at or below the path goes with its share; the last one takes the module (#625).
+			if (!isFullRemoval) this.#releaseMountsUnder(normalizedScoped, recordHistory, scopedModuleIDKey);
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
 			// any cache entry the removed nodes orphaned.
 			this.#sweepOrphanedCaches();
@@ -3655,7 +3759,7 @@ export class ApiManager extends ComponentBase {
 			/* v8 ignore next */
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
 			// A path that is the module's mount point takes the module with it (#625): checked before the removal drops it.
-			const removesModule = this.slothlet.handlers.ownership.getModuleEndpoint(moduleIDKey) === normalizedPath;
+			const removesModule = this.slothlet.handlers.ownership.getModuleMounts(moduleIDKey).includes(normalizedPath);
 			// ownership always returns a result object; the fallback object is unreachable.
 			/* v8 ignore next 4 */
 			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || {
@@ -3701,16 +3805,8 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
 					}
 				}
-				// Every module mounted at or below the removed path is gone with it (#625): its registrations, rules, rule
-				// history, principals, and listeners go too.
-				const ownership = this.slothlet.handlers.ownership;
-				for (const [mountedID, endpoint] of [...ownership.moduleEndpoints]) {
-					if (endpoint !== normalizedPath && !String(endpoint).startsWith(`${normalizedPath}.`)) continue;
-					// unregister() drops its remaining paths; markUnregistered() its mount point, also when no path is left.
-					ownership.unregister(mountedID);
-					ownership.markUnregistered(mountedID);
-					this.#forgetRemovedModule(mountedID, recordHistory);
-				}
+				// Every mount at or below the removed path is gone with it (#625); a module whose last mount it was goes too.
+				this.#releaseMountsUnder(normalizedPath, recordHistory);
 				// Invalidate the apiCacheManager entry for the removed module.
 				// The apiPath branch (unlike the moduleID branch) does not call
 				// ownership.unregister(), so the cache entry would otherwise be
@@ -3751,10 +3847,7 @@ export class ApiManager extends ComponentBase {
 						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
 					});
 					// The module's rules, rule history, principals, and listeners go with its mount point (#625).
-					if (removesModule) {
-						this.slothlet.handlers.ownership.markUnregistered(moduleIDKey);
-						this.#forgetRemovedModule(moduleIDKey, recordHistory);
-					}
+					if (removesModule) this.#releaseMount(moduleIDKey, normalizedPath, recordHistory);
 					// Track in operation history for reload replay
 					this.state.operationHistory.push({
 						type: "remove",
@@ -3807,12 +3900,11 @@ export class ApiManager extends ComponentBase {
 			// Captured wrappers still live in the tree are left to the restore/delete passes below and
 			// invalidated after them, once it is known which of them those passes detached (#555).
 			const capturedLive = this.slothlet.handlers.routineManager.pruneModule(moduleIDKey);
-			// Principals (#459) and rules (#625) the module registered go with it — neither a resolver nor a grant
-			// outlives its module.
-			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
-			if (recordHistory) this.#dropRuleHistory(moduleIDKey);
-			// So do its event listeners (#497), for the same reason.
-			this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleIDKey);
+			// Its mount points go (unregister() keeps them when the module had no path left), and so do the principals
+			// (#459), rules (#625), and event listeners (#497) it registered: none outlives its module. A module mounted
+			// below one of its mounts is another module, and stays (#625).
+			this.slothlet.handlers.ownership.markUnregistered(moduleIDKey);
+			this.#forgetRemovedModule(moduleIDKey, recordHistory);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
@@ -3844,13 +3936,16 @@ export class ApiManager extends ComponentBase {
 				// this module's uniquePaths, so scan the full ownership registry to keep the container alive.
 				// For a normal mount the subtree is this module's own and is removed wholesale — and the
 				// registry can hold stale post-reload entries, so the broad scan must NOT gate normal removals.
-				const hasChildrenWithOtherOwners = isRootMount
-					? this._hasForeignOwnedDescendant(path, moduleIDKey)
-					: uniquePaths.some((p) => {
-							if (p === path || !p.startsWith(path + ".")) return false;
-							const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
-							return childOwner && childOwner.moduleID !== moduleIDKey;
-						});
+				// Another module mounted below the path is that module's, and stays with its container (#625).
+				const hasChildrenWithOtherOwners =
+					this.#hasLiveForeignContent(path, moduleIDKey) ||
+					(isRootMount
+						? this._hasForeignOwnedDescendant(path, moduleIDKey)
+						: uniquePaths.some((p) => {
+								if (p === path || !p.startsWith(path + ".")) return false;
+								const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
+								return childOwner && childOwner.moduleID !== moduleIDKey;
+							}));
 
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
@@ -3905,6 +4000,9 @@ export class ApiManager extends ComponentBase {
 				const { parts } = this.normalizeApiPath(removedPath);
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
+				// A mount of another module inside a removed container (an empty one: nothing of it was left there) is gone
+				// with it (#625).
+				this.#releaseMountsUnder(removedPath, recordHistory);
 				// Clean up user metadata for removed path (use root segment only)
 				// metadata handler is always registered; FALSE never fires.
 				/* v8 ignore next */
@@ -3952,9 +4050,15 @@ export class ApiManager extends ComponentBase {
 				const hasRollbackSurvivor = pathsToRollback.some(
 					(r) => r.apiPath === mountRoot || (mountRootDot !== null && r.apiPath.startsWith(mountRootDot))
 				);
-				if (!hasRollbackSurvivor && (!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey))) {
+				if (
+					!hasRollbackSurvivor &&
+					!this.#hasLiveForeignContent(mountRoot, moduleIDKey) &&
+					(!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey))
+				) {
 					await this.deletePath(this.slothlet.api, rootParts);
 					await this.deletePath(this.slothlet.boundApi, rootParts);
+					// A mount of another module inside the removed container is gone with it (#625).
+					if (mountRoot !== "") this.#releaseMountsUnder(mountRoot, recordHistory);
 				}
 			}
 
@@ -4039,9 +4143,12 @@ export class ApiManager extends ComponentBase {
 			// namespace the module owns on reload (verified). mountRoot is preferred; split(".")[0] is
 			// the "" fallback (mountRoot is empty there).
 			if (recordHistory && pathsToDelete.length > 0) {
+				// A removal by moduleID that kept another module mounted below it replays by that moduleID, so a reload
+				// keeps that module too (#625); otherwise it replays as the removal of its mount root, as before.
 				this.state.operationHistory.push({
 					type: "remove",
-					apiPath: mountRoot || pathsToDelete[0].split(".")[0]
+					apiPath:
+						!isRootMount && this.#hasLiveForeignContent(mountRoot, moduleIDKey) ? moduleIDKey : mountRoot || pathsToDelete[0].split(".")[0]
 				});
 			}
 			// Return true if we actually removed something
