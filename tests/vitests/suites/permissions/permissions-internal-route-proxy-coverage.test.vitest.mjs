@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-10-18T18:18:48-07:00 (1792372728)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -99,8 +99,19 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 		});
 
-		const captured = await api.internalProxyHelper.writeSyntheticSetterViaDescriptor(42);
+		// The host plants the setter; a module may not write to the namespace (#625), only read through it.
+		let captured = 0;
+		const hostSetter = function hostSyntheticSetter(value) {
+			captured = value;
+		};
+		Object.defineProperty(api.slothlet.permissions, "__syntheticSetter", { configurable: true, enumerable: true, set: hostSetter });
+
+		const set = await api.internalProxyHelper.invokeSyntheticSetterViaDescriptor(42);
 		expect(captured).toBe(42);
+		// The module was handed the route proxy's re-checking wrapper, not the host's raw setter.
+		expect(typeof set).toBe("function");
+		expect(set).not.toBe(hostSetter);
+		expect(set.name).toBe("slothlet_internal_descriptor_setter");
 	});
 
 	it("denies string-key set mutation via internal route proxy set trap", async () => {

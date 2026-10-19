@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:41-07:00 (1791090881)
+ *	@Last modified time: 2026-10-18T18:17:40-07:00 (1792372660)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -131,26 +131,20 @@ export const readSlothletVersion = () => {
 };
 
 /**
- * Define an accessor with only a setter and invoke it via descriptor reflection.
- * Exercises setter-wrapping branches in internal route descriptor handling.
+ * Invoke a setter-only accessor the host planted on the permissions namespace, through the descriptor read
+ * back via reflection. Read-only on the module's side: the host defines the accessor, the module only reads
+ * its descriptor and calls the setter it hands back, which exercises the setter-wrapping branch of the
+ * internal route proxy's descriptor handling.
  *
- * @returns {number} Captured value written through the wrapped setter.
+ * @param {unknown} nextValue - Value passed to the setter.
+ * @returns {Function|undefined} The descriptor's `set` as the module received it.
  * @example
- * const value = api.internalProxyHelper.writeSyntheticSetterViaDescriptor(42);
+ * const set = api.internalProxyHelper.invokeSyntheticSetterViaDescriptor(42);
  */
-export const writeSyntheticSetterViaDescriptor = (nextValue) => {
-	let captured = 0;
-	Object.defineProperty(self.slothlet.permissions, "__syntheticSetter", {
-		configurable: true,
-		enumerable: true,
-		set(value) {
-			captured = value;
-		}
-	});
-
+export const invokeSyntheticSetterViaDescriptor = (nextValue) => {
 	const descriptor = Object.getOwnPropertyDescriptor(self.slothlet.permissions, "__syntheticSetter");
 	descriptor.set(nextValue);
-	return captured;
+	return descriptor.set;
 };
 
 /**
