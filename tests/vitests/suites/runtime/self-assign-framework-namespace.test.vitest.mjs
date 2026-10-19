@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:52:19-07:00 (1792378339)
+ *	@Last modified time: 2026-10-18T22:01:07-07:00 (1792386067)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -226,7 +226,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			}
 		});
 
-		it("lets a host rule lift the built-in write rule, ownership still applying", async () => {
+		it("a host rule lifting the built-in write rule grants the write to the callers it names", async () => {
 			if (!options.permissions) return;
 			const grant = { caller: "**", target: "slothlet.hostGranted:write", effect: "allow" };
 			api = await slothlet({
@@ -237,12 +237,30 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
-			// The base module owns the whole tree, so the lifted write goes through; the guest owns none of it.
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("hostGranted", 2))).toBe("LOOSE_SET_NOT_OWNED");
+			// The grant names every caller: the guest, which owns none of the namespace, writes too.
+			expect(await api.guest.attack.writeMember("hostGranted", 2)).toBe("done");
+			expect(api.slothlet.hostGranted).toBe(2);
 			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
 			expect(api.slothlet.hostGranted).toBe(1);
 			// Only the member the rule names is lifted.
 			expect(withSuppressedSlothletErrorOutputSync(() => api.attack.writeMember("lockCaller", 1))).toBe(REFUSED);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("lockCaller", 1))).toBe(REFUSED);
+		});
+
+		it("a host rule lifting the built-in write rule for the root module only leaves the guest refused", async () => {
+			if (!options.permissions) return;
+			const grant = { caller: "attack.**", target: "slothlet.hostGranted:write", effect: "allow" };
+			api = await slothlet({
+				base: path.join(FIXTURE, "base"),
+				mode,
+				runtime,
+				silent: true,
+				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
+			});
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("hostGranted", 2))).toBe(REFUSED);
+			expect(api.slothlet.hostGranted).toBe(1);
 		});
 
 		it("hands a module a member the host fixed on the namespace as the namespace holds it, as the engine requires", async () => {

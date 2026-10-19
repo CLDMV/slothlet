@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:52-07:00 (1792384552)
+ *	@Last modified time: 2026-10-18T22:01:03-07:00 (1792386063)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -262,6 +262,15 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(await api.mgr.x.addRuleFor({ caller: "root.**", target: "slothlet.managed:write", effect: "allow" })).toMatch(/^perm-/);
 			expect(await api.root.writeManaged()).toBe("done");
 			expect(api.slothlet.managed).toBe(1);
+		});
+
+		it("lets the manager's lift of a built-in write rule grant the write to a module that owns none of the namespace", async () => {
+			await load({ permissions: { rules: [DELEGATE] } });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("managed", 2))).toBe("PERMISSION_DENIED");
+			expect(await api.mgr.x.addRuleFor({ caller: "guest.**", target: "slothlet.managed:write", effect: "allow" })).toMatch(/^perm-/);
+			expect(await api.guest.x.writeNamespaceMember("managed", 2)).toBe("done");
+			expect(api.slothlet.managed).toBe(2);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.writeNamespaceMember("managed", 3))).toBe("PERMISSION_DENIED");
 		});
 
 		it("lets a module whose own manifest allows it manage rules beyond its subtree", async () => {

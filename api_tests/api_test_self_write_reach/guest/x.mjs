@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:34:51-07:00 (1792384491)
+ *	@Last modified time: 2026-10-18T21:59:56-07:00 (1792385996)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -421,4 +421,18 @@ export function callVictim() {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Write a member of the framework namespace.
+ * @param {string} name - The member.
+ * @param {*} value - The value.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * writeNamespaceMember("lifted", 1);
+ */
+export function writeNamespaceMember(name, value) {
+	return attempt(() => {
+		self.slothlet[name] = value;
+	});
 }

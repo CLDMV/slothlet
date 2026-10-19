@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:49-07:00 (1792384549)
+ *	@Last modified time: 2026-10-18T22:00:59-07:00 (1792386059)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,6 +75,15 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 			expect(api.slothlet.lifted).toBe(1);
 		});
 
+		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
+			await load();
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
+			expect(api.slothlet.lifted).toBe(2);
+		});
+
 		it("refuses module code lifting a built-in write rule with addRule", async () => {
 			await load();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
@@ -105,6 +114,15 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 			api.slothlet.permissions.addRule({ caller: "**", target: "slothlet.lifted:write", effect: "allow" });
 			expect(await api.root.writeNamespace()).toBe("done");
 			expect(api.slothlet.lifted).toBe(1);
+		});
+
+		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
+			await load();
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
+			expect(api.slothlet.lifted).toBe(2);
 		});
 	});
 });
