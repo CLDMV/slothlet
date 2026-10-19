@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:42:40-07:00 (1792388560)
+ *	@Last modified time: 2026-10-19T10:10:47-07:00 (1792429847)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1283,6 +1283,8 @@ export class ApiBuilder extends ComponentBase {
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
+						// Module code rebuilds only what it may write (#625): the base reaches the whole tree.
+						slothlet.handlers.apiManager.assertModuleReload(null, "");
 						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options });
 					}
 
@@ -1299,6 +1301,8 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
+						// Module code rebuilds only what it may write (#625).
+						slothlet.handlers.apiManager.assertModuleReload(pathOrModuleId, null);
 						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options });
 					}
 
@@ -1323,6 +1327,8 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
+					// Module code rebuilds only what it may write (#625).
+					slothlet.handlers.apiManager.assertModuleReload(null, normalizedPath);
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
 				},
@@ -1364,7 +1370,8 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.addModule(nameOrResult, options);
+						// The calling module, read before any await (#625): see ModuleManager#addModule.
+						return slothlet.handlers.moduleManager.addModule(nameOrResult, options, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -1378,7 +1385,7 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.addModules(items, options);
+						return slothlet.handlers.moduleManager.addModules(items, options, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -1409,9 +1416,11 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
+						// The calling module, read before the discovery's await loses it (#625).
+						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
 						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
-						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency });
+						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
 					},
 
 					/**
@@ -2182,6 +2191,9 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
+					// Module code sets a node's metadata only where it may write (#625).
+					const node = resolveWrapper(fn);
+					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
 					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
 				},
 
@@ -2204,6 +2216,9 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.remove(api.math.add);
 				 */
 				remove: function slothlet_metadata_remove(fn, key) {
+					// Module code removes a node's metadata only where it may write (#625).
+					const node = resolveWrapper(fn);
+					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
 					return slothlet.handlers.metadata.removeUserMetadata(fn, key);
 				},
 
@@ -2254,6 +2269,8 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					// Module code sets metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
 				},
 
@@ -2287,6 +2304,8 @@ export class ApiBuilder extends ComponentBase {
 				removeFor: function slothlet_metadata_removeFor(pathOrModuleId, key) {
 					if (!slothlet.handlers?.metadata) return;
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					// Module code removes metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
 				},
 
@@ -2368,6 +2387,8 @@ export class ApiBuilder extends ComponentBase {
 					}
 					const { moduleID } = info.versions[versionTag];
 					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					// Module code sets a version's metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
 				},
 
@@ -2807,6 +2828,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
+					// Module code points the dispatcher at a version only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(logicalPath);
 					return slothlet.handlers.versionManager.setDefault(logicalPath, versionTag);
 				},
 
@@ -2871,6 +2894,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
+					// Module code changes a version's metadata only where it may write: that version's mount (#625).
+					slothlet.handlers.apiManager.assertModuleWrite([String(versionTag), ...String(logicalPath).trim().split(".")]);
 					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
 				}
 			},
