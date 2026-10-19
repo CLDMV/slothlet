@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T10:10:03-07:00 (1792429803)
+ *	@Last modified time: 2026-10-19T11:33:24-07:00 (1792434804)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -681,7 +681,8 @@ export async function mountModule(entry, arg, options = {}) {
 
 /**
  * Call one of the framework's setters on a path from this module's code.
- * @param {string} what - `"setFor"`, `"removeFor"`, `"setForVersion"`, `"set"`, `"setDefault"`, `"setVersionMetadata"`, or `"reload"`.
+ * @param {string} what - `"setFor"`, `"removeFor"`, `"setForVersion"`, `"set"`, `"setGlobal"`, `"setDefault"`, `"setVersionMetadata"`, or
+ *   `"reload"`.
  * @param {string} target - The path, moduleID, or (for `"set"`) the path of the node passed.
  * @param {string} [tag] - The version tag, where the setter takes one.
  * @returns {Promise<string>} `"done"`, or the error code it was refused with.
@@ -700,10 +701,27 @@ export async function callSetter(what, target, tag) {
 				"planted",
 				1
 			);
+		else if (what === "setGlobal") slothlet.metadata.setGlobal("planted", 1);
 		else if (what === "setDefault") slothlet.versioning.setDefault(target, tag);
 		else if (what === "setVersionMetadata") slothlet.versioning.setVersionMetadata(target, tag, { planted: 1 });
 		else await slothlet.api.reload(target);
 		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Unmount a module by package name from this module's code.
+ * @param {string} name - The package name.
+ * @param {object} [opts] - `removeModule` options.
+ * @returns {Promise<*>} What `removeModule` returned, or the error code it was refused with.
+ * @example
+ * await removeModuleNamed("good"); // "LOOSE_SET_NOT_OWNED"
+ */
+export async function removeModuleNamed(name, opts) {
+	try {
+		return await self.slothlet.api.modules.removeModule(name, opts);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

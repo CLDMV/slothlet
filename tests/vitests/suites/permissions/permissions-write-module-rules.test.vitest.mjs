@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:01:03-07:00 (1792386063)
+ *	@Last modified time: 2026-10-19T11:34:45-07:00 (1792434885)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,10 +64,10 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 
 	/**
 	 * Load the base module and mount `victim`, and the guest code as `guest`, `other`, and `mgr`.
-	 * @param {object} [options] - Further slothlet options.
+	 * @param {object} [options] - Further slothlet options; the permission system is on unless they say otherwise, as write rules apply only then.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function load(options = {}) {
+	async function load(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
 		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });

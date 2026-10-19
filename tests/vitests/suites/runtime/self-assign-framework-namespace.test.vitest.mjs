@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:01:07-07:00 (1792386067)
+ *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,10 +21,12 @@
  * the namespace, or the namespace itself, and every other caller — the host included — then saw its fake.
  * The built-in write rules of the permission system (`slothlet:write`, `slothlet.**:write`, and the same for
  * `shutdown` / `destroy`) refuse every such change, at any depth, with `PERMISSION_DENIED`: for the base
- * module, which owns the rest of the tree, and for a module mounted with `api.add`; with no `permissions`
- * config at all, with one using the defaults, and with `defaultPolicy: "deny"`; in all four mode / runtime
- * configurations. Reading and calling the namespace, and the host changing it, stay as they were, and a
- * host rule can still lift the built-in one, as it can any built-in rule.
+ * module, which owns the rest of the tree, and for a module mounted with `api.add`; with a `permissions` config
+ * using the defaults and with `defaultPolicy: "deny"`; in all four mode / runtime configurations. Reading and
+ * calling the namespace, and the host changing it, stay as they were, and a host rule can still lift the
+ * built-in one, as it can any built-in rule. With the permission system off (no `permissions` config) the
+ * built-in rules are off too: a module mounted with `api.add` owns none of the namespace and is refused by the
+ * ownership rule, and the base module, which owns the whole tree, changes it as in the released 3.x line.
  *
  * Fixture: `api_tests/api_test_framework_namespace_guard` — `base/` and `guest/` both run `shared/attacks.mjs`.
  */
@@ -46,7 +48,6 @@ const CONFIGS = [
 // A host read rule keeps the namespace readable under `defaultPolicy: "deny"`; it says nothing about writes.
 const READ_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
-	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
 	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [READ_NAMESPACE] } } }
 ];
@@ -284,5 +285,49 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			expect(delete api.slothlet.hostProbe).toBe(true);
 			expect(api.slothlet.hostProbe).toBeUndefined();
 		});
+	});
+});
+
+describe.each(CONFIGS)("module writes to the framework namespace, permission system off (#625) — $mode / $runtime", ({ mode, runtime }) => {
+	const refusals = ["LOOSE_SET_NOT_OWNED"];
+	let api;
+
+	afterEach(async () => {
+		if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Load the base module with no permissions config, and mount the guest module beside it.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	async function load() {
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		return api;
+	}
+
+	it("refuses a module mounted with api.add every change, at any depth, by ownership", async () => {
+		await load();
+		const before = Object.fromEntries(MEMBERS.map((name) => [name, api.slothlet[name]]));
+		const shutdown = api.shutdown;
+		for (const name of MEMBERS) {
+			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.attack.changeMember(name));
+			expect({ name, report: markRefused(report, refusals) }).toEqual({ name, report: allRefused(report) });
+			expect(api.slothlet[name]).toBe(before[name]);
+		}
+		for (const change of ["changeNested", "changeRootFunctions"]) {
+			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.attack[change]());
+			expect({ change, report: markRefused(report, refusals) }).toEqual({ change, report: allRefused(report) });
+		}
+		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.plantPermissionsSetter())).toBe("LOOSE_SET_NOT_OWNED");
+		expect(api.slothlet.permissions.planted).toBeUndefined();
+		expect(api.shutdown).toBe(shutdown);
+	});
+
+	it("leaves the base module, which owns the whole tree, changing a member of the namespace", async () => {
+		await load();
+		expect(api.attack.changeMember("lockCaller")).toEqual({ assign: "done", define: "done", remove: "done" });
+		expect(api.slothlet.lockCaller).toBeUndefined();
 	});
 });

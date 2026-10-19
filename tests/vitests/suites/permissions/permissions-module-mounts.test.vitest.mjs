@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T05:53:35-07:00 (1792414415)
+ *	@Last modified time: 2026-10-19T11:34:42-07:00 (1792434882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,10 +62,10 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 	/**
 	 * Load the base module and mount `victim`, and the guest code as `guest`, `mgr`, and `other`.
-	 * @param {object} [options] - Further slothlet options.
+	 * @param {object} [options] - Further slothlet options; the permission system is on unless they say otherwise, as write rules apply only then.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function load(options = {}) {
+	async function load(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
 		for (const name of ["guest", "mgr", "other"]) await api.slothlet.api.add(name, GUEST, { moduleID: name });
@@ -214,10 +214,10 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	describe("a parent module's rules for its subtree", () => {
 		/**
 		 * Mount the victim code at `parent` and again at `parent.child`, as two modules, and the guest code at `third`.
-		 * @param {object} [options] - Further slothlet options.
+		 * @param {object} [options] - Further slothlet options; the permission system is on unless they say otherwise, as write rules apply only then.
 		 * @returns {Promise<object>} The composed api.
 		 */
-		async function nest(options = {}) {
+		async function nest(options = { permissions: {} }) {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			await api.slothlet.api.add("parent", VICTIM, { moduleID: "parent" });
 			await api.slothlet.api.add("parent.child", VICTIM, { moduleID: "child" });

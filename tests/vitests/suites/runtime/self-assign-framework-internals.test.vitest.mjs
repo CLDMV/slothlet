@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:58-07:00 (1792366498)
+ *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,8 +22,9 @@
  * permission system refuse a module defining any of them, on another module's node and on its own, and
  * assigning or deleting the ones a node does not already absorb, with `PERMISSION_DENIED`. A write a node
  * absorbs (it reports success and changes nothing, so the key's existence does not leak) stays absorbed.
- * Either way the framework's state is unchanged: with no `permissions` config, with the defaults, and with
- * `defaultPolicy: "deny"`, in all four mode / runtime configurations.
+ * Either way the framework's state is unchanged: with the defaults and with `defaultPolicy: "deny"`, in all four
+ * mode / runtime configurations. With the permission system off (no `permissions` config) the built-in rules are
+ * off too, and the ownership rule alone keeps a module off another module's node.
  *
  * Fixture: `api_tests/api_test_framework_namespace_guard` — `victim/` and `intruder/` both run `shared/internals.mjs`.
  */
@@ -43,7 +44,6 @@ const CONFIGS = [
 ];
 
 const PERMISSIONS = [
-	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
 	{
 		label: "permissions defaultPolicy deny",
@@ -168,3 +168,36 @@ describe.each(CONFIGS)("module writes to a node's framework-internal keys (#625)
 		});
 	});
 });
+
+describe.each(CONFIGS)(
+	"module writes to another module's framework-internal keys, permission system off (#625) — $mode / $runtime",
+	({ mode, runtime }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
+			api = null;
+		});
+
+		it("refuses them by ownership, and leaves the framework's state unchanged", async () => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { moduleID: "intruder" });
+			await api.victim.v.hello();
+			const nodeAt = (apiPath) => apiPath.split(".").reduce((value, key) => value[key], api);
+			for (const apiPath of ["victim", "victim.v", "victim.v.hello", "victim.v.data"]) {
+				const before = snapshot(nodeAt(apiPath));
+				const report = withSuppressedSlothletErrorOutputSync(() => api.intruder.x.changeInternals(apiPath));
+				for (const key of INTERNAL_KEYS) {
+					expect({ apiPath, key, outcome: report[`define ${key}`] }).toEqual({ apiPath, key, outcome: "LOOSE_SET_NOT_OWNED" });
+				}
+				for (const key of UNABSORBED_ON_SET) {
+					expect({ apiPath, key, outcome: report[`set ${key}`] }).toEqual({ apiPath, key, outcome: "LOOSE_SET_NOT_OWNED" });
+				}
+				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
+			}
+			expect(await api.victim.v.hello()).toBe("victim");
+			expect(api.victim.v.data.a).toBe(1);
+		});
+	}
+);

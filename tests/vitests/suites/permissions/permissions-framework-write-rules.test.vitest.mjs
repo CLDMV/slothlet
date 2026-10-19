@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:00:59-07:00 (1792386059)
+ *	@Last modified time: 2026-10-19T11:34:40-07:00 (1792434880)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,11 +17,13 @@
  * @fileoverview Who lifts the built-in write rules (#625).
  *
  * The built-in write rules (`slothlet.**:write`, `**.__metadata:write`, …) keep every module off the framework's
- * namespace and the framework's own keys on api nodes, with or without a permissions config. They are defaults:
+ * namespace and the framework's own keys on api nodes while the permission system is on. They are defaults:
  * the host lifts one with a rule of its own, and so does a module's manifest — mounting it is the consumer's
  * choice. Module code may not lift one through `addRule` or the options of an `api.add` it makes, even the base
  * module, which owns the rest of the tree, unless the host or its manifest let it manage rules beyond its subtree.
- * A lifted write still meets the ownership rule.
+ * A lifted write still meets the ownership rule. With the system off no rule decides a write, a lift included: the
+ * base module, which owns the whole tree, writes the namespace, a module owning none of it does not, and rule
+ * registration keeps its limits.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/` (owns the whole tree), `victim/`, and the module
  * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.__metadata`.
@@ -43,7 +45,6 @@ const CONFIGS = [
 // Under `defaultPolicy: "deny"` the host lets the base module call the namespace, so the write grant itself is what is refused.
 const CALL_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
-	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
 	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [CALL_NAMESPACE] } } }
 ];
@@ -127,6 +128,44 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 	});
 });
 
+describe.each(CONFIGS)("the built-in write rules with the permission system off (#625) — $mode / $runtime", ({ mode, runtime }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Load the base module with no permissions config, and mount `victim` and `guest` beside it.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	async function load() {
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		return api;
+	}
+
+	it("lets base-module code write the namespace it owns, and no lift grants it to a module that owns none of it", async () => {
+		await load();
+		expect(api.root.writeNamespace()).toBe("done");
+		expect(api.slothlet.lifted).toBe(1);
+		await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("LOOSE_SET_NOT_OWNED");
+		expect(api.slothlet.lifted).toBe(1);
+	});
+
+	it("keeps module code from adding a rule that lifts a built-in write rule", async () => {
+		await load();
+		expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
+		expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
+			"INVALID_PERMISSION_RULE"
+		);
+		expect(api.granted).toBeUndefined();
+	});
+});
+
 describe.each([
 	{ mode: "eager", runtime: "live" },
 	{ mode: "lazy", runtime: "live" }
@@ -155,7 +194,7 @@ describe.each([
 	const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 	it("refuses a rule from code the live runtime cannot attribute to one call", async () => {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
 		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
 		const [goGate, releaseGo] = gate();
 		const [peerGate, releasePeer] = gate();

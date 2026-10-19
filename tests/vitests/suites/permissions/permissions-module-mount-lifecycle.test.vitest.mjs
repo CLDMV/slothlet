@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T06:54:20-07:00 (1792418060)
+ *	@Last modified time: 2026-10-19T11:34:42-07:00 (1792434882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,10 +61,10 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 
 	/**
 	 * Load the base module.
-	 * @param {object} [options] - Further slothlet options.
+	 * @param {object} [options] - Further slothlet options; the permission system is on unless they say otherwise, as write rules apply only then.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function boot(options = {}) {
+	async function boot(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		return api;
 	}

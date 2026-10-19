@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:52:20-07:00 (1792378340)
+ *	@Last modified time: 2026-10-19T11:34:48-07:00 (1792434888)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -277,7 +277,10 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const api = await load();
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			try {
-				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe("PERMISSION_DENIED");
+				// With the permission system off, no built-in write rule applies, and the guest owns none of the namespace.
+				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe(
+					options.permissions ? "PERMISSION_DENIED" : "LOOSE_SET_NOT_OWNED"
+				);
 				expect(api.slothlet.planted).toBeUndefined();
 			} finally {
 				delete api.victim.v.Account.prototype.namespace;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T00:46:52-07:00 (1792396012)
+ *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -191,7 +191,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 
 		it("lets the callee's own grant from its code allow it", async () => {
-			await mountAll();
+			// A write rule grants only while the permission system is on.
+			await mountAll({ permissions: {} });
 			expect(await api.callee.ops.grant(SUPPLIER_WRITES_CALLEE)).toMatch(/^perm-/);
 			expect(await api.supplier.attack.writeCalleeSymbol()).toEqual(DONE);
 			expect(withSuppressedSlothletErrorOutputSync(() => api.bystander.writer.writeCalleeSymbol())).toEqual(NOT_OWNED);
@@ -303,7 +304,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			runtime,
 			silent: true,
 			stackRoutines: true,
-			routines: [{ name: "initialize", mode: "manual" }]
+			routines: [{ name: "initialize", mode: "manual" }],
+			// The host's grant is a write rule, which applies only while the permission system is on; the host reads the
+			// framework's `__`-prefixed routine-stack marker below.
+			permissions: { private: { host: "allow" } }
 		});
 		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.addRule(rule);
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
@@ -322,9 +326,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["callee.deep.extra2", true, true],
 		["callee.deep.extra2", true, false]
 	])(
-		"mounts a module's own api.add at %s below another module's mount point a host rule grants it (permissions: %s, awaited by the module: %s)",
-		async (at, permissions, awaited) => {
-			await mountModules(permissions ? { permissions: { defaultPolicy: "allow" } } : {});
+		"mounts a module's own api.add at %s below another module's mount point a host rule grants it (defaultPolicy allow: %s, awaited by the module: %s)",
+		async (at, allow, awaited) => {
+			// The host's grant is a write rule, which applies only while the permission system is on.
+			await mountModules({ permissions: allow ? { defaultPolicy: "allow" } : {} });
 			for (const rule of grantMount(at)) api.slothlet.permissions.addRule(rule);
 			const folder = path.join(FIXTURE, "vault");
 			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
