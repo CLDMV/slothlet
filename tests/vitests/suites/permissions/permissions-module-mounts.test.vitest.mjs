@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T00:46:44-07:00 (1792396004)
+ *	@Last modified time: 2026-10-19T05:53:35-07:00 (1792414415)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,12 +109,10 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			);
 		});
 
-		it("lets a module mount under its own path; the mount is then the new module's", async () => {
+		it("lets a module mount under its own path, and the mounted module remove itself", async () => {
 			await load();
 			expect(await api.guest.x.addAt("guest.sub2", GUEST, { moduleID: "sub2" })).toBe("done");
 			expect(typeof api.guest.sub2.x.listSelf).toBe("function");
-			// The path below now belongs to the module mounted there, which may remove itself; the guest may not.
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.sub2"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await api.guest.sub2.x.removeAt("guest.sub2")).toBe(true);
 			expect(api.guest.sub2).toBeUndefined();
 		});
@@ -145,6 +143,71 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			await api.slothlet.api.add("victim.hostExtra", GUEST, { moduleID: "host-extra" });
 			expect(typeof api.victim.hostExtra.x.listSelf).toBe("function");
 			expect(await api.slothlet.api.remove("victim.hostExtra")).toBe(true);
+		});
+	});
+
+	describe("a moduleID module code mounts with", () => {
+		it("is refused when it belongs to another mounted module", async () => {
+			await load();
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.imp", GUEST, { moduleID: "victim" }))).toBe(
+				"MODULE_ID_IN_USE"
+			);
+			expect(api.guest.imp).toBeUndefined();
+			expect(await api.victim.v.secret()).toBe("SECRET");
+		});
+
+		it("is allowed when it is the module's own, or not mounted", async () => {
+			await load();
+			expect(await api.guest.x.addAt("guest.own", GUEST, { moduleID: "guest" })).toBe("done");
+			expect(typeof api.guest.own.x.listSelf).toBe("function");
+			expect(await api.guest.x.addAt("guest.fresh", GUEST, { moduleID: "fresh" })).toBe("done");
+			expect(typeof api.guest.fresh.x.listSelf).toBe("function");
+		});
+
+		it("leaves the host re-using a moduleID", async () => {
+			await load();
+			await api.slothlet.api.add("victim2", VICTIM, { moduleID: "victim" });
+			expect(await api.victim2.v.secret()).toBe("SECRET");
+		});
+	});
+
+	describe("a mount a module added", () => {
+		it("is the adding module's to remove, by path, by moduleID, or scoped within it", async () => {
+			await load();
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.removeAt("kid", "guest.kid.x")).toBe(true);
+			expect(await api.guest.x.removeAt("guest.kid")).toBe(true);
+			expect(api.guest.kid).toBeUndefined();
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.removeAt("kid")).toBe(true);
+			expect(api.guest.kid).toBeUndefined();
+		});
+
+		it("is not a sibling module's to remove", async () => {
+			await load();
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("guest.kid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("kid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(typeof api.guest.kid.x.listSelf).toBe("function");
+		});
+
+		it("is not the module's to remove when the host mounted it below the module's path", async () => {
+			await load();
+			await api.slothlet.api.add("guest.hostkid", GUEST, { moduleID: "hostkid" });
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(typeof api.guest.hostkid.x.listSelf).toBe("function");
+		});
+
+		it("stays the adding module's to remove across a reload, and not a sibling's", async () => {
+			await load();
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			await api.slothlet.api.add("guest.hostkid", GUEST, { moduleID: "hostkid" });
+			await api.slothlet.reload();
+			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("guest.kid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await api.guest.x.removeAt("guest.kid")).toBe(true);
+			expect(api.guest.kid).toBeUndefined();
 		});
 	});
 
