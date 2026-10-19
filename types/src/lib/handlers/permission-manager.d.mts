@@ -377,21 +377,35 @@ export class PermissionManager extends ComponentBase {
      */
     snapshotRule(rule: any): any;
     /**
+     * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+     * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
+     * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
+     * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
+     * check, and weighs every other rule on the target as usual. Host code is not checked.
+     *
+     * @param {object|null} module - The calling module's wrapper ({@link runtime_selfModuleReader}), or null.
+     * @returns {void}
+     * @throws {SlothletError} `PERMISSION_DENIED` when no allow lifts the built-in deny for the module.
+     * @example
+     * pm.assertGlobalMetadataWrite(runtime_selfModuleReader(slothlet));
+     */
+    assertGlobalMetadataWrite(module: object | null): void;
+    /**
      * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
      * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
      * the prototype or extensibility of the node there.
      *
-     * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
-     * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-     * instance. An allow is a grant, a lift of a built-in rule included: the write goes through whatever the module
-     * owns. With no matching write
-     * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+     * Write rules are part of the permission system: with the system off (no `permissions` config, `enabled: false`,
+     * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
+     * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
+     * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
+     * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
      * A denial is audited like any other.
      *
      * @param {string} callerPath - Api path of the module writing.
      * @param {string} targetPath - Api path written.
      * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-     * @returns {"deny"|"grant"|null} The decision; null when no write rule matches.
+     * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
      * @example
      * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
      */

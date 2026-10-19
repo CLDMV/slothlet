@@ -184,9 +184,10 @@ export class ApiManager extends ComponentBase {
      * mounted owns nothing.
      *
      * The write rules of the permission system answer first ({@link PermissionManager#decideWrite}), for module
-     * code only: a denying rule refuses the write whatever the module owns, and an allowing one grants it whatever
-     * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
-     * the framework's own keys on api nodes, until an allow lifts one for the callers it names.
+     * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
+     * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
+     * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
+     * callers it names. With the system off, the ownership rule alone decides.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -421,6 +422,21 @@ export class ApiManager extends ComponentBase {
      */
     public assertModuleWrite(apiPath: string | string[]): void;
     /**
+     * Refuse module code removing a module by its moduleID when it may not write every path the removal reaches
+     * (#625), as {@link ApiManager#removeApiComponent} checks it. Lets a caller removing several modules check them
+     * all before removing any.
+     *
+     * @param {string} moduleID - The module removed.
+     * @param {object} writer - The removing module's wrapper.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleRemovalOf("victim", guestWrapper); // throws: the guest may not remove it
+     */
+    public assertModuleRemovalOf(moduleID: string, writer: object): void;
+    /**
      * Refuse module code reloading what it may not write (#625): a reload rebuilds every path it reaches, as a removal
      * reaches them ({@link ApiManager#assertModuleRemoval}). Host code is not checked.
      *
@@ -539,6 +555,8 @@ export class ApiManager extends ComponentBase {
      *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
      *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
      * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
+     * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
+     *   it before an await; read from the runtime otherwise (#625).
      * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
      * @throws {SlothletError} When inputs are invalid.
      * @package
@@ -562,6 +580,7 @@ export class ApiManager extends ComponentBase {
     removeApiComponent(pathOrModuleId: string, options?: {
         scopedApiPath?: string | undefined;
         recordHistory?: boolean | undefined;
+        writer?: object | null | undefined;
     }): Promise<boolean>;
     /**
      * Reload API modules using cache system.
