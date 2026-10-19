@@ -190,6 +190,19 @@ export class ApiManager extends ComponentBase {
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null): void;
     /**
+     * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
+     * Used where a write is held to a module that read a node rather than the code running now.
+     *
+     * @param {string[]} parts - Segments of the api path.
+     * @param {object} callerWrapper - The module's wrapper.
+     * @returns {boolean} Whether the module owns the path or is granted the write.
+     * @public
+     *
+     * @example
+     * apiManager.mayWrite(["victim", "v", "note"], guestWrapper); // true when a write rule grants it
+     */
+    public mayWrite(parts: string[], callerWrapper: object): boolean;
+    /**
      * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
      * base module (endpoint `"."`), a caller with no module, and code outside any module (no
      * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.

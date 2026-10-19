@@ -315,40 +315,76 @@ export class PermissionManager extends ComponentBase {
         via?: string;
     } | null): boolean;
     /**
-     * Refuse module code granting a write (#625): a rule with a write target (`pattern:write`) and effect `allow`.
+     * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+     * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
      *
-     * A write rule that allows can only lift a denial — the ownership rule still applies to what it lets
-     * through — and the denials are the host's or the framework's own (the built-in write rules), which only
-     * the host lifts. Code of a module executing now (or code the live runtime cannot attribute) adding such a
-     * rule, through `slothlet.permissions.addRule` or the `permissions` option of an `api.add` it makes, is
-     * refused; a module's manifest is refused the same at mount. A deny write rule only tightens and is left as
-     * it is, and host code is unaffected.
+     * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
+     * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
+     * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
+     * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
+     * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+     * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
+     * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
      *
-     * @param {object} rule - The rule about to be added (`{ target, effect }`).
-     * @returns {void}
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code grants a write.
+     * A rule module code adds is that module's rule, at the module layer (`module` for its own subtree, `manager`
+     * for a rule beyond it), ranked with a manifest's: a host rule outranks it at equal specificity. A `module`
+     * rule never lifts a built-in rule; a `manager` rule may, as a manifest's may. Host code is not placed: its
+     * rules keep their usual owner and layer. Code the live runtime cannot attribute is refused.
+     *
+     * @param {object} rule - The rule (`{ target, … }`).
+     * @returns {{ownerModuleID: string|null, layer: string|null}} Owner and layer to register the rule with; both null
+     *   for host code.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
      * @example
-     * pm.assertHostWriteGrant({ caller: "**", target: "slothlet.**:write", effect: "allow" }); // throws inside a module call
+     * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
+     * pm.addRule(rule, ownerModuleID, null, layer);
      */
-    assertHostWriteGrant(rule: object): void;
+    placeModuleRule(rule: object): {
+        ownerModuleID: string | null;
+        layer: string | null;
+    };
+    /**
+     * Refuse module code removing a rule it could not have added ({@link placeModuleRule}); host code may remove any.
+     *
+     * @param {string} ruleId - The rule about to be removed.
+     * @returns {void}
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+     * @example
+     * pm.assertModuleRuleRemoval("perm-12");
+     */
+    assertModuleRuleRemoval(ruleId: string): void;
     /**
      * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
-     * or deleting a member at `targetPath`, or changing the prototype or extensibility of the node there.
+     * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
+     * the prototype or extensibility of the node there.
      *
      * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
      * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-     * instance. Most-specific-wins, then the higher layer, then the last registered, as for call rules. With
-     * no matching write rule the rules say nothing, and the ownership rule alone decides the write. A denial
-     * is audited like any other.
+     * instance. An allow is a grant: the write goes through whatever the module owns. The one exception is an
+     * allow lifting a built-in rule, which leaves the write to the ownership rule. With no matching write
+     * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+     * A denial is audited like any other.
      *
      * @param {string} callerPath - Api path of the module writing.
      * @param {string} targetPath - Api path written.
      * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-     * @returns {boolean|null} False when a write rule denies the write, true when one allows it, null when none matches.
+     * @returns {"deny"|"grant"|"lift"|null} The decision; null when no write rule matches.
      * @example
-     * pm.enforceWrite("payments.charge", "slothlet.lockCaller"); // false — the built-in rule denies it
+     * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
      */
-    enforceWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): boolean | null;
+    decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | "lift" | null;
+    /**
+     * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
+     * `"grant"`), with no audit.
+     *
+     * @param {string} callerPath - Api path of the module writing.
+     * @param {string} targetPath - Api path written.
+     * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+     * @returns {boolean} Whether the write is granted.
+     * @example
+     * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
+     */
+    isWriteGranted(callerPath: string, targetPath: string, runtimeContext?: object | null): boolean;
     /**
      * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
      * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate

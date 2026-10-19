@@ -20,6 +20,24 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
+ * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
+ * @param {string} pattern - The path pattern (`victim.store.*`).
+ * @returns {string[]} The literal segments (`["victim", "store"]`).
+ * @example
+ * writeTargetLiteralPrefix("victim.**"); // ["victim"]
+ */
+export function writeTargetLiteralPrefix(pattern: string): string[];
+/**
+ * Whether a write rule's path pattern names the framework's own: its namespace or root functions as the first
+ * segment, or one of its internal keys as any segment. Such a target is the host's alone (#625).
+ * @param {string} pattern - The path pattern.
+ * @returns {boolean} Whether it names the framework's own.
+ * @example
+ * isFrameworkWriteTarget("slothlet.**"); // true
+ * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ */
+export function isFrameworkWriteTarget(pattern: string): boolean;
+/**
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/reserved-keys.mjs
@@ -28,7 +46,7 @@ export function isFrameworkReservedKey(key: string | symbol): boolean;
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:43-07:00 (1791821803)
+ *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
