@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:14-07:00 (1792366454)
+ *	@Last modified time: 2026-10-18T19:51:33-07:00 (1792378293)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,7 @@ import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
 import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -1471,6 +1472,32 @@ export class PermissionManager extends ComponentBase {
 			this.#emitAuditEvent(result.event, via ? { ...result.payload, via } : result.payload);
 		}
 		return result.allowed;
+	}
+
+	/**
+	 * Refuse module code granting a write (#625): a rule with a write target (`pattern:write`) and effect `allow`.
+	 *
+	 * A write rule that allows can only lift a denial — the ownership rule still applies to what it lets
+	 * through — and the denials are the host's or the framework's own (the built-in write rules), which only
+	 * the host lifts. Code of a module executing now (or code the live runtime cannot attribute) adding such a
+	 * rule, through `slothlet.permissions.addRule` or the `permissions` option of an `api.add` it makes, is
+	 * refused; a module's manifest is refused the same at mount. A deny write rule only tightens and is left as
+	 * it is, and host code is unaffected.
+	 *
+	 * @param {object} rule - The rule about to be added (`{ target, effect }`).
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code grants a write.
+	 * @example
+	 * pm.assertHostWriteGrant({ caller: "**", target: "slothlet.**:write", effect: "allow" }); // throws inside a module call
+	 */
+	assertHostWriteGrant(rule) {
+		if (rule?.effect !== "allow" || typeof rule.target !== "string" || this.#parseWriteTarget(rule.target) === null) return;
+		if (runtime_selfModuleReader(this.slothlet) === null) return;
+		throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+			reason: translate("PERM_RULE_WRITE_GRANT_HOST_ONLY"),
+			received: rule.target,
+			validationError: true
+		});
 	}
 
 	/**

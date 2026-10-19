@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:13-07:00 (1792366453)
+ *	@Last modified time: 2026-10-18T19:51:31-07:00 (1792378291)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -212,11 +212,17 @@ function makeCopyOnWriteSelf(parentSelf) {
 			has(_t, prop) {
 				return overlay.has(prop) || prop in parentSelf;
 			},
-			/* v8 ignore next 5 */
+			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
+			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
+			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
 			deleteProperty(_t, prop) {
-				// Defensive completeness — the runtime `self` proxy has no
-				// deleteProperty trap, so `delete self.X` never reaches here.
 				overlay.delete(prop);
+				childViews.delete(prop);
+				return true;
+			},
+			defineProperty(_t, prop, descriptor) {
+				if (!("value" in descriptor)) return false;
+				overlay.set(prop, descriptor.value);
 				childViews.delete(prop);
 				return true;
 			},
@@ -2577,22 +2583,25 @@ export class ApiBuilder extends ComponentBase {
 				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
 				/* v8 ignore start */
 				if (!mgr) {
-					return Object.freeze({
+					return {
 						get materialized() {
 							return getMaterializedState();
 						},
 						get: getMaterializeStats,
 						wait: waitForMaterialization
-					});
+					};
 				}
 				/* v8 ignore stop */
-				return Object.freeze({
+				// Not frozen: a frozen member is handed to a module as it is, so a module could change `get` / `wait`
+				// themselves; as configurable members they come to it as the framework's view of them, which refuses
+				// any change and runs a kept one as the module that read it (#625).
+				return {
 					get materialized() {
 						return getMaterializedState();
 					},
 					get: getMaterializeStats,
 					wait: waitForMaterialization
-				});
+				};
 			})(),
 
 			/**
@@ -2904,6 +2913,8 @@ export class ApiBuilder extends ComponentBase {
 					}
 					/* v8 ignore stop */
 
+					// Granting a write is the host's alone (#625).
+					permissionManager.assertHostWriteGrant(rule);
 					const ruleId = permissionManager.addRule(rule, null);
 
 					// Record in operationHistory for replay on reload

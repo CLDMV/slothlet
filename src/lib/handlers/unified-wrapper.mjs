@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:15-07:00 (1792366455)
+ *	@Last modified time: 2026-10-18T19:51:33-07:00 (1792378293)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -173,7 +173,7 @@ const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
  */
 export function runtime_unwrapSelfView(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	return SELF_VIEW_NODES.get(value) ?? value;
+	return SELF_VIEW_NODES.get(value) ?? SELF_MEMBER_VIEWS.get(value)?.value ?? value;
 }
 
 /**
@@ -282,6 +282,337 @@ function runtime_selfViewResult(result, reader) {
 }
 
 /**
+ * The member views {@link runtime_selfMemberView} built: per value, per reader, per api path.
+ * @type {WeakMap<object, WeakMap<object, Map<string, object>>>}
+ * @private
+ */
+const SELF_MEMBER_VIEW_CACHE = new WeakMap();
+/**
+ * What each member view stands for: the value, who read it, the instance, and the api path it was reached at.
+ * @type {WeakMap<object, {value: object, reader: object, slothlet: object, parts: string[]}>}
+ * @private
+ */
+const SELF_MEMBER_VIEWS = new WeakMap();
+/**
+ * The well-known symbols (`Symbol.iterator`, `Symbol.hasInstance`, …) and Node's inspect hook. What a member
+ * holds under one of them is the language's protocol, not data of the member, and is read as is.
+ * @type {Set<symbol>}
+ * @private
+ */
+const PROTOCOL_SYMBOLS = new Set([
+	...Object.getOwnPropertyNames(Symbol)
+		.map((name) => Symbol[name])
+		.filter((value) => typeof value === "symbol"),
+	Symbol.for("nodejs.util.inspect.custom")
+]);
+
+/**
+ * The realm's intrinsics — `Object`, `Function.prototype`, `Map.prototype.get`, `Math`, … — gathered once from
+ * the global object without running any getter. They belong to no module: a node reaches them only through the
+ * prototype chain every object shares, so they are handed out as they are, and `x.constructor === Object` holds.
+ * @type {WeakSet<object>|null}
+ * @private
+ */
+let REALM_INTRINSICS = null;
+
+/**
+ * Whether `value` is one of the realm's intrinsics ({@link REALM_INTRINSICS}).
+ * @param {object} value - An object or function.
+ * @returns {boolean} Whether it is an intrinsic.
+ * @private
+ */
+function runtime_isIntrinsic(value) {
+	if (REALM_INTRINSICS === null) {
+		REALM_INTRINSICS = new WeakSet();
+		const pending = [[globalThis, 0]];
+		while (pending.length > 0) {
+			const [current, depth] = pending.pop();
+			if (REALM_INTRINSICS.has(current)) continue;
+			REALM_INTRINSICS.add(current);
+			if (depth >= 3) continue;
+			const next = (candidate) => {
+				if (candidate !== null && (typeof candidate === "object" || typeof candidate === "function") && !REALM_INTRINSICS.has(candidate)) {
+					pending.push([candidate, depth + 1]);
+				}
+			};
+			next(Reflect.getPrototypeOf(current));
+			for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
+				next(descriptor.value);
+				next(descriptor.get);
+				next(descriptor.set);
+			}
+		}
+	}
+	return REALM_INTRINSICS.has(value);
+}
+
+/**
+ * Whether `value` is a built-in object whose methods work only on the object itself (a `Map`, a `Date`, a
+ * `Promise`, a typed array, …): such a value is handed out as it is, so those methods keep working on it.
+ * @param {object} value - An object or function.
+ * @returns {boolean} Whether it carries internal state only the object itself answers for.
+ * @private
+ */
+function runtime_hasInternalSlots(value) {
+	return (
+		value instanceof Map ||
+		value instanceof Set ||
+		value instanceof WeakMap ||
+		value instanceof WeakSet ||
+		value instanceof Date ||
+		value instanceof RegExp ||
+		value instanceof Promise ||
+		value instanceof ArrayBuffer ||
+		ArrayBuffer.isView(value) ||
+		(typeof WeakRef === "function" && value instanceof WeakRef)
+	);
+}
+
+/**
+ * Whether `fn` can be called with `new`, without calling it.
+ * @param {Function} fn - A function.
+ * @returns {boolean} Whether it is a constructor.
+ * @private
+ */
+function runtime_isConstructor(fn) {
+	try {
+		Reflect.construct(String, [], fn);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Whether `value` is a plain value of the api rather than a node: no node, view, version dispatcher, or
+ * framework member, each of which is handed out its own way.
+ * @param {object} value - An object or function.
+ * @returns {boolean} Whether it is plain.
+ * @private
+ */
+function runtime_isPlainMember(value) {
+	return (
+		!runtime_isIntrinsic(value) &&
+		!runtime_hasInternalSlots(value) &&
+		!SELF_VIEW_NODES.has(value) &&
+		!SELF_MEMBER_VIEWS.has(value) &&
+		!FRAMEWORK_VIEW_TARGETS.has(value) &&
+		!FRAMEWORK_MEMBERS.has(value) &&
+		resolveWrapper(value) === null &&
+		versionDispatcherRecord(value) === null &&
+		!capturedViewChildren.has(value) &&
+		!isFrameworkInternal(value)
+	);
+}
+
+/**
+ * A value read through `self` at an api path, as the reader is handed it: a node as its view
+ * ({@link runtime_selfView}), a framework member as its view, a plain value under another node's path as a
+ * member view ({@link runtime_selfMemberView}), anything else as is.
+ *
+ * @param {*} value - The value read.
+ * @param {object} reader - Who read it.
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {string[]} parts - The api path the value was reached at.
+ * @param {string|symbol|null} prop - The key it was read under, or null for a prototype.
+ * @returns {*} What the reader is handed.
+ * @private
+ */
+function runtime_selfMemberOf(value, reader, slothlet, parts, prop) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return value;
+	if (FRAMEWORK_MEMBERS.has(value)) return runtime_selfFrameworkView(value, reader);
+	if (!runtime_isPlainMember(value)) return runtime_selfView(value, reader);
+	return runtime_selfMemberView(value, reader, slothlet, parts);
+}
+
+/**
+ * Hand out a plain value reached through a node `self` handed out — a class's `prototype`, a method of it,
+ * the constructor behind it, what those hold in turn — as a view held to the rule of the api path it was
+ * reached at (#625).
+ *
+ * Such a value is no node of its own, but it is part of the node it was reached through: changing a class's
+ * prototype changes what every instance of it does, the host's included. So a change made through the view —
+ * an assignment, a definition, or a deletion of a member, a change to its prototype or extensibility — is held
+ * to the ownership and write rules at that path, at any depth, exactly as a change to a member of the node
+ * itself: refused for a module that does not own the path, and, made later from outside any call, held to
+ * the module that read it. Reads, calls, `new`, and use as a prototype (`class extends`) behave as on the value
+ * itself; a call runs on the value itself, and what it returns is handed back as it is: an instance a module
+ * returns is data it chose to share (#597). A write landing on an object that only inherits from the view
+ * (a subclass instance) is that object's own and is left to plain JS. The view stands in for the value it
+ * views: stored into the api, the value itself is stored.
+ *
+ * The proxy's target is a shadow, never the value: what the view reports of a member the value holds fixed is
+ * mirrored onto the shadow, so the view can hand that member out as a view too.
+ *
+ * @param {object|Function} value - The plain value.
+ * @param {object} reader - Who read it.
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {string[]} parts - The api path the value was reached at.
+ * @returns {object|Function} The view.
+ * @private
+ */
+function runtime_selfMemberView(value, reader, slothlet, parts) {
+	// The host owns the whole tree: it is handed the value itself.
+	if (reader === HOST_READER) return value;
+	let byReader = SELF_MEMBER_VIEW_CACHE.get(value);
+	if (!byReader) {
+		byReader = new WeakMap();
+		SELF_MEMBER_VIEW_CACHE.set(value, byReader);
+	}
+	let byPath = byReader.get(reader);
+	if (!byPath) {
+		byPath = new Map();
+		byReader.set(reader, byPath);
+	}
+	const pathKey = parts.join(".");
+	const cached = byPath.get(pathKey);
+	if (cached) return cached;
+
+	const raw = value;
+	// A shadow of the same kind, so the view calls, constructs, and answers `Array.isArray` as the value does,
+	// and carries no fixed member the value lacks.
+	let shadow;
+	if (Array.isArray(raw)) shadow = [];
+	else if (typeof raw !== "function") shadow = {};
+	else if (!runtime_isConstructor(raw)) shadow = () => {};
+	else if (hasOwn(raw, "prototype")) shadow = function () {};
+	else shadow = function () {}.bind(null);
+
+	const member = (prop, child) => runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+	const unwrapMember = (candidate) => SELF_MEMBER_VIEWS.get(candidate)?.value ?? candidate;
+	const shownDescriptor = (prop, descriptor) =>
+		"value" in descriptor
+			? { ...descriptor, value: member(prop, descriptor.value) }
+			: { ...descriptor, get: member(prop, descriptor.get), set: member(prop, descriptor.set) };
+	// A member the value holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
+	const mirror = (prop) => {
+		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
+		if (!descriptor) {
+			const stale = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
+			return undefined;
+		}
+		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+		if (held && !held.configurable && "value" in held && !held.writable) return held;
+		const shown = shownDescriptor(prop, descriptor);
+		if (!descriptor.configurable || !Reflect.isExtensible(shadow)) Reflect.defineProperty(shadow, prop, shown);
+		return shown;
+	};
+	// A value closed to extension is mirrored whole, the shadow closed with it, as the engine checks a proxy's
+	// answers about a non-extensible target against that target.
+	const mirrorClosed = () => {
+		if (Reflect.isExtensible(raw)) return;
+		for (const key of Reflect.ownKeys(shadow)) {
+			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
+		}
+		if (Reflect.isExtensible(shadow)) {
+			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			Reflect.setPrototypeOf(shadow, member(null, Reflect.getPrototypeOf(raw)));
+			Reflect.preventExtensions(shadow);
+		} else {
+			for (const key of Reflect.ownKeys(raw)) mirror(key);
+		}
+	};
+	const assertWrite = (prop) => {
+		const target = typeof prop === "string" ? [...parts, prop] : parts;
+		const writer = runtime_selfRootWriter(slothlet, reader, target);
+		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+	};
+	const view = new Proxy(shadow, {
+		get(_, prop, receiver) {
+			mirrorClosed();
+			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (held && !held.configurable && "value" in held && !held.writable) return held.value;
+			return member(prop, Reflect.get(raw, prop, receiver === view ? raw : receiver));
+		},
+		getOwnPropertyDescriptor(_, prop) {
+			mirrorClosed();
+			return mirror(prop);
+		},
+		has(_, prop) {
+			mirrorClosed();
+			return Reflect.has(raw, prop);
+		},
+		ownKeys() {
+			mirrorClosed();
+			return Reflect.ownKeys(raw);
+		},
+		getPrototypeOf() {
+			mirrorClosed();
+			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
+			return member(null, Reflect.getPrototypeOf(raw));
+		},
+		isExtensible() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow);
+		},
+		apply(_, thisArg, args) {
+			return runtime_selfViewResult(Reflect.apply(raw, unwrapMember(thisArg), args), reader);
+		},
+		construct(_, args, newTarget) {
+			return Reflect.construct(raw, args, newTarget === view ? raw : newTarget);
+		},
+		set(_, prop, written, receiver) {
+			// A write reaching the view from an object that inherits from it lands on that object, as plain JS has it.
+			if (receiver !== view) return Reflect.set(raw, prop, written, receiver);
+			assertWrite(prop);
+			const done = Reflect.set(raw, prop, runtime_unwrapSelfView(written));
+			if (done) mirror(prop);
+			return done;
+		},
+		defineProperty(_, prop, descriptor) {
+			assertWrite(prop);
+			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
+			if (!Reflect.defineProperty(raw, prop, stored)) return false;
+			// A member defined fixed is fixed on the shadow as defined, which is what the engine checks it against.
+			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
+			else mirror(prop);
+			return true;
+		},
+		deleteProperty(_, prop) {
+			assertWrite(prop);
+			if (!Reflect.deleteProperty(raw, prop)) return false;
+			mirror(prop);
+			return true;
+		},
+		setPrototypeOf(_, proto) {
+			assertWrite(null);
+			if (!Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto))) return false;
+			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
+		},
+		preventExtensions() {
+			assertWrite(null);
+				// A value that is itself a proxy may decline.
+			if (!Reflect.preventExtensions(raw)) return false;
+			mirrorClosed();
+			return true;
+		}
+	});
+	byPath.set(pathKey, view);
+	SELF_MEMBER_VIEWS.set(view, { value: raw, reader, slothlet, parts });
+	return view;
+}
+
+/**
+ * `instanceof` against a callable node's view: whether `instance` inherits from the node's `prototype`, also
+ * through the member view a reader got of that prototype (`class extends` a node's view makes one).
+ *
+ * @param {object} prototype - The node's own `prototype`.
+ * @param {*} instance - The value tested.
+ * @returns {boolean} Whether `instance` inherits from it.
+ * @private
+ */
+function runtime_selfHasInstance(prototype, instance) {
+	if (instance === null || (typeof instance !== "object" && typeof instance !== "function")) return false;
+	for (let proto = Reflect.getPrototypeOf(instance); proto !== null; proto = Reflect.getPrototypeOf(proto)) {
+		if ((SELF_MEMBER_VIEWS.get(proto)?.value ?? proto) === prototype) return true;
+	}
+	return false;
+}
+
+/**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
  * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
@@ -316,6 +647,12 @@ function runtime_selfViewResult(result, reader) {
  */
 export function runtime_selfView(node, reader) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
+	// A member view handed to another reader is that reader's view of the same value at the same path.
+	const memberRecord = SELF_MEMBER_VIEWS.get(node);
+	if (memberRecord) {
+		if (reader === undefined || reader === memberRecord.reader) return node;
+		return runtime_selfMemberView(memberRecord.value, reader, memberRecord.slothlet, memberRecord.parts);
+	}
 	// A view already keeps its reader. Handed to another reader, it is that reader's view of the same node.
 	if (SELF_VIEW_NODES.has(node)) {
 		if (reader === undefined) return node;
@@ -366,24 +703,50 @@ export function runtime_selfView(node, reader) {
 			}
 			return runtime_selfViewResult(Reflect.apply(fn, this === view ? node : this, args), reader);
 		};
+	// The api path of a member of the node: through a dispatcher, of the versioned node it resolves to now.
+	const memberParts = (prop) => {
+		const owner = dispatch ? resolveWrapper(dispatch.resolve()) : inner;
+		// A dispatcher hands out a member only of the node it has just resolved to, so it resolves to one here too;
+		// the empty path is the defensive answer should it not, owned only by who owns the whole tree.
+		/* v8 ignore next */
+		const parts = owner ? String(owner.____slothletInternal.apiPath).split(".").filter(Boolean) : [];
+		if (typeof prop === "string") parts.push(prop);
+		return parts;
+	};
 	const viewMember = (prop, value) => {
 		if (dispatch && typeof value === "function" && resolveWrapper(value) === null && !SELF_VIEW_NODES.has(value)) {
 			return dispatcherFunction(prop, value);
 		}
-		return runtime_selfView(value, reader);
+		// A plain value the node holds (a class's prototype, a method of it) is held to the node's path (#625).
+		return runtime_selfMemberOf(value, reader, slothlet, memberParts(prop), prop);
 	};
+	// `instanceof` against the view reads its `prototype`, which is handed out as a member view: it tests the
+	// node's own prototype, as `instanceof` against the node does.
+	let hasInstance = null;
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
 	const view = new Proxy(node, {
 		get(target, prop) {
 			const value = Reflect.get(target, prop);
+			if (prop === Symbol.hasInstance && value === undefined && typeof target === "function") {
+				hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(target, "prototype"), instance);
+				return hasInstance;
+			}
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 			if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
 			return viewMember(prop, value);
 		},
 		getOwnPropertyDescriptor(target, prop) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (!descriptor || !("value" in descriptor) || isFixed(descriptor)) return descriptor;
+			if (!descriptor || isFixed(descriptor)) return descriptor;
+			if (!("value" in descriptor)) {
+				// An accessor's functions are plain values the node holds; a fixed one is reported as it is. A node reports
+				// its accessors configurable, and a node frozen through a view reports data members, so the suite has no
+				// node that reports a fixed accessor; the guard keeps the proxy's answer valid if one ever does.
+				/* v8 ignore next */
+				if (!descriptor.configurable) return descriptor;
+				return { ...descriptor, get: viewMember(prop, descriptor.get), set: viewMember(prop, descriptor.set) };
+			}
 			return { ...descriptor, value: viewMember(prop, descriptor.value) };
 		},
 		ownKeys(target) {
@@ -496,8 +859,8 @@ export function runtime_registerFrameworkMember(member, slothlet, name) {
  * A module never changes them (#625): they are shared by every module and the host, so an assignment,
  * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
  * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
- * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is no api path
- * and is left to plain JS, as it is for the api's own nodes.
+ * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is held to the
+ * same rules as a string key: a change under one meets the rules of the member it is made on.
  *
  * @param {*} member - A root member read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
@@ -516,8 +879,9 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
 }
 
 /**
- * Refuse a module replacing, defining, or deleting one of the framework's root members (`self.slothlet`,
- * `self.shutdown`, `self.destroy`) through the runtime `self` (#625). Host code is left as it was.
+ * Refuse a module replacing one of the framework's root members (`self.slothlet`, `self.shutdown`,
+ * `self.destroy`) through the runtime `self` (#625); a definition or deletion goes through
+ * {@link runtime_selfChangeTarget}. Host code is left as it was.
  *
  * @param {object} slothlet - Instance the change is made on.
  * @param {string|symbol} prop - Member of `self` changed.
@@ -536,6 +900,44 @@ export function runtime_assertFrameworkRootChange(slothlet, prop) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
 	}
 	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite([prop], identity.currentWrapper);
+}
+
+/**
+ * Where a change to `self` itself lands, once the code running now may make it (#625): defining or deleting a
+ * member of `self`, or a symbol-keyed member of it.
+ *
+ * `self` is one object shared by every module of every instance; it stands for the api of the instance the
+ * running code belongs to. A change to it follows the rule a top-level `self.X = …` does: a module changes
+ * only what it owns (the framework's own members never, by the built-in write rules), a symbol key or a change
+ * to `self` as a whole is held to the root of the tree, and code the live runtime cannot attribute is refused.
+ * The change is made on that instance's api — or on the isolated scope's own view of it — never on the object
+ * behind `self`.
+ *
+ * @param {object} ctx - The active context store (`self`, `slothlet`).
+ * @param {string|symbol|null} prop - Member of `self` changed, or null for `self` as a whole.
+ * @returns {object} The object the change is made on.
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` / `PERMISSION_DENIED` when module code changes a member it may
+ *   not, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ * @internal
+ *
+ * @example
+ * return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
+ */
+export function runtime_selfChangeTarget(ctx, prop) {
+	// A store holding `self` holds its instance too: both are set together when the instance loads.
+	const slothlet = ctx.slothlet;
+	const parts = typeof prop === "string" ? [prop] : [];
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
+	// cannot attribute before it resolves a context at all, and the async runtime always attributes. Kept so a
+	// caller that did reach it would fail closed rather than write with the host's standing.
+	/* v8 ignore next 3 */
+	if (identity?.unresolved) {
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+	}
+	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite(parts, identity.currentWrapper);
+	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
+	return ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
 }
 
 /**
@@ -604,7 +1006,16 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		getOwnPropertyDescriptor(target, prop) {
 			return asReader(() => {
 				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-				if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
+				if (!descriptor || !descriptor.configurable) return descriptor;
+				// An accessor's functions are members too: kept and called later, they run as the reader, and a
+				// change to them is refused like any other.
+				if (!("value" in descriptor)) {
+					return {
+						...descriptor,
+						get: runtime_frameworkViewOf(descriptor.get, slothlet, reader, childPath(prop)),
+						set: runtime_frameworkViewOf(descriptor.set, slothlet, reader, childPath(prop))
+					};
+				}
 				return { ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
 			});
 		},
@@ -615,15 +1026,15 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
 		},
 		set(target, prop, value) {
-			if (typeof prop !== "symbol") refuseChange(prop);
+			refuseChange(prop);
 			return asReader(() => Reflect.set(target, prop, unwrap(value)));
 		},
 		defineProperty(target, prop, descriptor) {
-			if (typeof prop !== "symbol") refuseChange(prop);
+			refuseChange(prop);
 			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
 		},
 		deleteProperty(target, prop) {
-			if (typeof prop !== "symbol") refuseChange(prop);
+			refuseChange(prop);
 			return asReader(() => Reflect.deleteProperty(target, prop));
 		},
 		setPrototypeOf(target, proto) {
@@ -754,8 +1165,10 @@ export function runtime_selfRootView(slothlet, reader) {
 		if (typeof prop !== "string") return value;
 		return SELF_FRAMEWORK_ROOTS.has(prop) ? runtime_selfFrameworkView(value, reader, slothlet) : runtime_selfView(value, reader);
 	};
+	// A symbol key, like a change to the root itself, is held to the root's own path: only who owns the whole
+	// tree changes it (#625).
 	const assertChange = (prop) => {
-		const parts = prop === null ? [] : [String(prop)];
+		const parts = typeof prop === "string" ? [prop] : [];
 		const writer = runtime_selfRootWriter(slothlet, reader, parts);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
 	};
@@ -770,17 +1183,20 @@ export function runtime_selfRootView(slothlet, reader) {
 		},
 		set(target, prop, value) {
 			value = runtime_unwrapSelfView(value);
-			if (typeof prop === "symbol") return Reflect.set(target, prop, value);
+			if (typeof prop === "symbol") {
+				assertChange(prop);
+				return Reflect.set(target, prop, value);
+			}
 			slothlet.handlers.apiManager.setOwnedProperty(prop, value, runtime_selfRootWriter(slothlet, reader, [prop]));
 			return true;
 		},
 		defineProperty(target, prop, descriptor) {
-			if (typeof prop !== "symbol") assertChange(prop);
+			assertChange(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
 		deleteProperty(target, prop) {
-			if (typeof prop !== "symbol") assertChange(prop);
+			assertChange(prop);
 			return Reflect.deleteProperty(target, prop);
 		},
 		setPrototypeOf(target, proto) {
@@ -940,7 +1356,9 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
  * the top-level write follows ({@link ApiManager#assertOwnedWrite}) is applied here to the member's full
  * api path — or, for a change to the node itself (its prototype, its extensibility), to the node's own
  * path. The caller is the module executing now. Host code owns the whole tree, and a write the framework makes itself ({@link runtime_frameworkWrite})
- * is not the module's. A symbol key is never an api path, as at the top level.
+ * is not the module's. A symbol key is never an api path of its own, but it is held to the same rule as a
+ * string key: a change under one meets the rule of the node it is made on, so a module writes symbol-keyed
+ * members only on nodes it owns.
  *
  * @param {object} wrapper - Wrapper receiving the change.
  * @param {string|symbol|null} prop - Member being written, or null for a change to the node itself.
@@ -950,11 +1368,10 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
  * @private
  */
 function runtime_assertOwnedWrite(wrapper, prop) {
-	if (typeof prop === "symbol") return;
 	if (FRAMEWORK_WRITES.has(wrapper)) return;
 	const slothlet = wrapper.slothlet;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
-	if (prop !== null) parts.push(prop);
+	if (typeof prop === "string") parts.push(prop);
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
 	// names whichever call entered last, which is not who is running once calls overlap.
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);

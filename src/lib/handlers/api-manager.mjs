@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:13-07:00 (1792366453)
+ *	@Last modified time: 2026-10-18T19:51:32-07:00 (1792378292)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1986,6 +1986,15 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		this.#assertSafeSegments(normalizedPath, parts, true);
+
+		// Granting a write is the host's alone (#625): module code mounting with a write grant is refused before
+		// anything is mounted.
+		if (Array.isArray(restOptions.permissions?.allow)) {
+			for (const entry of restOptions.permissions.allow) {
+				const { target } = this.#normalizePermissionShorthandEntry(entry);
+				this.slothlet.handlers.permissionManager.assertHostWriteGrant({ target, effect: "allow" });
+			}
+		}
 
 		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
 		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount

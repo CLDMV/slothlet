@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:18-07:00 (1792366458)
+ *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@ import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
 	runtime_assertFrameworkRootChange,
+	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
 	runtime_unwrapSelfView
@@ -175,17 +176,37 @@ export const self = new Proxy(
 			}
 			return undefined;
 		},
-		deleteProperty(target, prop) {
-			// A module never deletes the framework's namespace or root functions (#625).
+		// A change to `self` itself follows the rule a top-level `self.X = …` does and lands on the running
+		// instance's api, never on the object behind `self`, which every module of every instance shares (#625).
+		deleteProperty(_, prop) {
 			const ctx = runtime_resolveExecutingContext();
-			if (ctx?.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
-			return Reflect.deleteProperty(target, prop);
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
 		},
-		defineProperty(target, prop, descriptor) {
-			// A module never redefines the framework's namespace or root functions (#625).
+		defineProperty(_, prop, descriptor) {
 			const ctx = runtime_resolveExecutingContext();
-			if (ctx?.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			const target = runtime_selfChangeTarget(ctx, prop);
+			// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
+			if (descriptor.configurable === false) return false;
+			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
+		},
+		// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
+		// one instance. The change is refused, after the rule for `self` as a whole has been applied.
+		setPrototypeOf() {
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.self) runtime_selfChangeTarget(ctx, null);
+			return false;
+		},
+		preventExtensions() {
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.self) runtime_selfChangeTarget(ctx, null);
+			return false;
 		},
 		set(_, prop, value) {
 			// A view `self` handed out stands for its node: the node is what is stored (#625).
@@ -208,8 +229,10 @@ export const self = new Proxy(
 			// "Symbol(…)" and set THAT string key instead of the symbol-keyed
 			// property the assignment targeted. Write straight to `ctx.self` (the
 			// copy-on-write set trap under isolation, or `boundApi`) so ordinary
-			// JS semantics hold; apiPath ownership validation does not apply.
+			// JS semantics hold. A symbol is no api path of its own: the write is
+			// held to the root of the tree, as a change to `self` as a whole is (#625).
 			if (typeof prop === "symbol") {
+				runtime_selfChangeTarget(ctx, prop);
 				ctx.self[prop] = value;
 				return true;
 			}

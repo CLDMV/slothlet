@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T16:34:18-07:00 (1792366458)
+ *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,6 @@
 
 // Import context managers
 import { asyncRuntime, liveRuntime } from "#factories/context";
-import { runtime_assertFrameworkRootChange } from "#handlers/unified-wrapper";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -88,21 +87,6 @@ function getCurrentRuntime() {
 export class SlothletSelf {}
 
 /**
- * Refuse module code deleting or redefining the framework's namespace or root functions on `self` (#625),
- * against the context the active runtime resolves, as {@link getCurrentRuntime} picks it. Host code is left
- * as it was.
- *
- * @param {string|symbol} prop - Member of `self` changed.
- * @returns {void}
- * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when module code changes `slothlet`, `shutdown`, or `destroy`.
- * @private
- */
-function runtime_assertSelfRootChange(prop) {
-	const ctx = asyncRuntime.tryGetContext() ?? liveRuntime.tryGetContext();
-	if (ctx?.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
-}
-
-/**
  * Live binding to the current API instance. Resolves to the running Slothlet proxy,
  * giving API modules access to all other API methods without import cycles.
  * Typed as {@link SlothletSelf}, which generated api types extend.
@@ -139,13 +123,19 @@ export const self = new Proxy(
 			}
 			return undefined;
 		},
-		deleteProperty(target, prop) {
-			runtime_assertSelfRootChange(prop);
-			return Reflect.deleteProperty(target, prop);
+		// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
+		// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
+		deleteProperty(_, prop) {
+			return Reflect.deleteProperty(getCurrentRuntime().self, prop);
 		},
-		defineProperty(target, prop, descriptor) {
-			runtime_assertSelfRootChange(prop);
-			return Reflect.defineProperty(target, prop, descriptor);
+		defineProperty(_, prop, descriptor) {
+			return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
+		},
+		setPrototypeOf(_, proto) {
+			return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
+		},
+		preventExtensions() {
+			return Reflect.preventExtensions(getCurrentRuntime().self);
 		},
 		set(_, prop, value) {
 			// Forward to the active per-runtime self proxy. Without this trap, JS
