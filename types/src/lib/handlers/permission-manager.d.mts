@@ -360,19 +360,19 @@ export class PermissionManager extends ComponentBase {
      *
      * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
      * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
-     * instance. An allow is a grant: the write goes through whatever the module owns. The one exception is an
-     * allow lifting a built-in rule, which leaves the write to the ownership rule. With no matching write
+     * instance. An allow is a grant, a lift of a built-in rule included: the write goes through whatever the module
+     * owns. With no matching write
      * rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
      * A denial is audited like any other.
      *
      * @param {string} callerPath - Api path of the module writing.
      * @param {string} targetPath - Api path written.
      * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
-     * @returns {"deny"|"grant"|"lift"|null} The decision; null when no write rule matches.
+     * @returns {"deny"|"grant"|null} The decision; null when no write rule matches.
      * @example
      * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
      */
-    decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | "lift" | null;
+    decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | null;
     /**
      * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
      * `"grant"`), with no audit.
