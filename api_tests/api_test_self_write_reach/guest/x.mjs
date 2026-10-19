@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T00:44:42-07:00 (1792395882)
+ *	@Last modified time: 2026-10-19T09:18:05-07:00 (1792426685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -622,4 +622,23 @@ export function addKeptConditionalRule() {
  */
 export function changeKeptCondition(tenant) {
 	keptConditionalRule.condition.tenant = tenant;
+}
+
+/**
+ * Mount a folder as a version of `apiPath`, from this module's code.
+ * @param {string} apiPath - The logical path.
+ * @param {string} folder - Folder to mount.
+ * @param {object} options - `api.add` options.
+ * @param {string} version - The version tag.
+ * @returns {Promise<string>} `"done"`, or the error code the mount was refused with.
+ * @example
+ * await addAtVersion("guest.lib", "/abs/guest", { moduleID: "gv" }, "v1");
+ */
+export async function addAtVersion(apiPath, folder, options, version) {
+	try {
+		await self.slothlet.api.add(apiPath, folder, options, { version });
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }
