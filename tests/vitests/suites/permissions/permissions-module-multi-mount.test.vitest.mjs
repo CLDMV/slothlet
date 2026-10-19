@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T08:10:11-07:00 (1792422611)
+ *	@Last modified time: 2026-10-19T08:46:06-07:00 (1792424766)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -104,7 +104,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 	it.each([
 		["the module mounting itself there, with a grant there only", true],
-		["the host merging it there", false]
+		["the host merging it there, with no grant, so sharing is what allows the write at shared", false]
 	])("does not extend a shared mount point to the other module's other mounts: %s", async (_label, byModule) => {
 		await boot(
 			byModule
@@ -126,6 +126,58 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 		expect(sharedWrites).toEqual(every(sharedWrites, "done"));
 		const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("a.v"));
 		expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
+	});
+
+	describe("a mount the caller performed, with the host's mount of the same module inside it", () => {
+		/**
+		 * The guest mounts `kid` at `guest.k`; the host mounts `kid` again at `guest.k.zone`.
+		 * @returns {Promise<object>} The composed api.
+		 */
+		async function nested() {
+			await boot();
+			expect(await api.guest.x.addAt("guest.k", GUEST, { moduleID: "kid" })).toBe("done");
+			await api.slothlet.api.add("guest.k.zone", VICTIM, { moduleID: "kid" });
+			return api;
+		}
+
+		it.each([
+			["by moduleID", (a) => a.guest.x.removeAt("kid")],
+			["by path", (a) => a.guest.x.removeAt("guest.k")],
+			["scoped", (a) => a.guest.x.removeAt("kid", "guest.k.zone")]
+		])("refuses the caller removing it %s, and changes nothing", async (_label, remove) => {
+			await nested();
+			expect(await withSuppressedSlothletErrorOutput(() => remove(api))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(typeof api.guest.k.x.listSelf).toBe("function");
+			expect(await api.guest.k.zone.v.secret()).toBe("SECRET");
+		});
+
+		it("lets the caller remove what it mounted when no host mount is inside it", async () => {
+			await boot();
+			expect(await api.guest.x.addAt("guest.k", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.removeAt("kid", "guest.k.x")).toBe(true);
+			expect(await api.guest.x.removeAt("kid")).toBe(true);
+			expect(api.guest.k).toBeUndefined();
+		});
+	});
+
+	describe("removing a module by its moduleID", () => {
+		it("removes the module with that exact id, not one whose id starts with it, for the host", async () => {
+			await boot();
+			await api.slothlet.api.add("vicpath", VICTIM, { moduleID: "vic" });
+			await api.slothlet.api.add("other", GUEST, { moduleID: "vic_x" });
+			expect(await api.slothlet.api.remove("vic")).toBe(true);
+			expect(api.vicpath).toBeUndefined();
+			expect(typeof api.other.x.listSelf).toBe("function");
+		});
+
+		it("removes the module with that exact id, not one whose id starts with it, for module code", async () => {
+			await boot();
+			expect(await api.guest.x.addAt("guest.vic", VICTIM, { moduleID: "vic" })).toBe("done");
+			await api.slothlet.api.add("other", GUEST, { moduleID: "vic_x" });
+			expect(await api.guest.x.removeAt("vic")).toBe(true);
+			expect(api.guest.vic).toBeUndefined();
+			expect(typeof api.other.x.listSelf).toBe("function");
+		});
 	});
 
 	it("refuses module code removing its own path while a module the host mounted below it sits there, and changes nothing", async () => {
