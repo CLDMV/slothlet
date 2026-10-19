@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:14-07:00 (1792384514)
+ *	@Last modified time: 2026-10-19T12:22:48-07:00 (1792437768)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -8208,7 +8208,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// read-only informational accessors whose values come from ____slothletInternal.
 			// Silently absorb the write so no TypeError leaks key existence.
 			// _materialize is exempted: the framework writes it directly on the target.
-			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
+			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
+			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") {
+				runtime_assertOwnedWrite(wrapper, prop);
+				return true;
+			}
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
 			// fixed on the shell when it was sealed, and reflection answers from there.
 			if (!Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
@@ -8526,6 +8530,8 @@ export class UnifiedWrapper extends ComponentBase {
 				"__inFlight"
 			]);
 			if (internalKeys.has(prop)) {
+				// Module code meets the write rules first, so a deletion is refused as a definition is (#625).
+				runtime_assertOwnedWrite(wrapper, prop);
 				return true; // silently ignore - do not expose the key's existence via TypeError
 			}
 			// Removing a member is a write to its path: a module removes only under the subtree it owns (#625),
@@ -9031,6 +9037,21 @@ export function resolveWrapper(value) {
  */
 export function isWrapperAnsweredName(key) {
 	return WRAPPER_ANSWERED_PROPS.has(key);
+}
+
+/**
+ * The node behind a value read out of the api: a per-reader view a read under a module's identity hands back stands
+ * for the node it was built over; anything else is the value itself (#625).
+ * @param {*} value - A value read out of the api.
+ * @returns {*} The node behind it.
+ * @internal
+ *
+ * @example
+ * runtime_nodeBehind(heldReference) === api.victim.v; // true for a view of victim.v
+ */
+export function runtime_nodeBehind(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	return capturedViewTargets.get(value) ?? value;
 }
 
 /**

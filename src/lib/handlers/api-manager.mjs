@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:01-07:00 (1792434841)
+ *	@Last modified time: 2026-10-19T12:22:46-07:00 (1792437766)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,6 +51,7 @@ import {
 	UnifiedWrapper,
 	resolveWrapper,
 	readApiMember,
+	runtime_nodeBehind,
 	loadApiMember,
 	isWrapperAnsweredName,
 	isFrameworkReservedKey,
@@ -764,6 +765,108 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 		}
 		this.assertOwnedWrite(parts, writer, ignoreModuleID);
+		// A node reached through an alias is written where it really is, and held to its owner there.
+		for (const realParts of this.#aliasedPaths(parts)) this.assertOwnedWrite(realParts, writer, ignoreModuleID);
+	}
+
+	/**
+	 * The member `key` a node of the live tree holds, read off the node itself rather than through its proxy, so no
+	 * read gate, captured view, or lazy load is involved; an accessor is not followed (#625).
+	 *
+	 * @param {*} node - The node: a wrapper proxy, or a plain object.
+	 * @param {string} key - The member.
+	 * @returns {{found: boolean, value: *}} Whether the node holds the member as data, and its value.
+	 * @private
+	 */
+	#rawMember(node, key) {
+		if (node === null || (typeof node !== "object" && typeof node !== "function")) return { found: false, value: undefined };
+		const raw = resolveWrapper(node);
+		const holders = raw ? [raw, raw.____slothletInternal.impl] : [node];
+		for (const holder of holders) {
+			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) continue;
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
+			// A view a module's read handed back, stored here, stands for the node it was built over.
+			if (descriptor && "value" in descriptor) return { found: true, value: runtime_nodeBehind(descriptor.value) };
+		}
+		return { found: false, value: undefined };
+	}
+
+	/**
+	 * The real paths a write at `parts` reaches through aliases (#625): walking the live tree along `parts`, a node
+	 * whose own api path is not the path it was reached at is another node stored there, an alias, and the rest of
+	 * the path continues from where that node really is. Each such path, with the remaining segments, is returned;
+	 * none when the path holds no alias.
+	 *
+	 * @param {string[]} parts - Segments of the path written.
+	 * @returns {string[][]} The real paths, one per alias walked.
+	 * @private
+	 */
+	#aliasedPaths(parts) {
+		const found = [];
+		let node = this.slothlet.api;
+		for (let index = 0; index < parts.length; index++) {
+			const { found: held, value } = this.#rawMember(node, parts[index]);
+			if (!held) break;
+			const child = resolveWrapper(value);
+			if (child) {
+				const real = String(child.____slothletInternal.apiPath ?? "");
+				if (real !== parts.slice(0, index + 1).join(".")) found.push([...real.split(".").filter(Boolean), ...parts.slice(index + 1)]);
+			}
+			node = value;
+		}
+		return found;
+	}
+
+	/**
+	 * Remove an alias (#625): the member at `apiPath` holding another node, which is left whole. Module code removes
+	 * it where it may write that member, the node it stands for aside; the host removes any.
+	 *
+	 * @param {string} apiPath - The path holding the alias.
+	 * @param {object} options - The removal's options ({@link ApiManager#removeApiComponent}).
+	 * @returns {Promise<boolean>} Whether an alias was removed; false when the path holds none.
+	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for module code.
+	 * @private
+	 */
+	async #removeAlias(apiPath, options) {
+		let parts;
+		try {
+			({ parts } = this.normalizeApiPath(apiPath));
+		} catch {
+			return false;
+		}
+		// The alias must be held at the path itself: a path that runs through one reaches the node it stands for, whose
+		// members are not removed through it.
+		if (parts.length === 0 || this.#aliasedPaths(parts.slice(0, -1)).length > 0 || !this.#isAliasAt(parts)) return false;
+		if (options.recordHistory !== false) {
+			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
+			if (writer !== null) {
+				if (!writer.____slothletInternal) {
+					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+				}
+				this.assertOwnedWrite(parts, writer);
+			}
+		}
+		await this.deletePath(this.slothlet.api, parts);
+		await this.deletePath(this.slothlet.boundApi, parts);
+		return true;
+	}
+
+	/**
+	 * Whether the node at `parts` is an alias: another node stored there, whose own api path is not `parts` (#625).
+	 *
+	 * @param {string[]} parts - Segments of the path.
+	 * @returns {boolean} Whether the node there is an alias.
+	 * @private
+	 */
+	#isAliasAt(parts) {
+		let node = this.slothlet.api;
+		for (const part of parts) {
+			const { found, value } = this.#rawMember(node, part);
+			if (!found) return false;
+			node = value;
+		}
+		const wrapper = resolveWrapper(node);
+		return wrapper !== null && String(wrapper.____slothletInternal.apiPath ?? "") !== parts.join(".");
 	}
 
 	/**
@@ -1735,11 +1838,31 @@ export class ApiManager extends ComponentBase {
 	async deletePath(root, parts) {
 		let current = root;
 		const stack = [];
+		const walked = [];
+		/**
+		 * Whether the node `holder` holds at `key` is an alias: another node stored there, whose own api path is not
+		 * `atPath` (#625).
+		 * @param {*} holder - The node holding the member.
+		 * @param {string} key - The member.
+		 * @param {string} atPath - The path the member is reached at.
+		 * @returns {boolean} Whether it is an alias.
+		 */
+		// Paths are the instance's api paths only from its api root; a removal from any other root has no aliases to tell.
+		const fromApiRoot = root === this.slothlet.api || root === this.slothlet.boundApi;
+		const isAlias = (holder, key, atPath) => {
+			if (!fromApiRoot) return false;
+			const member = this.#rawMember(holder, key);
+			const node = member.found ? resolveWrapper(member.value) : null;
+			return node !== null && String(node.____slothletInternal.apiPath ?? "") !== atPath;
+		};
 		for (const part of parts.slice(0, -1)) {
 			if (!current || (typeof current !== "object" && typeof current !== "function")) {
 				return false;
 			}
 			stack.push({ parent: current, key: part });
+			walked.push(part);
+			// Nothing at this path is removed through an alias: the node there is another node, which keeps what it holds.
+			if (isAlias(current, part, walked.join("."))) return false;
 			// The node itself, never the view a read under a module's identity hands back: a removal a module
 			// started is the framework's write, not the module's (#625).
 			current = readApiMember(current, part);
@@ -1756,9 +1879,11 @@ export class ApiManager extends ComponentBase {
 		// Get the impl being removed and its metadata before deletion
 		const removedImpl = readApiMember(current, finalKey);
 		const apiPath = parts.join(".");
+		// An alias removed is only the member holding it: the node it stands for is another node, left whole (#625).
+		const removesAlias = isAlias(current, finalKey, apiPath);
 
 		// Emit lifecycle event for removal BEFORE deletion
-		if (removedImpl && this.slothlet.handlers?.lifecycle) {
+		if (removedImpl && !removesAlias && this.slothlet.handlers?.lifecycle) {
 			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
 			await this.slothlet.handlers.lifecycle.emit("impl:removed", {
 				apiPath,
@@ -1802,7 +1927,7 @@ export class ApiManager extends ComponentBase {
 		// AFTER deletion, clean up wrapper state for removed proxy
 		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
 		/* v8 ignore next */
-		if (removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
+		if (!removesAlias && removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
 			// resolveWrapper always returns a wrapper for proxies in this path; FALSE is unreachable.
 			/* v8 ignore next */
@@ -1836,10 +1961,10 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Clean up user metadata for removed impl using root segment
-		// metadata handler is always registered in all test configurations; FALSE is unreachable.
+		// Clean up user metadata for removed impl using root segment; an alias removed takes none with it.
+		// metadata handler is always registered in all test configurations, so its absence is unreachable.
 		/* v8 ignore next */
-		if (this.slothlet.handlers?.metadata) {
+		if (!removesAlias && this.slothlet.handlers?.metadata) {
 			const rootSegment = apiPath.split(".")[0];
 			this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 		}
@@ -3833,8 +3958,9 @@ export class ApiManager extends ComponentBase {
 					apiPath = pathOrModuleId;
 					moduleID = owner.moduleID;
 				} else {
-					// Neither moduleID nor path found - not found
-					return false;
+					// Neither moduleID nor a registered path. A path holding an alias — another node stored there — is
+					// removed as the member holding it, never as the node it stands for (#625); anything else is not found.
+					return this.#removeAlias(pathOrModuleId, options);
 				}
 			}
 		} else {
