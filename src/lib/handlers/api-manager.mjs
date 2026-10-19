@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T08:09:26-07:00 (1792422566)
+ *	@Last modified time: 2026-10-19T08:45:16-07:00 (1792424716)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2047,9 +2047,13 @@ export class ApiManager extends ComponentBase {
 		}
 		for (const path of new Set(reached)) {
 			const owner = scopedApiPath !== null || !apiPath ? id : String(ownership.getCurrentOwner(path)?.moduleID ?? id);
-			const mountedByCaller = ownership
+			// Only the owner's innermost mount around the path counts: a mount the host made inside one the caller made
+			// is the host's, whoever made the mount around it.
+			const innermost = ownership
 				.getModuleMounts(owner)
-				.some((mount) => mount !== "." && mount !== "" && under(mount)(path) && this.mountedBy.get(this.mountKey(owner, mount)) === own);
+				.filter((mount) => mount !== "." && mount !== "" && under(mount)(path))
+				.sort((a, b) => b.length - a.length)[0];
+			const mountedByCaller = innermost !== undefined && this.mountedBy.get(this.mountKey(owner, innermost)) === own;
 			if (!mountedByCaller) this.#assertModuleMountWrite(path.split(".").filter(Boolean), writer);
 		}
 	}
@@ -3631,15 +3635,20 @@ export class ApiManager extends ComponentBase {
 			// id otherwise. A ':' — or any other character — in a user id is preserved intact (#303).
 			const candidateModuleID = pathOrModuleId.split(MODULE_ID_SEPARATOR)[0];
 
-			// Match the base verbatim, or its auto-generated "<base>_<hash>" form — this allows
-			// api.remove("removableInternal") to remove "removableInternal_abc123". Walk from the end to
-			// prefer the most recently registered module when multiple match, as stale entries from prior
-			// add/remove cycles may linger due to async lazy materialization.
-			for (let i = registeredModules.length - 1; i >= 0; i--) {
-				const candidate = registeredModules[i];
-				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
-					matchingModule = candidate;
-					break;
+			// The exact moduleID always wins. Without one, match its auto-generated "<base>_<hash>" form — this allows
+			// api.remove("removableInternal") to remove "removableInternal_abc123" — walking from the end to prefer the
+			// most recently registered module when several match, as stale entries from prior add/remove cycles may
+			// linger due to async lazy materialization. A module whose id merely starts with "<base>_" is never taken
+			// for a module that has the exact id (#625).
+			if (registeredModules.includes(candidateModuleID)) {
+				matchingModule = candidateModuleID;
+			} else {
+				for (let i = registeredModules.length - 1; i >= 0; i--) {
+					const candidate = registeredModules[i];
+					if (candidate.startsWith(`${candidateModuleID}_`)) {
+						matchingModule = candidate;
+						break;
+					}
 				}
 			}
 
