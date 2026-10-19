@@ -35,6 +35,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Owner Grant](#owner-grant)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
+- [Write Rules](#write-rules)
 - [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
@@ -713,6 +714,36 @@ See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating an
 
 ---
 
+## Write Rules
+
+A module's writes into the api follow the ownership rule (a module mounted at `P` writes only under `P.*`). Write rules decide such a write first: a target with the `pattern:write` **suffix** matches a module assigning, defining, or deleting a member at that path, or changing the prototype or extensibility of the node there (`Object.setPrototypeOf`, `Object.preventExtensions`, `Object.freeze`, `Object.seal`). A denying write rule refuses the write with `PERMISSION_DENIED`, whatever the module owns. An allowing one lifts a denying rule it outranks, and the write then meets the ownership rule as usual. With no matching write rule, ownership alone decides. Host code (no module executing) is never subject to write rules.
+
+Write rules are evaluated **whether or not a `permissions` block is configured or enabled**, so the built-in ones protect every instance:
+
+| Built-in rule | What it keeps modules from changing |
+| --- | --- |
+| `slothlet:write`, `slothlet.**:write` | The framework namespace and everything under it, at any depth (`self.slothlet.lockCaller`, `self.slothlet.lockCaller.caller`, `self.slothlet.permissions.addRule`, …) |
+| `shutdown:write`, `shutdown.**:write`, `destroy:write`, `destroy.**:write` | The framework's root functions |
+| `<key>:write`, `**.<key>:write` for each framework-internal key | The framework's own keys on any api node: wrapper state (`____slothletInternal`, `____slothlet`, `___setImpl`, `___getState`, `___resetLazy`, `___invalidate`, `_impl`, `_materialize`), what a node reports about itself (`__state`, `__invalid`, `__mode`, `__apiPath`, `__slothletPath`, `__isCallable`, `__materializeOnCreate`, `__displayName`, `__type`, `__metadata`, `__filePath`, `__sourceFolder`, `__moduleID`, `__materialized`, `__inFlight`, `__impl`), and impl metadata (`__childFilePaths`, `__childFilePathsPreMaterialize`) |
+
+Symbol keys are no api path and are not matched by write rules. A write a node already absorbs silently (assigning or deleting most of its internal keys reports success and changes nothing) stays absorbed.
+
+The host lifts a built-in write rule the way it lifts any built-in rule, with a rule of equal or higher specificity (a `permissions` block is then needed to declare it):
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		rules: [
+			// The base module (which owns the whole tree) may set one extra member on the namespace.
+			{ caller: "**", target: "slothlet.featureFlags:write", effect: "allow" }
+		]
+	}
+});
+```
+
+---
+
 ## Event Rules
 
 The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order), and control what each subscriber receives:
@@ -1040,7 +1071,7 @@ This holds true even when both instances use `runtime: "live"` (synchronous stac
 
 | Code                      | When                                                                                                                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context.                                                                                        |
+| `PERMISSION_DENIED`       | A call or a module write was blocked by a permission rule. Includes `caller` and `target` in the error context; a write's target carries the `:write` suffix.                       |
 | `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                                                                              |
 | `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                                                                        |
 | `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating` / `principal.register` / `principal.unregister`) was called after `control.seal()`. |

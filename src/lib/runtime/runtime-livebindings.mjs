@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:55-07:00 (1792336615)
+ *	@Last modified time: 2026-10-18T16:34:18-07:00 (1792366458)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,12 @@
 
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { runtime_selfFrameworkView, runtime_selfView, runtime_unwrapSelfView } from "#handlers/unified-wrapper";
+import {
+	runtime_assertFrameworkRootChange,
+	runtime_selfFrameworkView,
+	runtime_selfView,
+	runtime_unwrapSelfView
+} from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT } from "#handlers/trusted-root";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
@@ -170,6 +175,18 @@ export const self = new Proxy(
 			}
 			return undefined;
 		},
+		deleteProperty(target, prop) {
+			// A module never deletes the framework's namespace or root functions (#625).
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
+			return Reflect.deleteProperty(target, prop);
+		},
+		defineProperty(target, prop, descriptor) {
+			// A module never redefines the framework's namespace or root functions (#625).
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
+			return Reflect.defineProperty(target, prop, descriptor);
+		},
 		set(_, prop, value) {
 			// A view `self` handed out stands for its node: the node is what is stored (#625).
 			value = runtime_unwrapSelfView(value);
@@ -196,6 +213,8 @@ export const self = new Proxy(
 				ctx.self[prop] = value;
 				return true;
 			}
+			// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
+			if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
 			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
 			// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
 			// object from `slothlet.boundApi` that reads through to the live tree but

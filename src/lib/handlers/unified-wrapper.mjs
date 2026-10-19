@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:53:14-07:00 (1792360394)
+ *	@Last modified time: 2026-10-18T16:34:15-07:00 (1792366455)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,6 +100,31 @@ export function runtime_frameworkWrite(node, write) {
 const SELF_VIEWS = new WeakMap();
 /** @type {WeakMap<object, object>} */
 const SELF_VIEW_NODES = new WeakMap();
+/**
+ * The node and key a view just defined a member on ({@link runtime_selfView}), for the one read of the node's
+ * descriptor the engine makes right after: a proxy checks its trap's answer against its target, and the view's
+ * target is the node. That read answers the engine, never a reader, so the node does not gate the value it
+ * holds fixed (a frozen member) on it. Set only as the view's definition returns, and taken by the next read
+ * of a node's descriptor, which is that check.
+ * @type {{wrapper: object, prop: string|symbol}|null}
+ * @private
+ */
+let PENDING_INVARIANT_READ = null;
+
+/**
+ * Take the pending engine read {@link PENDING_INVARIANT_READ} when it is this one.
+ *
+ * @param {object} wrapper - The node's wrapper whose descriptor is read.
+ * @param {string|symbol} prop - The key read.
+ * @returns {boolean} Whether this read is the engine's check after a view's definition.
+ * @private
+ */
+function runtime_takeInvariantRead(wrapper, prop) {
+	const pending = PENDING_INVARIANT_READ;
+	PENDING_INVARIANT_READ = null;
+	return pending !== null && pending.wrapper === wrapper && pending.prop === prop;
+}
+
 /**
  * The reader each view {@link runtime_selfView} built belongs to.
  * @type {WeakMap<object, object>}
@@ -324,7 +349,8 @@ export function runtime_selfView(node, reader) {
 			if (owner) {
 				const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
 				if (typeof prop === "string") parts.push(prop);
-				if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return;
+				// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
+				if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 			}
 		}
 		throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
@@ -383,7 +409,11 @@ export function runtime_selfView(node, reader) {
 		defineProperty(target, prop, descriptor) {
 			refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
-			return Reflect.defineProperty(target, prop, descriptor);
+			const defined = Reflect.defineProperty(target, prop, descriptor);
+			// The engine now reads the node's descriptor to check the definition (freezing a node through its view
+			// fixes each member): that read is no reader's, so the node answers it ungated.
+			if (defined && inner && target === inner.____slothletInternal.proxy) PENDING_INVARIANT_READ = { wrapper: inner, prop };
+			return defined;
 		},
 		deleteProperty(target, prop) {
 			refuseWithoutStanding(prop);
@@ -415,6 +445,12 @@ export function runtime_selfView(node, reader) {
  * @private
  */
 const FRAMEWORK_MEMBERS = new WeakMap();
+/**
+ * The name each of the framework's root members is served under on the api (`slothlet`, `shutdown`, `destroy`).
+ * @type {WeakMap<object, string>}
+ * @private
+ */
+const FRAMEWORK_MEMBER_NAMES = new WeakMap();
 
 /**
  * The views {@link runtime_selfFrameworkView} built, per member and per reader, and the member behind each.
@@ -431,14 +467,18 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  *
  * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
  * @param {object} slothlet - Instance it belongs to.
+ * @param {string} name - The name it is served under on the api.
  * @returns {object|Function} `member`.
  * @internal
  *
  * @example
- * runtime_registerFrameworkMember(slothletNamespace, this.slothlet);
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-export function runtime_registerFrameworkMember(member, slothlet) {
-	if (member !== null && (typeof member === "object" || typeof member === "function")) FRAMEWORK_MEMBERS.set(member, slothlet);
+export function runtime_registerFrameworkMember(member, slothlet, name) {
+	if (member !== null && (typeof member === "object" || typeof member === "function")) {
+		FRAMEWORK_MEMBERS.set(member, slothlet);
+		FRAMEWORK_MEMBER_NAMES.set(member, name);
+	}
 	return member;
 }
 
@@ -453,6 +493,12 @@ export function runtime_registerFrameworkMember(member, slothlet) {
  * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
  * behaves as the member itself. The host is handed the member itself.
  *
+ * A module never changes them (#625): they are shared by every module and the host, so an assignment,
+ * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
+ * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
+ * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is no api path
+ * and is left to plain JS, as it is for the api's own nodes.
+ *
  * @param {*} member - A root member read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
  * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
@@ -466,7 +512,30 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
 	if (!slothlet || member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (reader === undefined) reader = runtime_selfReader(slothlet);
 	if (reader === HOST_READER) return member;
-	return runtime_frameworkViewOf(member, slothlet, reader);
+	return runtime_frameworkViewOf(member, slothlet, reader, FRAMEWORK_MEMBER_NAMES.get(member) ?? "slothlet");
+}
+
+/**
+ * Refuse a module replacing, defining, or deleting one of the framework's root members (`self.slothlet`,
+ * `self.shutdown`, `self.destroy`) through the runtime `self` (#625). Host code is left as it was.
+ *
+ * @param {object} slothlet - Instance the change is made on.
+ * @param {string|symbol} prop - Member of `self` changed.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
+ *   rules protect, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ * @internal
+ *
+ * @example
+ * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
+ */
+export function runtime_assertFrameworkRootChange(slothlet, prop) {
+	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
+	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.unresolved) {
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
+	}
+	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite([prop], identity.currentWrapper);
 }
 
 /**
@@ -475,10 +544,11 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
  * @param {*} member - The member.
  * @param {object} slothlet - Instance it belongs to.
  * @param {object} reader - The reader the view belongs to.
+ * @param {string} path - The member's api path (`slothlet.hook`), for the refusal of a change to it.
  * @returns {*} The view, or `member` when it is no object.
  * @private
  */
-function runtime_frameworkViewOf(member, slothlet, reader) {
+function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (FRAMEWORK_VIEW_TARGETS.has(member)) return member;
 	let byReader = FRAMEWORK_VIEWS.get(member);
@@ -501,20 +571,41 @@ function runtime_frameworkViewOf(member, slothlet, reader) {
 	const unwrap = (value) =>
 		value !== null && (typeof value === "object" || typeof value === "function") ? (FRAMEWORK_VIEW_TARGETS.get(value) ?? value) : value;
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
+	const childPath = (prop) => (typeof prop === "string" ? `${path}.${prop}` : path);
+	// A module never changes the framework's namespace (#625). The writer is the module executing now, or,
+	// for a change made with no standing of its own, the reader; a change the host makes inside a `run()` /
+	// `scope()` it opened goes through, as it would on the member itself.
+	const refuseChange = (prop) => {
+		const parts = (prop === null ? path : childPath(prop)).split(".");
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		if (identity?.unresolved) {
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		}
+		let writer = identity?.currentWrapper ?? null;
+		if (writer === null) {
+			if (runtime_selfWriteHasStanding(slothlet)) return;
+			if (reader === UNATTRIBUTED_READER) {
+				throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			writer = reader;
+		}
+		// The built-in write rules refuse it (`slothlet.**:write`), unless a host rule lifted them.
+		slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+	};
 	const view = new Proxy(member, {
 		get(target, prop) {
 			return asReader(() => {
 				const value = Reflect.get(target, prop);
 				if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 				if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
-				return runtime_frameworkViewOf(value, slothlet, reader);
+				return runtime_frameworkViewOf(value, slothlet, reader, childPath(prop));
 			});
 		},
 		getOwnPropertyDescriptor(target, prop) {
 			return asReader(() => {
 				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 				if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
-				return { ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader) };
+				return { ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
 			});
 		},
 		apply(target, thisArg, args) {
@@ -524,18 +615,23 @@ function runtime_frameworkViewOf(member, slothlet, reader) {
 			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
 		},
 		set(target, prop, value) {
+			if (typeof prop !== "symbol") refuseChange(prop);
 			return asReader(() => Reflect.set(target, prop, unwrap(value)));
 		},
 		defineProperty(target, prop, descriptor) {
+			if (typeof prop !== "symbol") refuseChange(prop);
 			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
 		},
 		deleteProperty(target, prop) {
+			if (typeof prop !== "symbol") refuseChange(prop);
 			return asReader(() => Reflect.deleteProperty(target, prop));
 		},
 		setPrototypeOf(target, proto) {
+			refuseChange(null);
 			return asReader(() => Reflect.setPrototypeOf(target, proto));
 		},
 		preventExtensions(target) {
+			refuseChange(null);
 			return asReader(() => Reflect.preventExtensions(target));
 		}
 	});
@@ -723,6 +819,10 @@ const CALLER_LOCKED = new WeakSet();
  */
 export function runtime_markCallerLocked(fn) {
 	CALLER_LOCKED.add(fn);
+	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
+	if (hasOwn(fn, "_slothletOriginal")) {
+		Object.defineProperty(fn, "_slothletOriginal", { value: fn._slothletOriginal, writable: false, enumerable: true, configurable: false });
+	}
 	return fn;
 }
 
@@ -7409,6 +7509,8 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Provides descriptors for target (wrapper), impl properties, filtering internals.
 		 */
 		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
+			// The engine's check of a definition a view just made reads the node's fixed members ungated (#625).
+			const engineCheck = runtime_takeInvariantRead(wrapper, prop);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -7459,7 +7561,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
 					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
-				return runtime_fixedDescriptor(wrapper, prop, sealed);
+				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed);
 			}
 
 			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
@@ -7478,7 +7580,7 @@ export class UnifiedWrapper extends ComponentBase {
 				const readThroughNode = (value) =>
 					value !== null && (typeof value === "object" || typeof value === "function") ? wrapper.____slothletInternal.proxy[prop] : value;
 				if (fixed && !fixed.configurable) {
-					if (!fixed.writable) return runtime_fixedDescriptor(wrapper, prop, fixed);
+					if (!fixed.writable) return engineCheck ? fixed : runtime_fixedDescriptor(wrapper, prop, fixed);
 					return { ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
 				}
 				if (withheld) return undefined;
@@ -7701,8 +7803,8 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 			// A module writes only under the subtree it owns, below the top level of `self` as at it (#625). A
-			// framework-reserved key is the framework's own state, never a member at an api path.
-			if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
+			// framework-reserved key is the framework's own state: the built-in write rules keep modules off it.
+			runtime_assertOwnedWrite(wrapper, prop);
 
 			// An array-backed wrapper fronts its array: a write (an index, `length`, or what `push`/`splice`
 			// do through it) lands on the array, exactly as it would on the array (#602). That is the
@@ -8009,8 +8111,9 @@ export class UnifiedWrapper extends ComponentBase {
 			if (internalKeys.has(prop)) {
 				return true; // silently ignore - do not expose the key's existence via TypeError
 			}
-			// Removing a member is a write to its path: a module removes only under the subtree it owns (#625).
-			if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
+			// Removing a member is a write to its path: a module removes only under the subtree it owns (#625),
+			// and never a framework-reserved key (the built-in write rules).
+			runtime_assertOwnedWrite(wrapper, prop);
 
 			// An array-backed wrapper's target is the array it was built over: a key fixed there (`length`, a
 			// sealed array's index) stays, as it would on that array, and the current array is left as is. So
@@ -8312,8 +8415,9 @@ export class UnifiedWrapper extends ComponentBase {
 						validationError: true
 					});
 				}
-				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625).
-				if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
+				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625),
+				// and never a framework-reserved key (the built-in write rules).
+				runtime_assertOwnedWrite(wrapper, prop);
 				// A view `self` handed out stands for its node: the node is what is defined (#625).
 				if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.

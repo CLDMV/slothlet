@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-18T16:34:14-07:00 (1792366454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -57,6 +58,14 @@ let ruleRegistrationSeq = 0;
  * @type {Set<string>}
  */
 const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "around", "hook"]);
+
+/**
+ * Suffix that makes a rule target a write target (#625): `pattern:write` gates a module assigning, defining,
+ * or deleting a member at a matching api path, or changing the prototype or extensibility of the node there.
+ * @type {string}
+ * @private
+ */
+const WRITE_TARGET_SUFFIX = ":write";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
@@ -479,6 +488,21 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.event.once", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.event.off", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.event.emit", effect: "allow" }, "__builtin__");
+
+		// Built-in write rules (#625), evaluated whether or not permissions are configured or enabled. The
+		// framework's namespace and root functions are shared by every module and the host, so no module
+		// assigns, defines, or deletes anything at or under them, or changes the prototype or extensibility
+		// of what is there; nor does a module touch the framework's own keys on any api node — the wrapper's
+		// state, what a node reports about itself, and impl metadata. A host rule lifts any of these as it
+		// lifts any built-in rule (equal or higher specificity); a lifted write still meets the ownership rule.
+		for (const root of FRAMEWORK_ROOTS) {
+			this.addRule({ caller: "**", target: `${root}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+			this.addRule({ caller: "**", target: `${root}.**${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+		}
+		for (const key of [...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]) {
+			this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+			this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+		}
 	}
 
 	/**
@@ -504,6 +528,8 @@ export class PermissionManager extends ComponentBase {
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
 		const hookTarget = this.#parseHookTarget(rule.target);
+		// A write target (`pattern:write`, #625) gates module writes rather than calls; null for any other rule.
+		const writePathPattern = this.#parseWriteTarget(rule.target);
 		// Precedence layer (#407): explicit `layer` wins; otherwise "__builtin__" → builtin, else instance.
 		// Used only as the equal-specificity tiebreak (see RULE_LAYER_RANK).
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
@@ -518,6 +544,7 @@ export class PermissionManager extends ComponentBase {
 			requires: rule.requires == null ? null : Object.freeze([...rule.requires]),
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
+			writePathPattern,
 			ownerModuleID: ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
@@ -1447,6 +1474,51 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
+	 * or deleting a member at `targetPath`, or changing the prototype or extensibility of the node there.
+	 *
+	 * Write rules are evaluated whether or not permissions are configured or enabled, so the built-in ones —
+	 * the framework's namespace and root functions, and the framework's own keys on api nodes — protect every
+	 * instance. Most-specific-wins, then the higher layer, then the last registered, as for call rules. With
+	 * no matching write rule the rules say nothing, and the ownership rule alone decides the write. A denial
+	 * is audited like any other.
+	 *
+	 * @param {string} callerPath - Api path of the module writing.
+	 * @param {string} targetPath - Api path written.
+	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+	 * @returns {boolean|null} False when a write rule denies the write, true when one allows it, null when none matches.
+	 * @example
+	 * pm.enforceWrite("payments.charge", "slothlet.lockCaller"); // false — the built-in rule denies it
+	 */
+	enforceWrite(callerPath, targetPath, runtimeContext = null) {
+		const matches = [];
+		for (const entry of this.#rules.values()) {
+			if (entry.writePathPattern == null) continue;
+			if (this.#getCompiledPattern(entry.caller)(callerPath) && this.#getCompiledPattern(entry.writePathPattern)(targetPath)) matches.push(entry);
+		}
+		// A write has no call arguments — function conditions receive null callMeta.
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
+		if (conditioned.length === 0) return null;
+		const spec = (entry) => this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath);
+		conditioned.sort((a, b) => {
+			const specA = spec(a);
+			const specB = spec(b);
+			if (specA !== specB) return specB - specA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+		const winner = conditioned[0];
+		if (winner.effect === "allow") return true;
+		this.#emitAuditEvent("permission:denied", {
+			caller: callerPath,
+			target: `${targetPath}${WRITE_TARGET_SUFFIX}`,
+			rule: this.#serializeRule(winner),
+			conditionMatched: winner.condition != null
+		});
+		return false;
+	}
+
+	/**
 	 * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
 	 * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate
 	 * evaluates, for a supplied caller identity, without invoking anything.
@@ -2199,8 +2271,9 @@ export class PermissionManager extends ComponentBase {
 		const matches = [];
 
 		for (const entry of this.#rules.values()) {
-			// Hook-target rules (pattern:type) gate interception, never plain calls — skip them here.
-			if (entry.hookType != null) continue;
+			// Hook-target rules (pattern:type) gate interception, and write-target rules (pattern:write) module
+			// writes, never plain calls — skip them here.
+			if (entry.hookType != null || entry.writePathPattern != null) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 
@@ -2369,6 +2442,19 @@ export class PermissionManager extends ComponentBase {
 		const pathPattern = target.substring(0, lastColon);
 		if (!pathPattern) return null;
 		return { pathPattern, hookType: type };
+	}
+
+	/**
+	 * Parse a permission target into its path pattern when it is a write target (`pattern:write`, #625).
+	 *
+	 * @param {string} target - Rule target string.
+	 * @returns {string|null} The path pattern, or null for any other target.
+	 * @private
+	 */
+	#parseWriteTarget(target) {
+		if (!target.endsWith(WRITE_TARGET_SUFFIX)) return null;
+		const pathPattern = target.slice(0, -WRITE_TARGET_SUFFIX.length);
+		return pathPattern ? pathPattern : null;
 	}
 
 	/**

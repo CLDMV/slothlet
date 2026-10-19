@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:53:03-07:00 (1792360383)
+ *	@Last modified time: 2026-10-18T16:34:13-07:00 (1792366453)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -389,7 +389,7 @@ export class ApiBuilder extends ComponentBase {
 			destroy: destroyWithApi
 		};
 		// Module code reads these through `self` as views that run as the module (#625).
-		for (const member of [shutdownFn, slothletNamespace, destroyWithApi]) runtime_registerFrameworkMember(member, this.slothlet);
+		for (const [name, member] of Object.entries(this.slothlet._ownBuiltins)) runtime_registerFrameworkMember(member, this.slothlet, name);
 
 		return userApi;
 	}

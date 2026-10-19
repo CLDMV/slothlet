@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:53:06-07:00 (1792360386)
+ *	@Last modified time: 2026-10-18T16:34:13-07:00 (1792366453)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,6 +88,13 @@ import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
 
 const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Root members of the api the framework itself serves: its namespace and its root functions (#625).
+ * @type {Set<string>}
+ * @private
+ */
+const FRAMEWORK_ROOT_SEGMENTS = new Set(["slothlet", "shutdown", "destroy"]);
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -536,6 +543,10 @@ export class ApiManager extends ComponentBase {
 		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
 		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
 		// built-in namespace and brick the instance.
+		// A module replacing the framework's own namespace or root functions meets the write rules (#625), before
+		// the reserved-name check the host meets.
+		const rootSegment = coercedPath.split(".")[0];
+		if (callerWrapper && FRAMEWORK_ROOT_SEGMENTS.has(rootSegment)) this.assertOwnedWrite(coercedPath.split("."), callerWrapper);
 		const { parts } = this.normalizeApiPath(apiPath);
 		// normalizeApiPath returns parts: [] for empty/null input — root-level writes
 		// don't make sense here (no key to set), so reject explicitly. The runtime
@@ -595,13 +606,27 @@ export class ApiManager extends ComponentBase {
 	 * module, and code outside any module (no `callerWrapper`) own the whole tree. A module no longer
 	 * mounted owns nothing.
 	 *
+	 * The write rules of the permission system answer first ({@link PermissionManager#enforceWrite}), for
+	 * module code only: a denying rule refuses the write whatever the module owns. The built-in ones keep
+	 * every module off the framework's namespace and root functions and off the framework's own keys on api
+	 * nodes; a host rule lifting one leaves the write to the ownership rule.
+	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
 	 * @returns {void}
-	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
+	 *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper) {
+		if (callerWrapper) {
+			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
+			const targetPath = parts.join(".");
+			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+			if (this.slothlet.handlers.permissionManager?.enforceWrite(callerPath, targetPath, runtimeContext) === false) {
+				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: `${targetPath}:write` });
+			}
+		}
 		if (this.ownsPath(parts, callerWrapper)) return;
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
 		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
