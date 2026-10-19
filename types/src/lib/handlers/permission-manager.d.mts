@@ -333,6 +333,8 @@ export class PermissionManager extends ComponentBase {
      * rules keep their usual owner and layer. Code the live runtime cannot attribute is refused.
      *
      * @param {object} rule - The rule (`{ target, … }`).
+     * @param {object|null} [writer] - The module code registering it, when an entry point captured it before an await
+     *   lost it; read now when omitted. Null is host code.
      * @returns {{ownerModuleID: string|null, layer: string|null}} Owner and layer to register the rule with; both null
      *   for host code.
      * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
@@ -340,7 +342,7 @@ export class PermissionManager extends ComponentBase {
      * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
      * pm.addRule(rule, ownerModuleID, null, layer);
      */
-    placeModuleRule(rule: object): {
+    placeModuleRule(rule: object, writer?: object | null): {
         ownerModuleID: string | null;
         layer: string | null;
     };

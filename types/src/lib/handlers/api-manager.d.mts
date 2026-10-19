@@ -195,7 +195,7 @@ export class ApiManager extends ComponentBase {
      *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
-    public assertOwnedWrite(parts: string[], callerWrapper: object | null): void;
+    public assertOwnedWrite(parts: string[], callerWrapper: object | null, ignoreModuleID?: null): void;
     /**
      * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
      * Used where a write is held to a module that read a node rather than the code running now.
@@ -217,13 +217,15 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string[]} parts - Segments of the api path.
      * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
+     * @param {string|null} [ignoreModuleID=null] - A module whose ownership entries do not count: the module an add in
+     *   flight is mounting, which registered its content before the add's writes are checked.
      * @returns {boolean} Whether the caller owns the path.
      * @public
      *
      * @example
      * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
      */
-    public ownsPath(parts: string[], callerWrapper: object | null): boolean;
+    public ownsPath(parts: string[], callerWrapper: object | null, ignoreModuleID?: string | null): boolean;
     /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
@@ -405,6 +407,33 @@ export class ApiManager extends ComponentBase {
      * apiManager.mountKey("kid", "guest.kid");
      */
     public mountKey(moduleID: string, mount: string): string;
+    /**
+     * Refuse module code a write at an api path made through one of the framework's setters (metadata, versioning)
+     * (#625). Host code is not checked.
+     *
+     * @param {string|string[]} apiPath - The path written.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleWrite("victim.v"); // throws inside another module's call
+     */
+    public assertModuleWrite(apiPath: string | string[]): void;
+    /**
+     * Refuse module code reloading what it may not write (#625): a reload rebuilds every path it reaches, as a removal
+     * reaches them ({@link ApiManager#assertModuleRemoval}). Host code is not checked.
+     *
+     * @param {string|null} moduleID - The module reloaded by its moduleID.
+     * @param {string|null} apiPath - The path reloaded.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
+     */
+    public assertModuleReload(moduleID: string | null, apiPath: string | null): void;
     /**
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
