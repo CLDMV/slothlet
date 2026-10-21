@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-12T16:02:57-07:00 (1791846177)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,8 +21,8 @@
  * to event listeners. This module patches EventEmitter.prototype methods to wrap
  * all listeners with AsyncResource, preserving the context where they were registered.
  *
- * Additionally tracks EventEmitters created within slothlet API context so they can
- * be cleaned up on shutdown.
+ * Additionally tracks, weakly, the EventEmitters that get a listener inside a slothlet API context,
+ * so the wrappers on them can be released at the last shutdown.
  *
  * @module @cldmv/slothlet/helpers/eventemitter-context
  * @internal
@@ -32,6 +32,7 @@
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -51,11 +52,27 @@ export function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
 /**
- * Storage for original EventEmitter methods
- * @type {Map<string, Function>}
+ * The patched EventEmitter methods: each patch, and its layer (which records the method it replaced).
+ * @type {Map<string, {layer: {active: boolean, below: Function}, patch: Function}>}
  * @private
  */
 const originalMethods = new Map();
+
+/**
+ * Install a patch over one `EventEmitter.prototype` method, as a layer shared with any other copy of
+ * slothlet in the realm (see boundary-patch-layers).
+ *
+ * @param {string} name - Method name.
+ * @param {{active: boolean, below: Function}} layer - The patch's layer, from `openLayer`.
+ * @param {Function} patch - The patch.
+ * @returns {void}
+ * @private
+ */
+function runtime_installPatch(name, layer, patch) {
+	markLayer(patch, layer);
+	EventEmitter.prototype[name] = patch;
+	originalMethods.set(name, { layer, patch });
+}
 
 /**
  * Storage for wrapped listeners per emitter.
@@ -82,8 +99,8 @@ const originalMethods = new Map();
  * reachable from it — headers, buffers, sockets) for the life of the process, a steady RSS leak
  * (~11.5 KB/request in a Fastify service). A `WeakMap` lets an emitter with no other referrers be
  * collected, listeners and all, exactly like unpatched Node. Every access is a single-emitter
- * `get`/`set`/`delete` (never an enumeration), so weak keys cost nothing here; the framework-owned
- * long-lived emitters that DO need a bulk shutdown sweep are tracked separately in `trackedEmitters`.
+ * `get`/`set`/`delete` (never an enumeration), so weak keys cost nothing here; the
+ * emitters the shutdown sweep visits are tracked separately (weakly too, #611) in `trackedEmitters`.
  *
  * @type {WeakMap<EventEmitter, Map<string, Map<Function, Function[]>>>}
  * @private
@@ -91,12 +108,41 @@ const originalMethods = new Map();
 const wrappedListeners = new WeakMap();
 
 /**
- * Set of EventEmitters created within slothlet API context
- * These will be cleaned up on shutdown
- * @type {Set<EventEmitter>}
+ * The EventEmitters that got a listener registered inside an api context, so the last shutdown can
+ * release the wrappers on them (#605). Held WEAKLY (#611): the emitters are the application's — sockets,
+ * undici `Fetch` objects, streams, clients — and tracking them must not keep them alive. A strong `Set`
+ * pinned every emitter a module ever touched, with everything reachable from it, for the life of the
+ * process (20-45 KB per `fetch()` from a module; a long-running server ran out of heap).
+ *
+ * The shutdown sweep needs to enumerate them, which a `WeakSet` cannot do, so this is a `Set` of
+ * `WeakRef`s; `trackedEmitterRefs` maps an emitter to its ref so it is added once, and
+ * `trackedEmitterFinalizer` drops the ref once its emitter has been collected.
+ * @type {Set<WeakRef<EventEmitter>>}
  * @private
  */
 const trackedEmitters = new Set();
+
+/**
+ * Each tracked emitter's `WeakRef` in `trackedEmitters`. Keyed weakly, so it retains nothing either.
+ * @type {WeakMap<EventEmitter, WeakRef<EventEmitter>>}
+ * @private
+ */
+const trackedEmitterRefs = new WeakMap();
+
+/**
+ * Drops a collected emitter's `WeakRef` from `trackedEmitters`. The ref is also the unregister token.
+ * @type {FinalizationRegistry<WeakRef<EventEmitter>>}
+ * @private
+ */
+const trackedEmitterFinalizer = new FinalizationRegistry((ref) => trackedEmitters.delete(ref));
+
+/**
+ * Advanced when the last instance shuts down (#605). A wrapper made in an earlier epoch has no instance
+ * left to restore, so it calls the listener it wraps directly, as plain code.
+ * @type {number}
+ * @private
+ */
+let releaseEpoch = 0;
 
 /**
  * Whether EventEmitter patching is currently enabled
@@ -122,15 +168,18 @@ function runtime_wrapEventListener(listener) {
 	// carries identity instead. A Node run cannot take it — the import is a live binding, not a value
 	// this suite can swap — so it is exercised only where the platform lacks the module.
 	/* v8 ignore next */
-	const resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
+	let resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
 
 	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
 	// not serve. Done here, at registration, because that is when the registering module is the
 	// executing one; by the time the event fires it is long gone.
-	const bound = pinToCurrentCaller(listener);
+	let bound = pinToCurrentCaller(listener);
 
+	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
 	const runtime_wrappedListener = function (...args) {
+		// Released at the last shutdown (#605): no instance is left to run it in, so it runs as registered.
+		if (epoch !== releaseEpoch) return listener.apply(this, args);
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
 		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
@@ -143,6 +192,13 @@ function runtime_wrapEventListener(listener) {
 	// Attach metadata for cleanup and identification
 	runtime_wrappedListener._slothletOriginal = listener;
 	runtime_wrappedListener._slothletResource = resource;
+	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
+	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
+	runtime_wrappedListener._slothletRelease = () => {
+		resource = null;
+		bound = null;
+		runtime_wrappedListener._slothletResource = null;
+	};
 
 	return runtime_wrappedListener;
 }
@@ -348,8 +404,12 @@ function runtime_shouldWrapListener(listener) {
  */
 function runtime_maybeTrackEmitter(emitter) {
 	// Only track if context checker is registered and returns true
-	if (isInApiContext && isInApiContext()) {
-		trackedEmitters.add(emitter);
+	if (isInApiContext && isInApiContext() && !trackedEmitterRefs.has(emitter)) {
+		// Weakly (#611): the emitter stays collectable once the code that owns it lets go.
+		const ref = new WeakRef(emitter);
+		trackedEmitterRefs.set(emitter, ref);
+		trackedEmitters.add(ref);
+		trackedEmitterFinalizer.register(emitter, ref, ref);
 	}
 }
 
@@ -358,10 +418,13 @@ function runtime_maybeTrackEmitter(emitter) {
  * @private
  */
 function runtime_patchOn() {
-	const original = EventEmitter.prototype.on;
-	originalMethods.set("on", original);
+	const layer = openLayer(EventEmitter.prototype.on);
+	const original = layer.below;
 
-	EventEmitter.prototype.on = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -373,6 +436,7 @@ function runtime_patchOn() {
 		runtime_trackListener(this, event, listener, wrapped);
 		return original.call(this, event, wrapped);
 	};
+	runtime_installPatch("on", layer, patch);
 
 	// Alias: addListener = on
 	EventEmitter.prototype.addListener = EventEmitter.prototype.on;
@@ -418,10 +482,13 @@ function runtime_patchOn() {
  * @private
  */
 function runtime_patchOnce() {
-	const original = EventEmitter.prototype.once;
-	originalMethods.set("once", original);
+	const layer = openLayer(EventEmitter.prototype.once);
+	const original = layer.below;
 
-	EventEmitter.prototype.once = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -436,8 +503,12 @@ function runtime_patchOnce() {
 		// native once does, so subclass overrides run), then drop our tracking
 		// entry, then call the user's wrapped fn. Identity-based untrack
 		// matches mixed on+once.
+		// One-shot even when called directly (a wrapper read back with rawListeners()), as Node's is.
+		let fired = false;
 		const runtime_onceWrapper = function (...args) {
+			if (fired) return undefined;
 			self.removeListener(event, runtime_onceWrapper);
+			fired = true;
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
@@ -445,6 +516,10 @@ function runtime_patchOnce() {
 		// Metadata for slothlet tracking + Node's introspection contract.
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper._slothletRelease = () => {
+			wrapped._slothletRelease();
+			runtime_onceWrapper._slothletResource = null;
+		};
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -452,6 +527,7 @@ function runtime_patchOnce() {
 		// the `_slothletOriginal` marker stops the patched `on` from re-wrapping.
 		return this.on(event, runtime_onceWrapper);
 	};
+	runtime_installPatch("once", layer, patch);
 }
 
 /**
@@ -459,10 +535,13 @@ function runtime_patchOnce() {
  * @private
  */
 function runtime_patchPrependListener() {
-	const original = EventEmitter.prototype.prependListener;
-	originalMethods.set("prependListener", original);
+	const layer = openLayer(EventEmitter.prototype.prependListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.prependListener = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -474,6 +553,7 @@ function runtime_patchPrependListener() {
 		runtime_trackListener(this, event, listener, wrapped);
 		return original.call(this, event, wrapped);
 	};
+	runtime_installPatch("prependListener", layer, patch);
 }
 
 /**
@@ -489,10 +569,13 @@ function runtime_patchPrependListener() {
  * @private
  */
 function runtime_patchPrependOnceListener() {
-	const original = EventEmitter.prototype.prependOnceListener;
-	originalMethods.set("prependOnceListener", original);
+	const layer = openLayer(EventEmitter.prototype.prependOnceListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.prependOnceListener = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -503,20 +586,29 @@ function runtime_patchPrependOnceListener() {
 		const wrapped = runtime_wrapEventListener(listener);
 		const self = this;
 
+		// One-shot even when called directly (a wrapper read back with rawListeners()), as Node's is.
+		let fired = false;
 		const runtime_onceWrapper = function (...args) {
+			if (fired) return undefined;
 			self.removeListener(event, runtime_onceWrapper);
+			fired = true;
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
 
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper._slothletRelease = () => {
+			wrapped._slothletRelease();
+			runtime_onceWrapper._slothletResource = null;
+		};
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
 		// Attach through the emitter's own `prependListener`, as native does (#503).
 		return this.prependListener(event, runtime_onceWrapper);
 	};
+	runtime_installPatch("prependOnceListener", layer, patch);
 }
 
 /**
@@ -524,10 +616,12 @@ function runtime_patchPrependOnceListener() {
  * @private
  */
 function runtime_patchRemoveListener() {
-	const original = EventEmitter.prototype.removeListener;
-	originalMethods.set("removeListener", original);
+	const layer = openLayer(EventEmitter.prototype.removeListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.removeListener = function (event, listener) {
+	// Not gated on the layer: a listener this copy wrapped while active must still resolve back to its
+	// wrapper after the copy disabled, or it could never be removed.
+	const patch = function (event, listener) {
 		// Look up the wrapped listener
 		const wrapped = runtime_getWrappedListener(this, event, listener);
 		if (wrapped) {
@@ -540,6 +634,7 @@ function runtime_patchRemoveListener() {
 		// Not wrapped, remove as-is
 		return original.call(this, event, listener);
 	};
+	runtime_installPatch("removeListener", layer, patch);
 
 	// off is an alias for removeListener
 	EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
@@ -550,10 +645,11 @@ function runtime_patchRemoveListener() {
  * @private
  */
 function runtime_patchRemoveAllListeners() {
-	const original = EventEmitter.prototype.removeAllListeners;
-	originalMethods.set("removeAllListeners", original);
+	const layer = openLayer(EventEmitter.prototype.removeAllListeners);
+	const original = layer.below;
 
-	EventEmitter.prototype.removeAllListeners = function (event) {
+	// Not gated on the layer either: dropping the tracking of what this copy wrapped stays correct.
+	const patch = function (event) {
 		// Node's original discriminates the remove-everything path by `arguments.length === 0`, not by
 		// the argument's value: an explicit `undefined` removes listeners for the event NAMED undefined
 		// — i.e. nothing. Both the tracking cleanup and the forwarded call key on the same test, so what
@@ -596,6 +692,7 @@ function runtime_patchRemoveAllListeners() {
 
 		return removeEverything ? original.call(this) : original.call(this, event);
 	};
+	runtime_installPatch("removeAllListeners", layer, patch);
 }
 
 /**
@@ -638,16 +735,16 @@ export function disableEventEmitterPatching() {
 		return;
 	}
 
-	// Restore original methods
-	for (const [methodName, originalMethod] of originalMethods.entries()) {
-		EventEmitter.prototype[methodName] = originalMethod;
-
-		// Restore aliases
-		if (methodName === "on") {
-			EventEmitter.prototype.addListener = originalMethod;
-		} else if (methodName === "removeListener") {
-			EventEmitter.prototype.off = originalMethod;
-		}
+	// Restore each method — and its alias — only where this copy's patch is still installed. Another
+	// copy of slothlet may have patched over it, and writing the originals back unconditionally would
+	// strip that copy's patches while it is still enabled. A patch left in place passes through from
+	// now on, and a restore puts back what is under every such patch (see boundary-patch-layers).
+	const aliases = { on: "addListener", removeListener: "off" };
+	for (const [methodName, { layer, patch }] of originalMethods.entries()) {
+		const restore = closeLayer(layer);
+		if (holdsValue(EventEmitter.prototype, methodName, patch)) EventEmitter.prototype[methodName] = restore;
+		const alias = aliases[methodName];
+		if (alias && holdsValue(EventEmitter.prototype, alias, patch)) EventEmitter.prototype[alias] = restore;
 	}
 
 	originalMethods.clear();
@@ -655,9 +752,41 @@ export function disableEventEmitterPatching() {
 }
 
 /**
- * Cleanup all tracked EventEmitters created within slothlet API context.
- * This removes all listeners from tracked emitters and clears tracking structures.
- * Should be called during shutdown to prevent memory leaks and hanging processes.
+ * A one-shot listener wrapper with no slothlet state, standing in for a slothlet once wrapper at
+ * shutdown (#605): it detaches itself and calls `listener` on first fire only, even when called directly,
+ * and reports `listener` through `.listener`, as Node's own once wrapper does.
+ * @param {EventEmitter} emitter - The emitter it is attached to.
+ * @param {string|symbol} event - The event.
+ * @param {Function} listener - The function the code registered.
+ * @returns {Function} The wrapper.
+ * @private
+ */
+function runtime_plainOnce(emitter, event, listener) {
+	let fired = false;
+	const plainOnce = function (...args) {
+		if (fired) return undefined;
+		emitter.removeListener(event, plainOnce);
+		fired = true;
+		return listener.apply(this, args);
+	};
+	plainOnce.listener = listener;
+	return plainOnce;
+}
+
+/**
+ * Release the EventEmitter state slothlet holds, when the last instance shuts down (#605).
+ *
+ * No listener is removed: an emitter a module created can outlive slothlet (undici keeps a `fetch`
+ * socket in its keep-alive pool and later destroys it with an error), and the listeners on it belong to
+ * the code that registered them. Every listener wrapper is released, so one firing later calls its
+ * listener directly, with no instance context. On each tracked emitter, a wrapper registered with
+ * `on` / `prependListener` is swapped in place for the function the code registered, and a `once` /
+ * `prependOnceListener` wrapper for a plain one-shot wrapper with no slothlet state, which reports its
+ * listener through `.listener` as Node's own does. The emitter then holds what it would without
+ * slothlet. The swap edits the listener table directly, so no `removeListener` / `newListener` event
+ * fires; a table the emitter keeps read-only is left as it is, its wrappers released. Every wrapper
+ * drops its captured context (its AsyncResource and pinned caller) first, so one left on such a table
+ * keeps no instance alive.
  *
  * @public
  */
@@ -665,25 +794,60 @@ export function cleanupEventEmitterResources() {
 	// Browser host: no node:events, nothing was tracked — bail early. shutdown() calls this
 	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
-	// Clean up all listeners on tracked emitters
-	for (const emitter of trackedEmitters) {
-		try {
-			// Remove all listeners from this emitter
-			emitter.removeAllListeners();
-		} catch (____error) {
-			// Silently ignore errors (emitter may already be destroyed)
+	releaseEpoch++;
+	for (const ref of trackedEmitters) {
+		// Stop tracking it either way; the finalizer has nothing left to drop.
+		trackedEmitterFinalizer.unregister(ref);
+		const emitter = ref.deref();
+		// Collected, with its listeners and their wrappers: nothing of it is left to release. The finalizer
+		// that drops such a ref runs some time after the collection, so the sweep can still meet one.
+		if (emitter === undefined) continue;
+		trackedEmitterRefs.delete(emitter);
+		const emitterTracking = wrappedListeners.get(emitter);
+		// Every wrapper drops its captured context first, so one the listener table keeps (a table that
+		// cannot be written) holds no instance state either (#605 review).
+		if (emitterTracking) {
+			for (const byOriginal of emitterTracking.values()) {
+				for (const wrappers of byOriginal.values()) {
+					for (const wrapper of wrappers) wrapper._slothletRelease();
+				}
+			}
 		}
-		// Explicitly drop this emitter's tracking entry. Cleanup runs AFTER patching is disabled
-		// (shutdown calls disableEventEmitterPatching() first), so the `removeAllListeners` above is
-		// the ORIGINAL, unpatched method and does NOT delete the entry for us — and since
-		// `wrappedListeners` is a WeakMap (#335) there is no `.clear()` to sweep entries either. A
-		// tracked emitter still referenced by user code after shutdown would otherwise retain its
-		// wrapper functions and their AsyncResources via the WeakMap value (#335 review).
+		const events = emitter._events;
+		if (emitterTracking && events) {
+			try {
+				for (const [event, byOriginal] of emitterTracking) {
+					const restore = new Map();
+					for (const [original, wrappers] of byOriginal) {
+						for (const wrapper of wrappers) {
+							// A once wrapper carries `.listener`. It is replaced by a plain one-shot wrapper that
+							// holds nothing of slothlet's (no captured resource, no pinned caller), so one that never
+							// fires keeps no instance alive; it reports the listener as Node's own once wrapper does.
+							restore.set(wrapper, wrapper.listener === undefined ? original : runtime_plainOnce(emitter, event, original));
+						}
+					}
+					const entry = events[event];
+					if (typeof entry === "function") {
+						if (restore.has(entry)) events[event] = restore.get(entry);
+					} else if (Array.isArray(entry)) {
+						for (let index = 0; index < entry.length; index++) {
+							if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
+						}
+					}
+				}
+			} catch (____error) {
+				// A listener table the emitter keeps read-only cannot be edited; its wrappers stay, released and
+				// holding no captured context, so they run their listeners as plain code. The other emitters are
+				// still released.
+			}
+		}
+		// Drop this emitter's tracking entry, so a tracked emitter still referenced after shutdown does not
+		// keep the wrappers alive through the WeakMap value (#335 review).
 		wrappedListeners.delete(emitter);
 	}
 
-	// Drop the strong refs to the tracked emitters themselves. `wrappedListeners` (a WeakMap) needs no
-	// clear: every tracked entry was just deleted above, and any remaining entry is an ephemeral
-	// non-tracked emitter the WeakMap lets GC reclaim on its own once it's unreferenced.
+	// Drop the refs to the tracked emitters. `wrappedListeners` (a WeakMap) needs no clear: every tracked
+	// entry was just deleted above, and any remaining entry is an ephemeral non-tracked emitter the
+	// WeakMap lets GC reclaim on its own once it's unreferenced.
 	trackedEmitters.clear();
 }

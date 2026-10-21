@@ -25,6 +25,24 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // Only LAZY configs
 const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
 
+/**
+ * Wait for background materialization to finish. `wait()` only waits; it starts no loading itself, so
+ * this still proves the background pass completes on its own. Bounded, so a pass that never
+ * completes fails the test instead of hanging it. A fixed sleep failed on a loaded machine, where the
+ * pass can take longer than the sleep.
+ * @param {object} api - Slothlet api.
+ * @returns {Promise<boolean>} True when materialization finished within the bound.
+ */
+function backgroundSettles(api) {
+	let timer;
+	return Promise.race([
+		api.slothlet.materialize.wait().then(() => true),
+		new Promise((resolve) => {
+			timer = setTimeout(() => resolve(false), 10000);
+		})
+	]).finally(() => clearTimeout(timer));
+}
+
 describe("Background Materialization (config.tracking.materialization)", () => {
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
 		let api;
@@ -64,7 +82,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background materialization to complete
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				const stats = api.slothlet.materialize.get();
 
@@ -83,7 +101,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 					tracking: true // Boolean shorthand
 				});
 
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
@@ -127,7 +145,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background materialization
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				// Event should have been emitted
 				expect(eventEmitted).toBe(true);
@@ -182,7 +200,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background materialization
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				// Check stats multiple times
 				api.slothlet.materialize.get();
@@ -205,7 +223,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background work to complete
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				// All should be materialized
 				const stats = api.slothlet.materialize.get();
@@ -223,7 +241,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background materialization
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				expect(await backgroundSettles(api)).toBe(true);
 
 				// wait() should resolve immediately since already complete
 				const start = Date.now();

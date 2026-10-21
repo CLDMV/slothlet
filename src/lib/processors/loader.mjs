@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-12T15:32:47-07:00 (1791844367)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,9 +37,25 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { translate } from "@cldmv/slothlet/i18n";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
+
+/**
+ * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
+ * (docs/MODULE-STRUCTURE.md). This is the rule for entries on disk or in a manifest; it does not apply
+ * to export names, which only the framework's reserved names exclude.
+ * @param {string} name - The entry's name.
+ * @returns {boolean} True for a hidden entry.
+ * @private
+ *
+ * @example
+ * isHiddenEntryName("__helpers"); // true
+ */
+function isHiddenEntryName(name) {
+	return name.startsWith(".") || name.startsWith("__");
+}
 
 /**
  * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
@@ -234,6 +250,59 @@ export function typeGenerationWorkerPath() {
 let instanceImportHooksInstalled = false;
 
 /**
+ * Add the per-instance import query to a resolved browser specifier — the same
+ * `slothlet_instance` / `module` / `_reload` parameters the Node branch puts on a leaf's file URL —
+ * so each instance, each `api.slothlet.api.add()` mount and each reload imports its own copy of the
+ * leaf rather than sharing one module record (#598).
+ *
+ * Only an absolute `http:`, `https:` or `file:` URL can carry a query that still names the same file;
+ * the parameters are merged with any query it already has. A bare or import-map specifier is resolved
+ * by the importmap, where a query would no longer match its entry, and `blob:` / `data:` URLs name
+ * their content directly — those are returned unchanged.
+ *
+ * A resolver may return a `URL` object as well as a string; it is read as its `href`, so it gets the
+ * same parameters a string URL would.
+ *
+ * @param {string|URL} specifier - What the resolver returned.
+ * @param {string} [instanceID] - Slothlet instance ID.
+ * @param {string} [moduleID] - Module ID of an `api.slothlet.api.add()` mount.
+ * @param {number|string|null} [cacheBust] - Reload stamp.
+ * @returns {string} The specifier to import.
+ * @internal
+ *
+ * @example
+ * withInstanceQuery("https://app.test/api/math.mjs?v=3", "abc", "mod1", null);
+ * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
+ */
+export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
+	if (specifier instanceof URL) specifier = specifier.href;
+	if (!instanceID || typeof specifier !== "string" || !/^(?:https?|file):/i.test(specifier)) return specifier;
+	let parsed;
+	try {
+		parsed = new URL(specifier);
+	} catch {
+		// Not a URL after all (a resolver handed back something scheme-like but malformed): import it as given.
+		return specifier;
+	}
+	parsed.searchParams.set("slothlet_instance", instanceID);
+	if (moduleID) parsed.searchParams.set("module", moduleID);
+	if (cacheBust) parsed.searchParams.set("_reload", String(cacheBust));
+	return parsed.href;
+}
+
+/**
+ * A query parameter value written so that no character of it can end the parameter where it is read back: a
+ * stack frame's location is read up to `&`, `#`, `:`, `)` or whitespace (#601 review), and encodeURIComponent
+ * leaves `( ) ! ' *` as they are.
+ * @param {string} value - The value.
+ * @returns {string} The encoded value.
+ * @private
+ */
+function runtime_encodeQueryValue(value) {
+	return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
  * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
  * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
  * never in browser mode. `node:module` is read through the platform's createRequire rather than an
@@ -255,6 +324,23 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#coverageSourcemapChecked = false;
+
+	/**
+	 * The URL each live copy of a browser-mode file was imported from, by the manifest path it was loaded
+	 * as and then by the mount that loaded it (#601). A reload of a mount replaces its copy, so it replaces
+	 * that mount's URL rather than adding one: a call still suspended in the old copy took its own record
+	 * of the URLs when it entered.
+	 * @type {Map<string, Map<string, string>>}
+	 * @private
+	 */
+	#importedLocations = new Map();
+
+	/**
+	 * {@link Loader#importedLocations}' list, kept until a location is recorded.
+	 * @type {Array<string>|null}
+	 * @private
+	 */
+	#importedLocationList = null;
 
 	/**
 	 * Create a Loader instance.
@@ -279,7 +365,7 @@ export class Loader extends ComponentBase {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
 			if (this.slothlet.envTarget === "browser") {
-				return this.#loadModuleBrowser(filePath);
+				return this.#loadModuleBrowser(filePath, instanceID, moduleID, cacheBust);
 			}
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
@@ -460,7 +546,7 @@ export class Loader extends ComponentBase {
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
-					moduleUrl += `&module=${moduleID}`;
+					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
@@ -476,9 +562,19 @@ export class Loader extends ComponentBase {
 			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
 			// busting ride the URL either way; only whose import() executes differs.
 			const customImport = this.slothlet?.config?.import;
+			// The live runtime matches a suspended call's frames against the file it was imported from; a
+			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
+			let byMount = this.#importedLocations.get(filePath);
+			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+			byMount.set(moduleID ?? "", String(moduleUrl));
+			this.#importedLocationList = null;
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
+			// A refused `then` export is the module's own error, not a failed import: keep its code, as
+			// export extraction does for an ES module (#571 review).
+			if (error instanceof this.SlothletError && (error.code === "MODULE_RESERVED_EXPORT" || error.code === "MODULE_THENABLE_EXPORT"))
+				throw error;
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
@@ -487,6 +583,52 @@ export class Loader extends ComponentBase {
 				error
 			);
 		}
+	}
+
+	/**
+	 * Whether a file or folder name is, or sanitizes to, a framework-reserved key. The member a file
+	 * or folder produces is named by its sanitized name, so `_materialize-` or `-_impl` collides with
+	 * the framework handle exactly as `_materialize` does (#571 review).
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @returns {boolean} True when the entry's name or its member name is reserved.
+	 * @private
+	 */
+	#isReservedEntryName(name) {
+		return isFrameworkReservedKey(name) || isFrameworkReservedKey(this.slothlet.helpers.sanitize.sanitizePropertyName(name));
+	}
+
+	/**
+	 * Refuse a file or folder whose member would be named `then` (#571). A `then` member makes its
+	 * namespace thenable, so every `await` of the namespace would call the member instead of
+	 * resolving it; the wrapper therefore answers `then` itself and the member would be unreachable.
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @param {string} entry - Entry name as listed, for the error.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_THENABLE_NAME when the entry's member name is `then`.
+	 * @private
+	 */
+	#assertNotThenable(name, entry, dir) {
+		if (this.slothlet.helpers.sanitize.sanitizePropertyName(name) === "then") {
+			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, dir }, null, { validationError: true });
+		}
+	}
+
+	/**
+	 * Refuse a folder named for a framework-reserved key or `then` (#571), the folder counterpart of
+	 * the file checks: such a folder used to fail later with a bare TypeError naming neither the
+	 * folder nor the rule.
+	 * @param {string} folder - Folder name.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_RESERVED_DIRNAME or MODULE_THENABLE_NAME.
+	 * @private
+	 */
+	#assertLoadableFolderName(folder, dir) {
+		if (this.#isReservedEntryName(folder)) {
+			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
+		}
+		this.#assertNotThenable(folder, folder, dir);
 	}
 
 	/**
@@ -511,6 +653,19 @@ export class Loader extends ComponentBase {
 	 */
 	#loadCJSIsolated(filePath, scopeKey) {
 		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
+
+		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
+		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
+		// load. Refuse it here, before the namespace is ever awaited: a `then` getter by its descriptor,
+		// without running it, and otherwise by the value the copy reads, which a Proxy's `get` trap answers
+		// whatever its descriptor says. A `then` holding data does not make the namespace awaitable, and is
+		// an ordinary export.
+		if (exports !== null && (typeof exports === "object" || typeof exports === "function")) {
+			const thenDescriptor = Object.getOwnPropertyDescriptor(exports, "then");
+			if (thenDescriptor && (isAwaitableThen(thenDescriptor) || typeof exports.then === "function")) {
+				throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
+			}
+		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports
@@ -638,7 +793,7 @@ export class Loader extends ComponentBase {
 		// and matches via cross-file aggregation; the TS branch fires in fewer files so v8 drops it.
 		/* v8 ignore next 3 */
 		if (moduleID) {
-			moduleUrl += `&module=${moduleID}`;
+			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 		}
 		if (cacheBust) {
 			moduleUrl += `&_reload=${cacheBust}`;
@@ -690,7 +845,6 @@ export class Loader extends ComponentBase {
 		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
 		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
 		const apiRel = (p) => path.relative(rootDir, p).split(path.sep).join(".");
-		const hasHiddenPrefix = (name) => name.startsWith(".") || name.startsWith("__");
 
 		try {
 			await fsp.stat(dir);
@@ -723,7 +877,7 @@ export class Loader extends ComponentBase {
 
 				// Built-in: skip `.`/`__`-prefixed folders (unless the deprecated opt-out is set), then
 				// skip folders matched by the consumer-supplied `hidden` glob(s).
-				if (!scanHiddenFolders && hasHiddenPrefix(entry.name)) {
+				if (!scanHiddenFolders && isHiddenEntryName(entry.name)) {
 					continue;
 				}
 				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
@@ -744,6 +898,8 @@ export class Loader extends ComponentBase {
 					if (subStructure.files.length === 0 && subStructure.directories.length === 0) {
 						continue;
 					}
+					// Checked once the folder is known to produce a member, like the file check below.
+					this.#assertLoadableFolderName(entry.name, dir);
 					structure.directories.push({
 						path: fullPath,
 						name: entry.name,
@@ -754,7 +910,7 @@ export class Loader extends ComponentBase {
 				const ext = path.extname(entry.name);
 				if (extensions.includes(ext)) {
 					// Built-in: skip `.`/`__`-prefixed files (JSDoc-only, test helpers, dotfiles, etc.).
-					if (hasHiddenPrefix(entry.name)) {
+					if (isHiddenEntryName(entry.name)) {
 						continue;
 					}
 
@@ -783,9 +939,10 @@ export class Loader extends ComponentBase {
 					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
 					// surface, so neither is this mount's problem. Each fails on its own the moment
 					// something does try to compose it.
-					if (isFrameworkReservedKey(nameWithoutExt)) {
+					if (this.#isReservedEntryName(nameWithoutExt)) {
 						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
+					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
 					structure.files.push({
 						path: fullPath,
@@ -925,7 +1082,6 @@ export class Loader extends ComponentBase {
 		} = options;
 		const ALLOWED_EXTS = [".mjs", ".cjs", ".js"];
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
-		const hasHiddenPrefix = (n) => n.startsWith(".") || n.startsWith("__");
 		const structure = { files: [], directories: [] };
 
 		for (const file of node.files || []) {
@@ -936,7 +1092,7 @@ export class Loader extends ComponentBase {
 
 			// Skip non-JS files and dot/double-underscore helpers.
 			if (!ALLOWED_EXTS.includes(ext)) continue;
-			if (hasHiddenPrefix(fullName)) continue;
+			if (isHiddenEntryName(fullName)) continue;
 
 			// Apply caller-supplied file filter (used for single-file api.add calls).
 			if (fileFilter && !fileFilter(fullName)) continue;
@@ -954,9 +1110,10 @@ export class Loader extends ComponentBase {
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
-			if (isFrameworkReservedKey(name)) {
+			if (this.#isReservedEntryName(name)) {
 				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
 			}
+			this.#assertNotThenable(name, fullName, rootPath);
 
 			structure.files.push({
 				path: filePath,
@@ -974,7 +1131,7 @@ export class Loader extends ComponentBase {
 
 				// dot/`__`-prefixed folders are hidden unless the deprecated scanHiddenFolders opt-out
 				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
-				if (!scanHiddenFolders && hasHiddenPrefix(dirName)) continue;
+				if (!scanHiddenFolders && isHiddenEntryName(dirName)) continue;
 				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
 				if (hiddenMatcher && hiddenMatcher(dirApiRel)) continue;
 
@@ -991,6 +1148,7 @@ export class Loader extends ComponentBase {
 				// A folder that yields no files and no kept subfolders must not create a leaf (#156).
 				if (children.files.length === 0 && children.directories.length === 0) continue;
 
+				this.#assertLoadableFolderName(dirName, rootPath);
 				structure.directories.push({ path: dirPath, name: dirName, children });
 			}
 		}
@@ -1018,7 +1176,7 @@ export class Loader extends ComponentBase {
 	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
-	async #loadModuleBrowser(filePath) {
+	async #loadModuleBrowser(filePath, instanceID, moduleID, cacheBust = null) {
 		// Use the user-supplied resolver, or fall back to resolving relative to config.base.
 		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
 		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
@@ -1057,21 +1215,69 @@ export class Loader extends ComponentBase {
 		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
-		const module = await import(specifier);
+		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
+		// The live runtime tells a suspended call apart from the host by the module's location in a stack
+		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
+		// URL, or another path on a server), so the URL actually imported is recorded to match against.
+		let byMount = this.#importedLocations.get(filePath);
+		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+		byMount.set(moduleID ?? "", String(imported));
+		this.#importedLocationList = null;
+		const module = await import(imported);
 		return module;
+	}
+
+	/**
+	 * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
+	 * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
+	 *
+	 * @param {string} filePath - The manifest path the file was loaded as.
+	 * @param {string|null} [moduleID] - A mount: only its copy's URL, when it imported one (two mounts of a folder
+	 *   import their own copies, and a `blob:` / `data:` URL carries no mount to tell them apart by).
+	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
+	 */
+	importedLocationsFor(filePath, moduleID) {
+		const byMount = this.#importedLocations.get(filePath);
+		if (!byMount) return undefined;
+		if (moduleID != null && byMount.has(moduleID)) return new Set([byMount.get(moduleID)]);
+		return new Set(byMount.values());
+	}
+
+	/**
+	 * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
+	 * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
+	 *
+	 * @returns {Array<string>} The files and imported URLs; the same array until another location is recorded.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
+	 */
+	importedLocations() {
+		if (this.#importedLocationList) return this.#importedLocationList;
+		const locations = [];
+		for (const [filePath, byMount] of this.#importedLocations) locations.push(filePath, ...byMount.values());
+		this.#importedLocationList = locations;
+		return locations;
 	}
 
 	/**
 	 * Extract exports from module
 	 * @param {Object} module - Loaded module
+	 * @param {string} [filePath] - The module's file, named in a refusal.
 	 * @returns {Object} Extracted exports
 	 * @public
 	 */
-	extractExports(module) {
+	extractExports(module, filePath) {
 		const exports = {};
 
-		// Add default export if exists
-		if (module.default !== undefined) {
+		// Add the default export when the module binds one: `export default undefined` binds it as `0` or
+		// `null` would, so presence is the binding, not its value (#585 review).
+		if ("default" in module) {
 			exports.default = module.default;
 		}
 
@@ -1085,6 +1291,24 @@ export class Loader extends ComponentBase {
 				// module author learns at the file, not from a distant behavioral surprise.
 				if (isFrameworkReservedKey(key)) {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
+				// No api path can hold `__proto__`: composing it would set the node's prototype rather than add a
+				// member. It is refused as a mount path, a `self` write or a routine name is (#585 review).
+				if (key === "__proto__") {
+					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+						apiPath: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
+						reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+						index: 0,
+						segment: key,
+						validationError: true
+					});
+				}
+				// A `then` export that is a function would make the module's namespace awaitable (#571); one
+				// holding data does not, and is an ordinary export. A namespace binding is never a user
+				// accessor (a module runner may still expose it as a getter), so the export's value decides,
+				// as it does for `await`.
+				if (key === "then" && isAwaitableThen({ value: module[key] })) {
+					throw thenableExportError(this.SlothletError, filePath ? `${filePath} (export 'then')` : "export 'then'");
 				}
 				exports[key] = module[key];
 			}

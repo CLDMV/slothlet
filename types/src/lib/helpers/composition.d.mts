@@ -1,0 +1,87 @@
+/**
+ * Whether a value is a layer {@link copyForComposition} or {@link relayer} returned.
+ * @param {unknown} value - The value.
+ * @returns {boolean} True for a composition layer.
+ * @package
+ *
+ * @example
+ * isCompositionLayer(copyForComposition(new Map(), { addsMembers: true })); // true
+ */
+export function isCompositionLayer(value: unknown): boolean;
+/**
+ * Put a member on a value being composed. A layer holds it itself, by definition, so it never reaches the
+ * value under the layer (a write to a member that value has would). Anything else takes an assignment.
+ * @param {object|Function} target - The value being composed (a layer, or a copy the build owns).
+ * @param {PropertyKey} key - Member name.
+ * @param {unknown} value - Member value.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * holdMember(moduleContent, "extra", mod.extra);
+ */
+export function holdMember(target: object | Function, key: PropertyKey, value: unknown): void;
+/**
+ * The keys a composition layer holds itself (the named exports composed onto it), in order. Every other
+ * key the layer reports is answered by the value under it.
+ * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
+ * @returns {PropertyKey[]} The held keys; none for a value that is not a layer.
+ * @package
+ *
+ * @example
+ * layerHeldKeys(flatten.composeFunctionDefault(mod.default)); // ["extra"] once `extra` is composed onto it
+ */
+export function layerHeldKeys(layer: object | Function): PropertyKey[];
+/**
+ * The value under a composition layer: the module's own array or function, which takes an integrity
+ * operation (seal, freeze) the layer itself refuses.
+ * @param {object|Function} layer - A composition layer, or any other value.
+ * @returns {object|Function} The value under a layer; any other value, unchanged.
+ * @package
+ *
+ * @example
+ * layerUnderlying(flatten.composeFunctionDefault(mod.default)) === mod.default; // true
+ */
+export function layerUnderlying(layer: object | Function): object | Function;
+/**
+ * Register how to recognize an api node (see {@link isApiNode}).
+ * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * setApiNodeCheck((value) => proxyRegistry.has(value));
+ */
+export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
+/**
+ * The version of a module's value the build may change, without the change reaching the module's
+ * export (see the module description for the rule).
+ * @param {unknown} value - The module's value.
+ * @param {object} [options={}] - Options.
+ * @param {boolean} [options.addsMembers=false] - True when named exports will be added to the result,
+ *   so a function, an array or a class instance needs a layer as well.
+ * @returns {unknown} A copy, a layer, or `value` itself.
+ * @package
+ *
+ * @example
+ * const moduleContent = copyForComposition(mod.default, { addsMembers: true });
+ * moduleContent.extra = mod.extra; // mod.default is unchanged
+ */
+export function copyForComposition(value: unknown, { addsMembers }?: {
+    addsMembers?: boolean | undefined;
+}): unknown;
+/**
+ * Lay a layer again over the value a layer composes over, starting with `members` in their order; a
+ * member the value itself holds keeps coming from the value, unless the layer being relaid held it over
+ * the value's own. Members that layer hid stay hidden. Used where a folder's members must appear in
+ * eager's order.
+ * @param {object} layered - A layer {@link copyForComposition} returned, or a value to layer.
+ * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
+ * @returns {object} The new layer.
+ * @package
+ *
+ * @example
+ * const instance = relayer(impl, [["sib", { value: sib }], ["extra", { value: extra }]]);
+ */
+export function relayer(layered: object, members: Array<[PropertyKey, PropertyDescriptor]>): object;
+//# sourceMappingURL=composition.d.mts.map

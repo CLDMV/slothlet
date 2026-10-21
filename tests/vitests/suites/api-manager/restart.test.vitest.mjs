@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-10-11T09:26:43-07:00 (1791736003)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@
  */
 
 import path from "node:path";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
@@ -455,6 +456,58 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(api.conn.handlers).toBeUndefined();
 	});
 
+	it("forwards a property definition on a held reference to the new instance's node", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		Object.defineProperty(conn, "tag", { value: 2, writable: true, enumerable: true, configurable: true });
+		expect(api.conn.tag).toBe(2);
+		expect(conn.tag).toBe(2);
+		// The live node still refuses a `then` member, through a held reference as well.
+		expect(() => Object.defineProperty(conn, "then", { value: () => {}, configurable: true })).toThrow(/then/i);
+	});
+
+	it("leaves a held reference unchanged when the live node refuses a non-configurable definition", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		const then = () => {};
+		expect(() => Object.defineProperty(conn, "then", { value: then, configurable: false })).toThrow(/then/i);
+		expect(Object.getOwnPropertyDescriptor(conn, "then")).toBeUndefined();
+		expect(conn.then).toBeUndefined();
+		expect(await conn).toBe(conn);
+	});
+
+	it("freezes a held reference without breaking its proxy invariants", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		expect(() => Object.freeze(conn)).not.toThrow();
+		expect(Object.isFrozen(conn)).toBe(true);
+		expect(() => Reflect.ownKeys(conn)).not.toThrow();
+		// A non-configurable definition the stale target cannot hold is refused, not thrown as an invariant error.
+		expect(Reflect.defineProperty(conn, "fresh", { value: 1, configurable: false })).toBe(false);
+	});
+
+	it("a definition through a held reference with its attributes left out is non-configurable, as on the live node", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		Object.defineProperty(conn, "fixed", { value: 1 });
+		expect(Object.getOwnPropertyDescriptor(conn, "fixed")).toEqual({ value: 1, writable: false, enumerable: false, configurable: false });
+		expect(Object.getOwnPropertyDescriptor(api.conn, "fixed")).toEqual({
+			value: 1,
+			writable: false,
+			enumerable: false,
+			configurable: false
+		});
+		expect(Reflect.deleteProperty(conn, "fixed")).toBe(false);
+	});
+
 	it("keeps a held function reference within its proxy invariants", async () => {
 		await create();
 		const increment = api.counter.increment;
@@ -573,4 +626,35 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 			expect(typeof increment.name).toBe("string");
 		});
 	}
+});
+
+describe("api.slothlet.restart() (#504) > a held array reference", () => {
+	let api;
+	let root;
+
+	beforeEach(async () => {
+		root = path.resolve("tmp", `restart-array-${process.pid}-${Date.now()}`);
+		await mkdir(root, { recursive: true });
+		// One array shared by every import of the module, so the test can reach the array the api fronts.
+		globalThis.__slothletRestartSparseItems = [1, 2, 3];
+		await writeFile(path.join(root, "list.mjs"), "export default globalThis.__slothletRestartSparseItems;\n");
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		delete globalThis.__slothletRestartSparseItems;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("shortens a sparse array of the largest length through a held reference without walking every index", async () => {
+		api = await slothlet({ base: root, mode: "eager", silent: true });
+		const items = api.list;
+		await api.slothlet.restart();
+		globalThis.__slothletRestartSparseItems.length = 4294967295;
+		expect(items.length).toBe(4294967295);
+		Object.defineProperty(items, "length", { value: 2 });
+		expect(items.length).toBe(2);
+		expect(globalThis.__slothletRestartSparseItems).toEqual([1, 2]);
+	}, 10000);
 });

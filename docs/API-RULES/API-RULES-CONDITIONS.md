@@ -523,7 +523,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Related Rule**: [Rule 4](../API-RULES.md#rule-4-default-export-promotion)
 **Status**: ✅ Active
 
-**Pattern**: A module that exports BOTH a default and named exports merges them onto one api value. The default is promoted to the slot; named exports attach as properties, resolved by the default's type: a **function** default consults the configured `collisionMode` for same-name conflicts; an **object** default keeps its own keys (conflicting named exports are dropped — see [#421](https://github.com/CLDMV/slothlet/issues/421)); a **primitive** default is wrapped under a `default` key with named exports attached unconditionally.
+**Pattern**: A module that exports BOTH a default and named exports merges them onto one api value. The default is promoted to the slot; named exports attach as properties, resolved by the default's type: a **function** default consults the configured `collisionMode` for same-name conflicts; an **object** default is copied (a `Proxy` default gets a layer instead, so it is never written to) and resolves a named export that conflicts with one of its members by `collisionMode` too: `merge` / `skip` keep the default's member, `error` throws, `warn` / `replace` / `merge-replace` take the named export ([#421](https://github.com/CLDMV/slothlet/issues/421)). A member is an own property, enumerable or not, or one the default's class provides; members of `Object.prototype`, `Function.prototype` and `Array.prototype` are not conflicts. Every composition path applies this same rule; a **primitive** default is wrapped under a `default` key with named exports attached unconditionally.
 
 **Function**: `processModuleForAPI()`
 **Source**: `src/lib/processors/flatten.mjs:304-365`
@@ -609,27 +609,25 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Flattening Guide**: [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)
 **Status**: ✅ Active
 
-**Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions - it should never create an intermediate `.addapi.` level.
+**Pattern**: A file named `addapi.mjs` never creates an `.addapi.` level, regardless of the `autoFlatten` setting. It is flattened into the level it sits in, which is the promotion [C05](#c05-filename-matches-container--category-level-flatten) gives a file named after its folder, so it composes as that level's self-named file. This holds at initial load and for `api.slothlet.api.add()` alike.
 
-**Function**: `getFlatteningDecision()` (detection) / modes-processor execution
-**Source**: `src/lib/processors/flatten.mjs` ~L119-L133, L332-L347; `src/lib/builders/modes-processor.mjs` ~L207-L215, L699-L710
+**Function**: `processFiles()` (alias) / `getFlatteningDecision()` (detection)
+**Source**: `src/lib/builders/modes-processor.mjs` (the `modes_addapiSelfName` alias in `processFiles()`, and the lazy single-file path); `src/lib/processors/flatten.mjs` (`isAddapiFile`)
 
 **Condition Check**:
 
 ```javascript
-if (newModules && typeof newModules === "object" && newModules.addapi) {
-	const addapiContent = newModules.addapi;
-	delete newModules.addapi;
-	if (typeof addapiContent === "object") {
-		Object.assign(newModules, addapiContent);
-	} else if (typeof addapiContent === "function") {
-		Object.assign(newModules, addapiContent);
+const selfName = categoryName ?? (isRoot && apiPathPrefix ? sanitize(apiPathPrefix.split(".").pop()) : null);
+if (selfName && !loadedModules.some((entry) => entry.moduleName === selfName)) {
+	for (const entry of loadedModules) {
+		if (entry.moduleName !== "addapi") continue;
+		entry.moduleName = selfName; // composes as the self-named file
 	}
 }
 ```
 
-**Triggers**: After modules are loaded, `newModules.addapi` key is present
-**Result**: `addapi.mjs` exports are merged directly into the mount path namespace
+**Triggers**: A loaded module named `addapi` in a folder (or at the root of an `api.add()` mount) with no file already named after that level
+**Result**: The `addapi` file composes as the self-named file: its default is the node (a function is callable, a Map stays a Map, an array keeps its elements, an object's getters keep reading later writes), with its named exports and the level's other files beside it. At a mount's root it takes the mount path's last segment, and [C25](#c25-addapi-path-deduplication) then puts it at the mount path. A level that already has its self-named file keeps that file as the node, with the `addapi` file's members merged in beside it: a getter stays a getter on that node, and a primitive default, which holds no members, is merged in under `default`.
 **Used By**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)
 
 **Example**:
@@ -646,13 +644,24 @@ api.plugins.initializePlugin(); // ✅ Direct extension
 api.plugins.cleanup(); // ✅ No .addapi. intermediate level
 ```
 
+```text
+tool/
+├── addapi.mjs    ← export default function main(x) { return "tool:" + x; }
+└── side.mjs      ← export const side = () => "tool.side";
+```
+
+```javascript
+api.tool(7); // "tool:7"  (the default is the node)
+api.tool.side(); // "tool.side"
+```
+
 **Key details**:
 
-1. Detection: `newModules.addapi` key check
-2. Extraction: content stored, `addapi` key deleted from `newModules`
-3. Flattening: `Object.assign(newModules, addapiContent)` merges exports flat
+1. Detection: a module named `addapi`, with no module already named after the level
+2. Alias: the module takes the level's name (the folder's, or the mount path's last segment)
+3. Composition: from there it is the self-named file, so [C05](#c05-filename-matches-container--category-level-flatten) and Rules 1 and 8 apply to it
 4. Works regardless of `autoFlatten` setting
-5. Applies only when loading via `api.slothlet.api.add()` - not initial load
+5. Applies at initial load and to `api.slothlet.api.add()`
 
 ---
 
@@ -690,7 +699,7 @@ if (newApi[lastPart] !== undefined && isDirectChild) {
 ```
 
 **Triggers**: `newApi` has key matching mount path's last segment + `isDirectChild === true`
-**Result**: Exports hoisted one level; duplicate key removed
+**Result**: Exports hoisted one level; duplicate key removed. When the duplicate is the mount's only key, it is used at the mount path as it is, so what its value answers (a getter reading a later write, a Proxy's trapped members) stays live rather than being copied key by key.
 **Used By**: [API-RULES Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)
 
 **Example**:

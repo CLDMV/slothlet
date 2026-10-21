@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-10-11T10:43:19-07:00 (1791740599)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,8 +21,9 @@
  * Around hooks follow the same rule as before/after: a synchronous around keeps a synchronous call
  * synchronous (`next()` returns the plain value); an async one — native async brand, or registered
  * with `{ async: true }` — promotes the call to the asynchronous pipeline, with the promotion guard
- * and the per-path strategy cache. A synchronous around returning a thenable it did not get from
- * `next()` fails loudly with `HOOK_AROUND_RETURNED_PROMISE`.
+ * and the per-path strategy cache. A synchronous around may return a thenable only when `next()`
+ * returned one — passed through or derived from (`next().then(check)`, #607); any other thenable
+ * fails loudly with `HOOK_AROUND_RETURNED_PROMISE`.
  *
  * The use case (#496): an around hook that runs `next()` inside `AsyncLocalStorage.run(store, …)`
  * makes that store visible to the target — including after an `await` inside the target.
@@ -239,12 +240,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 		expect(sources).toEqual([{ code: "HOOK_AROUND_RETURNED_PROMISE", type: "around" }]);
 	});
 
-	it("a sync around deriving a new thenable from next() is refused too — only pass-through is allowed", async () => {
+	it("a sync around may derive a new thenable from the thenable next() returned (#607)", async () => {
 		api = await boot(config);
 		api.slothlet.hook.on("svc.mulThenable:around", ({ next }) => next().then((value) => value * 2), { id: "derived" });
 
 		const result = await outcome(() => api.svc.mulThenable(2, 3));
-		expect(result.error.code).toBe("HOOK_AROUND_RETURNED_PROMISE");
+		expect(result).toEqual({ ok: true, value: 12 });
 	});
 
 	it("async pipeline error flow: a swallowed rejection is hidden from error hooks, a rethrown one is not", async () => {

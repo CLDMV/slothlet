@@ -498,7 +498,7 @@ export function logout() {
 **Technical**: [C24](API-RULES/API-RULES-CONDITIONS.md#c33)
 
 **Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
-**Behavior**: Exports are always flattened to the mount namespace regardless of other settings
+**Behavior**: Exports are always flattened to the mount namespace regardless of other settings. The file composes as the file named after that level ([Rule 1](#rule-1-filename-matches-container-flattening)): its default is the node, with its named exports and sibling files beside it, unless the level also has its own self-named file.
 **Processing Path**: Detection in `getFlatteningDecision()` (`src/lib/processors/flatten.mjs`); execution in `src/lib/builders/modes-processor.mjs`
 
 **Verified Example**:
@@ -793,7 +793,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 **Status**: ✅ Implemented (`src/lib/builders/api_builder.mjs`)
 **Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.unregister` No-Op
 
-**Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15).
+**Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15). Names the api node answers like a function (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`) are not reserved: an export, file, folder or mount of that name is an ordinary member and wins over the node's own answer (see [Module Structure](MODULE-STRUCTURE.md)).
 
 ---
 

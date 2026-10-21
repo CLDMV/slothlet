@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:14-07:00 (1791091694)
+ *	@Last modified time: 2026-10-16T21:19:28-07:00 (1792210768)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
@@ -109,7 +109,9 @@ import {
 	disableEventTargetPropertyPatching
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
+import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -126,6 +128,15 @@ import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
  * @private
  */
 const boundaryPatchHolders = new Set();
+
+/**
+ * Live-runtime instances holding the `Promise.prototype.then` patch. Only the live runtime needs it, and it
+ * runs on every `then` in the process, so it is removed once no live instance holds it even while
+ * async-runtime instances keep the other boundary patches.
+ * @type {Set<string>}
+ * @private
+ */
+const promisePatchHolders = new Set();
 
 /**
  * Top-level config keys retained by identity when the original config is snapshotted for
@@ -658,6 +669,9 @@ class Slothlet {
 	_registerLazyWrapper() {
 		this._totalLazyCount++;
 		this._unmaterializedLazyCount++;
+		// A wrapper registered after everything loaded (an api.add(), a reload) reopens completion, so the
+		// load that brings the count back to zero resolves the wait() callers queued meanwhile (#594).
+		this._materializationComplete = false;
 
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {
@@ -666,6 +680,25 @@ class Slothlet {
 				unmaterialized: this._unmaterializedLazyCount
 			});
 		}
+	}
+
+	/**
+	 * Count a lazy wrapper that is already loaded, such as one a forced replace hid that loaded through a
+	 * reference held to it and is now put back (#585 review). It joins the total but is not waited on, so
+	 * completion is left as it is.
+	 * @private
+	 */
+	_registerLoadedLazyWrapper() {
+		this._totalLazyCount++;
+	}
+
+	/**
+	 * Stop counting a loaded lazy wrapper that a forced replace hides from the api (#585 review). It is out
+	 * of the total while hidden; nothing waits on it, so completion is left as it is.
+	 * @private
+	 */
+	_onLoadedLazyWrapperParked() {
+		this._totalLazyCount--;
 	}
 
 	/**
@@ -687,6 +720,35 @@ class Slothlet {
 			});
 		}
 
+		this._checkMaterializationComplete();
+	}
+
+	/**
+	 * Count a loaded lazy wrapper as unloaded again after a reload re-armed it (#588). Completion is
+	 * reset, so wait() callers block until it loads again.
+	 * @private
+	 */
+	_onLazyWrapperRearmed() {
+		this._unmaterializedLazyCount++;
+		this._materializationComplete = false;
+	}
+
+	/**
+	 * Stop counting an unloaded lazy wrapper that was discarded before it loaded, such as a rejected
+	 * collision candidate or the child of a re-armed wrapper (#588).
+	 * @private
+	 */
+	_onLazyWrapperDiscarded() {
+		this._totalLazyCount--;
+		this._unmaterializedLazyCount--;
+		this._checkMaterializationComplete();
+	}
+
+	/**
+	 * Resolve wait() callers and emit `materialized:complete` once no counted lazy wrapper is unloaded.
+	 * @private
+	 */
+	_checkMaterializationComplete() {
 		// Check if all lazy wrappers are materialized
 		if (this._unmaterializedLazyCount === 0 && !this._materializationComplete) {
 			this._materializationComplete = true;
@@ -921,6 +983,15 @@ class Slothlet {
 		// argument rather than a registered listener or an assigned property — a third boundary shape.
 		enableObserverPatching();
 
+		// A fire-and-forget promise reaction (`p.then(cb)` nobody awaits) runs after the registering call
+		// returned, the same way a timer callback does (#595). `catch`/`finally` register through `then`.
+		// Live runtime only: the async runtime carries identity through promise reactions itself, so it pays
+		// nothing for this patch, which runs on every `then` in the process (#601 review).
+		if (typeof this.contextManager.runRegisteredAsHost === "function") {
+			enablePromisePatching();
+			promisePatchHolders.add(this.instanceID);
+		}
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
 
@@ -1127,6 +1198,9 @@ class Slothlet {
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
 		/* v8 ignore next */
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
+		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
+		/* v8 ignore next */
+		const addHistory = this.handlers.apiManager?.state?.addHistory ? [...this.handlers.apiManager.state.addHistory] : [];
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
@@ -1140,6 +1214,10 @@ class Slothlet {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			releaseInstanceScope(oldInstanceID);
+			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
+			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
+			boundaryPatchHolders.delete(oldInstanceID);
+			promisePatchHolders.delete(oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -1292,6 +1370,15 @@ class Slothlet {
 			}
 		}
 
+		// The fresh api manager load() built starts with no history, and the replay above records nothing
+		// into it, so the saved history is carried over as it was: without it the next reload would have
+		// nothing to replay, and every add() and remove() would be lost from the second reload on.
+		/* v8 ignore else */
+		if (this.handlers.apiManager?.state) {
+			this.handlers.apiManager.state.operationHistory = operationHistory;
+			this.handlers.apiManager.state.addHistory = addHistory;
+		}
+
 		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
 		// rebuilds from disk + operation history, and a runtime write is not part
 		// of that history. Module-init writes reappear naturally because the
@@ -1405,7 +1492,7 @@ class Slothlet {
 						// Skipped when the routine run above already invoked it as a `mode: "shutdown"`
 						// contribution, so it runs once per restart (#542).
 						if (
-							typeof this.userHooks?.shutdown === "function" &&
+							(await isCallableValue(this.userHooks?.shutdown)) &&
 							!this.handlers.routineManager?.ranInModeRun("shutdown", this.userHooks.shutdown)
 						) {
 							await this.userHooks.shutdown();
@@ -1578,7 +1665,7 @@ class Slothlet {
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.
 					for (const key of Object.keys(wrapper)) {
-						if (!key.startsWith("____")) collect(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) collect(wrapper[key], depth + 1);
 					}
 					return;
 				}
@@ -1624,6 +1711,7 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		boundaryPatchHolders.delete(this.instanceID);
+		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
 		if (boundaryPatchHolders.size === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();

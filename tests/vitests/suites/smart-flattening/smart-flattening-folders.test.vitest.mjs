@@ -355,21 +355,12 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		await api.shutdown();
 	});
 
-	test("Folder with ONLY a same-name subfolder triggers no-attached-keys path (line 1514)", async () => {
-		// This test targets the `return nestedValue.__impl ?? nestedValue` branch
-		// (modes-processor.mjs line 1514) which fires when:
-		//   materializedKeys.length === 1 && key === categoryName
-		//   AND nestedValue IS a wrapper proxy
-		//   AND attachedKeys.length === 0  (no pre-populated keys — no file-folder collision)
-		// Fixture: pipe/ contains ONLY pipe/pipe/ subfolder (no pipe.mjs file at the outer level),
-		// so no file-folder collision occurs and the inner lazy wrapper has zero own enumerable keys.
-		if (config.mode !== "lazy") return;
-
-		// Load the solo-subfolder fixture directly as the root dir with background
-		// materialization so the inner pipe/pipe/ wrapper is pre-materialized before
-		// the outer pipe/ wrapper's lazy_materializeFunc runs. This ensures that when
-		// line 1514 fires (`return nestedValue.__impl ?? nestedValue`), nestedValue.__impl
-		// is already the inner materialized plain-object, not undefined.
+	test("Folder with ONLY a same-name subfolder keeps it nested, in eager and lazy alike (#581)", async () => {
+		// Fixture: pipe/ contains ONLY a pipe/pipe/ subfolder (no pipe.mjs file at the outer level).
+		// Only a FILE named after its folder flattens into it (Rule 1); a same-named SUBFOLDER is a
+		// nested namespace. Eager has always composed `pipe.pipe`; lazy used to unwrap the subfolder
+		// into `pipe` (#581), so this asserts the same shape in both modes. Background materialization
+		// stays on so lazy settles the inner wrapper before the outer one, the order that unwrapped it.
 		const api = await slothlet({
 			...config,
 			backgroundMaterialize: true,
@@ -378,18 +369,12 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 
 		await api.slothlet.materialize.wait();
 
-		// pipe/ should be accessible as a folder-like value in lazy mode
 		expect(isValidFolderType(api.pipe, config.mode)).toBe(true);
+		await api.pipe;
+		expect(Object.keys(api.pipe).filter((key) => !key.startsWith("_"))).toEqual(["pipe"]);
 
-		// After background materialization, the outer pipe/ wrapper's __impl has been
-		// set to the already-materialized inner impl (via the line 1514 path),
-		// so doWork and getStatus are directly accessible.
-		expect(typeof api.pipe.doWork).toBe("function");
-		const result = await api.pipe.doWork();
-		expect(result).toBe("pipe-done");
-
-		const status = await api.pipe.getStatus();
-		expect(status).toBe("pipe-ready");
+		expect(await api.pipe.pipe.doWork()).toBe("pipe-done");
+		expect(await api.pipe.pipe.getStatus()).toBe("pipe-ready");
 
 		await api.shutdown();
 	});

@@ -53,10 +53,13 @@
  * option-name check in the companion file's docstring — never actually rejected under.
  *
  * The identical `constructor`-collides-with-the-namespace-proxy's-own-trap mechanism is
- * reused on `api_test_multi_default_ownership_revert/plugins/addapi.mjs` (a default-export-
- * only addApi file: Rule 11/C24) to cover the addApi/category-merge path's own "not
- * assigned" false arm (`modes_addapiOneAssigned`) alongside the C03 hoist path's identical
- * arm (`modes_hoistedOneAssigned`).
+ * reused on `api_test_multi_default_ownership_revert/extensions/addapi.mjs` (a default-export-
+ * only addApi file beside the folder's self-named `extensions.mjs`: Rule 11/C24) to cover the
+ * addApi/category-merge path's own "not assigned" false arm (`modes_addapiOneAssigned`)
+ * alongside the C03 hoist path's identical arm (`modes_hoistedOneAssigned`).
+ *
+ * `plugins/addapi.mjs` is the same default alone in its folder. There it composes as the
+ * folder's self-named file, so the object is the `plugins` node and keeps its own `constructor`.
  *
  * @module tests/vitests/suites/builders/modes-processor-revert-gaps
  */
@@ -97,14 +100,24 @@ describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#3
 
 		// The rejected raw candidate never lands; the namespace keeps its normal, inherited
 		// constructor instead of the fixture's string, on BOTH the C03 hoist path and the
-		// addApi/category-merge path.
+		// addApi/category-merge path (`extensions/`, where the addapi file merges beside the
+		// folder's self-named file).
 		expect(api.notifications.constructor).toBe(Object.prototype.constructor);
 		expect(api.notifications.constructor).not.toBe("not-a-function");
 		expect(Object.keys(api.notifications)).not.toContain("constructor");
 
-		expect(api.plugins.constructor).toBe(Object.prototype.constructor);
-		expect(api.plugins.constructor).not.toBe("not-a-function");
-		expect(Object.keys(api.plugins)).not.toContain("constructor");
+		await api.extensions;
+		expect(api.extensions.constructor).toBe(Object.prototype.constructor);
+		expect(api.extensions.constructor).not.toBe("not-a-function");
+		expect(Object.keys(api.extensions)).not.toContain("constructor");
+	});
+
+	it("an addapi file alone in its folder is the folder's value, so its default keeps its own `constructor` (Rule 11/C24)", async () => {
+		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, collision: { initial: "skip" } });
+
+		await api.plugins;
+		expect(api.plugins.constructor).toBe("not-a-function");
+		expect(Object.keys(api.plugins)).toEqual(["constructor", "greeting"]);
 	});
 
 	it("a non-colliding hoisted/addApi-merged key still assigns and registers ownership normally alongside its rejected sibling", async () => {
@@ -118,5 +131,8 @@ describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#3
 		expect(typeof api.notifications.email).toBe("function");
 		expect(typeof api.notifications.sms).toBe("function");
 		expect(api.plugins.greeting).toBe("hello");
+		await api.extensions;
+		expect(api.extensions.greeting).toBe("hello");
+		expect(await api.extensions.base()).toBe("base");
 	});
 });

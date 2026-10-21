@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-12T08:31:19-07:00 (1791819079)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,14 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import {
+	UnifiedWrapper,
+	resolveWrapper,
+	readApiMember,
+	loadApiMember,
+	isWrapperAnsweredName,
+	isFrameworkReservedKey
+} from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -189,17 +196,7 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
-			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-			if (unsafeArrayIndex !== -1) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
-					reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-					index: unsafeArrayIndex,
-					segment: apiPath[unsafeArrayIndex],
-					validationError: true
-				});
-			}
+			this.#assertSafeSegments(apiPath, apiPath);
 
 			return { apiPath: apiPath.join("."), parts: apiPath };
 		}
@@ -242,19 +239,34 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-		const unsafeIndex = parts.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-		if (unsafeIndex !== -1) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
-				reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-				index: unsafeIndex,
-				segment: parts[unsafeIndex],
-				validationError: true
-			});
-		}
+		this.#assertSafeSegments(normalized, parts);
 
 		return { apiPath: normalized, parts };
+	}
+
+	/**
+	 * Refuse a path segment no api path can hold: `__proto__` / `constructor` / `prototype`, the
+	 * prototype-pollution guard (#302). With `refuseThen`, also refuse `then`, which a new node must not be
+	 * mounted under, since it would make its namespace thenable and so unreachable (#571). An existing
+	 * member may still be named `then` when it holds data, so a lookup or removal by path accepts it.
+	 * Checked in segment order, so the first offending segment is the one reported.
+	 * @param {string|string[]} apiPath - The path as given, for the error.
+	 * @param {string[]} parts - Its segments.
+	 * @param {boolean} [refuseThen=false] - Also refuse a `then` segment.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
+	 * @private
+	 */
+	#assertSafeSegments(apiPath, parts, refuseThen = false) {
+		const index = parts.findIndex((segment) => (refuseThen && segment === "then") || UNSAFE_PATH_SEGMENTS.has(segment));
+		if (index === -1) return;
+		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			apiPath,
+			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+			index,
+			segment: parts[index],
+			validationError: true
+		});
 	}
 
 	/**
@@ -425,7 +437,9 @@ export class ApiManager extends ComponentBase {
 		let current = root;
 		for (let i = 0; i < parts.length - 1; i += 1) {
 			const part = parts[i];
-			const next = current[part];
+			// A member read, not a plain read: `session.name` is the string "session" when `session`
+			// has no `name` member, and that string is not something to refuse traversing (#571).
+			const next = readApiMember(current, part);
 			if (next === undefined) {
 				// Create a UnifiedWrapper for the container instead of plain object
 				const containerPath = parts.slice(0, i + 1).join(".");
@@ -715,8 +729,8 @@ export class ApiManager extends ComponentBase {
 		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		// Transfer children from wrapper properties
-		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !isFrameworkReservedKey(k));
 
 		// User-assigned overrides (wrap-on-set, tagged `userAssigned`) must survive selective reload
 		// verbatim — not be deleted or have the reloaded module's content merged back into them. Capture
@@ -823,7 +837,7 @@ export class ApiManager extends ComponentBase {
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
-				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
+				const isInternal = isFrameworkReservedKey(key);
 				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Object.defineProperty(existingWrapper, key, {
@@ -844,9 +858,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const syncWrapper_existingChildWrapper = resolveWrapper(existingChild) ?? existingChild;
-						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
-							(k) => !k.startsWith("_") && !k.startsWith("__")
-						);
+						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// #441: distinguish a genuine value leaf from a lazy-unmaterialized NAMESPACE whose
 						// children aren't visible yet. A leaf is fully resolved (no materializeFunc); a lazy
 						// directory carries a materializeFunc and hasn't materialized, so its own children —
@@ -927,7 +939,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
-						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// A still-lazy incoming folder is a namespace too, whose children are not visible yet:
 						// merge it rather than swapping it in, which dropped the existing side's children (#525).
 						// The recursive call materializes both sides before comparing their keys.
@@ -1048,6 +1060,29 @@ export class ApiManager extends ComponentBase {
 				this.state.replaceShadows.set(moduleIDKey, list);
 			}
 			list.push({ container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
+			// Off the api surface, nothing can load it, so its unloaded wrappers stop counting until it is
+			// put back; otherwise materialize.wait() never settles while it is hidden.
+			this._setShadowParked(child, true);
+		}
+	}
+
+	/**
+	 * Park or unpark the lazy wrappers of a member a forced replace hides, so the materialization count
+	 * leaves out what is off the api surface (#588).
+	 * @param {unknown} node - The hidden member, or one of its descendants.
+	 * @param {boolean} parked - True to park, false to put back in the count.
+	 * @param {Set<object>} [seen] - Wrappers already visited.
+	 * @returns {void}
+	 * @private
+	 */
+	_setShadowParked(node, parked, seen = new Set()) {
+		const raw = resolveWrapper(node);
+		if (!raw || seen.has(raw)) return;
+		seen.add(raw);
+		raw.___trackLazyLoad(parked ? "park" : "unpark");
+		for (const key of Object.keys(raw)) {
+			const descriptor = Object.getOwnPropertyDescriptor(raw, key);
+			if (descriptor && "value" in descriptor) this._setShadowParked(descriptor.value, parked, seen);
 		}
 	}
 
@@ -1276,6 +1311,18 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async setValueAtPath(root, parts, value, options) {
+		// An unloaded lazy node cannot tell its own `name` / `length` answer from a member of that name
+		// until it loads (#571). Step through the intermediate segments once, loading only the nodes
+		// this path reaches by such a name, so the synchronous walk below reads real members. A path with
+		// no such segment needs no walk, and mounts without yielding first, as before.
+		const intermediate = parts.slice(0, -1);
+		if (intermediate.some(isWrapperAnsweredName)) {
+			let node = root;
+			for (const part of intermediate) {
+				({ value: node } = await loadApiMember(node, part));
+				if (!node || (typeof node !== "object" && typeof node !== "function")) break;
+			}
+		}
 		const parent = this.ensureParentPath(root, parts, {
 			moduleID: options.moduleID,
 			sourceFolder: options.sourceFolder
@@ -1302,7 +1349,8 @@ export class ApiManager extends ComponentBase {
 
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
 		/* v8 ignore next */
-		const existing = parent ? parent[finalKey] : undefined;
+		// A member read (#571): a wrapper's own answer for `name` / `length` is not an existing value.
+		const existing = parent ? readApiMember(parent, finalKey) : undefined;
 		// options.collisionMode is always provided by callers; the "merge" fallback is unreachable.
 		/* v8 ignore next */
 		const collisionMode = options.collisionMode || "merge";
@@ -1538,7 +1586,7 @@ export class ApiManager extends ComponentBase {
 			// Delete from wrapper (child properties). The else-arm (an internal `_`/`__` key, or a key
 			// that lives only in _impl and not on the wrapper) is a defensive location guard for leaf
 			// shapes the test suite does not construct here.
-			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(finalKey);
 			/* v8 ignore else */
 			if (!isInternal && finalKey in wrapper) {
 				delete wrapper[finalKey];
@@ -1583,7 +1631,7 @@ export class ApiManager extends ComponentBase {
 					wrapper.____slothletInternal.impl = null;
 				}
 				// Clear children from wrapper to release references
-				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 				for (const key of childKeys) {
 					delete wrapper[key];
 				}
@@ -1852,6 +1900,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+		this.#assertSafeSegments(normalizedPath, parts, true);
 
 		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
 		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount
@@ -1899,6 +1948,22 @@ export class ApiManager extends ComponentBase {
 			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
 			effectiveParts = [versionTag, ...parts];
 			effectivePath = effectiveParts.join(".");
+			// The tag becomes the mount's first segment, so it is held to the rules of any path segment: not
+			// `slothlet`, not a prototype-pollution key, and not `then`, which would make the api root thenable.
+			// Nor may it hold the reserved separator: remove() and leaves() split their argument on it, so a
+			// mount path carrying it could be split to another module's id. The checks above see only the
+			// logical path and the moduleID, which the tag is not part of.
+			this.normalizeApiPath(effectiveParts);
+			this.#assertSafeSegments(effectivePath, effectiveParts, true);
+			if (versionTag.includes(MODULE_ID_SEPARATOR)) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath: effectivePath,
+					segment: versionTag,
+					index: 0,
+					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
+					validationError: true
+				});
+			}
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
@@ -2201,8 +2266,8 @@ export class ApiManager extends ComponentBase {
 						key: k,
 						apiPath: _w.apiPath,
 						implKeys: Object.keys(_w.____slothletInternal.impl || {}),
-						childCacheSize: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
-						childCacheKeys: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+						childCacheSize: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k)).length,
+						childCacheKeys: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k))
 					};
 				}),
 			nonWrappers: Object.keys(newApi)
@@ -2267,11 +2332,13 @@ export class ApiManager extends ComponentBase {
 					if (isDirectChild) {
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
 						/* v8 ignore next */
-						const dupChildKeys = dupWrapper
-							? Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
-							: Object.keys(dupValue);
+						const dupChildKeys = dupWrapper ? Object.keys(dupWrapper).filter((k) => !isFrameworkReservedKey(k)) : Object.keys(dupValue);
 
-						if (dupChildKeys.length === 0) {
+						// Alone at the mounted folder's root, the duplicate is the whole mount: it is used as it is, so
+						// what its value answers (a getter reading a later write, a Proxy's trapped members) stays live
+						// instead of being copied key by key into a new object (#585 review).
+						const dupHasSiblings = Object.keys(apiToMerge).some((k) => k !== lastPart);
+						if (dupChildKeys.length === 0 || !dupHasSiblings) {
 							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
 							// exported function) — it already IS what belongs at the mount path. Rebuilding it
 							// as a fresh plain object below would silently drop its callable nature and impl
@@ -2529,7 +2596,7 @@ export class ApiManager extends ComponentBase {
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
-					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
 						collectPendingMaterializations(wrapper[key], depth + 1);
 					}
@@ -2721,13 +2788,13 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Register with VersionManager if this is a versioned add.
-		// If registration fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
+		// If registration or its dispatcher mount fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
 		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
 		// (orphaned cache entry, ownership record, and history entries).
 		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
 			const versionTag = String(versionConfig.version).trim();
 			try {
-				this.slothlet.handlers.versionManager.registerVersion(
+				await this.slothlet.handlers.versionManager.registerVersion(
 					normalizedPath,
 					versionTag,
 					moduleID,
@@ -2953,7 +3020,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	#restoreNamespaceFunction(live, apiPath) {
 		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
-		if (!Object.keys(live).some((key) => !key.startsWith("_"))) return;
+		if (!Object.keys(live).some((key) => !isFrameworkReservedKey(key))) return;
 		const ownership = this.slothlet.handlers.ownership;
 		let fn = null;
 		for (const entry of ownership.getPathHistory(apiPath)) {
@@ -2998,7 +3065,7 @@ export class ApiManager extends ComponentBase {
 				await wrapper._materialize();
 			}
 		}
-		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !key.startsWith("_"));
+		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !isFrameworkReservedKey(key));
 		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
 		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
 		// ones and drop any child another module merged in.
@@ -3589,6 +3656,8 @@ export class ApiManager extends ComponentBase {
 						enumerable: true,
 						configurable: true
 					});
+					// Back on the surface, so what of it is unloaded counts again.
+					this._setShadowParked(shadow.child, false);
 				}
 				this.state.replaceShadows.delete(moduleIDKey);
 			}
@@ -3899,7 +3968,7 @@ export class ApiManager extends ComponentBase {
 
 		// Notify VersionManager so its dispatcher reflects the latest state
 		if (this.slothlet.handlers.versionManager) {
-			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
+			await this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
 		}
 	}
 
@@ -4272,6 +4341,20 @@ export class ApiManager extends ComponentBase {
 					const childWrapper = resolveWrapper(val);
 					if (childWrapper.____slothletInternal.state.materialized) {
 						implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
+						// The unwrapped impl no longer says which file it came from (a lazy build does not tag it), so
+						// the adopting wrapper would give the child its own folder; the child keeps its file here.
+						const childFile = childWrapper.____slothletInternal.filePath;
+						if (childFile) {
+							if (!Object.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
+								Object.defineProperty(implForReload, "__childFilePaths", {
+									value: {},
+									enumerable: false,
+									configurable: true,
+									writable: true
+								});
+							}
+							implForReload.__childFilePaths[key] ??= childFile;
+						}
 					}
 				}
 			}
@@ -4408,13 +4491,19 @@ export class ApiManager extends ComponentBase {
 				const child = resolveWrapper(shadow.child);
 				const freshWrapper = resolveWrapper(fresh);
 				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
-					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc, freshWrapper.____slothletInternal.memberNames);
+					// The shadowed member now loads through the rebuilt folder's loader, so the rebuilt folder is
+					// dropped. Invalidate it, as the root reload path does: it stops counting toward the
+					// materialization total, and a load it already started never applies (#588).
+					freshWrapper.___invalidate();
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
 					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
 					child.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
+				// Still hidden: the wrappers the refresh gave it count no more than the ones it replaced.
+				this._setShadowParked(shadow.child, true);
 				kept.push(shadow);
 			}
 			this.state.replaceShadows.set(overwriter, kept);
@@ -4594,7 +4683,7 @@ export class ApiManager extends ComponentBase {
 				// Skip internal keys from the fresh API proxy's ownKeys trap
 				// Internal keys are always filtered by the proxy's ownKeysTrap before this loop; the startsWith guard never fires.
 				/* v8 ignore next */
-				if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) continue;
+				if (isFrameworkReservedKey(key)) continue;
 				// Skip built-in slothlet namespace
 				// slothlet/shutdown/destroy are always filtered by ownKeysTrap; this guard never fires.
 				/* v8 ignore next */
@@ -4633,7 +4722,16 @@ export class ApiManager extends ComponentBase {
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						resolveWrapper(existingAtKey).___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+						// The rebuilt folder's entry names travel with the materializer: until it loads, they are what
+						// tells a `name` / `length` member apart from the node's own answer (#593).
+						resolveWrapper(existingAtKey).___resetLazy(
+							freshWrapper.____slothletInternal.materializeFunc,
+							freshWrapper.____slothletInternal.memberNames
+						);
+						// The existing wrapper now loads through the fresh shell's loader, so the fresh shell is
+						// dropped. Invalidate it: a load it already started then never applies, and its result's
+						// lazy children stop counting toward the materialization total (#588).
+						freshWrapper.___invalidate();
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);
@@ -4792,7 +4890,7 @@ export class ApiManager extends ComponentBase {
 							for (const k of Object.keys(implForReload)) {
 								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
 							}
-							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
+							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !isFrameworkReservedKey(k))) {
 								hoisted[k] = dupWrapperForDedup[k];
 							}
 							implForReload = hoisted;
