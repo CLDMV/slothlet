@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T12:22:46-07:00 (1792437766)
+ *	@Last modified time: 2026-10-23T15:26:03-07:00 (1792794363)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ import {
 	runtime_selfModuleReader,
 	runtime_unwrapSelfView
 } from "#handlers/unified-wrapper";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { isFrameworkInternal, versionDispatcherRecord } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -765,8 +765,17 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 		}
 		this.assertOwnedWrite(parts, writer, ignoreModuleID);
+		const { paths, opaque } = this.#walkReach(parts);
+		// A path running through an accessor is not walked: what the getter answers is not known without running it,
+		// so module code is refused there rather than written past it.
+		if (opaque)
+			throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
+				apiPath: parts.join("."),
+				callerApiPath: writer.____slothletInternal.apiPath,
+				validationError: true
+			});
 		// A node reached through an alias is written where it really is, and held to its owner there.
-		for (const realParts of this.#aliasedPaths(parts)) this.assertOwnedWrite(realParts, writer, ignoreModuleID);
+		for (const realParts of paths) this.assertOwnedWrite(realParts, writer, ignoreModuleID);
 	}
 
 	/**
@@ -775,46 +784,67 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {*} node - The node: a wrapper proxy, or a plain object.
 	 * @param {string} key - The member.
-	 * @returns {{found: boolean, value: *}} Whether the node holds the member as data, and its value.
+	 * @returns {{found: boolean, value: *, accessor: boolean}} Whether the node holds the member as data, its value,
+	 *   and whether it holds it as an accessor instead (own, or inherited by a plain object).
 	 * @private
 	 */
 	#rawMember(node, key) {
-		if (node === null || (typeof node !== "object" && typeof node !== "function")) return { found: false, value: undefined };
+		if (node === null || (typeof node !== "object" && typeof node !== "function"))
+			return { found: false, value: undefined, accessor: false };
 		const raw = resolveWrapper(node);
 		const holders = raw ? [raw, raw.____slothletInternal.impl] : [node];
 		for (const holder of holders) {
 			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) continue;
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
 			// A view a module's read handed back, stored here, stands for the node it was built over.
-			if (descriptor && "value" in descriptor) return { found: true, value: runtime_nodeBehind(descriptor.value) };
+			if (descriptor && "value" in descriptor)
+				return { found: true, value: runtime_nodeBehind(runtime_unwrapSelfView(descriptor.value)), accessor: false };
+			if (descriptor) return { found: false, value: undefined, accessor: true };
 		}
-		return { found: false, value: undefined };
+		// A plain object a module stored can inherit the member: an inherited accessor is as unknown as an own one.
+		if (!raw && versionDispatcherRecord(node) === null) {
+			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Object.prototype; proto = Reflect.getPrototypeOf(proto)) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
+				if (descriptor)
+					return "value" in descriptor
+						? { found: true, value: runtime_nodeBehind(runtime_unwrapSelfView(descriptor.value)), accessor: false }
+						: { found: false, value: undefined, accessor: true };
+			}
+		}
+		return { found: false, value: undefined, accessor: false };
 	}
 
 	/**
-	 * The real paths a write at `parts` reaches through aliases (#625): walking the live tree along `parts`, a node
-	 * whose own api path is not the path it was reached at is another node stored there, an alias, and the rest of
-	 * the path continues from where that node really is. Each such path, with the remaining segments, is returned;
-	 * none when the path holds no alias.
+	 * Walk the live tree along `parts` the way a write there reaches it (#625). A node whose own api path is not the
+	 * path it was reached at is another node stored there, an alias, and the rest of the path continues from where
+	 * that node really is; a version dispatcher stands for the versioned node it routes to. Each such real path, with
+	 * the remaining segments, is returned. A member held as an accessor stops the walk as opaque: its getter is never
+	 * run here.
 	 *
 	 * @param {string[]} parts - Segments of the path written.
-	 * @returns {string[][]} The real paths, one per alias walked.
+	 * @returns {{paths: string[][], opaque: boolean}} The real paths, one per alias walked, and whether the walk met an
+	 *   accessor.
 	 * @private
 	 */
-	#aliasedPaths(parts) {
-		const found = [];
+	#walkReach(parts) {
+		const paths = [];
 		let node = this.slothlet.api;
 		for (let index = 0; index < parts.length; index++) {
-			const { found: held, value } = this.#rawMember(node, parts[index]);
+			const { found: held, value, accessor } = this.#rawMember(node, parts[index]);
+			if (accessor) return { paths, opaque: true };
 			if (!held) break;
-			const child = resolveWrapper(value);
+			let next = value;
+			// A dispatcher is no node of its own: the write lands in the versioned node it routes to.
+			const dispatch = versionDispatcherRecord(next);
+			if (dispatch) next = runtime_nodeBehind(runtime_unwrapSelfView(dispatch.resolve())) ?? next;
+			const child = resolveWrapper(next);
 			if (child) {
 				const real = String(child.____slothletInternal.apiPath ?? "");
-				if (real !== parts.slice(0, index + 1).join(".")) found.push([...real.split(".").filter(Boolean), ...parts.slice(index + 1)]);
+				if (real !== parts.slice(0, index + 1).join(".")) paths.push([...real.split(".").filter(Boolean), ...parts.slice(index + 1)]);
 			}
-			node = value;
+			node = next;
 		}
-		return found;
+		return { paths, opaque: false };
 	}
 
 	/**
@@ -836,7 +866,9 @@ export class ApiManager extends ComponentBase {
 		}
 		// The alias must be held at the path itself: a path that runs through one reaches the node it stands for, whose
 		// members are not removed through it.
-		if (parts.length === 0 || this.#aliasedPaths(parts.slice(0, -1)).length > 0 || !this.#isAliasAt(parts)) return false;
+		if (parts.length === 0) return false;
+		const through = this.#walkReach(parts.slice(0, -1));
+		if (through.opaque || through.paths.length > 0 || !this.#isAliasAt(parts)) return false;
 		if (options.recordHistory !== false) {
 			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
 			if (writer !== null) {
