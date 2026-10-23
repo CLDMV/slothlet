@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T12:23:40-07:00 (1792437820)
+ *	@Last modified time: 2026-10-23T15:27:05-07:00 (1792794425)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,10 @@
  * into another module's node is refused with nothing planted, and removing the alias drops only the alias, never
  * the node it stands for; the framework's setters are judged the same way. An alias to a node the module owns
  * behaves as that node. A removal the host makes does
- * not walk through an alias either. With and without the permission system, in all four mode / runtime
+ * not walk through an alias either. A path that runs through an accessor — a getter defined on a node, or one on an
+ * object stored there — is refused to module code without running the getter, and a version dispatcher stored as an
+ * alias is judged by the versioned node it routes to. The host is unrestricted: its own add through an alias
+ * places into the node the alias stands for. With and without the permission system, in all four mode / runtime
  * configurations.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`, and `holder/`.
@@ -115,7 +118,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 		it("refuses the framework's setters through the alias", async () => {
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setFor", "guest.x.ref"))).toBe("LOOSE_SET_NOT_OWNED");
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).not.toBe("done");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
 			await victimIntact();
 		});
@@ -129,7 +132,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 
 		it("does not remove the aliased node's members through the alias", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.ref.secret"))).not.toBe(true);
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.ref.secret"))).toBe(false);
 			await victimIntact();
 		});
 
@@ -156,6 +159,101 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			expect(await api.guest.x.removeAt("guest.mine")).toBe(true);
 			expect(api.guest.mine).toBeUndefined();
 			expect(typeof api.guest.x.listSelf).toBe("function");
+		});
+
+		describe("through an accessor or a version dispatcher", () => {
+			/**
+			 * Load, and have the host mount the victim code as version `v1` of `victim.lib`.
+			 * @returns {Promise<object>} The composed api.
+			 */
+			async function loadVersioned() {
+				await load();
+				await api.slothlet.api.add("victim.lib", VICTIM, { moduleID: "vl1" }, { version: "v1" });
+				return api;
+			}
+
+			/**
+			 * Whether the versioned victim node is whole: nothing was placed into it.
+			 * @returns {Promise<void>} Resolves when every check passed.
+			 */
+			async function versionedIntact() {
+				expect(await api.v1.victim.lib.v.secret()).toBe("SECRET");
+				expect(api.v1.victim.lib.v.zz).toBeUndefined();
+				expect(api.v1.victim.lib.zz).toBeUndefined();
+			}
+
+			it.each([
+				["a getter defined on the module's node", (x) => x.defineGetterAlias("guest.x", "g", "victim.v"), "guest.x.g"],
+				["a getter on an object the module stored", (x) => x.storeGetterObject("guest.x", "b", "r", "victim.v"), "guest.x.b.r"]
+			])("refuses an add through %s, and plants nothing", async (_label, store, at) => {
+				await load();
+				expect(await store(api.guest.x)).toBe("done");
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(`${at}.zz`, HOLDER, { moduleID: "gz" }))).toBe(
+					"LOOSE_SET_NOT_OWNED"
+				);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected(at, "zz", { collisionMode: "merge" }))).toBe(
+					"LOOSE_SET_NOT_OWNED"
+				);
+				expect(api.victim.v.zz).toBeUndefined();
+				await victimIntact();
+				await api.slothlet.api.remove("guest");
+				expect(api.victim.v.zz).toBeUndefined();
+				await victimIntact();
+			});
+
+			it("refuses the setters and removes nothing through a getter", async () => {
+				await load();
+				expect(await api.guest.x.defineGetterAlias("guest.x", "g", "victim.v")).toBe("done");
+				api.slothlet.metadata.setFor("victim.v", "kept", 1);
+				for (const what of ["setFor", "removeFor", "reload"]) {
+					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.g")) }).toEqual({
+						what,
+						outcome: "LOOSE_SET_NOT_OWNED"
+					});
+				}
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.g.secret"))).toBe(false);
+				expect(api.slothlet.metadata.getFor("victim.v").kept).toBe(1);
+				expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
+				await victimIntact();
+			});
+
+			it("refuses an add through a version dispatcher stored as an alias, and plants nothing, before and after the host removes the module", async () => {
+				await loadVersioned();
+				expect(await api.guest.x.storeAlias("guest.x", "vl", "victim.lib")).toBe("done");
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.vl.v.zz", HOLDER, { moduleID: "vz" }))).toBe(
+					"LOOSE_SET_NOT_OWNED"
+				);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.vl", "zz", { collisionMode: "merge" }))).toBe(
+					"LOOSE_SET_NOT_OWNED"
+				);
+				await versionedIntact();
+				await api.slothlet.api.remove("guest");
+				await versionedIntact();
+			});
+
+			it("refuses the setters and removes nothing through a version dispatcher stored as an alias", async () => {
+				await loadVersioned();
+				expect(await api.guest.x.storeAlias("guest.x", "vl", "victim.lib")).toBe("done");
+				for (const what of ["setFor", "reload"]) {
+					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.vl")) }).toEqual({
+						what,
+						outcome: "LOOSE_SET_NOT_OWNED"
+					});
+				}
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.vl.v"))).toBe(false);
+				await versionedIntact();
+			});
+
+			it("leaves the host placing into the node a host alias or getter stands for", async () => {
+				await load();
+				api.guest.x.hostRef = api.victim.v;
+				const node = api.victim.v;
+				Object.defineProperty(api.guest.x, "hostGetter", { get: () => node, configurable: true });
+				await api.slothlet.api.add("guest.x.hostRef", { exports: { viaRef: { ok: () => "ref" } } }, { moduleID: "hr" });
+				await api.slothlet.api.add("guest.x.hostGetter.viaGetter", { exports: { ok: () => "getter" } }, { moduleID: "hg" });
+				expect(await api.victim.v.viaRef.ok()).toBe("ref");
+				expect(await api.victim.v.viaGetter.ok()).toBe("getter");
+			});
 		});
 	});
 });

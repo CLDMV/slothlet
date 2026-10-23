@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T12:22:12-07:00 (1792437732)
+ *	@Last modified time: 2026-10-23T15:25:20-07:00 (1792794320)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -741,5 +741,45 @@ export function storeAlias(at, key, target) {
 	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
 	return attempt(() => {
 		read(at)[key] = read(target);
+	});
+}
+
+/**
+ * Define an accessor `key` on the node at `at` whose getter answers the node at `target`, read through `self` once.
+ * @param {string} at - Dotted path of the node the accessor is defined on.
+ * @param {string} key - The member name.
+ * @param {string} target - Dotted path of the node the getter answers.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * defineGetterAlias("guest.x", "g", "victim.v");
+ */
+export function defineGetterAlias(at, key, target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	return attempt(() => {
+		const node = read(target);
+		Object.defineProperty(read(at), key, { get: () => node, configurable: true, enumerable: true });
+	});
+}
+
+/**
+ * Store an object at `key` on the node at `at` whose getter `inner` answers the node at `target`, read through `self`
+ * once.
+ * @param {string} at - Dotted path of the node the object is stored on.
+ * @param {string} key - The member name.
+ * @param {string} inner - The getter's name.
+ * @param {string} target - Dotted path of the node the getter answers.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * storeGetterObject("guest.x", "b", "r", "victim.v");
+ */
+export function storeGetterObject(at, key, inner, target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	return attempt(() => {
+		const node = read(target);
+		read(at)[key] = {
+			get [inner]() {
+				return node;
+			}
+		};
 	});
 }
