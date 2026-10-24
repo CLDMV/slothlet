@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:40:37-07:00 (1792831237)
+ *	@Last modified time: 2026-10-24T02:41:44-07:00 (1792834904)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1176,4 +1176,21 @@ export async function callGlobal(key) {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Subscribe, from this module's code, to `impl:removed`, holding open every removal of a path under `prefix` until
+ * the host calls the release function it finds on the global object under `slothlet.test.i625.release`.
+ * @param {string} prefix - Paths whose removal is held.
+ * @returns {void}
+ * @example
+ * holdRemoval("bait");
+ */
+export function holdRemoval(prefix) {
+	let release;
+	const gate = new Promise((resolve) => {
+		release = resolve;
+	});
+	globalThis[Symbol.for("slothlet.test.i625.release")] = release;
+	self.slothlet.lifecycle.on("impl:removed", (data) => (String(data?.apiPath ?? "").startsWith(prefix) ? gate : undefined));
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:41:42-07:00 (1792831302)
+ *	@Last modified time: 2026-10-24T02:42:52-07:00 (1792834972)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const GUEST = path.join(FIXTURE, "guest");
@@ -96,6 +96,36 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		await api.slothlet.api.remove("gA");
 		const outcome = withSuppressedSlothletErrorOutputSync(() => late());
 		expect(outcome).toEqual({ hook: "PERMISSION_DENIED", event: "PERMISSION_DENIED", lifecycle: "PERMISSION_DENIED" });
+		expect(await api.victim.v.secret()).toBe("SECRET");
+	});
+
+	it("leaves a removed module's kept code without standing while another removal is held open", async () => {
+		api = await slothlet({
+			base: path.join(FIXTURE, "base"),
+			mode,
+			runtime,
+			silent: true,
+			hook: { enabled: true },
+			permissions: {}
+		});
+		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
+		await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+		await api.slothlet.api.add("holder", GUEST, { moduleID: "holder" });
+		await api.slothlet.api.add("bait", VICTIM, { moduleID: "bait" });
+		const caller = api.g.x.keepCaller("victim.v.secret");
+		const registering = api.g.x.keepRegistering("victim.v.secret:after", "victim.news");
+		expect(await caller()).toBe("SECRET");
+		api.holder.x.holdRemoval("bait");
+		const held = api.slothlet.api.remove("bait");
+		await api.slothlet.api.remove("gA");
+		expect(await withSuppressedSlothletErrorOutput(() => caller())).toBe("PERMISSION_DENIED");
+		expect(withSuppressedSlothletErrorOutputSync(() => registering())).toEqual({
+			hook: "PERMISSION_DENIED",
+			event: "PERMISSION_DENIED",
+			lifecycle: "PERMISSION_DENIED"
+		});
+		globalThis[Symbol.for("slothlet.test.i625.release")]();
+		await held;
 		expect(await api.victim.v.secret()).toBe("SECRET");
 	});
 
