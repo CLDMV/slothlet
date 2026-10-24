@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T11:52:32-07:00 (1792867952)
+ *	@Last modified time: 2026-10-24T13:14:04-07:00 (1792872844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6265,7 +6265,38 @@ export class UnifiedWrapper extends ComponentBase {
 		// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
 		// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
+		// A change through the stand-in is a write at the path it stands for (#625): judged as one before it is made.
+		const assertWaitingWrite = (prop) => {
+			const slothlet = wrapper.slothlet;
+			const parts = [...String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean), ...propChain.map(String)];
+			if (typeof prop === "string") parts.push(prop);
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			if (identity?.unresolved) {
+				throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			}
+			if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite(parts, identity.currentWrapper);
+		};
 		const waitingHandler = {
+			set(target, prop, value, receiver) {
+				assertWaitingWrite(prop);
+				return Reflect.set(target, prop, value, receiver);
+			},
+			defineProperty(target, prop, descriptor) {
+				assertWaitingWrite(prop);
+				return Reflect.defineProperty(target, prop, descriptor);
+			},
+			deleteProperty(target, prop) {
+				assertWaitingWrite(prop);
+				return Reflect.deleteProperty(target, prop);
+			},
+			setPrototypeOf(target, proto) {
+				assertWaitingWrite(null);
+				return Reflect.setPrototypeOf(target, proto);
+			},
+			preventExtensions(target) {
+				assertWaitingWrite(null);
+				return Reflect.preventExtensions(target);
+			},
 			get(___target, prop) {
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
