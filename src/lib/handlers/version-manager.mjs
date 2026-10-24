@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:13:23-07:00 (1792822403)
+ *	@Last modified time: 2026-10-24T01:41:03-07:00 (1792831263)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -723,7 +723,8 @@ export class VersionManager extends ComponentBase {
 			// Check for inline force-override symbol in ALS context
 			// Note: user-supplied data from context.run() is stored in ctx.context (not ctx root),
 			// so we read from ctx.context for Symbol-keyed overrides.
-			const ctx = manager.slothlet.contextManager?.tryGetContext?.();
+			// This instance's flow only: another instance's context forces nothing here, nor names its caller (#625).
+			const ctx = manager.slothlet.contextManager?.tryGetContext?.(manager.slothlet.instanceID);
 			const forcedVersion = ctx?.context?.[FORCE_VERSION_SYMBOL];
 			if (forcedVersion) {
 				const entry = manager.#registry.get(logicalPath);
@@ -733,7 +734,8 @@ export class VersionManager extends ComponentBase {
 			// Build discriminator arguments
 			// currentWrapper = the module currently executing (the one calling into the dispatcher)
 			// Per-flow identity: the discriminator routes on who is calling.
-			const callerWrapper = manager.slothlet?.contextManager?.getCallerIdentity?.()?.currentWrapper ?? ctx?.currentWrapper ?? null;
+			const callerWrapper =
+				manager.slothlet?.contextManager?.getCallerIdentity?.(manager.slothlet.instanceID)?.currentWrapper ?? ctx?.currentWrapper ?? null;
 			const allVersions = manager.buildAllVersionsArg(logicalPath);
 			const caller = manager.buildCallerArg(callerWrapper);
 

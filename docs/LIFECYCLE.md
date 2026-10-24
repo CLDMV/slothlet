@@ -33,7 +33,7 @@ const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
 unsubscribe();
 ```
 
-A subscriber registered from module code runs as that module and receives the event data only. Once the module is removed its subscribers receive nothing more, and code the removed module kept cannot subscribe again.
+A subscriber registered from module code runs as that module and receives the event data only. It hears the events of its own module's removal, so it can clean up; once that removal is done its subscribers receive nothing more, and code the removed module kept cannot subscribe again.
 
 ### Unsubscribing
 

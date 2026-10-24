@@ -229,7 +229,7 @@ pending.length = 0;
 
 ### `strategy(fn)`
 
-`api.slothlet.event.strategy(fn)` installs `fn` for the instance; `strategy(null)` clears it. It is **host-only**, gated exactly like `rules.*` by the built-in `slothlet.event.**` deny — a module calling it is refused with `PERMISSION_DENIED`. The strategy survives `api.slothlet.reload()`.
+`api.slothlet.event.strategy(fn)` installs `fn` for the instance; `strategy(null)` clears it. It is **host-only**, gated exactly like `rules.*` by the built-in `slothlet.event.**` deny — a module calling it is refused with `PERMISSION_DENIED`. The strategy survives `api.slothlet.reload()`. A strategy module code installs anyway (the host granted it `slothlet.event.strategy`, or the permission system is off) runs as that module, whoever emits, so what it writes through `self` is held to that module; it goes with the module when the module is removed, and delivery is immediate again.
 
 It is called once per emit as `fn(envelope, listeners, defaultDeliver)`:
 

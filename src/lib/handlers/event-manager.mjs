@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-24T01:41:02-07:00 (1792831262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,6 +117,13 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#strategy = null;
+
+	/**
+	 * The module that installed {@link EventManager#strategy}'s current strategy, by base id, or null for the host.
+	 * @type {string|null}
+	 * @private
+	 */
+	#strategyOwner = null;
 
 	/**
 	 * @param {object} slothlet - Slothlet instance.
@@ -436,7 +443,21 @@ export class EventManager extends ComponentBase {
 		if (fn !== null && typeof fn !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "fn", expected: "a function or null", received: typeof fn });
 		}
-		this.#strategy = fn;
+		// A strategy module code installs (a host grant lets it, or the permission system is off) runs as that module,
+		// whoever emits (#625): its own writes are held to the module, as its listeners' are. Once the module is gone it
+		// does nothing, and delivery is immediate again.
+		const installer = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
+		if (fn === null || installer === null) {
+			this.#strategy = fn;
+			this.#strategyOwner = null;
+			return;
+		}
+		const slothlet = this.slothlet;
+		this.#strategy = function slothlet_moduleStrategy(envelope, listeners, defaultDeliver) {
+			if (slothlet.handlers.apiManager.isRemovedCaller(installer)) return defaultDeliver();
+			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [envelope, listeners, defaultDeliver], installer, true);
+		};
+		this.#strategyOwner = ownerIdOf(installer);
 	}
 
 	/**
@@ -532,6 +553,11 @@ export class EventManager extends ComponentBase {
 	 */
 	onModuleRemoved(moduleID) {
 		this.#dropOwner(moduleID);
+		// A strategy the module installed goes with it, as its listeners do (#625).
+		if (this.#strategyOwner !== null && this.#strategyOwner === String(moduleID).split(MODULE_ID_SEPARATOR)[0]) {
+			this.#strategy = null;
+			this.#strategyOwner = null;
+		}
 	}
 
 	/**

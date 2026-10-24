@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:19:30-07:00 (1792829970)
+ *	@Last modified time: 2026-10-24T01:41:02-07:00 (1792831262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1049,7 +1049,7 @@ export class ApiBuilder extends ComponentBase {
 					// says nothing about another module's module-private members (#260), which the
 					// composed surface already redacts from `Object.keys`. Reading identity the same
 					// way enforceInternalPermission does — a host caller has no currentWrapper.
-					const leavesIdentity = slothlet.contextManager?.getCallerIdentity?.();
+					const leavesIdentity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 					const leavesCaller = leavesIdentity?.currentWrapper ?? null;
 					if (includePrivate && leavesCaller) {
 						// The unredacted list is a host/tooling capability. A module asking for it would
@@ -2769,7 +2769,7 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
 							}
 							/* v8 ignore stop */
-							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
@@ -3023,7 +3023,7 @@ export class ApiBuilder extends ComponentBase {
 					// Per-flow identity: this moduleID decides whether the caller owns the rule it is
 					// removing, so attributing it to a concurrently-suspended module would let one
 					// module drop another's rule.
-					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 					// Module code removes only the rules it could add (#625).
 					permissionManager.assertModuleRuleRemoval(ruleId);
@@ -3087,7 +3087,7 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: the registrant becomes the name's owner, so attributing it to a
 						// concurrently-suspended module would hand that module the name.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 						const ownerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 						// A module's resolver runs AS that module: whatever it calls is attributed to the owner, not
 						// to the module whose call happened to trigger the resolve. `slothlet.instanceID` is read at
@@ -3133,7 +3133,7 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
@@ -3170,7 +3170,7 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 						return permissionManager.invalidatePrincipal(name, identityKey, callerModuleID);
 					}
@@ -3204,7 +3204,7 @@ export class ApiBuilder extends ComponentBase {
 
 						const ctx = slothlet.contextManager?.tryGetContext?.();
 						// Per-flow identity — otherwise this answers for whichever module entered last.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
@@ -3232,7 +3232,7 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: this returns the caller's own rules, so mis-attribution would
 						// disclose another module's rule set.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
 					}

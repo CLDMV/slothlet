@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:19:31-07:00 (1792829971)
+ *	@Last modified time: 2026-10-24T01:41:02-07:00 (1792831262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -131,6 +131,14 @@ const MOUNTED_BY = Symbol("mountedBy");
  * await manager.addApiComponent({ apiPath: "plugins", folderPath: "./plugins" });
  */
 export class ApiManager extends ComponentBase {
+	/**
+	 * Tokens of the modules a removal in progress has taken, for the length of the outermost
+	 * {@link ApiManager#removeApiComponent} (#625); null when no removal runs.
+	 * @type {Set<object>|null}
+	 * @private
+	 */
+	#dyingIncarnations = null;
+
 	static slothletProperty = "apiManager";
 
 	/**
@@ -968,6 +976,16 @@ export class ApiManager extends ComponentBase {
 	 */
 	isRemovedCaller(callerWrapper) {
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
+		// A module whose removal is still in progress hears of it, and may still clean up (see removeApiComponent): its
+		// token is still the id's, or this removal retired it.
+		const incarnation = callerWrapper.____slothletInternal.incarnation;
+		if (
+			this.#dyingIncarnations !== null &&
+			incarnation !== undefined &&
+			(this.#dyingIncarnations.has(incarnation) || incarnation === this.incarnationOf(callerWrapper.____slothletInternal.moduleID))
+		) {
+			return false;
+		}
 		return this.#ownedRoot(callerWrapper) === null;
 	}
 
@@ -2186,7 +2204,11 @@ export class ApiManager extends ComponentBase {
 		this.slothlet.handlers.permissionManager.onModuleRemoved(moduleID);
 		this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleID);
 		// Its code keeps no standing, whoever takes the id next (#625). A replay leaves the incarnations as they are.
-		if (recordHistory) this.slothlet._moduleIncarnations?.delete(id);
+		if (recordHistory) {
+			const incarnation = this.slothlet._moduleIncarnations?.get(id);
+			if (incarnation) this.#dyingIncarnations?.add(incarnation);
+			this.slothlet._moduleIncarnations?.delete(id);
+		}
 		// Its mounts' records go, and so does every record naming it as the mounting module: a module that later takes
 		// the freed id inherits no right to remove what it mounted, live or after a reload.
 		for (const [key, mounter] of [...this.mountedBy]) {
@@ -4027,6 +4049,26 @@ export class ApiManager extends ComponentBase {
 	 * await manager.removeApiComponent("plugins-core", { scopedApiPath: "plugins.tools" }); // just that node
 	 */
 	async removeApiComponent(pathOrModuleId, options = {}) {
+		// The modules this removal takes are still theirs to hear about until it is done (#625): what they subscribed is
+		// told of their own removal, and only once the outermost removal finishes are they gone.
+		const outermost = this.#dyingIncarnations === null;
+		if (outermost) this.#dyingIncarnations = new Set();
+		try {
+			return await this.#removeApiComponent(pathOrModuleId, options);
+		} finally {
+			if (outermost) this.#dyingIncarnations = null;
+		}
+	}
+
+	/**
+	 * The body of {@link ApiManager#removeApiComponent}.
+	 *
+	 * @param {string} pathOrModuleId - What to remove.
+	 * @param {object} [options] - Removal options.
+	 * @returns {Promise<boolean>} Whether anything was removed.
+	 * @private
+	 */
+	async #removeApiComponent(pathOrModuleId, options = {}) {
 		const recordHistory = options.recordHistory !== false;
 		if (typeof pathOrModuleId !== "string" || !pathOrModuleId) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
