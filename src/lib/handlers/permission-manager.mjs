@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:02-07:00 (1792434842)
+ *	@Last modified time: 2026-10-23T19:45:51-07:00 (1792809951)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1584,8 +1584,8 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object} rule - The rule (`{ target, … }`).
 	 * @param {object|null} [writer] - The module code registering it, when an entry point captured it before an await
 	 *   lost it; read now when omitted. Null is host code.
-	 * @returns {{ownerModuleID: string|null, layer: string|null}} Owner and layer to register the rule with; both null
-	 *   for host code.
+	 * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
+	 *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
 	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
 	 * @example
 	 * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
@@ -1593,7 +1593,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	placeModuleRule(rule, writer) {
 		const module = writer === undefined ? runtime_selfModuleReader(this.slothlet) : writer;
-		if (module === null) return { ownerModuleID: null, layer: null };
+		if (module === null) return { ownerModuleID: null, layer: null, writer: null };
 		const internal = module.____slothletInternal;
 		const refuse = () => {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
@@ -1607,13 +1607,55 @@ export class PermissionManager extends ComponentBase {
 		/* v8 ignore next */
 		if (!internal) refuse();
 		// A malformed rule is left to the rule validation, which refuses it.
-		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module" };
+		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module", writer: module };
 		const pattern = this.#parseWriteTarget(rule.target) ?? this.#parseHookTarget(rule.target)?.pathPattern ?? rule.target;
 		const prefix = writeTargetLiteralPrefix(pattern);
 		const own = prefix.length > 0 && !isFrameworkWriteTarget(pattern) && this.slothlet.handlers.apiManager.ownsPath(prefix, module);
-		if (own) return { ownerModuleID: internal.moduleID, layer: "module" };
+		if (own) return { ownerModuleID: internal.moduleID, layer: "module", writer: module };
 		if (!this.#mayReachBeyondOwn(String(internal.apiPath))) refuse();
-		return { ownerModuleID: internal.moduleID, layer: "manager" };
+		return { ownerModuleID: internal.moduleID, layer: "manager", writer: module };
+	}
+
+	/**
+	 * A rule's condition as module code registers it: each function in it runs as that module (#625).
+	 *
+	 * A function condition is called while some other call is checked, so on its own it would run as that call's
+	 * caller, and whatever it did through `self` — a write, a call — would be judged as that caller's. Pinned to the
+	 * module that registered the rule, it has that module's standing and no other, as the module's own code does.
+	 * A plain-data condition, and any condition host code registers, is handed back as it is.
+	 *
+	 * @param {*} condition - The condition, as {@link snapshotRule} copied it.
+	 * @param {object|null} writer - The module code registering the rule, as {@link placeModuleRule} returned it;
+	 *   null for host code.
+	 * @returns {*} The condition, its functions pinned to `writer`.
+	 * @example
+	 * const { writer } = pm.placeModuleRule(rule);
+	 * pm.addRule({ ...rule, condition: pm.pinConditions(rule.condition, writer) });
+	 */
+	pinConditions(condition, writer) {
+		if (!writer) return condition;
+		if (typeof condition === "function") return this.#pinCondition(condition, writer);
+		if (Array.isArray(condition) && condition.some((entry) => typeof entry === "function")) {
+			return Object.freeze(condition.map((entry) => (typeof entry === "function" ? this.#pinCondition(entry, writer) : entry)));
+		}
+		return condition;
+	}
+
+	/**
+	 * One function condition, run as `writer`.
+	 *
+	 * @param {Function} fn - The condition.
+	 * @param {object} writer - The module it runs as.
+	 * @returns {Function} The pinned condition.
+	 * @private
+	 */
+	#pinCondition(fn, writer) {
+		const slothlet = this.slothlet;
+		// instanceID and contextManager are read when the condition runs, so a rule replayed after a reload runs in
+		// the current instance. rawErrors: a throw reaches the condition matcher unchanged, which treats it as no match.
+		return function slothlet_pinnedCondition(ctx, callMeta) {
+			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [ctx, callMeta], writer, true);
+		};
 	}
 
 	/**

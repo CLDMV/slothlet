@@ -93,6 +93,8 @@ The function is called with the full runtime context object and must return a tr
 
 The function receives the same object the user passed to `context.run()`, or `{}` if no run is active. It may inspect any field at any depth.
 
+A condition in a rule that module code registered — through `self.slothlet.permissions.addRule`, a manifest it mounted, or the `permissions` option of an `api.add` it made — runs as that module, whichever caller's call is being checked, the same way a hook handler a module registers is pinned to it. Anything it reaches through `self` is judged with that module's standing: it cannot write, or call, past what the module itself may.
+
 #### Second argument: call metadata (`callMeta`)
 
 At a **call** or **construct** gate the function condition also receives a second argument, `callMeta`, carrying the invocation's own details:

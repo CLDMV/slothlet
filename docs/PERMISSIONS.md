@@ -504,7 +504,7 @@ const api = await slothlet({
 
 #### Rules are stored by value
 
-`addRule(rule)`, the config's `permissions.rules`, a manifest's rules, and the `permissions` option of an `api.add` each store their own copy of the rule, its `condition` included (copied deeply into frozen data). Editing the object afterwards does not change the installed rule, and a reload replays the copy. To change a rule, remove it and add the new one. A function condition is kept as the same function, and it is still evaluated on every check, against that call's context. A rule whose fields are accessors is refused.
+`addRule(rule)`, the config's `permissions.rules`, a manifest's rules, and the `permissions` option of an `api.add` each store their own copy of the rule, its `condition` included (copied deeply into frozen data). Editing the object afterwards does not change the installed rule, and a reload replays the copy. To change a rule, remove it and add the new one. A function condition is kept as the same function, and it is still evaluated on every check, against that call's context. When module code registered the rule (through `addRule`, a manifest it mounted, or the `permissions` option of an `api.add` it made), the function runs as that module, whichever caller's call is being checked: what it reads, calls, or writes through `self` is judged with that module's standing, never the caller's. A rule whose fields are accessors is refused.
 
 ```javascript
 const rule = { caller: "reports.**", target: "billing.**", effect: "deny" };
@@ -807,6 +807,8 @@ const api = await slothlet({
 	}
 });
 ```
+
+Ownership is judged for the module **executing** the write, as caller identity tracks it (see [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement)). A callback one module hands to another and that the other calls synchronously runs inside the other's call, so its writes are judged as that module's. To keep a callback to the module that made it, wrap it with `self.slothlet.lockCaller`.
 
 **Known limitation.** Module code the host invokes inside its own `context.run()` — a function, thenable, or getter a module returned — currently runs with the host's standing, so its writes are not held to that module's ownership or write rules.
 

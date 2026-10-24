@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:02-07:00 (1792434842)
+ *	@Last modified time: 2026-10-23T19:45:51-07:00 (1792809951)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -492,7 +492,15 @@ export class ModuleManager extends ComponentBase {
 		// wiring the permission system previously validated but never applied.
 		// Registered for the mounted module (removed with it), at the manifest layer for the host's mount and at the
 		// placed module layer for module code's (#625).
-		manifestRules.forEach((rule, i) => permissionManager.addRule(rule, moduleID, null, rulePlacements[i].layer ?? "manifest"));
+		// A function condition among them runs as the module code that mounted it, as its addRule's do.
+		manifestRules.forEach((rule, i) =>
+			permissionManager.addRule(
+				rulePlacements[i].writer ? { ...rule, condition: permissionManager.pinConditions(rule.condition, rulePlacements[i].writer) } : rule,
+				moduleID,
+				null,
+				rulePlacements[i].layer ?? "manifest"
+			)
+		);
 		manifestEvents.forEach((rule, i) => permissionManager.addEventRule(rule, moduleID, null, eventPlacements[i].layer ?? "manifest"));
 
 		const result = {

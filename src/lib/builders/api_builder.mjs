@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:00-07:00 (1792434840)
+ *	@Last modified time: 2026-10-23T19:45:50-07:00 (1792809950)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2947,7 +2947,9 @@ export class ApiBuilder extends ComponentBase {
 					// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
 					// that module's rule, at the module layer, below the host's.
 					rule = permissionManager.snapshotRule(rule);
-					const { ownerModuleID, layer } = permissionManager.placeModuleRule(rule);
+					const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule(rule);
+					// Its condition runs as the module, whichever call it is checked for.
+					if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
 					const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
 
 					// Record in operationHistory for replay on reload

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T17:06:56-07:00 (1792800416)
+ *	@Last modified time: 2026-10-23T19:45:50-07:00 (1792809950)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3583,7 +3583,8 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Register permission rules from options.permissions (e.g. { deny: [...], allow: [...] })
+		// Register permission rules from options.permissions (e.g. { deny: [...], allow: [...] }). A function condition
+		// in a rule module code mounts with runs as that module (#625).
 		if (restOptions.permissions && this.slothlet.handlers?.permissionManager) {
 			const perms = restOptions.permissions;
 			const callerPattern = `${normalizedPath}.**`;
@@ -3592,7 +3593,12 @@ export class ApiManager extends ComponentBase {
 				perms.deny.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
-						{ caller: callerPattern, target, effect: "deny", condition },
+						{
+							caller: callerPattern,
+							target,
+							effect: "deny",
+							condition: this.slothlet.handlers.permissionManager.pinConditions(condition, ruleLayers.deny[i].writer ?? null)
+						},
 						moduleID,
 						null,
 						ruleLayers.deny[i].layer
@@ -3603,7 +3609,12 @@ export class ApiManager extends ComponentBase {
 				perms.allow.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
-						{ caller: callerPattern, target, effect: "allow", condition },
+						{
+							caller: callerPattern,
+							target,
+							effect: "allow",
+							condition: this.slothlet.handlers.permissionManager.pinConditions(condition, ruleLayers.allow[i].writer ?? null)
+						},
 						moduleID,
 						null,
 						ruleLayers.allow[i].layer
