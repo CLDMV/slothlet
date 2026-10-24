@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-18T08:16:50-07:00 (1792336610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,4 +103,43 @@ export function markFrameworkInternal(obj) {
  */
 export function isFrameworkInternal(obj) {
 	return obj !== null && (typeof obj === "object" || typeof obj === "function") && FRAMEWORK_INTERNAL.has(obj);
+}
+
+/**
+ * Version dispatchers slothlet mounted, each with the instance it serves and how it resolves the versioned
+ * node it currently routes to. Weak, like the brand.
+ * @type {WeakMap<object, {slothlet: object, resolve: function(): (object|null)}>}
+ * @private
+ */
+const VERSION_DISPATCHERS = new WeakMap();
+
+/**
+ * Record a version dispatcher, so a view of it can be built for module code (#625): the dispatcher is no
+ * api node of its own, it routes every access to a versioned node.
+ *
+ * @param {object} dispatcher - The dispatcher proxy.
+ * @param {{slothlet: object, resolve: function(): (object|null)}} record - Its instance, and the resolver of
+ *   the versioned node it routes to right now.
+ * @returns {object} `dispatcher`.
+ * @internal
+ * @example
+ * registerVersionDispatcher(proxy, { slothlet, resolve: resolveVersionedWrapper });
+ */
+export function registerVersionDispatcher(dispatcher, record) {
+	VERSION_DISPATCHERS.set(dispatcher, record);
+	return dispatcher;
+}
+
+/**
+ * The record of a version dispatcher ({@link registerVersionDispatcher}), or null for anything else.
+ *
+ * @param {*} obj - Candidate.
+ * @returns {{slothlet: object, resolve: function(): (object|null)}|null} The record.
+ * @internal
+ * @example
+ * const dispatch = versionDispatcherRecord(node);
+ */
+export function versionDispatcherRecord(obj) {
+	if (obj === null || (typeof obj !== "object" && typeof obj !== "function")) return null;
+	return VERSION_DISPATCHERS.get(obj) ?? null;
 }

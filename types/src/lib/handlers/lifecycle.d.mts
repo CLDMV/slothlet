@@ -15,6 +15,7 @@ export class Lifecycle extends ComponentBase {
     constructor(slothlet: object);
     subscribers: Map<any, any>;
     internalSubscribers: Map<any, any>;
+    subscriberReaders: Map<any, any>;
     eventLog: any[];
     maxLogSize: number;
     /**
@@ -81,6 +82,9 @@ export class Lifecycle extends ComponentBase {
      * Emit lifecycle event
      * @param {string} event - Event name
      * @param {object} data - Event data
+     * @param {{impl?: object|null}} [nodes] - The api node the event's `impl` is about, when `data.impl` is
+     *   its implementation rather than the node: a subscriber a module subscribed is handed its module's
+     *   view of that node (#625), or null when there is none.
      * @private
      *
      * @description

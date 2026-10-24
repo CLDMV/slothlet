@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:18-07:00 (1791819078)
+ *	@Last modified time: 2026-10-18T14:53:02-07:00 (1792360382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey, runtime_frameworkWrite } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, markFrameworkInternal } from "#handlers/framework-internals";
 
 /**
@@ -397,7 +397,9 @@ export class ApiAssignment extends ComponentBase {
 							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
-						targetApi[key] = value;
+						runtime_frameworkWrite(targetApi, () => {
+							targetApi[key] = value;
+						});
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_COLLISION_REPLACE_AFTER",
 							propKey: key,
@@ -413,7 +415,9 @@ export class ApiAssignment extends ComponentBase {
 					// For other combinations, fall through to default replacement logic
 				}
 				// Default: Just replace
-				targetApi[key] = value;
+				runtime_frameworkWrite(targetApi, () => {
+					targetApi[key] = value;
+				});
 				return true;
 			}
 
@@ -446,7 +450,9 @@ export class ApiAssignment extends ComponentBase {
 						if (isMergeReplace && valueWrapper.____slothletInternal.isCallable) {
 							valueWrapper.____slothletInternal.offSlotCollisionFolder = existingWrapper;
 							existingWrapper.____slothletInternal.needsImmediateChildAdoption = true;
-							targetApi[key] = value;
+							runtime_frameworkWrite(targetApi, () => {
+								targetApi[key] = value;
+							});
 							return true;
 						}
 						// Under merge the first-loaded folder keeps its function — but whether it has one is unknown
@@ -525,7 +531,9 @@ export class ApiAssignment extends ComponentBase {
 								valueWrapper._materialize().catch(() => {});
 							}
 							// Keep the existing callable on the slot; the merge above finishes the composition.
-							targetApi[key] = existing;
+							runtime_frameworkWrite(targetApi, () => {
+								targetApi[key] = existing;
+							});
 							return true;
 						}
 						if (!isMergeReplace) {
@@ -619,7 +627,9 @@ export class ApiAssignment extends ComponentBase {
 							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
-						targetApi[key] = value;
+						runtime_frameworkWrite(targetApi, () => {
+							targetApi[key] = value;
+						});
 						return true; // Assignment completed
 					}
 
@@ -670,7 +680,9 @@ export class ApiAssignment extends ComponentBase {
 						}
 						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
 						// without anyone performing the assignment.
-						targetApi[key] = value;
+						runtime_frameworkWrite(targetApi, () => {
+							targetApi[key] = value;
+						});
 						return true; // The callable holds the slot, carrying both sources' members.
 					}
 
@@ -757,7 +769,7 @@ export class ApiAssignment extends ComponentBase {
 					// Primitive values never occur in a plain-object merge context.
 					/* v8 ignore next */
 					if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
-						Object.assign(existing, value);
+						runtime_frameworkWrite(existing, () => Object.assign(existing, value));
 						return true;
 					}
 				}
@@ -773,7 +785,9 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		// Case 4: Direct assignment
-		targetApi[key] = value;
+		runtime_frameworkWrite(targetApi, () => {
+			targetApi[key] = value;
+		});
 		return true;
 	}
 
@@ -884,7 +898,7 @@ export class ApiAssignment extends ComponentBase {
 		if (removeMissing) {
 			for (const key of Object.keys(targetApi)) {
 				if (!sourceKeys.has(key)) {
-					delete targetApi[key];
+					runtime_frameworkWrite(targetApi, () => delete targetApi[key]);
 				}
 			}
 		}

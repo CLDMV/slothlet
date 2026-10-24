@@ -93,6 +93,8 @@ The function is called with the full runtime context object and must return a tr
 
 The function receives the same object the user passed to `context.run()`, or `{}` if no run is active. It may inspect any field at any depth.
 
+A condition in a rule that module code registered — through `self.slothlet.permissions.addRule`, a manifest it mounted, or the `permissions` option of an `api.add` it made — runs as that module, whichever caller's call is being checked, the same way a hook handler a module registers is pinned to it. Anything it reaches through `self` is judged with that module's standing: it cannot write, or call, past what the module itself may.
+
 #### Second argument: call metadata (`callMeta`)
 
 At a **call** or **construct** gate the function condition also receives a second argument, `callMeta`, carrying the invocation's own details:
@@ -160,6 +162,8 @@ An empty array `[]` is rejected at `addRule()` time.
 
 ---
 
+A condition is stored by value with its rule: editing the object after the rule is added changes nothing, and a function condition is kept as the same function, evaluated on every check against that call's context. See [Rules are stored by value](PERMISSIONS.md#rules-are-stored-by-value).
+
 ## Behavior Reference
 
 | Situation                                                | Result                                                                                           |
@@ -199,6 +203,9 @@ An empty array `[]` is rejected at `addRule()` time.
 | Array containing a primitive entry                           | **No** — throws               |
 | Empty array `[]`                                             | **No** — throws               |
 | Class instance (custom prototype)                            | **No** — throws               |
+| A `Proxy`, as the condition or anywhere inside it            | **No** — throws               |
+
+**Why a `Proxy` is rejected:** a condition is stored as a frozen copy of plain data and read on every check. A trap of a Proxy inside it would run during those checks, as whichever caller is being checked, so a condition holding one is refused when the rule is added, whoever adds it.
 
 **Why primitives are rejected:** A condition is a _context matcher_ — it describes properties of the per-request runtime context. A bare primitive like `"admin"` has no defined semantics as a context matcher. Use a function condition if you need arbitrary matching logic.
 

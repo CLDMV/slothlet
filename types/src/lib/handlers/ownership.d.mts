@@ -21,6 +21,7 @@ export class OwnershipManager extends ComponentBase {
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
     moduleEndpoints: Map<any, any>;
+    moduleMounts: Map<any, any>;
     placementModes: Map<any, any>;
     exportIndex: Map<any, any>;
     cloneSources: WeakMap<object, any>;
@@ -200,6 +201,22 @@ export class OwnershipManager extends ComponentBase {
      * @public
      */
     public setModuleEndpoint(moduleID: string, endpoint: string): void;
+    /**
+     * Every live mount endpoint of a module (#625): one id may be mounted at several paths.
+     * @param {string} moduleID - Module identifier.
+     * @returns {string[]} The endpoints; empty when the module is not mounted.
+     * @public
+     */
+    public getModuleMounts(moduleID: string): string[];
+    /**
+     * Forget one mount endpoint of a module (#625). When another mount remains and the recorded endpoint was this
+     * one, the recorded endpoint becomes a remaining mount.
+     * @param {string} moduleID - Module identifier.
+     * @param {string} endpoint - The mount endpoint removed.
+     * @returns {number} How many mounts the module has left.
+     * @public
+     */
+    public releaseMount(moduleID: string, endpoint: string): number;
     /**
      * Look up a module's mount endpoint.
      * @param {string} moduleID - Module identifier.

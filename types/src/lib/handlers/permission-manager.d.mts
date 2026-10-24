@@ -30,6 +30,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string} rule.effect - "allow" or "deny".
      * @param {string|null} [ownerModuleID=null] - Module ID that owns this rule.
      * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
+     * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
      * @returns {string} The rule ID (generated or reused).
      * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
      * @example
@@ -39,7 +40,7 @@ export class PermissionManager extends ComponentBase {
         caller: string;
         target: string;
         effect: string;
-    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: null): string;
+    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: string | null): string;
     /**
      * Remove a permission rule by ID.
      * A module cannot remove rules it owns (immutability).
@@ -183,8 +184,8 @@ export class PermissionManager extends ComponentBase {
      */
     hasPrincipal(name: string): boolean;
     /**
-     * Drop every principal owned by a removed module (#459). Called when a whole module is removed
-     * (`api.slothlet.api.remove(moduleID)`), so a resolver never outlives the code that defined it.
+     * Drop every principal (#459) and every rule (#625) owned by a removed module. Called when a whole module is
+     * removed (`api.slothlet.api.remove(moduleID)`), so neither a resolver nor a grant outlives the module.
      *
      * @param {string} moduleID - The removed module's id.
      * @returns {void}
@@ -314,6 +315,153 @@ export class PermissionManager extends ComponentBase {
         moduleCaller?: boolean;
         via?: string;
     } | null): boolean;
+    /**
+     * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+     * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
+     *
+     * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
+     * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
+     * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
+     * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
+     * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+     * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
+     * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
+     *
+     * A rule module code adds is that module's rule, at the module layer (`module` for its own subtree, `manager`
+     * for a rule beyond it), ranked with a manifest's: a host rule outranks it at equal specificity. A `module`
+     * rule never lifts a built-in rule; a `manager` rule may, as a manifest's may. Host code is not placed: its
+     * rules keep their usual owner and layer. Code the live runtime cannot attribute is refused.
+     *
+     * @param {object} rule - The rule (`{ target, … }`).
+     * @param {object|null} [writer] - The module code registering it, when an entry point captured it before an await
+     *   lost it; read now when omitted. Null is host code.
+     * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
+     *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+     * @example
+     * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
+     * pm.addRule(rule, ownerModuleID, null, layer);
+     */
+    placeModuleRule(rule: object, writer?: object | null): {
+        ownerModuleID: string | null;
+        layer: string | null;
+        writer: object | null;
+    };
+    /**
+     * A rule's condition as module code registers it: each function in it runs as that module (#625).
+     *
+     * A function condition is called while some other call is checked, so on its own it would run as that call's
+     * caller, and whatever it did through `self` — a write, a call — would be judged as that caller's. Pinned to the
+     * module that registered the rule, it has that module's standing and no other, as the module's own code does.
+     * A plain-data condition, and any condition host code registers, is handed back as it is.
+     *
+     * @param {*} condition - The condition, as {@link snapshotRule} copied it.
+     * @param {object|null} writer - The module code registering the rule, as {@link placeModuleRule} returned it;
+     *   null for host code.
+     * @returns {*} The condition, its functions pinned to `writer`.
+     * @example
+     * const { writer } = pm.placeModuleRule(rule);
+     * pm.addRule({ ...rule, condition: pm.pinConditions(rule.condition, writer) });
+     */
+    pinConditions(condition: any, writer: object | null): any;
+    /**
+     * Refuse module code removing a rule it may not (#625). Host code removes any rule.
+     *
+     * A module removes the rules owned by its own module — those its code added; the ones registered on its behalf
+     * (its manifest's, an `api.add`'s) then meet the self-modification guard of {@link removeRule}. A module allowed
+     * to manage rules beyond its subtree (see {@link placeModuleRule}) also removes other modules' rules, never the
+     * host's (instance or runtime layer) or the framework's: to override one, it adds a rule of its own, which
+     * normal precedence then weighs.
+     *
+     * @param {string} ruleId - The rule about to be removed.
+     * @returns {void}
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+     * @example
+     * pm.assertModuleRuleRemoval("perm-12");
+     */
+    assertModuleRuleRemoval(ruleId: string): void;
+    /**
+     * Refuse module code removing an event rule it may not (#625), as {@link assertModuleRuleRemoval} does for a call
+     * or write rule. Host code removes any event rule.
+     *
+     * @param {string} ruleId - The event rule about to be removed.
+     * @returns {void}
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+     * @example
+     * pm.assertModuleEventRuleRemoval("evt-12");
+     */
+    assertModuleEventRuleRemoval(ruleId: string): void;
+    /**
+     * A rule as it is registered: its own data fields, read once into a frozen copy (#625).
+     *
+     * The copy, not the object handed in, is what is checked, registered, and replayed on a reload, so a field that
+     * answers differently on a later read, or a change to the object afterwards, changes nothing. A field that is an
+     * accessor is refused. Anything that is no object is handed back for the rule validation to refuse.
+     *
+     * @param {*} rule - The rule handed in.
+     * @returns {*} The frozen copy, or `rule` when it is no object.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @example
+     * const rule = pm.snapshotRule(input);
+     */
+    snapshotRule(rule: any): any;
+    /**
+     * An event rule as it is registered (`{ caller, event, effect, condition }`), read once into a frozen copy, as
+     * {@link snapshotRule} reads a call or write rule (#625).
+     *
+     * @param {*} rule - The event rule handed in.
+     * @returns {*} The frozen copy, or `rule` when it is no object.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @example
+     * const rule = pm.snapshotEventRule(input);
+     */
+    snapshotEventRule(rule: any): any;
+    /**
+     * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+     * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
+     * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
+     * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
+     * check, and weighs every other rule on the target as usual. Host code is not checked.
+     *
+     * @param {object|null} module - The calling module's wrapper ({@link runtime_selfModuleReader}), or null.
+     * @returns {void}
+     * @throws {SlothletError} `PERMISSION_DENIED` when no allow lifts the built-in deny for the module.
+     * @example
+     * pm.assertGlobalMetadataWrite(runtime_selfModuleReader(slothlet));
+     */
+    assertGlobalMetadataWrite(module: object | null): void;
+    /**
+     * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
+     * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
+     * the prototype or extensibility of the node there.
+     *
+     * Write rules are part of the permission system: with the system off (no `permissions` config, `enabled: false`,
+     * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
+     * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
+     * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
+     * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+     * A denial is audited like any other.
+     *
+     * @param {string} callerPath - Api path of the module writing.
+     * @param {string} targetPath - Api path written.
+     * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+     * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
+     * @example
+     * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
+     */
+    decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | null;
+    /**
+     * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
+     * `"grant"`), with no audit.
+     *
+     * @param {string} callerPath - Api path of the module writing.
+     * @param {string} targetPath - Api path written.
+     * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
+     * @returns {boolean} Whether the write is granted.
+     * @example
+     * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
+     */
+    isWriteGranted(callerPath: string, targetPath: string, runtimeContext?: object | null): boolean;
     /**
      * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
      * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate

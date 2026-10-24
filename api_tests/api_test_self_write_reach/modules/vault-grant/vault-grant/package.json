@@ -1,0 +1,5 @@
+{
+	"name": "@local/vault-grant",
+	"version": "0.1.0",
+	"description": "Test fixture: a module whose manifest declares write rules for its subtree (#625)."
+}

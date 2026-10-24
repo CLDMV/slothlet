@@ -172,6 +172,7 @@ api.slothlet.event.rules.remove(id);
 - Runtime rules enter the highest (**runtime**) layer.
 - The surface is gated by `api.mutations.events` (defaults to `true`); set it `false` to freeze the event-rule set, and `rules.add` / `rules.remove` throw.
 - It is **host-only**: the built-in rules keep `event.rules.*` reachable only from the host, so a module cannot rewrite event policy at runtime.
+- While the permission system is off, those built-in rules do not apply, and module code can reach `event.rules.*`. It is then held to its own events, as its `permissions.addRule` is: the rule's `event` pattern must have a literal prefix inside the module's own subtree (`guest.**` for the module mounted at `guest`, never `**` or `other.**`), unless the module may manage rules beyond it. Its rule sits at the module layer, below the host's, and its function conditions run as the module. A module removes only the event rules its own code added, never the host's.
 - Runtime mutations are recorded and **replayed on `reload()`**, like permission-rule mutations.
 
 Changing the rule set re-resolves the delivery level of existing subscribers on the next emit — a subscriber granted `allow` is downgraded (or upgraded) as soon as a matching rule changes.
@@ -228,7 +229,7 @@ pending.length = 0;
 
 ### `strategy(fn)`
 
-`api.slothlet.event.strategy(fn)` installs `fn` for the instance; `strategy(null)` clears it. It is **host-only**, gated exactly like `rules.*` by the built-in `slothlet.event.**` deny — a module calling it is refused with `PERMISSION_DENIED`. The strategy survives `api.slothlet.reload()`.
+`api.slothlet.event.strategy(fn)` installs `fn` for the instance; `strategy(null)` clears it. It is **host-only**, gated exactly like `rules.*` by the built-in `slothlet.event.**` deny — a module calling it is refused with `PERMISSION_DENIED`. The strategy survives `api.slothlet.reload()`. A strategy module code installs anyway (the host granted it `slothlet.event.strategy`, or the permission system is off) runs as that module, whoever emits, so what it writes through `self` is held to that module; it goes with the module when the module is removed, and delivery is immediate again.
 
 It is called once per emit as `fn(envelope, listeners, defaultDeliver)`:
 
