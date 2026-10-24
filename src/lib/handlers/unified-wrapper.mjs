@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T09:44:17-07:00 (1792860257)
+ *	@Last modified time: 2026-10-24T11:52:32-07:00 (1792867952)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -372,18 +372,53 @@ function runtime_isIntrinsic(value) {
  * @private
  */
 function runtime_hasInternalSlots(value) {
-	return (
-		value instanceof Map ||
-		value instanceof Set ||
-		value instanceof WeakMap ||
-		value instanceof WeakSet ||
-		value instanceof Date ||
-		value instanceof RegExp ||
-		value instanceof Promise ||
-		value instanceof ArrayBuffer ||
-		ArrayBuffer.isView(value) ||
-		(typeof WeakRef === "function" && value instanceof WeakRef)
-	);
+	return runtime_dataKind(value) !== null;
+}
+
+/**
+ * The checks {@link runtime_dataKind} tells the kinds apart by: the engine's own brand checks where the host has them
+ * (so a `SharedArrayBuffer`, and an object made in another realm, are told apart as the engine knows them), the
+ * realm's constructors otherwise.
+ * @type {Array<[string, function(*): boolean]>}
+ * @private
+ */
+const DATA_KINDS = (() => {
+	const types = util?.types ?? {};
+	const brand = (name, kind) =>
+		typeof types[name] === "function" ? (value) => types[name](value) : (value) => typeof kind === "function" && value instanceof kind;
+	return [
+		["map", brand("isMap", Map)],
+		["set", brand("isSet", Set)],
+		["weakmap", brand("isWeakMap", WeakMap)],
+		["weakset", brand("isWeakSet", WeakSet)],
+		["date", brand("isDate", Date)],
+		["regexp", brand("isRegExp", RegExp)],
+		["promise", brand("isPromise", Promise)],
+		["dataview", brand("isDataView", DataView)],
+		[
+			"typedarray",
+			typeof types.isTypedArray === "function"
+				? (value) => types.isTypedArray(value)
+				: (value) => ArrayBuffer.isView(value) && !(value instanceof DataView)
+		],
+		["sharedarraybuffer", brand("isSharedArrayBuffer", typeof SharedArrayBuffer === "function" ? SharedArrayBuffer : null)],
+		["arraybuffer", brand("isArrayBuffer", ArrayBuffer)],
+		// No brand check exists for a WeakRef, and reading its tag would run a proxy's traps: this realm's only.
+		["weakref", (value) => typeof WeakRef === "function" && value instanceof WeakRef]
+	];
+})();
+
+/**
+ * Which kind of data object `value` is (#625): `"map"`, `"set"`, `"weakmap"`, `"weakset"`, `"date"`, `"regexp"`,
+ * `"promise"`, `"dataview"`, `"typedarray"`, `"sharedarraybuffer"`, `"arraybuffer"`, `"weakref"` — or null for none.
+ * @param {*} value - A value.
+ * @returns {string|null} Its kind.
+ * @private
+ */
+function runtime_dataKind(value) {
+	if (value === null || typeof value !== "object") return null;
+	for (const [kind, is] of DATA_KINDS) if (is(value)) return kind;
+	return null;
 }
 
 /**
@@ -453,11 +488,11 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop) {
  * @type {Array<[Function, ReadonlySet<string|symbol>]>}
  * @private
  */
-const DATA_READERS = [
-	[Map, new Set(["get", "has", "keys", "values", "entries", "forEach", Symbol.iterator])],
-	[WeakMap, new Set(["get", "has"])],
+const DATA_READERS = new Map([
+	["map", new Set(["get", "has", "keys", "values", "entries", "forEach", Symbol.iterator])],
+	["weakmap", new Set(["get", "has"])],
 	[
-		Set,
+		"set",
 		new Set([
 			"has",
 			"keys",
@@ -474,13 +509,13 @@ const DATA_READERS = [
 			"isDisjointFrom"
 		])
 	],
-	[WeakSet, new Set(["has"])],
-	[RegExp, new Set(["exec", "test", Symbol.match, Symbol.matchAll, Symbol.search, Symbol.split, Symbol.replace])],
-	[ArrayBuffer, new Set(["slice"])],
-	...(typeof SharedArrayBuffer === "function" ? [[SharedArrayBuffer, new Set(["slice"])]] : []),
-	[Promise, new Set(["then", "catch", "finally"])],
-	...(typeof WeakRef === "function" ? [[WeakRef, new Set(["deref"])]] : [])
-];
+	["weakset", new Set(["has"])],
+	["regexp", new Set(["exec", "test", Symbol.match, Symbol.matchAll, Symbol.search, Symbol.split, Symbol.replace])],
+	["arraybuffer", new Set(["slice"])],
+	["sharedarraybuffer", new Set(["slice"])],
+	["promise", new Set(["then", "catch", "finally"])],
+	["weakref", new Set(["deref"])]
+]);
 
 /** The methods of a typed array that only read it. @type {ReadonlySet<string|symbol>} @private */
 const TYPED_ARRAY_READERS = new Set([
@@ -563,13 +598,42 @@ const ENGINE_DATA_PROTOTYPES = new Set(
  */
 function runtime_isEngineMember(value, prop) {
 	for (let proto = value; proto !== null; proto = Reflect.getPrototypeOf(proto)) {
-		if (hasOwn(proto, prop)) return ENGINE_DATA_PROTOTYPES.has(proto);
+		if (!hasOwn(proto, prop)) continue;
+		if (ENGINE_DATA_PROTOTYPES.has(proto)) return true;
+		// Another realm's own prototype: its constructor is the engine's, never code a module wrote.
+		const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
+		return proto !== value && typeof ctor === "function" && ctor.prototype === proto && runtime_isNativeFunction(ctor);
 	}
 	return false;
 }
 
+/**
+ * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
+ * reports itself the same way.
+ * @param {Function} fn - A function.
+ * @returns {boolean} Whether it is native.
+ * @private
+ */
+function runtime_isNativeFunction(fn) {
+	try {
+		const source = Function.prototype.toString.call(fn);
+		return /\{\s*\[native code\]\s*\}$/.test(source) && !String(fn.name).startsWith("bound ");
+	} catch {
+		return false;
+	}
+}
+
 /** Methods every object has that only read it. @type {ReadonlySet<string|symbol>} @private */
-const COMMON_READERS = new Set(["hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toString", "toLocaleString", "valueOf"]);
+const COMMON_READERS = new Set([
+	"hasOwnProperty",
+	"isPrototypeOf",
+	"propertyIsEnumerable",
+	"toString",
+	"toLocaleString",
+	"valueOf",
+	"__lookupGetter__",
+	"__lookupSetter__"
+]);
 
 /** The `Set` methods that compare it with another set-like and make no change to it. @type {ReadonlySet<string>} @private */
 const SET_COMPARISONS = new Set([
@@ -592,15 +656,12 @@ const SET_COMPARISONS = new Set([
  */
 function runtime_isDataReader(value, name) {
 	if (COMMON_READERS.has(name)) return true;
-	if (value instanceof Date) {
+	const kind = runtime_dataKind(value);
+	if (kind === "date")
 		return name === Symbol.toPrimitive || (typeof name === "string" && (name.startsWith("get") || name.startsWith("to")));
-	}
-	if (value instanceof DataView) return typeof name === "string" && name.startsWith("get");
-	if (ArrayBuffer.isView(value)) return TYPED_ARRAY_READERS.has(name);
-	for (const [kind, names] of DATA_READERS) {
-		if (value instanceof kind) return names.has(name);
-	}
-	return false;
+	if (kind === "dataview") return typeof name === "string" && name.startsWith("get");
+	if (kind === "typedarray") return TYPED_ARRAY_READERS.has(name);
+	return DATA_READERS.get(kind)?.has(name) ?? false;
 }
 
 /**
@@ -674,13 +735,9 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 	const raw = value;
 	const shadow = {};
 	// Values it holds are handed back viewed; the buffer a typed array or DataView shares with it too.
-	const holdsValues =
-		raw instanceof Map ||
-		raw instanceof Set ||
-		raw instanceof WeakMap ||
-		raw instanceof WeakSet ||
-		(typeof WeakRef === "function" && raw instanceof WeakRef);
-	const isPromise = raw instanceof Promise;
+	const kind = runtime_dataKind(raw);
+	const holdsValues = kind === "map" || kind === "set" || kind === "weakmap" || kind === "weakset" || kind === "weakref";
+	const isPromise = kind === "promise";
 	// A promise's methods run on one that settles as it does, with what it settles with viewed: a callback, and a
 	// `then()`, `catch()`, or `finally()` passing the value on, get the view, never what the module holds.
 	let settled = null;
@@ -747,16 +804,31 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 		if (isPromise) return returned;
 		// An iterator over what it holds yields it viewed.
 		if (holdsValues && typeof returned.next === "function") {
-			return {
-				next: (...args) => {
-					const step = returned.next(...args);
-					return step.done ? step : { value: held(step.value), done: false };
+			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
+			const iterator = Object.create(typeof Iterator === "function" ? Iterator.prototype : Object.prototype);
+			const tag = Object.prototype.toString.call(returned).slice(8, -1);
+			Object.defineProperties(iterator, {
+				next: {
+					value: (...args) => {
+						const step = returned.next(...args);
+						return step.done ? step : { value: held(step.value), done: false };
+					}
 				},
-				return: (...args) => (typeof returned.return === "function" ? returned.return(...args) : { value: args[0], done: true }),
-				[Symbol.iterator]() {
-					return this;
-				}
-			};
+				return: { value: (...args) => (typeof returned.return === "function" ? returned.return(...args) : { value: args[0], done: true }) },
+				throw: {
+					value: (...args) => {
+						if (typeof returned.throw === "function") return returned.throw(...args);
+						throw args[0];
+					}
+				},
+				[Symbol.iterator]: {
+					value() {
+						return this;
+					}
+				},
+				[Symbol.toStringTag]: { value: tag }
+			});
+			return iterator;
 		}
 		if (holdsValues) return held(returned);
 		// Memory it shares is held to the rule too; a copy it made is the caller's own.
@@ -770,15 +842,21 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 		const known = methods.get(prop);
 		if (known?.fn === fn) return known.call;
 		const reads = runtime_isDataReader(raw, prop);
-		const compares = raw instanceof Set && SET_COMPARISONS.has(prop);
+		const compares = kind === "set" && SET_COMPARISONS.has(prop);
 		const call = function (...args) {
 			if (!reads) assertWrite(null);
 			// A comparison runs on a copy holding what the set holds viewed: the set-like it is handed is the caller's,
 			// and is shown nothing else, and what it makes is the caller's own.
-			if (compares) return Reflect.apply(fn, new Set(Array.from(raw, (entry) => held(entry))), args.map(runtime_unwrapSelfView));
+			// The set-like is handed on as the caller gave it: a view of another object stays that view.
+			if (compares) return Reflect.apply(fn, new Set(Array.from(raw, (entry) => held(entry))), args);
+			// A key is looked up as the object holds it, so a view of one is unwrapped; what follows a callback (its
+			// `this`) is handed on as the caller gave it.
+			let afterCallback = false;
 			const passed = args.map((arg) => {
+				if (afterCallback) return arg;
 				const unwrapped = runtime_unwrapSelfView(arg);
 				if (typeof unwrapped !== "function") return unwrapped;
+				afterCallback = true;
 				return function (...values) {
 					return Reflect.apply(unwrapped, this, values.map(callbackArg));
 				};
@@ -916,7 +994,6 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 	else shadow = function () {}.bind(null);
 
 	const member = (prop, child) => runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
-	const unwrapMember = (candidate) => SELF_MEMBER_VIEWS.get(candidate)?.value ?? candidate;
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
 			? { ...descriptor, value: member(prop, descriptor.value) }
@@ -985,7 +1062,11 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 			return Reflect.isExtensible(shadow);
 		},
 		apply(_, thisArg, args) {
-			return runtime_selfViewResult(Reflect.apply(raw, unwrapMember(thisArg), args), reader);
+			// The call runs on the value it was read from: a view of that value as `this` is the value, and a view of any
+			// other value stays the view (#625), so a method cannot be pointed at another value to run on it as is.
+			const record = SELF_MEMBER_VIEWS.get(thisArg);
+			const receiver = record && runtime_holdsMember(record.value, raw) ? record.value : thisArg;
+			return runtime_selfViewResult(Reflect.apply(raw, receiver, args), reader);
 		},
 		construct(_, args, newTarget) {
 			return Reflect.construct(raw, args, newTarget === view ? raw : newTarget);
@@ -1029,6 +1110,39 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 	byPath.set(pathKey, view);
 	SELF_MEMBER_VIEWS.set(view, { value: raw, reader, slothlet, parts });
 	return view;
+}
+
+/**
+ * Values {@link runtime_holdsMember} found holding a function, per function.
+ * @type {WeakMap<Function, WeakSet<object>>}
+ * @private
+ */
+const MEMBER_HOLDERS = new WeakMap();
+
+/**
+ * Whether `value` holds `fn` as a member — its own, or inherited, as a method, a getter, or a setter.
+ * @param {object|Function} value - The value.
+ * @param {Function} fn - The function.
+ * @returns {boolean} Whether `fn` is one of its members.
+ * @private
+ */
+function runtime_holdsMember(value, fn) {
+	if (MEMBER_HOLDERS.get(fn)?.has(value)) return true;
+	for (
+		let proto = value;
+		proto !== null && (typeof proto === "object" || typeof proto === "function");
+		proto = Reflect.getPrototypeOf(proto)
+	) {
+		for (const key of Reflect.ownKeys(proto)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
+			if (descriptor && (descriptor.value === fn || descriptor.get === fn || descriptor.set === fn)) {
+				if (!MEMBER_HOLDERS.has(fn)) MEMBER_HOLDERS.set(fn, new WeakSet());
+				MEMBER_HOLDERS.get(fn).add(value);
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /**
@@ -1933,20 +2047,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
  * @private
  */
 function runtime_isTerminalData(value) {
-	return (
-		value !== Object(value) ||
-		value instanceof Map ||
-		value instanceof Set ||
-		value instanceof WeakMap ||
-		value instanceof WeakSet ||
-		value instanceof Date ||
-		value instanceof RegExp ||
-		value instanceof Promise ||
-		value instanceof Error ||
-		(typeof WeakRef === "function" && value instanceof WeakRef) ||
-		ArrayBuffer.isView(value) ||
-		value instanceof ArrayBuffer
-	);
+	return value !== Object(value) || runtime_dataKind(value) !== null || value instanceof Error;
 }
 
 /**
@@ -5847,19 +5948,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// `net.Socket` mounted via `api.add()` — which is meant to get full slothlet treatment
 		// (self access, permission gating, hooks) same as any other mounted object, not stay
 		// raw/opaque. The cycle guard is what makes this safe now, not type-based exclusion.
-		if (
-			value instanceof Map ||
-			value instanceof Set ||
-			value instanceof WeakMap ||
-			value instanceof WeakSet ||
-			value instanceof Date ||
-			value instanceof RegExp ||
-			value instanceof Promise ||
-			value instanceof Error ||
-			(typeof WeakRef === "function" && value instanceof WeakRef) ||
-			ArrayBuffer.isView(value) ||
-			value instanceof ArrayBuffer
-		) {
+		if (runtime_dataKind(value) !== null || value instanceof Error) {
 			return null;
 		}
 
@@ -7788,19 +7877,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Return built-in objects that require proper 'this' binding directly without wrapping.
 			// No test API method returns Map/Set/Date/RegExp/Promise/Error/ArrayBuffer; block unreachable.
 			/* v8 ignore start */
-			if (
-				value instanceof Map ||
-				value instanceof Set ||
-				value instanceof WeakMap ||
-				value instanceof WeakSet ||
-				value instanceof Date ||
-				value instanceof RegExp ||
-				value instanceof Promise ||
-				value instanceof Error ||
-				(typeof WeakRef === "function" && value instanceof WeakRef) ||
-				ArrayBuffer.isView(value) ||
-				value instanceof ArrayBuffer
-			) {
+			if (runtime_dataKind(value) !== null || value instanceof Error) {
 				return value;
 			}
 			/* v8 ignore stop */
