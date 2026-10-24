@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:38:15-07:00 (1792856295)
+ *	@Last modified time: 2026-10-24T08:54:32-07:00 (1792857272)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -327,9 +327,10 @@ const REALM_INTRINSICS = runtime_gatherIntrinsics();
  */
 function runtime_gatherIntrinsics() {
 	const intrinsics = new WeakSet();
+	// Breadth first, so each intrinsic is reached at its shallowest depth and its own members are gathered too.
 	const pending = [[globalThis, 0]];
-	while (pending.length > 0) {
-		const [current, depth] = pending.pop();
+	for (let index = 0; index < pending.length; index++) {
+		const [current, depth] = pending[index];
 		if (intrinsics.has(current)) continue;
 		intrinsics.add(current);
 		if (depth >= 3) continue;
@@ -445,38 +446,159 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop) {
 }
 
 /**
- * The methods of each kind of data object that change it (#625). A `Date` and a `DataView` change through every
- * `set…` method; `RegExp#exec` and `#test` move `lastIndex` as using a regular expression does, and are use.
- * @type {Array<[Function, ReadonlySet<string>|null]>}
+ * The methods of each kind of data object that only read it (#625). Every other method the engine gives the kind,
+ * one it adds later included, counts as a write when called through a view: a method changing the object
+ * cannot slip past by being new. `RegExp#exec` and `#test` move `lastIndex` as using a regular expression does,
+ * and are use.
+ * @type {Array<[Function, ReadonlySet<string|symbol>]>}
  * @private
  */
-const DATA_MUTATORS = [
-	[Map, new Set(["set", "delete", "clear"])],
-	[WeakMap, new Set(["set", "delete"])],
-	[Set, new Set(["add", "delete", "clear"])],
-	[WeakSet, new Set(["add", "delete"])],
-	[Date, null],
-	[DataView, null],
-	[RegExp, new Set(["compile"])],
-	[ArrayBuffer, new Set(["resize", "transfer", "transferToFixedLength"])],
-	...(typeof SharedArrayBuffer === "function" ? [[SharedArrayBuffer, new Set(["grow"])]] : [])
+const DATA_READERS = [
+	[Map, new Set(["get", "has", "keys", "values", "entries", "forEach", Symbol.iterator])],
+	[WeakMap, new Set(["get", "has"])],
+	[
+		Set,
+		new Set([
+			"has",
+			"keys",
+			"values",
+			"entries",
+			"forEach",
+			Symbol.iterator,
+			"union",
+			"intersection",
+			"difference",
+			"symmetricDifference",
+			"isSubsetOf",
+			"isSupersetOf",
+			"isDisjointFrom"
+		])
+	],
+	[WeakSet, new Set(["has"])],
+	[RegExp, new Set(["exec", "test", Symbol.match, Symbol.matchAll, Symbol.search, Symbol.split, Symbol.replace])],
+	[ArrayBuffer, new Set(["slice"])],
+	...(typeof SharedArrayBuffer === "function" ? [[SharedArrayBuffer, new Set(["slice"])]] : []),
+	[Promise, new Set(["then", "catch", "finally"])],
+	...(typeof WeakRef === "function" ? [[WeakRef, new Set(["deref"])]] : [])
 ];
 
-/** The methods of a typed array that change it. @type {ReadonlySet<string>} @private */
-const TYPED_ARRAY_MUTATORS = new Set(["set", "fill", "copyWithin", "reverse", "sort"]);
+/** The methods of a typed array that only read it. @type {ReadonlySet<string|symbol>} @private */
+const TYPED_ARRAY_READERS = new Set([
+	"at",
+	"entries",
+	"every",
+	"filter",
+	"find",
+	"findIndex",
+	"findLast",
+	"findLastIndex",
+	"forEach",
+	"includes",
+	"indexOf",
+	"join",
+	"keys",
+	"lastIndexOf",
+	"map",
+	"reduce",
+	"reduceRight",
+	"slice",
+	"some",
+	"subarray",
+	"toReversed",
+	"toSorted",
+	"with",
+	"toHex",
+	"toBase64",
+	"values",
+	Symbol.iterator
+]);
 
 /**
- * Whether calling the method `name` of the data object `value` changes it.
- * @param {object} value - The data object.
- * @param {PropertyKey} name - The method's key.
- * @returns {boolean} Whether the method changes it.
+ * The engine's prototypes of the kinds of data object, and `Object.prototype`: a method found on one of them is the
+ * engine's, held to {@link runtime_isDataReader}; any other is the module's own (#625).
+ * @type {ReadonlySet<object>}
  * @private
  */
-function runtime_isDataMutator(value, name) {
-	if (typeof name !== "string") return false;
-	if (ArrayBuffer.isView(value) && !(value instanceof DataView)) return TYPED_ARRAY_MUTATORS.has(name);
-	for (const [kind, names] of DATA_MUTATORS) {
-		if (value instanceof kind) return names === null ? name.startsWith("set") : names.has(name);
+const ENGINE_DATA_PROTOTYPES = new Set(
+	[
+		Object.prototype,
+		Map.prototype,
+		WeakMap.prototype,
+		Set.prototype,
+		WeakSet.prototype,
+		Date.prototype,
+		RegExp.prototype,
+		ArrayBuffer.prototype,
+		typeof SharedArrayBuffer === "function" ? SharedArrayBuffer.prototype : null,
+		DataView.prototype,
+		Promise.prototype,
+		typeof WeakRef === "function" ? WeakRef.prototype : null,
+		Reflect.getPrototypeOf(Uint8Array.prototype),
+		...[
+			Int8Array,
+			Uint8Array,
+			Uint8ClampedArray,
+			Int16Array,
+			Uint16Array,
+			Int32Array,
+			Uint32Array,
+			Float32Array,
+			Float64Array,
+			typeof Float16Array === "function" ? Float16Array : null,
+			BigInt64Array,
+			BigUint64Array
+		]
+			.filter(Boolean)
+			.map((kind) => kind.prototype)
+	].filter(Boolean)
+);
+
+/**
+ * Whether the member `prop` a data object answers comes from the engine: the prototype in its chain that holds it is
+ * one of {@link ENGINE_DATA_PROTOTYPES}.
+ * @param {object} value - The data object.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {boolean} Whether it is the engine's.
+ * @private
+ */
+function runtime_isEngineMember(value, prop) {
+	for (let proto = value; proto !== null; proto = Reflect.getPrototypeOf(proto)) {
+		if (hasOwn(proto, prop)) return ENGINE_DATA_PROTOTYPES.has(proto);
+	}
+	return false;
+}
+
+/** Methods every object has that only read it. @type {ReadonlySet<string|symbol>} @private */
+const COMMON_READERS = new Set(["hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toString", "toLocaleString", "valueOf"]);
+
+/** The `Set` methods that compare it with another set-like and make no change to it. @type {ReadonlySet<string>} @private */
+const SET_COMPARISONS = new Set([
+	"union",
+	"intersection",
+	"difference",
+	"symmetricDifference",
+	"isSubsetOf",
+	"isSupersetOf",
+	"isDisjointFrom"
+]);
+
+/**
+ * Whether the engine's method `name` of the data object `value` only reads it: on its kind's list, or every
+ * object's; a `Date`'s `get…` and `to…` methods and its primitive conversion; a `DataView`'s `get…` methods.
+ * @param {object} value - The data object.
+ * @param {PropertyKey} name - The method's key.
+ * @returns {boolean} Whether calling it only reads the object.
+ * @private
+ */
+function runtime_isDataReader(value, name) {
+	if (COMMON_READERS.has(name)) return true;
+	if (value instanceof Date) {
+		return name === Symbol.toPrimitive || (typeof name === "string" && (name.startsWith("get") || name.startsWith("to")));
+	}
+	if (value instanceof DataView) return typeof name === "string" && name.startsWith("get");
+	if (ArrayBuffer.isView(value)) return TYPED_ARRAY_READERS.has(name);
+	for (const [kind, names] of DATA_READERS) {
+		if (value instanceof kind) return names.has(name);
 	}
 	return false;
 }
@@ -514,13 +636,15 @@ const SELF_DATA_VIEW_CACHE = new WeakMap();
  * other reader gets the view: live, as it reads the object itself, and read-only. Native code refuses a view, so
  * such a reader copies what it passes on (`Buffer.from(view)`, `view.slice()`).
  *
- * Such an object keeps its contents in itself, out of reach of a member view, so its own methods have to run on
- * it. The view runs them there. A method that changes it (`set`, `clear`, `setFullYear`, `fill`, `transfer`, …),
- * an assignment or definition of a member or element, a deletion, and a change to its prototype or extensibility
- * are writes at the path: held to the ownership and write rules exactly as a write to a member there. Reads and
- * every other method behave as on the object itself. What it holds — a value `get` returns, the entries
- * iteration yields, what a callback or a promise is handed, a typed array's shared `buffer` — comes back held to
- * the same rule; a copy a method makes (`slice()`) is the caller's own.
+ * The object keeps its contents in itself, so the engine's own methods have to run on it, and the view runs them
+ * there: those of its kind that only read it as plain reads, and every other one — one the engine adds later
+ * included — as a write at the path, held to the ownership and write rules like an assignment, a definition, a
+ * deletion, or a change to its prototype or extensibility. A method its module defined (on a subclass of the kind)
+ * runs on the object itself, as a call through a member view does. What it holds — a value `get` returns, what
+ * iteration yields, what a callback or a promise is handed, the object itself handed to a callback, a typed array's
+ * shared `buffer` and `subarray`, its own members and prototype — comes back held to the same rule; a copy a method
+ * makes (`slice()`, `union()`) is the caller's own. The proxy's target is a shadow, never the object, as a member
+ * view's is.
  *
  * @param {object} value - The data object.
  * @param {object} reader - Who read it.
@@ -548,14 +672,15 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 	if (cached) return cached;
 
 	const raw = value;
+	const shadow = {};
 	// Values it holds are handed back viewed; the buffer a typed array or DataView shares with it too.
 	const holdsValues =
 		raw instanceof Map ||
 		raw instanceof Set ||
 		raw instanceof WeakMap ||
 		raw instanceof WeakSet ||
-		raw instanceof Promise ||
 		(typeof WeakRef === "function" && raw instanceof WeakRef);
+	const isPromise = raw instanceof Promise;
 	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
 		const target = typeof prop === "string" ? [...parts, prop] : parts;
@@ -564,9 +689,53 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 	};
 	let view = null;
 	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null));
+	const memberAt = (prop, child) =>
+		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+	const viewedProto = () => {
+		const proto = Reflect.getPrototypeOf(raw);
+		return proto === null ? null : runtime_selfMemberOf(proto, reader, slothlet, parts, null);
+	};
+	const shownDescriptor = (prop, descriptor) =>
+		"value" in descriptor
+			? { ...descriptor, value: memberAt(prop, descriptor.value) }
+			: { ...descriptor, get: memberAt(prop, descriptor.get), set: memberAt(prop, descriptor.set) };
+	// A member the object holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
+	const mirror = (prop) => {
+		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
+		if (!descriptor) {
+			const stale = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
+			return undefined;
+		}
+		const fixed = Reflect.getOwnPropertyDescriptor(shadow, prop);
+		if (fixed && !fixed.configurable && "value" in fixed && !fixed.writable) return fixed;
+		const shown = shownDescriptor(prop, descriptor);
+		if (!descriptor.configurable || !Reflect.isExtensible(shadow)) Reflect.defineProperty(shadow, prop, shown);
+		return shown;
+	};
+	// An object closed to extension is mirrored whole, the shadow closed with it, as the engine checks a proxy's
+	// answers about a non-extensible target against that target.
+	const mirrorClosed = () => {
+		if (Reflect.isExtensible(raw)) return;
+		for (const key of Reflect.ownKeys(shadow)) {
+			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
+		}
+		if (Reflect.isExtensible(shadow)) {
+			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			Reflect.setPrototypeOf(shadow, viewedProto());
+			Reflect.preventExtensions(shadow);
+		} else {
+			for (const key of Reflect.ownKeys(raw)) mirror(key);
+		}
+	};
+	// The object itself handed to a callback is the view; what it holds, viewed.
+	const callbackArg = (entry) => (entry === raw ? view : holdsValues || isPromise ? held(entry) : entry);
 	const result = (returned) => {
 		if (returned === raw) return view;
 		if (returned === null || (typeof returned !== "object" && typeof returned !== "function")) return returned;
+		// A promise a promise's method makes is the caller's: what it settles with comes from the caller's callbacks.
+		if (isPromise) return returned;
 		// An iterator over what it holds yields it viewed.
 		if (holdsValues && typeof returned.next === "function") {
 			return {
@@ -589,53 +758,94 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 	};
 	const methods = new Map();
 	const method = (prop, fn) => {
-		let bound = methods.get(prop);
-		if (bound?.fn === fn) return bound.call;
-		const mutates = runtime_isDataMutator(raw, prop);
+		const known = methods.get(prop);
+		if (known?.fn === fn) return known.call;
+		const reads = runtime_isDataReader(raw, prop);
+		const compares = raw instanceof Set && SET_COMPARISONS.has(prop);
 		const call = function (...args) {
-			if (mutates) assertWrite(null);
+			if (!reads) assertWrite(null);
+			// A comparison runs on a copy holding what the set holds viewed: the set-like it is handed is the caller's,
+			// and is shown nothing else, and what it makes is the caller's own.
+			if (compares) return Reflect.apply(fn, new Set(Array.from(raw, (entry) => held(entry))), args.map(runtime_unwrapSelfView));
 			const passed = args.map((arg) => {
 				const unwrapped = runtime_unwrapSelfView(arg);
-				// A callback is handed what it holds viewed, as a read of it is.
-				if (holdsValues && typeof unwrapped === "function") {
-					return (...values) => unwrapped(...values.map((entry) => held(entry)));
-				}
-				return unwrapped;
+				if (typeof unwrapped !== "function") return unwrapped;
+				return function (...values) {
+					return Reflect.apply(unwrapped, this, values.map(callbackArg));
+				};
 			});
 			return result(Reflect.apply(fn, raw, passed));
 		};
 		methods.set(prop, { fn, call });
 		return call;
 	};
-	view = new Proxy(raw, {
+	view = new Proxy(shadow, {
 		get(_, prop) {
+			mirrorClosed();
+			const fixed = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (fixed && !fixed.configurable && "value" in fixed && !fixed.writable) return fixed.value;
 			const member = Reflect.get(raw, prop, raw);
-			if (typeof member === "function" && prop !== "constructor") return method(prop, member);
 			if (sharedBuffer !== null && prop === "buffer") return held(member);
-			return typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)
-				? member
-				: runtime_selfMemberOf(member, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+			if (typeof member === "function" && prop !== "constructor") {
+				// The engine's own method runs on the object; one its module defined runs as a member view's call does.
+				return runtime_isEngineMember(raw, prop) ? method(prop, member) : memberAt(prop, member);
+			}
+			if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return member;
+			return memberAt(prop, member);
 		},
-		set(_, prop, written) {
+		getOwnPropertyDescriptor(_, prop) {
+			mirrorClosed();
+			return mirror(prop);
+		},
+		has(_, prop) {
+			mirrorClosed();
+			return Reflect.has(raw, prop);
+		},
+		ownKeys() {
+			mirrorClosed();
+			return Reflect.ownKeys(raw);
+		},
+		getPrototypeOf() {
+			mirrorClosed();
+			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
+			return viewedProto();
+		},
+		isExtensible() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow);
+		},
+		set(_, prop, written, receiver) {
+			// A write reaching the view from an object that inherits from it lands on that object, as plain JS has it.
+			if (receiver !== view) return Reflect.set(raw, prop, written, receiver);
 			assertWrite(prop);
-			return Reflect.set(raw, prop, runtime_unwrapSelfView(written), raw);
+			const done = Reflect.set(raw, prop, runtime_unwrapSelfView(written), raw);
+			if (done) mirror(prop);
+			return done;
 		},
 		defineProperty(_, prop, descriptor) {
 			assertWrite(prop);
 			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
-			return Reflect.defineProperty(raw, prop, stored);
+			if (!Reflect.defineProperty(raw, prop, stored)) return false;
+			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
+			else mirror(prop);
+			return true;
 		},
 		deleteProperty(_, prop) {
 			assertWrite(prop);
-			return Reflect.deleteProperty(raw, prop);
+			if (!Reflect.deleteProperty(raw, prop)) return false;
+			mirror(prop);
+			return true;
 		},
 		setPrototypeOf(_, proto) {
 			assertWrite(null);
-			return Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto));
+			if (!Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto))) return false;
+			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
 		},
 		preventExtensions() {
 			assertWrite(null);
-			return Reflect.preventExtensions(raw);
+			if (!Reflect.preventExtensions(raw)) return false;
+			mirrorClosed();
+			return true;
 		}
 	});
 	byPath.set(pathKey, view);
