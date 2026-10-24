@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:55:10-07:00 (1792857310)
+ *	@Last modified time: 2026-10-24T09:44:58-07:00 (1792860298)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -101,6 +101,52 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimDataByRoute());
 		expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
 		expect(await api.victim.v.dataState()).toEqual(INITIAL);
+	});
+
+	it("hands another module what a promise or a WeakRef of a module holds viewed, however it is reached", async () => {
+		await load({ permissions: {} });
+		const value = { n: 0 };
+		await api.slothlet.api.add(
+			"syn",
+			{ pending: Promise.resolve(value), ref: new WeakRef(value), map: new Map([["k", value]]) },
+			{ moduleID: "syn" }
+		);
+		globalThis[Symbol.for("slothlet.test.i625.probe")] = async (self) => {
+			const outcome = async (change) => {
+				try {
+					await change();
+					return "done";
+				} catch (error) {
+					return error?.code ?? String(error);
+				}
+			};
+			// Everything is reached synchronously, while the module's call is current; what is judged is the write.
+			const pending = [self.syn.pending.then(), self.syn.pending, self.syn.pending.finally(() => {})];
+			const dereferenced = self.syn.ref.deref();
+			const fromCallback = [];
+			self.syn.map.forEach((_held, _key, map) => fromCallback.push(map));
+			const [passedOn, awaited, afterFinally] = await Promise.all(pending);
+			return {
+				passedOn: await outcome(() => {
+					passedOn.n = 1;
+				}),
+				awaited: await outcome(() => {
+					awaited.n = 2;
+				}),
+				afterFinally: await outcome(() => {
+					afterFinally.n = 3;
+				}),
+				dereferenced: await outcome(() => {
+					dereferenced.n = 4;
+				}),
+				callbackMap: await outcome(() => fromCallback[0].set("x", 1))
+			};
+		};
+		const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf("slothlet.test.i625.probe"));
+		delete globalThis[Symbol.for("slothlet.test.i625.probe")];
+		// Refused for not owning the path, or, under the live runtime, for having no module caller after an await.
+		for (const outcome of Object.values(report)) expect(["LOOSE_SET_NOT_OWNED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome);
+		expect(value.n).toBe(0);
 	});
 
 	it("leaves what another module makes from them its own", async () => {

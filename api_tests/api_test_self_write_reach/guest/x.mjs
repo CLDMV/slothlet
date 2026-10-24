@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:54:06-07:00 (1792857246)
+ *	@Last modified time: 2026-10-24T09:43:50-07:00 (1792860230)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1367,4 +1367,15 @@ export function useVictimDataCopies() {
 		registryGet: d.registry.get("k"),
 		sliceFill: attempt(() => d.bytes.slice().fill(0))
 	};
+}
+
+/**
+ * Run, as this module, the function the host put on the global object under `key`, handing it this module's `self`.
+ * @param {string} key - The `Symbol.for` key it is stored under.
+ * @returns {Promise<*>} What it returned.
+ * @example
+ * await runWithSelf("slothlet.test.i625.probe");
+ */
+export async function runWithSelf(key) {
+	return globalThis[Symbol.for(key)](self);
 }
