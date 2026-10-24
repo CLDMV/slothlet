@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T10:45:24-07:00 (1792863924)
+ *	@Last modified time: 2026-10-24T10:51:21-07:00 (1792864281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
+import vm from "node:vm";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
@@ -285,6 +286,124 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 				data.pattern.lastIndex = 2;
 				data.members.add({ n: 1 });
 				expect(report()).toEqual({ map: "cfg,later", set: "a,later", date: 9, buffer: 16, bytes: "1,8,3", pattern: 2, members: 2 });
+			}
+		);
+	});
+
+	describe("less common routes", () => {
+		/**
+		 * Run `probe` as the guest module, with its `self`, and hand back what it returns.
+		 * @param {function(object): *} probe - The probe.
+		 * @returns {Promise<*>} What it returned.
+		 */
+		async function asGuest(probe) {
+			globalThis[Symbol.for("slothlet.test.i625.probe")] = probe;
+			try {
+				return await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf("slothlet.test.i625.probe"));
+			} finally {
+				delete globalThis[Symbol.for("slothlet.test.i625.probe")];
+			}
+		}
+
+		/**
+		 * Run `change`, reporting `"done"` or the error code it was refused with.
+		 * @param {function(): *} change - The change.
+		 * @returns {string} The outcome.
+		 */
+		const outcome = (change) => {
+			try {
+				change();
+				return "done";
+			} catch (error) {
+				return error?.code ?? String(error);
+			}
+		};
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])(
+			"refuses a change made through a callback's this, another view as a set-like, or another view as a method's this (permissions %s)",
+			async (_label, options) => {
+				await load(options);
+				const report = await asGuest((self) => {
+					const d = self.victim.v.data;
+					return {
+						thisArgMap: outcome(() =>
+							d.cache.forEach(function () {
+								this.set("evil", 1);
+							}, d.cache)
+						),
+						thisArgBytes: outcome(() =>
+							d.bytes.forEach(function () {
+								this[0] = 42;
+							}, d.bytes)
+						),
+						setLike: outcome(() => {
+							for (const entry of d.tags.union(d.members)) if (typeof entry === "object") entry.n = 9;
+						}),
+						methodThis: outcome(() => {
+							d.registry.lookup.call(d.cache, "cfg").level = 9;
+						})
+					};
+				});
+				expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
+				expect(await api.victim.v.dataState()).toEqual(INITIAL);
+			}
+		);
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])("holds a SharedArrayBuffer and data objects of another realm to the same rule (permissions %s)", async (_label, options) => {
+			await load(options);
+			const shared = new SharedArrayBuffer(8, { maxByteLength: 16 });
+			const foreign = vm.runInNewContext("({ map: new Map([['k', { n: 0 }]]), bytes: new Uint8Array([1, 2]), date: new Date(0) })");
+			await api.slothlet.api.add("syn", { shared, foreign }, { moduleID: "syn" });
+			const report = await asGuest((self) => ({
+				sharedGrow: outcome(() => self.syn.shared.grow(16)),
+				sharedRead: outcome(() => {
+					if (self.syn.shared.slice(0).byteLength !== 8) throw new Error("WRONG_READ");
+				}),
+				foreignSet: outcome(() => self.syn.foreign.map.set("evil", 1)),
+				foreignHeld: outcome(() => {
+					self.syn.foreign.map.get("k").n = 9;
+				}),
+				foreignFill: outcome(() => self.syn.foreign.bytes.fill(9)),
+				foreignDate: outcome(() => self.syn.foreign.date.setTime(9))
+			}));
+			expect(report).toEqual({
+				sharedGrow: "LOOSE_SET_NOT_OWNED",
+				sharedRead: "done",
+				foreignSet: "LOOSE_SET_NOT_OWNED",
+				foreignHeld: "LOOSE_SET_NOT_OWNED",
+				foreignFill: "LOOSE_SET_NOT_OWNED",
+				foreignDate: "LOOSE_SET_NOT_OWNED"
+			});
+			expect(shared.byteLength).toBe(8);
+			expect([...foreign.map.keys()].join(",")).toBe("k");
+			expect(foreign.map.get("k").n).toBe(0);
+			expect([...foreign.bytes].join(",")).toBe("1,2");
+			expect(foreign.date.getTime()).toBe(0);
+		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])(
+			"keeps iterators and property lookups working as plain JS for a reader without the write (permissions %s)",
+			async (_label, options) => {
+				await load(options);
+				const report = await asGuest((self) => {
+					const d = self.victim.v.data;
+					const keys = d.cache.keys();
+					return {
+						helpers: typeof Iterator === "function" ? d.cache.values().toArray().length : 1,
+						tag: Object.prototype.toString.call(keys),
+						lookupGetter: outcome(() => d.cache.__lookupGetter__("size"))
+					};
+				});
+				expect(report).toEqual({ helpers: 1, tag: "[object Map Iterator]", lookupGetter: "done" });
 			}
 		);
 	});
