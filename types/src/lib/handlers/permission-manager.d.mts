@@ -381,6 +381,17 @@ export class PermissionManager extends ComponentBase {
      */
     assertModuleRuleRemoval(ruleId: string): void;
     /**
+     * Refuse module code removing an event rule it may not (#625), as {@link assertModuleRuleRemoval} does for a call
+     * or write rule. Host code removes any event rule.
+     *
+     * @param {string} ruleId - The event rule about to be removed.
+     * @returns {void}
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+     * @example
+     * pm.assertModuleEventRuleRemoval("evt-12");
+     */
+    assertModuleEventRuleRemoval(ruleId: string): void;
+    /**
      * A rule as it is registered: its own data fields, read once into a frozen copy (#625).
      *
      * The copy, not the object handed in, is what is checked, registered, and replayed on a reload, so a field that
@@ -394,6 +405,17 @@ export class PermissionManager extends ComponentBase {
      * const rule = pm.snapshotRule(input);
      */
     snapshotRule(rule: any): any;
+    /**
+     * An event rule as it is registered (`{ caller, event, effect, condition }`), read once into a frozen copy, as
+     * {@link snapshotRule} reads a call or write rule (#625).
+     *
+     * @param {*} rule - The event rule handed in.
+     * @returns {*} The frozen copy, or `rule` when it is no object.
+     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @example
+     * const rule = pm.snapshotEventRule(input);
+     */
+    snapshotEventRule(rule: any): any;
     /**
      * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
      * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
