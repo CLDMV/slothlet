@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T09:43:50-07:00 (1792860230)
+ *	@Last modified time: 2026-10-24T10:44:10-07:00 (1792863850)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1378,4 +1378,75 @@ export function useVictimDataCopies() {
  */
 export async function runWithSelf(key) {
 	return globalThis[Symbol.for(key)](self);
+}
+
+/**
+ * One change to each of the victim's data objects, read through `self`.
+ * @returns {Record<string, string>} Outcome of each change, by kind.
+ * @example
+ * changeEachVictimData();
+ */
+export function changeEachVictimData() {
+	const d = self.victim.v.data;
+	return {
+		map: attempt(() => d.cache.set("granted", 1)),
+		set: attempt(() => d.tags.add("granted")),
+		date: attempt(() => d.when.setTime(7)),
+		buffer: attempt(() => d.buffer.resize(12)),
+		bytes: attempt(() => {
+			d.bytes[0] = 9;
+		}),
+		pattern: attempt(() => {
+			d.pattern.lastIndex = 1;
+		}),
+		members: attempt(() => d.members.add("granted")),
+		registry: attempt(() => d.registry.set("granted", 1))
+	};
+}
+
+/**
+ * One read of each of the victim's data objects, through `self`.
+ * @returns {Record<string, *>} What each read gave, or the error code it was refused with.
+ * @example
+ * readEachVictimData();
+ */
+export function readEachVictimData() {
+	const read = (path) => {
+		try {
+			return path.reduce((value, key) => value[key], self.victim.v.data) === undefined ? "missing" : "read";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return {
+		map: read(["cache"]),
+		set: read(["tags"]),
+		date: read(["when"]),
+		buffer: read(["buffer"]),
+		bytes: read(["bytes"]),
+		pattern: read(["pattern"]),
+		members: read(["members"]),
+		registry: read(["registry"])
+	};
+}
+
+/**
+ * Keep each of the victim's data objects, read through `self` now, and hand back a function reporting what each holds
+ * later.
+ * @returns {function(): Record<string, *>} Reports what each kept object holds.
+ * @example
+ * keepEachVictimData()();
+ */
+export function keepEachVictimData() {
+	const d = self.victim.v.data;
+	const kept = { cache: d.cache, tags: d.tags, when: d.when, buffer: d.buffer, bytes: d.bytes, pattern: d.pattern, members: d.members };
+	return () => ({
+		map: [...kept.cache.keys()].join(","),
+		set: [...kept.tags].join(","),
+		date: kept.when.getTime(),
+		buffer: kept.buffer.byteLength,
+		bytes: [...kept.bytes].join(","),
+		pattern: kept.pattern.lastIndex,
+		members: kept.members.size
+	});
 }

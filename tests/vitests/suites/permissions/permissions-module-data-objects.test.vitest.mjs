@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T09:44:58-07:00 (1792860298)
+ *	@Last modified time: 2026-10-24T10:45:24-07:00 (1792863924)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -222,6 +222,71 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 	it("hands a module a write rule grants the write the object itself", async () => {
 		await load({ permissions: { rules: [{ caller: "guest.**", target: "victim.**:write", effect: "allow" }] } });
 		expect(await api.guest.x.victimBytesNative()).toEqual({ isView: true, copied: "1,2,3" });
+	});
+
+	describe("each kind of data object", () => {
+		it("can be changed by a module a write rule grants it", async () => {
+			await load({ permissions: { rules: [{ caller: "guest.**", target: "victim.**:write", effect: "allow" }] } });
+			const report = api.guest.x.changeEachVictimData();
+			expect(report).toEqual(every(report, "done"));
+			const data = api.victim.v.data;
+			expect(data.cache.get("granted")).toBe(1);
+			expect(data.tags.has("granted")).toBe(true);
+			expect(data.when.getTime()).toBe(7);
+			expect(data.buffer.byteLength).toBe(12);
+			expect(data.bytes[0]).toBe(9);
+			expect(data.pattern.lastIndex).toBe(1);
+			expect(data.members.has("granted")).toBe(true);
+			expect(data.registry.get("granted")).toBe(1);
+		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])("cannot be changed by a module without the write (permissions %s)", async (_label, options) => {
+			await load(options);
+			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeEachVictimData());
+			expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
+			expect(await api.victim.v.dataState()).toEqual(INITIAL);
+			expect(api.victim.v.data.registry.has("granted")).toBe(false);
+		});
+
+		it("cannot be changed by a module a write rule denies", async () => {
+			await load({ permissions: { rules: [{ caller: "guest.**", target: "victim.**:write", effect: "deny" }] } });
+			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeEachVictimData());
+			expect(report).toEqual(every(report, "PERMISSION_DENIED"));
+			expect(await api.victim.v.dataState()).toEqual(INITIAL);
+		});
+
+		it.each([
+			["the module", "victim.**"],
+			["its data", "victim.v.data.**"]
+		])("cannot be read by a module a read rule denies %s", async (_label, target) => {
+			await load({ permissions: { rules: [{ caller: "guest.**", target, effect: "deny" }] } });
+			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.readEachVictimData());
+			expect(report).toEqual(every(report, "PERMISSION_DENIED"));
+		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])(
+			"is read live by a module without the write: what it kept follows every change the owner makes (permissions %s)",
+			async (_label, options) => {
+				await load(options);
+				const report = api.guest.x.keepEachVictimData();
+				expect(report()).toEqual({ map: "cfg", set: "a", date: 0, buffer: 8, bytes: "1,2,3", pattern: 0, members: 1 });
+				const data = api.victim.v.data;
+				data.cache.set("later", 1);
+				data.tags.add("later");
+				data.when.setTime(9);
+				data.buffer.resize(16);
+				data.bytes[1] = 8;
+				data.pattern.lastIndex = 2;
+				data.members.add({ n: 1 });
+				expect(report()).toEqual({ map: "cfg,later", set: "a,later", date: 9, buffer: 16, bytes: "1,8,3", pattern: 2, members: 2 });
+			}
+		);
 	});
 
 	it("lets the owning module change them through self", async () => {
