@@ -463,6 +463,7 @@
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event muss eine nicht-leere Zeichenkette sein",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect muss 'deny', 'notify' oder 'allow' sein",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition muss ein einfaches Objekt, eine Funktion oder ein Array sein, bei dem jeder Eintrag ein einfaches Objekt oder eine Funktion ist",
+		"PERM_RULE_CONDITION_PROXY": "rule.condition darf kein Proxy sein und keinen Proxy enthalten",
 		"PERM_RULE_REQUIRES_INVALID": "rule.requires muss ein nicht leeres Array von Principal-Namen (nicht leere Zeichenketten) sein",
 		"BRACE_EXPANSION_MAX_DEPTH": "Klammerauflösung hat die maximale Tiefe von {maxDepth} überschritten",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Verringern Sie die Verschachtelung in Ihren Klammermustern oder erhöhen Sie die maxDepth-Option.",

@@ -203,6 +203,9 @@ A condition is stored by value with its rule: editing the object after the rule 
 | Array containing a primitive entry                           | **No** — throws               |
 | Empty array `[]`                                             | **No** — throws               |
 | Class instance (custom prototype)                            | **No** — throws               |
+| A `Proxy`, as the condition or anywhere inside it            | **No** — throws               |
+
+**Why a `Proxy` is rejected:** a condition is stored as a frozen copy of plain data and read on every check. A trap of a Proxy inside it would run during those checks, as whichever caller is being checked, so a condition holding one is refused when the rule is added, whoever adds it.
 
 **Why primitives are rejected:** A condition is a _context matcher_ — it describes properties of the per-request runtime context. A bare primitive like `"admin"` has no defined semantics as a context matcher. Use a function condition if you need arbitrary matching logic.
 

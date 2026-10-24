@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:45:50-07:00 (1792809950)
+ *	@Last modified time: 2026-10-23T21:41:53-07:00 (1792816913)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2402,8 +2402,8 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Drop the recorded rules a removed module's code added from the operation history, so a reload does not add
-	 * them again (#625). The module's other rules come back only with its add, which the reload replays together
+	 * Drop the recorded rules a removed module's code added — call, write, and event rules — from the operation
+	 * history, so a reload does not add them again (#625). The host's rules (no owner) stay. The module's other rules come back only with its add, which the reload replays together
 	 * with its removal.
 	 *
 	 * @param {string} moduleID - The removed module's id.
@@ -2415,7 +2415,11 @@ export class ApiManager extends ComponentBase {
 		const history = this.state.operationHistory;
 		for (let i = history.length - 1; i >= 0; i--) {
 			const operation = history[i];
-			if (operation.type === "addPermissionRule" && String(operation.ownerModuleID).split(MODULE_ID_SEPARATOR)[0] === base)
+			if (
+				(operation.type === "addPermissionRule" || operation.type === "addEventRule") &&
+				operation.ownerModuleID != null &&
+				String(operation.ownerModuleID).split(MODULE_ID_SEPARATOR)[0] === base
+			)
 				history.splice(i, 1);
 		}
 	}

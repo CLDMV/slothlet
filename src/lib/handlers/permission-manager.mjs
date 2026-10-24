@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:05:14-07:00 (1792814714)
+ *	@Last modified time: 2026-10-23T21:41:54-07:00 (1792816914)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * @internal
  */
 
-import { path } from "@cldmv/slothlet/helpers/platform";
+import { path, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
@@ -1026,6 +1026,12 @@ export class PermissionManager extends ComponentBase {
 			this.#writeRules.delete(id);
 			if (entry.requires) this.#requiresRuleCount--;
 		}
+		// And its event rules, the same ones (#625).
+		for (const [id, entry] of this.#eventRules) {
+			if (entry.ownerModuleID === null || entry.layer === "builtin" || !this.#sameOwner(entry.ownerModuleID, moduleID)) continue;
+			this.#eventRules.delete(id);
+			this.#eventRulesEpoch++;
+		}
 		this.#clearCache();
 	}
 
@@ -1790,16 +1796,25 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * A rule's condition, copied once and deeply into frozen plain data (#625): arrays and plain objects are copied
 	 * member by member, a function (a condition the grammar allows) is kept as it is, and so is any other value. A
-	 * member that is an accessor is refused.
+	 * member that is an accessor is refused, and so is a Proxy anywhere in it: matching reads the condition on every
+	 * check, so a trap of one would run then, as whichever caller is being checked.
 	 *
 	 * @param {*} value - The condition, or a part of it.
 	 * @param {Map<object, object>} seen - Copies made so far, so a shared or cyclic part is copied once.
+	 * @param {string} [at="condition"] - Where `value` sits in the rule, for the error.
 	 * @returns {*} The frozen copy.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a member is an accessor.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a member is an accessor or a Proxy.
 	 * @private
 	 */
-	#snapshotCondition(value, seen) {
+	#snapshotCondition(value, seen, at = "condition") {
 		if (value === null || typeof value !== "object") return value;
+		if (util.types.isProxy(value)) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_CONDITION_PROXY"),
+				received: at,
+				validationError: true
+			});
+		}
 		if (seen.has(value)) return seen.get(value);
 		const isArray = Array.isArray(value);
 		const proto = Reflect.getPrototypeOf(value);
@@ -1812,11 +1827,11 @@ export class PermissionManager extends ComponentBase {
 			if (!("value" in descriptor)) {
 				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: `condition.${String(key)}`,
+					received: `${at}.${String(key)}`,
 					validationError: true
 				});
 			}
-			copy[key] = this.#snapshotCondition(descriptor.value, seen);
+			copy[key] = this.#snapshotCondition(descriptor.value, seen, `${at}.${String(key)}`);
 		}
 		return Object.freeze(copy);
 	}

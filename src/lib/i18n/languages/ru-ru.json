@@ -463,6 +463,7 @@
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event должен быть непустой строкой",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect должен быть 'deny', 'notify' или 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition должно быть обычным объектом, функцией или массивом, в котором каждый элемент является обычным объектом или функцией",
+		"PERM_RULE_CONDITION_PROXY": "rule.condition не может быть прокси-объектом или содержать его",
 		"PERM_RULE_REQUIRES_INVALID": "rule.requires должно быть непустым массивом имён принципалов (непустых строк)",
 		"BRACE_EXPANSION_MAX_DEPTH": "Расширение фигурных скобок превысило максимальную глубину {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в ваших шаблонах скобок или увеличьте параметр maxDepth.",

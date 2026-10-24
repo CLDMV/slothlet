@@ -463,6 +463,7 @@
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event는 비어 있지 않은 문자열이어야 합니다",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect는 'deny', 'notify' 또는 'allow'여야 합니다",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition은 일반 객체, 함수 또는 각 항목이 일반 객체 또는 함수인 배열이어야 합니다",
+		"PERM_RULE_CONDITION_PROXY": "rule.condition은 프록시이거나 프록시를 포함할 수 없습니다",
 		"PERM_RULE_REQUIRES_INVALID": "rule.requires는 프린시펄 이름(비어 있지 않은 문자열)의 비어 있지 않은 배열이어야 합니다",
 		"BRACE_EXPANSION_MAX_DEPTH": "중괄호 확장이 최대 깊이 {maxDepth}을(를) 초과했습니다",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "중괄호 패턴의 중첩을 줄이거나 maxDepth 옵션을 늘리세요.",

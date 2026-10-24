@@ -463,6 +463,7 @@
 		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event must be a non-empty string",
 		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect must be 'deny', 'notify', or 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array where each entry is a plain object or function",
+		"PERM_RULE_CONDITION_PROXY": "rule.condition must not be or contain a Proxy",
 		"PERM_RULE_REQUIRES_INVALID": "rule.requires must be a non-empty array of principal names (non-empty strings)",
 		"BRACE_EXPANSION_MAX_DEPTH": "Brace expansion exceeded maximum depth of {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce nesting in your brace patterns or increase the maxDepth option.",
