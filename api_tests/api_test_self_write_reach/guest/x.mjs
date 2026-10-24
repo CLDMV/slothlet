@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:41:20-07:00 (1792816880)
+ *	@Last modified time: 2026-10-23T22:22:12-07:00 (1792819332)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -994,4 +994,55 @@ export function addProxyCondition(target, where, kind) {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Change what the framework's metadata and versioning getters hand this module, as plain JS changes an object:
+ * another module's path metadata, its version metadata, and the version listing of a path.
+ * @param {string} metaPath - A path whose metadata to read and change.
+ * @param {string} logicalPath - A versioned logical path.
+ * @param {string} tag - One of its version tags.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * changeReadMetadata("victim", "svc", "v1");
+ */
+export function changeReadMetadata(metaPath, logicalPath, tag) {
+	const { metadata, versioning } = self.slothlet;
+	return {
+		pathNested: attempt(() => {
+			metadata.getFor(metaPath).tier.level = 9;
+		}),
+		pathTop: attempt(() => {
+			metadata.getFor(metaPath).planted = 1;
+		}),
+		versionMeta: attempt(() => {
+			versioning.getVersionMetadata(logicalPath, tag).version = "hijacked";
+		}),
+		versionNested: attempt(() => {
+			versioning.getVersionMetadata(logicalPath, tag).nested.flag = "hijacked";
+		}),
+		listParts: attempt(() => {
+			versioning.list(logicalPath).versions[tag].versionedParts.splice(0, 9, "elsewhere");
+		}),
+		listMeta: attempt(() => {
+			versioning.list(logicalPath).versions[tag].versionMeta.nested.flag = "hijacked";
+		})
+	};
+}
+
+/**
+ * Hand back a function that, called later, writes a member on the node at `target` through `self`, either pinned to
+ * this module with `lockCaller` or as a plain closure.
+ * @param {string} target - Dotted path of the node to write, read when the function runs.
+ * @param {boolean} locked - Whether to pin it with `lockCaller`.
+ * @returns {function(): string} Writes the node and reports the outcome.
+ * @example
+ * keepWriter("victim.v", true)();
+ */
+export function keepWriter(target, locked) {
+	const write = () =>
+		attempt(() => {
+			target.split(".").reduce((value, part) => value[part], self).viaHeld = 1;
+		});
+	return locked ? self.slothlet.lockCaller(write) : write;
 }

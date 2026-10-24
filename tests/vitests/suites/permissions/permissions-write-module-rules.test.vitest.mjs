@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:45-07:00 (1792434885)
+ *	@Last modified time: 2026-10-23T23:14:10-07:00 (1792822450)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,6 +96,19 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(granted).toEqual(every(granted, "done"));
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.other.x.writeAt("vault.store"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
+		});
+
+		it.each([
+			["deny", "vault-deny", "vault.store", "PERMISSION_DENIED"],
+			["grant", "vault-grant-other", "victim.v", "done"]
+		])("keeps the manifest's %s across a reload", async (_label, name, target, outcome) => {
+			await load();
+			expect(await mountVault(name)).toBe("done");
+			for (let round = 0; round < 2; round++) {
+				const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.writeAt(target));
+				expect(report).toEqual(every(report, outcome));
+				await api.slothlet.reload();
+			}
 		});
 
 		it("lets the manifest grant one module writes into another module's subtree", async () => {

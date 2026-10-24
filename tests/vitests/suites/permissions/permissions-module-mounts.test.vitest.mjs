@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:42-07:00 (1792434882)
+ *	@Last modified time: 2026-10-23T22:23:28-07:00 (1792819408)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -163,6 +163,42 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			expect(await api.guest.x.addAt("guest.fresh", GUEST, { moduleID: "fresh" })).toBe("done");
 			expect(typeof api.guest.fresh.x.listSelf).toBe("function");
 		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])(
+			"does not let content the module mounts under its own id land in a module mounted below it (permissions %s)",
+			async (_label, options) => {
+				await load(options);
+				await api.slothlet.api.add("guest.kid", VICTIM, { moduleID: "vic" });
+				const content = { kid: { v: { planted: () => "EVIL" } } };
+				for (const moduleID of ["guest", undefined]) {
+					const outcome = await withSuppressedSlothletErrorOutput(() =>
+						api.guest.x.addAt("guest", content, { collisionMode: "merge", ...(moduleID ? { moduleID } : {}) })
+					);
+					expect(outcome).toBe("LOOSE_SET_NOT_OWNED");
+					expect(api.guest.kid.v.planted).toBeUndefined();
+				}
+				expect(await api.guest.kid.v.secret()).toBe("SECRET");
+			}
+		);
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])(
+			"leaves a removed module's kept function owning nothing once another module takes its id (permissions %s)",
+			async (_label, options) => {
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+				const kept = api.g.x.keepWriter("z.v", true);
+				await api.slothlet.api.remove("gA");
+				await api.slothlet.api.add("z", VICTIM, { moduleID: "gA" });
+				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe("LOOSE_SET_NOT_OWNED");
+				expect(api.z.v.viaHeld).toBeUndefined();
+			}
+		);
 
 		it("leaves the host re-using a moduleID", async () => {
 			await load();

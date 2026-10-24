@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:42:41-07:00 (1792816961)
+ *	@Last modified time: 2026-10-23T23:14:07-07:00 (1792822447)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,6 +159,28 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
 			expect(api.guest.sub.v.viaCondition).toBeUndefined();
+		});
+
+		it("stops running it once that module is removed, even when another module takes its moduleID", async () => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
+			await api.slothlet.api.add("g", path.join(FIXTURE, "guest"), { moduleID: "gA" });
+			const runs = [];
+			const condition = () => {
+				try {
+					self.z.v.viaStale = 1;
+					runs.push("done");
+				} catch (error) {
+					runs.push(error?.code ?? String(error));
+				}
+				return true;
+			};
+			const permissions = { allow: [{ target: "g.kid.**:write", condition }] };
+			expect(await api.g.x.addAt("g.kid", path.join(FIXTURE, "guest"), { moduleID: "kid", permissions })).toBe("done");
+			await api.slothlet.api.remove("gA");
+			await api.slothlet.api.add("z", path.join(FIXTURE, "victim"), { moduleID: "gA" });
+			await withSuppressedSlothletErrorOutput(() => api.g.kid.x.writeAt("g.kid.x"));
+			expect(runs).not.toContain("done");
+			expect(api.z.v.viaStale).toBeUndefined();
 		});
 
 		it("keeps it so across a reload", async () => {
