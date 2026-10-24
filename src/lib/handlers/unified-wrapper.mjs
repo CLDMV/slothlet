@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:54:32-07:00 (1792857272)
+ *	@Last modified time: 2026-10-24T09:44:17-07:00 (1792860257)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -681,6 +681,15 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 		raw instanceof WeakSet ||
 		(typeof WeakRef === "function" && raw instanceof WeakRef);
 	const isPromise = raw instanceof Promise;
+	// A promise's methods run on one that settles as it does, with what it settles with viewed: a callback, and a
+	// `then()`, `catch()`, or `finally()` passing the value on, get the view, never what the module holds.
+	let settled = null;
+	const viewedPromise = () =>
+		(settled ??= Promise.prototype.then.call(
+			raw,
+			(resolved) => held(resolved),
+			(reason) => Promise.reject(held(reason))
+		));
 	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
 		const target = typeof prop === "string" ? [...parts, prop] : parts;
@@ -774,7 +783,7 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 					return Reflect.apply(unwrapped, this, values.map(callbackArg));
 				};
 			});
-			return result(Reflect.apply(fn, raw, passed));
+			return result(Reflect.apply(fn, isPromise ? viewedPromise() : raw, passed));
 		};
 		methods.set(prop, { fn, call });
 		return call;
@@ -1934,6 +1943,7 @@ function runtime_isTerminalData(value) {
 		value instanceof RegExp ||
 		value instanceof Promise ||
 		value instanceof Error ||
+		(typeof WeakRef === "function" && value instanceof WeakRef) ||
 		ArrayBuffer.isView(value) ||
 		value instanceof ArrayBuffer
 	);
@@ -5846,6 +5856,7 @@ export class UnifiedWrapper extends ComponentBase {
 			value instanceof RegExp ||
 			value instanceof Promise ||
 			value instanceof Error ||
+			(typeof WeakRef === "function" && value instanceof WeakRef) ||
 			ArrayBuffer.isView(value) ||
 			value instanceof ArrayBuffer
 		) {
@@ -7786,6 +7797,7 @@ export class UnifiedWrapper extends ComponentBase {
 				value instanceof RegExp ||
 				value instanceof Promise ||
 				value instanceof Error ||
+				(typeof WeakRef === "function" && value instanceof WeakRef) ||
 				ArrayBuffer.isView(value) ||
 				value instanceof ArrayBuffer
 			) {
