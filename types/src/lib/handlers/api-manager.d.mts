@@ -237,6 +237,31 @@ export class ApiManager extends ComponentBase {
         prior: Map<string, any>;
     } | null): boolean;
     /**
+     * The token of the live mount of a module (#625): the same object for as long as the module is mounted under
+     * `moduleID` (across a reload too), and a new one once it has been removed and an id-sharing module is mounted.
+     * Every wrapper records it at construction, so code built for an earlier module under the id is told apart.
+     *
+     * @param {string|null|undefined} moduleID - The module's id.
+     * @returns {object|undefined} The token, or undefined for a module mounted without one (the base module).
+     * @public
+     *
+     * @example
+     * apiManager.incarnationOf("guest");
+     */
+    public incarnationOf(moduleID: string | null | undefined): object | undefined;
+    /**
+     * Whether `callerWrapper` is code of a module that is gone: it has a module, and that module owns nothing (#625).
+     * Such code is granted nothing by a rule: no write, and no call while the permission system is on.
+     *
+     * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+     * @returns {boolean} Whether the caller's module is gone.
+     * @public
+     *
+     * @example
+     * if (apiManager.isRemovedCaller(wrapper)) refuse();
+     */
+    public isRemovedCaller(callerWrapper: object | null): boolean;
+    /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
      * @returns {boolean} True when value looks like a wrapper proxy.
