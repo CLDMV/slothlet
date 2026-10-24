@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T17:24:05-07:00 (1792196645)
+ *	@Last modified time: 2026-10-24T14:57:02-07:00 (1792879022)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -853,6 +853,10 @@ function runtime_capturedView(child, capturedCaller) {
 				return resolved;
 			}
 			if (resolveWrapper(resolved) === null) return resolved;
+			// A member the child holds fixed (a frozen node's, a frozen array's element) must read as exactly what it
+			// holds, as the engine checks a proxy's answer against its target (#655): it is handed out as it is.
+			const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return resolved;
 			return runtime_capturedView(resolved, capturedCaller);
 		}
 	});
