@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T14:57:02-07:00 (1792879022)
+ *	@Last modified time: 2026-10-24T16:00:42-07:00 (1792882842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -821,43 +821,130 @@ function runtime_capturedView(child, capturedCaller) {
 	// than reaching through the facade on every call.
 	const inner = resolveWrapper(child);
 
-	const view = new Proxy(child, {
-		apply(target, thisArg, args) {
+	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
+	// frozen array's element) is checked by the engine against the view's own target, so it is mirrored onto the
+	// shadow as the view hands it out — a child node as its view — and the reader's identity goes with it too. A
+	// shadow of the same kind keeps the view callable, constructible, and an array where the child is.
+	const shadow = typeof child === "function" ? function () {} : Array.isArray(child) ? [] : {};
+	let view = null;
+	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
+	// view, anything else as it is.
+	const handOut = (prop, resolved) => {
+		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
+		// wrapper probes for properties that are not there — `then` above all — and every absent
+		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
+		// is answered by redaction, into a thrown read.
+		// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
+		// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
+		const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
+		if (resolved !== undefined && isMember && runtime_isTerminalData(resolved)) {
+			// Terminal data read off a captured namespace: gate it against the module that captured
+			// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
+			const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
+			return resolved;
+		}
+		if (resolveWrapper(resolved) === null) return resolved;
+		return runtime_capturedView(resolved, capturedCaller);
+	};
+	// The value the shadow holds for a fixed member: a child node as its view, anything else as it is. The read gate
+	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
+	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller));
+	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
+	const mirror = (prop) => {
+		const descriptor = Reflect.getOwnPropertyDescriptor(child, prop);
+		if (!descriptor) {
+			const stale = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
+			return undefined;
+		}
+		if (descriptor.configurable && Reflect.isExtensible(shadow)) return descriptor;
+		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+		if (held && !held.configurable) return held;
+		const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+		Reflect.defineProperty(shadow, prop, shown);
+		return shown;
+	};
+	// A child closed to extension is mirrored whole, the shadow closed with it, as the engine checks a proxy's answers
+	// about a non-extensible target against that target.
+	const mirrorClosed = () => {
+		if (Reflect.isExtensible(child) || !Reflect.isExtensible(shadow)) return;
+		for (const key of Reflect.ownKeys(child)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(child, key);
+			const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+			Reflect.defineProperty(shadow, key, shown);
+		}
+		Reflect.setPrototypeOf(shadow, Reflect.getPrototypeOf(child));
+		Reflect.preventExtensions(shadow);
+	};
+
+	view = new Proxy(shadow, {
+		apply(_, thisArg, args) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
-			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(target, thisArg, args));
-			return Reflect.apply(target, thisArg, args);
+			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(child, thisArg, args));
+			return Reflect.apply(child, thisArg, args);
 		},
-		construct(target, args, newTarget) {
+		construct(_, args, newTarget) {
 			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+			return Reflect.construct(child, args, newTarget === view ? child : newTarget);
 		},
-		get(target, prop) {
-			const resolved = Reflect.get(target, prop);
-			// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
-			// wrapper probes for properties that are not there — `then` above all — and every absent
-			// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
-			// is answered by redaction, into a thrown read.
-			// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
-			// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
-			const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
-			if (resolved !== undefined && isMember && runtime_isTerminalData(resolved)) {
-				// Terminal data read off a captured namespace: gate it against the module that captured
-				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
-				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
-				return resolved;
+		get(_, prop, receiver) {
+			mirrorClosed();
+			const descriptor = Reflect.getOwnPropertyDescriptor(child, prop);
+			if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
+				// Read through the child, so its own read rules run, then gated against the reader; what is handed out
+				// is what the shadow holds, as the engine requires.
+				handOut(prop, Reflect.get(child, prop, child));
+				return mirror(prop).value;
 			}
-			if (resolveWrapper(resolved) === null) return resolved;
-			// A member the child holds fixed (a frozen node's, a frozen array's element) must read as exactly what it
-			// holds, as the engine checks a proxy's answer against its target (#655): it is handed out as it is.
-			const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return resolved;
-			return runtime_capturedView(resolved, capturedCaller);
+			return handOut(prop, Reflect.get(child, prop, receiver === view ? child : receiver));
+		},
+		getOwnPropertyDescriptor(_, prop) {
+			mirrorClosed();
+			return mirror(prop);
+		},
+		has(_, prop) {
+			return Reflect.has(child, prop);
+		},
+		ownKeys() {
+			mirrorClosed();
+			return Reflect.ownKeys(child);
+		},
+		getPrototypeOf() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow) ? Reflect.getPrototypeOf(child) : Reflect.getPrototypeOf(shadow);
+		},
+		isExtensible() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow);
+		},
+		set(_, prop, value, receiver) {
+			return Reflect.set(child, prop, value, receiver === view ? child : receiver);
+		},
+		defineProperty(_, prop, descriptor) {
+			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
+			if (descriptor.configurable === false) mirror(prop);
+			return true;
+		},
+		deleteProperty(_, prop) {
+			if (!Reflect.deleteProperty(child, prop)) return false;
+			mirror(prop);
+			return true;
+		},
+		setPrototypeOf(_, proto) {
+			if (!Reflect.setPrototypeOf(child, proto)) return false;
+			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === proto;
+			return true;
+		},
+		preventExtensions() {
+			if (!Reflect.preventExtensions(child)) return false;
+			mirrorClosed();
+			return true;
 		}
 	});
 
