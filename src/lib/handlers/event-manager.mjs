@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
+ *	@Last modified time: 2026-10-24T08:38:14-07:00 (1792856294)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -389,6 +389,9 @@ export class EventManager extends ComponentBase {
 
 		const listeners = [];
 		const levels = {};
+		// The mount each recipient's module was at emit (#625): a held event goes to that module's listener only, which
+		// a reload of the module keeps, never to another module given the same id since.
+		const recipients = new Map();
 		for (const sub of subs) {
 			// Informational only: rules are enforced again when each listener is actually delivered.
 			// A listener denied at emit time is not a recipient.
@@ -396,6 +399,7 @@ export class EventManager extends ComponentBase {
 			if (level === "deny") continue;
 			listeners.push(sub.id);
 			levels[sub.id] = level;
+			recipients.set(sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
 		}
 		Object.freeze(listeners);
 
@@ -410,7 +414,7 @@ export class EventManager extends ComponentBase {
 			levels: Object.freeze(levels),
 			listeners
 		});
-		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow });
+		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow, recipients });
 
 		let delivery = null;
 		const defaultDeliver = () => {
@@ -536,7 +540,10 @@ export class EventManager extends ComponentBase {
 				break;
 			}
 		}
-		if (!sub) return { delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE };
+		// A listener under the id now that belongs to another module than the one the event was held for is not it.
+		if (!sub || (sub.ownerWrapper?.____slothletInternal?.incarnation ?? null) !== record.recipients.get(listenerId)) {
+			return { delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE };
+		}
 
 		const level = this.#levelFor(sub, event);
 		if (level === "deny") {

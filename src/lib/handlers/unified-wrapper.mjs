@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:12-07:00 (1792834932)
+ *	@Last modified time: 2026-10-24T08:38:15-07:00 (1792856295)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -439,8 +439,208 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return value;
 	if (FRAMEWORK_MEMBERS.has(value)) return runtime_selfFrameworkView(value, reader);
+	if (runtime_hasInternalSlots(value) && !SELF_MEMBER_VIEWS.has(value)) return runtime_selfDataView(value, reader, slothlet, parts);
 	if (!runtime_isPlainMember(value)) return runtime_selfView(value, reader);
 	return runtime_selfMemberView(value, reader, slothlet, parts);
+}
+
+/**
+ * The methods of each kind of data object that change it (#625). A `Date` and a `DataView` change through every
+ * `set…` method; `RegExp#exec` and `#test` move `lastIndex` as using a regular expression does, and are use.
+ * @type {Array<[Function, ReadonlySet<string>|null]>}
+ * @private
+ */
+const DATA_MUTATORS = [
+	[Map, new Set(["set", "delete", "clear"])],
+	[WeakMap, new Set(["set", "delete"])],
+	[Set, new Set(["add", "delete", "clear"])],
+	[WeakSet, new Set(["add", "delete"])],
+	[Date, null],
+	[DataView, null],
+	[RegExp, new Set(["compile"])],
+	[ArrayBuffer, new Set(["resize", "transfer", "transferToFixedLength"])],
+	...(typeof SharedArrayBuffer === "function" ? [[SharedArrayBuffer, new Set(["grow"])]] : [])
+];
+
+/** The methods of a typed array that change it. @type {ReadonlySet<string>} @private */
+const TYPED_ARRAY_MUTATORS = new Set(["set", "fill", "copyWithin", "reverse", "sort"]);
+
+/**
+ * Whether calling the method `name` of the data object `value` changes it.
+ * @param {object} value - The data object.
+ * @param {PropertyKey} name - The method's key.
+ * @returns {boolean} Whether the method changes it.
+ * @private
+ */
+function runtime_isDataMutator(value, name) {
+	if (typeof name !== "string") return false;
+	if (ArrayBuffer.isView(value) && !(value instanceof DataView)) return TYPED_ARRAY_MUTATORS.has(name);
+	for (const [kind, names] of DATA_MUTATORS) {
+		if (value instanceof kind) return names === null ? name.startsWith("set") : names.has(name);
+	}
+	return false;
+}
+
+/**
+ * Whether `reader` may write the api path `parts` now: the write a change through it would be, judged as one.
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {object} reader - The module that read it.
+ * @param {string[]} parts - The api path.
+ * @returns {boolean} Whether the write would be allowed.
+ * @private
+ */
+function runtime_readerMayWrite(slothlet, reader, parts) {
+	try {
+		slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * The data views {@link runtime_selfDataView} built: per value, per reader, per api path.
+ * @type {WeakMap<object, WeakMap<object, Map<string, object>>>}
+ * @private
+ */
+const SELF_DATA_VIEW_CACHE = new WeakMap();
+
+/**
+ * Hand out a module's data object — a `Map`, `Set`, `Date`, `ArrayBuffer`, typed array, `DataView`, `RegExp`,
+ * `Promise`, `WeakRef` — read through `self` as a view held to the rule of the api path it was reached at (#625).
+ *
+ * A reader that may write the path (it owns it, or a write rule grants it the write) is handed the object itself, so
+ * native code taking it (`fs.write`, `crypto`, `structuredClone`, `ArrayBuffer.isView`) works as on the object. Any
+ * other reader gets the view: live, as it reads the object itself, and read-only. Native code refuses a view, so
+ * such a reader copies what it passes on (`Buffer.from(view)`, `view.slice()`).
+ *
+ * Such an object keeps its contents in itself, out of reach of a member view, so its own methods have to run on
+ * it. The view runs them there. A method that changes it (`set`, `clear`, `setFullYear`, `fill`, `transfer`, …),
+ * an assignment or definition of a member or element, a deletion, and a change to its prototype or extensibility
+ * are writes at the path: held to the ownership and write rules exactly as a write to a member there. Reads and
+ * every other method behave as on the object itself. What it holds — a value `get` returns, the entries
+ * iteration yields, what a callback or a promise is handed, a typed array's shared `buffer` — comes back held to
+ * the same rule; a copy a method makes (`slice()`) is the caller's own.
+ *
+ * @param {object} value - The data object.
+ * @param {object} reader - Who read it.
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {string[]} parts - The api path it was reached at.
+ * @returns {object} The view.
+ * @private
+ */
+function runtime_selfDataView(value, reader, slothlet, parts) {
+	// The host owns the whole tree: it is handed the value itself, as is a module that may change it.
+	if (reader === HOST_READER) return value;
+	if (reader !== UNATTRIBUTED_READER && runtime_readerMayWrite(slothlet, reader, parts)) return value;
+	let byReader = SELF_DATA_VIEW_CACHE.get(value);
+	if (!byReader) {
+		byReader = new WeakMap();
+		SELF_DATA_VIEW_CACHE.set(value, byReader);
+	}
+	let byPath = byReader.get(reader);
+	if (!byPath) {
+		byPath = new Map();
+		byReader.set(reader, byPath);
+	}
+	const pathKey = parts.join(".");
+	const cached = byPath.get(pathKey);
+	if (cached) return cached;
+
+	const raw = value;
+	// Values it holds are handed back viewed; the buffer a typed array or DataView shares with it too.
+	const holdsValues =
+		raw instanceof Map ||
+		raw instanceof Set ||
+		raw instanceof WeakMap ||
+		raw instanceof WeakSet ||
+		raw instanceof Promise ||
+		(typeof WeakRef === "function" && raw instanceof WeakRef);
+	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
+	const assertWrite = (prop) => {
+		const target = typeof prop === "string" ? [...parts, prop] : parts;
+		const writer = runtime_selfRootWriter(slothlet, reader, target);
+		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+	};
+	let view = null;
+	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null));
+	const result = (returned) => {
+		if (returned === raw) return view;
+		if (returned === null || (typeof returned !== "object" && typeof returned !== "function")) return returned;
+		// An iterator over what it holds yields it viewed.
+		if (holdsValues && typeof returned.next === "function") {
+			return {
+				next: (...args) => {
+					const step = returned.next(...args);
+					return step.done ? step : { value: held(step.value), done: false };
+				},
+				return: (...args) => (typeof returned.return === "function" ? returned.return(...args) : { value: args[0], done: true }),
+				[Symbol.iterator]() {
+					return this;
+				}
+			};
+		}
+		if (holdsValues) return held(returned);
+		// Memory it shares is held to the rule too; a copy it made is the caller's own.
+		if (sharedBuffer !== null && (returned === sharedBuffer || (ArrayBuffer.isView(returned) && returned.buffer === sharedBuffer))) {
+			return held(returned);
+		}
+		return returned;
+	};
+	const methods = new Map();
+	const method = (prop, fn) => {
+		let bound = methods.get(prop);
+		if (bound?.fn === fn) return bound.call;
+		const mutates = runtime_isDataMutator(raw, prop);
+		const call = function (...args) {
+			if (mutates) assertWrite(null);
+			const passed = args.map((arg) => {
+				const unwrapped = runtime_unwrapSelfView(arg);
+				// A callback is handed what it holds viewed, as a read of it is.
+				if (holdsValues && typeof unwrapped === "function") {
+					return (...values) => unwrapped(...values.map((entry) => held(entry)));
+				}
+				return unwrapped;
+			});
+			return result(Reflect.apply(fn, raw, passed));
+		};
+		methods.set(prop, { fn, call });
+		return call;
+	};
+	view = new Proxy(raw, {
+		get(_, prop) {
+			const member = Reflect.get(raw, prop, raw);
+			if (typeof member === "function" && prop !== "constructor") return method(prop, member);
+			if (sharedBuffer !== null && prop === "buffer") return held(member);
+			return typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)
+				? member
+				: runtime_selfMemberOf(member, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+		},
+		set(_, prop, written) {
+			assertWrite(prop);
+			return Reflect.set(raw, prop, runtime_unwrapSelfView(written), raw);
+		},
+		defineProperty(_, prop, descriptor) {
+			assertWrite(prop);
+			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
+			return Reflect.defineProperty(raw, prop, stored);
+		},
+		deleteProperty(_, prop) {
+			assertWrite(prop);
+			return Reflect.deleteProperty(raw, prop);
+		},
+		setPrototypeOf(_, proto) {
+			assertWrite(null);
+			return Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto));
+		},
+		preventExtensions() {
+			assertWrite(null);
+			return Reflect.preventExtensions(raw);
+		}
+	});
+	byPath.set(pathKey, view);
+	SELF_MEMBER_VIEWS.set(view, { value: raw, reader, slothlet, parts });
+	return view;
 }
 
 /**

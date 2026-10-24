@@ -254,7 +254,7 @@ An `async` strategy can therefore make `emit` wait for durable acceptance (e.g. 
 
 ### `deliver(envelope, listenerId)`
 
-`api.slothlet.event.deliver(envelope, listenerId)` delivers a strategy-held envelope to **one** listener, so retrying a listener that failed never re-runs the listeners that already succeeded. It is host-only, gated like `strategy`.
+`api.slothlet.event.deliver(envelope, listenerId)` delivers a strategy-held envelope to **one** listener, so retrying a listener that failed never re-runs the listeners that already succeeded. It is host-only, gated like `strategy`. It reaches only the listener the envelope was emitted for: once that listener's module has been removed, the delivery reports `listener-gone`, even when a module mounted under the same moduleID since has registered a listener under the same id. A module's own reload keeps its listeners deliverable.
 
 - `envelope` must be an envelope this instance passed to its strategy (a copy is refused), and `listenerId` must be one of its `listeners`; otherwise it rejects with `INVALID_ARGUMENT`.
 - The id is resolved against the listeners registered **now**, not at emit time.
