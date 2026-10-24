@@ -335,8 +335,8 @@ export class PermissionManager extends ComponentBase {
      * @param {object} rule - The rule (`{ target, … }`).
      * @param {object|null} [writer] - The module code registering it, when an entry point captured it before an await
      *   lost it; read now when omitted. Null is host code.
-     * @returns {{ownerModuleID: string|null, layer: string|null}} Owner and layer to register the rule with; both null
-     *   for host code.
+     * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
+     *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
      * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
      * @example
      * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
@@ -345,7 +345,25 @@ export class PermissionManager extends ComponentBase {
     placeModuleRule(rule: object, writer?: object | null): {
         ownerModuleID: string | null;
         layer: string | null;
+        writer: object | null;
     };
+    /**
+     * A rule's condition as module code registers it: each function in it runs as that module (#625).
+     *
+     * A function condition is called while some other call is checked, so on its own it would run as that call's
+     * caller, and whatever it did through `self` — a write, a call — would be judged as that caller's. Pinned to the
+     * module that registered the rule, it has that module's standing and no other, as the module's own code does.
+     * A plain-data condition, and any condition host code registers, is handed back as it is.
+     *
+     * @param {*} condition - The condition, as {@link snapshotRule} copied it.
+     * @param {object|null} writer - The module code registering the rule, as {@link placeModuleRule} returned it;
+     *   null for host code.
+     * @returns {*} The condition, its functions pinned to `writer`.
+     * @example
+     * const { writer } = pm.placeModuleRule(rule);
+     * pm.addRule({ ...rule, condition: pm.pinConditions(rule.condition, writer) });
+     */
+    pinConditions(condition: any, writer: object | null): any;
     /**
      * Refuse module code removing a rule it may not (#625). Host code removes any rule.
      *
