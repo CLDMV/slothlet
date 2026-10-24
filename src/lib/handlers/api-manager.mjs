@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T22:22:37-07:00 (1792819357)
+ *	@Last modified time: 2026-10-23T23:36:28-07:00 (1792823788)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -656,8 +656,8 @@ export class ApiManager extends ComponentBase {
 			if (decision === "deny") {
 				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: `${targetPath}:write` });
 			}
-			// An allowing write rule grants the write, whatever the module owns.
-			if (decision === "grant") return;
+			// An allowing write rule grants the write, whatever the module owns — to a module that is still there.
+			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return;
 		}
 		if (this.ownsPath(parts, callerWrapper, inFlight)) return;
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
@@ -923,6 +923,55 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The token of the live mount of a module (#625): the same object for as long as the module is mounted under
+	 * `moduleID` (across a reload too), and a new one once it has been removed and an id-sharing module is mounted.
+	 * Every wrapper records it at construction, so code built for an earlier module under the id is told apart.
+	 *
+	 * @param {string|null|undefined} moduleID - The module's id.
+	 * @returns {object|undefined} The token, or undefined for a module mounted without one (the base module).
+	 * @public
+	 *
+	 * @example
+	 * apiManager.incarnationOf("guest");
+	 */
+	incarnationOf(moduleID) {
+		if (moduleID == null) return undefined;
+		return this.slothlet._moduleIncarnations?.get(String(moduleID).split(MODULE_ID_SEPARATOR)[0]);
+	}
+
+	/**
+	 * Give a module about to be mounted its token, when it is new: no token is held for its id, and no mount of it is
+	 * live (one mounted before tokens were given keeps none, so its code keeps its standing).
+	 *
+	 * @param {string} moduleID - The module's id.
+	 * @returns {void}
+	 * @private
+	 */
+	#beginIncarnation(moduleID) {
+		const incarnations = this.slothlet._moduleIncarnations;
+		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		if (!incarnations || incarnations.has(id)) return;
+		if (this.slothlet.handlers.ownership.getModuleMounts(moduleID).length > 0) return;
+		incarnations.set(id, Object.freeze({ moduleID: id }));
+	}
+
+	/**
+	 * Whether `callerWrapper` is code of a module that is gone: it has a module, and that module owns nothing (#625).
+	 * Such code is granted nothing by a rule: no write, and no call while the permission system is on.
+	 *
+	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+	 * @returns {boolean} Whether the caller's module is gone.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.isRemovedCaller(wrapper)) refuse();
+	 */
+	isRemovedCaller(callerWrapper) {
+		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
+		return this.#ownedRoot(callerWrapper) === null;
+	}
+
+	/**
 	 * The mount point a caller owns: its module's endpoint, `"."` (the whole tree) when it has no module, or
 	 * null (nothing) when its module is no longer mounted.
 	 *
@@ -937,16 +986,12 @@ export class ApiManager extends ComponentBase {
 	#ownedRoot(callerWrapper) {
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
-			const ownership = this.slothlet.handlers.ownership;
-			const endpoint = ownership.getModuleEndpoint(callerModuleID);
+			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
 			if (endpoint != null) {
-				// Code of the module mounted under this id sits at or below one of its mounts. Code from outside them is a
-				// removed module's that another module took the id of since (#625): it owns nothing, as it did before.
-				const apiPath = String(callerWrapper.____slothletInternal.apiPath ?? "");
-				const mounted = ownership
-					.getModuleMounts(callerModuleID)
-					.some((mount) => mount === "." || mount === "" || apiPath === mount || apiPath.startsWith(`${mount}.`));
-				return mounted ? endpoint : null;
+				// Code built for an earlier mount of this id is a removed module's, which another module took the id of
+				// since (#625): it owns nothing, as it did before.
+				const current = this.incarnationOf(callerModuleID);
+				return current === undefined || callerWrapper.____slothletInternal.incarnation === current ? endpoint : null;
 			}
 			// The endpoint is recorded when a module is mounted and dropped when it is removed: code of a module
 			// that is no longer mounted (a call still in flight, a function it handed out) owns nothing (#625).
@@ -2140,6 +2185,8 @@ export class ApiManager extends ComponentBase {
 		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
 		this.slothlet.handlers.permissionManager.onModuleRemoved(moduleID);
 		this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleID);
+		// Its code keeps no standing, whoever takes the id next (#625). A replay leaves the incarnations as they are.
+		if (recordHistory) this.slothlet._moduleIncarnations?.delete(id);
 		// Its mounts' records go, and so does every record naming it as the mounting module: a module that later takes
 		// the freed id inherits no right to remove what it mounted, live or after a reload.
 		for (const [key, mounter] of [...this.mountedBy]) {
@@ -2945,6 +2992,10 @@ export class ApiManager extends ComponentBase {
 			const fileName = path.basename(resolvedFolderPath);
 			fileFilter = (file) => file === fileName;
 		}
+
+		// A module mounted under an id no live module has is a new one (#625): its code, built from here on, stands for
+		// this mount, and code of an earlier module under the id does not. A replay rebuilds the mounts that are there.
+		if (restOptions.recordHistory !== false) this.#beginIncarnation(moduleID);
 
 		// Snapshot the entries moduleID already legitimately owned BEFORE buildAPI runs. buildAPI's
 		// wrapper construction fires impl:created with apiPathPrefix as the wrapper's own apiPath —

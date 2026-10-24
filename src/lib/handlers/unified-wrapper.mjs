@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T12:22:48-07:00 (1792437768)
+ *	@Last modified time: 2026-10-23T23:36:29-07:00 (1792823789)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -310,10 +310,48 @@ const PROTOCOL_SYMBOLS = new Set([
  * The realm's intrinsics — `Object`, `Function.prototype`, `Map.prototype.get`, `Math`, … — gathered once from
  * the global object without running any getter. They belong to no module: a node reaches them only through the
  * prototype chain every object shares, so they are handed out as they are, and `x.constructor === Object` holds.
- * @type {WeakSet<object>|null}
+ *
+ * Gathered when this file loads, before any module's code runs, so what a module puts on the global object later
+ * never counts as one (#625). A Proxy found there is passed over, never asked for its members: its traps would
+ * run, and it is nobody's intrinsic.
+ * @type {WeakSet<object>}
  * @private
  */
-let REALM_INTRINSICS = null;
+const REALM_INTRINSICS = runtime_gatherIntrinsics();
+
+/**
+ * Gather the realm's intrinsics ({@link REALM_INTRINSICS}): what the global object holds, to a depth of three, by
+ * property descriptor and prototype, leaving out every Proxy.
+ * @returns {WeakSet<object>} The intrinsics.
+ * @private
+ */
+function runtime_gatherIntrinsics() {
+	const intrinsics = new WeakSet();
+	const pending = [[globalThis, 0]];
+	while (pending.length > 0) {
+		const [current, depth] = pending.pop();
+		if (intrinsics.has(current)) continue;
+		intrinsics.add(current);
+		if (depth >= 3) continue;
+		const next = (candidate) => {
+			if (
+				candidate !== null &&
+				(typeof candidate === "object" || typeof candidate === "function") &&
+				!intrinsics.has(candidate) &&
+				!util.types.isProxy(candidate)
+			) {
+				pending.push([candidate, depth + 1]);
+			}
+		};
+		next(Reflect.getPrototypeOf(current));
+		for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
+			next(descriptor.value);
+			next(descriptor.get);
+			next(descriptor.set);
+		}
+	}
+	return intrinsics;
+}
 
 /**
  * Whether `value` is one of the realm's intrinsics ({@link REALM_INTRINSICS}).
@@ -322,27 +360,6 @@ let REALM_INTRINSICS = null;
  * @private
  */
 function runtime_isIntrinsic(value) {
-	if (REALM_INTRINSICS === null) {
-		REALM_INTRINSICS = new WeakSet();
-		const pending = [[globalThis, 0]];
-		while (pending.length > 0) {
-			const [current, depth] = pending.pop();
-			if (REALM_INTRINSICS.has(current)) continue;
-			REALM_INTRINSICS.add(current);
-			if (depth >= 3) continue;
-			const next = (candidate) => {
-				if (candidate !== null && (typeof candidate === "object" || typeof candidate === "function") && !REALM_INTRINSICS.has(candidate)) {
-					pending.push([candidate, depth + 1]);
-				}
-			};
-			next(Reflect.getPrototypeOf(current));
-			for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
-				next(descriptor.value);
-				next(descriptor.get);
-				next(descriptor.set);
-			}
-		}
-	}
 	return REALM_INTRINSICS.has(value);
 }
 
@@ -1554,6 +1571,10 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 	}
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ctx } = decision;
+	// Code of a module that is gone is allowed no call: the rules naming its old path are another module's now (#625).
+	if (wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
+		return { allowed: false, caller: String(callerWrapper.____slothletInternal.apiPath ?? "") };
+	}
 
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
@@ -1895,6 +1916,24 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
 }
 
 /**
+ * Refuse a call by code of a module that is gone (#625): it owns nothing, and the rules naming its old path are
+ * another module's now, so none of them allows it anything.
+ * @param {object} wrapper - The wrapper being called.
+ * @param {object} callerWrapper - The calling module's wrapper.
+ * @param {string} targetPath - The called path.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the caller's module is gone.
+ * @private
+ */
+function runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
+	if (!wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
+		target: targetPath
+	});
+}
+
+/**
  * Enforce call/construct-level permission gating for a wrapper invocation.
  *
  * Shared by `applyTrap` (function calls) and `constructTrap` (`new` construction) so
@@ -1946,6 +1985,8 @@ function enforcePermission(wrapper, callArgs, promote = false) {
 		});
 	}
 	const { callerWrapper, ctx } = decision;
+	// Code of a module that is gone is allowed no call: the rules naming its old path are another module's now (#625).
+	runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath);
 
 	// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
 	/* v8 ignore start */
@@ -2110,6 +2151,7 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
 	// target rather than it being readable off the wrapper the chain started from.
 	const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
+	runtime_refuseRemovedCaller(wrapper, capturedCaller, targetPath);
 	// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
@@ -3532,6 +3574,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.isCallable = isCallableValue;
 		internal.isCallableLocked = isCallableLocked;
 		internal.moduleID = moduleID;
+		// The mount of its module this wrapper was built for (#625): see ApiManager#incarnationOf.
+		internal.incarnation = slothlet.handlers?.apiManager?.incarnationOf?.(moduleID);
 		// The module the children adopted by an in-flight ___setImpl belong to, when that call names one
 		// explicitly (a reload rebuilding one module's contribution to a namespace another module created).
 		// Null otherwise: children then belong to this wrapper's own module (#525).

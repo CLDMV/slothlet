@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:05:18-07:00 (1792814718)
+ *	@Last modified time: 2026-10-23T23:36:34-07:00 (1792823794)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,6 +252,11 @@ class Slothlet {
 		// node at the same path in the live tree (see unified-wrapper.mjs).
 		this._buildEpoch = 0;
 		this._liveEpoch = 0;
+		// Module incarnations (#625): for each moduleID mounted with api.add, a token that stands for that mount for
+		// as long as the module is there. Every wrapper records its module's token at construction; code whose token
+		// is not the module's current one belongs to a removed module, and has no standing, even once another module
+		// takes the id. Kept across a reload, which keeps the modules it rebuilds; a restart starts over.
+		this._moduleIncarnations = new Map();
 		// In-flight restart() promise — concurrent calls share it.
 		this._restartPromise = null;
 		// True for the duration of restart() (tags the `shutdown` / `init` lifecycle events).
@@ -1538,6 +1543,8 @@ class Slothlet {
 				config.base = this._originalBase;
 			}
 			this._buildEpoch = this._liveEpoch + 1;
+			// A restart mounts none of the modules added before it: a module added later under one of their ids is new.
+			this._moduleIncarnations = new Map();
 			await this.load(config);
 
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
