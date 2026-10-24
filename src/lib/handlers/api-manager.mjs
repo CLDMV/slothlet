@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T15:26:03-07:00 (1792794363)
+ *	@Last modified time: 2026-10-23T17:06:56-07:00 (1792800416)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,7 +68,7 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // browser mode mounts from the manifest tree and does not touch the filesystem.
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
-import { fsp, path } from "@cldmv/slothlet/helpers/platform";
+import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -792,6 +792,18 @@ export class ApiManager extends ComponentBase {
 		if (node === null || (typeof node !== "object" && typeof node !== "function"))
 			return { found: false, value: undefined, accessor: false };
 		const raw = resolveWrapper(node);
+		// A Proxy of a module's own answers each read from its traps, which run module code: what it holds is as
+		// unknown here as an accessor's value, so the walk does not look through it. Slothlet's own nodes and
+		// dispatchers are proxies too, and are resolved above and below, as is the api root itself.
+		if (
+			!raw &&
+			node !== this.slothlet.api &&
+			versionDispatcherRecord(node) === null &&
+			!isFrameworkInternal(node) &&
+			util.types.isProxy(node)
+		) {
+			return { found: false, value: undefined, accessor: true };
+		}
 		const holders = raw ? [raw, raw.____slothletInternal.impl] : [node];
 		for (const holder of holders) {
 			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) continue;
