@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:41:02-07:00 (1792831262)
+ *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -325,6 +325,11 @@ export class EventManager extends ComponentBase {
 		const promises = [];
 
 		for (const sub of subs) {
+			// A removed module's listener hears nothing more (#625), however it outlived the module's removal.
+			if (sub.ownerWrapper && this.slothlet.handlers?.apiManager?.isRemovedCaller(sub.ownerWrapper)) {
+				this.#removeSub(event, sub);
+				continue;
+			}
 			const level = this.#levelFor(sub, event);
 			// A (gated) rule change may have downgraded this subscriber to deny → drop it.
 			if (level === "deny") {

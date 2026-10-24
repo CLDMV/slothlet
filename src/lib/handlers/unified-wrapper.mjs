@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:41:03-07:00 (1792831263)
+ *	@Last modified time: 2026-10-24T02:42:12-07:00 (1792834932)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2267,8 +2267,7 @@ function runtime_capturedReader(wrapper) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return null;
 	if (permissionManager.isCaptureEnabled?.() === false) return null;
-	// Scoped to this instance: another instance's module running now is no reader here (#625).
-	return wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
+	return wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 }
 
 /**
@@ -2358,7 +2357,7 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
 		return value;
 
-	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID)?.currentWrapper;
+	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 	if (!capturedCaller) return value;
 	return runtime_capturedView(value, capturedCaller);
 }
@@ -5709,7 +5708,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// does not.
 		const __readGateCaller = __readGateStore
 			? {
-					currentWrapper: wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null,
+					currentWrapper: wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null,
 					context: __readGateStore.context,
 					[TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true
 				}

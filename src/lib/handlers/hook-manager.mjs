@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:41:03-07:00 (1792831263)
+ *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -434,8 +434,7 @@ export class HookManager extends ComponentBase {
 		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
 		// Per-flow identity: this owner decides what the hook may do, so reading the live runtime's
 		// shared field could pin a concurrently-suspended module as the owner instead.
-		// Scoped to this instance: code of another instance whose call is running is no module of this one (#625).
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.(this.slothlet.instanceID)?.currentWrapper ?? null;
+		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
@@ -640,7 +639,7 @@ export class HookManager extends ComponentBase {
 		// targets the current instance, never a torn-down one.
 		const slothlet = this.slothlet;
 		// Per-flow identity: the pin must name *this* module, not whichever entered last.
-		const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
+		const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 		// Registered outside a module — no caller identity to capture.
 		if (!capturedWrapper) return handler;
 

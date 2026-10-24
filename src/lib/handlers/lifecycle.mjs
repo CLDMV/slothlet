@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T01:19:31-07:00 (1792829971)
+ *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -319,9 +319,10 @@ export class Lifecycle extends ComponentBase {
 		for (const handler of handlers) {
 			try {
 				const reader = readers?.get(handler);
-				// A removed module's subscriber hears nothing more (#625), and a module's is handed the event only: the
-				// instance's token is the framework's own.
-				if (reader && this.slothlet.handlers?.apiManager?.isRemovedCaller(reader)) continue;
+				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
+				// event only: the instance's token is the framework's own.
+				const apiManager = this.slothlet.handlers?.apiManager;
+				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
 				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
 				// If handler returns a promise, track it
 				if (result && typeof result.then === "function") {

@@ -1145,6 +1145,8 @@ const apiB = await slothlet({
 
 This holds true even when both instances use `runtime: "live"` (synchronous stack-based context). The enforcement code uses explicit instance IDs to look up the correct context store, preventing cross-contamination between instances.
 
+A module of one instance that calls into another (through a reference the host handed it, say) is that module to both: the instance it calls holds it to its own rules by its api path, and never counts it as the host. Being no module of that instance, it is not one of its removed modules either.
+
 ---
 
 ## Error Reference
