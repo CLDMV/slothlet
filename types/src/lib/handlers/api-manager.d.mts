@@ -262,6 +262,19 @@ export class ApiManager extends ComponentBase {
      */
     public isRemovedCaller(callerWrapper: object | null): boolean;
     /**
+     * Whether `callerWrapper` is code of the module removed last under `moduleID`, and no module has been mounted under
+     * the id since (#625): the module whose removal an event about `moduleID` tells of. Its subscribers hear that.
+     *
+     * @param {object} callerWrapper - The subscribing module's wrapper.
+     * @param {string|null|undefined} moduleID - The module an event is about.
+     * @returns {boolean} Whether the event tells of the subscriber's own removal.
+     * @public
+     *
+     * @example
+     * apiManager.isOwnRetired(reader, data.moduleID);
+     */
+    public isOwnRetired(callerWrapper: object, moduleID: string | null | undefined): boolean;
+    /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
      * @returns {boolean} True when value looks like a wrapper proxy.
