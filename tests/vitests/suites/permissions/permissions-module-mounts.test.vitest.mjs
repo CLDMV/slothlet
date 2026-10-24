@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T22:23:28-07:00 (1792819408)
+ *	@Last modified time: 2026-10-23T23:37:20-07:00 (1792823840)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -199,6 +199,56 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 				expect(api.z.v.viaHeld).toBeUndefined();
 			}
 		);
+
+		it.each([
+			["at the same path", "g", "g.v"],
+			["at the root", "", "v"]
+		])("leaves a removed module's kept function owning nothing when the host mounts its id again %s", async (_label, mountAt, target) => {
+			for (const options of [{ permissions: {} }, {}]) {
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+				const kept = api.g.x.keepWriter(target, true);
+				await api.slothlet.api.remove("gA");
+				await api.slothlet.api.add(mountAt, VICTIM, { moduleID: "gA" });
+				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe("LOOSE_SET_NOT_OWNED");
+				expect(target.split(".").reduce((node, key) => node[key], api).viaHeld).toBeUndefined();
+				await api.slothlet.shutdown();
+				api = null;
+			}
+		});
+
+		it("keeps a module's kept function its standing across a full reload", async () => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+			await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+			const kept = api.g.x.keepWriter("g.x", true);
+			await api.slothlet.reload();
+			expect(kept()).toBe("done");
+		});
+
+		it("gives a removed module's kept code none of the rules naming its old path", async () => {
+			api = await slothlet({
+				base: path.join(FIXTURE, "base"),
+				mode,
+				runtime,
+				silent: true,
+				permissions: {
+					defaultPolicy: "deny",
+					rules: [
+						{ caller: "g.**", target: "t.**:write", effect: "allow" },
+						{ caller: "g.**", target: "t.**", effect: "allow" }
+					]
+				}
+			});
+			await api.slothlet.api.add("t", VICTIM, { moduleID: "t" });
+			await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+			const writer = api.g.x.keepWriter("t.v", true);
+			const caller = api.g.x.keepCaller("t.v.secret");
+			expect(writer()).toBe("done");
+			expect(await caller()).toBe("SECRET");
+			await api.slothlet.api.remove("gA");
+			expect(withSuppressedSlothletErrorOutputSync(() => writer())).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => caller())).toBe("PERMISSION_DENIED");
+		});
 
 		it("leaves the host re-using a moduleID", async () => {
 			await load();

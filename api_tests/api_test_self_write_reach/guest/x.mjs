@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T22:22:12-07:00 (1792819332)
+ *	@Last modified time: 2026-10-23T23:35:57-07:00 (1792823757)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1045,4 +1045,33 @@ export function keepWriter(target, locked) {
 			target.split(".").reduce((value, part) => value[part], self).viaHeld = 1;
 		});
 	return locked ? self.slothlet.lockCaller(write) : write;
+}
+
+/**
+ * Hand back a function pinned to this module with `lockCaller` that, called later, calls the function at `target`
+ * through `self`.
+ * @param {string} target - Dotted path of the function, read when the function runs.
+ * @returns {function(): Promise<*>} Calls it and reports what it returned, or the error code.
+ * @example
+ * await keepCaller("victim.v.secret")();
+ */
+export function keepCaller(target) {
+	return self.slothlet.lockCaller(async () => {
+		try {
+			return await target.split(".").reduce((value, part) => value[part], self)();
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	});
+}
+
+/**
+ * Put this module's `self` and an object of its own on the global object under a symbol key, as plain JS lets any
+ * code do.
+ * @returns {void}
+ * @example
+ * exposeOnGlobal();
+ */
+export function exposeOnGlobal() {
+	globalThis[Symbol.for("slothlet.test.i625.global")] = { self, own: { n: 1 } };
 }
