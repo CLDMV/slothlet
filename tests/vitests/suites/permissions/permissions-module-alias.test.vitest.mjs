@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T15:27:05-07:00 (1792794425)
+ *	@Last modified time: 2026-10-23T17:07:43-07:00 (1792800463)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * the node it stands for; the framework's setters are judged the same way. An alias to a node the module owns
  * behaves as that node. A removal the host makes does
  * not walk through an alias either. A path that runs through an accessor — a getter defined on a node, or one on an
- * object stored there — is refused to module code without running the getter, and a version dispatcher stored as an
+ * object stored there — or through a Proxy a module stored is refused to module code without running the getter, and a version dispatcher stored as an
  * alias is judged by the versioned node it routes to. The host is unrestricted: its own add through an alias
  * places into the node the alias stands for. With and without the permission system, in all four mode / runtime
  * configurations.
@@ -184,7 +184,8 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 
 			it.each([
 				["a getter defined on the module's node", (x) => x.defineGetterAlias("guest.x", "g", "victim.v"), "guest.x.g"],
-				["a getter on an object the module stored", (x) => x.storeGetterObject("guest.x", "b", "r", "victim.v"), "guest.x.b.r"]
+				["a getter on an object the module stored", (x) => x.storeGetterObject("guest.x", "b", "r", "victim.v"), "guest.x.b.r"],
+				["a Proxy the module stored", (x) => x.storeProxyObject("guest.x", "p", "r", "victim.v"), "guest.x.p.r"]
 			])("refuses an add through %s, and plants nothing", async (_label, store, at) => {
 				await load();
 				expect(await store(api.guest.x)).toBe("done");

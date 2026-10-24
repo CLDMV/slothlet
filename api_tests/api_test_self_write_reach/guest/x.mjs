@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T15:25:20-07:00 (1792794320)
+ *	@Last modified time: 2026-10-23T17:06:22-07:00 (1792800382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -781,5 +781,24 @@ export function storeGetterObject(at, key, inner, target) {
 				return node;
 			}
 		};
+	});
+}
+
+/**
+ * Store a Proxy at `key` on the node at `at` whose `get` trap answers the node at `target` for `inner`, and reports no
+ * own member, read through `self` once.
+ * @param {string} at - Dotted path of the node the Proxy is stored on.
+ * @param {string} key - The member name.
+ * @param {string} inner - The name the trap answers.
+ * @param {string} target - Dotted path of the node the trap answers.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * storeProxyObject("guest.x", "p", "r", "victim.v");
+ */
+export function storeProxyObject(at, key, inner, target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	return attempt(() => {
+		const node = read(target);
+		read(at)[key] = new Proxy({}, { get: (_object, name) => (name === inner ? node : undefined) });
 	});
 }
