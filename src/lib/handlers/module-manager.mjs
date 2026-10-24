@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:05:13-07:00 (1792814713)
+ *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -488,24 +488,25 @@ export class ModuleManager extends ComponentBase {
 		// Registered for the mounted module (removed with it), at the manifest layer for the host's mount and at the
 		// placed module layer for module code's (#625).
 		// A function condition among them runs as the module code that mounted it, as its addRule's do.
-		manifestRules.forEach((rule, i) =>
-			permissionManager.addRule(
-				rulePlacements[i].writer ? { ...rule, condition: permissionManager.pinConditions(rule.condition, rulePlacements[i].writer) } : rule,
-				moduleID,
-				null,
-				rulePlacements[i].layer ?? "manifest"
-			)
-		);
-		manifestEvents.forEach((rule, i) =>
-			permissionManager.addEventRule(
-				eventPlacements[i].writer
-					? { ...rule, condition: permissionManager.pinConditions(rule.condition, eventPlacements[i].writer) }
-					: rule,
-				moduleID,
-				null,
-				eventPlacements[i].layer ?? "manifest"
-			)
-		);
+		// Each is recorded as the module's rule, so a reload, which replays the mount as a plain add, registers it again
+		// after it, at the same layer and with the same id; the module's removal drops the record (#625).
+		const history = this.slothlet.handlers.apiManager.state?.operationHistory;
+		manifestRules.forEach((rule, i) => {
+			const placed = rulePlacements[i].writer
+				? { ...rule, condition: permissionManager.pinConditions(rule.condition, rulePlacements[i].writer) }
+				: rule;
+			const layer = rulePlacements[i].layer ?? "manifest";
+			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
+			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+		});
+		manifestEvents.forEach((rule, i) => {
+			const placed = eventPlacements[i].writer
+				? { ...rule, condition: permissionManager.pinConditions(rule.condition, eventPlacements[i].writer) }
+				: rule;
+			const layer = eventPlacements[i].layer ?? "manifest";
+			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
+			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+		});
 
 		const result = {
 			packageName: discoverResult.packageName,

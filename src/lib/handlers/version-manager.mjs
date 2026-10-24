@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:52-07:00 (1792336612)
+ *	@Last modified time: 2026-10-23T23:13:23-07:00 (1792822403)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -202,7 +202,7 @@ export class VersionManager extends ComponentBase {
 			// Segment array keeping versionTag atomic even when it contains dots (e.g. "2.3.0").
 			// Used by #walkApiPath to avoid re-splitting the concatenated versionedPath string,
 			// which would fragment "2.3.0" into ["2","3","0"] and walk the wrong tree nodes.
-			versionedParts: [versionTag, ...logicalPath.split(".")],
+			versionedParts: Object.freeze([versionTag, ...logicalPath.split(".")]),
 			// isDefault and versionMeta are always explicitly passed via registerVersion's callers.
 			/* v8 ignore next */
 			isDefault: isDefault ?? false,

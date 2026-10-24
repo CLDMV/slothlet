@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:41:54-07:00 (1792816914)
+ *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -97,6 +97,13 @@ const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
  * @private
  */
 const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "requires"]);
+
+/**
+ * The pin a module's function condition carries (#625): `{ moduleID, live }`, the registering module's base id, and
+ * whether that module is still there. Its removal revokes the pin, so a condition held after it is gone never runs —
+ * not even when another module later takes the freed id, whose standing it would otherwise reach.
+ */
+const CONDITION_PIN = Symbol("slothlet.permissions.conditionPin");
 
 /** The data fields of an event rule (#407), read once when it is registered (#625). */
 const EVENT_RULE_FIELDS = Object.freeze(["caller", "event", "effect", "condition"]);
@@ -341,6 +348,14 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#eventRules = new Map();
+
+	/**
+	 * Pins of the function conditions registered here, by the base id of the module each runs as (#625): a module's
+	 * removal revokes them ({@link onModuleRemoved}).
+	 * @type {Map<string, Set<{moduleID: string, live: boolean}>>}
+	 * @private
+	 */
+	#conditionPins = new Map();
 
 	/**
 	 * Base event level applied when no event rule matches a subscriber/event pair. Built-in default
@@ -598,6 +613,7 @@ export class PermissionManager extends ComponentBase {
 		// The rule is read once: the copy is what is validated and kept (#625).
 		rule = this.snapshotRule(rule);
 		this.#validateRule(rule);
+		this.#trackConditionPins(rule.condition);
 
 		const id = ruleId || `perm-${++ruleIdCounter}`;
 		// Detect the hook-target suffix form (`pattern:type`). When present the rule gates hook
@@ -716,6 +732,7 @@ export class PermissionManager extends ComponentBase {
 	addEventRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
 		this.#assertNotSealed();
 		this.#validateEventRule(rule);
+		this.#trackConditionPins(rule.condition);
 
 		const id = ruleId || `evt-${++ruleIdCounter}`;
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
@@ -1012,6 +1029,11 @@ export class PermissionManager extends ComponentBase {
 	 * pm.onModuleRemoved("roles_mod");
 	 */
 	onModuleRemoved(moduleID) {
+		// The function conditions it registered stop running, wherever their rules live (a module it mounted keeps
+		// its rules): a later module taking the freed id must not reach them (#625).
+		const base = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		for (const pin of this.#conditionPins.get(base) ?? []) pin.live = false;
+		this.#conditionPins.delete(base);
 		for (const [name, record] of this.#principals) {
 			if (record.ownerModuleID !== null && this.#sameOwner(record.ownerModuleID, moduleID)) {
 				this.#principals.delete(name);
@@ -1669,11 +1691,33 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#pinCondition(fn, writer) {
 		const slothlet = this.slothlet;
+		const pin = { moduleID: String(writer.____slothletInternal?.moduleID).split(MODULE_ID_SEPARATOR)[0], live: true };
 		// instanceID and contextManager are read when the condition runs, so a rule replayed after a reload runs in
 		// the current instance. rawErrors: a throw reaches the condition matcher unchanged, which treats it as no match.
-		return function slothlet_pinnedCondition(ctx, callMeta) {
+		// Once its module is removed the condition no longer matches.
+		const pinned = function slothlet_pinnedCondition(ctx, callMeta) {
+			if (!pin.live) return false;
 			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [ctx, callMeta], writer, true);
 		};
+		Object.defineProperty(pinned, CONDITION_PIN, { value: pin });
+		return pinned;
+	}
+
+	/**
+	 * Record the pins of a rule's function conditions, so the removal of the module each runs as revokes it (#625).
+	 * Called as each rule is registered, a reload's replay included, which registers into a new manager.
+	 *
+	 * @param {*} condition - The rule's condition.
+	 * @returns {void}
+	 * @private
+	 */
+	#trackConditionPins(condition) {
+		for (const entry of Array.isArray(condition) ? condition : [condition]) {
+			const pin = typeof entry === "function" ? entry[CONDITION_PIN] : undefined;
+			if (!pin) continue;
+			if (!this.#conditionPins.has(pin.moduleID)) this.#conditionPins.set(pin.moduleID, new Set());
+			this.#conditionPins.get(pin.moduleID).add(pin);
+		}
 	}
 
 	/**

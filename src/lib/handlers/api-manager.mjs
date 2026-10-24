@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:41:53-07:00 (1792816913)
+ *	@Last modified time: 2026-10-23T22:22:37-07:00 (1792819357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -640,12 +640,14 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
+	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
 	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
 	 *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
 	 * @public
 	 */
-	assertOwnedWrite(parts, callerWrapper, ignoreModuleID = null) {
+	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
 		if (callerWrapper) {
 			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
 			const targetPath = parts.join(".");
@@ -657,7 +659,7 @@ export class ApiManager extends ComponentBase {
 			// An allowing write rule grants the write, whatever the module owns.
 			if (decision === "grant") return;
 		}
-		if (this.ownsPath(parts, callerWrapper, ignoreModuleID)) return;
+		if (this.ownsPath(parts, callerWrapper, inFlight)) return;
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
 		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
 		/* v8 ignore next */
@@ -695,19 +697,20 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string[]} parts - Segments of the api path.
 	 * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
-	 * @param {string|null} [ignoreModuleID=null] - A module whose ownership entries do not count: the module an add in
-	 *   flight is mounting, which registered its content before the add's writes are checked.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight, which registered its
+	 *   content before its writes are checked: the module it mounts, and the paths that module owned before it began.
+	 *   That module's entries at any other path are the add's own content, and do not count.
 	 * @returns {boolean} Whether the caller owns the path.
 	 * @public
 	 *
 	 * @example
 	 * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
 	 */
-	ownsPath(parts, callerWrapper, ignoreModuleID = null) {
+	ownsPath(parts, callerWrapper, inFlight = null) {
 		const ownedRoot = this.#ownedRoot(callerWrapper);
 		// External code (no callerWrapper) and base-module code (endpoint "." or "") own the whole tree.
 		if (ownedRoot !== null && (!ownedRoot || ownedRoot === ".")) return true;
-		return this.#ownsAt(parts, String(callerWrapper?.____slothletInternal?.moduleID), ownedRoot, ignoreModuleID);
+		return this.#ownsAt(parts, String(callerWrapper?.____slothletInternal?.moduleID), ownedRoot, inFlight);
 	}
 
 	/**
@@ -722,18 +725,22 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Segments of the api path.
 	 * @param {string} moduleID - The module's id.
 	 * @param {string|null} ownedRoot - The module's mount point; null when it is no longer mounted.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight (see {@link ownsPath}).
 	 * @returns {boolean} Whether the module owns the path.
 	 * @private
 	 */
-	#ownsAt(parts, moduleID, ownedRoot, ignoreModuleID = null) {
+	#ownsAt(parts, moduleID, ownedRoot, inFlight = null) {
 		// A module no longer mounted (removed, or gone with the instance it belonged to) owns nothing (#625).
 		if (ownedRoot === null) return false;
 		const ownership = this.slothlet.handlers.ownership;
 		for (let length = parts.length; length > 0; length--) {
-			// An add in flight has registered its own content already: that is not who owned the path before it.
+			// An add in flight has registered its own content already: that is not who owned the path before it. Its
+			// module's entry counts only where that module owned the path before the add began, whichever module writes
+			// (a module adding under its own id included).
+			const at = parts.slice(0, length).join(".");
 			const stack = ownership
-				.getPathHistory(parts.slice(0, length).join("."))
-				.filter((entry) => ignoreModuleID === null || String(entry.moduleID) !== ignoreModuleID || ignoreModuleID === moduleID);
+				.getPathHistory(at)
+				.filter((entry) => inFlight === null || String(entry.moduleID) !== inFlight.moduleID || inFlight.prior.has(at));
 			if (stack.length === 0) continue;
 			// Modules mounted at one point share that point's subtree only, never each other's other mounts.
 			const path = parts.join(".");
@@ -755,16 +762,18 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string[]} parts - Segments of the path written.
 	 * @param {object} writer - The module's wrapper ({@link runtime_selfModuleReader}).
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
+	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_UNATTRIBUTED` for code the live runtime cannot attribute, and what
 	 *   {@link ApiManager#assertOwnedWrite} throws.
 	 * @private
 	 */
-	#assertModuleMountWrite(parts, writer, ignoreModuleID = null) {
+	#assertModuleMountWrite(parts, writer, inFlight = null) {
 		if (!writer.____slothletInternal) {
 			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 		}
-		this.assertOwnedWrite(parts, writer, ignoreModuleID);
+		this.assertOwnedWrite(parts, writer, inFlight);
 		const { paths, opaque } = this.#walkReach(parts);
 		// A path running through an accessor is not walked: what the getter answers is not known without running it,
 		// so module code is refused there rather than written past it.
@@ -775,7 +784,7 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		// A node reached through an alias is written where it really is, and held to its owner there.
-		for (const realParts of paths) this.assertOwnedWrite(realParts, writer, ignoreModuleID);
+		for (const realParts of paths) this.assertOwnedWrite(realParts, writer, inFlight);
 	}
 
 	/**
@@ -928,8 +937,17 @@ export class ApiManager extends ComponentBase {
 	#ownedRoot(callerWrapper) {
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
-			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
-			if (endpoint != null) return endpoint;
+			const ownership = this.slothlet.handlers.ownership;
+			const endpoint = ownership.getModuleEndpoint(callerModuleID);
+			if (endpoint != null) {
+				// Code of the module mounted under this id sits at or below one of its mounts. Code from outside them is a
+				// removed module's that another module took the id of since (#625): it owns nothing, as it did before.
+				const apiPath = String(callerWrapper.____slothletInternal.apiPath ?? "");
+				const mounted = ownership
+					.getModuleMounts(callerModuleID)
+					.some((mount) => mount === "." || mount === "" || apiPath === mount || apiPath.startsWith(`${mount}.`));
+				return mounted ? endpoint : null;
+			}
 			// The endpoint is recorded when a module is mounted and dropped when it is removed: code of a module
 			// that is no longer mounted (a call still in flight, a function it handed out) owns nothing (#625).
 			return null;
@@ -2273,12 +2291,13 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} baseParts - Where the content is placed.
 	 * @param {*} content - The content: the add's built api subtree.
 	 * @param {object} writer - The adding module's wrapper.
-	 * @param {string} addingModuleID - The module the add mounts.
+	 * @param {{moduleID: string, prior: Map<string, *>}} inFlight - The module the add mounts, and the paths it owned
+	 *   before the add began (see {@link ApiManager#ownsPath}).
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @private
 	 */
-	async #assertModuleContent(baseParts, content, writer, addingModuleID) {
+	async #assertModuleContent(baseParts, content, writer, inFlight) {
 		const seen = new WeakSet();
 		// Read through the wrapper itself, never its proxy: the content is the framework's own until it is placed, and
 		// reading it through the proxy would meet the read gates as the adding module.
@@ -2304,7 +2323,7 @@ export class ApiManager extends ComponentBase {
 			for (const [key, value] of members) {
 				if (isFrameworkReservedKey(key)) continue;
 				const childParts = [...parts, key];
-				this.#assertModuleMountWrite(childParts, writer, String(addingModuleID));
+				this.#assertModuleMountWrite(childParts, writer, inFlight);
 				await walk(value, childParts);
 			}
 		};
@@ -2403,8 +2422,8 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Drop the recorded rules a removed module's code added — call, write, and event rules — from the operation
-	 * history, so a reload does not add them again (#625). The host's rules (no owner) stay. The module's other rules come back only with its add, which the reload replays together
-	 * with its removal.
+	 * history, so a reload does not add them again (#625). The host's rules (no owner) stay. The module's other rules
+	 * come back only with its add, which the reload replays together with its removal.
 	 *
 	 * @param {string} moduleID - The removed module's id.
 	 * @returns {void}
@@ -3164,7 +3183,10 @@ export class ApiManager extends ComponentBase {
 		if (writer !== null) {
 			const content = parts.length === 0 ? (isSynthetic ? apiToMerge : newApi) : apiToMerge;
 			try {
-				await this.#assertModuleContent(parts.length === 0 ? [] : effectiveParts, content, writer, moduleID);
+				await this.#assertModuleContent(parts.length === 0 ? [] : effectiveParts, content, writer, {
+					moduleID: String(moduleID),
+					prior: priorEntriesForModule
+				});
 			} catch (err) {
 				// A live node handed in as content is left alone: only what the add built is dropped.
 				this.invalidateSpeculativeWrappers(content, new WeakSet(), []);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:05:12-07:00 (1792814712)
+ *	@Last modified time: 2026-10-23T23:13:21-07:00 (1792822401)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2355,7 +2355,8 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return {};
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
-					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
+					// A copy: changing it never changes what is stored for the path, which only the setters do (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
 				},
 
 				/**
@@ -2421,7 +2422,8 @@ export class ApiBuilder extends ComponentBase {
 					if (!info || !info.versions?.[versionTag]) return {};
 					const { moduleID } = info.versions[versionTag];
 					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
-					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
+					// A copy, as getFor's (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
 				}
 			},
 
@@ -2828,7 +2830,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
-					return slothlet.handlers.versionManager.list(logicalPath);
+					// A copy: changing it never changes the registry a version dispatcher routes by (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.list(logicalPath));
 				},
 
 				/**
@@ -2891,7 +2894,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
-					return slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag);
+					// A copy: changing it never changes the stored version metadata, which only setVersionMetadata does (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag));
 				},
 
 				/**
