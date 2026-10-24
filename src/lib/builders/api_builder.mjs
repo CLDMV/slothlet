@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:13:21-07:00 (1792822401)
+ *	@Last modified time: 2026-10-24T01:19:30-07:00 (1792829970)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -441,6 +441,14 @@ export class ApiBuilder extends ComponentBase {
 			}
 			const callerWrapper = identity?.currentWrapper;
 			if (!callerWrapper) return;
+			// Code of a module that is gone reaches none of the framework's surface, permissions on or off (#625): what it
+			// could register there (a hook, a listener, a subscriber) would outlive it.
+			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
+					target: targetPath
+				});
+			}
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
@@ -492,6 +500,7 @@ export class ApiBuilder extends ComponentBase {
 			// tryGetContext() returning non-null without currentWrapper is an impossible state.
 			/* v8 ignore next */
 			if (!callerWrapper) return false;
+			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return false;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			// Defensive guard: this proxy helper runs only when permissionManager is initialized.

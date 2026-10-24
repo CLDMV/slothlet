@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:36:28-07:00 (1792823788)
+ *	@Last modified time: 2026-10-24T01:19:31-07:00 (1792829971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -990,8 +990,8 @@ export class ApiManager extends ComponentBase {
 			if (endpoint != null) {
 				// Code built for an earlier mount of this id is a removed module's, which another module took the id of
 				// since (#625): it owns nothing, as it did before.
-				const current = this.incarnationOf(callerModuleID);
-				return current === undefined || callerWrapper.____slothletInternal.incarnation === current ? endpoint : null;
+				// A token the id no longer holds (its module removed, and a reload replaying an add of it) is stale too.
+				return callerWrapper.____slothletInternal.incarnation === this.incarnationOf(callerModuleID) ? endpoint : null;
 			}
 			// The endpoint is recorded when a module is mounted and dropped when it is removed: code of a module
 			// that is no longer mounted (a call still in flight, a function it handed out) owns nothing (#625).

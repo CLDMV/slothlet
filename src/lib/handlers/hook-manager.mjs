@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
+ *	@Last modified time: 2026-10-24T01:19:31-07:00 (1792829971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -438,6 +438,8 @@ export class HookManager extends ComponentBase {
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+		// The registering module's code itself (#625): once that module is removed the hook no longer fires.
+		const ownerModule = replayIdentity ? (replayIdentity.ownerModule ?? null) : ownerWrapper;
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -573,6 +575,7 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
+			ownerModule,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -940,7 +943,12 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
-		const hooks = this.#matchHooksForPath(type, apiPath);
+		// A removed module's hook fires no more, permissions on or off, whoever is mounted at its old path or under
+		// its old id since (#625).
+		const apiManager = this.slothlet.handlers?.apiManager;
+		const hooks = this.#matchHooksForPath(type, apiPath).filter(
+			(hook) => hook.ownerModule === null || !apiManager?.isRemovedCaller(hook.ownerModule)
+		);
 
 		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
 		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
@@ -1970,6 +1978,7 @@ export class HookManager extends ComponentBase {
 				// preserves the original module attribution across reload (the ALS context is gone at
 				// replay) without exposing a spoofable public knob (#138 review).
 				ownerPath: hook.ownerPath,
+				ownerModule: hook.ownerModule,
 				// Version-dispatched entries replay literally (the stored pattern is already the
 				// physical `tag.pattern`); the binding travels outside options for the same
 				// non-spoofable reason and is re-stamped through the private channel (#250).
@@ -1996,7 +2005,11 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				[REPLAY_IDENTITY]: {
+					ownerPath: reg.ownerPath ?? null,
+					ownerFilePath: reg.ownerFilePath ?? null,
+					ownerModule: reg.ownerModule ?? null
+				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).
 				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
+ *	@Last modified time: 2026-10-24T01:19:31-07:00 (1792829971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -287,7 +287,7 @@ export class Lifecycle extends ComponentBase {
 	 * `api.add`, the host — the subscriber's own `self` writes are held to the module that subscribed it.
 	 * @param {Function} handler - The subscriber.
 	 * @param {object} reader - The module it was subscribed from.
-	 * @param {Array} args - `[data, token]`.
+	 * @param {Array} args - `[data]`: a module's subscriber is handed the event, never the instance token.
 	 * @returns {*} What the subscriber returns.
 	 * @private
 	 */
@@ -319,7 +319,10 @@ export class Lifecycle extends ComponentBase {
 		for (const handler of handlers) {
 			try {
 				const reader = readers?.get(handler);
-				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes), token]) : handler(data, token);
+				// A removed module's subscriber hears nothing more (#625), and a module's is handed the event only: the
+				// instance's token is the framework's own.
+				if (reader && this.slothlet.handlers?.apiManager?.isRemovedCaller(reader)) continue;
+				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
 				// If handler returns a promise, track it
 				if (result && typeof result.then === "function") {
 					handlerPromises.push(
