@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:52-07:00 (1792834972)
+ *	@Last modified time: 2026-10-24T08:39:01-07:00 (1792856341)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,6 +159,25 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		expect(globalThis[Symbol.for("slothlet.test.i625.conditionWrites")].splice(0)).toEqual([]);
 		// Delivered as before, the strategy gone: once, at the level the listener's rules give it.
 		expect(api.victim.v.takeHeard()).toHaveLength(1);
+	});
+
+	it("delivers an event held for a removed module's listener to no other module's listener under its id", async () => {
+		await load({});
+		const held = [];
+		api.slothlet.event.strategy((envelope) => {
+			held.push(envelope);
+		});
+		expect(api.g.x.registerCallbacks("g.v.**:after", "victim.news").event).toBe("done");
+		await api.victim.v.shout("victim.news", { n: 1 });
+		expect(held).toHaveLength(1);
+		const [envelope] = held;
+		const [listenerId] = envelope.listeners;
+		await api.slothlet.api.remove("gA");
+		await api.slothlet.api.add("g2", GUEST, { moduleID: "gA" });
+		expect(api.g2.x.registerCallbacks("g2.v.**:after", "victim.news").event).toBe("done");
+		globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
+		expect(await api.slothlet.event.deliver(envelope, listenerId)).toEqual({ delivered: false, reason: "listener-gone" });
+		expect(globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0).filter((entry) => entry.tokenType === "event")).toEqual([]);
 	});
 
 	it.each([

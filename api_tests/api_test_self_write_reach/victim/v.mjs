@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:04:49-07:00 (1792814689)
+ *	@Last modified time: 2026-10-24T04:22:37-07:00 (1792840957)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -373,4 +373,60 @@ export function shout(event, payload) {
  */
 export function takeHeard() {
 	return heard.splice(0);
+}
+
+/**
+ * Data objects the victim exports, each kind whose methods work only on the object itself.
+ * @type {{cache: Map<string, *>, tags: Set<string>, when: Date, buffer: ArrayBuffer, bytes: Uint8Array, pattern: RegExp}}
+ */
+export const data = {
+	cache: new Map([["cfg", { level: 1 }]]),
+	tags: new Set(["a"]),
+	when: new Date(0),
+	buffer: new ArrayBuffer(8, { maxByteLength: 16 }),
+	bytes: new Uint8Array([1, 2, 3]),
+	pattern: /x/g
+};
+
+/**
+ * What the victim's data objects hold now, as the victim sees them.
+ * @returns {Record<string, *>} A snapshot.
+ * @example
+ * dataState();
+ */
+export function dataState() {
+	return {
+		cache: [...data.cache.keys()].join(","),
+		cfgLevel: data.cache.get("cfg")?.level,
+		cacheProto: Object.getPrototypeOf(data.cache) === Map.prototype,
+		tags: [...data.tags].join(","),
+		when: data.when.getTime(),
+		bufferLength: data.buffer.byteLength,
+		bytes: [...data.bytes].join(","),
+		lastIndexSource: data.pattern.source,
+		patternExtra: data.pattern.extra
+	};
+}
+
+/**
+ * The victim changing its own data objects through `self`, as plain JS does, then putting them back.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * changeOwnData();
+ */
+export function changeOwnData() {
+	const own = self.victim.v.data;
+	const out = {
+		mapSet: attempt(() => own.cache.set("own", 1)),
+		setAdd: attempt(() => own.tags.add("own")),
+		dateSet: attempt(() => own.when.setTime(5)),
+		bytesIndex: attempt(() => {
+			own.bytes[0] = 9;
+		})
+	};
+	data.cache.delete("own");
+	data.tags.delete("own");
+	data.when.setTime(0);
+	data.bytes[0] = 1;
+	return out;
 }

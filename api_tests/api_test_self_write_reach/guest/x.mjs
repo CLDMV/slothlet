@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:41:44-07:00 (1792834904)
+ *	@Last modified time: 2026-10-24T04:22:34-07:00 (1792840954)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1193,4 +1193,120 @@ export function holdRemoval(prefix) {
 	});
 	globalThis[Symbol.for("slothlet.test.i625.release")] = release;
 	self.slothlet.lifecycle.on("impl:removed", (data) => (String(data?.apiPath ?? "").startsWith(prefix) ? gate : undefined));
+}
+
+/**
+ * Change the victim's data objects, read through `self`, every way plain JS lets code change them.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * changeVictimData();
+ */
+export function changeVictimData() {
+	const d = self.victim.v.data;
+	return {
+		mapSet: attempt(() => d.cache.set("evil", 1)),
+		mapDelete: attempt(() => d.cache.delete("cfg")),
+		mapClear: attempt(() => d.cache.clear()),
+		mapNested: attempt(() => {
+			d.cache.get("cfg").level = 9;
+		}),
+		mapIterated: attempt(() => {
+			for (const [, value] of d.cache) value.level = 8;
+		}),
+		mapForEach: attempt(() => d.cache.forEach((value) => (value.level = 7))),
+		mapProto: attempt(() => Object.setPrototypeOf(d.cache, null)),
+		setAdd: attempt(() => d.tags.add("evil")),
+		setClear: attempt(() => d.tags.clear()),
+		dateSet: attempt(() => d.when.setFullYear(2000)),
+		bufferTransfer: attempt(() => d.buffer.transfer()),
+		bufferResize: attempt(() => d.buffer.resize(4)),
+		bytesIndex: attempt(() => {
+			d.bytes[0] = 9;
+		}),
+		bytesFill: attempt(() => d.bytes.fill(0)),
+		bytesSet: attempt(() => d.bytes.set([7], 1)),
+		patternCompile: attempt(() => d.pattern.compile("y")),
+		patternMember: attempt(() => {
+			d.pattern.extra = 1;
+		}),
+		defineMember: attempt(() => Object.defineProperty(d.cache, "extra", { value: 1 }))
+	};
+}
+
+/**
+ * Read and use the victim's data objects, read through `self`, as plain JS does.
+ * @returns {Record<string, *>} What each read gave.
+ * @example
+ * readVictimData();
+ */
+export function readVictimData() {
+	const d = self.victim.v.data;
+	return {
+		mapGet: d.cache.get("cfg").level,
+		mapHas: d.cache.has("cfg"),
+		mapSize: d.cache.size,
+		mapIsMap: d.cache instanceof Map,
+		mapSpread: [...d.cache.keys()].join(","),
+		copied: new Map(d.cache).size,
+		setHas: d.tags.has("a"),
+		dateTime: d.when.getTime(),
+		dateJson: JSON.stringify(d.when),
+		bufferLength: d.buffer.byteLength,
+		bytes: [...d.bytes].join(","),
+		bytesSlice: [...d.bytes.slice(1)].join(","),
+		bytesIndex: d.bytes[2],
+		patternTest: d.pattern.test("x"),
+		patternSource: d.pattern.source
+	};
+}
+
+/**
+ * {@link readVictimData}, reporting the error code a refused read throws instead of throwing it.
+ * @returns {Record<string, *>|string} What each read gave, or the error code.
+ * @example
+ * readVictimDataOutcome();
+ */
+export function readVictimDataOutcome() {
+	try {
+		return readVictimData();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Read the `Map` at `apiPath` through `self`, then add an entry to it and read one back.
+ * @param {string} apiPath - Dotted path of the `Map`.
+ * @returns {{read: *, change: string}} What a read gave, and the outcome of the change.
+ * @example
+ * changeMapAt("syn.cache");
+ */
+export function changeMapAt(apiPath) {
+	const map = apiPath.split(".").reduce((value, part) => value[part], self);
+	return {
+		read: map.get("k")?.n,
+		change: attempt(() => map.set("evil", 1))
+	};
+}
+
+/**
+ * Keep the victim's `Map`, read through `self` now, and hand back a function that lists its keys later.
+ * @returns {function(): string} Lists the kept `Map`'s keys.
+ * @example
+ * keepVictimCache()();
+ */
+export function keepVictimCache() {
+	const cache = self.victim.v.data.cache;
+	return () => [...cache.keys()].join(",");
+}
+
+/**
+ * Whether the victim's bytes, read through `self`, are the typed array itself, as native code needs.
+ * @returns {{isView: boolean, copied: string}} What `ArrayBuffer.isView` says of them, and a copy of them.
+ * @example
+ * victimBytesNative();
+ */
+export function victimBytesNative() {
+	const bytes = self.victim.v.data.bytes;
+	return { isView: ArrayBuffer.isView(bytes), copied: [...Buffer.from(bytes)].join(",") };
 }
