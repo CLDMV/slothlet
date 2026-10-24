@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T00:39:46-07:00 (1792827586)
+ *	@Last modified time: 2026-10-24T01:41:42-07:00 (1792831302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,6 +102,38 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	it.each([
 		["on", { permissions: {} }],
 		["off", {}]
+	])("tells a module's lifecycle subscriber of the module's own removal (permissions %s)", async (_label, options) => {
+		await load(options);
+		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").lifecycle).toBe("done");
+		await api.slothlet.api.remove("gA");
+		const seen = globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
+		expect(seen.some((entry) => entry.event === "impl:removed" && String(entry.apiPath).startsWith("g"))).toBe(true);
+	});
+
+	it.each([
+		["on", { permissions: { rules: [HOOK_GRANT, { caller: "g.**", target: "slothlet.event.strategy", effect: "allow" }] } }],
+		["off", {}]
+	])("runs a module's event strategy as that module, and drops it with the module (permissions %s)", async (_label, options) => {
+		await load(options);
+		expect(api.g.x.installStrategy("victim.v")).toBe("done");
+		api.g.x.takeConditionWrites();
+		api.victim.v.listen("victim.news");
+		await api.victim.v.shout("victim.news", { n: 1 });
+		const writes = api.g.x.takeConditionWrites();
+		expect(writes.length).toBeGreaterThan(0);
+		expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+		expect(api.victim.v.viaStrategy).toBeUndefined();
+		await api.slothlet.api.remove("gA");
+		api.victim.v.takeHeard();
+		await api.victim.v.shout("victim.news", { n: 2 });
+		expect(globalThis[Symbol.for("slothlet.test.i625.conditionWrites")].splice(0)).toEqual([]);
+		// Delivered as before, the strategy gone: once, at the level the listener's rules give it.
+		expect(api.victim.v.takeHeard()).toHaveLength(1);
+	});
+
+	it.each([
+		["on", { permissions: {} }],
+		["off", {}]
 	])("hands a module's lifecycle subscriber no token, and nothing once the module is removed (permissions %s)", async (_label, options) => {
 		await load(options);
 		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").lifecycle).toBe("done");
@@ -111,6 +143,8 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		expect(seen.length).toBeGreaterThan(0);
 		expect(seen.every((entry) => entry.tokenType === "undefined")).toBe(true);
 		await api.slothlet.api.remove("gA");
+		// What it heard of its own removal is checked above; another module's removal it hears nothing of.
+		globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
 		await api.slothlet.api.remove("victim");
 		const globalSeen = globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
 		expect(globalSeen.filter((entry) => entry.event === "impl:removed")).toEqual([]);

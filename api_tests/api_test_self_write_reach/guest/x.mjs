@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T00:38:44-07:00 (1792827524)
+ *	@Last modified time: 2026-10-24T01:40:37-07:00 (1792831237)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1136,4 +1136,44 @@ export function keepRegistering(pattern, event) {
  */
 export function takeLifecycleSeen() {
 	return lifecycleSeen.splice(0);
+}
+
+/**
+ * Install, from this module's code, an event delivery strategy that, on every emit, writes a member on `target`
+ * through `self`, records the outcome in the list {@link takeConditionWrites} reads, and delivers.
+ * @param {string} target - Dotted path of the node the strategy writes.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * installStrategy("victim.v");
+ */
+export function installStrategy(target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	try {
+		self.slothlet.event.strategy((_envelope, _listeners, deliver) => {
+			conditionWrites.push(
+				attempt(() => {
+					read(target).viaStrategy = 1;
+				})
+			);
+			return deliver();
+		});
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Call the function the host put on the global object under `key`, from this module's code.
+ * @param {string} key - The `Symbol.for` key it is stored under.
+ * @returns {Promise<*>} What it returned, or the error code it threw.
+ * @example
+ * await callGlobal("slothlet.test.i625.bridge");
+ */
+export async function callGlobal(key) {
+	try {
+		return await globalThis[Symbol.for(key)]();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }
