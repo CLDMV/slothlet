@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:05:57-07:00 (1792814757)
+ *	@Last modified time: 2026-10-23T21:42:41-07:00 (1792816961)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -240,6 +240,53 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
 			expect(api.victim.v.viaKey).toBeUndefined();
+		});
+	});
+
+	describe("a condition is data the framework copied", () => {
+		it.each([
+			["nested in", "nested", "call"],
+			["as", "whole", "call"],
+			["nested in an event rule's", "nested", "event"],
+			["as an event rule's", "whole", "event"]
+		])("refuses a Proxy %s condition, and nothing it could do runs at a later check", async (_label, where, kind) => {
+			await load(kind === "event" ? {} : { permissions: { defaultPolicy: "allow", rules: [] } });
+			expect(api.guest.x.addProxyCondition("victim.v", where, kind)).toBe("INVALID_PERMISSION_RULE");
+			api.guest.x.takeConditionWrites();
+			if (kind === "event") {
+				api.victim.v.listen("guest.zap");
+				await api.guest.x.shout("guest.zap", { n: 1 });
+				await new Promise((resolve) => setTimeout(resolve, 20));
+			} else {
+				await withSuppressedSlothletErrorOutput(() => api.victim.v.callAt("guest.x.listSelf"));
+			}
+			expect(api.guest.x.takeConditionWrites()).toEqual([]);
+			expect(api.victim.v.viaProxy).toBeUndefined();
+		});
+
+		it("refuses a Proxy in a condition the host adds", async () => {
+			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			const condition = { tenant: new Proxy({}, {}) };
+			expect(() => api.slothlet.permissions.addRule({ caller: "**", target: "guest.**", effect: "allow", condition })).toThrow(
+				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
+			);
+		});
+	});
+
+	describe("a removed module's event rules", () => {
+		it("go with it, and stay gone across a reload", async () => {
+			await load({});
+			const before = api.slothlet.event.resolveLevel("victim.v", "guest.ping");
+			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" })).toMatch(/^evt-/);
+			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "victim.*", effect: "deny" });
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			await api.slothlet.api.remove("guest");
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			await api.slothlet.reload();
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			expect(typeof hostId).toBe("string");
 		});
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T21:04:46-07:00 (1792814686)
+ *	@Last modified time: 2026-10-23T21:41:20-07:00 (1792816880)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -944,6 +944,53 @@ export function registerWritingPrincipal(name, target) {
 			resolve: () => ({ ok: true })
 		});
 		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * A Proxy whose `getPrototypeOf` trap, each time it runs, writes a member on `target` through `self` and records the
+ * outcome in the list {@link takeConditionWrites} reads. The first run answers `Object.prototype`, every later one
+ * `Array.prototype`.
+ * @param {string} target - Dotted path of the node the trap writes.
+ * @returns {object} The Proxy.
+ */
+function writingProxy(target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	let runs = 0;
+	return new Proxy(
+		{},
+		{
+			getPrototypeOf() {
+				conditionWrites.push(
+					attempt(() => {
+						read(target).viaProxy = 1;
+					})
+				);
+				return runs++ === 0 ? Object.prototype : Array.prototype;
+			}
+		}
+	);
+}
+
+/**
+ * Add a rule for this module's subtree whose object condition holds a {@link writingProxy}, nested or as the
+ * condition itself, from this module's code.
+ * @param {string} target - Dotted path of the node the Proxy's trap writes.
+ * @param {"nested"|"whole"} where - Where the Proxy sits in the condition.
+ * @param {"call"|"event"} kind - A call rule, or an event rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addProxyCondition("victim.v", "nested", "call");
+ */
+export function addProxyCondition(target, where, kind) {
+	const proxy = writingProxy(target);
+	const condition = where === "nested" ? { tenant: proxy } : proxy;
+	try {
+		return kind === "event"
+			? self.slothlet.event.rules.add({ caller: "**", event: "guest.**", effect: "allow", condition })
+			: self.slothlet.permissions.addRule({ caller: "**", target: "guest.**", effect: "allow", condition });
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
