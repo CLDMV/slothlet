@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:35:57-07:00 (1792823757)
+ *	@Last modified time: 2026-10-24T00:38:44-07:00 (1792827524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1074,4 +1074,66 @@ export function keepCaller(target) {
  */
 export function exposeOnGlobal() {
 	globalThis[Symbol.for("slothlet.test.i625.global")] = { self, own: { n: 1 } };
+}
+
+/**
+ * What this module's lifecycle subscribers received, kept outside the module so a removed module's subscriber
+ * records into the same list a test reads.
+ * @type {Array<{event: string, apiPath: *, tokenType: string}>}
+ */
+const lifecycleSeen = (globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")] ??= []);
+
+/**
+ * Register, from this module's code, an `after` hook on `pattern` that marks the result, an event listener on
+ * `event`, and a lifecycle subscriber on `impl:removed`, each recording into a list outside the module.
+ * @param {string} pattern - The hook pattern (`path:after`).
+ * @param {string} event - The event to listen to.
+ * @returns {Record<string, string>} Outcome of each registration.
+ * @example
+ * registerCallbacks("victim.v.secret:after", "victim.news");
+ */
+export function registerCallbacks(pattern, event) {
+	const outcome = (run) => {
+		try {
+			run();
+			return "done";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return {
+		hook: outcome(() => self.slothlet.hook.on(pattern, ({ result }) => `HOOKED:${result}`)),
+		event: outcome(() =>
+			self.slothlet.event.on(event, (payload) => {
+				lifecycleSeen.push({ event, apiPath: payload ?? null, tokenType: "event" });
+			})
+		),
+		lifecycle: outcome(() =>
+			self.slothlet.lifecycle.on("impl:removed", (data, token) => {
+				lifecycleSeen.push({ event: "impl:removed", apiPath: data?.apiPath ?? null, tokenType: typeof token });
+			})
+		)
+	};
+}
+
+/**
+ * {@link registerCallbacks}, pinned to this module with `lockCaller` and handed back to call later.
+ * @param {string} pattern - The hook pattern.
+ * @param {string} event - The event to listen to.
+ * @returns {function(): Record<string, string>} Registers them and reports each outcome.
+ * @example
+ * keepRegistering("victim.v.secret:after", "victim.news")();
+ */
+export function keepRegistering(pattern, event) {
+	return self.slothlet.lockCaller(() => registerCallbacks(pattern, event));
+}
+
+/**
+ * What this module's subscribers recorded, cleared on read.
+ * @returns {Array<{event: string, apiPath: *, tokenType: string}>} The records, in order.
+ * @example
+ * takeLifecycleSeen();
+ */
+export function takeLifecycleSeen() {
+	return lifecycleSeen.splice(0);
 }
