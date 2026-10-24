@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:17-07:00 (1792384517)
+ *	@Last modified time: 2026-10-23T21:05:18-07:00 (1792814718)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1350,7 +1350,8 @@ class Slothlet {
 				// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
 				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+					// An event rule keeps the layer it was added at (#625).
+					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
 				}
 			} else if (operation.type === "registerPrincipal") {
 				// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's

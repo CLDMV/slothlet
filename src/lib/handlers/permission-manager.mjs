@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:45:51-07:00 (1792809951)
+ *	@Last modified time: 2026-10-23T21:05:14-07:00 (1792814714)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -97,6 +97,9 @@ const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
  * @private
  */
 const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "requires"]);
+
+/** The data fields of an event rule (#407), read once when it is registered (#625). */
+const EVENT_RULE_FIELDS = Object.freeze(["caller", "event", "effect", "condition"]);
 
 const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
 
@@ -757,10 +760,17 @@ export class PermissionManager extends ComponentBase {
 		this.#assertNotSealed();
 		const entry = this.#eventRules.get(ruleId);
 		if (!entry) return false;
-		// Self-modification protection, mirroring removeRule: only reachable via a direct
-		// addEventRule(rule, moduleID) call, never from the null-owner public runtime surface.
+		// Self-modification protection, mirroring removeRule: a module cannot remove the event rules registered on its
+		// behalf (its manifest's). One its own code added (the module layer, #625) is its to remove. The guarded rules
+		// are registered with an owner only internally, and their ids are not handed to the module.
 		/* v8 ignore start */
-		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
+		if (
+			callerModuleID &&
+			entry.ownerModuleID &&
+			callerModuleID === entry.ownerModuleID &&
+			entry.layer !== "module" &&
+			entry.layer !== "manager"
+		) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: callerModuleID });
 		}
 		/* v8 ignore stop */
@@ -1222,7 +1232,9 @@ export class PermissionManager extends ComponentBase {
 	#principalKey(record, ctx) {
 		let identityKey;
 		try {
-			identityKey = record.key(ctx);
+			// A module's key function runs as that module, as its resolver does (#625): it is computed while some
+			// other caller's call is checked, and must not act with that caller's standing.
+			identityKey = record.invoke ? record.invoke(record.key, [ctx]) : record.key(ctx);
 		} catch {
 			return null;
 		}
@@ -1674,7 +1686,34 @@ export class PermissionManager extends ComponentBase {
 	 * pm.assertModuleRuleRemoval("perm-12");
 	 */
 	assertModuleRuleRemoval(ruleId) {
-		const entry = this.#rules.get(ruleId);
+		this.#assertModuleRemoval(this.#rules.get(ruleId), ruleId);
+	}
+
+	/**
+	 * Refuse module code removing an event rule it may not (#625), as {@link assertModuleRuleRemoval} does for a call
+	 * or write rule. Host code removes any event rule.
+	 *
+	 * @param {string} ruleId - The event rule about to be removed.
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+	 * @example
+	 * pm.assertModuleEventRuleRemoval("evt-12");
+	 */
+	assertModuleEventRuleRemoval(ruleId) {
+		this.#assertModuleRemoval(this.#eventRules.get(ruleId), ruleId);
+	}
+
+	/**
+	 * Refuse module code removing the rule `entry` unless its own module added it, or the module may manage rules
+	 * beyond its subtree and the rule is another module's.
+	 *
+	 * @param {object|undefined} entry - The rule entry; nothing to check when absent.
+	 * @param {string} ruleId - The rule's id, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+	 * @private
+	 */
+	#assertModuleRemoval(entry, ruleId) {
 		if (!entry) return;
 		const module = runtime_selfModuleReader(this.slothlet);
 		if (module === null) return;
@@ -1703,9 +1742,36 @@ export class PermissionManager extends ComponentBase {
 	 * const rule = pm.snapshotRule(input);
 	 */
 	snapshotRule(rule) {
+		return this.#snapshotFields(rule, RULE_FIELDS);
+	}
+
+	/**
+	 * An event rule as it is registered (`{ caller, event, effect, condition }`), read once into a frozen copy, as
+	 * {@link snapshotRule} reads a call or write rule (#625).
+	 *
+	 * @param {*} rule - The event rule handed in.
+	 * @returns {*} The frozen copy, or `rule` when it is no object.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @example
+	 * const rule = pm.snapshotEventRule(input);
+	 */
+	snapshotEventRule(rule) {
+		return this.#snapshotFields(rule, EVENT_RULE_FIELDS);
+	}
+
+	/**
+	 * Read `fields` of a rule once into a frozen copy.
+	 *
+	 * @param {*} rule - The rule handed in.
+	 * @param {ReadonlyArray<string>} fields - The data fields to copy.
+	 * @returns {*} The frozen copy, or `rule` when it is no object.
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @private
+	 */
+	#snapshotFields(rule, fields) {
 		if (rule === null || typeof rule !== "object") return rule;
 		const copy = {};
-		for (const key of RULE_FIELDS) {
+		for (const key of fields) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(rule, key);
 			if (descriptor === undefined) continue;
 			if (!("value" in descriptor)) {

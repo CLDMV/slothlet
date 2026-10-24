@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:45:50-07:00 (1792809950)
+ *	@Last modified time: 2026-10-23T21:05:12-07:00 (1792814712)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2699,8 +2699,10 @@ export class ApiBuilder extends ComponentBase {
 					deliver: handler.deliver.bind(handler),
 					rules: {
 						/**
-						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
-						 * The rule enters the highest "runtime" precedence layer.
+						 * Add an event rule at runtime (gated by `config.api.mutations.events`). The host's rule enters the
+						 * highest "runtime" precedence layer. Module code reaches this only while the permission system is
+						 * off (a built-in rule keeps it host-only otherwise), and is then held to its own events, as its
+						 * `permissions.addRule` is (#625).
 						 * @param {object} rule - `{ caller, event, effect }` (effect: deny/notify/allow).
 						 * @returns {string} The rule id.
 						 */
@@ -2717,13 +2719,20 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
 							}
 							/* v8 ignore stop */
-							const ruleId = permissionManager.addEventRule(rule, null, null, "runtime");
+							// The rule is read once; module code's is placed as its call rules are, at the module layer, and
+							// its condition runs as the module.
+							rule = permissionManager.snapshotEventRule(rule);
+							const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule({ target: rule?.event });
+							if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
+							const ruleLayer = layer ?? "runtime";
+							const ruleId = permissionManager.addEventRule(rule, ownerModuleID, null, ruleLayer);
 							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
 									type: "addEventRule",
 									rule,
-									ownerModuleID: null,
+									ownerModuleID,
 									ruleId,
+									layer: ruleLayer,
 									timestamp: Date.now()
 								});
 							}
@@ -2731,7 +2740,8 @@ export class ApiBuilder extends ComponentBase {
 						},
 
 						/**
-						 * Remove an event rule by id at runtime (host-only; gated by `config.api.mutations.events`).
+						 * Remove an event rule by id at runtime (gated by `config.api.mutations.events`). Module code removes
+						 * only the event rules it could add (#625).
 						 * @param {string} ruleId - The event-rule id.
 						 * @returns {boolean} True if a rule was removed.
 						 */
@@ -2750,6 +2760,7 @@ export class ApiBuilder extends ComponentBase {
 							/* v8 ignore stop */
 							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
