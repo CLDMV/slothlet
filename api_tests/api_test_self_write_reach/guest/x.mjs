@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T17:06:22-07:00 (1792800382)
+ *	@Last modified time: 2026-10-23T19:45:22-07:00 (1792809922)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -801,4 +801,50 @@ export function storeProxyObject(at, key, inner, target) {
 		const node = read(target);
 		read(at)[key] = new Proxy({}, { get: (_object, name) => (name === inner ? node : undefined) });
 	});
+}
+
+/**
+ * Outcomes of the writes the condition of {@link addWritingCondition}'s rule made, in order. Kept outside the
+ * module so a condition registered before a reload records into the same list as the reloaded module reads.
+ * @type {string[]}
+ */
+const conditionWrites = (globalThis[Symbol.for("slothlet.test.i625.conditionWrites")] ??= []);
+
+/**
+ * Add a rule for this module's subtree whose condition, each time it is checked, writes a member on `target`
+ * through `self` and records the outcome; it always matches.
+ * @param {string} target - Dotted path of the node the condition writes.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addWritingCondition("victim.v");
+ */
+export function addWritingCondition(target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	try {
+		return self.slothlet.permissions.addRule({
+			caller: "**",
+			target: "guest.**",
+			effect: "allow",
+			condition: () => {
+				conditionWrites.push(
+					attempt(() => {
+						read(target).viaCondition = 1;
+					})
+				);
+				return true;
+			}
+		});
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * The outcomes the condition of {@link addWritingCondition}'s rule recorded, cleared on read.
+ * @returns {string[]} The outcomes, in order.
+ * @example
+ * takeConditionWrites(); // ["LOOSE_SET_NOT_OWNED"]
+ */
+export function takeConditionWrites() {
+	return conditionWrites.splice(0);
 }

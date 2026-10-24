@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:43:43-07:00 (1792388623)
+ *	@Last modified time: 2026-10-23T19:46:39-07:00 (1792809999)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { self } from "@cldmv/slothlet/runtime";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -123,6 +124,53 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**:write", effect: "deny" });
 			const denied = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(denied).toEqual(every(denied, "PERMISSION_DENIED"));
+		});
+	});
+
+	describe("a condition of a rule module code adds runs as that module", () => {
+		it("keeps the condition to the module's own writes when another module's call is checked", async () => {
+			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			expect(api.guest.x.addWritingCondition("victim.v")).toMatch(/^perm-/);
+			api.guest.x.takeConditionWrites();
+			await withSuppressedSlothletErrorOutput(() => api.victim.v.callAt("guest.x.listSelf"));
+			const writes = api.guest.x.takeConditionWrites();
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+
+		it("keeps it so for a rule in the permissions option of an api.add module code makes", async () => {
+			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			// The condition writes the calling module's own node: run as that caller it could, run as the module that
+			// mounted the rule it may not.
+			const writes = [];
+			const condition = () => {
+				try {
+					self.guest.sub.v.viaCondition = 1;
+					writes.push("done");
+				} catch (error) {
+					writes.push(error?.code ?? String(error));
+				}
+				return true;
+			};
+			const permissions = { allow: [{ target: "guest.**", condition }] };
+			expect(await api.guest.x.addAt("guest.sub", path.join(FIXTURE, "victim"), { moduleID: "gsub", permissions })).toBe("done");
+			await withSuppressedSlothletErrorOutput(() => api.guest.sub.v.callAt("guest.x.listSelf"));
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.guest.sub.v.viaCondition).toBeUndefined();
+		});
+
+		it("keeps it so across a reload", async () => {
+			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			expect(api.guest.x.addWritingCondition("victim.v")).toMatch(/^perm-/);
+			await api.slothlet.reload();
+			api.guest.x.takeConditionWrites();
+			await withSuppressedSlothletErrorOutput(() => api.victim.v.callAt("guest.x.listSelf"));
+			const writes = api.guest.x.takeConditionWrites();
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
 		});
 	});
 

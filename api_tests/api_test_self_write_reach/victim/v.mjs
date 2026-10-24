@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T22:41:59-07:00 (1792388519)
+ *	@Last modified time: 2026-10-23T19:45:24-07:00 (1792809924)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -317,4 +317,19 @@ export function revoke(ruleId) {
  */
 export function secret() {
 	return "SECRET";
+}
+
+/**
+ * Call the function at `apiPath`, read through `self`, with no arguments.
+ * @param {string} apiPath - Dotted path of the function.
+ * @returns {Promise<*>} What it returned, or the error code the call was refused with.
+ * @example
+ * await callAt("guest.x.listSelf");
+ */
+export async function callAt(apiPath) {
+	try {
+		return await apiPath.split(".").reduce((value, key) => value[key], self)();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }
