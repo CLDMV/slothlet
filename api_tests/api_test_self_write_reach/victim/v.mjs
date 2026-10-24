@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:45:24-07:00 (1792809924)
+ *	@Last modified time: 2026-10-23T21:04:49-07:00 (1792814689)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -332,4 +332,45 @@ export async function callAt(apiPath) {
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
+}
+
+/**
+ * Events the victim received through {@link listen}, in order.
+ * @type {Array<*>}
+ */
+const heard = [];
+
+/**
+ * Subscribe the victim to `event`, recording what it receives.
+ * @param {string} event - The event name.
+ * @returns {void}
+ * @example
+ * listen("guest.ping");
+ */
+export function listen(event) {
+	self.slothlet.event.on(event, (payload) => {
+		heard.push(payload);
+	});
+}
+
+/**
+ * Emit `event` from the victim's code.
+ * @param {string} event - The event name.
+ * @param {*} payload - The payload.
+ * @returns {*} What `emit` returned.
+ * @example
+ * shout("victim.ping", { n: 1 });
+ */
+export function shout(event, payload) {
+	return self.slothlet.event.emit(event, payload);
+}
+
+/**
+ * What the victim received through {@link listen}, cleared on read.
+ * @returns {Array<*>} The payloads, in order.
+ * @example
+ * takeHeard();
+ */
+export function takeHeard() {
+	return heard.splice(0);
 }

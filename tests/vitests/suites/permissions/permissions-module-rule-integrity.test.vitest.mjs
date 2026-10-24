@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:46:39-07:00 (1792809999)
+ *	@Last modified time: 2026-10-23T21:05:57-07:00 (1792814757)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -171,6 +171,75 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
 			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+	});
+
+	describe("event rules module code adds, with the permission system off", () => {
+		it("refuses an event rule beyond the module's own events", async () => {
+			await load({});
+			const before = api.slothlet.event.resolveLevel("victim.v", "victim.ping");
+			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe(before);
+		});
+
+		it("lets a module add and remove event rules for its own events", async () => {
+			await load({});
+			const ruleId = api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" });
+			expect(ruleId).toMatch(/^evt-/);
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.guest.x.removeEventRuleFor(ruleId)).toBe(true);
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).not.toBe("deny");
+		});
+
+		it("refuses a module removing the host's event rule, even for its own events", async () => {
+			await load({});
+			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
+			expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+		});
+
+		it("ranks the module's event rule below the host's, across a reload too", async () => {
+			await load({});
+			api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
+			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.*", effect: "allow" })).toMatch(/^evt-/);
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			await api.slothlet.reload();
+			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+		});
+
+		it("runs the condition of a module's event rule as that module", async () => {
+			await load({});
+			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
+			api.guest.x.takeConditionWrites();
+			api.victim.v.listen("guest.zap");
+			await api.guest.x.shout("guest.zap", { n: 1 });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const writes = api.guest.x.takeConditionWrites();
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+	});
+
+	describe("a principal module code registers", () => {
+		it("computes its key as that module, whichever caller's call is checked", async () => {
+			await load({
+				permissions: {
+					defaultPolicy: "allow",
+					rules: [
+						{ caller: "guest.**", target: "slothlet.permissions.principal.register", effect: "allow" },
+						{ caller: "victim.**", target: "guest.**", effect: "allow", requires: ["writer"] }
+					]
+				}
+			});
+			expect(api.guest.x.registerWritingPrincipal("writer", "victim.v")).toBe("done");
+			api.guest.x.takeConditionWrites();
+			await withSuppressedSlothletErrorOutput(() => api.victim.v.callAt("guest.x.listSelf"));
+			const writes = api.guest.x.takeConditionWrites();
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaKey).toBeUndefined();
 		});
 	});
 

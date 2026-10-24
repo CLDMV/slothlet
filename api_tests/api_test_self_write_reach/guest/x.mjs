@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T19:45:22-07:00 (1792809922)
+ *	@Last modified time: 2026-10-23T21:04:46-07:00 (1792814686)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -847,4 +847,104 @@ export function addWritingCondition(target) {
  */
 export function takeConditionWrites() {
 	return conditionWrites.splice(0);
+}
+
+/**
+ * Add an event rule from this module's code.
+ * @param {object} rule - The event rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addEventRuleFor({ caller: "**", event: "guest.**", effect: "deny" });
+ */
+export function addEventRuleFor(rule) {
+	try {
+		return self.slothlet.event.rules.add(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Remove an event rule from this module's code.
+ * @param {string} ruleId - The event rule's id.
+ * @returns {*} What `rules.remove` returned, or the error code it was refused with.
+ * @example
+ * removeEventRuleFor("evt-3");
+ */
+export function removeEventRuleFor(ruleId) {
+	try {
+		return self.slothlet.event.rules.remove(ruleId);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Add an event rule for this module's events whose condition, each time it is checked, writes a member on
+ * `target` through `self` and records the outcome in the list {@link takeConditionWrites} reads; it always matches.
+ * @param {string} target - Dotted path of the node the condition writes.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ * @example
+ * addWritingEventCondition("victim.v");
+ */
+export function addWritingEventCondition(target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	try {
+		return self.slothlet.event.rules.add({
+			caller: "**",
+			event: "guest.**",
+			effect: "allow",
+			condition: () => {
+				conditionWrites.push(
+					attempt(() => {
+						read(target).viaCondition = 1;
+					})
+				);
+				return true;
+			}
+		});
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Emit `event` from this module's code.
+ * @param {string} event - The event name.
+ * @param {*} payload - The payload.
+ * @returns {*} What `emit` returned.
+ * @example
+ * shout("guest.ping", { n: 1 });
+ */
+export function shout(event, payload) {
+	return self.slothlet.event.emit(event, payload);
+}
+
+/**
+ * Register a principal from this module's code whose `key`, each time it is computed, writes a member on `target`
+ * through `self` and records the outcome in the list {@link takeConditionWrites} reads.
+ * @param {string} name - The principal's name.
+ * @param {string} target - Dotted path of the node the key writes.
+ * @returns {string} `"done"`, or the error code it was refused with.
+ * @example
+ * registerWritingPrincipal("p", "victim.v");
+ */
+export function registerWritingPrincipal(name, target) {
+	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
+	try {
+		self.slothlet.permissions.principal.register(name, {
+			key: () => {
+				conditionWrites.push(
+					attempt(() => {
+						read(target).viaKey = 1;
+					})
+				);
+				return "k";
+			},
+			resolve: () => ({ ok: true })
+		});
+		return "done";
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
 }
