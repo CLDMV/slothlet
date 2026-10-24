@@ -191,12 +191,17 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+     * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
+     *   being checked (see {@link ApiManager#ownsPath}).
      * @returns {void}
      * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
      *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
-    public assertOwnedWrite(parts: string[], callerWrapper: object | null, ignoreModuleID?: null): void;
+    public assertOwnedWrite(parts: string[], callerWrapper: object | null, inFlight?: {
+        moduleID: string;
+        prior: Map<string, any>;
+    } | null): void;
     /**
      * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
      * Used where a write is held to a module that read a node rather than the code running now.
@@ -218,15 +223,19 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string[]} parts - Segments of the api path.
      * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
-     * @param {string|null} [ignoreModuleID=null] - A module whose ownership entries do not count: the module an add in
-     *   flight is mounting, which registered its content before the add's writes are checked.
+     * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight, which registered its
+     *   content before its writes are checked: the module it mounts, and the paths that module owned before it began.
+     *   That module's entries at any other path are the add's own content, and do not count.
      * @returns {boolean} Whether the caller owns the path.
      * @public
      *
      * @example
      * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
      */
-    public ownsPath(parts: string[], callerWrapper: object | null, ignoreModuleID?: string | null): boolean;
+    public ownsPath(parts: string[], callerWrapper: object | null, inFlight?: {
+        moduleID: string;
+        prior: Map<string, any>;
+    } | null): boolean;
     /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
