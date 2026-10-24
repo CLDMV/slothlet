@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T04:22:37-07:00 (1792840957)
+ *	@Last modified time: 2026-10-24T08:54:07-07:00 (1792857247)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -376,6 +376,29 @@ export function takeHeard() {
 }
 
 /**
+ * A `Map` of the victim's own kind, with a member and a method of its own.
+ * @example
+ * new Registry().lookup("k");
+ */
+export class Registry extends Map {
+	constructor() {
+		super([["k", 1]]);
+		/** @type {{level: number}} */
+		this.meta = { level: 0 };
+	}
+
+	/**
+	 * @param {string} key - A key.
+	 * @returns {*} What it holds under the key.
+	 * @example
+	 * new Registry().lookup("k"); // 1
+	 */
+	lookup(key) {
+		return this.get(key);
+	}
+}
+
+/**
  * Data objects the victim exports, each kind whose methods work only on the object itself.
  * @type {{cache: Map<string, *>, tags: Set<string>, when: Date, buffer: ArrayBuffer, bytes: Uint8Array, pattern: RegExp}}
  */
@@ -385,7 +408,9 @@ export const data = {
 	when: new Date(0),
 	buffer: new ArrayBuffer(8, { maxByteLength: 16 }),
 	bytes: new Uint8Array([1, 2, 3]),
-	pattern: /x/g
+	pattern: /x/g,
+	members: new Set([{ n: 0 }]),
+	registry: new Registry()
 };
 
 /**
@@ -404,7 +429,11 @@ export function dataState() {
 		bufferLength: data.buffer.byteLength,
 		bytes: [...data.bytes].join(","),
 		lastIndexSource: data.pattern.source,
-		patternExtra: data.pattern.extra
+		patternExtra: data.pattern.extra,
+		memberN: [...data.members][0].n,
+		registryLevel: data.registry.meta.level,
+		registryLookup: data.registry.lookup("k"),
+		cacheOwnKeys: Object.getOwnPropertyNames(data.cache).join(",")
 	};
 }
 

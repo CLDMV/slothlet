@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T04:23:53-07:00 (1792841033)
+ *	@Last modified time: 2026-10-24T08:55:10-07:00 (1792857310)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,11 @@ const INITIAL = {
 	bufferLength: 8,
 	bytes: "1,2,3",
 	lastIndexSource: "x",
-	patternExtra: undefined
+	patternExtra: undefined,
+	memberN: 0,
+	registryLevel: 0,
+	registryLookup: 1,
+	cacheOwnKeys: ""
 };
 
 /**
@@ -87,6 +91,27 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimData());
 		expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
 		expect(await api.victim.v.dataState()).toEqual(INITIAL);
+	});
+
+	it.each([
+		["on", { permissions: {} }],
+		["off", {}]
+	])("refuses another module changing them by any other route, and leaves them as they were (permissions %s)", async (_label, options) => {
+		await load(options);
+		const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimDataByRoute());
+		expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
+		expect(await api.victim.v.dataState()).toEqual(INITIAL);
+	});
+
+	it("leaves what another module makes from them its own", async () => {
+		await load({ permissions: {} });
+		expect(await api.guest.x.useVictimDataCopies()).toEqual({
+			unionAdd: "done",
+			unionSize: 3,
+			registryLookup: 1,
+			registryGet: 1,
+			sliceFill: "done"
+		});
 	});
 
 	it.each([

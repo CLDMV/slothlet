@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T04:22:34-07:00 (1792840954)
+ *	@Last modified time: 2026-10-24T08:54:06-07:00 (1792857246)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1309,4 +1309,62 @@ export function keepVictimCache() {
 export function victimBytesNative() {
 	const bytes = self.victim.v.data.bytes;
 	return { isView: ArrayBuffer.isView(bytes), copied: [...Buffer.from(bytes)].join(",") };
+}
+
+/**
+ * Change the victim's data objects, read through `self`, by routes past the plain ones: methods the engine added
+ * lately, inherited definers, a callback's array argument, what a set comparison shows a set-like, an own member's
+ * descriptor, and a prototype of the victim's own kind.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * changeVictimDataByRoute();
+ */
+export function changeVictimDataByRoute() {
+	const d = self.victim.v.data;
+	return {
+		getOrInsert: attempt(() => (typeof Map.prototype.getOrInsert === "function" ? d.cache.getOrInsert("evil", 1) : d.cache.set("evil", 1))),
+		setFromHex: attempt(() => (typeof Uint8Array.prototype.setFromHex === "function" ? d.bytes.setFromHex("2c") : d.bytes.fill(0))),
+		defineGetter: attempt(() => d.cache.__defineGetter__("x", () => 1)),
+		callbackArray: attempt(() =>
+			d.bytes.forEach((_value, _index, array) => {
+				array[0] = 42;
+			})
+		),
+		setLikeShown: attempt(() => {
+			let shown = null;
+			d.members.isSubsetOf({
+				size: 9,
+				has(entry) {
+					shown = entry;
+					return true;
+				},
+				keys: () => [][Symbol.iterator]()
+			});
+			shown.n = 1;
+		}),
+		ownDescriptor: attempt(() => {
+			Object.getOwnPropertyDescriptor(d.registry, "meta").value.level = 1;
+		}),
+		ownPrototype: attempt(() => {
+			Object.getPrototypeOf(d.registry).lookup = () => "pwned";
+		})
+	};
+}
+
+/**
+ * Use the victim's data objects, read through `self`, where using them makes something of the caller's own.
+ * @returns {Record<string, *>} What each use gave.
+ * @example
+ * useVictimDataCopies();
+ */
+export function useVictimDataCopies() {
+	const d = self.victim.v.data;
+	const union = d.members.union(new Set([5]));
+	return {
+		unionAdd: attempt(() => union.add(6)),
+		unionSize: union.size,
+		registryLookup: d.registry.lookup("k"),
+		registryGet: d.registry.get("k"),
+		sliceFill: attempt(() => d.bytes.slice().fill(0))
+	};
 }
