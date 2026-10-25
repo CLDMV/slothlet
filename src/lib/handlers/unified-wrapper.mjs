@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T19:24:15-07:00 (1792895055)
+ *	@Last modified time: 2026-10-24T20:21:53-07:00 (1792898513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -532,42 +532,48 @@ function runtime_unwrapLeafValue(value) {
 const SERIALIZERS = new WeakMap();
 
 /**
- * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
+ * A serialized snapshot of the wrapper tree with the terminal leaves the reader may not read left out.
  *
  * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
  * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
- * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
- * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
- * is ungated by design. An array in the snapshot is the module's own array (#602), which must not be
- * edited (#609): it is replaced by its api node, so `JSON.stringify` reads each element through the
- * node, gated as the value it reads at that moment, as `JSON.stringify` of the array member does (#603 review).
+ * every terminal value beneath a namespace it cannot read. The snapshot shares the module's own objects, so
+ * an object that loses a leaf, or holds an array, is copied rather than changed: serializing never edits a
+ * module's data, frozen or not. Plain objects are recursed into, as their traversal is ungated by design. An
+ * array in the snapshot is the module's own array (#602): the copy holds its api node instead, so
+ * `JSON.stringify` reads each element through the node, gated as the value it reads at that moment, as
+ * `JSON.stringify` of the array member does (#603 review).
  *
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
- * @param {*} data - Extracted snapshot, mutated in place.
+ * @param {*} data - Extracted snapshot; never changed.
  * @param {string} basePath - Api path corresponding to `data`.
  * @param {object} node - The api node corresponding to `data`.
  * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
  *   keys is redacted at each, and a cycle still stops.
  * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
  *   the one reading now (a module serializing a node it kept, see {@link runtime_capturedView}).
- * @returns {void}
+ * @returns {*} `data`, or a copy of it with what the reader may not read left out.
  * @private
  */
 function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride) {
-	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
+	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return data;
 	seen.add(data);
+	let copy = null;
+	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
+	const own = () => (copy ??= Object.assign(Object.create(Object.getPrototypeOf(data)), data));
 	for (const key of Object.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
-			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride).allowed) delete data[key];
+			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride).allowed) delete own()[key];
 		} else if (Array.isArray(value)) {
-			data[key] = node[key];
+			own()[key] = node[key];
 		} else {
-			runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride);
+			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride);
+			if (redacted !== value) own()[key] = redacted;
 		}
 	}
 	seen.delete(data);
+	return copy ?? data;
 }
 
 /**
@@ -804,6 +810,21 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 }
 
 /**
+ * An empty function named as `fn` is: what `util.inspect` shows of a function, to hold the members a reader may read.
+ * @param {Function} fn - The function.
+ * @returns {Function} An empty function of the same name.
+ * @private
+ *
+ * @example
+ * runtime_namedFunction(function load() {}).name; // "load"
+ */
+function runtime_namedFunction(fn) {
+	const named = function () {};
+	Reflect.defineProperty(named, "name", { value: typeof fn.name === "string" ? fn.name : "", configurable: true });
+	return named;
+}
+
+/**
  * Whether a function can be called with `new`. Asked through a proxy that answers every read, so a node is never
  * read for its `prototype` to find out.
  * @param {Function} fn - The function.
@@ -861,12 +882,38 @@ function runtime_capturedView(child, capturedCaller) {
 	else if (typeof child !== "function") shadow = {};
 	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
 	else shadow = () => {};
-	// `util.inspect` describes a proxy by its target: while the shadow is open, it describes the child instead.
+	let view = null;
+	// `util.inspect` describes a proxy by its target, without its traps: the shadow describes what the reader can
+	// read of the child instead, member by member through the view, leaving out what it may not read.
+	const shown = () => {
+		// A function is shown by the name the module gave it, not the name of the api path it sits at.
+		const impl = inner.____slothletInternal.impl;
+		const out = Array.isArray(child)
+			? []
+			: typeof child === "function"
+				? runtime_namedFunction(typeof impl === "function" ? impl : child)
+				: {};
+		for (const key of Reflect.ownKeys(child)) {
+			if (key === util.inspect.custom || (Array.isArray(child) && key === "length")) continue;
+			try {
+				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
+				if (!descriptor?.enumerable) continue;
+				// An accessor is shown as one, read through the view only when inspect is asked to read getters.
+				const member =
+					"value" in descriptor
+						? { value: view[key], writable: true }
+						: { get: descriptor.get && (() => view[key]), set: descriptor.set && ((next) => (view[key] = next)) };
+				Reflect.defineProperty(out, key, { ...member, enumerable: true, configurable: true });
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+			}
+		}
+		return out;
+	};
 	Reflect.defineProperty(shadow, util.inspect.custom, {
-		value: (depth, options, inspect) => inspect(child, { ...options, depth }),
+		value: (depth, options, inspect) => inspect(shown(), { ...options, depth }),
 		configurable: true
 	});
-	let view = null;
 	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
 	// view, anything else as it is.
 	const handOut = (prop, resolved) => {
@@ -877,12 +924,17 @@ function runtime_capturedView(child, capturedCaller) {
 		// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
 		// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
 		const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
-		if (resolved !== undefined && isMember && runtime_isTerminalData(resolved)) {
+		// A node standing for a plain value (a leaf a descriptor hands out as its node) is read as that value; a lazy
+		// node not loaded yet holds no value of its own (`impl` is empty) and stays a node.
+		const leaf = resolved !== undefined && !runtime_isTerminalData(resolved) ? resolveWrapper(resolved) : null;
+		const leafValue = leaf?.____slothletInternal.impl;
+		const value = leafValue !== null && leafValue !== undefined && runtime_isTerminalData(leafValue) ? leafValue : resolved;
+		if (value !== undefined && isMember && runtime_isTerminalData(value)) {
 			// Terminal data read off a captured namespace: gate it against the module that captured
 			// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
 			const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
-			return resolved;
+			runtime_enforceReadGate(inner, prop, value, { currentWrapper: capturedCaller, context });
+			if (value === resolved) return resolved;
 		}
 		// The node's `toJSON` serializes as the module that kept the node, through this view, wherever it is called.
 		const serialize = typeof resolved === "function" ? SERIALIZERS.get(resolved) : undefined;
@@ -899,17 +951,24 @@ function runtime_capturedView(child, capturedCaller) {
 	// The child's descriptor of a member, or REFUSED when the reader may not read that member. Mirroring the child
 	// whole reads every member; one the reader may not read must not stop it reading the rest.
 	const REFUSED = Symbol("refused");
+	// An array's `length` is its shape, not a member it holds: mirrored as it is, never refused.
+	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Array.isArray(child));
 	const describe = (key) => {
 		try {
-			return Reflect.getOwnPropertyDescriptor(child, key);
+			const descriptor = Reflect.getOwnPropertyDescriptor(child, key);
+			if (isMemberRead(key, descriptor)) handOut(key, descriptor.value);
+			return descriptor;
 		} catch (error) {
 			if (error?.code === "PERMISSION_DENIED") return REFUSED;
 			throw error;
 		}
 	};
-	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
-	const mirror = (prop) => {
+	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there. A
+	// member read for the reader is read as the reader may read it (the read gate, as for a plain read); one mirrored
+	// after the reader's own write is mirrored as the write left it.
+	const mirror = (prop, asRead = true) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(child, prop);
+		if (asRead && isMemberRead(prop, descriptor)) handOut(prop, descriptor.value);
 		if (!descriptor) {
 			const stale = prop === util.inspect.custom ? undefined : Reflect.getOwnPropertyDescriptor(shadow, prop);
 			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
@@ -934,10 +993,20 @@ function runtime_capturedView(child, capturedCaller) {
 		if (!keys.includes(util.inspect.custom)) Reflect.deleteProperty(shadow, util.inspect.custom);
 		for (const key of keys) {
 			const descriptor = describe(key);
-			// A member the reader may not read holds its place, fixed and empty; reading it still asks the child, which
-			// refuses it.
+			// A member the reader may not read holds its place, fixed and empty, listed as the member is listed (its key
+			// is no secret); reading it still asks the child, which refuses it.
 			if (descriptor === REFUSED) {
-				Reflect.defineProperty(shadow, key, { value: undefined, writable: false, enumerable: true, configurable: false });
+				const impl = inner.____slothletInternal.impl;
+				const held =
+					impl !== null && (typeof impl === "object" || typeof impl === "function")
+						? Reflect.getOwnPropertyDescriptor(impl, key)
+						: undefined;
+				Reflect.defineProperty(shadow, key, {
+					value: undefined,
+					writable: false,
+					enumerable: held?.enumerable ?? true,
+					configurable: false
+				});
 				continue;
 			}
 			if (key === util.inspect.custom && descriptor.configurable) continue;
@@ -1010,12 +1079,12 @@ function runtime_capturedView(child, capturedCaller) {
 		defineProperty(_, prop, descriptor) {
 			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
 			// A member made fixed, or made read-only where the shadow already holds it fixed, is mirrored as it is now.
-			mirror(prop);
+			mirror(prop, false);
 			return true;
 		},
 		deleteProperty(_, prop) {
 			if (!Reflect.deleteProperty(child, prop)) return false;
-			mirror(prop);
+			mirror(prop, false);
 			return true;
 		},
 		setPrototypeOf(_, proto) {
@@ -5845,7 +5914,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// gate on getTrap. Strip leaves this caller may not read before handing it over.
 					const pm = wrapper.slothlet.handlers?.permissionManager;
 					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
-						runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, node, new WeakSet(), callerOverride);
+						return runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, node, new WeakSet(), callerOverride);
 					}
 					return data;
 				};
