@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T12:30:35-07:00 (1792870235)
+ *	@Last modified time: 2026-10-24T17:12:32-07:00 (1792887152)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -83,6 +83,71 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			const inner = await api.holder.deep.inner;
 			expect(inner.planted).toBeUndefined();
 			expect(Object.isFrozen(inner)).toBe(false);
+		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])("an unloaded node frozen by the host still answers for its prototype (permissions %s)", async (_label, options) => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			const inner = api.holder.deep.inner;
+			Object.freeze(inner);
+			expect(Object.isFrozen(inner)).toBe(true);
+			expect(() => Object.getPrototypeOf(inner)).not.toThrow();
+		});
+
+		it.each([
+			["on", { permissions: {} }],
+			["off", {}]
+		])("reads and refuses through a version dispatcher as eager mode does (permissions %s)", async (_label, options) => {
+			globalThis[Symbol.for(PROBE)] = (self) => {
+				/**
+				 * Run `use`, reporting what it gave or the error code it threw. A node is reported as one whatever its
+				 * `typeof`: a lazy node not loaded yet stands in as a function.
+				 * @param {function(): *} use - The use.
+				 * @returns {string} The outcome.
+				 */
+				const outcome = (use) => {
+					try {
+						const value = use();
+						if (value === undefined) return "done";
+						return typeof value === "object" || typeof value === "function" ? "node" : typeof value;
+					} catch (error) {
+						return error?.code ?? String(error);
+					}
+				};
+				return {
+					deep: outcome(() => self.holder.deep),
+					inner: outcome(() => self.holder.deep.inner),
+					leaf: outcome(() => self.holder.deep.inner.leaf),
+					assign: outcome(() => {
+						self.holder.deep.planted = 1;
+					}),
+					assignDeeper: outcome(() => {
+						self.holder.deep.inner.planted = 1;
+					}),
+					define: outcome(() => {
+						Object.defineProperty(self.holder.deep.inner, "defined", { value: 1, configurable: true });
+					}),
+					remove: outcome(() => {
+						delete self.holder.deep.inner.leaf;
+					})
+				};
+			};
+			const reports = {};
+			for (const mode of ["eager", "lazy"]) {
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" }, { version: "v1", default: true });
+				await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+				await api.slothlet.shutdown();
+				api = null;
+			}
+			expect(reports.lazy).toEqual(reports.eager);
+			expect(reports.lazy.inner).not.toBe("done");
+			expect(reports.lazy.assign).toBe("LOOSE_SET_NOT_OWNED");
+			expect(reports.lazy.assignDeeper).toBe("LOOSE_SET_NOT_OWNED");
 		});
 	}
 );
