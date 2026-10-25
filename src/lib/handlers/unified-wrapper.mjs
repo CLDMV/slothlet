@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T20:21:53-07:00 (1792898513)
+ *	@Last modified time: 2026-10-24T21:54:50-07:00 (1792904090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -819,9 +819,11 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
  * runtime_namedFunction(function load() {}).name; // "load"
  */
 function runtime_namedFunction(fn) {
-	const named = function () {};
-	Reflect.defineProperty(named, "name", { value: typeof fn.name === "string" ? fn.name : "", configurable: true });
-	return named;
+	const name = typeof fn.name === "string" ? fn.name : "";
+	// A class shows as a class, and a function with no `prototype` (an arrow, a method) shows none.
+	if (/^class\b/.test(Function.prototype.toString.call(fn))) return { [name]: class {} }[name];
+	if (!Object.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
+	return { [name]: function () {} }[name];
 }
 
 /**
@@ -888,12 +890,18 @@ function runtime_capturedView(child, capturedCaller) {
 	const shown = () => {
 		// A function is shown by the name the module gave it, not the name of the api path it sits at.
 		const impl = inner.____slothletInternal.impl;
+		// An instance of a class keeps its class's prototype, so it shows as one; any other object shows as plain.
+		const proto = impl !== null && typeof impl === "object" ? Reflect.getPrototypeOf(impl) : null;
 		const out = Array.isArray(child)
 			? []
 			: typeof child === "function"
 				? runtime_namedFunction(typeof impl === "function" ? impl : child)
-				: {};
+				: proto !== null && proto !== Object.prototype
+					? Object.create(proto)
+					: {};
 		for (const key of Reflect.ownKeys(child)) {
+			// Symbol members are left out, as the node's own inspect leaves them.
+			if (typeof key === "symbol") continue;
 			if (key === util.inspect.custom || (Array.isArray(child) && key === "length")) continue;
 			try {
 				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
@@ -1053,7 +1061,17 @@ function runtime_capturedView(child, capturedCaller) {
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			mirrorClosed();
-			return mirror(prop);
+			try {
+				return mirror(prop);
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+				// A member the reader may not read is described as it is in a call: absent from an open view, and as
+				// its fixed, empty place in a closed one.
+				const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+				if (held && !held.configurable) return held;
+				if (Reflect.isExtensible(shadow)) return undefined;
+				throw error;
+			}
 		},
 		has(_, prop) {
 			mirrorClosed();
@@ -1063,7 +1081,11 @@ function runtime_capturedView(child, capturedCaller) {
 		ownKeys() {
 			mirrorClosed();
 			pruneClosed();
-			return Reflect.ownKeys(child);
+			const keys = Reflect.ownKeys(child);
+			// An open view lists what its reader may read, as it is listed in a call; a closed one lists every member,
+			// as the engine requires, those the reader may not read held empty.
+			if (!Reflect.isExtensible(shadow)) return keys;
+			return keys.filter((key) => describe(key) !== REFUSED || Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable === false);
 		},
 		getPrototypeOf() {
 			mirrorClosed();
