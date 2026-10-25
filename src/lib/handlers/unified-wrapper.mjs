@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:23:42-07:00 (1792887822)
+ *	@Last modified time: 2026-10-24T18:28:45-07:00 (1792891725)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -910,6 +910,14 @@ function runtime_capturedView(child, capturedCaller) {
 		Reflect.setPrototypeOf(shadow, Reflect.getPrototypeOf(child));
 		Reflect.preventExtensions(shadow);
 	};
+	// A closed shadow lists exactly what the child has: a member the child has since lost — deleted, or cut off by a
+	// shorter length — goes from the shadow too.
+	const pruneClosed = () => {
+		if (Reflect.isExtensible(shadow)) return;
+		for (const key of Reflect.ownKeys(shadow)) {
+			if (!Reflect.getOwnPropertyDescriptor(child, key)) Reflect.deleteProperty(shadow, key);
+		}
+	};
 
 	view = new Proxy(shadow, {
 		apply(_, thisArg, args) {
@@ -942,10 +950,13 @@ function runtime_capturedView(child, capturedCaller) {
 			return mirror(prop);
 		},
 		has(_, prop) {
+			mirrorClosed();
+			pruneClosed();
 			return Reflect.has(child, prop);
 		},
 		ownKeys() {
 			mirrorClosed();
+			pruneClosed();
 			return Reflect.ownKeys(child);
 		},
 		getPrototypeOf() {
@@ -961,7 +972,8 @@ function runtime_capturedView(child, capturedCaller) {
 		},
 		defineProperty(_, prop, descriptor) {
 			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
-			if (descriptor.configurable === false) mirror(prop);
+			// A member made fixed, or made read-only where the shadow already holds it fixed, is mirrored as it is now.
+			mirror(prop);
 			return true;
 		},
 		deleteProperty(_, prop) {
