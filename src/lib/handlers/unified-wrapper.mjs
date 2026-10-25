@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T23:33:11-07:00 (1792909991)
+ *	@Last modified time: 2026-10-25T01:33:59-07:00 (1792917239)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,44 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * @private
  */
 let capturedAccess = null;
+
+/**
+ * Take the access a kept node is making into `wrapper`, if it is making one, so no other check can.
+ * @param {object} wrapper - The node being accessed.
+ * @returns {{wrapper: object, reader: object}|null} The access, or `null`.
+ * @private
+ *
+ * @example
+ * const kept = runtime_takeCapturedAccess(wrapper);
+ */
+function runtime_takeCapturedAccess(wrapper) {
+	if (capturedAccess?.wrapper !== wrapper) return null;
+	const kept = capturedAccess;
+	capturedAccess = null;
+	return kept;
+}
+
+/**
+ * Run a check of a node with the access a kept node is making into it, taken earlier by
+ * {@link runtime_takeCapturedAccess}: offered to that check alone.
+ * @param {{wrapper: object, reader: object}|null} kept - The access, or `null`.
+ * @param {function(): *} check - The check.
+ * @returns {*} What the check gave.
+ * @private
+ *
+ * @example
+ * runtime_withCapturedAccess(kept, () => runtime_enforceReadGate(wrapper, prop, value));
+ */
+function runtime_withCapturedAccess(kept, check) {
+	if (!kept) return check();
+	const previous = capturedAccess;
+	capturedAccess = kept;
+	try {
+		return check();
+	} finally {
+		capturedAccess = previous;
+	}
+}
 
 /**
  * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
@@ -5639,7 +5677,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
-			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue);
+			// A node a module kept, reading through this one, says who it reads for: taken now, before any of the
+			// module's own code this read runs (a getter) could take it, and offered only to this read's gate (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
+			const enforceReadGate = (resolvedValue) =>
+				runtime_withCapturedAccess(kept, () => runtime_enforceReadGate(wrapper, prop, resolvedValue));
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
