@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T18:28:45-07:00 (1792891725)
+ *	@Last modified time: 2026-10-24T19:24:15-07:00 (1792895055)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -524,6 +524,14 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
+ * The serializer behind each `toJSON` a node hands out, by that function: it takes the reader to redact for and the
+ * node to read arrays through, so a node a module kept serializes for that module wherever it is serialized.
+ * @type {WeakMap<Function, function({currentWrapper: object, context: object}|undefined, object): *>}
+ * @private
+ */
+const SERIALIZERS = new WeakMap();
+
+/**
  * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
  *
  * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
@@ -540,21 +548,23 @@ function runtime_unwrapLeafValue(value) {
  * @param {object} node - The api node corresponding to `data`.
  * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
  *   keys is redacted at each, and a cycle still stops.
+ * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
+ *   the one reading now (a module serializing a node it kept, see {@link runtime_capturedView}).
  * @returns {void}
  * @private
  */
-function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
+function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride) {
 	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
 	seen.add(data);
 	for (const key of Object.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
-			if (!runtime_readGateDecision(wrapper, targetPath).allowed) delete data[key];
+			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride).allowed) delete data[key];
 		} else if (Array.isArray(value)) {
 			data[key] = node[key];
 		} else {
-			runtime_redactSerialized(wrapper, value, targetPath, node[key], seen);
+			runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride);
 		}
 	}
 	seen.delete(data);
@@ -874,12 +884,29 @@ function runtime_capturedView(child, capturedCaller) {
 			runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
 			return resolved;
 		}
+		// The node's `toJSON` serializes as the module that kept the node, through this view, wherever it is called.
+		const serialize = typeof resolved === "function" ? SERIALIZERS.get(resolved) : undefined;
+		if (serialize) {
+			return () =>
+				serialize({ currentWrapper: capturedCaller, context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null }, view);
+		}
 		if (resolveWrapper(resolved) === null) return resolved;
 		return runtime_capturedView(resolved, capturedCaller);
 	};
 	// The value the shadow holds for a fixed member: a child node as its view, anything else as it is. The read gate
 	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
 	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller));
+	// The child's descriptor of a member, or REFUSED when the reader may not read that member. Mirroring the child
+	// whole reads every member; one the reader may not read must not stop it reading the rest.
+	const REFUSED = Symbol("refused");
+	const describe = (key) => {
+		try {
+			return Reflect.getOwnPropertyDescriptor(child, key);
+		} catch (error) {
+			if (error?.code === "PERMISSION_DENIED") return REFUSED;
+			throw error;
+		}
+	};
 	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
 	const mirror = (prop) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(child, prop);
@@ -889,6 +916,8 @@ function runtime_capturedView(child, capturedCaller) {
 			return undefined;
 		}
 		if (descriptor.configurable && Reflect.isExtensible(shadow)) return descriptor;
+		// The inspect hook a closed shadow keeps for the child's own describes the child as it is now.
+		if (prop === util.inspect.custom && descriptor.configurable) return descriptor;
 		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 		// A fixed member keeps what it holds; one the child can still write is refreshed with its value now.
 		if (held && !held.configurable && !("value" in held && held.writable)) return held;
@@ -900,10 +929,18 @@ function runtime_capturedView(child, capturedCaller) {
 	// about a non-extensible target against that target.
 	const mirrorClosed = () => {
 		if (Reflect.isExtensible(child) || !Reflect.isExtensible(shadow)) return;
-		// Closed, the shadow holds exactly the child's members, so its inspect hook goes unless the child has one.
-		Reflect.deleteProperty(shadow, util.inspect.custom);
-		for (const key of Reflect.ownKeys(child)) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(child, key);
+		// Closed, the shadow holds exactly the child's members: its inspect hook stays only where the child has one too.
+		const keys = Reflect.ownKeys(child);
+		if (!keys.includes(util.inspect.custom)) Reflect.deleteProperty(shadow, util.inspect.custom);
+		for (const key of keys) {
+			const descriptor = describe(key);
+			// A member the reader may not read holds its place, fixed and empty; reading it still asks the child, which
+			// refuses it.
+			if (descriptor === REFUSED) {
+				Reflect.defineProperty(shadow, key, { value: undefined, writable: false, enumerable: true, configurable: false });
+				continue;
+			}
+			if (key === util.inspect.custom && descriptor.configurable) continue;
 			const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
 			Reflect.defineProperty(shadow, key, shown);
 		}
@@ -915,7 +952,7 @@ function runtime_capturedView(child, capturedCaller) {
 	const pruneClosed = () => {
 		if (Reflect.isExtensible(shadow)) return;
 		for (const key of Reflect.ownKeys(shadow)) {
-			if (!Reflect.getOwnPropertyDescriptor(child, key)) Reflect.deleteProperty(shadow, key);
+			if (!describe(key)) Reflect.deleteProperty(shadow, key);
 		}
 	};
 
@@ -5795,7 +5832,8 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl.toJSON === "function") {
 					return impl.toJSON.bind(impl);
 				}
-				return () => {
+				// The snapshot for a given reader, read through `node`: a module's kept node serializes for that module.
+				const serialize = (callerOverride, node) => {
 					const data = UnifiedWrapper._extractFullImpl(wrapper);
 					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
 					// paths — for lazy folder leaves) that must never leak into serialization output.
@@ -5807,16 +5845,13 @@ export class UnifiedWrapper extends ComponentBase {
 					// gate on getTrap. Strip leaves this caller may not read before handing it over.
 					const pm = wrapper.slothlet.handlers?.permissionManager;
 					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
-						runtime_redactSerialized(
-							wrapper,
-							data,
-							wrapper.____slothletInternal.apiPath,
-							wrapper.____slothletInternal.proxy,
-							new WeakSet()
-						);
+						runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, node, new WeakSet(), callerOverride);
 					}
 					return data;
 				};
+				const toJSON = () => serialize(undefined, wrapper.____slothletInternal.proxy);
+				SERIALIZERS.set(toJSON, serialize);
+				return toJSON;
 			}
 
 			if (wrapper.____slothletInternal.invalid) {
