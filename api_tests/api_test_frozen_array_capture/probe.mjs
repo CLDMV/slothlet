@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T19:23:28-07:00 (1792895008)
+ *	@Last modified time: 2026-10-24T20:21:12-07:00 (1792898472)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -248,6 +248,64 @@ export async function surveyLater(id, prop, as) {
 			extensible: attempt(() => Object.isExtensible(view)),
 			proto: attempt(() => Object.getPrototypeOf(view) === null),
 			json: attempt(() => JSON.parse(JSON.stringify(view)))
+		};
+	}, 0);
+	return "armed";
+}
+
+/**
+ * Ask a kept reference for its own keys now, in this call.
+ * @param {string} id - The kept reference.
+ * @returns {{value?: string, error?: string}} The outcome.
+ */
+export function touch(id) {
+	return attempt(() => Reflect.ownKeys(kept[id]).filter((key) => typeof key === "string"));
+}
+
+/**
+ * From a timer slothlet does not patch, list a kept reference's enumerable keys: `Object.keys` and `for…in`.
+ * @param {string} id - The kept reference.
+ * @param {string} as - The id to record the outcome under.
+ * @returns {Promise<string>} "armed".
+ */
+export async function keysLater(id, as) {
+	const timers = await import("node:timers");
+	outcomes[as] = null;
+	timers.setTimeout(() => {
+		outcomes[as] = attempt(() => {
+			const forIn = [];
+			for (const key in kept[id]) forIn.push(key);
+			return { keys: Object.keys(kept[id]), forIn };
+		});
+	}, 0);
+	return "armed";
+}
+
+/**
+ * Serialize a member of `store` now, in this call.
+ * @param {string} name - The member.
+ * @returns {{value?: string, error?: string}} The JSON, or what serializing threw.
+ */
+export function serializeNow(name) {
+	return attempt(() => JSON.parse(JSON.stringify(self.store[name])));
+}
+
+/**
+ * From a timer slothlet does not patch, read a member of a kept reference through its descriptor, and inspect it.
+ * @param {string} id - The kept reference.
+ * @param {string} prop - The member.
+ * @param {string} as - The id to record the outcome under.
+ * @returns {Promise<string>} "armed".
+ */
+export async function descriptorLater(id, prop, as) {
+	const timers = await import("node:timers");
+	const util = await import("node:util");
+	outcomes[as] = null;
+	timers.setTimeout(() => {
+		outcomes[as] = {
+			descriptor: attempt(() => Object.getOwnPropertyDescriptor(kept[id], prop)?.value),
+			descriptors: attempt(() => Object.getOwnPropertyDescriptors(kept[id])[prop]?.value),
+			inspect: attempt(() => util.inspect(kept[id], { depth: 4 }))
 		};
 	}, 0);
 	return "armed";

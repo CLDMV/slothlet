@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T19:24:52-07:00 (1792895092)
+ *	@Last modified time: 2026-10-24T20:22:24-07:00 (1792898544)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -420,6 +420,21 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			expect(JSON.stringify(survey)).not.toContain("S3CRET");
 		});
 
+		it("a hidden member the reader may not read stays hidden once the view closes", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.hArr.1", "store.hArr.extra"]) });
+			await api.probe.keep("h", ["hArr"]);
+			expect(await api.store.changeOwn("hArr", { close: "freeze" })).toBe("done");
+			// Closed inside a call first, then read from a timer.
+			await api.probe.touch("h");
+			await api.probe.keysLater("h", "after");
+			const outcome = await waitOutcome(api, "probe", "after");
+			const keys = Object.keys(api.store.hArr);
+			expect(keys).toEqual(["0", "2"]);
+			// Listing the keys may itself be refused for a reader denied some of them; where it answers, it lists only these.
+			if (outcome.value) expect(outcome).toEqual({ value: JSON.stringify({ keys, forIn: keys }) });
+			else expect(outcome).toEqual({ error: "PERMISSION_DENIED" });
+		});
+
 		it("a kept view of a closed node inspects as the node is now", async () => {
 			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
 			await api.probe.keep("iObj", ["iObj"]);
@@ -430,6 +445,32 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			await api.probe.inspectLater("iObj");
 			const outcome = await waitOutcome(api, "probe", "iObj");
 			expect(outcome.value).toContain("[Getter]");
+		});
+	});
+
+	describe("7. serializing and describing what a module may not read", () => {
+		it.each([["sealedHid"], ["frozenHid"]])(
+			"a module's JSON of %s leaves out what it may not read, and leaves the owner's data as it was",
+			async (name) => {
+				api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe([`store.${name}.inner.hid`]) });
+				expect(await api.probe.serializeNow(name)).toEqual({ value: JSON.stringify({ inner: { x: 1 }, n: 1 }) });
+				expect((await api.store.ownInnerKeys())[name]).toEqual(["x", "hid"]);
+				expect(JSON.stringify(api.store[name])).toContain("S3CRET");
+			}
+		);
+
+		it.each([
+			["dObj", "secret", undefined],
+			["dObj", "secret", "freeze"],
+			["frozenHid", "inner", undefined]
+		])("a kept %s describes %s from a timer only as its reader may read it (closed: %s)", async (name, prop, close) => {
+			const deny = name === "frozenHid" ? ["store.frozenHid.inner.hid"] : ["store.dObj.secret"];
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(deny) });
+			await api.probe.keep(name, name === "frozenHid" ? [name, "inner"] : [name]);
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			await api.probe.descriptorLater(name, name === "frozenHid" ? "hid" : prop, "later");
+			const outcome = await waitOutcome(api, "probe", "later");
+			expect(JSON.stringify(outcome)).not.toContain("S3CRET");
 		});
 	});
 });

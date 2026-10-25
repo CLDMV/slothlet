@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T19:23:29-07:00 (1792895009)
+ *	@Last modified time: 2026-10-24T20:21:13-07:00 (1792898473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -90,6 +90,25 @@ export const dObj = { secret: "S3CRET", n: 1, inner: { x: 1 } };
 
 /** @type {Array<*>} An array one module may read all of but its first element. */
 export const dArr = ["S3CRET", 1, { x: 1 }];
+
+/** @type {Array<*>} An array with a hidden element and a hidden named member, one module may read neither of. */
+export const hArr = ["H0", "S3CRET", 2];
+Object.defineProperty(hArr, 1, { enumerable: false });
+Object.defineProperty(hArr, "extra", { value: "S3CRET", enumerable: false, writable: true, configurable: true });
+
+/** @type {object} A sealed object holding an object with a member one module may not read. */
+export const sealedHid = Object.seal({ inner: { x: 1, hid: "S3CRET" }, n: 1 });
+
+/** @type {object} A frozen object holding a frozen object with a member one module may not read. */
+export const frozenHid = Object.freeze({ inner: Object.freeze({ x: 1, hid: "S3CRET" }), n: 1 });
+
+/**
+ * The keys this module's own `inner` objects hold, read straight off its exports, not through `self`.
+ * @returns {{sealedHid: string[], frozenHid: string[]}} The keys.
+ */
+export function ownInnerKeys() {
+	return { sealedHid: Object.keys(sealedHid.inner), frozenHid: Object.keys(frozenHid.inner) };
+}
 
 /** @type {object} An object the module closes, then changes. */
 export const iObj = { n: 1, m: 1 };
