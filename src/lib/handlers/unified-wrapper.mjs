@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:46:13-07:00 (1792907173)
+ *	@Last modified time: 2026-10-24T23:33:11-07:00 (1792909991)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -467,23 +467,23 @@ function runtime_gateFixedValue(wrapper, prop, value) {
  * @param {object} wrapper - The node's wrapper.
  * @param {string|symbol} prop - The key.
  * @param {PropertyDescriptor|undefined} descriptor - The target's own descriptor.
+ * @param {boolean} [asHeld=false] - Whether a view is asking for the member as it is held (see
+ *   {@link runtime_describeAsHeld}), which no reader's rules decide.
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @throws {SlothletError} PERMISSION_DENIED for a read-only value the caller may not read.
  * @private
  */
-function runtime_fixedDescriptor(wrapper, prop, descriptor) {
-	// A view mirroring this member onto its shadow asks for it as it is held, once (see runtime_describeAsHeld).
-	if (describingAsHeld?.wrapper === wrapper && describingAsHeld.prop === prop) {
-		describingAsHeld = null;
-		return descriptor;
-	}
+function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false) {
+	// A view mirroring this member onto its shadow asks for it as it is held (see runtime_describeAsHeld).
+	if (asHeld) return descriptor;
 	if (descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable)
 		runtime_gateFixedValue(wrapper, prop, descriptor.value);
 	return descriptor;
 }
 
 /**
- * The member a view is asking its node to describe as it is held, whoever reads it: that node and key, once.
+ * The member a view is asking its node to describe as it is held, whoever reads it: that node and key, taken by
+ * the node's descriptor trap as it starts, before any code that read might run can make a read of its own.
  * @type {{wrapper: object, prop: string|symbol}|null}
  * @private
  */
@@ -945,6 +945,20 @@ function runtime_capturedView(child, capturedCaller) {
 				: proto !== null && proto !== Object.prototype
 					? Object.create(proto)
 					: {};
+		// A function's stand-in shows the methods its `prototype` holds, read through the view.
+		if (typeof out === "function" && out.prototype) {
+			try {
+				const proto = view.prototype;
+				if (proto !== null && typeof proto === "object") {
+					for (const key of Reflect.ownKeys(proto)) {
+						const descriptor = key === "constructor" ? undefined : Reflect.getOwnPropertyDescriptor(proto, key);
+						if (descriptor) Reflect.defineProperty(out.prototype, key, { ...descriptor, configurable: true });
+					}
+				}
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+			}
+		}
 		for (const key of Reflect.ownKeys(child)) {
 			// Symbol members are left out, as the node's own inspect leaves them, and so are a function's own
 			// `name`, `length` and `prototype`, which the stand-in has of its own.
@@ -1111,10 +1125,12 @@ function runtime_capturedView(child, capturedCaller) {
 				return mirror(prop);
 			} catch (error) {
 				if (error?.code !== "PERMISSION_DENIED") throw error;
-				// A member the reader may not read is absent from an open view, as it is in a call; a closed view, which
-				// must describe every member it holds, refuses it.
+				// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
+				// describe every member it holds: one it may still change is described with its value withheld, as the
+				// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
 				const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 				if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
+				if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
 				throw error;
 			}
 		},
@@ -6867,6 +6883,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Provides descriptors for target (wrapper), impl properties, filtering internals.
 		 */
 		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
+			// A view asking for this member as it is held (runtime_describeAsHeld): taken now, for this read only.
+			const asHeld = describingAsHeld?.wrapper === wrapper && describingAsHeld.prop === prop;
+			if (asHeld) describingAsHeld = null;
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -6917,7 +6936,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
 					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
-				return runtime_fixedDescriptor(wrapper, prop, sealed);
+				return runtime_fixedDescriptor(wrapper, prop, sealed, asHeld);
 			}
 
 			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
@@ -6936,7 +6955,7 @@ export class UnifiedWrapper extends ComponentBase {
 				const readThroughNode = (value) =>
 					value !== null && (typeof value === "object" || typeof value === "function") ? wrapper.____slothletInternal.proxy[prop] : value;
 				if (fixed && !fixed.configurable) {
-					if (!fixed.writable) return runtime_fixedDescriptor(wrapper, prop, fixed);
+					if (!fixed.writable) return runtime_fixedDescriptor(wrapper, prop, fixed, asHeld);
 					return { ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
 				}
 				if (withheld) return undefined;
