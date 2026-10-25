@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T02:27:39-07:00 (1792920459)
+ *	@Last modified time: 2026-10-25T03:13:37-07:00 (1792923217)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -977,6 +977,9 @@ function runtime_capturedView(child, capturedCaller) {
 	// deliberately invisible through the proxy, so resolve to the object behind it once, here, rather
 	// than reaching through the facade on every call.
 	const inner = resolveWrapper(child);
+	// What the view does to its child, made for the view's reader (#661) — only when the child is the node itself, whose
+	// traps take the reader first; a stand-in for a node not loaded yet runs its node's code before any gate.
+	const asKept = (access) => (child === inner.____slothletInternal.proxy ? runtime_accessAsKept(inner, capturedCaller, access) : access());
 
 	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
 	// frozen array's element) is checked by the engine against the view's own target, so it is mirrored onto the
@@ -1155,7 +1158,7 @@ function runtime_capturedView(child, capturedCaller) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
-			const call = () => runtime_accessAsKept(inner, capturedCaller, () => Reflect.apply(child, thisArg, args));
+			const call = () => asKept(() => Reflect.apply(child, thisArg, args));
 			if (pending) return runtime_runAfterPrincipalGate(inner, pending, call);
 			return call();
 		},
@@ -1164,7 +1167,7 @@ function runtime_capturedView(child, capturedCaller) {
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return runtime_accessAsKept(inner, capturedCaller, () => Reflect.construct(child, args, newTarget === view ? child : newTarget));
+			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
 		},
 		get(_, prop, receiver) {
 			mirrorClosed();
@@ -1175,13 +1178,13 @@ function runtime_capturedView(child, capturedCaller) {
 				// is what the shadow holds, as the engine requires.
 				handOut(
 					prop,
-					runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, prop, child))
+					asKept(() => Reflect.get(child, prop, child))
 				);
 				return mirror(prop).value;
 			}
 			return handOut(
 				prop,
-				runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, prop, receiver === view ? child : receiver))
+				asKept(() => Reflect.get(child, prop, receiver === view ? child : receiver))
 			);
 		},
 		getOwnPropertyDescriptor(_, prop) {
@@ -4739,6 +4742,9 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const waitingHandler = {
 			get(___target, prop) {
+				// A stand-in is no node of its own: a kept node's access offered to it is dropped, before any code its
+				// read runs (a getter of the node it stands for) could take it (#661).
+				runtime_takeCapturedAccess(wrapper);
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
@@ -5253,6 +5259,8 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 
 			async apply(___target, ___thisArg, args) {
+				// As get: a kept node's access offered to a stand-in is dropped first (#661).
+				runtime_takeCapturedAccess(wrapper);
 				// Capture caller context synchronously before any await.
 				// In LAZY_LIVE mode, the outer runInContext's finally block restores
 				// context before this Promise settles, losing caller identity.
