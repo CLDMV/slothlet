@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T01:33:59-07:00 (1792917239)
+ *	@Last modified time: 2026-10-25T02:27:39-07:00 (1792920459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,28 +77,6 @@ function runtime_takeCapturedAccess(wrapper) {
 }
 
 /**
- * Run a check of a node with the access a kept node is making into it, taken earlier by
- * {@link runtime_takeCapturedAccess}: offered to that check alone.
- * @param {{wrapper: object, reader: object}|null} kept - The access, or `null`.
- * @param {function(): *} check - The check.
- * @returns {*} What the check gave.
- * @private
- *
- * @example
- * runtime_withCapturedAccess(kept, () => runtime_enforceReadGate(wrapper, prop, value));
- */
-function runtime_withCapturedAccess(kept, check) {
-	if (!kept) return check();
-	const previous = capturedAccess;
-	capturedAccess = kept;
-	try {
-		return check();
-	} finally {
-		capturedAccess = previous;
-	}
-}
-
-/**
  * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
  * say who is accessing, the check of `wrapper` takes it as `reader`'s (#661).
  * @param {object} wrapper - The node being accessed.
@@ -137,10 +115,12 @@ function runtime_accessAsKept(wrapper, reader, access) {
  * @param {{currentWrapper: object, context: object}|null} [ctxOverride] - Explicit caller context
  *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
  *   getContext() path.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into this
+ *   node, taken by the trap making the check (see {@link runtime_takeCapturedAccess}).
  * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ctx: object}}
  * @private
  */
-function resolveEnforcedCaller(wrapper, ctxOverride) {
+function resolveEnforcedCaller(wrapper, ctxOverride, kept = null) {
 	// Scope both the store and the caller lookup to THIS wrapper's instance. The context managers
 	// are singletons shared by every instance, so an outer instance mid-call (e.g. a leaf booting a
 	// second `slothlet()`) would otherwise be seen as this instance's caller and enforced against
@@ -152,9 +132,6 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
 	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
 	let identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
-	// A node a module kept, reaching into this node, says who it reads for, once: the check it is making now.
-	const kept = capturedAccess?.wrapper === wrapper ? capturedAccess : null;
-	if (kept) capturedAccess = null;
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
@@ -211,14 +188,14 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
  */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -267,10 +244,12 @@ function runtime_isTerminalData(value) {
  * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
  * @param {string} targetPath - Fully-qualified api path of the value being read.
  * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit caller context.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null) {
 	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -282,7 +261,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
 		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
-	const decision = resolveEnforcedCaller(wrapper, callerOverride);
+	const decision = resolveEnforcedCaller(wrapper, callerOverride, kept);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -708,10 +687,12 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false) {
+function enforcePermission(wrapper, callArgs, promote = false, kept = null) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
@@ -721,7 +702,7 @@ function enforcePermission(wrapper, callArgs, promote = false) {
 	const callMeta = { args: callArgs, target: targetPath };
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
-	const decision = resolveEnforcedCaller(wrapper);
+	const decision = resolveEnforcedCaller(wrapper, undefined, kept);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -5674,14 +5655,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver) => {
+			// A node a module kept, reading through this one, says who it reads for: taken first, before any code this
+			// read runs (a getter, a Proxy's trap) could take it, and handed to this read's own gate (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
-			// A node a module kept, reading through this one, says who it reads for: taken now, before any of the
-			// module's own code this read runs (a getter) could take it, and offered only to this read's gate (#661).
-			const kept = runtime_takeCapturedAccess(wrapper);
-			const enforceReadGate = (resolvedValue) =>
-				runtime_withCapturedAccess(kept, () => runtime_enforceReadGate(wrapper, prop, resolvedValue));
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept);
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
@@ -6460,6 +6440,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args, ___gatePassed = false) => {
+			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
+			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -6510,7 +6493,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// on the synchronous path. `___gatePassed` is only ever set by that re-entry (the Proxy invokes this
 			// trap with three arguments).
 			if (!___gatePassed) {
-				const ___principalGate = enforcePermission(wrapper, args, true);
+				const ___principalGate = enforcePermission(wrapper, args, true, kept);
 				if (___principalGate) {
 					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true));
 				}
@@ -7676,6 +7659,8 @@ export class UnifiedWrapper extends ComponentBase {
 		 * console.log(instance.x); // 42
 		 */
 		const constructTrap = (target, args, newTarget) => {
+			// As applyTrap: a kept node's access, taken before any code this construction runs.
+			const kept = runtime_takeCapturedAccess(wrapper);
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -7685,7 +7670,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Permission enforcement parity with applyTrap: gate `new proxy(args)` the same
 			// way function calls are gated, before any materialization or construction.
 			// Constructor args are threaded for resource-scoped conditions (#455).
-			enforcePermission(wrapper, args);
+			enforcePermission(wrapper, args, false, kept);
 
 			// Lazy mode: start materialization if not already in flight.
 			// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
