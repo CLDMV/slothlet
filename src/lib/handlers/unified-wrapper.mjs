@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T13:14:04-07:00 (1792872844)
+ *	@Last modified time: 2026-10-24T17:11:14-07:00 (1792887074)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1264,7 +1264,15 @@ export function runtime_selfView(node, reader) {
 		return parts;
 	};
 	const viewMember = (prop, value) => {
-		if (dispatch && typeof value === "function" && resolveWrapper(value) === null && !SELF_VIEW_NODES.has(value)) {
+		// A node is viewed as one, including the captured view a dispatcher hands a module in lazy mode for a node
+		// not loaded yet; only what the dispatcher answers itself is its own function.
+		if (
+			dispatch &&
+			typeof value === "function" &&
+			resolveWrapper(value) === null &&
+			!capturedViewChildren.has(value) &&
+			!SELF_VIEW_NODES.has(value)
+		) {
 			return dispatcherFunction(prop, value);
 		}
 		// A plain value the node holds (a class's prototype, a method of it) is held to the node's path (#625).
@@ -6295,6 +6303,8 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 			preventExtensions(target) {
 				assertWaitingWrite(null);
+				// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
+				Reflect.setPrototypeOf(target, null);
 				return Reflect.preventExtensions(target);
 			},
 			get(___target, prop) {
