@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T10:31:30-07:00 (1792949490)
+ *	@Last modified time: 2026-10-25T11:38:32-07:00 (1792953512)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5718,7 +5718,7 @@ export class UnifiedWrapper extends ComponentBase {
 						return wrapper[prop];
 					}
 					const fixedValue = target[prop];
-					runtime_gateFixedValue(wrapper, prop, fixedValue);
+					runtime_gateFixedValue(wrapper, prop, fixedValue, kept);
 					return fixedValue;
 				}
 			}
