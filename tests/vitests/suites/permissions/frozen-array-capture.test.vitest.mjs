@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T20:22:24-07:00 (1792898544)
+ *	@Last modified time: 2026-10-24T21:55:22-07:00 (1792904122)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -458,6 +458,26 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 				expect(JSON.stringify(api.store[name])).toContain("S3CRET");
 			}
 		);
+
+		it.each([[undefined], ["freeze"]])("a kept node describes from a timer as it does in the call (closed: %s)", async (close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.dObj.secret"]) });
+			await api.probe.keep("o", ["dObj"]);
+			expect(await api.store.changeOwn("dObj", { close })).toBe("done");
+			const now = await api.probe.describeNow("dObj", "secret");
+			// A closed node lists every member it holds (the engine requires it), refused ones included.
+			expect(now.keys).toEqual({ value: JSON.stringify(close ? ["secret", "n", "inner"] : ["n", "inner"]) });
+			expect(JSON.stringify(now)).not.toContain("S3CRET");
+			await api.probe.describeKeptLater("o", "secret", "later");
+			expect(await waitOutcome(api, "probe", "later")).toEqual(now);
+		});
+
+		it.each([["Point"], ["shapes"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
 
 		it.each([
 			["dObj", "secret", undefined],

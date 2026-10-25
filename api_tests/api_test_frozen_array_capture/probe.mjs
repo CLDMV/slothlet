@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T20:21:12-07:00 (1792898472)
+ *	@Last modified time: 2026-10-24T21:53:54-07:00 (1792904034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -306,6 +306,42 @@ export async function descriptorLater(id, prop, as) {
 			descriptor: attempt(() => Object.getOwnPropertyDescriptor(kept[id], prop)?.value),
 			descriptors: attempt(() => Object.getOwnPropertyDescriptors(kept[id])[prop]?.value),
 			inspect: attempt(() => util.inspect(kept[id], { depth: 4 }))
+		};
+	}, 0);
+	return "armed";
+}
+
+/**
+ * Describe a member of `store` now, in this call: its keys, the member's descriptor value, and all descriptors.
+ * @param {string} name - The member of `store`.
+ * @param {string} prop - The member of it to describe.
+ * @returns {{keys: object, descriptor: object, descriptors: object}} The outcomes.
+ */
+export function describeNow(name, prop) {
+	const node = self.store[name];
+	return {
+		keys: attempt(() => Object.keys(node)),
+		descriptor: attempt(() => Object.getOwnPropertyDescriptor(node, prop)?.value),
+		descriptors: attempt(() => Object.keys(Object.getOwnPropertyDescriptors(node)))
+	};
+}
+
+/**
+ * From a timer slothlet does not patch, describe a kept reference as {@link describeNow} does.
+ * @param {string} id - The kept reference.
+ * @param {string} prop - The member to describe.
+ * @param {string} as - The id to record the outcome under.
+ * @returns {Promise<string>} "armed".
+ */
+export async function describeKeptLater(id, prop, as) {
+	const timers = await import("node:timers");
+	outcomes[as] = null;
+	timers.setTimeout(() => {
+		const node = kept[id];
+		outcomes[as] = {
+			keys: attempt(() => Object.keys(node)),
+			descriptor: attempt(() => Object.getOwnPropertyDescriptor(node, prop)?.value),
+			descriptors: attempt(() => Object.keys(Object.getOwnPropertyDescriptors(node)))
 		};
 	}, 0);
 	return "armed";

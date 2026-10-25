@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T20:21:13-07:00 (1792898473)
+ *	@Last modified time: 2026-10-24T21:53:54-07:00 (1792904034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,6 +109,17 @@ export const frozenHid = Object.freeze({ inner: Object.freeze({ x: 1, hid: "S3CR
 export function ownInnerKeys() {
 	return { sealedHid: Object.keys(sealedHid.inner), frozenHid: Object.keys(frozenHid.inner) };
 }
+
+/** A class whose instances the module holds. */
+export class Point {
+	/** Make a point at the origin. */
+	constructor() {
+		this.x = 0;
+	}
+}
+
+/** @type {object} An object holding a class instance. */
+export const shapes = { origin: new Point(), arrow: () => "ARROW" };
 
 /** @type {object} An object the module closes, then changes. */
 export const iObj = { n: 1, m: 1 };
