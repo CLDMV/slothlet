@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T16:00:42-07:00 (1792882842)
+ *	@Last modified time: 2026-10-24T17:23:42-07:00 (1792887822)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -794,6 +794,26 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 }
 
 /**
+ * Whether a function can be called with `new`. Asked through a proxy that answers every read, so a node is never
+ * read for its `prototype` to find out.
+ * @param {Function} fn - The function.
+ * @returns {boolean} True when `fn` is a constructor.
+ * @private
+ *
+ * @example
+ * runtime_isConstructor(class {}); // true
+ * runtime_isConstructor(() => {}); // false
+ */
+function runtime_isConstructor(fn) {
+	try {
+		Reflect.construct(Object, [], new Proxy(fn, { get: () => undefined }));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Build (or reuse) the view of a child wrapper that remembers who read it.
  *
  * Only `apply`, `construct`, and `get` are trapped; every other operation falls through to the child
@@ -824,8 +844,18 @@ function runtime_capturedView(child, capturedCaller) {
 	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
 	// frozen array's element) is checked by the engine against the view's own target, so it is mirrored onto the
 	// shadow as the view hands it out — a child node as its view — and the reader's identity goes with it too. A
-	// shadow of the same kind keeps the view callable, constructible, and an array where the child is.
-	const shadow = typeof child === "function" ? function () {} : Array.isArray(child) ? [] : {};
+	// shadow of the same kind keeps the view callable, constructible, and an array where the child is; a function's
+	// shadow owns no `prototype`, so the view reports the child's own, or none where the child has none.
+	let shadow;
+	if (Array.isArray(child)) shadow = [];
+	else if (typeof child !== "function") shadow = {};
+	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
+	else shadow = () => {};
+	// `util.inspect` describes a proxy by its target: while the shadow is open, it describes the child instead.
+	Reflect.defineProperty(shadow, util.inspect.custom, {
+		value: (depth, options, inspect) => inspect(child, { ...options, depth }),
+		configurable: true
+	});
 	let view = null;
 	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
 	// view, anything else as it is.
@@ -854,13 +884,14 @@ function runtime_capturedView(child, capturedCaller) {
 	const mirror = (prop) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(child, prop);
 		if (!descriptor) {
-			const stale = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			const stale = prop === util.inspect.custom ? undefined : Reflect.getOwnPropertyDescriptor(shadow, prop);
 			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
 			return undefined;
 		}
 		if (descriptor.configurable && Reflect.isExtensible(shadow)) return descriptor;
 		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
-		if (held && !held.configurable) return held;
+		// A fixed member keeps what it holds; one the child can still write is refreshed with its value now.
+		if (held && !held.configurable && !("value" in held && held.writable)) return held;
 		const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
 		Reflect.defineProperty(shadow, prop, shown);
 		return shown;
@@ -869,6 +900,8 @@ function runtime_capturedView(child, capturedCaller) {
 	// about a non-extensible target against that target.
 	const mirrorClosed = () => {
 		if (Reflect.isExtensible(child) || !Reflect.isExtensible(shadow)) return;
+		// Closed, the shadow holds exactly the child's members, so its inspect hook goes unless the child has one.
+		Reflect.deleteProperty(shadow, util.inspect.custom);
 		for (const key of Reflect.ownKeys(child)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(child, key);
 			const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
