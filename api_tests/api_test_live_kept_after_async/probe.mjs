@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T01:33:16-07:00 (1792917196)
+ *	@Last modified time: 2026-10-25T02:27:04-07:00 (1792920424)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,6 +95,37 @@ export async function readBoxLater(prop) {
 	outcome = null;
 	timers.setTimeout(() => {
 		outcome = { read: attempt(() => kept.box[prop]) };
+	}, 0);
+	return "armed";
+}
+
+/**
+ * Keep `store.secretFn`, and a `this` from `rogue` to call it with.
+ * @returns {string} "kept".
+ */
+export function keepCallables() {
+	kept.secretFn = self.store.secretFn;
+	kept.thisObj = self.rogue.makeThis();
+	return "kept";
+}
+
+/** @type {Record<string, function(): *>} Uses of kept nodes that run another module's code. */
+const runningUses = {
+	proxyMember: () => typeof kept.box.px,
+	proxyFn: () => typeof kept.box.pfn,
+	thisProxy: () => kept.secretFn.call(kept.thisObj)
+};
+
+/**
+ * From a timer slothlet does not patch, make one of {@link runningUses}.
+ * @param {string} kind - Which use.
+ * @returns {Promise<string>} "armed".
+ */
+export async function useRunningLater(kind) {
+	const timers = await import("node:timers");
+	outcome = null;
+	timers.setTimeout(() => {
+		outcome = { use: attempt(runningUses[kind]) };
 	}, 0);
 	return "armed";
 }

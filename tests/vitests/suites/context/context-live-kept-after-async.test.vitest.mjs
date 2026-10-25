@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T01:34:22-07:00 (1792917262)
+ *	@Last modified time: 2026-10-25T02:27:54-07:00 (1792920474)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,6 +86,38 @@ describe.each([
 		expect(await api.rogue.stolenValue()).not.toBe(42);
 		expect(outcome).toEqual({ read: "e" });
 	});
+
+	it.runIf(runtime === "live").each([["proxyMember"], ["proxyFn"], ["thisProxy"]])(
+		"code another module has run inside a kept node's use (%s) does not read or call as the kept node's reader",
+		async (kind) => {
+			api = await slothlet({
+				base: BASE,
+				mode,
+				runtime,
+				silent: true,
+				permissions: {
+					defaultPolicy: "allow",
+					rules: [
+						{ caller: "rogue.**", target: "store.box.secret", effect: "deny" },
+						{ caller: "rogue.**", target: "store.secretFn", effect: "deny" }
+					]
+				}
+			});
+			await api.probe.keepBox();
+			await api.probe.keepCallables();
+			await api.rogue.plant();
+			let release;
+			const held = api.other.hold(new Promise((resolve) => (release = resolve)));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			await api.probe.useRunningLater(kind);
+			await waitOutcome(api);
+			release();
+			await held;
+			const log = await api.rogue.report();
+			expect(log.length).toBeGreaterThan(0);
+			expect(log.filter((got) => got.secret === 42 || got.call === "S")).toEqual([]);
+		}
+	);
 
 	it("still refuses them when the rules deny probe", async () => {
 		api = await slothlet({
