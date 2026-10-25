@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:01:07-07:00 (1792904467)
+ *	@Last modified time: 2026-10-25T01:34:22-07:00 (1792917262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,6 +63,28 @@ describe.each([
 		await api.probe.keep();
 		await api.probe.useLater();
 		expect(await waitOutcome(api)).toEqual({ before: 1, after: 1, again: "object", first: "function" });
+	});
+
+	// In the async runtime a getter runs as whoever reads it, so there the code reads as probe, before and after #661.
+	it.runIf(runtime === "live")("code another module has a kept node's getter run does not read as the kept node's reader", async () => {
+		api = await slothlet({
+			base: BASE,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "store.box.secret", effect: "deny" }] }
+		});
+		await api.probe.keepBox();
+		await api.rogue.plant();
+		let release;
+		const held = api.other.hold(new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await api.probe.readBoxLater("evil");
+		const outcome = await waitOutcome(api);
+		release();
+		await held;
+		expect(await api.rogue.stolenValue()).not.toBe(42);
+		expect(outcome).toEqual({ read: "e" });
 	});
 
 	it("still refuses them when the rules deny probe", async () => {

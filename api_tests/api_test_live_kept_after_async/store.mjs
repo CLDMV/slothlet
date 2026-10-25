@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:00:12-07:00 (1792904412)
+ *	@Last modified time: 2026-10-25T01:33:16-07:00 (1792917196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,4 +26,27 @@ export const obj = { n: 1 };
  */
 export async function work() {
 	return "W";
+}
+
+/** @type {Function|null} Code another module asked to run whenever `box.evil` is read. */
+let onRead = null;
+
+/** @type {{inner: {v: number}, secret: number, evil: string}} An object one module may read all of and another not its `secret`. */
+export const box = {
+	inner: { v: 2 },
+	secret: 42,
+	get evil() {
+		if (onRead) onRead();
+		return "e";
+	}
+};
+
+/**
+ * Run `hook` whenever `box.evil` is read.
+ * @param {Function} hook - The hook.
+ * @returns {string} "set".
+ */
+export function whenRead(hook) {
+	onRead = hook;
+	return "set";
 }

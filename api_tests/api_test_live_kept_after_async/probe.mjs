@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:00:12-07:00 (1792904412)
+ *	@Last modified time: 2026-10-25T01:33:16-07:00 (1792917196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,4 +74,27 @@ export async function useLater() {
  */
 export function result() {
 	return outcome;
+}
+
+/**
+ * Keep `store.box`.
+ * @returns {string} "kept".
+ */
+export function keepBox() {
+	kept.box = self.store.box;
+	return "kept";
+}
+
+/**
+ * From a timer slothlet does not patch, read a member of the kept `store.box`.
+ * @param {string} prop - The member.
+ * @returns {Promise<string>} "armed".
+ */
+export async function readBoxLater(prop) {
+	const timers = await import("node:timers");
+	outcome = null;
+	timers.setTimeout(() => {
+		outcome = { read: attempt(() => kept.box[prop]) };
+	}, 0);
+	return "armed";
 }
