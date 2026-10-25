@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T02:27:54-07:00 (1792920474)
+ *	@Last modified time: 2026-10-25T03:14:02-07:00 (1792923242)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 
 const BASE = new URL("../../../../api_tests/api_test_live_kept_after_async", import.meta.url).pathname;
+const LAZY_BASE = new URL("../../../../api_tests/api_test_live_kept_lazy_waiting", import.meta.url).pathname;
 
 /**
  * Poll the probe's outcome.
@@ -135,5 +136,36 @@ describe.each([
 			after: "PERMISSION_DENIED",
 			again: "PERMISSION_DENIED"
 		});
+	});
+});
+
+describe("a module's node kept before its module loads, read from a timer (#661) — lazy / live", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("code the node's getter runs does not read as the kept node's reader", async () => {
+		api = await slothlet({
+			base: LAZY_BASE,
+			mode: "lazy",
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "sneak.**", target: "store.sub.secret", effect: "deny" }] }
+		});
+		await api.store.work();
+		expect(await api.probe.keep()).toBe("function");
+		await api.sneak.plant(api.store.sub);
+		let release;
+		const held = api.other.hold(new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await api.probe.readLater();
+		const outcome = await waitOutcome(api);
+		release();
+		await held;
+		expect(outcome).toEqual({ read: "e" });
+		expect(await api.sneak.report()).toEqual(["PERMISSION_DENIED"]);
 	});
 });
