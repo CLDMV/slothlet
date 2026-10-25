@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:47:04-07:00 (1792907224)
+ *	@Last modified time: 2026-10-24T23:33:52-07:00 (1792910032)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -544,6 +544,50 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			await api.probe.inspectLater(name);
 			const outcome = await waitOutcome(api, "probe", name);
 			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
+	});
+
+	describe("11. a closed node handed on, a node whose own traps read it, and a class's methods", () => {
+		const surveyHost = (node) => {
+			const first = Object.getOwnPropertyDescriptor(node, "0");
+			return {
+				keys: { value: JSON.stringify(Object.keys(node)) },
+				sealed: { value: JSON.stringify(Object.isSealed(node)) },
+				first: { value: JSON.stringify({ writable: first.writable, configurable: first.configurable, value: undefined }) }
+			};
+		};
+
+		it("a sealed array handed out by its reader describes as it does in the reader's call", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.sealedSecret.0"]) });
+			const inCall = await api.probe.closedSurveyNow("sealedSecret");
+			expect(JSON.stringify(inCall)).not.toContain("S3CRET");
+			const { node } = await api.probe.give(["sealedSecret"]);
+			const handed = {
+				keys: hostUse(() => Object.keys(node)),
+				sealed: hostUse(() => Object.isSealed(node)),
+				first: hostUse(() => {
+					const descriptor = Object.getOwnPropertyDescriptor(node, "0");
+					return { writable: descriptor.writable, configurable: descriptor.configurable, value: descriptor.value };
+				})
+			};
+			expect(handed).toEqual({
+				keys: JSON.stringify(["0", "1", "2"]),
+				sealed: "true",
+				first: JSON.stringify({ writable: true, configurable: false })
+			});
+			expect(surveyHost(api.store.sealedSecret).sealed).toEqual({ value: "true" });
+		});
+
+		it.each([[false], [true]])("a node whose own traps read it answers as it does otherwise (hooked: %s)", async (hooked) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.trapped.0"]) });
+			if (hooked) await api.probe.armTrapped();
+			expect(await api.probe.askTrapped()).toEqual({ has: { value: "false" }, keys: { value: JSON.stringify(["0", "1", "length"]) } });
+		});
+
+		it("a class shows the methods its prototype holds when hidden members are shown", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const outcome = await api.probe.inspectHiddenNow(["kinds", "klass"]);
+			expect(outcome.value).toContain("[tag]");
 		});
 	});
 });

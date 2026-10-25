@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:45:27-07:00 (1792907127)
+ *	@Last modified time: 2026-10-24T23:32:22-07:00 (1792909942)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -138,6 +138,41 @@ export async function asyncFn() {
  */
 export function* generatorFn() {
 	yield "G";
+}
+
+/** @type {Array<*>} A sealed array whose first, writable element one module may not read. */
+export const sealedSecret = Object.seal(["S3CRET", { x: 1 }, 2]);
+
+/** @type {Array<Function>} Callbacks run whenever `trapped` is asked to describe a member. */
+const describeHooks = [];
+let describing = 0;
+
+/**
+ * A frozen array behind a Proxy of the module's own, whose traps run other code as they are asked.
+ * @type {ReadonlyArray<*>}
+ */
+export const trapped = new Proxy(Object.freeze(["S3CRET", 1]), {
+	getOwnPropertyDescriptor(target, prop) {
+		if (!describing) {
+			describing++;
+			try {
+				for (const hook of describeHooks) hook(prop);
+			} finally {
+				describing--;
+			}
+		}
+		return Reflect.getOwnPropertyDescriptor(target, prop);
+	}
+});
+
+/**
+ * Run `hook` whenever `trapped` is asked to describe a member.
+ * @param {Function} hook - The hook.
+ * @returns {number} How many hooks there are.
+ */
+export function onDescribe(hook) {
+	describeHooks.push(hook);
+	return describeHooks.length;
 }
 
 /** @type {object} An object the module closes, then changes. */

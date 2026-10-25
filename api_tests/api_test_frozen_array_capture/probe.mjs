@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T22:45:27-07:00 (1792907127)
+ *	@Last modified time: 2026-10-24T23:32:22-07:00 (1792909942)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -370,4 +370,53 @@ export function describePath(keys, prop) {
 				prop
 			)?.value
 	);
+}
+
+/**
+ * Survey a closed member of `store` now, in this call: its keys, whether it is sealed, and its first descriptor.
+ * @param {string} name - The member.
+ * @returns {Record<string, object>} The outcomes.
+ */
+export function closedSurveyNow(name) {
+	const node = self.store[name];
+	return {
+		keys: attempt(() => Object.keys(node)),
+		sealed: attempt(() => Object.isSealed(node)),
+		first: attempt(() => {
+			const descriptor = Object.getOwnPropertyDescriptor(node, "0");
+			return descriptor && { writable: descriptor.writable, configurable: descriptor.configurable, value: descriptor.value };
+		})
+	};
+}
+
+/**
+ * Have `store.trapped` read its own first member, through `self`, each time it is asked to describe one.
+ * @returns {number} How many hooks there are.
+ */
+export function armTrapped() {
+	return self.store.onDescribe(() => {
+		attempt(() => Object.getOwnPropertyDescriptor(self.store.trapped, "0"));
+	});
+}
+
+/**
+ * Ask `store.trapped` whether it has a member, and for its own keys.
+ * @returns {{has: object, keys: object}} The outcomes.
+ */
+export function askTrapped() {
+	return {
+		has: attempt(() => "pub" in self.store.trapped),
+		keys: attempt(() => Reflect.ownKeys(self.store.trapped).filter((key) => typeof key === "string"))
+	};
+}
+
+/**
+ * Inspect a member of `store` now, with hidden members shown.
+ * @param {Array<string|number>} keys - The path below `store`.
+ * @returns {Promise<{value?: string, error?: string}>} The output.
+ */
+export async function inspectHiddenNow(keys) {
+	const node = keys.reduce((holder, key) => holder[key], self.store);
+	const util = await import("node:util");
+	return attempt(() => util.inspect(node, { showHidden: true, depth: 2 }));
 }
