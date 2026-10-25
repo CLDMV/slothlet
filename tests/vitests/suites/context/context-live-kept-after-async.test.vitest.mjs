@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T03:14:02-07:00 (1792923242)
+ *	@Last modified time: 2026-10-25T10:31:49-07:00 (1792949509)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@ import slothlet from "@cldmv/slothlet";
 
 const BASE = new URL("../../../../api_tests/api_test_live_kept_after_async", import.meta.url).pathname;
 const LAZY_BASE = new URL("../../../../api_tests/api_test_live_kept_lazy_waiting", import.meta.url).pathname;
+const HAS_BASE = new URL("../../../../api_tests/api_test_live_kept_has", import.meta.url).pathname;
 
 /**
  * Poll the probe's outcome.
@@ -169,3 +170,35 @@ describe("a module's node kept before its module loads, read from a timer (#661)
 		expect(await api.sneak.report()).toEqual(["PERMISSION_DENIED"]);
 	});
 });
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"asking a kept node whether it has a member, from a timer (#661) — $mode / live",
+	({ mode }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		it("code the node runs to answer does not read as the kept node's reader", async () => {
+			api = await slothlet({
+				base: HAS_BASE,
+				mode,
+				runtime: "live",
+				silent: true,
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "trapmod.tbox.secret", effect: "deny" }] }
+			});
+			await api.probe.keep();
+			await api.rogue.plant();
+			let release;
+			const held = api.other.hold(new Promise((resolve) => (release = resolve)));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			await api.probe.askLater();
+			expect(await waitOutcome(api)).toEqual({ has: false });
+			release();
+			await held;
+			expect(await api.rogue.report()).toEqual(["PERMISSION_DENIED"]);
+		});
+	}
+);
