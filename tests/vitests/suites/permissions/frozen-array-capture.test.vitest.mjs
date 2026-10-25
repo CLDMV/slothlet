@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T15:18:50-07:00 (1792880330)
+ *	@Last modified time: 2026-10-24T17:24:16-07:00 (1792887856)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import util from "node:util";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
@@ -271,6 +272,91 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			const first = await api.probe.give(["objs", 0]);
 			const second = await api.probe.give(["objs", 0]);
 			expect(first.node).toBe(second.node);
+		});
+	});
+
+	describe("4. a kept function reports and behaves as the function does", () => {
+		const kinds = ["arrow", "method", "klass", "plain", "bound"];
+
+		it.each(kinds)("a kept %s reports its prototype as the node does", async (kind) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const node = api.store.kinds[kind];
+			const descriptor = Object.getOwnPropertyDescriptor(node, "prototype");
+			const expected = {
+				own: descriptor !== undefined,
+				writable: descriptor?.writable,
+				configurable: descriptor?.configurable,
+				has: "prototype" in node,
+				listed: Reflect.ownKeys(node).includes("prototype")
+			};
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.describeLater(kind, "prototype");
+			const outcome = await waitOutcome(api, "probe", kind);
+			expect(outcome).toEqual({ value: JSON.stringify(expected) });
+		});
+
+		it.each(["arrow", "method", "bound"])("a kept %s has no prototype, as the function has none", async (kind) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.describeLater(kind, "prototype");
+			const outcome = await waitOutcome(api, "probe", kind);
+			expect(outcome).toEqual({ value: JSON.stringify({ own: false, has: false, listed: false }) });
+		});
+
+		it.each([
+			["arrow", '"ARROW"'],
+			["method", '"METHOD"'],
+			["plain", '"PLAIN"'],
+			["bound", '"BOUND"']
+		])("a kept %s still calls", async (kind, result) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.useLater(kind, [], true);
+			expect(await waitOutcome(api, "probe", kind)).toEqual({ value: result });
+		});
+
+		it.each([
+			["klass", true],
+			["plain", true],
+			["bound", true],
+			["arrow", false],
+			["method", false]
+		])("a kept %s constructs exactly when the function does (%s)", async (kind, constructs) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.constructLater(kind);
+			const outcome = await waitOutcome(api, "probe", kind);
+			if (constructs) expect(outcome).toEqual({ value: '"object"' });
+			else expect(outcome.error).toMatch(/^TypeError: /);
+		});
+	});
+
+	describe("5. a module changing its own arrays, and views kept of them", () => {
+		it.each([
+			["mut", "freeze"],
+			["mut", "seal"],
+			["sealedMut", "freeze"]
+		])("the owner can close its own %s through self (%s)", async (name, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			expect(close === "freeze" ? Object.isFrozen(api.store[name]) : Object.isSealed(api.store[name])).toBe(true);
+		});
+
+		it("a kept view reads what the owner wrote before freezing", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("arr", ["sealedMut"]);
+			expect(await api.store.changeOwn("sealedMut", { set: [0, 9] })).toBe("done");
+			expect(await api.store.changeOwn("sealedMut", { close: "freeze" })).toBe("done");
+			await api.probe.useLater("arr", [0], false);
+			expect(await waitOutcome(api, "probe", "arr")).toEqual({ value: "9" });
+		});
+
+		it.each([["ns"], ["prims"], ["objs"], ["sealed"], ["mfns"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
 		});
 	});
 });

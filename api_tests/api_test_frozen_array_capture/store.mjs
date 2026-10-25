@@ -7,15 +7,17 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T15:17:10-07:00 (1792880230)
+ *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Scratch fixture (#656 review): a module holding frozen, sealed and mutable arrays and objects.
+ * @fileoverview Fixture (#655): a module holding frozen, sealed and mutable arrays and objects.
  */
+
+import { self } from "@cldmv/slothlet/runtime";
 
 /** @type {ReadonlyArray<number>} */
 export const prims = Object.freeze([1, 2, 3]);
@@ -48,3 +50,48 @@ export const ns = Object.freeze({
 	fn: () => "NSFN",
 	list: Object.freeze([{ z: 3 }])
 });
+
+/** @type {Readonly<object>} A frozen object holding each kind of function: some own a `prototype`, some do not. */
+export const kinds = Object.freeze({
+	arrow: () => "ARROW",
+	method: {
+		method() {
+			return "METHOD";
+		}
+	}.method,
+	klass: class Klass {
+		/** @returns {string} The tag. */
+		tag() {
+			return "KLASS";
+		}
+	},
+	plain: function plain() {
+		return "PLAIN";
+	},
+	bound: function bound() {
+		return "BOUND";
+	}.bind(null)
+});
+
+/** @type {Array<number>} An array the module itself changes, then closes. */
+export const mut = [1, 2];
+
+/** @type {Array<number>} A sealed array the module itself changes, then freezes. */
+export const sealedMut = Object.seal([1, 2]);
+
+/**
+ * Change this module's own member through `self`: write an element, then seal or freeze it.
+ * @param {string} name - The member.
+ * @param {{set?: [number, *], close?: "seal"|"freeze"}} change - What to do.
+ * @returns {string} "done", or what the change threw.
+ */
+export function changeOwn(name, change) {
+	try {
+		if (change.set) self.store[name][change.set[0]] = change.set[1];
+		if (change.close === "seal") Object.seal(self.store[name]);
+		if (change.close === "freeze") Object.freeze(self.store[name]);
+		return "done";
+	} catch (error) {
+		return error.code ?? `${error.name}: ${error.message}`;
+	}
+}

@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T15:17:10-07:00 (1792880230)
+ *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Scratch fixture (#656 review): a module allowed to read `store`, doing as `probe` does.
+ * @fileoverview Fixture (#655): a module allowed to read `store`, doing as `probe` does.
  */
 import { self } from "@cldmv/slothlet/runtime";
 

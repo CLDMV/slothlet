@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T15:17:10-07:00 (1792880230)
+ *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Scratch fixture (#656 review): a module reading `store` every way, and keeping references for later.
+ * @fileoverview Fixture (#655): a module reading `store` every way, and keeping references for later.
  */
 import { self } from "@cldmv/slothlet/runtime";
 
@@ -153,4 +153,55 @@ export async function handTo(other, id, at, keys, call) {
  */
 export function give(keys) {
 	return { node: keys.reduce((holder, key) => holder[key], self.store) };
+}
+
+/**
+ * From a timer slothlet does not patch, ask a kept reference what it holds of `prop`: its descriptor, `in`, and
+ * its own keys.
+ * @param {string} id - The kept reference.
+ * @param {string} prop - The member to ask about.
+ * @returns {Promise<string>} "armed".
+ */
+export async function describeLater(id, prop) {
+	const timers = await import("node:timers");
+	timers.setTimeout(() => {
+		outcomes[id] = attempt(() => {
+			const descriptor = Object.getOwnPropertyDescriptor(kept[id], prop);
+			return {
+				own: descriptor !== undefined,
+				writable: descriptor?.writable,
+				configurable: descriptor?.configurable,
+				has: prop in kept[id],
+				listed: Reflect.ownKeys(kept[id]).includes(prop)
+			};
+		});
+	}, 0);
+	return "armed";
+}
+
+/**
+ * From a timer slothlet does not patch, construct a kept reference.
+ * @param {string} id - The kept reference.
+ * @returns {Promise<string>} "armed".
+ */
+export async function constructLater(id) {
+	const timers = await import("node:timers");
+	timers.setTimeout(() => {
+		outcomes[id] = attempt(() => typeof new kept[id]());
+	}, 0);
+	return "armed";
+}
+
+/**
+ * From a timer slothlet does not patch, describe a kept reference with `util.inspect`.
+ * @param {string} id - The kept reference.
+ * @returns {Promise<string>} "armed".
+ */
+export async function inspectLater(id) {
+	const timers = await import("node:timers");
+	const util = await import("node:util");
+	timers.setTimeout(() => {
+		outcomes[id] = attempt(() => util.inspect(kept[id]));
+	}, 0);
+	return "armed";
 }
