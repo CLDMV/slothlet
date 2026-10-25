@@ -52,6 +52,37 @@ import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
+ * The access a node a module kept is making into the node it stands for, while it makes it: that node, and the
+ * module the kept node reads for. Read once, by the check of that node it is making (see
+ * {@link resolveEnforcedCaller}).
+ * @type {{wrapper: object, reader: object}|null}
+ * @private
+ */
+let capturedAccess = null;
+
+/**
+ * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
+ * say who is accessing, the check of `wrapper` takes it as `reader`'s (#661).
+ * @param {object} wrapper - The node being accessed.
+ * @param {object} reader - The module the kept node reads for.
+ * @param {function(): *} access - The access.
+ * @returns {*} What the access gave.
+ * @private
+ *
+ * @example
+ * runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
+ */
+function runtime_accessAsKept(wrapper, reader, access) {
+	const previous = capturedAccess;
+	capturedAccess = { wrapper, reader };
+	try {
+		return access();
+	} finally {
+		capturedAccess = previous;
+	}
+}
+
+/**
  * Resolve the enforcing caller identity for a permission-gated call/read, failing closed on an
  * absent or forged caller inside an active context.
  *
@@ -82,12 +113,19 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
 	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
-	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
+	let identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
+	// A node a module kept, reaching into this node, says who it reads for, once: the check it is making now.
+	const kept = capturedAccess?.wrapper === wrapper ? capturedAccess : null;
+	if (kept) capturedAccess = null;
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
-	// module suspended and resuming in a file they share, with no frame to tell them apart (#512).
-	if (identity?.unresolved) return { verdict: "deny" };
+	// module suspended and resuming in a file they share, with no frame to tell them apart (#512). Only
+	// a node a module kept, which knows that module, settles it: the access is that module's (#661).
+	if (identity?.unresolved) {
+		if (!kept) return { verdict: "deny" };
+		identity = { currentWrapper: kept.reader };
+	}
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
 		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
@@ -1097,15 +1135,16 @@ function runtime_capturedView(child, capturedCaller) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
-			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(child, thisArg, args));
-			return Reflect.apply(child, thisArg, args);
+			const call = () => runtime_accessAsKept(inner, capturedCaller, () => Reflect.apply(child, thisArg, args));
+			if (pending) return runtime_runAfterPrincipalGate(inner, pending, call);
+			return call();
 		},
 		construct(_, args, newTarget) {
 			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return Reflect.construct(child, args, newTarget === view ? child : newTarget);
+			return runtime_accessAsKept(inner, capturedCaller, () => Reflect.construct(child, args, newTarget === view ? child : newTarget));
 		},
 		get(_, prop, receiver) {
 			mirrorClosed();
@@ -1114,10 +1153,16 @@ function runtime_capturedView(child, capturedCaller) {
 			if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
 				// Read through the child, so its own read rules run, then gated against the reader; what is handed out
 				// is what the shadow holds, as the engine requires.
-				handOut(prop, Reflect.get(child, prop, child));
+				handOut(
+					prop,
+					runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, prop, child))
+				);
 				return mirror(prop).value;
 			}
-			return handOut(prop, Reflect.get(child, prop, receiver === view ? child : receiver));
+			return handOut(
+				prop,
+				runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, prop, receiver === view ? child : receiver))
+			);
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			mirrorClosed();
