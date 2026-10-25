@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T21:53:54-07:00 (1792904034)
+ *	@Last modified time: 2026-10-24T22:45:27-07:00 (1792907127)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -345,4 +345,29 @@ export async function describeKeptLater(id, prop, as) {
 		};
 	}, 0);
 	return "armed";
+}
+
+/**
+ * Serialize a node another module handed over, and read its `secret`.
+ * @param {object} node - The node.
+ * @returns {{json: object, secret: object}} The outcomes.
+ */
+export function serializeGiven(node) {
+	return { json: attempt(() => JSON.parse(JSON.stringify(node))), secret: attempt(() => node.secret) };
+}
+
+/**
+ * Read a member of a node at a path below `store` through its descriptor, now.
+ * @param {Array<string|number>} keys - The path to the node.
+ * @param {string|number} prop - The member.
+ * @returns {{value?: string, error?: string}} The descriptor's value, or what reading it threw.
+ */
+export function describePath(keys, prop) {
+	return attempt(
+		() =>
+			Object.getOwnPropertyDescriptor(
+				keys.reduce((node, key) => node[key], self.store),
+				prop
+			)?.value
+	);
 }

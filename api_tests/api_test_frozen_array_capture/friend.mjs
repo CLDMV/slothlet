@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
+ *	@Last modified time: 2026-10-24T22:45:27-07:00 (1792907127)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -153,4 +153,13 @@ export async function handTo(other, id, at, keys, call) {
  */
 export function give(keys) {
 	return { node: keys.reduce((holder, key) => holder[key], self.store) };
+}
+
+/**
+ * Hand a member of `store` to `probe`, which serializes it and reads its `secret`.
+ * @param {string} name - The member.
+ * @returns {{json: object, secret: object}} What probe got.
+ */
+export function handToProbe(name) {
+	return self.probe.serializeGiven(self.store[name]);
 }

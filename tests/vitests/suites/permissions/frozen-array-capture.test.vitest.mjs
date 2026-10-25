@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T21:55:22-07:00 (1792904122)
+ *	@Last modified time: 2026-10-24T22:47:04-07:00 (1792907224)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -464,8 +464,9 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			await api.probe.keep("o", ["dObj"]);
 			expect(await api.store.changeOwn("dObj", { close })).toBe("done");
 			const now = await api.probe.describeNow("dObj", "secret");
-			// A closed node lists every member it holds (the engine requires it), refused ones included.
-			expect(now.keys).toEqual({ value: JSON.stringify(close ? ["secret", "n", "inner"] : ["n", "inner"]) });
+			// An open node lists what the reader may read; a closed one must describe every member it holds, so listing
+			// its enumerable keys reaches the refused one and is refused.
+			expect(now.keys).toEqual(close ? { error: "PERMISSION_DENIED" } : { value: JSON.stringify(["n", "inner"]) });
 			expect(JSON.stringify(now)).not.toContain("S3CRET");
 			await api.probe.describeKeptLater("o", "secret", "later");
 			expect(await waitOutcome(api, "probe", "later")).toEqual(now);
@@ -491,6 +492,58 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			await api.probe.descriptorLater(name, name === "frozenHid" ? "hid" : prop, "later");
 			const outcome = await waitOutcome(api, "probe", "later");
 			expect(JSON.stringify(outcome)).not.toContain("S3CRET");
+		});
+	});
+
+	describe("8. rules that change after a frozen node was first read", () => {
+		const locked = { caller: "probe.**", target: "store.ruled.2", effect: "deny", condition: { lock: true } };
+
+		it("an element refused once reads once it is allowed", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			const refused = await api.slothlet.context.run({ lock: true }, () => api.probe.readPath(["ruled", 2]));
+			expect(refused).toEqual({ error: "PERMISSION_DENIED" });
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
+			expect(await api.probe.describePath(["ruled"], 2)).toEqual({ value: '"S3CRET"' });
+		});
+
+		it("an element read once is refused, every way, once it is denied", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			expect(await api.probe.describePath(["ruled"], 2)).toEqual({ value: '"S3CRET"' });
+			const later = await api.slothlet.context.run({ lock: true }, async () => ({
+				read: await api.probe.readPath(["ruled", 2]),
+				descriptor: await api.probe.describePath(["ruled"], 2)
+			}));
+			expect(later.read).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(later)).not.toContain("S3CRET");
+		});
+
+		it("an element refused, then allowed by removing the rule, reads", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [] } });
+			const id = api.slothlet.permissions.addRule({ caller: "probe.**", target: "store.ruled.2", effect: "deny" });
+			expect(await api.probe.readPath(["ruled", 0])).toEqual({ value: "1" });
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ error: "PERMISSION_DENIED" });
+			api.slothlet.permissions.removeRule(id);
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
+		});
+	});
+
+	describe("9. a node handed to a module that may not read all of it", () => {
+		it.each([[undefined], ["freeze"]])("serializes for the module serializing it (closed: %s)", async (close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.dObj.secret"]) });
+			expect(await api.store.changeOwn("dObj", { close })).toBe("done");
+			const got = await api.friend.handToProbe("dObj");
+			expect(got.secret).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(got)).not.toContain("S3CRET");
+		});
+	});
+
+	describe("10. functions of every kind inspect as the node does", () => {
+		it.each([["asyncFn"], ["generatorFn"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
 		});
 	});
 });

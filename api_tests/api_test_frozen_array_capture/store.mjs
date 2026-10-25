@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T21:53:54-07:00 (1792904034)
+ *	@Last modified time: 2026-10-24T22:45:27-07:00 (1792907127)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -120,6 +120,25 @@ export class Point {
 
 /** @type {object} An object holding a class instance. */
 export const shapes = { origin: new Point(), arrow: () => "ARROW" };
+
+/** @type {ReadonlyArray<*>} A frozen array whose last element is read under rules that change. */
+export const ruled = Object.freeze([1, Object.freeze({ x: 1 }), "S3CRET"]);
+
+/**
+ * An async function, a generator function and an async generator function.
+ * @returns {Promise<string>} "A".
+ */
+export async function asyncFn() {
+	return "A";
+}
+
+/**
+ * A generator function.
+ * @yields {string} "G".
+ */
+export function* generatorFn() {
+	yield "G";
+}
 
 /** @type {object} An object the module closes, then changes. */
 export const iObj = { n: 1, m: 1 };
