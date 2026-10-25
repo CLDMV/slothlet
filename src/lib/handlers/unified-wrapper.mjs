@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T09:50:58-07:00 (1792947058)
+ *	@Last modified time: 2026-10-25T10:31:30-07:00 (1792949490)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1223,7 +1223,9 @@ function runtime_capturedView(child, capturedCaller) {
 		has(_, prop) {
 			mirrorClosed();
 			pruneClosed();
-			return asKept(() => Reflect.has(child, prop));
+			// `in` decides no read: it is asked as it is, never for the view's reader, so code the node runs to answer
+			// (a Proxy among its prototypes) has no reader to take (#661).
+			return Reflect.has(child, prop);
 		},
 		ownKeys() {
 			mirrorClosed();
@@ -6934,6 +6936,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Checks for properties on impl, target (wrapper), filtering internals.
 		 */
 		const hasTrap = (target, prop) => {
+			// `in` gates nothing: an access a kept node offers here is dropped first, before any code the answer runs
+			// (a Proxy among the impl's prototypes) could take it (#661).
+			runtime_takeCapturedAccess(wrapper);
 			if (prop === "_materialize") {
 				return true;
 			}
