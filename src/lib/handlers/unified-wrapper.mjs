@@ -121,9 +121,10 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
 	// module suspended and resuming in a file they share, with no frame to tell them apart (#512). Only
-	// a node a module kept, which knows that module, settles it: the access is that module's (#661).
+	// code no suspended call accounts for, reaching in through a node a module kept, is settled by it: the
+	// access is that module's, and no more than it may do (#661). A tie between calls stays refused.
 	if (identity?.unresolved) {
-		if (!kept) return { verdict: "deny" };
+		if (!kept || !identity.unaccounted) return { verdict: "deny" };
 		identity = { currentWrapper: kept.reader };
 	}
 	const callerWrapper = identity?.currentWrapper;
