@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
+ *	@Last modified time: 2026-10-24T18:28:05-07:00 (1792891685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,17 +79,28 @@ export const mut = [1, 2];
 /** @type {Array<number>} A sealed array the module itself changes, then freezes. */
 export const sealedMut = Object.seal([1, 2]);
 
+/** @type {Array<*>} A sealed array the module marks read-only member by member. */
+export const sealedSoft = Object.seal([{ a: 1 }, 2]);
+
+/** @type {Array<*>} An array closed to extension, whose members the module deletes. */
+export const closedArr = Object.preventExtensions([{ a: 1 }, 2, 3]);
+
 /**
- * Change this module's own member through `self`: write an element, then seal or freeze it.
+ * Change this module's own member through `self`: write an element, delete one, seal, freeze or close it, or mark
+ * an element read-only.
  * @param {string} name - The member.
- * @param {{set?: [number, *], close?: "seal"|"freeze"}} change - What to do.
- * @returns {string} "done", or what the change threw.
+ * @param {{set?: [number, *], remove?: number, close?: "seal"|"freeze"|"preventExtensions", readOnly?: number}} change - What to do.
+ * @returns {string} "done", or what the change threw or refused.
  */
 export function changeOwn(name, change) {
 	try {
 		if (change.set) self.store[name][change.set[0]] = change.set[1];
+		if (change.remove !== undefined && !delete self.store[name][change.remove]) return "NOT_DELETED";
 		if (change.close === "seal") Object.seal(self.store[name]);
 		if (change.close === "freeze") Object.freeze(self.store[name]);
+		if (change.close === "preventExtensions") Object.preventExtensions(self.store[name]);
+		if (change.readOnly !== undefined && !Reflect.defineProperty(self.store[name], change.readOnly, { writable: false }))
+			return "NOT_DEFINED";
 		return "done";
 	} catch (error) {
 		return error.code ?? `${error.name}: ${error.message}`;

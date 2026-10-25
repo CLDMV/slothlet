@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:24:16-07:00 (1792887856)
+ *	@Last modified time: 2026-10-24T18:29:13-07:00 (1792891753)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -340,6 +340,31 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
 			expect(await api.store.changeOwn(name, { close })).toBe("done");
 			expect(close === "freeze" ? Object.isFrozen(api.store[name]) : Object.isSealed(api.store[name])).toBe(true);
+		});
+
+		it.each([
+			["sealedSoft", undefined],
+			["mut", "seal"],
+			["mut", "preventExtensions"]
+		])("the owner can mark an element of its closed %s read-only (%s)", async (name, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			expect(await api.store.changeOwn(name, { close, readOnly: 1 })).toBe("done");
+			expect(Object.getOwnPropertyDescriptor(api.store[name], 1).writable).toBe(false);
+			expect(await api.store.changeOwn(name, { close: "freeze" })).toBe("done");
+		});
+
+		it.each([
+			["delete", { remove: 2 }, ["0", "1"], '[{"a":1},2,null]', 3],
+			["shrink", { set: ["length", 1] }, ["0"], '[{"a":1}]', 1]
+		])("a kept view of a closed array still enumerates after its owner's %s", async (_label, change, keys, json, length) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("arr", ["closedArr"]);
+			await api.probe.enumerateLater("arr", "2", "before");
+			expect((await waitOutcome(api, "probe", "before")).value).toBeTruthy();
+			expect(await api.store.changeOwn("closedArr", change)).toBe("done");
+			await api.probe.enumerateLater("arr", "2", "after");
+			const outcome = await waitOutcome(api, "probe", "after");
+			expect(outcome).toEqual({ value: JSON.stringify({ keys, has: false, json, length }) });
 		});
 
 		it("a kept view reads what the owner wrote before freezing", async () => {

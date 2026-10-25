@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:22:52-07:00 (1792887772)
+ *	@Last modified time: 2026-10-24T18:28:05-07:00 (1792891685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -202,6 +202,28 @@ export async function inspectLater(id) {
 	const util = await import("node:util");
 	timers.setTimeout(() => {
 		outcomes[id] = attempt(() => util.inspect(kept[id]));
+	}, 0);
+	return "armed";
+}
+
+/**
+ * From a timer slothlet does not patch, enumerate a kept reference: its keys, whether it has `prop`, its JSON and
+ * its length.
+ * @param {string} id - The kept reference.
+ * @param {string} prop - The member to ask `in` about.
+ * @param {string} [as=id] - The id to record the outcome under.
+ * @returns {Promise<string>} "armed".
+ */
+export async function enumerateLater(id, prop, as = id) {
+	const timers = await import("node:timers");
+	outcomes[as] = null;
+	timers.setTimeout(() => {
+		outcomes[as] = attempt(() => ({
+			keys: Object.keys(kept[id]),
+			has: prop in kept[id],
+			json: JSON.stringify(kept[id]),
+			length: kept[id].length
+		}));
 	}, 0);
 	return "armed";
 }
