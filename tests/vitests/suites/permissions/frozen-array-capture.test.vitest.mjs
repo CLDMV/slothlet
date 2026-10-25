@@ -1,0 +1,593 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/frozen-array-capture.test.vitest.mjs
+ *	@Date: 2026-10-24T15:16:48-07:00 (1792880208)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-24T23:33:52-07:00 (1792910032)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview Frozen arrays read through a module's captured view of a node, with permissions on (#655): read
+ * rules apply to every element, and an element keeps the reading module's identity when it is handed on, as an
+ * element of an array that is not frozen does.
+ *
+ * @description
+ * Fixture `api_test_frozen_array_capture`:
+ * ```
+ * store.mjs    prims, objs, nested, fns, deep (frozen arrays); mfns (fns's shape, not frozen); sealed; later; ns (frozen object)
+ * probe.mjs    reads store every way, keeps references, hands nodes on
+ * friend.mjs   the same as probe, under rules that allow it
+ * ```
+ */
+
+import { describe, it, expect, afterEach } from "vitest";
+import util from "node:util";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
+
+const BASE = new URL("../../../../api_tests/api_test_frozen_array_capture", import.meta.url).pathname;
+
+/**
+ * Rules denying `probe` each target.
+ * @param {string[]} targets - The target patterns.
+ * @returns {object} The permissions config.
+ */
+const denyProbe = (targets) => ({
+	defaultPolicy: "allow",
+	rules: targets.map((target) => ({ caller: "probe.**", target, effect: "deny" }))
+});
+
+/**
+ * Run a host-side use of a node, reporting the JSON of what it gave or the code it threw.
+ * @param {function(): *} use - The use.
+ * @returns {string} The JSON, "fn" for a function, or the error code.
+ */
+const hostUse = (use) => {
+	try {
+		const value = use();
+		return typeof value === "function" ? "fn" : JSON.stringify(value);
+	} catch (error) {
+		return error.code ?? `${error.name}: ${error.message}`;
+	}
+};
+
+/**
+ * Follow a path below a node, calling the end when `call` is set.
+ * @param {*} node - The node.
+ * @param {Array<string|number>} keys - The path.
+ * @param {boolean} call - Whether to call the end.
+ * @returns {*} What the path gave.
+ */
+const follow = (node, keys, call) => {
+	if (keys.length === 0) return call ? node() : node;
+	const holder = keys.slice(0, -1).reduce((at, key) => at[key], node);
+	return call ? holder[keys.at(-1)]() : holder[keys.at(-1)];
+};
+
+/**
+ * Poll a module's later outcome.
+ * @param {object} api - The api.
+ * @param {string} module - The module.
+ * @param {string} id - The outcome's id.
+ * @returns {Promise<object|null>} The outcome.
+ */
+const waitOutcome = async (api, module, id) => {
+	for (let tries = 0; tries < 200; tries++) {
+		const outcome = await api[module].outcome(id);
+		if (outcome) return outcome;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	return null;
+};
+
+/**
+ * Whether a set of outcomes handed over any of the secrets.
+ * @param {object} outcomes - The outcomes.
+ * @param {string[]} secrets - JSON fragments that must not appear.
+ * @returns {boolean} True when one leaked.
+ */
+const leaked = (outcomes, secrets) => secrets.some((secret) => JSON.stringify(outcomes).includes(secret));
+
+describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	describe("1. read rules still apply", () => {
+		it.each([
+			["prims", ['"value":"1', "[1,2,3]"]],
+			["objs", ['\\"a\\":1', '\\"b\\":2']],
+			["nested", ["[1,2]", '\\"c\\":3']],
+			["deep", ["DEEP", "SOFT"]],
+			["sealed", ['\\"s\\":1']],
+			["later", ['\\"l\\":1']]
+		])("a module denied store.** reads nothing of %s", async (name, secrets) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.**"]) });
+			const outcomes = await api.probe.readArray(name);
+			expect(leaked(outcomes, secrets)).toBe(false);
+			expect(outcomes.spread).toEqual({ error: "PERMISSION_DENIED" });
+			expect(outcomes.map).toEqual({ error: "PERMISSION_DENIED" });
+			expect(outcomes.stringify).toEqual({ error: "PERMISSION_DENIED" });
+		});
+
+		it.each([["prims"], ["objs"], ["nested"], ["deep"], ["sealed"]])(
+			"a module denied store.%s.** reads nothing of it, and a sibling stays readable",
+			async (name) => {
+				api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe([`store.${name}.**`]) });
+				const outcomes = await api.probe.readArray(name);
+				expect(outcomes.spread).toEqual({ error: "PERMISSION_DENIED" });
+				expect(outcomes.map).toEqual({ error: "PERMISSION_DENIED" });
+				expect(outcomes.stringify).toEqual({ error: "PERMISSION_DENIED" });
+				expect(["PERMISSION_DENIED", undefined]).toContain(outcomes.index.error);
+				if (!outcomes.index.error) expect(["{}", "[]"]).toContain(outcomes.index.value);
+				expect((await api.probe.readArray(name === "prims" ? "objs" : "prims")).stringify.value).toBeTruthy();
+			}
+		);
+
+		it("a denied module's element leaf reads are refused at every depth", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.**"]) });
+			for (const keys of [
+				["prims", 0],
+				["objs", 0, "a"],
+				["nested", 0, 0],
+				["nested", 1, 0, "c"],
+				["deep", 0, "a"],
+				["deep", 1, "a"],
+				["fns", 1, "note"],
+				["ns", "list", 0, "z"],
+				["ns", "inner", "x"],
+				["ns", "frozenInner", "y"]
+			]) {
+				expect({ keys, outcome: await api.probe.readPath(keys) }).toEqual({ keys, outcome: { error: "PERMISSION_DENIED" } });
+			}
+		});
+
+		it("an array the host freezes after a first read stays gated for a denied module", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.later.**"]) });
+			await api.store;
+			expect(api.store.later[0]).toEqual({ l: 1 });
+			Object.freeze(api.store.later);
+			expect(Object.isFrozen(api.store.later)).toBe(true);
+			const outcomes = await api.probe.readArray("later");
+			expect(leaked(outcomes, ['\\"l\\":1'])).toBe(false);
+			expect(await api.probe.readPath(["later", 0, "l"])).toEqual({ error: "PERMISSION_DENIED" });
+			expect(await api.probe.callPath(["later", 1])).toEqual({ error: "PERMISSION_DENIED" });
+		});
+
+		it("an allowed module reads every frozen array's values", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.**"]) });
+			expect(await api.friend.readArray("objs")).toEqual({
+				index: { value: JSON.stringify({ a: 1 }) },
+				spread: { value: JSON.stringify([{ a: 1 }, { b: 2 }]) },
+				map: { value: JSON.stringify([{ a: 1 }, { b: 2 }]) },
+				stringify: { value: JSON.stringify([{ a: 1 }, { b: 2 }]) }
+			});
+			expect(await api.friend.readPath(["deep", 0, "a"])).toEqual({ value: '"DEEP"' });
+			expect(await api.friend.readPath(["nested", 1, 0, "c"])).toEqual({ value: "3" });
+			expect(await api.friend.readPath(["ns", "list", 0, "z"])).toEqual({ value: "3" });
+			expect(await api.friend.callPath(["fns", 0])).toEqual({ value: '"F0"' });
+			expect(await api.friend.callPath(["fns", 1, "run"])).toEqual({ value: '"RUN"' });
+		});
+	});
+
+	describe("2. captured identity of a fixed member handed out", () => {
+		const RULES = denyProbe(["store.fns.**", "store.mfns.**", "store.deep.**", "store.ns.**"]);
+
+		it.each([
+			["fns[0]()", ["fns", 0], [], true, ["mfns", 0]],
+			["fns[1].run()", ["fns", 1], ["run"], true, ["mfns", 1]],
+			["fns[1].note", ["fns", 1], ["note"], false, ["mfns", 1]],
+			["fns[2].note (unfrozen object in a frozen array)", ["fns", 2], ["note"], false, ["mfns", 2]],
+			["deep[0].a", ["deep", 0], ["a"], false, null],
+			["ns.list[0].z", ["ns", "list"], [0, "z"], false, null]
+		])("a reference probe took to %s is refused when used outside any call", async (_label, at, keys, call, twin) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: RULES });
+			const { node } = await api.probe.give(at);
+			const outcome = hostUse(() => follow(node, keys, call));
+			if (twin) {
+				const { node: twinNode } = await api.probe.give(twin);
+				expect(hostUse(() => follow(twinNode, keys, call))).toBe("PERMISSION_DENIED");
+			}
+			expect(outcome).toBe("PERMISSION_DENIED");
+			const { node: friendNode } = await api.friend.give(at);
+			expect(hostUse(() => follow(friendNode, keys, call))).not.toBe("PERMISSION_DENIED");
+		});
+
+		it.each([
+			["fns[0]()", ["fns", 0], [], true],
+			["fns[1].note", ["fns", 1], ["note"], false],
+			["fns[2].note", ["fns", 2], ["note"], false],
+			["mfns[0]()", ["mfns", 0], [], true],
+			["mfns[1].note", ["mfns", 1], ["note"], false]
+		])("an element %s probe hands to friend keeps probe's floor", async (_label, at, keys, call) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: RULES });
+			const now = await api.probe.handTo("friend", "h", at, keys, call);
+			const later = await waitOutcome(api, "friend", "h");
+			expect(later?.error ?? "allowed").toBe("PERMISSION_DENIED");
+			if (!call) expect(now.error ?? "allowed").toBe("PERMISSION_DENIED");
+		});
+
+		it.each([
+			["fns", 0, [], true],
+			["fns", 1, ["run"], true],
+			["fns", 1, ["note"], false],
+			["deep", 0, ["a"], false]
+		])("a reference probe kept to %s[%s] is refused from a timer", async (name, index, keys, call) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: RULES });
+			await api.probe.keep("el", [name, index]);
+			await api.probe.useLater("el", keys, call);
+			expect(await waitOutcome(api, "probe", "el")).toEqual({ error: "PERMISSION_DENIED" });
+			await api.probe.keep("arr", [name]);
+			await api.probe.useLater("arr", [index, ...keys], call);
+			expect(await waitOutcome(api, "probe", "arr")).toEqual({ error: "PERMISSION_DENIED" });
+		});
+	});
+
+	describe("3. ordinary reads still work", () => {
+		it("every shape reads as plain JS through self with permissions on", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const all = (value) => ({
+				index: { value: JSON.stringify(value[0]) },
+				spread: { value: JSON.stringify(value) },
+				map: { value: JSON.stringify(value) },
+				stringify: { value: JSON.stringify(value) }
+			});
+			expect(await api.probe.readArray("prims")).toEqual(all([1, 2, 3]));
+			expect(await api.probe.readArray("objs")).toEqual(all([{ a: 1 }, { b: 2 }]));
+			expect(await api.probe.readArray("nested")).toEqual(all([[1, 2], [{ c: 3 }]]));
+			expect(await api.probe.readArray("sealed")).toEqual(all([{ s: 1 }, { s: 2 }]));
+			expect(await api.probe.readArray("deep")).toEqual(all([{ a: "DEEP" }, { a: "SOFT" }]));
+			expect(await api.probe.readPath(["nested", 1, 0, "c"])).toEqual({ value: "3" });
+			expect(await api.probe.readPath(["ns", "inner", "x"])).toEqual({ value: "1" });
+			expect(await api.probe.readPath(["ns", "frozenInner", "y"])).toEqual({ value: "2" });
+			expect(await api.probe.readPath(["ns", "list", 0, "z"])).toEqual({ value: "3" });
+			expect(await api.probe.callPath(["ns", "fn"])).toEqual({ value: '"NSFN"' });
+			expect(await api.probe.callPath(["fns", 0])).toEqual({ value: '"F0"' });
+			expect(await api.probe.callPath(["fns", 1, "run"])).toEqual({ value: '"RUN"' });
+			expect(await api.probe.callPath(["fns", 2, "run"])).toEqual({ value: '"RUN2"' });
+		});
+
+		it("an array frozen after a first read still reads as plain JS", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			expect((await api.probe.readArray("later")).index).toEqual({ value: JSON.stringify({ l: 1 }) });
+			Object.freeze(api.store.later);
+			const outcomes = await api.probe.readArray("later");
+			expect(outcomes.index).toEqual({ value: JSON.stringify({ l: 1 }) });
+			expect(outcomes.spread.value).toBe(JSON.stringify([{ l: 1 }, null]));
+			expect(await api.probe.callPath(["later", 1])).toEqual({ value: '"LATER"' });
+		});
+
+		it("a frozen array's element is the same object on every read", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const first = await api.probe.give(["objs", 0]);
+			const second = await api.probe.give(["objs", 0]);
+			expect(first.node).toBe(second.node);
+		});
+	});
+
+	describe("4. a kept function reports and behaves as the function does", () => {
+		const kinds = ["arrow", "method", "klass", "plain", "bound"];
+
+		it.each(kinds)("a kept %s reports its prototype as the node does", async (kind) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const node = api.store.kinds[kind];
+			const descriptor = Object.getOwnPropertyDescriptor(node, "prototype");
+			const expected = {
+				own: descriptor !== undefined,
+				writable: descriptor?.writable,
+				configurable: descriptor?.configurable,
+				has: "prototype" in node,
+				listed: Reflect.ownKeys(node).includes("prototype")
+			};
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.describeLater(kind, "prototype");
+			const outcome = await waitOutcome(api, "probe", kind);
+			expect(outcome).toEqual({ value: JSON.stringify(expected) });
+		});
+
+		it.each(["arrow", "method", "bound"])("a kept %s has no prototype, as the function has none", async (kind) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.describeLater(kind, "prototype");
+			const outcome = await waitOutcome(api, "probe", kind);
+			expect(outcome).toEqual({ value: JSON.stringify({ own: false, has: false, listed: false }) });
+		});
+
+		it.each([
+			["arrow", '"ARROW"'],
+			["method", '"METHOD"'],
+			["plain", '"PLAIN"'],
+			["bound", '"BOUND"']
+		])("a kept %s still calls", async (kind, result) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.useLater(kind, [], true);
+			expect(await waitOutcome(api, "probe", kind)).toEqual({ value: result });
+		});
+
+		it.each([
+			["klass", true],
+			["plain", true],
+			["bound", true],
+			["arrow", false],
+			["method", false]
+		])("a kept %s constructs exactly when the function does (%s)", async (kind, constructs) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(kind, ["kinds", kind]);
+			await api.probe.constructLater(kind);
+			const outcome = await waitOutcome(api, "probe", kind);
+			if (constructs) expect(outcome).toEqual({ value: '"object"' });
+			else expect(outcome.error).toMatch(/^TypeError: /);
+		});
+	});
+
+	describe("5. a module changing its own arrays, and views kept of them", () => {
+		it.each([
+			["mut", "freeze"],
+			["mut", "seal"],
+			["sealedMut", "freeze"]
+		])("the owner can close its own %s through self (%s)", async (name, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			expect(close === "freeze" ? Object.isFrozen(api.store[name]) : Object.isSealed(api.store[name])).toBe(true);
+		});
+
+		it.each([
+			["sealedSoft", undefined],
+			["mut", "seal"],
+			["mut", "preventExtensions"]
+		])("the owner can mark an element of its closed %s read-only (%s)", async (name, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			expect(await api.store.changeOwn(name, { close, readOnly: 1 })).toBe("done");
+			expect(Object.getOwnPropertyDescriptor(api.store[name], 1).writable).toBe(false);
+			expect(await api.store.changeOwn(name, { close: "freeze" })).toBe("done");
+		});
+
+		it.each([
+			["delete", { remove: 2 }, ["0", "1"], '[{"a":1},2,null]', 3],
+			["shrink", { set: ["length", 1] }, ["0"], '[{"a":1}]', 1]
+		])("a kept view of a closed array still enumerates after its owner's %s", async (_label, change, keys, json, length) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("arr", ["closedArr"]);
+			await api.probe.enumerateLater("arr", "2", "before");
+			expect((await waitOutcome(api, "probe", "before")).value).toBeTruthy();
+			expect(await api.store.changeOwn("closedArr", change)).toBe("done");
+			await api.probe.enumerateLater("arr", "2", "after");
+			const outcome = await waitOutcome(api, "probe", "after");
+			expect(outcome).toEqual({ value: JSON.stringify({ keys, has: false, json, length }) });
+		});
+
+		it("a kept view reads what the owner wrote before freezing", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("arr", ["sealedMut"]);
+			expect(await api.store.changeOwn("sealedMut", { set: [0, 9] })).toBe("done");
+			expect(await api.store.changeOwn("sealedMut", { close: "freeze" })).toBe("done");
+			await api.probe.useLater("arr", [0], false);
+			expect(await waitOutcome(api, "probe", "arr")).toEqual({ value: "9" });
+		});
+
+		it.each([["ns"], ["prims"], ["objs"], ["sealed"], ["mfns"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
+	});
+
+	describe("6. a closed node with a member the reader may not read", () => {
+		const denySecret = denyProbe(["store.dObj.secret", "store.dArr.0"]);
+
+		it.each([
+			["dObj", "n", "1", ["secret", "n", "inner"], { n: 1, inner: { x: 1 } }],
+			["dArr", "1", "1", ["0", "1", "2", "length"], null]
+		])("a kept view of %s still reads its other members after the owner freezes it", async (name, prop, read, keys, json) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denySecret });
+			await api.probe.keep(name, [name]);
+			expect(await api.store.changeOwn(name, { close: "freeze" })).toBe("done");
+			await api.probe.surveyLater(name, prop, "survey");
+			const survey = await waitOutcome(api, "probe", "survey");
+			expect(survey.read).toEqual({ value: read });
+			expect(survey.keys).toEqual({ value: JSON.stringify(keys) });
+			expect(survey.has).toEqual({ value: "true" });
+			expect(survey.extensible).toEqual({ value: "false" });
+			expect(JSON.stringify(survey)).not.toContain("S3CRET");
+			if (json) expect(survey.json).toEqual({ value: JSON.stringify(json) });
+		});
+
+		it.each([
+			["dObj", "secret", "freeze"],
+			["dArr", "0", "freeze"],
+			["dObj", "secret", undefined],
+			["dArr", "0", undefined]
+		])("the denied member of %s stays refused, every way, from a timer (%s, %s)", async (name, prop, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denySecret });
+			await api.probe.keep(name, [name]);
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			await api.probe.surveyLater(name, prop, "survey");
+			const survey = await waitOutcome(api, "probe", "survey");
+			expect(survey.read).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(survey)).not.toContain("S3CRET");
+		});
+
+		it("a hidden member the reader may not read stays hidden once the view closes", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.hArr.1", "store.hArr.extra"]) });
+			await api.probe.keep("h", ["hArr"]);
+			expect(await api.store.changeOwn("hArr", { close: "freeze" })).toBe("done");
+			// Closed inside a call first, then read from a timer.
+			await api.probe.touch("h");
+			await api.probe.keysLater("h", "after");
+			const outcome = await waitOutcome(api, "probe", "after");
+			const keys = Object.keys(api.store.hArr);
+			expect(keys).toEqual(["0", "2"]);
+			// Listing the keys may itself be refused for a reader denied some of them; where it answers, it lists only these.
+			if (outcome.value) expect(outcome).toEqual({ value: JSON.stringify({ keys, forIn: keys }) });
+			else expect(outcome).toEqual({ error: "PERMISSION_DENIED" });
+		});
+
+		it("a kept view of a closed node inspects as the node is now", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("iObj", ["iObj"]);
+			expect(await api.store.changeOwn("iObj", { close: "preventExtensions" })).toBe("done");
+			await api.probe.enumerateLater("iObj", "n", "closed");
+			expect((await waitOutcome(api, "probe", "closed")).value).toBeTruthy();
+			expect(await api.store.changeOwn("iObj", { getter: ["n", 3] })).toBe("done");
+			await api.probe.inspectLater("iObj");
+			const outcome = await waitOutcome(api, "probe", "iObj");
+			expect(outcome.value).toContain("[Getter]");
+		});
+	});
+
+	describe("7. serializing and describing what a module may not read", () => {
+		it.each([["sealedHid"], ["frozenHid"]])(
+			"a module's JSON of %s leaves out what it may not read, and leaves the owner's data as it was",
+			async (name) => {
+				api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe([`store.${name}.inner.hid`]) });
+				expect(await api.probe.serializeNow(name)).toEqual({ value: JSON.stringify({ inner: { x: 1 }, n: 1 }) });
+				expect((await api.store.ownInnerKeys())[name]).toEqual(["x", "hid"]);
+				expect(JSON.stringify(api.store[name])).toContain("S3CRET");
+			}
+		);
+
+		it.each([[undefined], ["freeze"]])("a kept node describes from a timer as it does in the call (closed: %s)", async (close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.dObj.secret"]) });
+			await api.probe.keep("o", ["dObj"]);
+			expect(await api.store.changeOwn("dObj", { close })).toBe("done");
+			const now = await api.probe.describeNow("dObj", "secret");
+			// An open node lists what the reader may read; a closed one must describe every member it holds, so listing
+			// its enumerable keys reaches the refused one and is refused.
+			expect(now.keys).toEqual(close ? { error: "PERMISSION_DENIED" } : { value: JSON.stringify(["n", "inner"]) });
+			expect(JSON.stringify(now)).not.toContain("S3CRET");
+			await api.probe.describeKeptLater("o", "secret", "later");
+			expect(await waitOutcome(api, "probe", "later")).toEqual(now);
+		});
+
+		it.each([["Point"], ["shapes"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
+
+		it.each([
+			["dObj", "secret", undefined],
+			["dObj", "secret", "freeze"],
+			["frozenHid", "inner", undefined]
+		])("a kept %s describes %s from a timer only as its reader may read it (closed: %s)", async (name, prop, close) => {
+			const deny = name === "frozenHid" ? ["store.frozenHid.inner.hid"] : ["store.dObj.secret"];
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(deny) });
+			await api.probe.keep(name, name === "frozenHid" ? [name, "inner"] : [name]);
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			await api.probe.descriptorLater(name, name === "frozenHid" ? "hid" : prop, "later");
+			const outcome = await waitOutcome(api, "probe", "later");
+			expect(JSON.stringify(outcome)).not.toContain("S3CRET");
+		});
+	});
+
+	describe("8. rules that change after a frozen node was first read", () => {
+		const locked = { caller: "probe.**", target: "store.ruled.2", effect: "deny", condition: { lock: true } };
+
+		it("an element refused once reads once it is allowed", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			const refused = await api.slothlet.context.run({ lock: true }, () => api.probe.readPath(["ruled", 2]));
+			expect(refused).toEqual({ error: "PERMISSION_DENIED" });
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
+			expect(await api.probe.describePath(["ruled"], 2)).toEqual({ value: '"S3CRET"' });
+		});
+
+		it("an element read once is refused, every way, once it is denied", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			expect(await api.probe.describePath(["ruled"], 2)).toEqual({ value: '"S3CRET"' });
+			const later = await api.slothlet.context.run({ lock: true }, async () => ({
+				read: await api.probe.readPath(["ruled", 2]),
+				descriptor: await api.probe.describePath(["ruled"], 2)
+			}));
+			expect(later.read).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(later)).not.toContain("S3CRET");
+		});
+
+		it("an element refused, then allowed by removing the rule, reads", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [] } });
+			const id = api.slothlet.permissions.addRule({ caller: "probe.**", target: "store.ruled.2", effect: "deny" });
+			expect(await api.probe.readPath(["ruled", 0])).toEqual({ value: "1" });
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ error: "PERMISSION_DENIED" });
+			api.slothlet.permissions.removeRule(id);
+			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
+		});
+	});
+
+	describe("9. a node handed to a module that may not read all of it", () => {
+		it.each([[undefined], ["freeze"]])("serializes for the module serializing it (closed: %s)", async (close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.dObj.secret"]) });
+			expect(await api.store.changeOwn("dObj", { close })).toBe("done");
+			const got = await api.friend.handToProbe("dObj");
+			expect(got.secret).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(got)).not.toContain("S3CRET");
+		});
+	});
+
+	describe("10. functions of every kind inspect as the node does", () => {
+		it.each([["asyncFn"], ["generatorFn"]])("a kept view of %s inspects as the node does", async (name) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep(name, [name]);
+			await api.probe.inspectLater(name);
+			const outcome = await waitOutcome(api, "probe", name);
+			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
+	});
+
+	describe("11. a closed node handed on, a node whose own traps read it, and a class's methods", () => {
+		const surveyHost = (node) => {
+			const first = Object.getOwnPropertyDescriptor(node, "0");
+			return {
+				keys: { value: JSON.stringify(Object.keys(node)) },
+				sealed: { value: JSON.stringify(Object.isSealed(node)) },
+				first: { value: JSON.stringify({ writable: first.writable, configurable: first.configurable, value: undefined }) }
+			};
+		};
+
+		it("a sealed array handed out by its reader describes as it does in the reader's call", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.sealedSecret.0"]) });
+			const inCall = await api.probe.closedSurveyNow("sealedSecret");
+			expect(JSON.stringify(inCall)).not.toContain("S3CRET");
+			const { node } = await api.probe.give(["sealedSecret"]);
+			const handed = {
+				keys: hostUse(() => Object.keys(node)),
+				sealed: hostUse(() => Object.isSealed(node)),
+				first: hostUse(() => {
+					const descriptor = Object.getOwnPropertyDescriptor(node, "0");
+					return { writable: descriptor.writable, configurable: descriptor.configurable, value: descriptor.value };
+				})
+			};
+			expect(handed).toEqual({
+				keys: JSON.stringify(["0", "1", "2"]),
+				sealed: "true",
+				first: JSON.stringify({ writable: true, configurable: false })
+			});
+			expect(surveyHost(api.store.sealedSecret).sealed).toEqual({ value: "true" });
+		});
+
+		it.each([[false], [true]])("a node whose own traps read it answers as it does otherwise (hooked: %s)", async (hooked) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denyProbe(["store.trapped.0"]) });
+			if (hooked) await api.probe.armTrapped();
+			expect(await api.probe.askTrapped()).toEqual({ has: { value: "false" }, keys: { value: JSON.stringify(["0", "1", "length"]) } });
+		});
+
+		it("a class shows the methods its prototype holds when hidden members are shown", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			const outcome = await api.probe.inspectHiddenNow(["kinds", "klass"]);
+			expect(outcome.value).toContain("[tag]");
+		});
+	});
+});
