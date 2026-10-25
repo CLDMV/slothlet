@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T09:51:16-07:00 (1792947076)
+ *	@Last modified time: 2026-10-25T11:38:54-07:00 (1792953534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		/**
 		 * Build an instance, mount what the case needs, keep the node, and use it from a timer.
-		 * @param {string} name - `obj` or `ns`.
+		 * @param {string} name - `obj`, `farr` or `ns`.
 		 * @param {string} runtime - `async` or `live`.
 		 * @returns {Promise<object>} What the uses gave.
 		 */
@@ -73,7 +73,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		it.each([
 			["plain data", "obj", { read: 1, keys: JSON.stringify(["n", "inner"]), json: 1, spread: 1 }],
-			["a namespace made callable after it was kept", "ns", { read: 3, keys: JSON.stringify(["n"]), spread: 3 }]
+			["a namespace made callable after it was kept", "ns", { read: 3, keys: JSON.stringify(["n"]), spread: 3 }],
+			["a frozen array", "farr", { read: 1, keys: JSON.stringify(["0", "1"]), json: 1, spread: 1 }]
 		])("%s answers in the live runtime as in the async one", async (_label, name, expected) => {
 			const reference = await useKept(name, "async");
 			expect(reference).toMatchObject(expected);

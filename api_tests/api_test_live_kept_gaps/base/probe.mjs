@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T09:50:12-07:00 (1792947012)
+ *	@Last modified time: 2026-10-25T11:37:46-07:00 (1792953466)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,12 +41,12 @@ function attempt(use) {
 
 /**
  * Keep `store.work`, and the node at `name`.
- * @param {string} name - `obj` (store.obj) or `ns` (mounts.ns).
+ * @param {string} name - `obj` (store.obj), `farr` (store.farr) or `ns` (mounts.ns).
  * @returns {string} The kept node's `typeof`.
  */
 export function keep(name) {
 	kept.work = self.store.work;
-	kept.node = name === "obj" ? self.store.obj : self.mounts.ns;
+	kept.node = name === "obj" ? self.store.obj : name === "farr" ? self.store.farr : self.mounts.ns;
 	return typeof kept.node;
 }
 
@@ -61,12 +61,12 @@ export async function useLater() {
 		kept.work();
 		const node = kept.node;
 		outcome = {
-			read: attempt(() => node.n),
+			read: attempt(() => (Array.isArray(node) ? node[0] : node.n)),
 			keys: attempt(() => Object.keys(node).filter((key) => !key.startsWith("__"))),
 			has: attempt(() => "n" in node),
-			descriptor: attempt(() => Object.getOwnPropertyDescriptor(node, "n")?.value),
-			json: attempt(() => JSON.parse(JSON.stringify(node)).n),
-			spread: attempt(() => ({ ...node }).n),
+			descriptor: attempt(() => Object.getOwnPropertyDescriptor(node, Array.isArray(node) ? "0" : "n")?.value),
+			json: attempt(() => (Array.isArray(node) ? JSON.parse(JSON.stringify(node))[0] : JSON.parse(JSON.stringify(node)).n)),
+			spread: attempt(() => (Array.isArray(node) ? [...node][0] : { ...node }.n)),
 			call: attempt(() => (typeof node.login === "function" ? node.login() : typeof node === "function" ? node() : "none"))
 		};
 	}, 0);
