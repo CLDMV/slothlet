@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:11:14-07:00 (1792887074)
+ *	@Last modified time: 2026-10-25T11:38:32-07:00 (1792953512)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -419,21 +419,6 @@ function runtime_dataKind(value) {
 	if (value === null || typeof value !== "object") return null;
 	for (const [kind, is] of DATA_KINDS) if (is(value)) return kind;
 	return null;
-}
-
-/**
- * Whether `fn` can be called with `new`, without calling it.
- * @param {Function} fn - A function.
- * @returns {boolean} Whether it is a constructor.
- * @private
- */
-function runtime_isConstructor(fn) {
-	try {
-		Reflect.construct(String, [], fn);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 /**
@@ -1283,19 +1268,22 @@ export function runtime_selfView(node, reader) {
 	let hasInstance = null;
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-	const view = new Proxy(node, {
-		get(target, prop) {
-			const value = Reflect.get(target, prop);
-			if (prop === Symbol.hasInstance && value === undefined && typeof target === "function") {
-				hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(target, "prototype"), instance);
+	// A view over a module's captured view stands over that view's shadow, which holds what the captured view has
+	// reported fixed: the engine checks this view's answers against it, never by asking the captured view again,
+	// which refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
+	const view = new Proxy(capturedViewShadows.get(node) ?? node, {
+		get(_, prop) {
+			const value = Reflect.get(node, prop);
+			if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
+				hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
 				return hasInstance;
 			}
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-			if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
+			if (isFixed(Reflect.getOwnPropertyDescriptor(node, prop))) return value;
 			return viewMember(prop, value);
 		},
-		getOwnPropertyDescriptor(target, prop) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+		getOwnPropertyDescriptor(_, prop) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(node, prop);
 			if (!descriptor || isFixed(descriptor)) return descriptor;
 			if (!("value" in descriptor)) {
 				// An accessor's functions are plain values the node holds; a fixed one is reported as it is. A node reports
@@ -1307,8 +1295,8 @@ export function runtime_selfView(node, reader) {
 			}
 			return { ...descriptor, value: viewMember(prop, descriptor.value) };
 		},
-		ownKeys(target) {
-			return Reflect.ownKeys(target);
+		ownKeys(_) {
+			return Reflect.ownKeys(node);
 		},
 		// A call reaches the node as one made on it would. The method runs as its own module: called on the
 		// node it was read from, it gets that module's view of the node as its receiver, the one it reads
@@ -1316,37 +1304,46 @@ export function runtime_selfView(node, reader) {
 		// argument reach it exactly as the caller passed them, so a method that keeps or returns them hands
 		// back what it was given, and nothing it is handed carries its module's standing. What it returns is
 		// viewed for the reader that called it. Construction never sees the view as the new target.
-		apply(target, thisArg, args) {
+		apply(_, thisArg, args) {
 			const ownThis = inner && runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
-			return runtime_selfViewResult(Reflect.apply(target, ownThis, args), reader);
+			return runtime_selfViewResult(Reflect.apply(node, ownThis, args), reader);
 		},
-		construct(target, args, newTarget) {
-			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+		construct(_, args, newTarget) {
+			return Reflect.construct(node, args, newTarget === view ? node : newTarget);
 		},
-		set(target, prop, value) {
+		set(_, prop, value) {
 			refuseWithoutStanding(prop);
-			return Reflect.set(target, prop, runtime_unwrapSelfView(value));
+			return Reflect.set(node, prop, runtime_unwrapSelfView(value));
 		},
-		defineProperty(target, prop, descriptor) {
+		defineProperty(_, prop, descriptor) {
 			refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
-			const defined = Reflect.defineProperty(target, prop, descriptor);
+			const defined = Reflect.defineProperty(node, prop, descriptor);
 			// The engine now reads the node's descriptor to check the definition (freezing a node through its view
 			// fixes each member): that read is no reader's, so the node answers it ungated.
-			if (defined && inner && target === inner.____slothletInternal.proxy) PENDING_INVARIANT_READ = { wrapper: inner, prop };
+			if (defined && inner && node === inner.____slothletInternal.proxy) PENDING_INVARIANT_READ = { wrapper: inner, prop };
 			return defined;
 		},
-		deleteProperty(target, prop) {
+		deleteProperty(_, prop) {
 			refuseWithoutStanding(prop);
-			return Reflect.deleteProperty(target, prop);
+			return Reflect.deleteProperty(node, prop);
 		},
-		setPrototypeOf(target, proto) {
+		setPrototypeOf(_, proto) {
 			refuseWithoutStanding(null);
-			return Reflect.setPrototypeOf(target, proto);
+			return Reflect.setPrototypeOf(node, proto);
 		},
-		preventExtensions(target) {
+		preventExtensions(_) {
 			refuseWithoutStanding(null);
-			return Reflect.preventExtensions(target);
+			return Reflect.preventExtensions(node);
+		},
+		has(_, prop) {
+			return Reflect.has(node, prop);
+		},
+		getPrototypeOf(_) {
+			return Reflect.getPrototypeOf(node);
+		},
+		isExtensible(_) {
+			return Reflect.isExtensible(node);
 		}
 	});
 	byReader.set(reader, view);
@@ -1944,6 +1941,61 @@ function runtime_assertOwnedWrite(wrapper, prop) {
 }
 
 /**
+ * The access a node a module kept is making into the node it stands for, while it makes it: that node, and the
+ * module the kept node reads for. Read once, by the check of that node it is making (see
+ * {@link resolveEnforcedCaller}).
+ * @type {{wrapper: object, reader: object}|null}
+ * @private
+ */
+let capturedAccess = null;
+
+/**
+ * The stand-ins a lazy node hands out for members it has not loaded yet (waiting proxies). A kept node never hands
+ * one its reader: a stand-in reads its node's members, running their code, before any gate (#661).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const STAND_INS = new WeakSet();
+
+/**
+ * Take the access a kept node is making into `wrapper`, if it is making one, so no other check can.
+ * @param {object} wrapper - The node being accessed.
+ * @returns {{wrapper: object, reader: object}|null} The access, or `null`.
+ * @private
+ *
+ * @example
+ * const kept = runtime_takeCapturedAccess(wrapper);
+ */
+function runtime_takeCapturedAccess(wrapper) {
+	if (capturedAccess?.wrapper !== wrapper) return null;
+	const kept = capturedAccess;
+	capturedAccess = null;
+	return kept;
+}
+
+/**
+ * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
+ * say who is accessing, the check of `wrapper` takes it as `reader`'s (#661).
+ * @param {object} wrapper - The node being accessed.
+ * @param {object} reader - The module the kept node reads for.
+ * @param {function(): *} access - The access.
+ * @returns {*} What the access gave.
+ * @private
+ *
+ * @example
+ * runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
+ */
+function runtime_accessAsKept(wrapper, reader, access) {
+	const previous = capturedAccess;
+	capturedAccess = { wrapper, reader };
+	try {
+		return access();
+	} finally {
+		capturedAccess = previous;
+	}
+}
+
+/**
  * Resolve the enforcing caller identity for a permission-gated call/read, failing closed on an
  * absent or forged caller inside an active context.
  *
@@ -1960,10 +2012,12 @@ function runtime_assertOwnedWrite(wrapper, prop) {
  * @param {{currentWrapper: object, context: object}|null} [ctxOverride] - Explicit caller context
  *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
  *   getContext() path.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into this
+ *   node, taken by the trap making the check (see {@link runtime_takeCapturedAccess}).
  * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ctx: object}}
  * @private
  */
-function resolveEnforcedCaller(wrapper, ctxOverride) {
+function resolveEnforcedCaller(wrapper, ctxOverride, kept = null) {
 	// Scope both the store and the caller lookup to THIS wrapper's instance. The context managers
 	// are singletons shared by every instance, so an outer instance mid-call (e.g. a leaf booting a
 	// second `slothlet()`) would otherwise be seen as this instance's caller and enforced against
@@ -1974,12 +2028,17 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
 	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
-	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
+	let identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
-	// module suspended and resuming in a file they share, with no frame to tell them apart (#512).
-	if (identity?.unresolved) return { verdict: "deny" };
+	// module suspended and resuming in a file they share, with no frame to tell them apart (#512). Only
+	// code no suspended call accounts for, reaching in through a node a module kept, is settled by it: the
+	// access is that module's, and no more than it may do (#661). A tie between calls stays refused.
+	if (identity?.unresolved) {
+		if (!kept || !identity.unaccounted) return { verdict: "deny" };
+		identity = { currentWrapper: kept.reader };
+	}
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
 		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
@@ -2026,14 +2085,14 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
  */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -2070,10 +2129,12 @@ function runtime_isTerminalData(value) {
  * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
  * @param {string} targetPath - Fully-qualified api path of the value being read.
  * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit caller context.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null) {
 	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -2085,7 +2146,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
 		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
-	const decision = resolveEnforcedCaller(wrapper, callerOverride);
+	const decision = resolveEnforcedCaller(wrapper, callerOverride, kept);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -2308,10 +2369,12 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
  *
  * @param {object} wrapper - Parent UnifiedWrapper being enumerated.
  * @param {string|symbol} prop - Property key being considered for disclosure.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @returns {boolean} True when the key must be withheld.
  * @private
  */
-function runtime_isReadRedacted(wrapper, prop) {
+function runtime_isReadRedacted(wrapper, prop, kept = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	const impl = wrapper.____slothletInternal?.impl;
@@ -2324,7 +2387,7 @@ function runtime_isReadRedacted(wrapper, prop) {
 		Object.getOwnPropertyDescriptor(wrapper, prop);
 	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	return !runtime_readGateDecision(wrapper, targetPath).allowed;
+	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept).allowed;
 }
 
 /**
@@ -2335,14 +2398,16 @@ function runtime_isReadRedacted(wrapper, prop) {
  * @param {object} wrapper - The node's wrapper.
  * @param {string|symbol} prop - The key.
  * @param {*} value - The value the target holds.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the caller may not read the member.
  * @private
  */
-function runtime_gateFixedValue(wrapper, prop, value) {
+function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 	const impl = wrapper.____slothletInternal.impl;
 	const isMember = Array.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
-	if (isMember) runtime_enforceReadGate(wrapper, prop, value);
+	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
 }
 
 /**
@@ -2351,14 +2416,51 @@ function runtime_gateFixedValue(wrapper, prop, value) {
  * @param {object} wrapper - The node's wrapper.
  * @param {string|symbol} prop - The key.
  * @param {PropertyDescriptor|undefined} descriptor - The target's own descriptor.
+ * @param {boolean} [asHeld=false] - Whether a view is asking for the member as it is held (see
+ *   {@link runtime_describeAsHeld}), which no reader's rules decide.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @throws {SlothletError} PERMISSION_DENIED for a read-only value the caller may not read.
  * @private
  */
-function runtime_fixedDescriptor(wrapper, prop, descriptor) {
+function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null) {
+	// A view mirroring this member onto its shadow asks for it as it is held (see runtime_describeAsHeld).
+	if (asHeld) return descriptor;
 	if (descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable)
-		runtime_gateFixedValue(wrapper, prop, descriptor.value);
+		runtime_gateFixedValue(wrapper, prop, descriptor.value, kept);
 	return descriptor;
+}
+
+/**
+ * The member a view is asking its node to describe as it is held, whoever reads it: that node and key, taken by
+ * the node's descriptor trap as it starts, before any code that read might run can make a read of its own.
+ * @type {{wrapper: object, prop: string|symbol}|null}
+ * @private
+ */
+let describingAsHeld = null;
+
+/**
+ * A node's descriptor of a member as the node holds it, for a view mirroring the member onto its shadow: a fixed
+ * member is described as it is fixed, whoever is reading. The view still gates every read it hands out; what its
+ * shadow holds only has to agree with what the node holds (#655).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} node - The node.
+ * @param {string|symbol} prop - The member.
+ * @returns {PropertyDescriptor|undefined} The descriptor.
+ * @private
+ *
+ * @example
+ * runtime_describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
+ */
+function runtime_describeAsHeld(wrapper, node, prop) {
+	const previous = describingAsHeld;
+	describingAsHeld = { wrapper, prop };
+	try {
+		return Reflect.getOwnPropertyDescriptor(node, prop);
+	} finally {
+		describingAsHeld = previous;
+	}
 }
 
 /**
@@ -2408,40 +2510,58 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
- * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
+ * The serializer behind each `toJSON` a node hands out, by that function: it takes the reader to redact for and the
+ * node to read arrays through, so a node a module kept serializes for that module wherever it is serialized.
+ * @type {WeakMap<Function, function(Array<{currentWrapper: object, context: object}|undefined>, object): *>}
+ * @private
+ */
+const SERIALIZERS = new WeakMap();
+
+/**
+ * A serialized snapshot of the wrapper tree with the terminal leaves the reader may not read left out.
  *
  * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
  * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
- * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
- * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
- * is ungated by design. An array in the snapshot is the module's own array (#602), which must not be
- * edited (#609): it is replaced by its api node, so `JSON.stringify` reads each element through the
- * node, gated as the value it reads at that moment, as `JSON.stringify` of the array member does (#603 review).
+ * every terminal value beneath a namespace it cannot read. The snapshot shares the module's own objects, so
+ * an object that loses a leaf, or holds an array, is copied rather than changed: serializing never edits a
+ * module's data, frozen or not. Plain objects are recursed into, as their traversal is ungated by design. An
+ * array in the snapshot is the module's own array (#602): the copy holds its api node instead, so
+ * `JSON.stringify` reads each element through the node, gated as the value it reads at that moment, as
+ * `JSON.stringify` of the array member does (#603 review).
  *
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
- * @param {*} data - Extracted snapshot, mutated in place.
+ * @param {*} data - Extracted snapshot; never changed.
  * @param {string} basePath - Api path corresponding to `data`.
  * @param {object} node - The api node corresponding to `data`.
  * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
  *   keys is redacted at each, and a cycle still stops.
- * @returns {void}
+ * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
+ *   the one reading now (a module serializing a node it kept, see {@link runtime_capturedView}).
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}), for the reader reading now.
+ * @returns {*} `data`, or a copy of it with what the reader may not read left out.
  * @private
  */
-function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
-	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
+function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
+	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return data;
 	seen.add(data);
+	let copy = null;
+	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
+	const own = () => (copy ??= Object.assign(Object.create(Object.getPrototypeOf(data)), data));
 	for (const key of Object.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
-			if (!runtime_readGateDecision(wrapper, targetPath).allowed) delete data[key];
+			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
 		} else if (Array.isArray(value)) {
-			data[key] = node[key];
+			own()[key] = node[key];
 		} else {
-			runtime_redactSerialized(wrapper, value, targetPath, node[key], seen);
+			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
+			if (redacted !== value) own()[key] = redacted;
 		}
 	}
 	seen.delete(data);
+	return copy ?? data;
 }
 
 /**
@@ -2482,10 +2602,12 @@ function runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false) {
+function enforcePermission(wrapper, callArgs, promote = false, kept = null) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
@@ -2495,7 +2617,7 @@ function enforcePermission(wrapper, callArgs, promote = false) {
 	const callMeta = { args: callArgs, target: targetPath };
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
-	const decision = resolveEnforcedCaller(wrapper);
+	const decision = resolveEnforcedCaller(wrapper, undefined, kept);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -2650,6 +2772,14 @@ const capturedViewChildren = new WeakMap();
 const capturedViewTargets = new WeakMap();
 
 /**
+ * The shadow each captured view ({@link runtime_capturedView}) stands over, so a view built over a captured view
+ * ({@link runtime_selfView}) can stand over it too.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const capturedViewShadows = new WeakMap();
+
+/**
  * Enforce a captured reader's access to a wrapper it is about to invoke.
  *
  * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
@@ -2714,6 +2844,55 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 }
 
 /**
+ * The members every function holds of its own, which an inspect snapshot of a function node takes from its stand-in.
+ * @type {Set<string>}
+ * @private
+ */
+const FUNCTION_OWN_KEYS = new Set(["name", "length", "prototype", "arguments", "caller"]);
+
+/**
+ * An empty function named as `fn` is: what `util.inspect` shows of a function, to hold the members a reader may read.
+ * @param {Function} fn - The function.
+ * @returns {Function} An empty function of the same name.
+ * @private
+ *
+ * @example
+ * runtime_namedFunction(function load() {}).name; // "load"
+ */
+function runtime_namedFunction(fn) {
+	const name = typeof fn.name === "string" ? fn.name : "";
+	// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
+	// a method) shows none.
+	if (/^class\b/.test(Function.prototype.toString.call(fn))) return { [name]: class {} }[name];
+	if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
+	if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
+	if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
+	if (!Object.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
+	return { [name]: function () {} }[name];
+}
+
+/**
+ * Whether a function can be called with `new`. Asked by constructing a proxy whose construct trap answers in its
+ * place: the proxy is constructible exactly when `fn` is, and nothing of `fn` is read or run to find out — not even
+ * a node's `prototype`, which a class holds fixed, so a proxy cannot answer for it.
+ * @param {Function} fn - The function.
+ * @returns {boolean} True when `fn` is a constructor.
+ * @private
+ *
+ * @example
+ * runtime_isConstructor(class {}); // true
+ * runtime_isConstructor(() => {}); // false
+ */
+function runtime_isConstructor(fn) {
+	try {
+		Reflect.construct(new Proxy(fn, { construct: () => ({}) }), []);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Build (or reuse) the view of a child wrapper that remembers who read it.
  *
  * Only `apply`, `construct`, and `get` are trapped; every other operation falls through to the child
@@ -2740,46 +2919,287 @@ function runtime_capturedView(child, capturedCaller) {
 	// deliberately invisible through the proxy, so resolve to the object behind it once, here, rather
 	// than reaching through the facade on every call.
 	const inner = resolveWrapper(child);
+	// What the view does to its child, made for the view's reader (#661) — only when the child is the node, or a proxy
+	// of it from before it became callable (#533), whose traps take the reader first; never a stand-in for a node not
+	// loaded yet, which runs its node's code before any gate.
+	const asKept = (access) => (STAND_INS.has(child) ? access() : runtime_accessAsKept(inner, capturedCaller, access));
 
-	const view = new Proxy(child, {
-		apply(target, thisArg, args) {
+	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
+	// frozen array's element) is checked by the engine against the view's own target, so it is mirrored onto the
+	// shadow as the view hands it out — a child node as its view — and the reader's identity goes with it too. A
+	// shadow of the same kind keeps the view callable, constructible, and an array where the child is; a function's
+	// shadow owns no `prototype`, so the view reports the child's own, or none where the child has none.
+	let shadow;
+	if (Array.isArray(child)) shadow = [];
+	else if (typeof child !== "function") shadow = {};
+	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
+	else shadow = () => {};
+	let view = null;
+	// `util.inspect` describes a proxy by its target, without its traps: the shadow describes what the reader can
+	// read of the child instead, member by member through the view, leaving out what it may not read.
+	const shown = () => {
+		// A function is shown by the name the module gave it, not the name of the api path it sits at.
+		const impl = inner.____slothletInternal.impl;
+		// An instance of a class keeps its class's prototype, so it shows as one; any other object shows as plain.
+		const proto = impl !== null && typeof impl === "object" ? Reflect.getPrototypeOf(impl) : null;
+		const out = Array.isArray(child)
+			? []
+			: typeof child === "function"
+				? runtime_namedFunction(typeof impl === "function" ? impl : child)
+				: proto !== null && proto !== Object.prototype
+					? Object.create(proto)
+					: {};
+		// A function's stand-in shows the methods its `prototype` holds, read through the view.
+		if (typeof out === "function" && out.prototype) {
+			try {
+				const proto = view.prototype;
+				if (proto !== null && typeof proto === "object") {
+					for (const key of Reflect.ownKeys(proto)) {
+						const descriptor = key === "constructor" ? undefined : Reflect.getOwnPropertyDescriptor(proto, key);
+						if (descriptor) Reflect.defineProperty(out.prototype, key, { ...descriptor, configurable: true });
+					}
+				}
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+			}
+		}
+		for (const key of asKept(() => Reflect.ownKeys(child))) {
+			// Symbol members are left out, as the node's own inspect leaves them, and so are a function's own
+			// `name`, `length` and `prototype`, which the stand-in has of its own.
+			if (typeof key === "symbol") continue;
+			if (typeof child === "function" && FUNCTION_OWN_KEYS.has(key)) continue;
+			if (key === util.inspect.custom || (Array.isArray(child) && key === "length")) continue;
+			try {
+				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
+				if (!descriptor) continue;
+				// An accessor is shown as one, read through the view only when inspect is asked to read getters; a hidden
+				// member stays hidden, shown only when inspect is asked for those.
+				const member =
+					"value" in descriptor
+						? { value: view[key], writable: true }
+						: { get: descriptor.get && (() => view[key]), set: descriptor.set && ((next) => (view[key] = next)) };
+				Reflect.defineProperty(out, key, { ...member, enumerable: descriptor.enumerable, configurable: true });
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+			}
+		}
+		return out;
+	};
+	Reflect.defineProperty(shadow, util.inspect.custom, {
+		value: (depth, options, inspect) => inspect(shown(), { ...options, depth }),
+		configurable: true
+	});
+	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
+	// view, anything else as it is.
+	const handOut = (prop, resolved) => {
+		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
+		// wrapper probes for properties that are not there — `then` above all — and every absent
+		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
+		// is answered by redaction, into a thrown read.
+		// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
+		// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
+		const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
+		// A node standing for a plain value (a leaf a descriptor hands out as its node) is read as that value; a lazy
+		// node not loaded yet holds no value of its own (`impl` is empty) and stays a node.
+		const leaf = resolved !== undefined && !runtime_isTerminalData(resolved) ? resolveWrapper(resolved) : null;
+		const leafValue = leaf?.____slothletInternal.impl;
+		const value = leafValue !== null && leafValue !== undefined && runtime_isTerminalData(leafValue) ? leafValue : resolved;
+		if (value !== undefined && isMember && runtime_isTerminalData(value)) {
+			// Terminal data read off a captured namespace: gate it against the module that captured
+			// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
+			const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			runtime_enforceReadGate(inner, prop, value, { currentWrapper: capturedCaller, context });
+			if (value === resolved) return resolved;
+		}
+		// The node's `toJSON` serializes as the module that kept the node, through this view, wherever it is called.
+		const serialize = typeof resolved === "function" ? SERIALIZERS.get(resolved) : undefined;
+		// It also serializes for whoever serializes it, as each read through the view is gated for both.
+		if (serialize) {
+			return () =>
+				serialize(
+					[{ currentWrapper: capturedCaller, context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null }, undefined],
+					view,
+					{ wrapper: inner, reader: capturedCaller }
+				);
+		}
+		if (resolveWrapper(resolved) === null) return resolved;
+		return runtime_capturedView(resolved, capturedCaller);
+	};
+	// The value the shadow holds for a fixed member: a child node as its view, anything else as it is. The read gate
+	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
+	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller));
+	// An array's `length` is its shape, not a member it holds: mirrored as it is, never refused.
+	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Array.isArray(child));
+	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
+	// holds, never an answer that depends on the reader or on when it read (rules change); each read through the view
+	// is gated as it is made.
+	const rawDescriptor = (key) => runtime_describeAsHeld(inner, child, key);
+	// Whether the reader may read a member now.
+	const readable = (key) => {
+		try {
+			const descriptor = asKept(() => Reflect.getOwnPropertyDescriptor(child, key));
+			if (isMemberRead(key, descriptor)) handOut(key, descriptor.value);
+			return true;
+		} catch (error) {
+			if (error?.code === "PERMISSION_DENIED") return false;
+			throw error;
+		}
+	};
+	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there. A
+	// member read for the reader is read as the reader may read it (the read gate, as for a plain read); one mirrored
+	// after the reader's own write is mirrored as the write left it.
+	const mirror = (prop, asRead = true) => {
+		// A closed shadow's inspect hook is its own, whatever the child holds at that key: the engine checks the view
+		// against the shadow, and the child's hook would describe the child unchecked.
+		if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.getOwnPropertyDescriptor(shadow, prop);
+		const descriptor = asRead ? asKept(() => Reflect.getOwnPropertyDescriptor(child, prop)) : rawDescriptor(prop);
+		if (asRead && isMemberRead(prop, descriptor)) handOut(prop, descriptor.value);
+		if (!descriptor) {
+			const stale = prop === util.inspect.custom ? undefined : Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (stale && stale.configurable) Reflect.deleteProperty(shadow, prop);
+			return undefined;
+		}
+		if (descriptor.configurable && Reflect.isExtensible(shadow)) return descriptor;
+		// The inspect hook a closed shadow keeps for the child's own describes the child as it is now.
+		if (prop === util.inspect.custom && descriptor.configurable) return descriptor;
+		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+		// A fixed member keeps what it holds; one the child can still write is refreshed with its value now.
+		if (held && !held.configurable && !("value" in held && held.writable)) return held;
+		const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+		Reflect.defineProperty(shadow, prop, shown);
+		return shown;
+	};
+	// A child closed to extension is mirrored whole, the shadow closed with it, as the engine checks a proxy's answers
+	// about a non-extensible target against that target.
+	const mirrorClosed = () => {
+		if (Reflect.isExtensible(child) || !Reflect.isExtensible(shadow)) return;
+		// Closed, the shadow holds the child's members and keeps its inspect hook, which the view lists as well: the
+		// shadow holds what the module holds, so `util.inspect` must never describe it directly.
+		const keys = asKept(() => Reflect.ownKeys(child));
+		for (const key of keys) {
+			// What the module holds, for every member: one the reader may not read is still refused when it is read.
+			if (key === util.inspect.custom) continue;
+			const descriptor = rawDescriptor(key);
+			const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+			Reflect.defineProperty(shadow, key, shown);
+		}
+		// The hook is fixed with the shadow, so closing the view member by member (as `Object.freeze` does) finds it fixed.
+		Reflect.defineProperty(shadow, util.inspect.custom, { configurable: false, writable: false });
+		Reflect.setPrototypeOf(shadow, Reflect.getPrototypeOf(child));
+		Reflect.preventExtensions(shadow);
+	};
+	// A closed shadow lists exactly what the child has: a member the child has since lost — deleted, or cut off by a
+	// shorter length — goes from the shadow too.
+	const pruneClosed = () => {
+		if (Reflect.isExtensible(shadow)) return;
+		for (const key of Reflect.ownKeys(shadow)) {
+			if (key !== util.inspect.custom && !rawDescriptor(key)) Reflect.deleteProperty(shadow, key);
+		}
+	};
+
+	view = new Proxy(shadow, {
+		apply(_, thisArg, args) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
-			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(target, thisArg, args));
-			return Reflect.apply(target, thisArg, args);
+			const call = () => asKept(() => Reflect.apply(child, thisArg, args));
+			if (pending) return runtime_runAfterPrincipalGate(inner, pending, call);
+			return call();
 		},
-		construct(target, args, newTarget) {
+		construct(_, args, newTarget) {
 			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
 		},
-		get(target, prop) {
-			const resolved = Reflect.get(target, prop);
-			// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
-			// wrapper probes for properties that are not there — `then` above all — and every absent
-			// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
-			// is answered by redaction, into a thrown read.
-			// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
-			// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
-			const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
-			if (resolved !== undefined && isMember && runtime_isTerminalData(resolved)) {
-				// Terminal data read off a captured namespace: gate it against the module that captured
-				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
-				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
-				return resolved;
+		get(_, prop, receiver) {
+			mirrorClosed();
+			if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.get(shadow, prop);
+			const descriptor = rawDescriptor(prop);
+			if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
+				// Read through the child, so its own read rules run, then gated against the reader; what is handed out
+				// is what the shadow holds, as the engine requires.
+				handOut(
+					prop,
+					asKept(() => Reflect.get(child, prop, child))
+				);
+				return mirror(prop).value;
 			}
-			if (resolveWrapper(resolved) === null) return resolved;
-			return runtime_capturedView(resolved, capturedCaller);
+			return handOut(
+				prop,
+				asKept(() => Reflect.get(child, prop, receiver === view ? child : receiver))
+			);
+		},
+		getOwnPropertyDescriptor(_, prop) {
+			mirrorClosed();
+			try {
+				return mirror(prop);
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+				// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
+				// describe every member it holds: one it may still change is described with its value withheld, as the
+				// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
+				const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+				if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
+				if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
+				throw error;
+			}
+		},
+		has(_, prop) {
+			mirrorClosed();
+			pruneClosed();
+			// `in` decides no read: it is asked as it is, never for the view's reader, so code the node runs to answer
+			// (a Proxy among its prototypes) has no reader to take (#661).
+			return Reflect.has(child, prop);
+		},
+		ownKeys() {
+			mirrorClosed();
+			pruneClosed();
+			const keys = asKept(() => Reflect.ownKeys(child));
+			// An open view lists what its reader may read, as it is listed in a call; a closed one lists every member,
+			// as the engine requires, and refuses those the reader may not read when they are read, and its inspect hook.
+			if (!Reflect.isExtensible(shadow)) return keys.includes(util.inspect.custom) ? keys : [...keys, util.inspect.custom];
+			return keys.filter((key) => readable(key) || Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable === false);
+		},
+		getPrototypeOf() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow) ? Reflect.getPrototypeOf(child) : Reflect.getPrototypeOf(shadow);
+		},
+		isExtensible() {
+			mirrorClosed();
+			return Reflect.isExtensible(shadow);
+		},
+		set(_, prop, value, receiver) {
+			return Reflect.set(child, prop, value, receiver === view ? child : receiver);
+		},
+		defineProperty(_, prop, descriptor) {
+			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
+			// A member made fixed, or made read-only where the shadow already holds it fixed, is mirrored as it is now.
+			mirror(prop, false);
+			return true;
+		},
+		deleteProperty(_, prop) {
+			if (!Reflect.deleteProperty(child, prop)) return false;
+			mirror(prop, false);
+			return true;
+		},
+		setPrototypeOf(_, proto) {
+			if (!Reflect.setPrototypeOf(child, proto)) return false;
+			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === proto;
+			return true;
+		},
+		preventExtensions() {
+			if (!Reflect.preventExtensions(child)) return false;
+			mirrorClosed();
+			return true;
 		}
 	});
 
 	byChild.set(child, view);
 	capturedViewChildren.set(view, inner);
 	capturedViewTargets.set(view, child);
+	capturedViewShadows.set(view, shadow);
 	return view;
 }
 
@@ -6308,6 +6728,9 @@ export class UnifiedWrapper extends ComponentBase {
 				return Reflect.preventExtensions(target);
 			},
 			get(___target, prop) {
+				// A stand-in is no node of its own: a kept node's access offered to it is dropped, before any code its
+				// read runs (a getter of the node it stands for) could take it (#661).
+				runtime_takeCapturedAccess(wrapper);
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
@@ -6822,6 +7245,8 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 
 			async apply(___target, ___thisArg, args) {
+				// As get: a kept node's access offered to a stand-in is dropped first (#661).
+				runtime_takeCapturedAccess(wrapper);
 				// Capture caller context synchronously before any await.
 				// In LAZY_LIVE mode, the outer runInContext's finally block restores
 				// context before this Promise settles, losing caller identity.
@@ -7146,6 +7571,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
 		// worked on waiting proxies before step 2 blocked the property on regular proxies.
 		_proxyRegistry.set(waitingProxy, wrapper);
+		STAND_INS.add(waitingProxy);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
 		cache.set(cacheKey, waitingProxy);
@@ -7224,10 +7650,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver) => {
+			// A node a module kept, reading through this one, says who it reads for: taken first, before any code this
+			// read runs (a getter, a Proxy's trap) could take it, and handed to this read's own gate (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
-			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue);
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept);
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
@@ -7255,7 +7684,7 @@ export class UnifiedWrapper extends ComponentBase {
 						return wrapper[prop];
 					}
 					const fixedValue = target[prop];
-					runtime_gateFixedValue(wrapper, prop, fixedValue);
+					runtime_gateFixedValue(wrapper, prop, fixedValue, kept);
 					return fixedValue;
 				}
 			}
@@ -7618,7 +8047,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl.toJSON === "function") {
 					return impl.toJSON.bind(impl);
 				}
-				return () => {
+				// The snapshot for the given readers (`undefined` for whoever is reading now), read through `node`: a
+				// module's kept node serializes for that module and for the module serializing it.
+				const serialize = (readers, node, kept = null) => {
 					const data = UnifiedWrapper._extractFullImpl(wrapper);
 					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
 					// paths — for lazy folder leaves) that must never leak into serialization output.
@@ -7630,16 +8061,25 @@ export class UnifiedWrapper extends ComponentBase {
 					// gate on getTrap. Strip leaves this caller may not read before handing it over.
 					const pm = wrapper.slothlet.handlers?.permissionManager;
 					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
-						runtime_redactSerialized(
-							wrapper,
-							data,
-							wrapper.____slothletInternal.apiPath,
-							wrapper.____slothletInternal.proxy,
-							new WeakSet()
-						);
+						let redacted = data;
+						for (const reader of readers) {
+							redacted = runtime_redactSerialized(
+								wrapper,
+								redacted,
+								wrapper.____slothletInternal.apiPath,
+								node,
+								new WeakSet(),
+								reader,
+								kept
+							);
+						}
+						return redacted;
 					}
 					return data;
 				};
+				const toJSON = () => serialize([undefined], wrapper.____slothletInternal.proxy);
+				SERIALIZERS.set(toJSON, serialize);
+				return toJSON;
 			}
 
 			if (wrapper.____slothletInternal.invalid) {
@@ -7992,6 +8432,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args, ___gatePassed = false) => {
+			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
+			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -8049,7 +8492,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// on the synchronous path. `___gatePassed` is only ever set by that re-entry (the Proxy invokes this
 			// trap with three arguments).
 			if (!___gatePassed) {
-				const ___principalGate = enforcePermission(wrapper, args, true);
+				const ___principalGate = enforcePermission(wrapper, args, true, kept);
 				if (___principalGate) {
 					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true));
 				}
@@ -8455,6 +8898,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Checks for properties on impl, target (wrapper), filtering internals.
 		 */
 		const hasTrap = (target, prop) => {
+			// `in` gates nothing: an access a kept node offers here is dropped first, before any code the answer runs
+			// (a Proxy among the impl's prototypes) could take it (#661).
+			runtime_takeCapturedAccess(wrapper);
 			if (prop === "_materialize") {
 				return true;
 			}
@@ -8512,6 +8958,17 @@ export class UnifiedWrapper extends ComponentBase {
 		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
 			// The engine's check of a definition a view just made reads the node's fixed members ungated (#625).
 			const engineCheck = runtime_takeInvariantRead(wrapper, prop);
+			// A node a module kept, describing a member through this one, says who it reads for: taken first, before
+			// any code this description runs could take it, and handed to every gate it makes (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
+			// What this description reads through the node itself, read for that reader too.
+			const readNode = () =>
+				kept
+					? runtime_accessAsKept(wrapper, kept.reader, () => wrapper.____slothletInternal.proxy[prop])
+					: wrapper.____slothletInternal.proxy[prop];
+			// A view asking for this member as it is held (runtime_describeAsHeld): taken now, for this read only.
+			const asHeld = describingAsHeld?.wrapper === wrapper && describingAsHeld.prop === prop;
+			if (asHeld) describingAsHeld = null;
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -8556,13 +9013,13 @@ export class UnifiedWrapper extends ComponentBase {
 				if (sealed && "value" in sealed && sealed.writable && prop !== "length") {
 					// A value the caller may not read is withheld, as the invariants allow for a writable member: the key
 					// must still be described, and sealing or freezing the node needs only its attributes.
-					if (redact && runtime_isReadRedacted(wrapper, prop)) return { ...sealed, value: undefined };
-					return { ...sealed, value: wrapper.____slothletInternal.proxy[prop] };
+					if (redact && runtime_isReadRedacted(wrapper, prop, kept)) return { ...sealed, value: undefined };
+					return { ...sealed, value: readNode() };
 				}
 				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
 					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
-				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed);
+				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed, asHeld, kept);
 			}
 
 			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
@@ -8574,14 +9031,14 @@ export class UnifiedWrapper extends ComponentBase {
 			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
 				// An element a caller may not read is not described to it, as ownKeys leaves it out (#609); one
 				// fixed on the shell must still be described, with its value withheld.
-				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop);
+				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 				// An object element is described by its api node, not the module's object: reading the node is the read
 				// the permission rules see, where the raw object would hand every leaf under it to any caller.
 				const readThroughNode = (value) =>
-					value !== null && (typeof value === "object" || typeof value === "function") ? wrapper.____slothletInternal.proxy[prop] : value;
+					value !== null && (typeof value === "object" || typeof value === "function") ? readNode() : value;
 				if (fixed && !fixed.configurable) {
-					if (!fixed.writable) return engineCheck ? fixed : runtime_fixedDescriptor(wrapper, prop, fixed);
+					if (!fixed.writable) return engineCheck ? fixed : runtime_fixedDescriptor(wrapper, prop, fixed, asHeld, kept);
 					return { ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
 				}
 				if (withheld) return undefined;
@@ -8609,7 +9066,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
 			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
-			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop)) {
+			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept)) {
 				return undefined;
 			}
 
@@ -8669,6 +9126,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Returns property keys from target (wrapper), impl, filtering internals.
 		 */
 		const ownKeysTrap = (target, redact = true) => {
+			// A node a module kept, listing this one's members, says who it reads for: taken first, and handed to every
+			// gate the listing makes (#661).
+			const kept = runtime_takeCapturedAccess(wrapper);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -8701,7 +9161,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (!runtime_isArrayIndex(key) && Object.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
 				}
 				for (const key of keys) {
-					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
 				}
 				return Array.from(keys);
 			}
@@ -8761,7 +9221,7 @@ export class UnifiedWrapper extends ComponentBase {
 				for (const key of keys) {
 					const targetDesc = Object.getOwnPropertyDescriptor(target, key);
 					if (targetDesc && !targetDesc.configurable) continue;
-					if (runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+					if (runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
 				}
 			}
 
@@ -9228,6 +9688,8 @@ export class UnifiedWrapper extends ComponentBase {
 		 * console.log(instance.x); // 42
 		 */
 		const constructTrap = (target, args, newTarget) => {
+			// As applyTrap: a kept node's access, taken before any code this construction runs.
+			const kept = runtime_takeCapturedAccess(wrapper);
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -9237,7 +9699,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Permission enforcement parity with applyTrap: gate `new proxy(args)` the same
 			// way function calls are gated, before any materialization or construction.
 			// Constructor args are threaded for resource-scoped conditions (#455).
-			enforcePermission(wrapper, args);
+			enforcePermission(wrapper, args, false, kept);
 
 			// Lazy mode: start materialization if not already in flight.
 			// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.

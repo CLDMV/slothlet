@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:19-07:00 (1792210759)
+ *	@Last modified time: 2026-10-25T00:53:13-07:00 (1792914793)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,15 @@ import { instanceCommonJSFiles, instanceCommonJSVersion, instanceImporters } fro
  * @private
  */
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
+
+/**
+ * Stack resolution found the running code placed in an instance's files while no suspended call accounts for any
+ * of it — a module's callback from a boundary slothlet does not patch, run while another call is suspended. Refused
+ * like {@link AMBIGUOUS}; reported apart from it so a node a module kept can still answer for its own reader (#661).
+ * @type {symbol}
+ * @private
+ */
+const UNACCOUNTED = Symbol("slothlet.callerIdentity.unaccounted");
 
 /**
  * Marks a call pinned to the host (`runInContext(..., asHost)`, from `lockCaller.caller()` when the
@@ -649,7 +658,7 @@ export class LiveContextManager {
 		const resolved = this.#resolveSuspendedFromStack(candidates);
 		// Code several instances' calls account for could be any of them: the field would pick one of them at
 		// random, so no instance is active and the access is refused.
-		if (resolved === AMBIGUOUS) return families.size > 1 ? null : raw;
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return families.size > 1 ? null : raw;
 		if (!resolved) return raw;
 		// The field names a run()/scope() store of the resolved instance: that flow's own store wins.
 		if (resolved.family === rawFamily && raw !== rawFamily) return raw;
@@ -752,7 +761,7 @@ export class LiveContextManager {
 	 *   transiently overwrote the global while this instance's own call is parked at an `await` (its
 	 *   store still holds the in-flight caller → resolved and enforced). Scoping the store keeps both
 	 *   correct; a bare `currentInstanceID` read conflates them (#290). Omit for the legacy behavior.
-	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
+	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean, unaccounted?: boolean}|undefined}
 	 *   Identity for the executing call, or undefined when there is no active context.
 	 * @public
 	 */
@@ -768,7 +777,7 @@ export class LiveContextManager {
 	 * behind {@link LiveContextManager#getCallerIdentity}, for a store already in hand.
 	 *
 	 * @param {object} store - Instance context store.
-	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}} Identity for the executing call.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean, unaccounted?: boolean}} Identity for the executing call.
 	 * @private
 	 */
 	#identityFor(store) {
@@ -812,6 +821,11 @@ export class LiveContextManager {
 		if (resolved === AMBIGUOUS) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 		}
+		// Code no suspended call accounts for is refused the same way, and says so: a node a module kept, which knows
+		// that module, answers for it (#661), where a tie between calls stays refused.
+		if (resolved === UNACCOUNTED) {
+			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
+		}
 		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: resolved.callerWrapper };
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
@@ -850,7 +864,7 @@ export class LiveContextManager {
 		}
 		if (suspended.size === 0) return { wrapper: this.#baselineFor(store), inFlight };
 		const resolved = this.#resolveSuspendedFromStack(suspended);
-		if (resolved === AMBIGUOUS) return { wrapper: null, inFlight, ambiguous: true };
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return { wrapper: null, inFlight, ambiguous: true };
 		return { wrapper: resolved ? resolved.currentWrapper : null, inFlight };
 	}
 
@@ -1074,7 +1088,7 @@ export class LiveContextManager {
 			let agreed = null;
 			for (const { matches } of running) {
 				agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
-				if (!agreed.length) return AMBIGUOUS;
+				if (!agreed.length) return running.every((placed) => !placed.matches.length) ? UNACCOUNTED : AMBIGUOUS;
 			}
 			if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
 			// Different functions of one file: a frame in a candidate's own file names the function as well.

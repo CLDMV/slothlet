@@ -116,7 +116,7 @@ export class LiveContextManager {
      *   transiently overwrote the global while this instance's own call is parked at an `await` (its
      *   store still holds the in-flight caller → resolved and enforced). Scoping the store keeps both
      *   correct; a bare `currentInstanceID` read conflates them (#290). Omit for the legacy behavior.
-     * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
+     * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean, unaccounted?: boolean}|undefined}
      *   Identity for the executing call, or undefined when there is no active context.
      * @public
      */
@@ -124,6 +124,7 @@ export class LiveContextManager {
         currentWrapper: object | null;
         callerWrapper: object;
         unresolved?: boolean;
+        unaccounted?: boolean;
     } | undefined;
     /**
      * Register the EventEmitter context checker
