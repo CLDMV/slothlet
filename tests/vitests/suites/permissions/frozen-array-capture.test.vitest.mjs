@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T18:29:13-07:00 (1792891753)
+ *	@Last modified time: 2026-10-24T19:24:52-07:00 (1792895092)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -382,6 +382,54 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			await api.probe.inspectLater(name);
 			const outcome = await waitOutcome(api, "probe", name);
 			expect(outcome).toEqual({ value: JSON.stringify(util.inspect(api.store[name])) });
+		});
+	});
+
+	describe("6. a closed node with a member the reader may not read", () => {
+		const denySecret = denyProbe(["store.dObj.secret", "store.dArr.0"]);
+
+		it.each([
+			["dObj", "n", "1", ["secret", "n", "inner"], { n: 1, inner: { x: 1 } }],
+			["dArr", "1", "1", ["0", "1", "2", "length"], null]
+		])("a kept view of %s still reads its other members after the owner freezes it", async (name, prop, read, keys, json) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denySecret });
+			await api.probe.keep(name, [name]);
+			expect(await api.store.changeOwn(name, { close: "freeze" })).toBe("done");
+			await api.probe.surveyLater(name, prop, "survey");
+			const survey = await waitOutcome(api, "probe", "survey");
+			expect(survey.read).toEqual({ value: read });
+			expect(survey.keys).toEqual({ value: JSON.stringify(keys) });
+			expect(survey.has).toEqual({ value: "true" });
+			expect(survey.extensible).toEqual({ value: "false" });
+			expect(JSON.stringify(survey)).not.toContain("S3CRET");
+			if (json) expect(survey.json).toEqual({ value: JSON.stringify(json) });
+		});
+
+		it.each([
+			["dObj", "secret", "freeze"],
+			["dArr", "0", "freeze"],
+			["dObj", "secret", undefined],
+			["dArr", "0", undefined]
+		])("the denied member of %s stays refused, every way, from a timer (%s, %s)", async (name, prop, close) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: denySecret });
+			await api.probe.keep(name, [name]);
+			expect(await api.store.changeOwn(name, { close })).toBe("done");
+			await api.probe.surveyLater(name, prop, "survey");
+			const survey = await waitOutcome(api, "probe", "survey");
+			expect(survey.read).toEqual({ error: "PERMISSION_DENIED" });
+			expect(JSON.stringify(survey)).not.toContain("S3CRET");
+		});
+
+		it("a kept view of a closed node inspects as the node is now", async () => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			await api.probe.keep("iObj", ["iObj"]);
+			expect(await api.store.changeOwn("iObj", { close: "preventExtensions" })).toBe("done");
+			await api.probe.enumerateLater("iObj", "n", "closed");
+			expect((await waitOutcome(api, "probe", "closed")).value).toBeTruthy();
+			expect(await api.store.changeOwn("iObj", { getter: ["n", 3] })).toBe("done");
+			await api.probe.inspectLater("iObj");
+			const outcome = await waitOutcome(api, "probe", "iObj");
+			expect(outcome.value).toContain("[Getter]");
 		});
 	});
 });

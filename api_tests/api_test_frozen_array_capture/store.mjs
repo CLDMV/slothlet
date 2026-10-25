@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T18:28:05-07:00 (1792891685)
+ *	@Last modified time: 2026-10-24T19:23:29-07:00 (1792895009)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,11 +85,20 @@ export const sealedSoft = Object.seal([{ a: 1 }, 2]);
 /** @type {Array<*>} An array closed to extension, whose members the module deletes. */
 export const closedArr = Object.preventExtensions([{ a: 1 }, 2, 3]);
 
+/** @type {object} An object one module may read all of but `secret`. */
+export const dObj = { secret: "S3CRET", n: 1, inner: { x: 1 } };
+
+/** @type {Array<*>} An array one module may read all of but its first element. */
+export const dArr = ["S3CRET", 1, { x: 1 }];
+
+/** @type {object} An object the module closes, then changes. */
+export const iObj = { n: 1, m: 1 };
+
 /**
- * Change this module's own member through `self`: write an element, delete one, seal, freeze or close it, or mark
- * an element read-only.
+ * Change this module's own member through `self`: write an element, delete one, seal, freeze or close it, mark an
+ * element read-only, or turn a member into a getter.
  * @param {string} name - The member.
- * @param {{set?: [number, *], remove?: number, close?: "seal"|"freeze"|"preventExtensions", readOnly?: number}} change - What to do.
+ * @param {{set?: [number, *], remove?: number, close?: "seal"|"freeze"|"preventExtensions", readOnly?: number, getter?: [string, *]}} change - What to do.
  * @returns {string} "done", or what the change threw or refused.
  */
 export function changeOwn(name, change) {
@@ -101,6 +110,9 @@ export function changeOwn(name, change) {
 		if (change.close === "preventExtensions") Object.preventExtensions(self.store[name]);
 		if (change.readOnly !== undefined && !Reflect.defineProperty(self.store[name], change.readOnly, { writable: false }))
 			return "NOT_DEFINED";
+		if (change.getter && !Reflect.defineProperty(self.store[name], change.getter[0], { get: () => change.getter[1], enumerable: true })) {
+			return "NOT_DEFINED";
+		}
 		return "done";
 	} catch (error) {
 		return error.code ?? `${error.name}: ${error.message}`;

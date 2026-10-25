@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T18:28:05-07:00 (1792891685)
+ *	@Last modified time: 2026-10-24T19:23:28-07:00 (1792895008)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -224,6 +224,31 @@ export async function enumerateLater(id, prop, as = id) {
 			json: JSON.stringify(kept[id]),
 			length: kept[id].length
 		}));
+	}, 0);
+	return "armed";
+}
+
+/**
+ * From a timer slothlet does not patch, survey a kept reference: read `prop`, its own keys, whether it has `prop`,
+ * whether it is extensible, its prototype, and its JSON.
+ * @param {string} id - The kept reference.
+ * @param {string} prop - The member to read.
+ * @param {string} as - The id to record the outcome under.
+ * @returns {Promise<string>} "armed".
+ */
+export async function surveyLater(id, prop, as) {
+	const timers = await import("node:timers");
+	outcomes[as] = null;
+	timers.setTimeout(() => {
+		const view = kept[id];
+		outcomes[as] = {
+			read: attempt(() => view[prop]),
+			keys: attempt(() => Reflect.ownKeys(view).filter((key) => typeof key === "string")),
+			has: attempt(() => prop in view),
+			extensible: attempt(() => Object.isExtensible(view)),
+			proto: attempt(() => Object.getPrototypeOf(view) === null),
+			json: attempt(() => JSON.parse(JSON.stringify(view)))
+		};
 	}, 0);
 	return "armed";
 }
