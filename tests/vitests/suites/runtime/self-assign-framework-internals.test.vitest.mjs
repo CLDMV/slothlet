@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
+ *	@Last modified time: 2026-10-26T16:16:14-07:00 (1793056574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -177,8 +177,11 @@ describe.each(CONFIGS)(
 			api = null;
 		});
 
-		it("lets a module change them as it may change any member: nothing decides writes", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+		it.each([
+			["keeps a module off them: the built-in write rules stay with the system off", {}, "PERMISSION_DENIED"],
+			["lets a module change them with the system disabled", { permissions: { mode: "disabled" } }, "done"]
+		])("%s", async (_label, options, outcome) => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
 			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { moduleID: "intruder" });
 			await api.victim.v.hello();
@@ -192,11 +195,12 @@ describe.each(CONFIGS)(
 							apiPath,
 							key,
 							change,
-							outcome: "done"
+							outcome
 						});
 					}
 				}
-				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).not.toEqual({ apiPath, after: before });
+				if (outcome === "done") expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).not.toEqual({ apiPath, after: before });
+				else expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
 			}
 			// The framework's own handle on the node is not one of the keys a module reaches.
 			expect(await api.victim.v.hello()).toBe("victim");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T11:41:13-07:00 (1793040073)
+ *	@Last modified time: 2026-10-26T16:15:01-07:00 (1793056501)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1421,8 +1421,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 /**
  * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
- * view of it as outside the scope ({@link runtime_selfFrameworkView}); a copy of a member of the permission
- * system's namespace is recorded as one too. Anything else is left unrecorded.
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
  *
  * @param {object} copy - The stand-in.
  * @param {*} member - The value it stands in for.
@@ -1435,140 +1434,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 export function runtime_registerFrameworkMemberCopy(copy, member) {
 	const slothlet = FRAMEWORK_MEMBERS.get(member);
 	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, FRAMEWORK_MEMBER_NAMES.get(member));
-	if (PERMISSION_SURFACE.has(member)) PERMISSION_SURFACE.add(copy);
-	if (FRAMEWORK_OWN.has(member)) FRAMEWORK_OWN.add(copy);
 	return copy;
-}
-
-/**
- * Every object and function of the permission system's namespace (`slothlet.permissions` and what it holds), and
- * an isolated scope's copies of them. Module code never changes one, whatever path it reached it at (#625).
- * @type {WeakSet<object>}
- * @private
- */
-const PERMISSION_SURFACE = new WeakSet();
-
-/**
- * The framework's own objects and functions of its namespace (`slothlet` and what it holds, its `context` aside), the
- * proxies it serves them through, and an isolated scope's copies of them (#625).
- * @type {WeakSet<object>}
- * @private
- */
-const FRAMEWORK_OWN = new WeakSet();
-
-/**
- * Record the framework's namespace as built, and every object and function it holds as data, as the framework's own.
- * The `context` it carries is the host's data, and is left out.
- *
- * @param {object} namespace - The namespace, before the framework wraps it.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_recordFrameworkNamespace(namespace);
- */
-export function runtime_recordFrameworkNamespace(namespace) {
-	const record = (value) => {
-		if (value === null || (typeof value !== "object" && typeof value !== "function") || FRAMEWORK_OWN.has(value)) return;
-		FRAMEWORK_OWN.add(value);
-		if (typeof value === "function") return;
-		for (const key of Reflect.ownKeys(value)) {
-			if (value === namespace && key === "context") continue;
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (descriptor && "value" in descriptor) record(descriptor.value);
-		}
-	};
-	record(namespace);
-}
-
-/**
- * Whether `value` is one of the framework's own objects or functions ({@link FRAMEWORK_OWN}).
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isFrameworkOwn(api.slothlet.hook); // true
- */
-export function runtime_isFrameworkOwn(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && FRAMEWORK_OWN.has(value);
-}
-
-/**
- * Record `value`, a proxy the framework serves one of its own members through, as the framework's own.
- *
- * @param {object} value - The proxy.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_markFrameworkOwn(routeProxy);
- */
-export function runtime_markFrameworkOwn(value) {
-	FRAMEWORK_OWN.add(value);
-}
-
-/**
- * Whether `value` is one of the permission system's own objects or functions ({@link PERMISSION_SURFACE}).
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isPermissionSurface(api.slothlet.permissions); // true
- */
-export function runtime_isPermissionSurface(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && PERMISSION_SURFACE.has(value);
-}
-
-/**
- * Whether `value` is the framework's own namespace of an instance (`api.slothlet`), or an isolated scope's copy.
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isFrameworkNamespace(api.slothlet); // true
- */
-export function runtime_isFrameworkNamespace(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && FRAMEWORK_MEMBER_NAMES.get(value) === "slothlet";
-}
-
-/**
- * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
- * namespace through, and the member behind it.
- *
- * @param {...*} values - The values; anything but an object or function is skipped.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_markPermissionSurface(routeProxy, member);
- */
-export function runtime_markPermissionSurface(...values) {
-	for (const value of values) {
-		if (value !== null && (typeof value === "object" || typeof value === "function")) PERMISSION_SURFACE.add(value);
-	}
-}
-
-/**
- * Record `value` and every object and function it holds as data, at any depth, as the permission system's own.
- * Accessors are left unread.
- *
- * @param {*} value - The permission namespace, or a member of it.
- * @returns {void}
- * @private
- */
-function runtime_recordPermissionSurface(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function") || PERMISSION_SURFACE.has(value)) return;
-	PERMISSION_SURFACE.add(value);
-	for (const key of Reflect.ownKeys(value)) {
-		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-		if (descriptor && "value" in descriptor) runtime_recordPermissionSurface(descriptor.value);
-	}
 }
 
 /**
@@ -1588,10 +1454,6 @@ export function runtime_registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
 		FRAMEWORK_MEMBERS.set(member, slothlet);
 		FRAMEWORK_MEMBER_NAMES.set(member, name);
-		if (name === "slothlet") {
-			const descriptor = Reflect.getOwnPropertyDescriptor(member, "permissions");
-			if (descriptor && "value" in descriptor) runtime_recordPermissionSurface(descriptor.value);
-		}
 	}
 	return member;
 }
@@ -1648,7 +1510,7 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
  */
 export function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
-	if (slothlet.handlers.apiManager.ownershipEnforced()) {
+	if (slothlet.handlers.apiManager.frameworkProtected()) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
 			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
@@ -1687,7 +1549,7 @@ export function runtime_selfChangeTarget(ctx, prop) {
 	const parts = typeof prop === "string" ? [prop] : [];
 	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
 	const target = ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
-	if (slothlet.handlers.apiManager.ownershipEnforced()) {
+	if (slothlet.handlers.apiManager.writeChecked(parts)) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
 		// cannot attribute before it resolves a context at all, and the async runtime always attributes. Kept so a
@@ -1753,35 +1615,15 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		}
 		return reader;
 	};
-	// A module never changes the framework's namespace while the permission system is on, unless a host rule lifted
-	// the built-in write rules (#625). With it off, a module changes the namespace as it changes anything, except the
-	// permission system's own namespace (replacing `addRule` would drop the rules the host registers before it
-	// enables the system) and the prototype of the framework's own objects (a getter there would run for the host).
-	// Both are known by identity, not by the path the member was reached at. Returns the module making the change.
-	const refuseChange = (prop, prototype = false) => {
+	// A module never changes the framework's namespace, unless a host rule lifted the built-in write rules (#625): with
+	// the permission system on or off alike, only disabled leaves it open. Returns the module making the change.
+	const refuseChange = (prop) => {
+		if (!slothlet.handlers.apiManager.frameworkProtected()) return null;
 		const parts = (prop === null ? path : childPath(prop)).split(".");
 		const writer = changeWriter(parts);
-		if (writer === null) return null;
-		if (slothlet.handlers.apiManager.ownershipEnforced()) {
-			// The built-in write rules refuse it (`slothlet.**:write`), unless a host rule lifted them.
-			slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
-			return writer;
-		}
-		const kept =
-			PERMISSION_SURFACE.has(member) ||
-			(prop === "permissions" && runtime_isFrameworkNamespace(member)) ||
-			(prototype && FRAMEWORK_OWN.has(member));
-		if (kept) {
-			throw new slothlet.SlothletError("PERMISSION_DENIED", {
-				caller: String(writer.____slothletInternal?.apiPath ?? ""),
-				target: `${parts.join(".")}:write`
-			});
-		}
+		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
 		return writer;
 	};
-	// A function or accessor a module places on the namespace is the module's code: whoever calls it, it runs as that
-	// module, with the module's view of what it is called on.
-	const asWriters = (value, writer) => (writer === null ? unwrap(value) : runtime_moduleFunction(unwrap(value), writer, slothlet, path));
 	const view = new Proxy(member, {
 		get(target, prop) {
 			return asReader(() => {
@@ -1818,21 +1660,19 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
 		},
 		set(target, prop, value) {
-			const writer = refuseChange(prop);
-			return asReader(() => Reflect.set(target, prop, asWriters(value, writer)));
+			refuseChange(prop);
+			return asReader(() => Reflect.set(target, prop, unwrap(value)));
 		},
 		defineProperty(target, prop, descriptor) {
-			const writer = refuseChange(prop);
-			const placed = { ...descriptor };
-			for (const key of ["value", "get", "set"]) if (key in placed) placed[key] = asWriters(placed[key], writer);
-			return asReader(() => Reflect.defineProperty(target, prop, placed));
+			refuseChange(prop);
+			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
 		},
 		deleteProperty(target, prop) {
 			refuseChange(prop);
 			return asReader(() => Reflect.deleteProperty(target, prop));
 		},
 		setPrototypeOf(target, proto) {
-			refuseChange(null, true);
+			refuseChange(null);
 			return asReader(() => Reflect.setPrototypeOf(target, proto));
 		},
 		preventExtensions(target) {
@@ -1843,53 +1683,6 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	byReader.set(reader, view);
 	FRAMEWORK_VIEW_TARGETS.set(view, member);
 	return view;
-}
-
-/**
- * The functions {@link runtime_moduleFunction} built, per function and per module.
- * @type {WeakMap<Function, WeakMap<object, Function>>}
- * @private
- */
-const MODULE_FUNCTIONS = new WeakMap();
-
-/**
- * A function a module placed on the framework's namespace, as it runs from there (#625): whoever calls it, the host
- * included, it runs as that module, and what it is called on is the module's view of it. So a module cannot place a
- * function, or an accessor's, where the host calls it and have it handed the host's namespace. Anything but a
- * function is returned as is.
- *
- * @param {*} fn - The value placed.
- * @param {object} writer - The module that placed it.
- * @param {object} slothlet - Instance it belongs to.
- * @param {string} path - Path of the member it was placed on, for the view of its receiver.
- * @returns {*} The function as it runs from the namespace, or `fn` unchanged.
- * @private
- */
-function runtime_moduleFunction(fn, writer, slothlet, path) {
-	if (typeof fn !== "function") return fn;
-	let byWriter = MODULE_FUNCTIONS.get(fn);
-	if (!byWriter) {
-		byWriter = new WeakMap();
-		MODULE_FUNCTIONS.set(fn, byWriter);
-	}
-	const cached = byWriter.get(writer);
-	if (cached) return cached;
-	const asWriter = (use) =>
-		slothlet.contextManager.runInContext(slothlet.instanceID, () => runtime_asViewReader(writer, use), undefined, [], writer, true);
-	const receiverOf = (thisArg) =>
-		thisArg !== null && (typeof thisArg === "object" || typeof thisArg === "function")
-			? runtime_frameworkViewOf(FRAMEWORK_VIEW_TARGETS.get(thisArg) ?? thisArg, slothlet, writer, path)
-			: thisArg;
-	const placed = new Proxy(fn, {
-		apply(target, thisArg, args) {
-			return asWriter(() => Reflect.apply(target, receiverOf(thisArg), args));
-		},
-		construct(target, args, newTarget) {
-			return asWriter(() => Reflect.construct(target, args, newTarget === placed ? target : newTarget));
-		}
-	});
-	byWriter.set(writer, placed);
-	return placed;
 }
 
 /**
@@ -2226,9 +2019,9 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 function runtime_assertOwnedWrite(wrapper, prop) {
 	if (FRAMEWORK_WRITES.has(wrapper)) return;
 	const slothlet = wrapper.slothlet;
-	if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
 	if (typeof prop === "string") parts.push(prop);
+	if (!slothlet.handlers.apiManager.writeChecked(parts)) return;
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
 	// names whichever call entered last, which is not who is running once calls overlap.
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);

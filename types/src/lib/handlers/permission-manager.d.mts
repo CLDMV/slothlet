@@ -625,6 +625,26 @@ export class PermissionManager extends ComponentBase {
      */
     isEnabled(): boolean;
     /**
+     * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
+     * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
+     * cover), or `"disabled"` (nothing applies).
+     *
+     * @returns {"on"|"off"|"disabled"} The mode.
+     * @example
+     * pm.mode(); // "off" with no permissions config
+     */
+    mode(): "on" | "off" | "disabled";
+    /**
+     * Whether a built-in write rule covers a write to `targetPath`: the framework's own namespace, root functions, and
+     * keys on api nodes. Such a write is checked unless the permission system is disabled.
+     *
+     * @param {string} targetPath - Api path written.
+     * @returns {boolean} Whether a built-in write rule covers it.
+     * @example
+     * pm.coversWrite("slothlet.metadata"); // true
+     */
+    coversWrite(targetPath: string): boolean;
+    /**
      * Whether terminal data-value property reads are permission-gated.
      * Separate from {@link isEnabled} so call enforcement is unaffected by this default-on
      * flag (opt out via `permissions.readGating: false`).

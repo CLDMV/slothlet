@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:53:06-07:00 (1793008386)
+ *	@Last modified time: 2026-10-26T16:16:16-07:00 (1793056576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -368,12 +368,22 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const api = await load();
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			try {
-				// With the permission system off, nothing decides writes: no built-in write rule, and no ownership.
-				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe(off ? "done" : "PERMISSION_DENIED");
-				expect(api.slothlet.planted).toBe(off ? 1 : undefined);
+				// The built-in write rules keep the namespace from module code with the permission system on or off.
+				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe("PERMISSION_DENIED");
+				expect(api.slothlet.planted).toBeUndefined();
 			} finally {
 				delete api.victim.v.Account.prototype.namespace;
 			}
+		});
+
+		it.runIf(off)("leaves the framework namespace stored on another module's class to a module with the system disabled", async () => {
+			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "disabled" } });
+			instances.push(api);
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			api.victim.v.Account.prototype.namespace = api.slothlet;
+			expect(api.guest.x.changeStoredNamespace()).toBe("done");
+			expect(api.slothlet.planted).toBe(1);
 		});
 
 		it("hands the host, inside a run() it opened, a module's class prototype itself", async () => {

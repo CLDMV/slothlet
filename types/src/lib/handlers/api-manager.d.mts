@@ -184,10 +184,11 @@ export class ApiManager extends ComponentBase {
      * mounted owns nothing.
      *
      * The write rules of the permission system answer first ({@link PermissionManager#decideWrite}), for module
-     * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
-     * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
-     * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
-     * callers it names. With the system off nothing is checked: with no permissions, a module writes anywhere.
+     * code only: a denying rule refuses the write whatever the module owns, and an allowing one grants it whatever
+     * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
+     * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
+     * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
+     * module writes anywhere outside the framework's own; with it disabled nothing is checked.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -213,6 +214,29 @@ export class ApiManager extends ComponentBase {
      * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
      */
     public ownershipEnforced(): boolean;
+    /**
+     * Whether the framework's own namespace, root functions, and keys on api nodes are kept from module code now:
+     * unless the permission system is disabled (`mode: "disabled"`), with no permissions config included.
+     *
+     * @returns {boolean} Whether the built-in write rules apply.
+     * @public
+     *
+     * @example
+     * if (apiManager.frameworkProtected()) apiManager.assertOwnedWrite(parts, writer);
+     */
+    public frameworkProtected(): boolean;
+    /**
+     * Whether a write at `parts` is checked now: every write while the permission system is on, only a write to the
+     * framework's own (what a built-in write rule covers) while it is off, none while it is disabled.
+     *
+     * @param {string[]} parts - Segments of the api path written.
+     * @returns {boolean} Whether the write is checked.
+     * @public
+     *
+     * @example
+     * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+     */
+    public writeChecked(parts: string[]): boolean;
     /**
      * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
      * Used where a write is held to a module that read a node rather than the code running now.

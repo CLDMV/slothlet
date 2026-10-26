@@ -79,8 +79,7 @@ export function runtime_selfView(node: any, reader?: object): any;
 /**
  * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
- * view of it as outside the scope ({@link runtime_selfFrameworkView}); a copy of a member of the permission
- * system's namespace is recorded as one too. Anything else is left unrecorded.
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
  *
  * @param {object} copy - The stand-in.
  * @param {*} member - The value it stands in for.
@@ -91,74 +90,6 @@ export function runtime_selfView(node: any, reader?: object): any;
  * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
  */
 export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
-/**
- * Record the framework's namespace as built, and every object and function it holds as data, as the framework's own.
- * The `context` it carries is the host's data, and is left out.
- *
- * @param {object} namespace - The namespace, before the framework wraps it.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_recordFrameworkNamespace(namespace);
- */
-export function runtime_recordFrameworkNamespace(namespace: object): void;
-/**
- * Whether `value` is one of the framework's own objects or functions ({@link FRAMEWORK_OWN}).
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isFrameworkOwn(api.slothlet.hook); // true
- */
-export function runtime_isFrameworkOwn(value: any): boolean;
-/**
- * Record `value`, a proxy the framework serves one of its own members through, as the framework's own.
- *
- * @param {object} value - The proxy.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_markFrameworkOwn(routeProxy);
- */
-export function runtime_markFrameworkOwn(value: object): void;
-/**
- * Whether `value` is one of the permission system's own objects or functions ({@link PERMISSION_SURFACE}).
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isPermissionSurface(api.slothlet.permissions); // true
- */
-export function runtime_isPermissionSurface(value: any): boolean;
-/**
- * Whether `value` is the framework's own namespace of an instance (`api.slothlet`), or an isolated scope's copy.
- *
- * @param {*} value - The value.
- * @returns {boolean} Whether it is.
- * @internal
- *
- * @example
- * runtime_isFrameworkNamespace(api.slothlet); // true
- */
-export function runtime_isFrameworkNamespace(value: any): boolean;
-/**
- * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
- * namespace through, and the member behind it.
- *
- * @param {...*} values - The values; anything but an object or function is skipped.
- * @returns {void}
- * @internal
- *
- * @example
- * runtime_markPermissionSurface(routeProxy, member);
- */
-export function runtime_markPermissionSurface(...values: any[]): void;
 /**
  * Record one of the framework's own root members of an instance's api, so module code reading it through
  * `self` is handed a view of it ({@link runtime_selfFrameworkView}).

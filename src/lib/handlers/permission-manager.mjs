@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
+ *	@Last modified time: 2026-10-26T16:15:01-07:00 (1793056501)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -300,6 +300,22 @@ export class PermissionManager extends ComponentBase {
 	#enabled = false;
 
 	/**
+	 * Whether the permission system is disabled outright (`mode: "disabled"`): not even the built-in rules that keep
+	 * module code off the framework's own namespace apply. Off (`mode: "off"`, the default) evaluates those alone.
+	 * @type {boolean}
+	 * @private
+	 */
+	#disabled = false;
+
+	/**
+	 * Whether each target is one a built-in rule covers, by target (`pattern` or `pattern:write`): what the built-in
+	 * rules cover is evaluated while the system is off, everything else only while it is on.
+	 * @type {Map<string, boolean>}
+	 * @private
+	 */
+	#builtinCoverCache = new Map();
+
+	/**
 	 * Audit level: "default" or "verbose".
 	 * @type {string}
 	 * @private
@@ -454,7 +470,8 @@ export class PermissionManager extends ComponentBase {
 			// The "allow" fallback in || is uncovered when all tests supply defaultPolicy explicitly.
 			/* v8 ignore next */
 			this.#defaultPolicy = permConfig.defaultPolicy || "allow";
-			this.#enabled = permConfig.enabled !== false;
+			this.#enabled = permConfig.mode ? permConfig.mode === "on" : permConfig.enabled !== false;
+			this.#disabled = permConfig.mode === "disabled";
 			this.#audit = permConfig.audit || "default";
 			this.#readGating = permConfig.readGating !== false;
 			this.#capture = permConfig.references?.capture !== false;
@@ -2024,7 +2041,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
-		if (!this.#enabled) return null;
+		if (!this.#evaluates(targetPath, this.#writeRules, "writePathPattern")) return null;
 		const winner = this.#decideWrite(callerPath, targetPath, runtimeContext);
 		if (winner === null) return null;
 		if (winner.effect === "allow") return "grant";
@@ -2049,7 +2066,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
 	 */
 	isWriteGranted(callerPath, targetPath, runtimeContext = null) {
-		if (!this.#enabled) return false;
+		if (!this.#evaluates(targetPath, this.#writeRules, "writePathPattern")) return false;
 		return this.#decideWrite(callerPath, targetPath, runtimeContext)?.effect === "allow";
 	}
 
@@ -2242,6 +2259,7 @@ export class PermissionManager extends ComponentBase {
 	enable() {
 		this.#assertNotSealed();
 		this.#enabled = true;
+		this.#disabled = false;
 		this.#clearCache();
 	}
 
@@ -2318,6 +2336,7 @@ export class PermissionManager extends ComponentBase {
 	disable() {
 		this.#assertNotSealed();
 		this.#enabled = false;
+		this.#disabled = false;
 		this.#clearCache();
 	}
 
@@ -2330,6 +2349,75 @@ export class PermissionManager extends ComponentBase {
 	 */
 	isEnabled() {
 		return this.#enabled;
+	}
+
+	/**
+	 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
+	 * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
+	 * cover), or `"disabled"` (nothing applies).
+	 *
+	 * @returns {"on"|"off"|"disabled"} The mode.
+	 * @example
+	 * pm.mode(); // "off" with no permissions config
+	 */
+	mode() {
+		if (this.#enabled) return "on";
+		return this.#disabled ? "disabled" : "off";
+	}
+
+	/**
+	 * Whether a built-in write rule covers a write to `targetPath`: the framework's own namespace, root functions, and
+	 * keys on api nodes. Such a write is checked unless the permission system is disabled.
+	 *
+	 * @param {string} targetPath - Api path written.
+	 * @returns {boolean} Whether a built-in write rule covers it.
+	 * @example
+	 * pm.coversWrite("slothlet.metadata"); // true
+	 */
+	coversWrite(targetPath) {
+		if (this.#disabled) return false;
+		return this.#builtinCovers(targetPath, this.#writeRules, "writePathPattern");
+	}
+
+	/**
+	 * Whether a target is evaluated in the current mode: every target while the system is on, only what a built-in
+	 * rule covers while it is off, none while it is disabled.
+	 *
+	 * @param {string} targetPath - Api path of the target (`path` for a call or read, `path:write` for a write).
+	 * @param {Map<string, object>} rules - The rules of that kind ({@link #callRules} or {@link #writeRules}).
+	 * @param {string} patternKey - The key of each rule's target pattern (`target` or `writePathPattern`).
+	 * @returns {boolean} Whether the target is evaluated.
+	 * @private
+	 */
+	#evaluates(targetPath, rules, patternKey) {
+		if (this.#enabled) return true;
+		if (this.#disabled) return false;
+		return this.#builtinCovers(targetPath, rules, patternKey);
+	}
+
+	/**
+	 * Whether a built-in rule of `rules` covers `targetPath`.
+	 *
+	 * @param {string} targetPath - Api path of the target.
+	 * @param {Map<string, object>} rules - The rules of that kind.
+	 * @param {string} patternKey - The key of each rule's target pattern.
+	 * @returns {boolean} Whether one covers it.
+	 * @private
+	 */
+	#builtinCovers(targetPath, rules, patternKey) {
+		const cacheKey = `${patternKey}\u0000${targetPath}`;
+		let covered = this.#builtinCoverCache.get(cacheKey);
+		if (covered === undefined) {
+			covered = false;
+			for (const entry of rules.values()) {
+				if (entry.layer === "builtin" && entry.hookType == null && this.#getCompiledPattern(entry[patternKey])(targetPath)) {
+					covered = true;
+					break;
+				}
+			}
+			this.#builtinCoverCache.set(cacheKey, covered);
+		}
+		return covered;
 	}
 
 	/**
@@ -2456,6 +2544,7 @@ export class PermissionManager extends ComponentBase {
 		this.#resolvedCache.clear();
 		this.#compiledCache.clear();
 		this.#enabled = false;
+		this.#disabled = false;
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 		this.#readGating = false;
@@ -2674,13 +2763,14 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta, moduleCaller = false) {
-		// Global toggle: when disabled, everything is allowed (no event to emit).
-		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
-		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
+		// Global toggle: when off, everything is allowed (no event to emit).
+		// Exception: slothlet.permissions.control.** is always subject to rule evaluation while the system is off
+		// (not disabled), so the built-in deny rule protects the toggle surface.
 		// The principal management surface (#459) gets the same always-evaluated treatment, so a module
 		// cannot register or replace a resolver while enforcement happens to be switched off.
 		const isControlTarget =
-			targetPath?.startsWith("slothlet.permissions.control.") || targetPath?.startsWith("slothlet.permissions.principal.");
+			!this.#disabled &&
+			(targetPath?.startsWith("slothlet.permissions.control.") || targetPath?.startsWith("slothlet.permissions.principal."));
 		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
 
 		// Self-call bypass: same source file always allowed
@@ -3056,6 +3146,7 @@ export class PermissionManager extends ComponentBase {
 	#clearCache() {
 		this.#resolvedCache.clear();
 		this.#writeCache.clear();
+		this.#builtinCoverCache.clear();
 	}
 
 	/**

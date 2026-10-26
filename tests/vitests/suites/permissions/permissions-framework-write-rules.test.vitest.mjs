@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:47-07:00 (1793008367)
+ *	@Last modified time: 2026-10-26T16:16:01-07:00 (1793056561)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -137,18 +137,26 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 	});
 
 	/**
-	 * Load the base module with no permissions config, and mount `victim` and `guest` beside it.
+	 * Load the base module with no permissions config (or `options`), and mount `victim` and `guest` beside it.
+	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function load() {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+	async function load(options = {}) {
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
 		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 		return api;
 	}
 
-	it("lets base-module code and a module mounted with api.add write the namespace: nothing decides writes", async () => {
+	it("keeps base-module code and a module mounted with api.add off the namespace: the built-in write rules stay", async () => {
 		await load();
+		expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
+		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
+		expect(api.slothlet.lifted).toBeUndefined();
+	});
+
+	it("lets base-module code and a module mounted with api.add write the namespace with the system disabled", async () => {
+		await load({ permissions: { mode: "disabled" } });
 		expect(api.root.writeNamespace()).toBe("done");
 		expect(api.slothlet.lifted).toBe(1);
 		expect(api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");

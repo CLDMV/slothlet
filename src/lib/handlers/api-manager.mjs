@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:51:08-07:00 (1793008268)
+ *	@Last modified time: 2026-10-26T16:14:59-07:00 (1793056499)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -633,10 +633,11 @@ export class ApiManager extends ComponentBase {
 	 * mounted owns nothing.
 	 *
 	 * The write rules of the permission system answer first ({@link PermissionManager#decideWrite}), for module
-	 * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
-	 * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
-	 * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
-	 * callers it names. With the system off nothing is checked: with no permissions, a module writes anywhere.
+	 * code only: a denying rule refuses the write whatever the module owns, and an allowing one grants it whatever
+	 * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
+	 * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
+	 * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
+	 * module writes anywhere outside the framework's own; with it disabled nothing is checked.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -648,7 +649,7 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
-		if (!this.ownershipEnforced()) return;
+		if (!this.frameworkProtected()) return;
 		if (callerWrapper) {
 			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
 			const targetPath = parts.join(".");
@@ -660,7 +661,7 @@ export class ApiManager extends ComponentBase {
 			// An allowing write rule grants the write, whatever the module owns — to a module that is still there.
 			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return;
 		}
-		if (this.ownsPath(parts, callerWrapper, inFlight)) return;
+		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) return;
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
 		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
 		/* v8 ignore next */
@@ -684,6 +685,36 @@ export class ApiManager extends ComponentBase {
 	 */
 	ownershipEnforced() {
 		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
+	}
+
+	/**
+	 * Whether the framework's own namespace, root functions, and keys on api nodes are kept from module code now:
+	 * unless the permission system is disabled (`mode: "disabled"`), with no permissions config included.
+	 *
+	 * @returns {boolean} Whether the built-in write rules apply.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.frameworkProtected()) apiManager.assertOwnedWrite(parts, writer);
+	 */
+	frameworkProtected() {
+		return this.slothlet.handlers?.permissionManager?.mode?.() !== "disabled";
+	}
+
+	/**
+	 * Whether a write at `parts` is checked now: every write while the permission system is on, only a write to the
+	 * framework's own (what a built-in write rule covers) while it is off, none while it is disabled.
+	 *
+	 * @param {string[]} parts - Segments of the api path written.
+	 * @returns {boolean} Whether the write is checked.
+	 * @public
+	 *
+	 * @example
+	 * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+	 */
+	writeChecked(parts) {
+		if (this.ownershipEnforced()) return true;
+		return this.frameworkProtected() && this.slothlet.handlers.permissionManager.coversWrite(parts.join("."));
 	}
 
 	/**

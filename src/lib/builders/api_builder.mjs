@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T11:41:11-07:00 (1793040071)
+ *	@Last modified time: 2026-10-26T16:14:58-07:00 (1793056498)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,12 +42,6 @@ import {
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
-	runtime_isFrameworkNamespace,
-	runtime_isFrameworkOwn,
-	runtime_markFrameworkOwn,
-	runtime_recordFrameworkNamespace,
-	runtime_isPermissionSurface,
-	runtime_markPermissionSurface,
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller
 } from "#handlers/unified-wrapper";
@@ -593,38 +587,6 @@ export class ApiBuilder extends ComponentBase {
 		 * @example
 		 * const gated = createInternalRouteProxy(namespace, "slothlet");
 		 */
-		/**
-		 * Refuse module code changing the permission system's own namespace through a route proxy (#625): the
-		 * `permissions` member of the namespace, or anything that is part of it, however the proxy was reached.
-		 * Permissions on or off: a module that replaced
-		 * `addRule` would drop the rules the host registers before it enables the system.
-		 *
-		 * @param {object} target - The proxied value changed.
-		 * @param {object} proxy - The route proxy the change is made through.
-		 * @param {string} routePath - The proxy's route.
-		 * @param {string|symbol|null} prop - Member changed, or null for the value itself.
-		 * @returns {void}
-		 * @throws {SlothletError} `PERMISSION_DENIED` for module code changing the namespace.
-		 * @example
-		 * refusePermissionSurfaceChange(target, proxy, "slothlet", "permissions"); // throws inside a module call
-		 */
-		const refusePermissionSurfaceChange = (target, proxy, routePath, prop) => {
-			const surface =
-				(prop === "permissions" && runtime_isFrameworkNamespace(proxy)) ||
-				runtime_isPermissionSurface(proxy) ||
-				runtime_isPermissionSurface(target);
-			if (!surface) return;
-			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-			const changed = typeof prop === "string" ? `${routePath}.${prop}` : routePath;
-			if (identity?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: `${changed}:write` });
-			const callerWrapper = identity?.currentWrapper;
-			if (!callerWrapper) return;
-			throw new slothlet.SlothletError("PERMISSION_DENIED", {
-				caller: String(callerWrapper.____slothletInternal?.apiPath ?? ""),
-				target: `${changed}:write`
-			});
-		};
-
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
@@ -764,7 +726,6 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				set(target, prop, newValue, receiver) {
-					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.set(target, prop, newValue, receiver);
 					}
@@ -775,7 +736,6 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				defineProperty(target, prop, descriptor) {
-					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.defineProperty(target, prop, descriptor);
 					}
@@ -786,7 +746,6 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				deleteProperty(target, prop) {
-					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.deleteProperty(target, prop);
 					}
@@ -798,16 +757,6 @@ export class ApiBuilder extends ComponentBase {
 
 				ownKeys(target) {
 					return Reflect.ownKeys(target);
-				},
-
-				setPrototypeOf(target, proto) {
-					refusePermissionSurfaceChange(target, proxy, routePath, null);
-					return Reflect.setPrototypeOf(target, proto);
-				},
-
-				preventExtensions(target) {
-					refusePermissionSurfaceChange(target, proxy, routePath, null);
-					return Reflect.preventExtensions(target);
 				},
 
 				apply(target, thisArg, argArray) {
@@ -822,11 +771,6 @@ export class ApiBuilder extends ComponentBase {
 			});
 
 			routeCache.set(routePath, proxy);
-			// The permission system's own namespace is known by identity, at whatever route it is reached (#625).
-			if (routePath === "slothlet.permissions" || routePath.startsWith("slothlet.permissions.") || runtime_isPermissionSurface(value)) {
-				runtime_markPermissionSurface(proxy, value);
-			}
-			if (runtime_isFrameworkOwn(value)) runtime_markFrameworkOwn(proxy);
 			return proxy;
 		};
 
@@ -3456,6 +3400,21 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
+					 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that
+					 * keep module code off the framework's own namespace, root functions, and keys on api nodes), or
+					 * `"disabled"` (nothing applies). `enable()` turns it on and `disable()` off; disabled is chosen in
+					 * the config only.
+					 *
+					 * @returns {"on"|"off"|"disabled"} The mode.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.mode; // "off" with no permissions config
+					 */
+					get mode() {
+						return slothlet.handlers.permissionManager.mode();
+					},
+
+					/**
 					 * Enable permission enforcement globally.
 					 *
 					 * @returns {void}
@@ -3852,8 +3811,6 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
-		// The namespace as built is the framework's own, whatever is placed on it later (#625).
-		runtime_recordFrameworkNamespace(namespace);
 		return createInternalRouteProxy(namespace, "slothlet");
 	}
 

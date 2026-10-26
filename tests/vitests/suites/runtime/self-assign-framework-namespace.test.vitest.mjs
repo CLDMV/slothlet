@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
+ *	@Last modified time: 2026-10-26T16:16:15-07:00 (1793056575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -297,24 +297,34 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	});
 
 	/**
-	 * Load the base module with no permissions config, and mount the guest module beside it.
+	 * Load the base module with no permissions config (or `options`), and mount the guest module beside it.
+	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function load() {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+	async function load(options = {}) {
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 		return api;
 	}
 
-	it("leaves a module mounted with api.add changing a member of the namespace too: nothing decides writes", async () => {
-		await load();
-		expect(api.guest.attack.changeMember("lockCaller")).toEqual({ assign: "done", define: "done", remove: "done" });
-		expect(api.slothlet.lockCaller).toBeUndefined();
+	const REFUSED = { assign: "PERMISSION_DENIED", define: "PERMISSION_DENIED", remove: "PERMISSION_DENIED" };
+	const DONE = { assign: "done", define: "done", remove: "done" };
+
+	it.each([
+		["refuses", {}, REFUSED],
+		["leaves, with the system disabled,", { permissions: { mode: "disabled" } }, DONE]
+	])("%s a module mounted with api.add changing a member of the namespace", async (_label, options, expected) => {
+		await load(options);
+		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.changeMember("lockCaller"))).toEqual(expected);
+		expect(api.slothlet.lockCaller === undefined).toBe(expected === DONE);
 	});
 
-	it("leaves the base module, which owns the whole tree, changing a member of the namespace", async () => {
-		await load();
-		expect(api.attack.changeMember("lockCaller")).toEqual({ assign: "done", define: "done", remove: "done" });
-		expect(api.slothlet.lockCaller).toBeUndefined();
+	it.each([
+		["refuses", {}, REFUSED],
+		["leaves, with the system disabled,", { permissions: { mode: "disabled" } }, DONE]
+	])("%s the base module, which owns the whole tree, changing a member of the namespace", async (_label, options, expected) => {
+		await load(options);
+		expect(withSuppressedSlothletErrorOutputSync(() => api.attack.changeMember("lockCaller"))).toEqual(expected);
+		expect(api.slothlet.lockCaller === undefined).toBe(expected === DONE);
 	});
 });

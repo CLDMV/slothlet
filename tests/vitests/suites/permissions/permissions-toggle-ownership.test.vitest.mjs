@@ -7,23 +7,24 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T11:42:07-07:00 (1793040127)
+ *	@Last modified time: 2026-10-26T16:16:11-07:00 (1793056571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview What a module does while the permission system is off holds once the host enables it (#625).
+ * @fileoverview The permission system's three modes, and what a module does while it is off (#625).
  *
- * With the system off nothing refuses a module's write, but ownership is still recorded as with it on: a member a
- * module places through the api a framework payload hands it is that module's, so once the host enables the system
- * the member is held to the module's ownership, not run with the host's. A view a module read while the system was
- * off is the view it reads after, and holds a change it makes with no standing once the system is on.
+ * `mode: "on"` applies every rule. `mode: "off"` (no `permissions` config, `enabled: false`, or `control.disable()`)
+ * refuses no write on ownership or by a `:write` rule, but the built-in write rules still keep module code off the
+ * framework's own namespace, root functions, and keys on api nodes, wherever the module reached them. `mode:
+ * "disabled"` checks nothing; `slothlet`, `shutdown` and `destroy` stay reserved names on `self` even then.
  *
- * Two limits stay on whether or not the system is: a module never changes the permission system's own namespace
- * (it would drop the rules the host registers before enabling it), and the framework's namespace and root functions
- * are reserved names, refused when defined or deleted through `self` as when assigned.
+ * Ownership is recorded in every mode: a member a module places through the api a framework payload hands it is that
+ * module's, so once the host enables the system it is held to the module's ownership, not run with the host's. A view
+ * a module read while the system was off is the view it reads after, and holds a change made with no standing once the
+ * system is on.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
@@ -146,35 +147,90 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	);
 
 	describe.each([
-		["no permissions config", {}],
-		["enabled: false", { permissions: { enabled: false } }],
-		["the system on", { permissions: { defaultPolicy: "allow" } }]
-	])("with %s", (label, options) => {
-		it("refuses a module changing the permission system's namespace, and keeps the host's rules", async () => {
+		["no permissions config", {}, "off"],
+		["mode: off", { permissions: { mode: "off" } }, "off"],
+		["enabled: false", { permissions: { enabled: false } }, "off"],
+		["the system on", { permissions: { defaultPolicy: "allow" } }, "on"],
+		["mode: disabled", { permissions: { mode: "disabled" } }, "disabled"]
+	])("with %s", (_label, options, systemMode) => {
+		// What the built-in write rules decide: the framework's own namespace is kept from module code unless disabled.
+		const framework = systemMode === "disabled" ? "done" : "PERMISSION_DENIED";
+
+		it("reports its mode", async () => {
+			await load(options);
+			expect(api.slothlet.permissions.control.mode).toBe(systemMode);
+		});
+
+		it("keeps a module off the permission system's namespace unless the system is disabled", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => ({
 				addRule: outcome(() => {
 					self.slothlet.permissions.addRule = () => "swallowed";
 				}),
+				control: outcome(() => {
+					self.slothlet.permissions.control = { enable() {}, disable() {} };
+				}),
+				defined: outcome(() => Object.defineProperty(self.slothlet.permissions, "removeRule", { value: () => "gone", configurable: true })),
+				removed: outcome(() => {
+					if (!delete self.slothlet.permissions.removeRule) throw new Error("NOT_DELETED");
+				}),
 				namespace: outcome(() => {
 					self.slothlet.permissions = {};
-				}),
-				defined: outcome(() => Object.defineProperty(self.slothlet.permissions, "addRule", { value: () => "swallowed" })),
-				removed: outcome(() => {
-					if (!delete self.slothlet.permissions.addRule) throw new Error("NOT_DELETED");
 				})
 			});
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			expect(report).toEqual({
-				addRule: "PERMISSION_DENIED",
-				namespace: "PERMISSION_DENIED",
-				defined: "PERMISSION_DENIED",
-				removed: "PERMISSION_DENIED"
-			});
-			expect(typeof api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**", effect: "deny" })).toBe("string");
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, framework])));
+			if (framework !== "done") {
+				expect(typeof api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**", effect: "deny" })).toBe("string");
+			}
 		});
 
-		it("lands a module's write into another module's subtree only with the system off", async () => {
+		it("keeps a module off the rest of the framework namespace unless the system is disabled", async () => {
+			await load(options);
+			globalThis[Symbol.for(PROBE)] = (self) => ({
+				member: outcome(() => {
+					self.slothlet.metadata.planted = 1;
+				}),
+				placed: outcome(() => {
+					self.slothlet.leak = function leak() {
+						return this;
+					};
+				}),
+				prototype: outcome(() => Object.setPrototypeOf(self.slothlet.context, {})),
+				closed: outcome(() => Object.preventExtensions(self.slothlet.metadata))
+			});
+			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, framework])));
+			expect(api.slothlet.metadata.planted).toBe(framework === "done" ? 1 : undefined);
+		});
+
+		it("keeps the namespace a module stored on its own node from another module, as reached directly", async () => {
+			await load(options);
+			globalThis[Symbol.for(PROBE)] = (self) =>
+				outcome(() => {
+					self.guest.x.ns = self.slothlet;
+				});
+			expect(await api.guest.x.runWithSelf(PROBE)).toBe("done");
+			globalThis[Symbol.for(PROBE)] = (self) => {
+				// Read from the other module's node: allowed only where that module's node may be read and written.
+				const ns = self.guest.x.ns;
+				return {
+					addRule: outcome(() => {
+						ns.permissions.addRule = () => "swallowed";
+					}),
+					member: outcome(() => {
+						ns.metadata.stored = 1;
+					})
+				};
+			};
+			const report = await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE));
+			expect(report).toEqual({ addRule: framework, member: framework });
+			if (framework !== "done") {
+				expect(typeof api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
+			}
+		});
+
+		it("lands a module's write into another module's subtree unless the system is on", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				const v = self.victim.v;
@@ -195,300 +251,15 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				};
 			};
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			const off = label !== "the system on";
-			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, off ? "done" : "LOOSE_SET_NOT_OWNED"])));
+			const on = systemMode === "on";
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, on ? "LOOSE_SET_NOT_OWNED" : "done"])));
 			const v = api.victim.v;
 			expect([v.landed, v.defined, v.shelf[0].landed, v.sealedBox.inner.landed, v.deepShelf[0].inner.landed]).toEqual(
-				off ? [1, 2, 3, 4, 5] : [undefined, undefined, undefined, undefined, undefined]
+				on ? [undefined, undefined, undefined, undefined, undefined] : [1, 2, 3, 4, 5]
 			);
 		});
 
-		it("lets a module change the rest of the framework namespace only with the system off", async () => {
-			await load(options);
-			globalThis[Symbol.for(PROBE)] = (self) =>
-				outcome(() => {
-					self.slothlet.metadata.planted = 1;
-				});
-			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			expect(report).toBe(label === "the system on" ? "PERMISSION_DENIED" : "done");
-			expect(api.slothlet.metadata.planted).toBe(label === "the system on" ? undefined : 1);
-		});
-
-		it.runIf(label !== "the system on")(
-			"refuses a change to the permission namespace a module stored under another member, whoever reaches it there",
-			async () => {
-				await load(options);
-				globalThis[Symbol.for(PROBE)] = (self) =>
-					outcome(() => {
-						self.slothlet.metadata.stored = self.slothlet.permissions;
-					});
-				expect(await api.guest.x.runWithSelf(PROBE)).toBe("done");
-				globalThis[Symbol.for(PROBE)] = (self) => {
-					const stored = self.slothlet.metadata.stored;
-					return {
-						addRule: outcome(() => {
-							stored.addRule = () => "swallowed";
-						}),
-						control: outcome(() => {
-							stored.control = { enable() {}, disable() {} };
-						}),
-						removeRule: outcome(() => {
-							if (!delete stored.removeRule) throw new Error("NOT_DELETED");
-						}),
-						asThis: outcome(() => {
-							self.slothlet.leak = function leak() {
-								return this;
-							};
-							self.slothlet.leak().permissions.addRule = () => "swallowed";
-						}),
-						getterThis: outcome(() => {
-							Object.defineProperty(self.slothlet, "reach", {
-								configurable: true,
-								get() {
-									this.permissions.removeRule = () => "gone";
-									return 1;
-								}
-							});
-							return self.slothlet.reach;
-						}),
-						replaced: outcome(() => {
-							self.slothlet.metadata.alias = self.slothlet;
-							self.slothlet.metadata.alias.permissions = {};
-						})
-					};
-				};
-				const report = await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE));
-				expect(report).toEqual({
-					addRule: "PERMISSION_DENIED",
-					control: "PERMISSION_DENIED",
-					removeRule: "PERMISSION_DENIED",
-					asThis: "PERMISSION_DENIED",
-					getterThis: "PERMISSION_DENIED",
-					replaced: "PERMISSION_DENIED"
-				});
-				// The member that held the reference is the module's to change: only the namespace is kept.
-				globalThis[Symbol.for(PROBE)] = (self) => ({
-					replace: outcome(() => {
-						self.slothlet.metadata.stored = null;
-					}),
-					remove: outcome(() => {
-						if (!delete self.slothlet.metadata.stored) throw new Error("NOT_DELETED");
-					})
-				});
-				expect(await api.guest.x.runWithSelf(PROBE)).toEqual({ replace: "done", remove: "done" });
-				expect(api.slothlet.metadata.stored).toBeUndefined();
-				expect(typeof api.slothlet.permissions.addRule({ caller: "other.**", target: "victim.**:write", effect: "deny" })).toBe("string");
-				api.slothlet.permissions.control.enable();
-				// The system turns on, and the host's rule added before it applies.
-				expect(api.slothlet.permissions.control.enabled).toBe(true);
-				globalThis[Symbol.for(PROBE)] = (self) =>
-					outcome(() => {
-						self.victim.v.flag = "x";
-					});
-				expect(await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE))).toBe("PERMISSION_DENIED");
-				expect(api.victim.v.flag).toBeUndefined();
-			}
-		);
-
-		it("hands a function or getter a module places on the namespace the module's view as this, kept and used later too", async () => {
-			await load(options);
-			const symbol = Symbol("own");
-			globalThis[Symbol.for(PROBE)] = (self) => {
-				const report = {
-					place: outcome(() => {
-						self.slothlet.leak = function leak() {
-							return this;
-						};
-						Object.defineProperty(self.slothlet, "reach", {
-							configurable: true,
-							get() {
-								return this;
-							}
-						});
-					})
-				};
-				if (report.place !== "done") return { report };
-				const kept = [self.slothlet.leak(), self.slothlet.reach];
-				report.own = outcome(() => {
-					self.slothlet[symbol] = { own: true };
-					self.slothlet[symbol].permissions = 1;
-				});
-				return { report, kept };
-			};
-			const { report, kept } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			if (label === "the system on") {
-				expect(report).toEqual({ place: "PERMISSION_DENIED" });
-				return;
-			}
-			// A symbol-keyed object of the module's own is no part of the namespace.
-			expect(report).toEqual({ place: "done", own: "done" });
-			api.slothlet.permissions.control.enable();
-			// Kept and used later, outside any call, each is still the module's view: nothing of the namespace changes.
-			const later = withSuppressedSlothletErrorOutputSync(() =>
-				kept.map((ns) => ({
-					addRule: outcome(() => {
-						ns.permissions.addRule = () => "swallowed";
-					}),
-					disable: outcome(() => ns.permissions.control.disable()),
-					grant: outcome(() => ns.permissions.addRule({ caller: "guest.**", target: "**", effect: "allow" })),
-					prototype: outcome(() => Object.setPrototypeOf(ns.permissions, null)),
-					close: outcome(() => Object.preventExtensions(ns.permissions))
-				}))
-			);
-			for (const outcomes of later) {
-				expect(Object.values(outcomes).every((code) => code !== "done")).toBe(true);
-			}
-			expect(api.slothlet.permissions.control.enabled).toBe(true);
-			expect(typeof api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
-		});
-
-		it.runIf(label !== "the system on")(
-			"runs a function or accessor a module places on the namespace as the module, when the host calls or reads it too",
-			async () => {
-				await load(options);
-				const stash = [];
-				globalThis[Symbol.for(PROBE)] = (self) => {
-					const keep = function keep() {
-						stash.push(this);
-						return "kept";
-					};
-					const run = self.slothlet.run;
-					return {
-						leak: outcome(() => {
-							self.slothlet.leak = keep;
-						}),
-						getter: outcome(() =>
-							Object.defineProperty(self.slothlet, "reach", {
-								configurable: true,
-								get() {
-									stash.push(this);
-									return 1;
-								}
-							})
-						),
-						run: outcome(() => {
-							self.slothlet.run = function replacedRun(...args) {
-								stash.push(this);
-								return run(...args);
-							};
-						}),
-						prototype: outcome(() =>
-							Object.setPrototypeOf(self.slothlet, {
-								get missing() {
-									stash.push(this);
-									return 1;
-								}
-							})
-						)
-					};
-				};
-				const placed = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-				// The framework's own objects keep their prototype; anything else a module places goes through.
-				expect(placed).toEqual({ leak: "done", getter: "done", run: "done", prototype: "PERMISSION_DENIED" });
-				expect(api.slothlet.leak()).toBe("kept");
-				expect(api.slothlet.reach).toBe(1);
-				await api.slothlet.run({}, () => "ran");
-				expect(stash.length).toBe(3);
-				expect(stash.some((held) => held === api.slothlet)).toBe(false);
-				api.slothlet.permissions.control.enable();
-				// What each was handed is the module's view: kept and used later, nothing of the namespace changes.
-				const later = withSuppressedSlothletErrorOutputSync(() =>
-					stash.map((ns) => ({
-						addRule: outcome(() => {
-							ns.permissions.addRule = () => "swallowed";
-						}),
-						disable: outcome(() => ns.permissions.control.disable()),
-						grant: outcome(() => ns.permissions.addRule({ caller: "guest.**", target: "**", effect: "allow" }))
-					}))
-				);
-				for (const outcomes of later) expect(Object.values(outcomes).every((code) => code !== "done")).toBe(true);
-				expect(api.slothlet.permissions.control.enabled).toBe(true);
-			}
-		);
-
-		it.runIf(label !== "the system on")(
-			"keeps a module's writes inside an isolated scope in the scope, through a descriptor too",
-			async () => {
-				await load(options);
-				globalThis[Symbol.for(PROBE)] = (self) =>
-					self.slothlet.scope({
-						context: {},
-						isolation: "full",
-						fn: () => ({
-							read: outcome(() => {
-								self.slothlet.metadata.inScope = 1;
-								self.victim.v.inScope = 1;
-							}),
-							descriptor: outcome(() => {
-								Object.getOwnPropertyDescriptor(self.slothlet, "metadata").value.viaDescriptor = 1;
-								Object.getOwnPropertyDescriptor(self, "victim").value.v.viaDescriptor = 1;
-							}),
-							seen: [
-								self.slothlet.metadata.inScope,
-								self.slothlet.metadata.viaDescriptor,
-								self.victim.v.inScope,
-								self.victim.v.viaDescriptor
-							],
-							close: outcome(() => Object.preventExtensions(self.slothlet)),
-							closeNode: outcome(() => Object.preventExtensions(self.guest)),
-							afterClose: typeof self.slothlet.permissions
-						})
-					});
-				const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-				expect(report.read).toBe("done");
-				expect(report.descriptor).toBe("done");
-				expect(report.seen).toEqual([1, 1, 1, 1]);
-				// The scope's views stay open: one closed could no longer answer for what it lists.
-				expect(report.close).toMatch(/^TypeError/);
-				expect(report.closeNode).toMatch(/^TypeError/);
-				expect(report.afterClose).toBe("object");
-				const meta = api.slothlet.metadata;
-				expect([meta.inScope, meta.viaDescriptor, api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([
-					undefined,
-					undefined,
-					undefined,
-					undefined
-				]);
-			}
-		);
-
-		it("keeps both limits inside an isolated scope a module opens", async () => {
-			await load(options);
-			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "guest.**:write", effect: "deny" });
-			globalThis[Symbol.for(PROBE)] = (self) =>
-				self.slothlet.scope({
-					context: {},
-					isolation: "full",
-					fn: () => ({
-						report: {
-							addRule: outcome(() => {
-								self.slothlet.permissions.addRule = () => "swallowed";
-							}),
-							slothlet: outcome(() => {
-								self.slothlet = { fake: 1 };
-							}),
-							shutdown: outcome(() => {
-								self.shutdown = 1;
-							})
-						},
-						viewed: self.slothlet.permissions.removeRule !== api.slothlet.permissions.removeRule,
-						removeRule: self.slothlet.permissions.removeRule
-					})
-				});
-			const { report, viewed, removeRule } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			const on = label === "the system on";
-			expect(report).toEqual({
-				addRule: "PERMISSION_DENIED",
-				slothlet: on ? "PERMISSION_DENIED" : "INVALID_CONFIG_API_PATH_INVALID",
-				shutdown: on ? "PERMISSION_DENIED" : "INVALID_CONFIG_API_PATH_INVALID"
-			});
-			expect(viewed).toBe(true);
-			// Kept from the scope and called later, outside any call, it still runs as the module: no host rule goes.
-			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.permissions.removeRule(hostRule)).toBe(true);
-		});
-
-		it("refuses defining or deleting the framework's reserved names through self, as assigning them", async () => {
+		it("refuses defining, deleting, or assigning the framework's reserved names through self", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				const root = self.slothlet.diag.getAPI();
@@ -509,12 +280,95 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				return report;
 			};
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			// With the system on, the built-in write rules refuse a module first; with it off, the reserved name does.
-			const code = label === "the system on" ? "PERMISSION_DENIED" : "INVALID_CONFIG_API_PATH_INVALID";
+			// The built-in write rules refuse a module first; disabled, the reserved name still does.
+			const code = framework === "done" ? "INVALID_CONFIG_API_PATH_INVALID" : "PERMISSION_DENIED";
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, code])));
 			expect(typeof api.shutdown).toBe("function");
 			expect(typeof api.destroy).toBe("function");
 			expect(typeof api.slothlet.permissions.addRule).toBe("function");
 		});
+
+		it.runIf(framework !== "done")("keeps the framework namespace inside an isolated scope a module opens", async () => {
+			await load(options);
+			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "guest.**:write", effect: "deny" });
+			globalThis[Symbol.for(PROBE)] = (self) =>
+				self.slothlet.scope({
+					context: {},
+					isolation: "full",
+					fn: () => ({
+						report: {
+							addRule: outcome(() => {
+								self.slothlet.permissions.addRule = () => "swallowed";
+							}),
+							member: outcome(() => {
+								self.slothlet.metadata.inScope = 1;
+							}),
+							slothlet: outcome(() => {
+								self.slothlet = { fake: 1 };
+							}),
+							shutdown: outcome(() => {
+								self.shutdown = 1;
+							})
+						},
+						viewed: self.slothlet.permissions.removeRule !== api.slothlet.permissions.removeRule,
+						removeRule: self.slothlet.permissions.removeRule
+					})
+				});
+			const { report, viewed, removeRule } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "PERMISSION_DENIED"])));
+			expect(viewed).toBe(true);
+			// Kept from the scope and called later, outside any call, it still runs as the module: no host rule goes.
+			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("INVALID_PERMISSION_RULE");
+			expect(api.slothlet.permissions.removeRule(hostRule)).toBe(true);
+		});
+
+		it.runIf(systemMode !== "on")("keeps a module's writes inside an isolated scope in the scope, through a descriptor too", async () => {
+			await load(options);
+			globalThis[Symbol.for(PROBE)] = (self) =>
+				self.slothlet.scope({
+					context: {},
+					isolation: "full",
+					fn: () => ({
+						read: outcome(() => {
+							self.victim.v.inScope = 1;
+						}),
+						descriptor: outcome(() => {
+							Object.getOwnPropertyDescriptor(self, "victim").value.v.viaDescriptor = 1;
+						}),
+						seen: [self.victim.v.inScope, self.victim.v.viaDescriptor],
+						close: outcome(() => Object.preventExtensions(self.guest)),
+						afterClose: typeof self.slothlet.permissions
+					})
+				});
+			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+			expect(report.read).toBe("done");
+			expect(report.descriptor).toBe("done");
+			expect(report.seen).toEqual([1, 1]);
+			// The scope's views stay open: one closed could no longer answer for what it lists.
+			expect(report.close).toMatch(/^TypeError/);
+			expect(report.afterClose).toBe("object");
+			expect([api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([undefined, undefined]);
+		});
+	});
+
+	it("refuses an unknown mode in the config", async () => {
+		await expect(
+			slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "partial" } })
+		).rejects.toMatchObject({
+			code: "INVALID_CONFIG"
+		});
+	});
+
+	it("turns a disabled system on and off from the host, the namespace kept from module code once it is", async () => {
+		await load({ permissions: { mode: "disabled" } });
+		api.slothlet.permissions.control.enable();
+		expect(api.slothlet.permissions.control.mode).toBe("on");
+		api.slothlet.permissions.control.disable();
+		expect(api.slothlet.permissions.control.mode).toBe("off");
+		globalThis[Symbol.for(PROBE)] = (self) =>
+			outcome(() => {
+				self.slothlet.metadata.planted = 1;
+			});
+		expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE))).toBe("PERMISSION_DENIED");
 	});
 });
