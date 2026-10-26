@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:51:11-07:00 (1793008271)
+ *	@Last modified time: 2026-10-26T07:38:25-07:00 (1793025505)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1297,12 +1297,14 @@ export function runtime_selfView(node, reader) {
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
 	// A member the node holds fixed is handed out as the node holds it, and so with no view of this one to hold a
-	// change made through it to the reader. While the ownership rule applies (permissions on), a module's view of a
-	// node no captured view stands for (capture off, a top-level node) therefore works through a view of the node that
-	// only holds such changes to the reader, and holds what the node holds fixed as views of the same kind
-	// ({@link runtime_capturedView}). With no permissions nothing is held, and the view works on the node itself.
+	// change made through it to the reader. A module's view of a node no captured view stands for (capture off, a
+	// top-level node) therefore works through a view of the node that only holds such changes to the reader, and
+	// holds what the node holds fixed as views of the same kind ({@link runtime_capturedView}). That view is built
+	// whether or not permissions are on, since it is cached for the reader: it asks whether the ownership rule
+	// applies at each change, so with no permissions it holds nothing, and a view built then still holds a change
+	// once the permission system is enabled.
 	const held = node;
-	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node) && slothlet.handlers.apiManager.ownershipEnforced()) {
+	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node)) {
 		node = runtime_capturedView(node, reader, false);
 	}
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
@@ -1522,16 +1524,20 @@ export function runtime_selfChangeTarget(ctx, prop) {
 	const parts = typeof prop === "string" ? [prop] : [];
 	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
 	const target = ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
-	if (!slothlet.handlers.apiManager.ownershipEnforced()) return target;
-	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-	// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
-	// cannot attribute before it resolves a context at all, and the async runtime always attributes. Kept so a
-	// caller that did reach it would fail closed rather than write with the host's standing.
-	/* v8 ignore next 3 */
-	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+	if (slothlet.handlers.apiManager.ownershipEnforced()) {
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
+		// cannot attribute before it resolves a context at all, and the async runtime always attributes. Kept so a
+		// caller that did reach it would fail closed rather than write with the host's standing.
+		/* v8 ignore next 3 */
+		if (identity?.unresolved) {
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		}
+		if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite(parts, identity.currentWrapper);
 	}
-	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite(parts, identity.currentWrapper);
+	// The framework's namespace and root functions are reserved names: defined or deleted, as assigned, they are
+	// refused whether or not permissions are on, after the write rules a module meets first.
+	if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	return target;
 }
 
@@ -1573,8 +1579,12 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	// for a change made with no standing of its own, the reader; a change the host makes inside a `run()` /
 	// `scope()` it opened goes through, as it would on the member itself.
 	const refuseChange = (prop) => {
-		if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 		const parts = (prop === null ? path : childPath(prop)).split(".");
+		// With no permissions a module changes the namespace as it changes anything, except the permission system's
+		// own surface: a module replacing `addRule` while the system is off would drop the rules the host registers
+		// before it enables the system, as the toggle and principal surfaces are kept for the same reason.
+		const enforced = slothlet.handlers.apiManager.ownershipEnforced();
+		if (!enforced && parts[1] !== "permissions") return;
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
 			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
@@ -1586,6 +1596,12 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 				throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			writer = reader;
+		}
+		if (!enforced) {
+			throw new slothlet.SlothletError("PERMISSION_DENIED", {
+				caller: String(writer.____slothletInternal?.apiPath ?? ""),
+				target: `${parts.join(".")}:write`
+			});
 		}
 		// The built-in write rules refuse it (`slothlet.**:write`), unless a host rule lifted them.
 		slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
@@ -1721,8 +1737,15 @@ const SELF_ROOT_VIEWS = new WeakMap();
  * @private
  */
 function runtime_selfRootWriter(slothlet, reader, parts) {
-	if (!slothlet.handlers.apiManager.ownershipEnforced()) return null;
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	// With the permission system off nothing is refused, but the change is still recorded as whoever made it, the
+	// executing module or the reader, as a top-level `self.X = …` is: the ownership it records must not depend on
+	// whether permissions were on at the time.
+	if (!slothlet.handlers.apiManager.ownershipEnforced()) {
+		if (identity?.currentWrapper) return identity.currentWrapper;
+		if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === UNATTRIBUTED_READER) return null;
+		return reader;
+	}
 	if (identity?.unresolved) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 	}
@@ -1768,6 +1791,8 @@ export function runtime_selfRootView(slothlet, reader) {
 		const parts = typeof prop === "string" ? [prop] : [];
 		const writer = runtime_selfRootWriter(slothlet, reader, parts);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+		// A reserved name is refused whoever changes it, as an assignment to it is.
+		if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	};
 	const view = new Proxy(root, {
 		get(target, prop) {
@@ -3268,6 +3293,11 @@ function runtime_capturedView(child, capturedCaller, gated = true) {
 		},
 		defineProperty(_, prop, descriptor) {
 			refuseWithoutStanding(prop);
+			// A closed shadow lists an inspect hook even for a child that holds none (see ownKeys), such as a lazy node
+			// not loaded yet, which could not define one: freezing the view fixes the shadow's own there.
+			if (prop === util.inspect.custom && !Reflect.isExtensible(shadow) && !rawDescriptor(prop)) {
+				return Reflect.defineProperty(shadow, prop, descriptor);
+			}
 			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
 			// A member made fixed, or made read-only where the shadow already holds it fixed, is mirrored as it is now.
 			mirror(prop, false);

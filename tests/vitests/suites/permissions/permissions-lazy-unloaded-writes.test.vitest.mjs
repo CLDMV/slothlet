@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:49-07:00 (1793008369)
+ *	@Last modified time: 2026-10-26T07:39:40-07:00 (1793025580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,6 +81,27 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 				expect(inner.planted).toBeUndefined();
 				expect(Object.isFrozen(inner)).toBe(false);
 			}
+		});
+
+		it.each([
+			["granted the write", { permissions: { rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }] } }],
+			[
+				"granted the write, capture off",
+				{ permissions: { references: { capture: false }, rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }] } }
+			]
+		])("lets a module %s freeze another module's unloaded node through self", async (_label, options) => {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			globalThis[Symbol.for(PROBE)] = (self) => {
+				try {
+					Object.freeze(self.holder.deep.inner);
+					return Object.isFrozen(self.holder.deep.inner);
+				} catch (error) {
+					return error?.code ?? String(error);
+				}
+			};
+			expect(await api.guest.x.runWithSelf(PROBE)).toBe(true);
 		});
 
 		it.each([

@@ -7,20 +7,20 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:59-07:00 (1793008379)
+ *	@Last modified time: 2026-10-26T07:39:51-07:00 (1793025591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview With the permission system off, no permission rule decides a write; ownership still does (#625).
+ * @fileoverview With the permission system off, nothing decides a module's write: no rule, and no ownership (#625).
  *
  * The permission system is off with no `permissions` config, with `enabled: false`, and after `control.disable()`.
  * Then neither the built-in write rules (the framework's namespace and root functions) nor a `:write` rule refuses
- * or grants anything, and a module writes exactly what it owns: base-module code owns the whole tree, as in the
- * released 3.x line, and a module an `api.add` mounted owns its own subtree only. Rule registration keeps its
- * limits, and a rule a module registers while the system is off takes effect once the host turns it on.
+ * or grants anything, and ownership refuses nothing either: base-module code and a module an `api.add` mounted
+ * write anywhere. Rule registration keeps its limits, and a rule a module registers while the system is off takes
+ * effect once the host turns it on.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/` (base-module code), `victim/`, and `guest/` (also
  * mounted as `other`).
