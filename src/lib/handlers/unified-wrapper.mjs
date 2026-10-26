@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T08:25:47-07:00 (1793028347)
+ *	@Last modified time: 2026-10-26T09:16:53-07:00 (1793031413)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1419,22 +1419,10 @@ const FRAMEWORK_VIEWS = new WeakMap();
 const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 
 /**
- * Record one of the framework's own root members of an instance's api, so module code reading it through
- * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
- *
- * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
- * @param {object} slothlet - Instance it belongs to.
- * @param {string} name - The name it is served under on the api.
- * @returns {object|Function} `member`.
- * @internal
- *
- * @example
- * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
- */
-/**
  * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
- * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}); a copy of a member of the permission
+ * system's namespace is recorded as one too. Anything else is left unrecorded.
  *
  * @param {object} copy - The stand-in.
  * @param {*} member - The value it stands in for.
@@ -1447,13 +1435,87 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 export function runtime_registerFrameworkMemberCopy(copy, member) {
 	const slothlet = FRAMEWORK_MEMBERS.get(member);
 	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, FRAMEWORK_MEMBER_NAMES.get(member));
+	if (PERMISSION_SURFACE.has(member)) PERMISSION_SURFACE.add(copy);
 	return copy;
 }
 
+/**
+ * Every object and function of the permission system's namespace (`slothlet.permissions` and what it holds), and
+ * an isolated scope's copies of them. Module code never changes one, whatever path it reached it at (#625).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const PERMISSION_SURFACE = new WeakSet();
+
+/**
+ * Whether `value` is one of the permission system's own objects or functions ({@link PERMISSION_SURFACE}).
+ *
+ * @param {*} value - The value.
+ * @returns {boolean} Whether it is.
+ * @internal
+ *
+ * @example
+ * runtime_isPermissionSurface(api.slothlet.permissions); // true
+ */
+export function runtime_isPermissionSurface(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && PERMISSION_SURFACE.has(value);
+}
+
+/**
+ * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
+ * namespace through, and the member behind it.
+ *
+ * @param {...*} values - The values; anything but an object or function is skipped.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_markPermissionSurface(routeProxy, member);
+ */
+export function runtime_markPermissionSurface(...values) {
+	for (const value of values) {
+		if (value !== null && (typeof value === "object" || typeof value === "function")) PERMISSION_SURFACE.add(value);
+	}
+}
+
+/**
+ * Record `value` and every object and function it holds as data, at any depth, as the permission system's own.
+ * Accessors are left unread.
+ *
+ * @param {*} value - The permission namespace, or a member of it.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordPermissionSurface(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || PERMISSION_SURFACE.has(value)) return;
+	PERMISSION_SURFACE.add(value);
+	for (const key of Reflect.ownKeys(value)) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (descriptor && "value" in descriptor) runtime_recordPermissionSurface(descriptor.value);
+	}
+}
+
+/**
+ * Record one of the framework's own root members of an instance's api, so module code reading it through
+ * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
+ *
+ * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
+ * @param {object} slothlet - Instance it belongs to.
+ * @param {string} name - The name it is served under on the api.
+ * @returns {object|Function} `member`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
+ */
 export function runtime_registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
 		FRAMEWORK_MEMBERS.set(member, slothlet);
 		FRAMEWORK_MEMBER_NAMES.set(member, name);
+		if (name === "slothlet") {
+			const descriptor = Reflect.getOwnPropertyDescriptor(member, "permissions");
+			if (descriptor && "value" in descriptor) runtime_recordPermissionSurface(descriptor.value);
+		}
 	}
 	return member;
 }
@@ -1608,8 +1670,14 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		// With no permissions a module changes the namespace as it changes anything, except the permission system's
 		// own surface: a module replacing `addRule` while the system is off would drop the rules the host registers
 		// before it enables the system, as the toggle and principal surfaces are kept for the same reason.
+		// The surface is known by what is changed, not by the path it was reached at: a module may have stored it
+		// under another member of the namespace.
 		const enforced = slothlet.handlers.apiManager.ownershipEnforced();
-		if (!enforced && parts[1] !== "permissions") return;
+		const surface =
+			parts[1] === "permissions" ||
+			PERMISSION_SURFACE.has(member) ||
+			(prop !== null && PERMISSION_SURFACE.has(Reflect.getOwnPropertyDescriptor(member, prop)?.value));
+		if (!enforced && !surface) return;
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
 			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });

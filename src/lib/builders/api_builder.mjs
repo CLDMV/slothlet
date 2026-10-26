@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T08:25:44-07:00 (1793028344)
+ *	@Last modified time: 2026-10-26T09:16:47-07:00 (1793031407)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,8 @@ import {
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
+	runtime_isPermissionSurface,
+	runtime_markPermissionSurface,
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller
 } from "#handlers/unified-wrapper";
@@ -186,26 +188,34 @@ function describeScopeReceived(value) {
 function makeCopyOnWriteSelf(parentSelf) {
 	const overlay = new Map(); // prop → value written inside this scope
 	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
+	/**
+	 * What the scope reads at `prop`: its own write, or the live value, an object child as its memoized COW view.
+	 * @param {string|symbol} prop - Member read.
+	 * @returns {*} The value.
+	 */
+	const read = (prop) => {
+		if (overlay.has(prop)) return overlay.get(prop);
+		const real = parentSelf[prop];
+		// Wrap object children in their own COW so deep-path writes are
+		// captured. Memoized so `self.X` returns the same view each time
+		// and in-scope writes to it are read back consistently.
+		if (real !== null && typeof real === "object") {
+			let view = childViews.get(prop);
+			if (view === undefined) {
+				// The framework's namespace read in the scope is still the framework's: module code is handed its
+				// view of it, with the limits that view keeps, over the scope's copy (#625).
+				view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
+				childViews.set(prop, view);
+			}
+			return view;
+		}
+		return real;
+	};
 	return new Proxy(
 		{},
 		{
 			get(_t, prop) {
-				if (overlay.has(prop)) return overlay.get(prop);
-				const real = parentSelf[prop];
-				// Wrap object children in their own COW so deep-path writes are
-				// captured. Memoized so `self.X` returns the same view each time
-				// and in-scope writes to it are read back consistently.
-				if (real !== null && typeof real === "object") {
-					let view = childViews.get(prop);
-					if (view === undefined) {
-						// The framework's namespace read in the scope is still the framework's: module code is handed its
-						// view of it, with the limits that view keeps, over the scope's copy (#625).
-						view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
-						childViews.set(prop, view);
-					}
-					return view;
-				}
-				return real;
+				return read(prop);
 			},
 			set(_t, prop, value) {
 				overlay.set(prop, value);
@@ -240,8 +250,15 @@ function makeCopyOnWriteSelf(parentSelf) {
 				}
 				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
 				// Always configurable — the proxy target is an empty object, so a
-				// non-configurable descriptor would violate proxy invariants.
-				return desc ? { ...desc, configurable: true } : undefined;
+				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
+				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
+				if (!desc) return undefined;
+				return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
+			},
+			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
+			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
+			preventExtensions() {
+				return false;
 			}
 		}
 	);
@@ -756,6 +773,10 @@ export class ApiBuilder extends ComponentBase {
 			});
 
 			routeCache.set(routePath, proxy);
+			// The permission system's own namespace is known by identity, at whatever route it is reached (#625).
+			if (routePath === "slothlet.permissions" || routePath.startsWith("slothlet.permissions.") || runtime_isPermissionSurface(value)) {
+				runtime_markPermissionSurface(proxy, value);
+			}
 			return proxy;
 		};
 

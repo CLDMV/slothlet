@@ -77,6 +77,44 @@ export function runtime_selfModuleReader(slothlet: object): object | null;
  */
 export function runtime_selfView(node: any, reader?: object): any;
 /**
+ * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}); a copy of a member of the permission
+ * system's namespace is recorded as one too. Anything else is left unrecorded.
+ *
+ * @param {object} copy - The stand-in.
+ * @param {*} member - The value it stands in for.
+ * @returns {object} `copy`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ */
+export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
+/**
+ * Whether `value` is one of the permission system's own objects or functions ({@link PERMISSION_SURFACE}).
+ *
+ * @param {*} value - The value.
+ * @returns {boolean} Whether it is.
+ * @internal
+ *
+ * @example
+ * runtime_isPermissionSurface(api.slothlet.permissions); // true
+ */
+export function runtime_isPermissionSurface(value: any): boolean;
+/**
+ * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
+ * namespace through, and the member behind it.
+ *
+ * @param {...*} values - The values; anything but an object or function is skipped.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_markPermissionSurface(routeProxy, member);
+ */
+export function runtime_markPermissionSurface(...values: any[]): void;
+/**
  * Record one of the framework's own root members of an instance's api, so module code reading it through
  * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
  *
@@ -89,21 +127,7 @@ export function runtime_selfView(node: any, reader?: object): any;
  * @example
  * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-/**
- * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
- * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
- * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
- *
- * @param {object} copy - The stand-in.
- * @param {*} member - The value it stands in for.
- * @returns {object} `copy`.
- * @internal
- *
- * @example
- * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
- */
-export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
-export function runtime_registerFrameworkMember(member: any, slothlet: any, name: any): any;
+export function runtime_registerFrameworkMember(member: object | Function, slothlet: object, name: string): object | Function;
 /**
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).

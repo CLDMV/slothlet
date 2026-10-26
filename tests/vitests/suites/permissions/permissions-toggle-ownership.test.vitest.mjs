@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T08:27:18-07:00 (1793028438)
+ *	@Last modified time: 2026-10-26T09:18:03-07:00 (1793031483)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,7 +73,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, diagnostics: true, ...options });
 		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });
 		return api;
 	}
 
@@ -211,7 +211,99 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				});
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 			expect(report).toBe(label === "the system on" ? "PERMISSION_DENIED" : "done");
+			expect(api.slothlet.metadata.planted).toBe(label === "the system on" ? undefined : 1);
 		});
+
+		it.runIf(label !== "the system on")(
+			"refuses a change to the permission namespace a module stored under another member, whoever reaches it there",
+			async () => {
+				await load(options);
+				globalThis[Symbol.for(PROBE)] = (self) =>
+					outcome(() => {
+						self.slothlet.metadata.stored = self.slothlet.permissions;
+					});
+				expect(await api.guest.x.runWithSelf(PROBE)).toBe("done");
+				globalThis[Symbol.for(PROBE)] = (self) => {
+					const stored = self.slothlet.metadata.stored;
+					return {
+						addRule: outcome(() => {
+							stored.addRule = () => "swallowed";
+						}),
+						control: outcome(() => {
+							stored.control = { enable() {}, disable() {} };
+						}),
+						removeRule: outcome(() => {
+							if (!delete stored.removeRule) throw new Error("NOT_DELETED");
+						}),
+						replaced: outcome(() => {
+							self.slothlet.metadata.alias = self.slothlet;
+							self.slothlet.metadata.alias.permissions = {};
+						})
+					};
+				};
+				const report = await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE));
+				expect(report).toEqual({
+					addRule: "PERMISSION_DENIED",
+					control: "PERMISSION_DENIED",
+					removeRule: "PERMISSION_DENIED",
+					replaced: "PERMISSION_DENIED"
+				});
+				expect(typeof api.slothlet.permissions.addRule({ caller: "other.**", target: "victim.**:write", effect: "deny" })).toBe("string");
+				api.slothlet.permissions.control.enable();
+				// The system turns on, and the host's rule added before it applies.
+				expect(api.slothlet.permissions.control.enabled).toBe(true);
+				globalThis[Symbol.for(PROBE)] = (self) =>
+					outcome(() => {
+						self.victim.v.flag = "x";
+					});
+				expect(await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE))).toBe("PERMISSION_DENIED");
+				expect(api.victim.v.flag).toBeUndefined();
+			}
+		);
+
+		it.runIf(label !== "the system on")(
+			"keeps a module's writes inside an isolated scope in the scope, through a descriptor too",
+			async () => {
+				await load(options);
+				globalThis[Symbol.for(PROBE)] = (self) =>
+					self.slothlet.scope({
+						context: {},
+						isolation: "full",
+						fn: () => ({
+							read: outcome(() => {
+								self.slothlet.metadata.inScope = 1;
+								self.victim.v.inScope = 1;
+							}),
+							descriptor: outcome(() => {
+								Object.getOwnPropertyDescriptor(self.slothlet, "metadata").value.viaDescriptor = 1;
+								Object.getOwnPropertyDescriptor(self, "victim").value.v.viaDescriptor = 1;
+							}),
+							seen: [
+								self.slothlet.metadata.inScope,
+								self.slothlet.metadata.viaDescriptor,
+								self.victim.v.inScope,
+								self.victim.v.viaDescriptor
+							],
+							close: outcome(() => Object.preventExtensions(self.slothlet)),
+							afterClose: typeof self.slothlet.permissions
+						})
+					});
+				const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+				expect(report.read).toBe("done");
+				expect(report.descriptor).toBe("done");
+				expect(report.seen).toEqual([1, 1, 1, 1]);
+				// The scope's views stay open: one closed could no longer answer for what it lists.
+				expect(report.close).toMatch(/^TypeError/);
+				expect(report.afterClose).toBe("object");
+				const meta = api.slothlet.metadata;
+				expect([meta.inScope, meta.viaDescriptor, api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([
+					undefined,
+					undefined,
+					undefined,
+					undefined
+				]);
+			}
+		);
 
 		it("keeps both limits inside an isolated scope a module opens", async () => {
 			await load(options);
