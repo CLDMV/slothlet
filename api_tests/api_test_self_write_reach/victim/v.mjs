@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T17:41:55-07:00 (1792975315)
+ *	@Last modified time: 2026-10-25T20:03:36-07:00 (1792983816)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -473,11 +473,34 @@ export const shelf = Object.freeze([{ n: 1 }, "S", 3]);
 export const sealedBox = Object.freeze({ inner: { n: 1 } });
 
 /**
+ * A list the victim exports frozen, whose element holds a member it can still change.
+ * @type {ReadonlyArray<{inner: {n: number}}>}
+ */
+export const deepShelf = Object.freeze([{ inner: { n: 1 } }]);
+
+/**
+ * A member a function the victim holds frozen hands back.
+ * @type {{n: number}}
+ */
+export const box = { n: 1 };
+
+/**
+ * A list the victim exports frozen, holding a function that hands back one of its nodes, read through `self`.
+ * @type {ReadonlyArray<function(): object>}
+ */
+export const toolShelf = Object.freeze([() => self.victim.v.box]);
+
+/**
  * What the members the victim holds frozen hold now, as the victim sees them.
- * @returns {{shelf: string, inner: string}} Each member, as JSON.
+ * @returns {{shelf: string, inner: string, deep: string, box: string}} Each member, as JSON.
  * @example
- * frozenState(); // { shelf: '{"n":1}', inner: '{"n":1}' }
+ * frozenState(); // { shelf: '{"n":1}', inner: '{"n":1}', deep: '{"n":1}', box: '{"n":1}' }
  */
 export function frozenState() {
-	return { shelf: JSON.stringify(shelf[0]), inner: JSON.stringify(sealedBox.inner) };
+	return {
+		shelf: JSON.stringify(shelf[0]),
+		inner: JSON.stringify(sealedBox.inner),
+		deep: JSON.stringify(deepShelf[0].inner),
+		box: JSON.stringify(box)
+	};
 }

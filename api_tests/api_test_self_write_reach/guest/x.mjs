@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T17:41:48-07:00 (1792975308)
+ *	@Last modified time: 2026-10-25T20:03:29-07:00 (1792983809)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,8 @@ export function keepVictimPrototype() {
  * changeVictimFrozenMembers(); // { elementAssign: "LOOSE_SET_NOT_OWNED", … }
  */
 export function changeVictimFrozenMembers() {
-	return frozenMemberWrites(self.victim.v.shelf[0], self.victim.v.sealedBox.inner);
+	const v = self.victim.v;
+	return frozenMemberWrites(v.shelf[0], v.sealedBox.inner, v.deepShelf[0].inner, v.toolShelf[0]());
 }
 
 /**
@@ -134,10 +135,10 @@ export function changeVictimFrozenMembers() {
  * keepVictimFrozenMembers()(); // { elementAssign: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", … }
  */
 export function keepVictimFrozenMembers() {
-	const element = self.victim.v.shelf[0];
-	const inner = self.victim.v.sealedBox.inner;
+	const v = self.victim.v;
+	const members = [v.shelf[0], v.sealedBox.inner, v.deepShelf[0].inner, v.toolShelf[0]()];
 	return function writeKept() {
-		return frozenMemberWrites(element, inner);
+		return frozenMemberWrites(...members);
 	};
 }
 
@@ -154,14 +155,17 @@ export function storeVictimElement() {
 }
 
 /**
- * Assign, define, and delete on an element of a frozen list and a member of a frozen node.
+ * Assign, define, and delete on an element of a frozen list and a member of a frozen node; assign on a member of
+ * an element of a frozen list, and on what a function a frozen list holds handed back.
  * @param {object} element - The element.
  * @param {object} inner - The member.
+ * @param {object} deep - The element's member.
+ * @param {object} returned - What the function handed back.
  * @returns {Record<string, string>} Outcome of each change.
  * @example
- * frozenMemberWrites(self.victim.v.shelf[0], self.victim.v.sealedBox.inner);
+ * frozenMemberWrites(v.shelf[0], v.sealedBox.inner, v.deepShelf[0].inner, v.toolShelf[0]());
  */
-function frozenMemberWrites(element, inner) {
+function frozenMemberWrites(element, inner, deep, returned) {
 	return {
 		elementAssign: attempt(() => {
 			element.planted = 1;
@@ -177,6 +181,15 @@ function frozenMemberWrites(element, inner) {
 		}),
 		innerDelete: attempt(() => {
 			if (!delete inner.n) throw new Error("NOT_DELETED");
+		}),
+		deepAssign: attempt(() => {
+			deep.planted = 1;
+		}),
+		deepDelete: attempt(() => {
+			if (!delete deep.n) throw new Error("NOT_DELETED");
+		}),
+		returnedAssign: attempt(() => {
+			returned.planted = 1;
 		})
 	};
 }

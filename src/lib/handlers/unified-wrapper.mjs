@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T17:42:54-07:00 (1792975374)
+ *	@Last modified time: 2026-10-25T20:04:26-07:00 (1792983866)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1221,6 +1221,8 @@ export function runtime_selfView(node, reader) {
 		if (reader === undefined) return node;
 		node = SELF_VIEW_NODES.get(node);
 	}
+	// A view that only holds changes to its reader stands for the node behind it.
+	if (GUARD_VIEWS.has(node)) node = capturedViewTargets.get(node);
 	// A live-identity instance a method got as its receiver stands for the node it was called on.
 	// The async runtime hands such a value back in a context-preserving Proxy: the same value.
 	node = SELF_INSTANCE_NODES.get(runtime_unwrapClassInstance(node)) ?? node;
@@ -3063,8 +3065,9 @@ function runtime_capturedView(child, capturedCaller, gated = true) {
 	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
 	// view, anything else as it is.
 	const handOut = (prop, resolved) => {
-		// A view that gates nothing hands out what the child does: the view over it views what it reads.
-		if (!gated) return resolved;
+		// A view that gates nothing hands out what the child does, a node as a view of the same kind: a member handed
+		// out fixed reaches module code with no view of `self` over it, and so does every node read through that member.
+		if (!gated) return resolveWrapper(resolved) === null ? resolved : runtime_capturedView(resolved, capturedCaller, false);
 		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
 		// wrapper probes for properties that are not there — `then` above all — and every absent
 		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
@@ -3172,11 +3175,17 @@ function runtime_capturedView(child, capturedCaller, gated = true) {
 
 	view = new Proxy(shadow, {
 		apply(_, thisArg, args) {
-			if (!gated) return Reflect.apply(child, thisArg, args);
+			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
+			// handed out fixed is called with no view of `self` over it.
+			if (!gated) return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
-			const call = () => asKept(() => Reflect.apply(child, thisArg, args));
+			const call = () =>
+				runtime_selfViewResult(
+					asKept(() => Reflect.apply(child, thisArg, args)),
+					capturedCaller
+				);
 			if (pending) return runtime_runAfterPrincipalGate(inner, pending, call);
 			return call();
 		},

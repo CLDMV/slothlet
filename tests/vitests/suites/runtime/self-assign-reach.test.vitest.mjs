@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T17:44:12-07:00 (1792975452)
+ *	@Last modified time: 2026-10-25T20:05:56-07:00 (1792983956)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,6 +43,8 @@ import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vi
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const REFUSALS = ["LOOSE_SET_NOT_OWNED", "PERMISSION_DENIED"];
+// What the victim's frozen members hold while no other module has changed them.
+const FROZEN_UNCHANGED = { shelf: '{"n":1}', inner: '{"n":1}', deep: '{"n":1}', box: '{"n":1}' };
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -169,7 +171,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const api = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimFrozenMembers());
 			expect(markRefused(report)).toEqual(allRefused(report));
-			expect(await api.victim.v.frozenState()).toEqual({ shelf: '{"n":1}', inner: '{"n":1}' });
+			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
 
 		it("refuses a write through members another module holds frozen a module kept, made later from outside any call", async () => {
@@ -177,7 +179,24 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
-			expect(await api.victim.v.frozenState()).toEqual({ shelf: '{"n":1}', inner: '{"n":1}' });
+			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
+		});
+
+		it("refuses a later write through members another module holds frozen with captured references off", async () => {
+			const api = await slothlet({
+				base: path.join(FIXTURE, "base"),
+				mode,
+				runtime,
+				silent: true,
+				permissions: { ...options.permissions, references: { capture: false } }
+			});
+			instances.push(api);
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			const later = await api.guest.x.keepVictimFrozenMembers();
+			const report = withSuppressedSlothletErrorOutputSync(() => later());
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
 
 		it("stores the node itself when a module stores a member another module holds frozen", async () => {
