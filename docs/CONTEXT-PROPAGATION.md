@@ -327,7 +327,7 @@ const api = await slothlet({ dir: "./api" }); // default: partial isolation
 
 #### Full Isolation
 
-Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated.
+Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated. Two limits apply: a function member (a callable node, a class) is shared with the live API rather than copied, so a write to its own properties or its `prototype` persists ([#674](https://github.com/CLDMV/slothlet/issues/674)); and the scope's views cannot be closed, so `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on `self` or a node read from it inside the scope throw a `TypeError`.
 
 ```javascript
 const api = await slothlet({

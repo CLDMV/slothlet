@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T09:16:53-07:00 (1793031413)
+ *	@Last modified time: 2026-10-26T10:01:18-07:00 (1793034078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1673,10 +1673,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		// The surface is known by what is changed, not by the path it was reached at: a module may have stored it
 		// under another member of the namespace.
 		const enforced = slothlet.handlers.apiManager.ownershipEnforced();
-		const surface =
-			parts[1] === "permissions" ||
-			PERMISSION_SURFACE.has(member) ||
-			(prop !== null && PERMISSION_SURFACE.has(Reflect.getOwnPropertyDescriptor(member, prop)?.value));
+		const surface = parts[1] === "permissions" || PERMISSION_SURFACE.has(member);
 		if (!enforced && !surface) return;
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {

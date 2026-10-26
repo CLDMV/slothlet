@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T09:18:03-07:00 (1793031483)
+ *	@Last modified time: 2026-10-26T10:02:25-07:00 (1793034145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -235,6 +235,22 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 						removeRule: outcome(() => {
 							if (!delete stored.removeRule) throw new Error("NOT_DELETED");
 						}),
+						asThis: outcome(() => {
+							self.slothlet.leak = function leak() {
+								return this;
+							};
+							self.slothlet.leak().permissions.addRule = () => "swallowed";
+						}),
+						getterThis: outcome(() => {
+							Object.defineProperty(self.slothlet, "reach", {
+								configurable: true,
+								get() {
+									this.permissions.removeRule = () => "gone";
+									return 1;
+								}
+							});
+							return self.slothlet.reach;
+						}),
 						replaced: outcome(() => {
 							self.slothlet.metadata.alias = self.slothlet;
 							self.slothlet.metadata.alias.permissions = {};
@@ -246,8 +262,21 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 					addRule: "PERMISSION_DENIED",
 					control: "PERMISSION_DENIED",
 					removeRule: "PERMISSION_DENIED",
+					asThis: "PERMISSION_DENIED",
+					getterThis: "PERMISSION_DENIED",
 					replaced: "PERMISSION_DENIED"
 				});
+				// The member that held the reference is the module's to change: only the namespace is kept.
+				globalThis[Symbol.for(PROBE)] = (self) => ({
+					replace: outcome(() => {
+						self.slothlet.metadata.stored = null;
+					}),
+					remove: outcome(() => {
+						if (!delete self.slothlet.metadata.stored) throw new Error("NOT_DELETED");
+					})
+				});
+				expect(await api.guest.x.runWithSelf(PROBE)).toEqual({ replace: "done", remove: "done" });
+				expect(api.slothlet.metadata.stored).toBeUndefined();
 				expect(typeof api.slothlet.permissions.addRule({ caller: "other.**", target: "victim.**:write", effect: "deny" })).toBe("string");
 				api.slothlet.permissions.control.enable();
 				// The system turns on, and the host's rule added before it applies.
@@ -285,6 +314,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 								self.victim.v.viaDescriptor
 							],
 							close: outcome(() => Object.preventExtensions(self.slothlet)),
+							closeNode: outcome(() => Object.preventExtensions(self.guest)),
 							afterClose: typeof self.slothlet.permissions
 						})
 					});
@@ -294,6 +324,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				expect(report.seen).toEqual([1, 1, 1, 1]);
 				// The scope's views stay open: one closed could no longer answer for what it lists.
 				expect(report.close).toMatch(/^TypeError/);
+				expect(report.closeNode).toMatch(/^TypeError/);
 				expect(report.afterClose).toBe("object");
 				const meta = api.slothlet.metadata;
 				expect([meta.inScope, meta.viaDescriptor, api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([

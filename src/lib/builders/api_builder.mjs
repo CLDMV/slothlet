@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T09:16:47-07:00 (1793031407)
+ *	@Last modified time: 2026-10-26T10:01:15-07:00 (1793034075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -589,6 +589,36 @@ export class ApiBuilder extends ComponentBase {
 		 * @example
 		 * const gated = createInternalRouteProxy(namespace, "slothlet");
 		 */
+		/**
+		 * Refuse module code changing the permission system's own namespace through a route proxy (#625): the
+		 * `permissions` member of the namespace, or anything that is part of it, however the proxy was reached (a
+		 * function planted on the namespace gets it as `this`). Permissions on or off: a module that replaced
+		 * `addRule` would drop the rules the host registers before it enables the system.
+		 *
+		 * @param {object} target - The proxied value changed.
+		 * @param {object} proxy - The route proxy the change is made through.
+		 * @param {string} routePath - The proxy's route.
+		 * @param {string|symbol|null} prop - Member changed, or null for the value itself.
+		 * @returns {void}
+		 * @throws {SlothletError} `PERMISSION_DENIED` for module code changing the namespace.
+		 * @example
+		 * refusePermissionSurfaceChange(target, proxy, "slothlet", "permissions"); // throws inside a module call
+		 */
+		const refusePermissionSurfaceChange = (target, proxy, routePath, prop) => {
+			const surface =
+				(routePath === "slothlet" && prop === "permissions") || runtime_isPermissionSurface(proxy) || runtime_isPermissionSurface(target);
+			if (!surface) return;
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			const changed = typeof prop === "string" ? `${routePath}.${prop}` : routePath;
+			if (identity?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: `${changed}:write` });
+			const callerWrapper = identity?.currentWrapper;
+			if (!callerWrapper) return;
+			throw new slothlet.SlothletError("PERMISSION_DENIED", {
+				caller: String(callerWrapper.____slothletInternal?.apiPath ?? ""),
+				target: `${changed}:write`
+			});
+		};
+
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
@@ -728,6 +758,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				set(target, prop, newValue, receiver) {
+					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.set(target, prop, newValue, receiver);
 					}
@@ -738,6 +769,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				defineProperty(target, prop, descriptor) {
+					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.defineProperty(target, prop, descriptor);
 					}
@@ -748,6 +780,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				deleteProperty(target, prop) {
+					refusePermissionSurfaceChange(target, proxy, routePath, prop);
 					if (typeof prop !== "string") {
 						return Reflect.deleteProperty(target, prop);
 					}
@@ -759,6 +792,16 @@ export class ApiBuilder extends ComponentBase {
 
 				ownKeys(target) {
 					return Reflect.ownKeys(target);
+				},
+
+				setPrototypeOf(target, proto) {
+					refusePermissionSurfaceChange(target, proxy, routePath, null);
+					return Reflect.setPrototypeOf(target, proto);
+				},
+
+				preventExtensions(target) {
+					refusePermissionSurfaceChange(target, proxy, routePath, null);
+					return Reflect.preventExtensions(target);
 				},
 
 				apply(target, thisArg, argArray) {
