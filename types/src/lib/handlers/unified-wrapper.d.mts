@@ -16,8 +16,9 @@
  */
 export function runtime_frameworkWrite(node: object, write: () => any): any;
 /**
- * The node behind a value: a view `self` handed out ({@link runtime_selfView}) stands for its node, which is
- * what is stored when the view is written into the api. Anything else is returned as is.
+ * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
+ * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
+ * else is returned as is.
  *
  * @param {*} value - A value about to be stored.
  * @returns {*} The node a view stands for, or `value`.

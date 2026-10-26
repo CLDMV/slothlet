@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T11:38:32-07:00 (1792953512)
+ *	@Last modified time: 2026-10-25T17:42:54-07:00 (1792975374)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,8 +161,9 @@ const HOST_READER = Object.freeze({ reader: "host" });
 const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
 
 /**
- * The node behind a value: a view `self` handed out ({@link runtime_selfView}) stands for its node, which is
- * what is stored when the view is written into the api. Anything else is returned as is.
+ * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
+ * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
+ * else is returned as is.
  *
  * @param {*} value - A value about to be stored.
  * @returns {*} The node a view stands for, or `value`.
@@ -173,6 +174,7 @@ const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
  */
 export function runtime_unwrapSelfView(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	if (GUARD_VIEWS.has(value)) return capturedViewTargets.get(value);
 	return SELF_VIEW_NODES.get(value) ?? SELF_MEMBER_VIEWS.get(value)?.value ?? value;
 }
 
@@ -225,6 +227,32 @@ function runtime_selfWriteHasStanding(slothlet) {
 	if (identity?.currentWrapper || identity?.unresolved) return true;
 	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
 	return Boolean(store?.parentInstanceID) && store[TRUSTED_ROOT] === true;
+}
+
+/**
+ * Refuse a change a reader's view makes to a node with no standing of its own ({@link runtime_selfWriteHasStanding}):
+ * such a change is the reader's, and goes through only under a path the reader owns and may write. The host owns
+ * the whole tree; code that could not be attributed owns none of it.
+ *
+ * @param {object} slothlet - Instance the node belongs to.
+ * @param {object|null} owner - Wrapper of the node changed, or null when there is none to check against.
+ * @param {object} reader - The reader the view belongs to.
+ * @param {string|symbol|null} prop - Member being changed, or null for a change to the node itself.
+ * @returns {void}
+ * @throws {SlothletError} `RUNTIME_NO_ACTIVE_CONTEXT_SELF` for a change outside what the reader owns, and what
+ *   the reader's write rules throw.
+ * @private
+ */
+function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
+	if (runtime_selfWriteHasStanding(slothlet)) return;
+	if (reader === HOST_READER) return;
+	if (reader !== UNATTRIBUTED_READER && owner) {
+		const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
+		if (typeof prop === "string") parts.push(prop);
+		// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
+		if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
+	}
+	throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 }
 
 /**
@@ -1212,20 +1240,18 @@ export function runtime_selfView(node, reader) {
 
 	// A write made with no standing of its own is the reader's: it goes through only under a path the
 	// reader owns. The host owns the whole tree; code that could not be attributed owns none of it.
-	const refuseWithoutStanding = (prop) => {
-		if (runtime_selfWriteHasStanding(slothlet)) return;
-		if (reader === HOST_READER) return;
-		if (reader !== UNATTRIBUTED_READER) {
-			// Through a dispatcher, the write lands on the versioned node it resolves to now: that path decides.
-			const owner = dispatch ? resolveWrapper(dispatch.resolve()) : inner;
-			if (owner) {
-				const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
-				if (typeof prop === "string") parts.push(prop);
-				// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
-				if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
-			}
+	// Through a dispatcher, the write lands on the versioned node it resolves to now: that path decides.
+	const refuseWithoutStanding = (prop) =>
+		runtime_refuseWriteWithoutStanding(slothlet, dispatch ? resolveWrapper(dispatch.resolve()) : inner, reader, prop);
+	// A change this view lets through is made on the node as decided here, never decided again by a view under it.
+	const vouched = (change) => {
+		const previous = VOUCHED_CHANGE;
+		VOUCHED_CHANGE = node;
+		try {
+			return change();
+		} finally {
+			VOUCHED_CHANGE = previous;
 		}
-		throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 	};
 	// What a dispatcher hands back of its own — `valueOf()`, its inspect function — is no node, but answers
 	// with the dispatcher or the versioned node: what it returns is viewed for the reader, and so is the node
@@ -1268,9 +1294,15 @@ export function runtime_selfView(node, reader) {
 	let hasInstance = null;
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-	// A view over a module's captured view stands over that view's shadow, which holds what the captured view has
-	// reported fixed: the engine checks this view's answers against it, never by asking the captured view again,
-	// which refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
+	// A member the node holds fixed is handed out as the node holds it, and so with no view of this one to hold a
+	// change made through it to the reader. A module's view of a node no captured view stands for (permissions or
+	// capture off, a top-level node) therefore works through a view of the node that only holds such changes to
+	// the reader, and holds what the node holds fixed as views of the same kind ({@link runtime_capturedView}).
+	const held = node;
+	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node)) node = runtime_capturedView(node, reader, false);
+	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
+	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
+	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
 	const view = new Proxy(capturedViewShadows.get(node) ?? node, {
 		get(_, prop) {
 			const value = Reflect.get(node, prop);
@@ -1309,16 +1341,16 @@ export function runtime_selfView(node, reader) {
 			return runtime_selfViewResult(Reflect.apply(node, ownThis, args), reader);
 		},
 		construct(_, args, newTarget) {
-			return Reflect.construct(node, args, newTarget === view ? node : newTarget);
+			return Reflect.construct(node, args, newTarget === view ? held : newTarget);
 		},
 		set(_, prop, value) {
 			refuseWithoutStanding(prop);
-			return Reflect.set(node, prop, runtime_unwrapSelfView(value));
+			return vouched(() => Reflect.set(node, prop, runtime_unwrapSelfView(value)));
 		},
 		defineProperty(_, prop, descriptor) {
 			refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
-			const defined = Reflect.defineProperty(node, prop, descriptor);
+			const defined = vouched(() => Reflect.defineProperty(node, prop, descriptor));
 			// The engine now reads the node's descriptor to check the definition (freezing a node through its view
 			// fixes each member): that read is no reader's, so the node answers it ungated.
 			if (defined && inner && node === inner.____slothletInternal.proxy) PENDING_INVARIANT_READ = { wrapper: inner, prop };
@@ -1326,15 +1358,15 @@ export function runtime_selfView(node, reader) {
 		},
 		deleteProperty(_, prop) {
 			refuseWithoutStanding(prop);
-			return Reflect.deleteProperty(node, prop);
+			return vouched(() => Reflect.deleteProperty(node, prop));
 		},
 		setPrototypeOf(_, proto) {
 			refuseWithoutStanding(null);
-			return Reflect.setPrototypeOf(node, proto);
+			return vouched(() => Reflect.setPrototypeOf(node, proto));
 		},
 		preventExtensions(_) {
 			refuseWithoutStanding(null);
-			return Reflect.preventExtensions(node);
+			return vouched(() => Reflect.preventExtensions(node));
 		},
 		has(_, prop) {
 			return Reflect.has(node, prop);
@@ -1347,7 +1379,7 @@ export function runtime_selfView(node, reader) {
 		}
 	});
 	byReader.set(reader, view);
-	SELF_VIEW_NODES.set(view, node);
+	SELF_VIEW_NODES.set(view, held);
 	SELF_VIEW_READERS.set(view, reader);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions), and a view of a
 	// dispatcher as a dispatcher.
@@ -1948,6 +1980,15 @@ function runtime_assertOwnedWrite(wrapper, prop) {
  * @private
  */
 let capturedAccess = null;
+
+/**
+ * The captured view a view `self` handed out ({@link runtime_selfView}) is changing, while it changes it: that
+ * view's reader already decided whether the change stands, so the captured view does not decide it again for its
+ * own reader, which may be another module (a method's receiver views the caller's captured view of its node).
+ * @type {object|null}
+ * @private
+ */
+let VOUCHED_CHANGE = null;
 
 /**
  * The stand-ins a lazy node hands out for members it has not loaded yet (waiting proxies). A kept node never hands
@@ -2757,6 +2798,22 @@ function runtime_runAfterPrincipalGate(wrapper, gate, run) {
 const capturedViews = new WeakMap();
 
 /**
+ * The views {@link runtime_capturedView} built that gate nothing, per reader and node: the same cache as
+ * {@link capturedViews}, for the views a module's `self` works through where no captured view stands for a node.
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const guardViews = new WeakMap();
+
+/**
+ * Every view {@link runtime_capturedView} built that gates nothing, so storing one stores the node it guards, as
+ * storing a view `self` handed out does ({@link runtime_unwrapSelfView}).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const GUARD_VIEWS = new WeakSet();
+
+/**
  * The node behind each per-reader view {@link runtime_capturedView} built, so a view reached through
  * `self` can be told apart from host data and held to `self`'s rule ({@link runtime_selfView}).
  * @type {WeakMap<object, object>}
@@ -2901,16 +2958,25 @@ function runtime_isConstructor(fn) {
  * `self.db.write` and calling `.insert()` later has to be refused for the same reason capturing the
  * leaf directly is.
  *
+ * A change made through the view with no standing of its own is its reader's, and goes through only under a
+ * path the reader owns ({@link runtime_refuseWriteWithoutStanding}): a member the child holds fixed is handed
+ * out as the view of the child the view's own target holds, so such a change has no other view to meet.
+ *
+ * Built with `gated` false, the view gates no read and no call, and reads and calls as the child does: it only
+ * holds those changes to its reader, for `self` where no captured view stands for a node (#625).
+ *
  * @param {object} child - Shared child UnifiedWrapper.
  * @param {object} capturedCaller - Module that read it.
+ * @param {boolean} [gated=true] - Whether reads and calls through the view are gated against its reader.
  * @returns {object} The per-reader view.
  * @private
  */
-function runtime_capturedView(child, capturedCaller) {
-	let byChild = capturedViews.get(capturedCaller);
+function runtime_capturedView(child, capturedCaller, gated = true) {
+	const views = gated ? capturedViews : guardViews;
+	let byChild = views.get(capturedCaller);
 	if (!byChild) {
 		byChild = new WeakMap();
-		capturedViews.set(capturedCaller, byChild);
+		views.set(capturedCaller, byChild);
 	}
 	const existing = byChild.get(child);
 	if (existing) return existing;
@@ -2922,7 +2988,12 @@ function runtime_capturedView(child, capturedCaller) {
 	// What the view does to its child, made for the view's reader (#661) — only when the child is the node, or a proxy
 	// of it from before it became callable (#533), whose traps take the reader first; never a stand-in for a node not
 	// loaded yet, which runs its node's code before any gate.
-	const asKept = (access) => (STAND_INS.has(child) ? access() : runtime_accessAsKept(inner, capturedCaller, access));
+	const asKept = (access) => (!gated || STAND_INS.has(child) ? access() : runtime_accessAsKept(inner, capturedCaller, access));
+	// A change made through the view with no standing of its own is the reader's.
+	const refuseWithoutStanding = (prop) => {
+		if (VOUCHED_CHANGE === view) return;
+		runtime_refuseWriteWithoutStanding(inner.slothlet, inner, capturedCaller, prop);
+	};
 
 	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
 	// frozen array's element) is checked by the engine against the view's own target, so it is mirrored onto the
@@ -2992,6 +3063,8 @@ function runtime_capturedView(child, capturedCaller) {
 	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
 	// view, anything else as it is.
 	const handOut = (prop, resolved) => {
+		// A view that gates nothing hands out what the child does: the view over it views what it reads.
+		if (!gated) return resolved;
 		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
 		// wrapper probes for properties that are not there — `then` above all — and every absent
 		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
@@ -3027,7 +3100,7 @@ function runtime_capturedView(child, capturedCaller) {
 	};
 	// The value the shadow holds for a fixed member: a child node as its view, anything else as it is. The read gate
 	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
-	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller));
+	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller, gated));
 	// An array's `length` is its shape, not a member it holds: mirrored as it is, never refused.
 	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Array.isArray(child));
 	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
@@ -3099,6 +3172,7 @@ function runtime_capturedView(child, capturedCaller) {
 
 	view = new Proxy(shadow, {
 		apply(_, thisArg, args) {
+			if (!gated) return Reflect.apply(child, thisArg, args);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
@@ -3107,7 +3181,7 @@ function runtime_capturedView(child, capturedCaller) {
 			return call();
 		},
 		construct(_, args, newTarget) {
-			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
+			if (gated) runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
@@ -3171,25 +3245,30 @@ function runtime_capturedView(child, capturedCaller) {
 			return Reflect.isExtensible(shadow);
 		},
 		set(_, prop, value, receiver) {
+			refuseWithoutStanding(prop);
 			return Reflect.set(child, prop, value, receiver === view ? child : receiver);
 		},
 		defineProperty(_, prop, descriptor) {
+			refuseWithoutStanding(prop);
 			if (!Reflect.defineProperty(child, prop, descriptor)) return false;
 			// A member made fixed, or made read-only where the shadow already holds it fixed, is mirrored as it is now.
 			mirror(prop, false);
 			return true;
 		},
 		deleteProperty(_, prop) {
+			refuseWithoutStanding(prop);
 			if (!Reflect.deleteProperty(child, prop)) return false;
 			mirror(prop, false);
 			return true;
 		},
 		setPrototypeOf(_, proto) {
+			refuseWithoutStanding(null);
 			if (!Reflect.setPrototypeOf(child, proto)) return false;
 			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === proto;
 			return true;
 		},
 		preventExtensions() {
+			refuseWithoutStanding(null);
 			if (!Reflect.preventExtensions(child)) return false;
 			mirrorClosed();
 			return true;
@@ -3200,6 +3279,7 @@ function runtime_capturedView(child, capturedCaller) {
 	capturedViewChildren.set(view, inner);
 	capturedViewTargets.set(view, child);
 	capturedViewShadows.set(view, shadow);
+	if (!gated) GUARD_VIEWS.add(view);
 	return view;
 }
 
@@ -3868,8 +3948,9 @@ function runtime_adoptArrayIntegrity(wrapper) {
 	internal.integritySyncing = true;
 	try {
 		// The node is made to match its module's own array, whoever's read noticed the change: the
-		// framework's write, never that reader's (#625).
-		runtime_frameworkWrite(proxy, () => {
+		// framework's write, never that reader's (#625). Exempted by its wrapper: while the node is built,
+		// its proxy is not yet registered to it.
+		runtime_frameworkWrite(wrapper, () => {
 			// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
 			if (!Reflect.isExtensible(array)) {
 				Reflect.preventExtensions(proxy);

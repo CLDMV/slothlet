@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:48-07:00 (1792434888)
+ *	@Last modified time: 2026-10-25T17:44:12-07:00 (1792975452)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -163,6 +163,42 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const later = await api.guest.x.keepVictimPrototype();
 			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
 			expect(new api.victim.v.Account().balance()).toBe(100);
+		});
+
+		it("refuses a module changing members another module holds frozen", async () => {
+			const api = await load();
+			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimFrozenMembers());
+			expect(markRefused(report)).toEqual(allRefused(report));
+			expect(await api.victim.v.frozenState()).toEqual({ shelf: '{"n":1}', inner: '{"n":1}' });
+		});
+
+		it("refuses a write through members another module holds frozen a module kept, made later from outside any call", async () => {
+			const api = await load();
+			const later = await api.guest.x.keepVictimFrozenMembers();
+			const report = withSuppressedSlothletErrorOutputSync(() => later());
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+			expect(await api.victim.v.frozenState()).toEqual({ shelf: '{"n":1}', inner: '{"n":1}' });
+		});
+
+		it("stores the node itself when a module stores a member another module holds frozen", async () => {
+			const api = await load();
+			expect(await api.guest.x.storeVictimElement()).toBe("done");
+			if (!options.permissions) {
+				expect(api.guest.x.keptElement).toBe(api.victim.v.shelf[0]);
+				api.guest.x.keptElement.hostNote = 1;
+				expect(api.victim.v.shelf[0].hostNote).toBe(1);
+				return;
+			}
+			// With permissions on, what a module read keeps its identity when it is handed on (#655), and acts as that
+			// module wherever it is used: a change made through it with no standing of its own is the module's.
+			expect(api.guest.x.keptElement).not.toBe(api.victim.v.shelf[0]);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.guest.x.keptElement.hostNote = 1;
+				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+			api.victim.v.shelf[0].hostNote = 1;
+			expect(api.victim.v.shelf[0].hostNote).toBe(1);
 		});
 
 		it("lets a module use another module's class as plain JS does: instances, instanceof, and a subclass", async () => {

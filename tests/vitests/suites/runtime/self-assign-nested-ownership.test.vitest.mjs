@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
+ *	@Last modified time: 2026-10-25T19:08:18-07:00 (1792980498)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -508,6 +508,13 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("lets a method of another module keep its receiver and write its own node through it later", async () => {
 		await mountModules();
+		const later = await api.supplier.attack.keptOwnReceiver();
+		expect(later("kept-later")).toBe("kept-later");
+		expect(api.callee.ops.kept).toBe("kept-later");
+	});
+
+	it("lets a method of another module keep its receiver and write its own node through it later, with permissions on", async () => {
+		await mountModules({ permissions: {} });
 		const later = await api.supplier.attack.keptOwnReceiver();
 		expect(later("kept-later")).toBe("kept-later");
 		expect(api.callee.ops.kept).toBe("kept-later");

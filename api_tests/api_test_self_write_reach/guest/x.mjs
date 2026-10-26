@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T10:44:10-07:00 (1792863850)
+ *	@Last modified time: 2026-10-25T17:41:48-07:00 (1792975308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,6 +113,71 @@ export function keepVictimPrototype() {
 		return attempt(() => {
 			proto.balance = () => 0;
 		});
+	};
+}
+
+/**
+ * Change members the victim holds frozen — an element of a frozen list, a member of a frozen node — reached
+ * through `self`: assign, define, and delete.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * changeVictimFrozenMembers(); // { elementAssign: "LOOSE_SET_NOT_OWNED", … }
+ */
+export function changeVictimFrozenMembers() {
+	return frozenMemberWrites(self.victim.v.shelf[0], self.victim.v.sealedBox.inner);
+}
+
+/**
+ * Keep members the victim holds frozen and hand back a function that changes them later, from outside any call.
+ * @returns {function(): Record<string, string>} Changes the kept members and reports each outcome.
+ * @example
+ * keepVictimFrozenMembers()(); // { elementAssign: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", … }
+ */
+export function keepVictimFrozenMembers() {
+	const element = self.victim.v.shelf[0];
+	const inner = self.victim.v.sealedBox.inner;
+	return function writeKept() {
+		return frozenMemberWrites(element, inner);
+	};
+}
+
+/**
+ * Store an element of the victim's frozen list, read through `self`, on this module's own node.
+ * @returns {string} The outcome.
+ * @example
+ * storeVictimElement(); // "done"
+ */
+export function storeVictimElement() {
+	return attempt(() => {
+		self.guest.x.keptElement = self.victim.v.shelf[0];
+	});
+}
+
+/**
+ * Assign, define, and delete on an element of a frozen list and a member of a frozen node.
+ * @param {object} element - The element.
+ * @param {object} inner - The member.
+ * @returns {Record<string, string>} Outcome of each change.
+ * @example
+ * frozenMemberWrites(self.victim.v.shelf[0], self.victim.v.sealedBox.inner);
+ */
+function frozenMemberWrites(element, inner) {
+	return {
+		elementAssign: attempt(() => {
+			element.planted = 1;
+		}),
+		elementDefine: attempt(() => {
+			Object.defineProperty(element, "defined", { value: 1, configurable: true, writable: true, enumerable: true });
+		}),
+		elementDelete: attempt(() => {
+			if (!delete element.n) throw new Error("NOT_DELETED");
+		}),
+		innerAssign: attempt(() => {
+			inner.planted = 1;
+		}),
+		innerDelete: attempt(() => {
+			if (!delete inner.n) throw new Error("NOT_DELETED");
+		})
 	};
 }
 

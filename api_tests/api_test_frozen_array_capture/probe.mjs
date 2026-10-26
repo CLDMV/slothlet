@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T23:32:22-07:00 (1792909942)
+ *	@Last modified time: 2026-10-25T19:04:44-07:00 (1792980284)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -386,6 +386,19 @@ export function closedSurveyNow(name) {
 			const descriptor = Object.getOwnPropertyDescriptor(node, "0");
 			return descriptor && { writable: descriptor.writable, configurable: descriptor.configurable, value: descriptor.value };
 		})
+	};
+}
+
+/**
+ * List the keys of a top-level node now, in this call.
+ * @param {string} name - The node.
+ * @returns {{ownKeys: object, names: object}} The outcomes.
+ */
+export function rootKeysNow(name) {
+	const node = self[name];
+	return {
+		ownKeys: attempt(() => Reflect.ownKeys(node).filter((key) => typeof key === "string")),
+		names: attempt(() => Object.getOwnPropertyNames(node))
 	};
 }
 

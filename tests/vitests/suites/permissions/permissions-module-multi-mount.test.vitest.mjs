@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T08:46:06-07:00 (1792424766)
+ *	@Last modified time: 2026-10-25T19:08:05-07:00 (1792980485)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -168,6 +168,13 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 			expect(await api.slothlet.api.remove("vic")).toBe(true);
 			expect(api.vicpath).toBeUndefined();
 			expect(typeof api.other.x.listSelf).toBe("function");
+		});
+
+		it("lets module code mount a module that exports a frozen array, which the mounted node keeps frozen", async () => {
+			await boot();
+			expect(await api.guest.x.addAt("guest.vic", VICTIM, { moduleID: "vic" })).toBe("done");
+			expect(Object.isFrozen(api.guest.vic.v.shelf)).toBe(true);
+			expect(api.guest.vic.v.shelf[1]).toBe("S");
 		});
 
 		it("removes the module with that exact id, not one whose id starts with it, for module code", async () => {

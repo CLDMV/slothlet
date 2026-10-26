@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:54:07-07:00 (1792857247)
+ *	@Last modified time: 2026-10-25T17:41:55-07:00 (1792975315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -458,4 +458,26 @@ export function changeOwnData() {
 	data.when.setTime(0);
 	data.bytes[0] = 1;
 	return out;
+}
+
+/**
+ * A list the victim exports frozen, whose elements it can still change.
+ * @type {ReadonlyArray<*>}
+ */
+export const shelf = Object.freeze([{ n: 1 }, "S", 3]);
+
+/**
+ * A node the victim exports frozen, holding a member it can still change.
+ * @type {{readonly inner: {n: number}}}
+ */
+export const sealedBox = Object.freeze({ inner: { n: 1 } });
+
+/**
+ * What the members the victim holds frozen hold now, as the victim sees them.
+ * @returns {{shelf: string, inner: string}} Each member, as JSON.
+ * @example
+ * frozenState(); // { shelf: '{"n":1}', inner: '{"n":1}' }
+ */
+export function frozenState() {
+	return { shelf: JSON.stringify(shelf[0]), inner: JSON.stringify(sealedBox.inner) };
 }
