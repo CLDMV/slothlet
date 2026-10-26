@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T19:08:18-07:00 (1792980498)
+ *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,12 @@ import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, withSuppressedSlothle
 
 const FIXTURE = TEST_DIRS.API_TEST_NESTED_SELF_ASSIGN;
 
+/**
+ * The permission system on, allowing every read and call: ownership decides the writes, and it decides them only
+ * while the system is on (#625).
+ */
+const PERMISSIONS_ON = { permissions: { defaultPolicy: "allow" } };
+
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
 	{ mode: "lazy", runtime: "async" },
@@ -50,12 +56,13 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	});
 
 	/**
-	 * Mount `callee`, `vault`, and `supplier` as three separate modules over a base tree.
+	 * Mount `callee`, `vault`, and `supplier` as three separate modules over a base tree, with the permission system
+	 * on unless `options` gives its own `permissions`.
 	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function mountModules(options = {}) {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
 		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
@@ -530,8 +537,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.vault.secret()).toBe("vault-secret");
 	});
 
-	it("hands a method its own node as it reads it through self as receiver and return value, and an argument as the caller passed it", async () => {
-		await mountModules();
+	it("hands a method its own node as it reads it through self as receiver and return value, and an argument as the caller passed it, with the permission system off", async () => {
+		// With the permission system off nothing is gated, so a module is handed the nodes themselves.
+		await mountModules({ permissions: undefined });
 		expect(await api.supplier.attack.identityChecks()).toEqual([true, true, false]);
 	});
 
@@ -670,12 +678,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => write()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 		});
-		for (const call of [borrow.member, borrow.method]) {
-			const later = call();
-			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
-			});
-		}
+		// The module that read them is gone: its views refuse it even the read.
+		withSuppressedSlothletErrorOutputSync(() => {
+			for (const call of [borrow.member, borrow.method]) expect(() => call()).toThrow(/PERMISSION_DENIED/);
+		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 		expect(api.vault.secret.useSecret).toBeUndefined();
 	});
@@ -685,8 +691,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.supplier.attack.sameNodeTwice()).toBe(true);
 	});
 
-	it("stores the node itself when a module stores what it read through self", async () => {
-		await mountModules();
+	it("stores the node itself when a module stores what it read through self, with the permission system off", async () => {
+		await mountModules({ permissions: undefined });
 		await api.supplier.attack.storeCalleeRef();
 		expect(api.supplier.ref).toBe(api.callee.ops);
 		api.supplier.ref.hostNote = "through-the-stored-node";
@@ -955,7 +961,7 @@ describe.each([
 	const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 	it("refuses a write the live runtime cannot attribute to one call, rather than taking the store's last caller", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON });
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
 		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
 		const [goGate, releaseGo] = gate();

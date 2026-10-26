@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:45-07:00 (1792434885)
+ *	@Last modified time: 2026-10-26T02:52:59-07:00 (1793008379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,12 +82,12 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 			expect(api.slothlet.lifted).toBe(1);
 		});
 
-		it("holds a module an api.add mounted to what it owns", async () => {
+		it("lets a module an api.add mounted write anywhere: what it owns is not checked", async () => {
 			await load(options);
-			const framework = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("slothlet.metadata"));
-			expect(framework).toEqual(every(framework, "LOOSE_SET_NOT_OWNED"));
-			const victim = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
-			expect(victim).toEqual(every(victim, "LOOSE_SET_NOT_OWNED"));
+			const framework = api.guest.x.writeAt("slothlet.metadata");
+			expect(framework).toEqual(every(framework, "done"));
+			const victim = api.guest.x.writeAt("victim.v");
+			expect(victim).toEqual(every(victim, "done"));
 			const own = api.guest.x.writeAt("guest.x");
 			expect(own).toEqual(every(own, "done"));
 		});
@@ -100,11 +100,13 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 				)
 			).toBe("INVALID_PERMISSION_RULE");
 			expect(typeof api.guest.x.addRuleFor({ caller: "other.**", target: "guest.**:write", effect: "allow" })).toBe("string");
-			const off = withSuppressedSlothletErrorOutputSync(() => api.other.x.writeAt("guest.x"));
-			expect(off).toEqual(every(off, "LOOSE_SET_NOT_OWNED"));
+			const off = api.other.x.writeAt("victim.v");
+			expect(off).toEqual(every(off, "done"));
 			api.slothlet.permissions.control.enable();
 			const on = api.other.x.writeAt("guest.x");
 			expect(on).toEqual(every(on, "done"));
+			const ungranted = withSuppressedSlothletErrorOutputSync(() => api.other.x.writeAt("victim.v"));
+			expect(ungranted).toEqual(every(ungranted, "LOOSE_SET_NOT_OWNED"));
 		});
 	});
 
@@ -123,9 +125,11 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 			await load({ permissions: { defaultPolicy: "allow", rules: [GRANT] } });
 			api.slothlet.permissions.control.disable();
 			expect(api.root.writeNamespace()).toBe("done");
-			const ungranted = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
-			expect(ungranted).toEqual(every(ungranted, "LOOSE_SET_NOT_OWNED"));
+			const ungranted = api.other.x.writeAt("victim.v");
+			expect(ungranted).toEqual(every(ungranted, "done"));
 			api.slothlet.permissions.control.enable();
+			const refused = withSuppressedSlothletErrorOutputSync(() => api.other.x.writeAt("victim.v"));
+			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 			const granted = api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));

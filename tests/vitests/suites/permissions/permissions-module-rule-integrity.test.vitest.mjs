@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:14:07-07:00 (1792822447)
+ *	@Last modified time: 2026-10-26T02:52:54-07:00 (1793008374)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,6 +183,21 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(api.z.v.viaStale).toBeUndefined();
 		});
 
+		it("keeps it so for an event rule's condition", async () => {
+			await load({
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.rules.add", effect: "allow" }] }
+			});
+			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
+			api.guest.x.takeConditionWrites();
+			api.victim.v.listen("guest.zap");
+			await api.guest.x.shout("guest.zap", { n: 1 });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const writes = api.guest.x.takeConditionWrites();
+			expect(writes.length).toBeGreaterThan(0);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+
 		it("keeps it so across a reload", async () => {
 			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
 			expect(api.guest.x.addWritingCondition("victim.v")).toMatch(/^perm-/);
@@ -230,7 +245,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
 		});
 
-		it("runs the condition of a module's event rule as that module", async () => {
+		it("lets the condition of a module's event rule write anywhere, as nothing decides writes", async () => {
 			await load({});
 			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
 			api.guest.x.takeConditionWrites();
@@ -239,8 +254,8 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await new Promise((resolve) => setTimeout(resolve, 20));
 			const writes = api.guest.x.takeConditionWrites();
 			expect(writes.length).toBeGreaterThan(0);
-			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
-			expect(api.victim.v.viaCondition).toBeUndefined();
+			expect([...new Set(writes)]).toEqual(["done"]);
+			expect(api.victim.v.viaCondition).toBe(1);
 		});
 	});
 
@@ -342,11 +357,12 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 	describe("a module's mount below another module's", () => {
 		/**
-		 * Mount the guest code at `outer` and again at `outer.inner`, as two modules.
+		 * Mount the guest code at `outer` and again at `outer.inner`, as two modules, with the permission system on:
+		 * ownership decides writes only while it is on.
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function nest() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { defaultPolicy: "allow" } });
 			await api.slothlet.api.add("outer", path.join(FIXTURE, "guest"), { moduleID: "outer" });
 			await api.slothlet.api.add("outer.inner", path.join(FIXTURE, "guest"), { moduleID: "inner" });
 			return api;

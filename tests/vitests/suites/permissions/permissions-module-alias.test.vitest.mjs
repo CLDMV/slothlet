@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T17:07:43-07:00 (1792800463)
+ *	@Last modified time: 2026-10-26T02:52:50-07:00 (1793008370)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,6 +55,9 @@ const PERMISSIONS = [
 describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({ mode, runtime }) => {
 	describe.each(PERMISSIONS)("$label", ({ options }) => {
 		let api;
+		// Ownership decides a write only while the permission system is on (#625): with it off, every write lands.
+		const refused = options.permissions !== undefined;
+		const WRITE = refused ? "LOOSE_SET_NOT_OWNED" : "done";
 
 		afterEach(async () => {
 			if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
@@ -103,22 +106,27 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			["replace", { collisionMode: "replace" }],
 			["forceOverwrite", { forceOverwrite: true }],
 			["default", {}]
-		])("refuses an add through the alias into the aliased node (%s), and plants nothing", async (_label, addOptions) => {
+		])("holds an add through the alias into the aliased node to the rule for that node (%s)", async (label, addOptions) => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.ref", "planted", addOptions))).toBe(
-				"LOOSE_SET_NOT_OWNED"
-			);
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.ref", "planted", addOptions))).toBe(WRITE);
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.ref.deep", HOLDER, { moduleID: "deep" }))).toBe(
-				"LOOSE_SET_NOT_OWNED"
+				WRITE
 			);
-			await victimIntact();
-			expect(api.victim.v.deep).toBeUndefined();
+			if (refused) {
+				await victimIntact();
+				expect(api.victim.v.deep).toBeUndefined();
+				return;
+			}
+			// It lands as the same add made at the aliased node's own path does: a replace takes the node's members.
+			expect(await api.victim.v.planted.injected()).toBe("injected");
+			expect(typeof api.victim.v.deep).toBe("object");
+			expect(typeof api.victim.v.secret).toBe(label === "replace" || label === "forceOverwrite" ? "undefined" : "function");
 		});
 
-		it("refuses the framework's setters through the alias", async () => {
+		it("holds the framework's setters through the alias to the rule for the aliased node", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setFor", "guest.x.ref"))).toBe("LOOSE_SET_NOT_OWNED");
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setFor", "guest.x.ref"))).toBe(WRITE);
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).toBe(WRITE);
 			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
 			await victimIntact();
 		});
@@ -186,30 +194,27 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 				["a getter defined on the module's node", (x) => x.defineGetterAlias("guest.x", "g", "victim.v"), "guest.x.g"],
 				["a getter on an object the module stored", (x) => x.storeGetterObject("guest.x", "b", "r", "victim.v"), "guest.x.b.r"],
 				["a Proxy the module stored", (x) => x.storeProxyObject("guest.x", "p", "r", "victim.v"), "guest.x.p.r"]
-			])("refuses an add through %s, and plants nothing", async (_label, store, at) => {
+			])("holds an add through %s to the rule for the node it reaches", async (_label, store, at) => {
 				await load();
 				expect(await store(api.guest.x)).toBe("done");
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(`${at}.zz`, HOLDER, { moduleID: "gz" }))).toBe(
-					"LOOSE_SET_NOT_OWNED"
-				);
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected(at, "zz", { collisionMode: "merge" }))).toBe(
-					"LOOSE_SET_NOT_OWNED"
-				);
-				expect(api.victim.v.zz).toBeUndefined();
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(`${at}.zz`, HOLDER, { moduleID: "gz" }))).toBe(WRITE);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected(at, "zz", { collisionMode: "merge" }))).toBe(WRITE);
+				expect(typeof api.victim.v.zz).toBe(refused ? "undefined" : "object");
 				await victimIntact();
+				// What landed is mounted under its own moduleID, so removing the module that added it leaves it.
 				await api.slothlet.api.remove("guest");
-				expect(api.victim.v.zz).toBeUndefined();
+				expect(typeof api.victim.v.zz).toBe(refused ? "undefined" : "object");
 				await victimIntact();
 			});
 
-			it("refuses the setters and removes nothing through a getter", async () => {
+			it("holds the setters through a getter to the rule for the node it reaches, and removes nothing through it", async () => {
 				await load();
 				expect(await api.guest.x.defineGetterAlias("guest.x", "g", "victim.v")).toBe("done");
 				api.slothlet.metadata.setFor("victim.v", "kept", 1);
 				for (const what of ["setFor", "removeFor", "reload"]) {
 					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.g")) }).toEqual({
 						what,
-						outcome: "LOOSE_SET_NOT_OWNED"
+						outcome: WRITE
 					});
 				}
 				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.g.secret"))).toBe(false);
@@ -218,27 +223,33 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 				await victimIntact();
 			});
 
-			it("refuses an add through a version dispatcher stored as an alias, and plants nothing, before and after the host removes the module", async () => {
+			it("holds an add through a version dispatcher stored as an alias to the rule for the version it reaches, before and after the host removes the module", async () => {
 				await loadVersioned();
 				expect(await api.guest.x.storeAlias("guest.x", "vl", "victim.lib")).toBe("done");
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.vl.v.zz", HOLDER, { moduleID: "vz" }))).toBe(
-					"LOOSE_SET_NOT_OWNED"
-				);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.vl.v.zz", HOLDER, { moduleID: "vz" }))).toBe(WRITE);
 				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.vl", "zz", { collisionMode: "merge" }))).toBe(
-					"LOOSE_SET_NOT_OWNED"
+					WRITE
 				);
-				await versionedIntact();
+				if (refused) {
+					await versionedIntact();
+					await api.slothlet.api.remove("guest");
+					await versionedIntact();
+					return;
+				}
+				expect(await api.v1.victim.lib.v.secret()).toBe("SECRET");
+				expect(typeof api.v1.victim.lib.v.zz).toBe("object");
+				expect(typeof api.v1.victim.lib.zz).toBe("object");
 				await api.slothlet.api.remove("guest");
-				await versionedIntact();
+				expect(typeof api.v1.victim.lib.v.zz).toBe("object");
 			});
 
-			it("refuses the setters and removes nothing through a version dispatcher stored as an alias", async () => {
+			it("holds the setters through a version dispatcher stored as an alias to the rule for the version it reaches, and removes nothing through it", async () => {
 				await loadVersioned();
 				expect(await api.guest.x.storeAlias("guest.x", "vl", "victim.lib")).toBe("done");
 				for (const what of ["setFor", "reload"]) {
 					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.vl")) }).toEqual({
 						what,
-						outcome: "LOOSE_SET_NOT_OWNED"
+						outcome: WRITE
 					});
 				}
 				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.vl.v"))).toBe(false);

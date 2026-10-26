@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:40-07:00 (1792434880)
+ *	@Last modified time: 2026-10-26T02:52:47-07:00 (1793008367)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -147,13 +147,12 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 		return api;
 	}
 
-	it("lets base-module code write the namespace it owns, and no lift grants it to a module that owns none of it", async () => {
+	it("lets base-module code and a module mounted with api.add write the namespace: nothing decides writes", async () => {
 		await load();
 		expect(api.root.writeNamespace()).toBe("done");
 		expect(api.slothlet.lifted).toBe(1);
-		await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
-		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("LOOSE_SET_NOT_OWNED");
-		expect(api.slothlet.lifted).toBe(1);
+		expect(api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
+		expect(api.slothlet.lifted).toBe(2);
 	});
 
 	it("keeps module code from adding a rule that lifts a built-in write rule", async () => {

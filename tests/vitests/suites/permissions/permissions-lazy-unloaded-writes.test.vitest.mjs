@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T17:12:32-07:00 (1792887152)
+ *	@Last modified time: 2026-10-26T02:52:49-07:00 (1793008369)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,9 +42,9 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 		});
 
 		it.each([
-			["on", { permissions: {} }],
-			["off", {}]
-		])("refuses another module's change, and changes nothing (permissions %s)", async (_label, options) => {
+			["on", { permissions: {} }, "LOOSE_SET_NOT_OWNED"],
+			["off", {}, "done"]
+		])("holds another module's change to the same rule as a loaded node (permissions %s)", async (_label, options, expected) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
@@ -74,15 +74,13 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 				};
 			};
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
-			expect(report).toEqual({
-				assign: "LOOSE_SET_NOT_OWNED",
-				define: "LOOSE_SET_NOT_OWNED",
-				remove: "LOOSE_SET_NOT_OWNED",
-				freeze: "LOOSE_SET_NOT_OWNED"
-			});
-			const inner = await api.holder.deep.inner;
-			expect(inner.planted).toBeUndefined();
-			expect(Object.isFrozen(inner)).toBe(false);
+			expect(report).toEqual({ assign: expected, define: expected, remove: expected, freeze: expected });
+			// What lands through a node not loaded yet is #672: here only a refused change is checked to change nothing.
+			if (expected !== "done") {
+				const inner = await api.holder.deep.inner;
+				expect(inner.planted).toBeUndefined();
+				expect(Object.isFrozen(inner)).toBe(false);
+			}
 		});
 
 		it.each([
@@ -98,9 +96,9 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 		});
 
 		it.each([
-			["on", { permissions: {} }],
-			["off", {}]
-		])("reads and refuses through a version dispatcher as eager mode does (permissions %s)", async (_label, options) => {
+			["on", { permissions: {} }, "LOOSE_SET_NOT_OWNED"],
+			["off", {}, "done"]
+		])("reads and writes through a version dispatcher as eager mode does (permissions %s)", async (_label, options, expected) => {
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				/**
 				 * Run `use`, reporting what it gave or the error code it threw. A node is reported as one whatever its
@@ -146,8 +144,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			}
 			expect(reports.lazy).toEqual(reports.eager);
 			expect(reports.lazy.inner).not.toBe("done");
-			expect(reports.lazy.assign).toBe("LOOSE_SET_NOT_OWNED");
-			expect(reports.lazy.assignDeeper).toBe("LOOSE_SET_NOT_OWNED");
+			expect(reports.lazy.assign).toBe(expected);
+			expect(reports.lazy.assignDeeper).toBe(expected);
 		});
 	}
 );

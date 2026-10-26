@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T20:05:56-07:00 (1792983956)
+ *	@Last modified time: 2026-10-26T02:53:06-07:00 (1793008386)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -80,9 +80,19 @@ const markRefused = (report) =>
  */
 const allRefused = (report) => Object.fromEntries(Object.keys(report).map((key) => [key, "refused"]));
 
+/**
+ * The report expected when every change went through.
+ * @param {Record<string, string>} report - Outcomes by change.
+ * @returns {Record<string, string>} The same keys, each `"done"`.
+ */
+const allDone = (report) => Object.fromEntries(Object.keys(report).map((key) => [key, "done"]));
+
 describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $runtime", ({ mode, runtime }) => {
 	describe.each(PERMISSIONS)("$label", ({ options }) => {
 		const instances = [];
+		// Ownership decides a module's write only while the permission system is on (#625): with it off, every write
+		// a module makes goes through as plain JS lets it.
+		const off = !options.permissions;
 
 		afterEach(async () => {
 			for (const api of instances.splice(0)) await api.slothlet.shutdown();
@@ -100,9 +110,14 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			return api;
 		}
 
-		it("refuses a module changing another module's class prototype reached through self, at any depth", async () => {
+		it("holds a module changing another module's class prototype reached through self, at any depth, to ownership", async () => {
 			const api = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimPrototype());
+			if (off) {
+				expect(Object.values(markRefused(report))).not.toContain("refused");
+				expect(api.victim.v.Account.prototype.planted).toBe(1);
+				return;
+			}
 			expect(markRefused(report)).toEqual(allRefused(report));
 			const proto = api.victim.v.Account.prototype;
 			expect(new api.victim.v.Account().balance()).toBe(100);
@@ -115,12 +130,12 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(Object.isExtensible(proto)).toBe(true);
 		});
 
-		it("refuses a module changing another module's class prototype that module handed back", async () => {
+		it("holds a module changing another module's class prototype that module handed back to ownership", async () => {
 			const api = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeHandedPrototype());
-			expect(markRefused(report)).toEqual(allRefused(report));
-			expect(new api.victim.v.Account().balance()).toBe(100);
-			expect(api.victim.v.Account.prototype.planted).toBeUndefined();
+			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
+			expect(api.victim.v.Account.prototype.planted).toBe(off ? 1 : undefined);
+			if (!off) expect(new api.victim.v.Account().balance()).toBe(100);
 		});
 
 		it("lets a module write later, from outside any call, through its own class prototype it kept", async () => {
@@ -160,25 +175,30 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			});
 		});
 
-		it("refuses a write through another module's class prototype a module kept, made later from outside any call", async () => {
+		it("holds a write through another module's class prototype a module kept, made later from outside any call, to ownership", async () => {
 			const api = await load();
 			const later = await api.guest.x.keepVictimPrototype();
-			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
-			expect(new api.victim.v.Account().balance()).toBe(100);
+			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(off ? "done" : "RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+			if (!off) expect(new api.victim.v.Account().balance()).toBe(100);
 		});
 
-		it("refuses a module changing members another module holds frozen", async () => {
+		it("holds a module changing members another module holds frozen to ownership", async () => {
 			const api = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimFrozenMembers());
-			expect(markRefused(report)).toEqual(allRefused(report));
+			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
+			// Freezing a list leaves its elements open, so a change that goes through lands on the element.
+			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
 			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
 
-		it("refuses a write through members another module holds frozen a module kept, made later from outside any call", async () => {
+		it("holds a write through members another module holds frozen a module kept, made later from outside any call, to ownership", async () => {
 			const api = await load();
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
-			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+			expect(report).toEqual(
+				off ? allDone(report) : Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]))
+			);
+			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
 			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
 
@@ -247,11 +267,11 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			delete api.victim.v.Account.prototype.shared;
 		});
 
-		it("refuses a module writing symbol-keyed members on another module's node", async () => {
+		it("holds a module writing symbol-keyed members on another module's node to ownership", async () => {
 			const api = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimSymbol());
-			expect(markRefused(report)).toEqual(allRefused(report));
-			expect(api.victim.v[Symbol.for("slothlet.test.i625.guest")]).toBeUndefined();
+			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
+			expect(api.victim.v[Symbol.for("slothlet.test.i625.guest")]).toBe(off ? 1 : undefined);
 		});
 
 		it("lets a module write symbol-keyed members on its own node", async () => {
@@ -260,10 +280,26 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(await api.guest.x.writeOwnSymbol()).toEqual({ assign: "done", read: 1 });
 		});
 
-		it("refuses a module changing self outside what it owns, and every module of every instance can still list self", async () => {
+		it("holds a module changing self outside what it owns to ownership, and every module of every instance can still list self", async () => {
 			const api = await load();
 			const other = await load();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeSelf());
+			if (off) {
+				// As base-module code may: the root of self still refuses a fixed definition and changes to itself.
+				expect(report).toEqual({
+					defineFixed: "TypeError",
+					define: "done",
+					remove: "done",
+					setPrototypeOf: "TypeError",
+					preventExtensions: "TypeError",
+					freeze: "TypeError",
+					symbol: "done"
+				});
+				expect(api.zz).toBe(1);
+				expect(api.victim).toBeUndefined();
+				expect(await other.guest.x.listSelf()).toBe(Object.keys(other).length);
+				return;
+			}
 			expect(markRefused(report)).toEqual(allRefused(report));
 			expect(api.zz).toBeUndefined();
 			expect(api[Symbol.for("slothlet.test.i625.self")]).toBeUndefined();
@@ -295,19 +331,19 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			}
 		});
 
-		it("refuses a module changing what another module's node holds under a symbol key, or its accessor's functions", async () => {
+		it("holds a module changing what another module's node holds under a symbol key, or its accessor's functions, to ownership", async () => {
 			const api = await load();
 			await api.victim.v.plantSymbolBox();
 			const report = await withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeVictimHeld());
-			expect(markRefused(report)).toEqual(allRefused(report));
-			expect(api.victim.v[Symbol.for("slothlet.test.i625.box")].n).toBe(1);
-			expect(Object.getOwnPropertyDescriptor(api.victim.v.conf, "level").get.planted).toBeUndefined();
+			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
+			expect(api.victim.v[Symbol.for("slothlet.test.i625.box")].n).toBe(off ? 2 : 1);
+			expect(Object.getOwnPropertyDescriptor(api.victim.v.conf, "level").get.planted).toBe(off ? 1 : undefined);
 		});
 
-		it("refuses a module writing through its view of another module's class prototype that module handed back to it", async () => {
+		it("holds a module writing through its view of another module's class prototype that module handed back to it to ownership", async () => {
 			const api = await load();
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.echoPrototype())).toBe("LOOSE_SET_NOT_OWNED");
-			expect(api.victim.v.Account.prototype.echoed).toBeUndefined();
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.echoPrototype())).toBe(off ? "done" : "LOOSE_SET_NOT_OWNED");
+			expect(api.victim.v.Account.prototype.echoed).toBe(off ? 1 : undefined);
 		});
 
 		it("keeps a change base-module code makes to self inside a fully isolated scope in that scope", async () => {
@@ -332,11 +368,9 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const api = await load();
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			try {
-				// With the permission system off, no built-in write rule applies, and the guest owns none of the namespace.
-				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe(
-					options.permissions ? "PERMISSION_DENIED" : "LOOSE_SET_NOT_OWNED"
-				);
-				expect(api.slothlet.planted).toBeUndefined();
+				// With the permission system off, nothing decides writes: no built-in write rule, and no ownership.
+				expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeStoredNamespace())).toBe(off ? "done" : "PERMISSION_DENIED");
+				expect(api.slothlet.planted).toBe(off ? 1 : undefined);
 			} finally {
 				delete api.victim.v.Account.prototype.namespace;
 			}

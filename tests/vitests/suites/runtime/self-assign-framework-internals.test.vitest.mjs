@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T12:23:51-07:00 (1792437831)
+ *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,8 +23,8 @@
  * its own, with `PERMISSION_DENIED`. A write the host makes is absorbed (it reports success and changes nothing, so
  * the key's existence does not leak).
  * Either way the framework's state is unchanged: with the defaults and with `defaultPolicy: "deny"`, in all four
- * mode / runtime configurations. With the permission system off (no `permissions` config) the built-in rules are
- * off too, and the ownership rule alone keeps a module off another module's node.
+ * mode / runtime configurations. With the permission system off (no `permissions` config) nothing decides writes:
+ * the built-in rules and the ownership rule are off, and a module changes these keys as it changes any member.
  *
  * Fixture: `api_tests/api_test_framework_namespace_guard` — `victim/` and `intruder/` both run `shared/internals.mjs`.
  */
@@ -177,7 +177,7 @@ describe.each(CONFIGS)(
 			api = null;
 		});
 
-		it("refuses them by ownership, and leaves the framework's state unchanged", async () => {
+		it("lets a module change them as it may change any member: nothing decides writes", async () => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
 			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
 			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { moduleID: "intruder" });
@@ -192,12 +192,13 @@ describe.each(CONFIGS)(
 							apiPath,
 							key,
 							change,
-							outcome: "LOOSE_SET_NOT_OWNED"
+							outcome: "done"
 						});
 					}
 				}
-				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).toEqual({ apiPath, after: before });
+				expect({ apiPath, after: snapshot(nodeAt(apiPath)) }).not.toEqual({ apiPath, after: before });
 			}
+			// The framework's own handle on the node is not one of the keys a module reaches.
 			expect(await api.victim.v.hello()).toBe("victim");
 			expect(api.victim.v.data.a).toBe(1);
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T20:04:26-07:00 (1792983866)
+ *	@Last modified time: 2026-10-26T02:51:11-07:00 (1793008271)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -244,7 +244,7 @@ function runtime_selfWriteHasStanding(slothlet) {
  * @private
  */
 function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
-	if (runtime_selfWriteHasStanding(slothlet)) return;
+	if (!slothlet.handlers.apiManager.ownershipEnforced() || runtime_selfWriteHasStanding(slothlet)) return;
 	if (reader === HOST_READER) return;
 	if (reader !== UNATTRIBUTED_READER && owner) {
 		const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
@@ -1297,11 +1297,14 @@ export function runtime_selfView(node, reader) {
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
 	// A member the node holds fixed is handed out as the node holds it, and so with no view of this one to hold a
-	// change made through it to the reader. A module's view of a node no captured view stands for (permissions or
-	// capture off, a top-level node) therefore works through a view of the node that only holds such changes to
-	// the reader, and holds what the node holds fixed as views of the same kind ({@link runtime_capturedView}).
+	// change made through it to the reader. While the ownership rule applies (permissions on), a module's view of a
+	// node no captured view stands for (capture off, a top-level node) therefore works through a view of the node that
+	// only holds such changes to the reader, and holds what the node holds fixed as views of the same kind
+	// ({@link runtime_capturedView}). With no permissions nothing is held, and the view works on the node itself.
 	const held = node;
-	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node)) node = runtime_capturedView(node, reader, false);
+	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node) && slothlet.handlers.apiManager.ownershipEnforced()) {
+		node = runtime_capturedView(node, reader, false);
+	}
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
@@ -1484,6 +1487,7 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
  */
 export function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
+	if (!slothlet?.handlers?.apiManager?.ownershipEnforced()) return;
 	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
@@ -1516,6 +1520,9 @@ export function runtime_selfChangeTarget(ctx, prop) {
 	// A store holding `self` holds its instance too: both are set together when the instance loads.
 	const slothlet = ctx.slothlet;
 	const parts = typeof prop === "string" ? [prop] : [];
+	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
+	const target = ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
+	if (!slothlet.handlers.apiManager.ownershipEnforced()) return target;
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
 	// cannot attribute before it resolves a context at all, and the async runtime always attributes. Kept so a
@@ -1525,8 +1532,7 @@ export function runtime_selfChangeTarget(ctx, prop) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 	}
 	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite(parts, identity.currentWrapper);
-	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
-	return ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
+	return target;
 }
 
 /**
@@ -1567,6 +1573,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	// for a change made with no standing of its own, the reader; a change the host makes inside a `run()` /
 	// `scope()` it opened goes through, as it would on the member itself.
 	const refuseChange = (prop) => {
+		if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 		const parts = (prop === null ? path : childPath(prop)).split(".");
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
@@ -1714,6 +1721,7 @@ const SELF_ROOT_VIEWS = new WeakMap();
  * @private
  */
 function runtime_selfRootWriter(slothlet, reader, parts) {
+	if (!slothlet.handlers.apiManager.ownershipEnforced()) return null;
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
@@ -1959,6 +1967,7 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 function runtime_assertOwnedWrite(wrapper, prop) {
 	if (FRAMEWORK_WRITES.has(wrapper)) return;
 	const slothlet = wrapper.slothlet;
+	if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
 	if (typeof prop === "string") parts.push(prop);
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
@@ -6786,6 +6795,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// A change through the stand-in is a write at the path it stands for (#625): judged as one before it is made.
 		const assertWaitingWrite = (prop) => {
 			const slothlet = wrapper.slothlet;
+			if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 			const parts = [...String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean), ...propChain.map(String)];
 			if (typeof prop === "string") parts.push(prop);
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);

@@ -187,7 +187,7 @@ export class ApiManager extends ComponentBase {
      * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
      * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
      * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
-     * callers it names. With the system off, the ownership rule alone decides.
+     * callers it names. With the system off nothing is checked: with no permissions, a module writes anywhere.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -202,6 +202,17 @@ export class ApiManager extends ComponentBase {
         moduleID: string;
         prior: Map<string, any>;
     } | null): void;
+    /**
+     * Whether module writes are held to the ownership rule at all: only while the permission system is on. With no
+     * permissions, nothing restricts where a module writes.
+     *
+     * @returns {boolean} Whether the ownership rule applies now.
+     * @public
+     *
+     * @example
+     * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
+     */
+    public ownershipEnforced(): boolean;
     /**
      * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
      * Used where a write is held to a module that read a node rather than the code running now.

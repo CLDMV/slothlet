@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T23:11:31-07:00 (1792390291)
+ *	@Last modified time: 2026-10-26T02:52:58-07:00 (1793008378)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,8 +96,16 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 		expect(report).toEqual(every(report, "done"));
 	});
 
+	it("lets a module write another module's members with no permissions config: nothing decides writes", async () => {
+		await load({});
+		const report = await api.guest.x.writeVictim();
+		expect(report).toEqual(every(report, "done"));
+		expect(api.victim.v.noteDefined).toBe(2);
+		expect(api.victim.v.Account.prototype.granted).toBe(1);
+		expect(Object.isFrozen(api.victim.v.conf)).toBe(true);
+	});
+
 	it.each([
-		["no permissions config", {}],
 		["permissions with defaults", { permissions: {} }],
 		["defaultPolicy allow, no write rule", { permissions: { defaultPolicy: "allow" } }]
 	])("refuses the writes with no granting rule: %s", async (_label, options) => {

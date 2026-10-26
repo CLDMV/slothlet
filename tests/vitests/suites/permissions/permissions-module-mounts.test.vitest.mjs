@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:37:20-07:00 (1792823840)
+ *	@Last modified time: 2026-10-26T02:52:52-07:00 (1793008372)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -165,11 +165,11 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		});
 
 		it.each([
-			["on", { permissions: {} }],
-			["off", {}]
+			["on", { permissions: {} }, "LOOSE_SET_NOT_OWNED"],
+			["off", {}, "done"]
 		])(
-			"does not let content the module mounts under its own id land in a module mounted below it (permissions %s)",
-			async (_label, options) => {
+			"holds content the module mounts under its own id to the rule for a module mounted below it (permissions %s)",
+			async (_label, options, expected) => {
 				await load(options);
 				await api.slothlet.api.add("guest.kid", VICTIM, { moduleID: "vic" });
 				const content = { kid: { v: { planted: () => "EVIL" } } };
@@ -177,26 +177,27 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 					const outcome = await withSuppressedSlothletErrorOutput(() =>
 						api.guest.x.addAt("guest", content, { collisionMode: "merge", ...(moduleID ? { moduleID } : {}) })
 					);
-					expect(outcome).toBe("LOOSE_SET_NOT_OWNED");
-					expect(api.guest.kid.v.planted).toBeUndefined();
+					expect(outcome).toBe(expected);
+					expect(api.guest.kid.v.planted?.()).toBe(expected === "done" ? "EVIL" : undefined);
 				}
 				expect(await api.guest.kid.v.secret()).toBe("SECRET");
 			}
 		);
 
 		it.each([
-			["on", { permissions: {} }],
-			["off", {}]
+			["on", { permissions: {} }, "LOOSE_SET_NOT_OWNED"],
+			["off", {}, "done"]
 		])(
 			"leaves a removed module's kept function owning nothing once another module takes its id (permissions %s)",
-			async (_label, options) => {
+			async (_label, options, expected) => {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
 				const kept = api.g.x.keepWriter("z.v", true);
 				await api.slothlet.api.remove("gA");
 				await api.slothlet.api.add("z", VICTIM, { moduleID: "gA" });
-				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe("LOOSE_SET_NOT_OWNED");
-				expect(api.z.v.viaHeld).toBeUndefined();
+				// With the permission system off nothing decides writes, so even code of a removed module writes.
+				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe(expected);
+				expect(api.z.v.viaHeld).toBe(expected === "done" ? 1 : undefined);
 			}
 		);
 
@@ -204,14 +205,17 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			["at the same path", "g", "g.v"],
 			["at the root", "", "v"]
 		])("leaves a removed module's kept function owning nothing when the host mounts its id again %s", async (_label, mountAt, target) => {
-			for (const options of [{ permissions: {} }, {}]) {
+			for (const [options, expected] of [
+				[{ permissions: {} }, "LOOSE_SET_NOT_OWNED"],
+				[{}, "done"]
+			]) {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
 				const kept = api.g.x.keepWriter(target, true);
 				await api.slothlet.api.remove("gA");
 				await api.slothlet.api.add(mountAt, VICTIM, { moduleID: "gA" });
-				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe("LOOSE_SET_NOT_OWNED");
-				expect(target.split(".").reduce((node, key) => node[key], api).viaHeld).toBeUndefined();
+				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe(expected);
+				expect(target.split(".").reduce((node, key) => node[key], api).viaHeld).toBe(expected === "done" ? 1 : undefined);
 				await api.slothlet.shutdown();
 				api = null;
 			}

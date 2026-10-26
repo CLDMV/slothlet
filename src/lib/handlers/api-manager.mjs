@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:10-07:00 (1792834930)
+ *	@Last modified time: 2026-10-26T02:51:08-07:00 (1793008268)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -636,7 +636,7 @@ export class ApiManager extends ComponentBase {
 	 * code only and only while the system is on: a denying rule refuses the write whatever the module owns, and an
 	 * allowing one grants it whatever the module owns. The built-in ones keep every module off the framework's
 	 * namespace and root functions and off the framework's own keys on api nodes, until an allow lifts one for the
-	 * callers it names. With the system off, the ownership rule alone decides.
+	 * callers it names. With the system off nothing is checked: with no permissions, a module writes anywhere.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -648,6 +648,7 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
+		if (!this.ownershipEnforced()) return;
 		if (callerWrapper) {
 			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
 			const targetPath = parts.join(".");
@@ -672,6 +673,20 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether module writes are held to the ownership rule at all: only while the permission system is on. With no
+	 * permissions, nothing restricts where a module writes.
+	 *
+	 * @returns {boolean} Whether the ownership rule applies now.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
+	 */
+	ownershipEnforced() {
+		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
+	}
+
+	/**
 	 * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
 	 * Used where a write is held to a module that read a node rather than the code running now.
 	 *
@@ -684,7 +699,7 @@ export class ApiManager extends ComponentBase {
 	 * apiManager.mayWrite(["victim", "v", "note"], guestWrapper); // true when a write rule grants it
 	 */
 	mayWrite(parts, callerWrapper) {
-		if (this.ownsPath(parts, callerWrapper)) return true;
+		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper)) return true;
 		const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
 		return this.slothlet.handlers.permissionManager.isWriteGranted(callerPath, parts.join("."));
 	}
@@ -770,6 +785,7 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#assertModuleMountWrite(parts, writer, inFlight = null) {
+		if (!this.ownershipEnforced()) return;
 		if (!writer.____slothletInternal) {
 			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 		}
@@ -892,7 +908,7 @@ export class ApiManager extends ComponentBase {
 		if (through.opaque || through.paths.length > 0 || !this.#isAliasAt(parts)) return false;
 		if (options.recordHistory !== false) {
 			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
-			if (writer !== null) {
+			if (writer !== null && this.ownershipEnforced()) {
 				if (!writer.____slothletInternal) {
 					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 				}

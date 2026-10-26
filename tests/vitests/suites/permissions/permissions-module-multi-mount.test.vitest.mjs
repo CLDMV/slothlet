@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T19:08:05-07:00 (1792980485)
+ *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,12 +58,20 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 	});
 
 	/**
-	 * Load the base module and mount the guest code at `guest`, as the module `gmod` (so `"guest"` names its path).
+	 * Load the base module and mount the guest code at `guest`, as the module `gmod` (so `"guest"` names its path), with
+	 * the permission system on unless `options` gives its own `permissions`: ownership decides writes only while it is on.
 	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function boot(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({
+			base: path.join(FIXTURE, "base"),
+			mode,
+			runtime,
+			silent: true,
+			permissions: { defaultPolicy: "allow" },
+			...options
+		});
 		await api.slothlet.api.add("guest", GUEST, { moduleID: "gmod" });
 		return api;
 	}

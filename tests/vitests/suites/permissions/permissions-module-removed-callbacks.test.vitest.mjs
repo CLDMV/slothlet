@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:39:01-07:00 (1792856341)
+ *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -143,7 +143,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	it.each([
 		["on", { permissions: { rules: [HOOK_GRANT, { caller: "g.**", target: "slothlet.event.strategy", effect: "allow" }] } }],
 		["off", {}]
-	])("runs a module's event strategy as that module, and drops it with the module (permissions %s)", async (_label, options) => {
+	])("runs a module's event strategy as that module, and drops it with the module (permissions %s)", async (label, options) => {
 		await load(options);
 		expect(api.g.x.installStrategy("victim.v")).toBe("done");
 		api.g.x.takeConditionWrites();
@@ -151,8 +151,9 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		await api.victim.v.shout("victim.news", { n: 1 });
 		const writes = api.g.x.takeConditionWrites();
 		expect(writes.length).toBeGreaterThan(0);
-		expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
-		expect(api.victim.v.viaStrategy).toBeUndefined();
+		// Ownership decides the strategy's write only while the permission system is on.
+		expect([...new Set(writes)]).toEqual([label === "on" ? "LOOSE_SET_NOT_OWNED" : "done"]);
+		expect(api.victim.v.viaStrategy).toBe(label === "on" ? undefined : 1);
 		await api.slothlet.api.remove("gA");
 		api.victim.v.takeHeard();
 		await api.victim.v.shout("victim.news", { n: 2 });

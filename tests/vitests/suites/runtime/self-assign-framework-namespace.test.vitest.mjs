@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:47-07:00 (1792434887)
+ *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -289,7 +289,6 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 });
 
 describe.each(CONFIGS)("module writes to the framework namespace, permission system off (#625) — $mode / $runtime", ({ mode, runtime }) => {
-	const refusals = ["LOOSE_SET_NOT_OWNED"];
 	let api;
 
 	afterEach(async () => {
@@ -307,22 +306,10 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 		return api;
 	}
 
-	it("refuses a module mounted with api.add every change, at any depth, by ownership", async () => {
+	it("leaves a module mounted with api.add changing a member of the namespace too: nothing decides writes", async () => {
 		await load();
-		const before = Object.fromEntries(MEMBERS.map((name) => [name, api.slothlet[name]]));
-		const shutdown = api.shutdown;
-		for (const name of MEMBERS) {
-			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.attack.changeMember(name));
-			expect({ name, report: markRefused(report, refusals) }).toEqual({ name, report: allRefused(report) });
-			expect(api.slothlet[name]).toBe(before[name]);
-		}
-		for (const change of ["changeNested", "changeRootFunctions"]) {
-			const report = withSuppressedSlothletErrorOutputSync(() => api.guest.attack[change]());
-			expect({ change, report: markRefused(report, refusals) }).toEqual({ change, report: allRefused(report) });
-		}
-		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.plantPermissionsSetter())).toBe("LOOSE_SET_NOT_OWNED");
-		expect(api.slothlet.permissions.planted).toBeUndefined();
-		expect(api.shutdown).toBe(shutdown);
+		expect(api.guest.attack.changeMember("lockCaller")).toEqual({ assign: "done", define: "done", remove: "done" });
+		expect(api.slothlet.lockCaller).toBeUndefined();
 	});
 
 	it("leaves the base module, which owns the whole tree, changing a member of the namespace", async () => {

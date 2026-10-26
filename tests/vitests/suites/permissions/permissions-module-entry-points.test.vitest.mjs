@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T11:34:42-07:00 (1792434882)
+ *	@Last modified time: 2026-10-26T02:52:51-07:00 (1793008371)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,12 +70,13 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	});
 
 	/**
-	 * Load the base module and mount `victim`, and the guest code at `guest`, `atk`, and `other`.
+	 * Load the base module and mount `victim`, and the guest code at `guest`, `atk`, and `other`, with the permission
+	 * system on unless `options` gives its own `permissions`: ownership decides writes only while it is on.
 	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
 		for (const name of ["guest", "atk", "other"]) await api.slothlet.api.add(name, GUEST, { moduleID: name });
 		return api;
@@ -279,7 +280,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		});
 
 		it("is left to module code with the permission system off", async () => {
-			await load();
+			await load({ permissions: undefined });
 			expect(await api.guest.x.callSetter("setGlobal", "")).toBe("done");
 			expect(api.slothlet.metadata.getFor("victim.v").planted).toBe(1);
 		});
