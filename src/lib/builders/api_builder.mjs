@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T10:52:25-07:00 (1793037145)
+ *	@Last modified time: 2026-10-26T11:41:11-07:00 (1793040071)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,6 +43,9 @@ import {
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
 	runtime_isFrameworkNamespace,
+	runtime_isFrameworkOwn,
+	runtime_markFrameworkOwn,
+	runtime_recordFrameworkNamespace,
 	runtime_isPermissionSurface,
 	runtime_markPermissionSurface,
 	runtime_selfFrameworkView,
@@ -823,6 +826,7 @@ export class ApiBuilder extends ComponentBase {
 			if (routePath === "slothlet.permissions" || routePath.startsWith("slothlet.permissions.") || runtime_isPermissionSurface(value)) {
 				runtime_markPermissionSurface(proxy, value);
 			}
+			if (runtime_isFrameworkOwn(value)) runtime_markFrameworkOwn(proxy);
 			return proxy;
 		};
 
@@ -3848,6 +3852,8 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
+		// The namespace as built is the framework's own, whatever is placed on it later (#625).
+		runtime_recordFrameworkNamespace(namespace);
 		return createInternalRouteProxy(namespace, "slothlet");
 	}
 

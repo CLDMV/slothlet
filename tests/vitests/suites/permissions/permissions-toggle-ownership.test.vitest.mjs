@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T10:53:29-07:00 (1793037209)
+ *	@Last modified time: 2026-10-26T11:42:07-07:00 (1793040127)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -341,6 +341,70 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(api.slothlet.permissions.control.enabled).toBe(true);
 			expect(typeof api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
 		});
+
+		it.runIf(label !== "the system on")(
+			"runs a function or accessor a module places on the namespace as the module, when the host calls or reads it too",
+			async () => {
+				await load(options);
+				const stash = [];
+				globalThis[Symbol.for(PROBE)] = (self) => {
+					const keep = function keep() {
+						stash.push(this);
+						return "kept";
+					};
+					const run = self.slothlet.run;
+					return {
+						leak: outcome(() => {
+							self.slothlet.leak = keep;
+						}),
+						getter: outcome(() =>
+							Object.defineProperty(self.slothlet, "reach", {
+								configurable: true,
+								get() {
+									stash.push(this);
+									return 1;
+								}
+							})
+						),
+						run: outcome(() => {
+							self.slothlet.run = function replacedRun(...args) {
+								stash.push(this);
+								return run(...args);
+							};
+						}),
+						prototype: outcome(() =>
+							Object.setPrototypeOf(self.slothlet, {
+								get missing() {
+									stash.push(this);
+									return 1;
+								}
+							})
+						)
+					};
+				};
+				const placed = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+				// The framework's own objects keep their prototype; anything else a module places goes through.
+				expect(placed).toEqual({ leak: "done", getter: "done", run: "done", prototype: "PERMISSION_DENIED" });
+				expect(api.slothlet.leak()).toBe("kept");
+				expect(api.slothlet.reach).toBe(1);
+				await api.slothlet.run({}, () => "ran");
+				expect(stash.length).toBe(3);
+				expect(stash.some((held) => held === api.slothlet)).toBe(false);
+				api.slothlet.permissions.control.enable();
+				// What each was handed is the module's view: kept and used later, nothing of the namespace changes.
+				const later = withSuppressedSlothletErrorOutputSync(() =>
+					stash.map((ns) => ({
+						addRule: outcome(() => {
+							ns.permissions.addRule = () => "swallowed";
+						}),
+						disable: outcome(() => ns.permissions.control.disable()),
+						grant: outcome(() => ns.permissions.addRule({ caller: "guest.**", target: "**", effect: "allow" }))
+					}))
+				);
+				for (const outcomes of later) expect(Object.values(outcomes).every((code) => code !== "done")).toBe(true);
+				expect(api.slothlet.permissions.control.enabled).toBe(true);
+			}
+		);
 
 		it.runIf(label !== "the system on")(
 			"keeps a module's writes inside an isolated scope in the scope, through a descriptor too",

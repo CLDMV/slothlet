@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
+ *	@Last modified time: 2026-10-26T11:41:12-07:00 (1793040072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -157,6 +157,19 @@ const UNMARKABLE_PROCESSED = (() => {
 	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
 	return globalThis[key];
 })();
+
+/**
+ * Call a hook's handler with its payload as a plain function, with no receiver (#625). Called as a method of the
+ * hook's record, a handler would get the record itself as `this` and could change its own registration.
+ *
+ * @param {object} hook - The hook's record.
+ * @param {object} payload - What the handler is handed.
+ * @returns {*} What the handler returns.
+ * @private
+ */
+function runtime_callHookHandler(hook, payload) {
+	return Reflect.apply(hook.handler, undefined, [payload]);
+}
 
 /**
  * Record that error hooks have run for an error, so an outer hooked call does not report it again.
@@ -1093,7 +1106,7 @@ export class HookManager extends ComponentBase {
 			try {
 				// `version` is the structured which-version-fired-me signal for version-dispatched
 				// registrations (#250); ordinary hooks see undefined.
-				const result = hook.handler({ path, args, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
@@ -1168,7 +1181,7 @@ export class HookManager extends ComponentBase {
 					ctx,
 					version: hook.version
 				};
-				const transformed = hook.handler(hookContext);
+				const transformed = runtime_callHookHandler(hook, hookContext);
 
 				// A thenable from a sync-pipeline after hook is the silent-corruption cell (#251): the
 				// pending Promise would replace the result and surface as NaN far from the cause. It can
@@ -1247,7 +1260,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Check for short-circuit (hook returns value directly)
@@ -1315,7 +1328,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, result: currentResult, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, result: currentResult, api, ctx, version: hook.version });
 				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
@@ -1530,7 +1543,7 @@ export class HookManager extends ComponentBase {
 				const state = { called: false, returned: undefined };
 				const next = makeNext(hook, index, currentArgs, state, invokeAsync);
 				try {
-					const raw = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+					const raw = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 					return raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 				} catch (error) {
 					sinkAround(hook, error);
@@ -1546,7 +1559,7 @@ export class HookManager extends ComponentBase {
 			const state = { called: false, returned: undefined };
 			const next = makeNext(hook, index, currentArgs, state, invokeSync);
 			try {
-				const result = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 				// Object-only thenable test, as everywhere else on a value path: a lazy callable wrapper
 				// answers `.then` on purpose (see executeAfterHooks).
 				if (!(result && typeof result === "object" && typeof result.then === "function")) return result;
@@ -1583,7 +1596,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
@@ -1627,7 +1640,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					error,

@@ -92,6 +92,40 @@ export function runtime_selfView(node: any, reader?: object): any;
  */
 export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
 /**
+ * Record the framework's namespace as built, and every object and function it holds as data, as the framework's own.
+ * The `context` it carries is the host's data, and is left out.
+ *
+ * @param {object} namespace - The namespace, before the framework wraps it.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_recordFrameworkNamespace(namespace);
+ */
+export function runtime_recordFrameworkNamespace(namespace: object): void;
+/**
+ * Whether `value` is one of the framework's own objects or functions ({@link FRAMEWORK_OWN}).
+ *
+ * @param {*} value - The value.
+ * @returns {boolean} Whether it is.
+ * @internal
+ *
+ * @example
+ * runtime_isFrameworkOwn(api.slothlet.hook); // true
+ */
+export function runtime_isFrameworkOwn(value: any): boolean;
+/**
+ * Record `value`, a proxy the framework serves one of its own members through, as the framework's own.
+ *
+ * @param {object} value - The proxy.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_markFrameworkOwn(routeProxy);
+ */
+export function runtime_markFrameworkOwn(value: object): void;
+/**
  * Whether `value` is one of the permission system's own objects or functions ({@link PERMISSION_SURFACE}).
  *
  * @param {*} value - The value.
