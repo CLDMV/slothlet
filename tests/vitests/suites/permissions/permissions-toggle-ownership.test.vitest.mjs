@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T10:02:25-07:00 (1793034145)
+ *	@Last modified time: 2026-10-26T10:53:29-07:00 (1793037209)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -289,6 +289,58 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				expect(api.victim.v.flag).toBeUndefined();
 			}
 		);
+
+		it("hands a function or getter a module places on the namespace the module's view as this, kept and used later too", async () => {
+			await load(options);
+			const symbol = Symbol("own");
+			globalThis[Symbol.for(PROBE)] = (self) => {
+				const report = {
+					place: outcome(() => {
+						self.slothlet.leak = function leak() {
+							return this;
+						};
+						Object.defineProperty(self.slothlet, "reach", {
+							configurable: true,
+							get() {
+								return this;
+							}
+						});
+					})
+				};
+				if (report.place !== "done") return { report };
+				const kept = [self.slothlet.leak(), self.slothlet.reach];
+				report.own = outcome(() => {
+					self.slothlet[symbol] = { own: true };
+					self.slothlet[symbol].permissions = 1;
+				});
+				return { report, kept };
+			};
+			const { report, kept } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+			if (label === "the system on") {
+				expect(report).toEqual({ place: "PERMISSION_DENIED" });
+				return;
+			}
+			// A symbol-keyed object of the module's own is no part of the namespace.
+			expect(report).toEqual({ place: "done", own: "done" });
+			api.slothlet.permissions.control.enable();
+			// Kept and used later, outside any call, each is still the module's view: nothing of the namespace changes.
+			const later = withSuppressedSlothletErrorOutputSync(() =>
+				kept.map((ns) => ({
+					addRule: outcome(() => {
+						ns.permissions.addRule = () => "swallowed";
+					}),
+					disable: outcome(() => ns.permissions.control.disable()),
+					grant: outcome(() => ns.permissions.addRule({ caller: "guest.**", target: "**", effect: "allow" })),
+					prototype: outcome(() => Object.setPrototypeOf(ns.permissions, null)),
+					close: outcome(() => Object.preventExtensions(ns.permissions))
+				}))
+			);
+			for (const outcomes of later) {
+				expect(Object.values(outcomes).every((code) => code !== "done")).toBe(true);
+			}
+			expect(api.slothlet.permissions.control.enabled).toBe(true);
+			expect(typeof api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
+		});
 
 		it.runIf(label !== "the system on")(
 			"keeps a module's writes inside an isolated scope in the scope, through a descriptor too",

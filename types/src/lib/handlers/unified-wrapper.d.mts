@@ -103,6 +103,17 @@ export function runtime_registerFrameworkMemberCopy(copy: object, member: any): 
  */
 export function runtime_isPermissionSurface(value: any): boolean;
 /**
+ * Whether `value` is the framework's own namespace of an instance (`api.slothlet`), or an isolated scope's copy.
+ *
+ * @param {*} value - The value.
+ * @returns {boolean} Whether it is.
+ * @internal
+ *
+ * @example
+ * runtime_isFrameworkNamespace(api.slothlet); // true
+ */
+export function runtime_isFrameworkNamespace(value: any): boolean;
+/**
  * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
  * namespace through, and the member behind it.
  *

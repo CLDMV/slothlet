@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T10:01:15-07:00 (1793034075)
+ *	@Last modified time: 2026-10-26T10:52:25-07:00 (1793037145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,7 @@ import {
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
+	runtime_isFrameworkNamespace,
 	runtime_isPermissionSurface,
 	runtime_markPermissionSurface,
 	runtime_selfFrameworkView,
@@ -591,8 +592,8 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		/**
 		 * Refuse module code changing the permission system's own namespace through a route proxy (#625): the
-		 * `permissions` member of the namespace, or anything that is part of it, however the proxy was reached (a
-		 * function planted on the namespace gets it as `this`). Permissions on or off: a module that replaced
+		 * `permissions` member of the namespace, or anything that is part of it, however the proxy was reached.
+		 * Permissions on or off: a module that replaced
 		 * `addRule` would drop the rules the host registers before it enables the system.
 		 *
 		 * @param {object} target - The proxied value changed.
@@ -606,7 +607,9 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		const refusePermissionSurfaceChange = (target, proxy, routePath, prop) => {
 			const surface =
-				(routePath === "slothlet" && prop === "permissions") || runtime_isPermissionSurface(proxy) || runtime_isPermissionSurface(target);
+				(prop === "permissions" && runtime_isFrameworkNamespace(proxy)) ||
+				runtime_isPermissionSurface(proxy) ||
+				runtime_isPermissionSurface(target);
 			if (!surface) return;
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			const changed = typeof prop === "string" ? `${routePath}.${prop}` : routePath;

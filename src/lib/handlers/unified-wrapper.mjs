@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T10:01:18-07:00 (1793034078)
+ *	@Last modified time: 2026-10-26T10:52:28-07:00 (1793037148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1462,6 +1462,20 @@ export function runtime_isPermissionSurface(value) {
 }
 
 /**
+ * Whether `value` is the framework's own namespace of an instance (`api.slothlet`), or an isolated scope's copy.
+ *
+ * @param {*} value - The value.
+ * @returns {boolean} Whether it is.
+ * @internal
+ *
+ * @example
+ * runtime_isFrameworkNamespace(api.slothlet); // true
+ */
+export function runtime_isFrameworkNamespace(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && FRAMEWORK_MEMBER_NAMES.get(value) === "slothlet";
+}
+
+/**
  * Record each of `values` as one of the permission system's own: a proxy the framework serves a member of its
  * namespace through, and the member behind it.
  *
@@ -1661,7 +1675,8 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const unwrap = (value) =>
 		value !== null && (typeof value === "object" || typeof value === "function") ? (FRAMEWORK_VIEW_TARGETS.get(value) ?? value) : value;
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-	const childPath = (prop) => (typeof prop === "string" ? `${path}.${prop}` : path);
+	// A symbol-keyed member has no name of its own in a path: its own members are not the namespace's.
+	const childPath = (prop) => (typeof prop === "string" ? `${path}.${prop}` : `${path}.[symbol]`);
 	// A module never changes the framework's namespace (#625). The writer is the module executing now, or,
 	// for a change made with no standing of its own, the reader; a change the host makes inside a `run()` /
 	// `scope()` it opened goes through, as it would on the member itself.
@@ -1699,7 +1714,9 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const view = new Proxy(member, {
 		get(target, prop) {
 			return asReader(() => {
-				const value = Reflect.get(target, prop);
+				// An accessor a module placed on the namespace runs with the view as `this`, never the member behind it,
+				// which acts for no reader at all (#625).
+				const value = Reflect.get(target, prop, view);
 				if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 				if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
 				return runtime_frameworkViewOf(value, slothlet, reader, childPath(prop));
@@ -1722,7 +1739,9 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			});
 		},
 		apply(target, thisArg, args) {
-			return asReader(() => Reflect.apply(target, unwrap(thisArg), args));
+			// The receiver is passed as given: a view of the namespace stays the view, so a function a module placed on
+			// it never gets the member behind it, which acts for no reader at all (#625).
+			return asReader(() => Reflect.apply(target, thisArg, args));
 		},
 		construct(target, args, newTarget) {
 			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
