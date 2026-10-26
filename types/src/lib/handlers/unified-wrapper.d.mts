@@ -89,7 +89,21 @@ export function runtime_selfView(node: any, reader?: object): any;
  * @example
  * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-export function runtime_registerFrameworkMember(member: object | Function, slothlet: object, name: string): object | Function;
+/**
+ * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
+ *
+ * @param {object} copy - The stand-in.
+ * @param {*} member - The value it stands in for.
+ * @returns {object} `copy`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ */
+export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
+export function runtime_registerFrameworkMember(member: any, slothlet: any, name: any): any;
 /**
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).
@@ -118,15 +132,17 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  */
 export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
 /**
- * Refuse a module replacing one of the framework's root members (`self.slothlet`, `self.shutdown`,
- * `self.destroy`) through the runtime `self` (#625); a definition or deletion goes through
- * {@link runtime_selfChangeTarget}. Host code is left as it was.
+ * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
+ * through the runtime `self` (#625); a definition or deletion goes through {@link runtime_selfChangeTarget}.
+ * While the permission system is on, module code meets the write rules first; the names are reserved for
+ * everyone, so the assignment is refused either way, in an isolated scope as outside one.
  *
  * @param {object} slothlet - Instance the change is made on.
  * @param {string|symbol} prop - Member of `self` changed.
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
- *   rules protect, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
+ *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
  * @internal
  *
  * @example

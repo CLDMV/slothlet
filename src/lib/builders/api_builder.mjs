@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:10-07:00 (1792834930)
+ *	@Last modified time: 2026-10-26T08:25:44-07:00 (1793028344)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@ import {
 	runtime_selfView,
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
+	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller
 } from "#handlers/unified-wrapper";
@@ -197,7 +198,9 @@ function makeCopyOnWriteSelf(parentSelf) {
 				if (real !== null && typeof real === "object") {
 					let view = childViews.get(prop);
 					if (view === undefined) {
-						view = makeCopyOnWriteSelf(real);
+						// The framework's namespace read in the scope is still the framework's: module code is handed its
+						// view of it, with the limits that view keeps, over the scope's copy (#625).
+						view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
 						childViews.set(prop, view);
 					}
 					return view;

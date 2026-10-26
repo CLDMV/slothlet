@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T07:39:40-07:00 (1793025580)
+ *	@Last modified time: 2026-10-26T08:27:04-07:00 (1793028424)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,7 +89,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 				"granted the write, capture off",
 				{ permissions: { references: { capture: false }, rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }] } }
 			]
-		])("lets a module %s freeze another module's unloaded node through self", async (_label, options) => {
+		])("lets a module %s freeze its view of another module's unloaded node without an error", async (_label, options) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
@@ -101,6 +101,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 					return error?.code ?? String(error);
 				}
 			};
+			// The freeze applies to the view; what reaches the node once it loads is #672.
 			expect(await api.guest.x.runWithSelf(PROBE)).toBe(true);
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:09-07:00 (1792378269)
+ *	@Last modified time: 2026-10-26T08:25:07-07:00 (1793028307)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,26 @@ export async function later(gate) {
 	try {
 		permissions.addRule({ caller: "**", target: "slothlet.**:write", effect: "allow" });
 		return "landed";
+	} catch (error) {
+		return error.code;
+	}
+}
+
+/**
+ * Keep the api this module is handed, wait on the gate, then place a function in it from this shared file, where
+ * the live runtime cannot attribute the code to one api path. The function writes into the victim's subtree.
+ * @param {Promise<void>} gate - Released by the test.
+ * @returns {Promise<string>} `"planted"` when the function was placed, else the refusal's code.
+ */
+export async function plantLater(gate) {
+	const root = self.slothlet.diag.getAPI();
+	await gate;
+	try {
+		root.plantedTwin = function plantedTwin() {
+			self.victim.v.flag = "planted";
+			return "wrote";
+		};
+		return "planted";
 	} catch (error) {
 		return error.code;
 	}

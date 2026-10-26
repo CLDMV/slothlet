@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T07:39:50-07:00 (1793025590)
+ *	@Last modified time: 2026-10-26T08:27:18-07:00 (1793028438)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,8 +101,11 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		expect(api.victim.v.flag).toBeUndefined();
 	});
 
-	it("holds a later change through a view a module read while the system was off, once it is on", async () => {
-		await load({ permissions: { references: { capture: false } } });
+	it.each([
+		["captured references off", false],
+		["captured references on", true]
+	])("holds a later change through a view a module read while the system was off, once it is on (%s)", async (_label, capture) => {
+		await load({ permissions: { references: { capture } } });
 		api.slothlet.permissions.control.disable();
 		await api.guest.x.keepVictimFrozenMembers();
 		api.slothlet.permissions.control.enable();
@@ -111,6 +114,36 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
 		expect(api.victim.v.shelf[0].planted).toBeUndefined();
 	});
+
+	it.runIf(runtime === "live")(
+		"refuses a change through the api a module is handed from code it cannot attribute, with the system off",
+		async () => {
+			await load({ permissions: { enabled: false } });
+			await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+			/**
+			 * A promise and the function that resolves it.
+			 * @returns {[Promise<void>, function(): void]} The gate and its release.
+			 */
+			const gate = () => {
+				let release;
+				const promise = new Promise((resolve) => (release = resolve));
+				return [promise, release];
+			};
+			const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
+			const [plantGate, releasePlant] = gate();
+			const [peerGate, releasePeer] = gate();
+			// twin.plant resumes in resume.mjs, which twin.peer imports too, while both are suspended.
+			const planting = api.twin.plant(plantGate);
+			await turn();
+			const waiting = api.twin.peer.wait(peerGate);
+			await turn();
+			releasePlant();
+			expect(await withSuppressedSlothletErrorOutput(() => planting)).toBe("LOOSE_SET_UNATTRIBUTED");
+			releasePeer();
+			expect(await waiting).toBe("waited");
+			expect(api.plantedTwin).toBeUndefined();
+		}
+	);
 
 	describe.each([
 		["no permissions config", {}],
@@ -178,6 +211,42 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				});
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 			expect(report).toBe(label === "the system on" ? "PERMISSION_DENIED" : "done");
+		});
+
+		it("keeps both limits inside an isolated scope a module opens", async () => {
+			await load(options);
+			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "guest.**:write", effect: "deny" });
+			globalThis[Symbol.for(PROBE)] = (self) =>
+				self.slothlet.scope({
+					context: {},
+					isolation: "full",
+					fn: () => ({
+						report: {
+							addRule: outcome(() => {
+								self.slothlet.permissions.addRule = () => "swallowed";
+							}),
+							slothlet: outcome(() => {
+								self.slothlet = { fake: 1 };
+							}),
+							shutdown: outcome(() => {
+								self.shutdown = 1;
+							})
+						},
+						viewed: self.slothlet.permissions.removeRule !== api.slothlet.permissions.removeRule,
+						removeRule: self.slothlet.permissions.removeRule
+					})
+				});
+			const { report, viewed, removeRule } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
+			const on = label === "the system on";
+			expect(report).toEqual({
+				addRule: "PERMISSION_DENIED",
+				slothlet: on ? "PERMISSION_DENIED" : "INVALID_CONFIG_API_PATH_INVALID",
+				shutdown: on ? "PERMISSION_DENIED" : "INVALID_CONFIG_API_PATH_INVALID"
+			});
+			expect(viewed).toBe(true);
+			// Kept from the scope and called later, outside any call, it still runs as the module: no host rule goes.
+			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("INVALID_PERMISSION_RULE");
+			expect(api.slothlet.permissions.removeRule(hostRule)).toBe(true);
 		});
 
 		it("refuses defining or deleting the framework's reserved names through self, as assigning them", async () => {

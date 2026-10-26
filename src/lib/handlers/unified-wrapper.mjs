@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T07:38:25-07:00 (1793025505)
+ *	@Last modified time: 2026-10-26T08:25:47-07:00 (1793028347)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1431,6 +1431,25 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * @example
  * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
+/**
+ * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
+ *
+ * @param {object} copy - The stand-in.
+ * @param {*} member - The value it stands in for.
+ * @returns {object} `copy`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ */
+export function runtime_registerFrameworkMemberCopy(copy, member) {
+	const slothlet = FRAMEWORK_MEMBERS.get(member);
+	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, FRAMEWORK_MEMBER_NAMES.get(member));
+	return copy;
+}
+
 export function runtime_registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
 		FRAMEWORK_MEMBERS.set(member, slothlet);
@@ -1473,15 +1492,17 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
 }
 
 /**
- * Refuse a module replacing one of the framework's root members (`self.slothlet`, `self.shutdown`,
- * `self.destroy`) through the runtime `self` (#625); a definition or deletion goes through
- * {@link runtime_selfChangeTarget}. Host code is left as it was.
+ * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
+ * through the runtime `self` (#625); a definition or deletion goes through {@link runtime_selfChangeTarget}.
+ * While the permission system is on, module code meets the write rules first; the names are reserved for
+ * everyone, so the assignment is refused either way, in an isolated scope as outside one.
  *
  * @param {object} slothlet - Instance the change is made on.
  * @param {string|symbol} prop - Member of `self` changed.
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
- *   rules protect, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
+ *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
  * @internal
  *
  * @example
@@ -1489,12 +1510,16 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
  */
 export function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
-	if (!slothlet?.handlers?.apiManager?.ownershipEnforced()) return;
-	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
+	if (slothlet.handlers.apiManager.ownershipEnforced()) {
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		if (identity?.unresolved) {
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
+		}
+		if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite([prop], identity.currentWrapper);
 	}
-	if (identity?.currentWrapper) slothlet.handlers.apiManager.assertOwnedWrite([prop], identity.currentWrapper);
+	// A reserved name, refused whoever assigns it, including inside an isolated scope, whose `self` takes the
+	// assignment without reaching the api.
+	slothlet.handlers.apiManager.normalizeApiPath([prop]);
 }
 
 /**
@@ -1742,6 +1767,11 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 	// executing module or the reader, as a top-level `self.X = …` is: the ownership it records must not depend on
 	// whether permissions were on at the time.
 	if (!slothlet.handlers.apiManager.ownershipEnforced()) {
+		// Code the live runtime cannot attribute is refused here as through `self.X = …`: recorded as anyone's, the
+		// change would run with standing it was never given once the system is on.
+		if (identity?.unresolved) {
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === UNATTRIBUTED_READER) return null;
 		return reader;
