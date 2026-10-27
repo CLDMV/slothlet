@@ -68,6 +68,43 @@ export function requireInInstance(filePath: string, instanceID: string, { fresh 
     fresh?: boolean | undefined;
 }): any;
 /**
+ * The import graph of an instance's own code: for each file a leaf of the instance reached through an
+ * import or require that carries the instance (#601 review), the files that import it. The live runtime
+ * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * @param {string} instanceID - The instance ID.
+ * @returns {Map<string, Set<string>>|null} Importers by imported file (forward-slash paths), or null.
+ * @internal
+ * @example
+ * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
+ */
+export function instanceImporters(instanceID: string): Map<string, Set<string>> | null;
+/**
+ * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
+ * They run under their plain path, with no import query, so the live runtime looks a stack frame up
+ * here to tell the instance's code from the host's (#601 review).
+ * @param {string} instanceID - The instance ID.
+ * @returns {string[]} Absolute paths, as Node's require cache keys them.
+ * @internal
+ * @example
+ * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
+ */
+export function instanceCommonJSFiles(instanceID: string): string[];
+/**
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object
+ * the instance's CommonJS state lives in, dropped by {@link releaseInstanceScope}, and how many files
+ * the instance has. Files are only ever added while the instance lives, so an equal count means the same
+ * files.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
+ * @internal
+ * @example
+ * instanceCommonJSVersion("inst-a"); // { key: Set {…}, count: 3 }
+ */
+export function instanceCommonJSVersion(instanceID: string): {
+    key: object;
+    count: number;
+} | null;
+/**
  * Drop an instance's private CommonJS copies (#534): on shutdown, and for the old instance ID on a
  * full reload. Its ES module copies stay in Node's module cache (which has no eviction) but are no
  * longer reachable from a live instance.
@@ -175,6 +212,22 @@ export type InstanceImportState = {
      * `require()` of an ES module.
      */
     requireESM: (url: string) => any;
+    /**
+     * - Per instance ID: for each file of the
+     * instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
+     * state object made by an older slothlet copy gains it too.
+     */
+    graphs?: Map<string, Map<string, Set<string>>> | undefined;
+    /**
+     * - Per instance ID: the CommonJS leaves it loaded, which its
+     * private cache does not keep (each load evaluates the leaf anew). Created on first use.
+     */
+    leaves?: Map<string, Set<string>> | undefined;
+    /**
+     * - Records a
+     * module's imports; called by the registration the vite plugin appends to each instance module.
+     */
+    recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
 };
 /**
  * Resolve-result shape shared by Node's resolve hooks.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-26T11:41:12-07:00 (1793040072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -76,13 +77,126 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
+ * @property {function(object): void} onUnobserved - Names the stage to report a rejection nothing recorded as: one
+ *   whose thenable could not be given a recording view (see {@link HookManager#observeThenable}). Called for each
+ *   such stage, inner first, so the last call names the outermost.
  */
+
+/**
+ * Whether a value is a thenable: an object or function with a callable `then`.
+ * @param {*} value - Any value.
+ * @returns {boolean} True for a thenable.
+ * @private
+ */
+const isThenable = (value) =>
+	Boolean(value) && (typeof value === "object" || typeof value === "function") && typeof value.then === "function";
+
+/**
+ * React to a thenable the way `await` does, for a thenable that may be hand-written.
+ *
+ * @param {object} thenable - A thenable that is not a native Promise.
+ * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result.
+ * @param {function(*): *} onRejected - Handles its rejection; returning recovers, a throw rejects the result.
+ * @returns {object} What its `then` returned when that is a thenable (of its own kind, for one that returns its
+ *   kind), otherwise a native Promise settled with the reactions' outcome.
+ * @public
+ *
+ * @description
+ * Its `then` is called once, with two functions, as `await` calls it. The first call of either settles it;
+ * a later call, or a throw from `then` after it, is ignored. A throw from `then` before either is called is
+ * handled as a rejection. Neither function throws back into its `then`: a hand-written `then` may call one
+ * later from its own code, such as a timer, where a throw would surface as an uncaught exception. Each
+ * returns the reaction's value, or the rejected result when the reaction threw, so a `then` that builds on
+ * the return value still sees the outcome.
+ */
+export function settleThenable(thenable, onFulfilled, onRejected) {
+	let settled = false;
+	let settle;
+	const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
+	// Handled up front: it can reject before anything that is handed it attaches a handler.
+	adopted.then(undefined, () => {});
+	const react = (reaction, input) => {
+		if (settled) return adopted;
+		settled = true;
+		try {
+			const output = reaction(input);
+			settle.resolve(output);
+			return output;
+		} catch (error) {
+			settle.reject(error);
+			return adopted;
+		}
+	};
+	let observed;
+	try {
+		observed = thenable.then(
+			(value) => react(onFulfilled, value),
+			(error) => react(onRejected, error)
+		);
+	} catch (error) {
+		react(onRejected, error);
+		return adopted;
+	}
+	return isThenable(observed) ? observed : adopted;
+}
 
 /**
  * Symbol to mark errors that have already been processed by hook error handlers
  * @private
  */
 const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
+
+/**
+ * Processed errors that could not carry {@link ERROR_HOOK_PROCESSED} (a frozen or non-extensible error).
+ * Shared through the global object, as the mark is, so every slothlet copy in the realm sees it.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const UNMARKABLE_PROCESSED = (() => {
+	const key = Symbol.for("@cldmv/slothlet/hook-error-processed-unmarkable");
+	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
+	return globalThis[key];
+})();
+
+/**
+ * Call a hook's handler with its payload as a plain function, with no receiver (#625). Called as a method of the
+ * hook's record, a handler would get the record itself as `this` and could change its own registration.
+ *
+ * @param {object} hook - The hook's record.
+ * @param {object} payload - What the handler is handed.
+ * @returns {*} What the handler returns.
+ * @private
+ */
+function runtime_callHookHandler(hook, payload) {
+	return Reflect.apply(hook.handler, undefined, [payload]);
+}
+
+/**
+ * Record that error hooks have run for an error, so an outer hooked call does not report it again.
+ * @param {*} error - The error.
+ * @returns {void}
+ * @private
+ */
+function markHookProcessed(error) {
+	if (!error || (typeof error !== "object" && typeof error !== "function")) return;
+	try {
+		error[ERROR_HOOK_PROCESSED] = true;
+	} catch {
+		// A frozen or non-extensible error rejects the mark; the thrown value must stay as it is.
+		UNMARKABLE_PROCESSED.add(error);
+	}
+}
+
+/**
+ * Whether error hooks have already run for an error.
+ * @param {*} error - The error.
+ * @returns {boolean} True when it was reported.
+ * @public
+ */
+export function isHookProcessed(error) {
+	if (!error || (typeof error !== "object" && typeof error !== "function")) return false;
+	return error[ERROR_HOOK_PROCESSED] === true || UNMARKABLE_PROCESSED.has(error);
+}
 
 /**
  * Module-private channel used by reload replay ({@link HookManager#importHooks}) to restore a hook's
@@ -337,6 +451,8 @@ export class HookManager extends ComponentBase {
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+		// The registering module's code itself (#625): once that module is removed the hook no longer fires.
+		const ownerModule = replayIdentity ? (replayIdentity.ownerModule ?? null) : ownerWrapper;
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -455,8 +571,12 @@ export class HookManager extends ComponentBase {
 		// plain one — where the native brand check reads sync. The check has zero false positives, so
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
-		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
-		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		const handlerIsAsync =
+			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler._slothletOriginal : handler);
+		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
+		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
+		if (lockCaller && ownerWrapper) effectiveHandler = runtime_selfHookHandler(effectiveHandler, this.slothlet, ownerWrapper);
 
 		// Create hook object
 		const hook = {
@@ -468,6 +588,7 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
+			ownerModule,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -520,8 +641,9 @@ export class HookManager extends ComponentBase {
 	 *   nothing to pin.
 	 */
 	#pinHandler(handler) {
-		// Already locked (manual lockCaller, or a re-registered hook) — respect it.
-		if (typeof handler._slothletOriginal === "function") return handler;
+		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
+		// record, never by a property: a module can put `_slothletOriginal` on any function (#625).
+		if (runtime_isCallerLocked(handler)) return handler;
 
 		// `slothlet` is the long-lived instance object; a full reload() swaps both
 		// `contextManager` and `instanceID` on it (and carries this pinned handler
@@ -541,7 +663,7 @@ export class HookManager extends ComponentBase {
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;
-		return pinned;
+		return runtime_markCallerLocked(pinned);
 	}
 
 	/**
@@ -834,7 +956,12 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
-		const hooks = this.#matchHooksForPath(type, apiPath);
+		// A removed module's hook fires no more, permissions on or off, whoever is mounted at its old path or under
+		// its old id since (#625).
+		const apiManager = this.slothlet.handlers?.apiManager;
+		const hooks = this.#matchHooksForPath(type, apiPath).filter(
+			(hook) => hook.ownerModule === null || !apiManager?.isRemovedCaller(hook.ownerModule)
+		);
 
 		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
 		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
@@ -979,7 +1106,7 @@ export class HookManager extends ComponentBase {
 			try {
 				// `version` is the structured which-version-fired-me signal for version-dispatched
 				// registrations (#250); ordinary hooks see undefined.
-				const result = hook.handler({ path, args, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
@@ -1003,7 +1130,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1054,7 +1181,7 @@ export class HookManager extends ComponentBase {
 					ctx,
 					version: hook.version
 				};
-				const transformed = hook.handler(hookContext);
+				const transformed = runtime_callHookHandler(hook, hookContext);
 
 				// A thenable from a sync-pipeline after hook is the silent-corruption cell (#251): the
 				// pending Promise would replace the result and surface as NaN far from the cause. It can
@@ -1083,7 +1210,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1133,7 +1260,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Check for short-circuit (hook returns value directly)
@@ -1153,7 +1280,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1201,7 +1328,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, result: currentResult, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, result: currentResult, api, ctx, version: hook.version });
 				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
@@ -1216,7 +1343,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1243,6 +1370,87 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Observe a non-native thenable a pipeline stage hands back: react to it as `await` does, and record any
+	 * rejection of it as that stage's.
+	 *
+	 * @param {object} thenable - The thenable, not a native Promise.
+	 * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result (it records its own failure).
+	 * @param {function(*): void} record - Records a rejection as this stage's.
+	 * @param {function(): void} onUnviewable - Called when the result's rejections cannot be recorded on their way out.
+	 * @returns {object} The result, as {@link settleThenable} gives it, with its rejections recorded.
+	 * @public
+	 *
+	 * @description
+	 * {@link settleThenable} records what its rejection callback sees. Its `then` may also hand back something
+	 * that rejects without calling that callback: a native Promise (a `then` that takes only onFulfilled) has
+	 * its rejection recorded on the way out, and one of its own kind is handed on as a recording view (see
+	 * {@link HookManager#recordRejections}).
+	 */
+	observeThenable(thenable, onFulfilled, record, onUnviewable) {
+		const fail = (error) => {
+			record(error);
+			throw error;
+		};
+		const observed = settleThenable(thenable, onFulfilled, fail);
+		if (observed instanceof Promise) return observed.then(undefined, fail);
+		return this.recordRejections(observed, record, onUnviewable);
+	}
+
+	/**
+	 * Present a non-native thenable a pipeline stage hands back so that a rejection reaching whoever settles on
+	 * it is recorded as that stage's first.
+	 *
+	 * @param {object} thenable - The thenable, kept as is: its kind, prototype and methods.
+	 * @param {function(*): void} record - Records a rejection; called before the settling code's own callback.
+	 * @param {function(): void} onUnviewable - Called instead when no view can replace its `then`.
+	 * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through, or the
+	 *   thenable itself when its own `then` cannot be replaced.
+	 * @public
+	 *
+	 * @description
+	 * A hand-written `then` can reject the thenable it returns without calling the rejection callback it was
+	 * given, so the stage that called it cannot see that rejection. Whoever later settles on the thenable — an
+	 * outer hook, the wrapper, the caller's `await` — calls its `then` once, as it would without slothlet; the
+	 * view adds the record to that call. Its other members are the thenable's own, methods bound to it (once
+	 * each, so a method read twice is the same function) so private fields still resolve.
+	 *
+	 * A Proxy must answer a read of a non-writable, non-configurable own property (a frozen object's) with its
+	 * own value. Such a member is handed out as it is; when it is `then`, no view is made at all, the thenable is
+	 * returned as it is, and `onUnviewable` lets the caller fall back to naming the stage for a rejection
+	 * nothing recorded.
+	 */
+	recordRejections(thenable, record, onUnviewable) {
+		const fixed = (key) => {
+			const descriptor = Reflect.getOwnPropertyDescriptor(thenable, key);
+			return descriptor !== undefined && !descriptor.configurable && (!("value" in descriptor) || !descriptor.writable);
+		};
+		if (fixed("then")) {
+			onUnviewable();
+			return thenable;
+		}
+		const bound = new Map();
+		return new Proxy(thenable, {
+			get(target, key) {
+				const value = Reflect.get(target, key, target);
+				if (typeof value !== "function" || fixed(key)) return value;
+				if (key === "then") {
+					return (onFulfilled, onRejected) =>
+						Reflect.apply(value, target, [
+							onFulfilled,
+							(error) => {
+								record(error);
+								if (typeof onRejected === "function") return onRejected(error);
+								throw error;
+							}
+						]);
+				}
+				if (!bound.has(key)) bound.set(key, value.bind(target));
+				return bound.get(key);
+			}
+		});
+	}
+
+	/**
 	 * Run a call through its around hooks, highest priority outermost.
 	 *
 	 * @param {Array<object>} hooks - Around hooks for the path, in execution order (from {@link getHooksForPath}).
@@ -1252,7 +1460,8 @@ export class HookManager extends ComponentBase {
 	 * @param {object} ctx - User context object
 	 * @param {AroundChainOptions} options - Pipeline wiring supplied by the wrapper.
 	 * @returns {*} The outermost around hook's return value — the call's result. A Promise when
-	 *   `options.isAsync` is set.
+	 *   `options.isAsync` is set; on the synchronous pipeline, a thenable when a handler returned one
+	 *   after `next()` returned one.
 	 * @public
 	 *
 	 * @description
@@ -1267,32 +1476,48 @@ export class HookManager extends ComponentBase {
 	 * target runs — including after an `await` inside the target, since async context follows the
 	 * target's own continuation.
 	 *
-	 * In the synchronous pipeline a handler's thenable return is refused with
+	 * In the synchronous pipeline a handler may return a thenable only when it called `next()` and
+	 * `next()` returned a thenable — the target's own Promise (a plain function returning one), or an
+	 * inner hook's. The caller receives a thenable then either way, so the handler may return that one,
+	 * one derived from it (`next().then(check)`) or any other thenable. A thenable is refused with
 	 * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
-	 * `{ async: true }`), except when it is the very value its own `next()` returned: that is the
-	 * target's own Promise (a plain function returning one) passed straight through, not something
-	 * the hook produced. In the asynchronous pipeline thenables are awaited.
+	 * `{ async: true }`) when it would introduce asynchrony into a synchronous call: a short-circuit, or
+	 * a thenable when `next()` returned a plain value. A rejection of a thenable other than `next()`'s own
+	 * that nothing reported yet — a throw from the handler's own continuation — is reported as this hook's
+	 * `around` failure. In the asynchronous pipeline thenables are awaited.
 	 *
 	 * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
 	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
 	 */
 	executeAroundChain(hooks, path, args, api, ctx, options) {
-		const { core, isAsync, caller, entry, errorSink, runInCallerFlow } = options;
+		const { core, isAsync, caller, entry, errorSink, runInCallerFlow, onUnobserved } = options;
 		const count = hooks.length;
 
-		const sinkAround = (hook, error) => {
-			errorSink(error, {
-				type: "around",
-				subset: hook.subset,
-				hookTag: hook.id,
-				hookId: hook.id,
-				timestamp: Date.now(),
-				stack: error?.stack
-			});
-		};
+		const aroundSource = (hook, stack) => ({
+			type: "around",
+			subset: hook.subset,
+			hookTag: hook.id,
+			hookId: hook.id,
+			timestamp: Date.now(),
+			stack
+		});
+		const sinkAround = (hook, error) => errorSink(error, aroundSource(hook, error?.stack));
+
+		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
+		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
+		// source. It is reacted to as `await` would (see settleThenable): the caller gets what its `then` returns
+		// (a thenable of the handler's own kind for one that returns its kind), or a native Promise settled by
+		// its callbacks when it returns nothing to await.
+		const observeReturnedThenable = (hook, result) =>
+			this.observeThenable(
+				result,
+				(value) => value,
+				(error) => sinkAround(hook, error),
+				() => onUnobserved(aroundSource(hook, undefined))
+			);
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
-		// handed back so the synchronous pipeline can recognise a passed-through target Promise.
+		// handed back so the synchronous pipeline can tell whether `next()` returned a thenable.
 		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
 			if (state.called) {
 				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
@@ -1307,7 +1532,7 @@ export class HookManager extends ComponentBase {
 			const rest = () => invoke(index + 1, forwarded);
 			// A pinned handler runs as the module that registered it. The rest of the pipeline belongs
 			// to the call being intercepted, so the target must see the call's own caller again.
-			state.returned = runInCallerFlow && typeof hook.handler._slothletOriginal === "function" ? runInCallerFlow(rest) : rest();
+			state.returned = runInCallerFlow && runtime_isCallerLocked(hook.handler) ? runInCallerFlow(rest) : rest();
 			return state.returned;
 		};
 
@@ -1318,7 +1543,7 @@ export class HookManager extends ComponentBase {
 				const state = { called: false, returned: undefined };
 				const next = makeNext(hook, index, currentArgs, state, invokeAsync);
 				try {
-					const raw = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+					const raw = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 					return raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 				} catch (error) {
 					sinkAround(hook, error);
@@ -1334,13 +1559,18 @@ export class HookManager extends ComponentBase {
 			const state = { called: false, returned: undefined };
 			const next = makeNext(hook, index, currentArgs, state, invokeSync);
 			try {
-				const result = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 				// Object-only thenable test, as everywhere else on a value path: a lazy callable wrapper
 				// answers `.then` on purpose (see executeAfterHooks).
-				if (result && typeof result === "object" && typeof result.then === "function" && !(state.called && result === state.returned)) {
+				if (!(result && typeof result === "object" && typeof result.then === "function")) return result;
+				const returned = state.returned;
+				// A thenable is accepted only when next() was called and itself returned one: the caller already
+				// gets a thenable then, so whatever thenable the handler returns adds no asynchrony the target did not.
+				if (!(state.called && returned && typeof returned === "object" && typeof returned.then === "function")) {
 					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
 				}
-				return result;
+				if (result === returned) return result;
+				return observeReturnedThenable(hook, result);
 			} catch (error) {
 				sinkAround(hook, error);
 				throw error;
@@ -1366,7 +1596,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
@@ -1384,7 +1614,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 			}
@@ -1404,15 +1634,13 @@ export class HookManager extends ComponentBase {
 	 */
 	executeErrorHooks(path, error, source, args, api, ctx) {
 		// Mark error as processed to prevent double-handling
-		if (error && typeof error === "object") {
-			error[ERROR_HOOK_PROCESSED] = true;
-		}
+		markHookProcessed(error);
 
 		const hooks = this.getHooksForPath("error", path);
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					error,
@@ -1763,6 +1991,7 @@ export class HookManager extends ComponentBase {
 				// preserves the original module attribution across reload (the ALS context is gone at
 				// replay) without exposing a spoofable public knob (#138 review).
 				ownerPath: hook.ownerPath,
+				ownerModule: hook.ownerModule,
 				// Version-dispatched entries replay literally (the stored pattern is already the
 				// physical `tag.pattern`); the binding travels outside options for the same
 				// non-spoofable reason and is re-stamped through the private channel (#250).
@@ -1789,7 +2018,11 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				[REPLAY_IDENTITY]: {
+					ownerPath: reg.ownerPath ?? null,
+					ownerFilePath: reg.ownerFilePath ?? null,
+					ownerModule: reg.ownerModule ?? null
+				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).
 				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})

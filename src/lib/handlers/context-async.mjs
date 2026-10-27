@@ -21,6 +21,7 @@
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
 import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
+import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
@@ -144,7 +145,7 @@ export class AsyncContextManager {
 					// handler: async rejections already propagate untouched here, matching the leaf
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (result instanceof Promise) {
-						return result.then((value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+						return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
 					}
 					return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
 				} catch (error) {
@@ -174,7 +175,7 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (result instanceof Promise) {
-					return result.then((value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+					return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
 				}
 				return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
 			} catch (error) {

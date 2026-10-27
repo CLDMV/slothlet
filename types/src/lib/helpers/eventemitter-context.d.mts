@@ -21,9 +21,19 @@ export function enableEventEmitterPatching(): void;
  */
 export function disableEventEmitterPatching(): void;
 /**
- * Cleanup all tracked EventEmitters created within slothlet API context.
- * This removes all listeners from tracked emitters and clears tracking structures.
- * Should be called during shutdown to prevent memory leaks and hanging processes.
+ * Release the EventEmitter state slothlet holds, when the last instance shuts down (#605).
+ *
+ * No listener is removed: an emitter a module created can outlive slothlet (undici keeps a `fetch`
+ * socket in its keep-alive pool and later destroys it with an error), and the listeners on it belong to
+ * the code that registered them. Every listener wrapper is released, so one firing later calls its
+ * listener directly, with no instance context. On each tracked emitter, a wrapper registered with
+ * `on` / `prependListener` is swapped in place for the function the code registered, and a `once` /
+ * `prependOnceListener` wrapper for a plain one-shot wrapper with no slothlet state, which reports its
+ * listener through `.listener` as Node's own does. The emitter then holds what it would without
+ * slothlet. The swap edits the listener table directly, so no `removeListener` / `newListener` event
+ * fires; a table the emitter keeps read-only is left as it is, its wrappers released. Every wrapper
+ * drops its captured context (its AsyncResource and pinned caller) first, so one left on such a table
+ * keeps no instance alive.
  *
  * @public
  */

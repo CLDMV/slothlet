@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:28-07:00 (1791090928)
+ *	@Last modified time: 2026-10-07T19:05:58-07:00 (1791425158)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -694,10 +694,17 @@ function parseErrorThrows(content, filePath) {
 		// Has originalError if 3+ params and 3rd param isn't { stub: true }
 		const hasOriginalError = paramCount >= 3 && !isStub;
 
+		// SlothletWarning takes its message from `context.key` when one is given (a message variant
+		// under the same warning code), so that key is the translation the context must match.
+		const isWarning = content.substring(startIndex, parenStart).includes("SlothletWarning");
+		const keyOverride = isWarning ? fullMatch.match(/\bkey:\s*"([A-Z][A-Z0-9_]*)"/) : null;
+		const messageKey = keyOverride ? keyOverride[1] : errorCode;
+
 		errors.push({
 			filePath,
 			lineNumber,
 			errorCode,
+			messageKey,
 			fullMatch,
 			isStub,
 			isValidation,
@@ -1241,7 +1248,7 @@ console.log("=== Translation Analysis ===");
 console.log("=".repeat(80) + "\n");
 
 // Collect all error codes used in codebase (from SlothletError + direct t() calls)
-const usedErrorCodes = new Set([...allErrors.map((e) => e.errorCode), ...directTranslationUsage]);
+const usedErrorCodes = new Set([...allErrors.flatMap((e) => [e.errorCode, e.messageKey]), ...directTranslationUsage]);
 
 // Keys intentionally used via console.warn in translations.mjs itself (circular dependency -
 // SlothletWarning cannot be imported in the i18n module, so these are used as raw string lookups).
@@ -1262,7 +1269,7 @@ console.log("\n📋 Placeholder Consistency Check:\n");
 const placeholderIssues = [];
 
 for (const error of allErrors) {
-	const translation = translations[error.errorCode];
+	const translation = translations[error.messageKey];
 	if (!translation) continue;
 
 	// Extract placeholders from translation (e.g., {apiPath}, {error})
@@ -1400,6 +1407,10 @@ for (const error of allErrors) {
 			// - validationError: Flag extracted from context, skips hint detection
 			// Note: 'hint' CAN be passed to override auto-detection, so don't filter it
 			usedPlaceholders = usedPlaceholders.filter((p) => p !== "stub" && p !== "validationError");
+			// A SlothletWarning `key` names the message variant; it is not interpolated.
+			if (error.messageKey !== error.errorCode) {
+				usedPlaceholders = usedPlaceholders.filter((p) => p !== "key");
+			}
 
 			usedPlaceholders.sort();
 		}
@@ -1430,7 +1441,7 @@ for (const error of allErrors) {
 	if (missingInUsage.length > 0 || extraInUsage.length > 0 || forbiddenInContext.length > 0 || validationErrorIssue) {
 		const relPath = relative(rootDir, error.filePath);
 		placeholderIssues.push({
-			code: error.errorCode,
+			code: error.messageKey === error.errorCode ? error.errorCode : `${error.errorCode} (key ${error.messageKey})`,
 			file: `${relPath}:${error.lineNumber}`,
 			missingInUsage,
 			extraInUsage,

@@ -18,23 +18,40 @@
  * @module third-party-cleanup.test.vitest
  *
  * @description
- * Tests that EventEmitters created within slothlet API files are properly
- * tracked and cleaned up when slothlet shuts down. This includes:
+ * Tests that EventEmitters created within slothlet API files are tracked, and
+ * released when the last slothlet instance shuts down (#605): each listener
+ * slothlet wrapped is swapped back for the function the code registered, and
+ * none is removed. This includes:
  * - Native Node.js EventEmitters
  * - Third-party file watchers (chokidar)
  *
- * Key principle: Slothlet tracks and cleans up EventEmitters created WITHIN
- * slothlet API context, regardless of whether they're native or from third-party
- * libraries. EventEmitters created OUTSIDE slothlet context are NOT cleaned up.
+ * Key principle: Slothlet tracks EventEmitters created WITHIN slothlet API context,
+ * native or third-party, and at shutdown leaves them holding exactly what their
+ * code registered. The emitters can outlive slothlet (undici's keep-alive sockets),
+ * so their listeners are never stripped.
  */
 
 import { describe, test, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
+/**
+ * Count the listeners on `emitter` for `events` that are still slothlet wrappers. A slothlet wrapper,
+ * `on` or `once`, carries `_slothletOriginal`; the plain one-shot wrapper that replaces a `once` wrapper at
+ * shutdown does not.
+ * @param {import("node:events").EventEmitter} emitter - Emitter.
+ * @param {string[]} events - Event names.
+ * @returns {number} Wrapped listeners still attached.
+ */
+const wrappedListeners = (emitter, events) =>
+	events.reduce((sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal !== undefined).length, 0);
+
+const POOL_EVENTS = ["connect", "query", "error", "disconnect"];
+const WATCHER_EVENTS = ["add", "change", "unlink", "error", "ready"];
+
 describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ config }) => {
 	let api;
-	// The chokidar watcher a test obtained. Shutdown only strips its listeners (what these tests
+	// The chokidar watcher a test obtained. Shutdown only unwraps its listeners (what these tests
 	// assert); the watcher's file-system handles are closed here so none outlive the test.
 	let openWatcher = null;
 
@@ -47,7 +64,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		openWatcher = null;
 	});
 
-	test("Native EventEmitters created in API files are tracked and cleaned up", async () => {
+	test("Native EventEmitters created in API files keep their listeners, unwrapped, after shutdown", async () => {
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST
@@ -78,18 +95,19 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		);
 		expect(totalListenersBefore).toBe(20);
 
-		// Shutdown slothlet - should clean up tracked EventEmitters
+		// Shutdown slothlet - releases the tracked EventEmitters
 		await api.shutdown();
 
-		// Verify all listeners were removed
+		// Every listener is still attached, as the function the module registered
 		const totalListenersAfter = emitters.reduce(
 			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
-		expect(totalListenersAfter).toBe(0);
+		expect(totalListenersAfter).toBe(totalListenersBefore);
+		expect(emitters.reduce((sum, e) => sum + wrappedListeners(e, POOL_EVENTS), 0)).toBe(0);
 	}, 240000);
 
-	test("Third-party EventEmitters (chokidar) created in API files are tracked and cleaned up", async () => {
+	test("Third-party EventEmitters (chokidar) created in API files keep their listeners, unwrapped, after shutdown", async () => {
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST
@@ -122,20 +140,21 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 			watcher.listenerCount("ready");
 		expect(directCountBefore).toBe(5);
 
-		// Shutdown slothlet - should clean up tracked EventEmitters
+		// Shutdown slothlet - releases the tracked EventEmitters
 		await api.shutdown();
 
-		// Verify all listeners were removed
+		// Every listener is still attached, as the function the module registered
 		const directCountAfter =
 			watcher.listenerCount("add") +
 			watcher.listenerCount("change") +
 			watcher.listenerCount("unlink") +
 			watcher.listenerCount("error") +
 			watcher.listenerCount("ready");
-		expect(directCountAfter).toBe(0);
+		expect(directCountAfter).toBe(directCountBefore);
+		expect(wrappedListeners(watcher, WATCHER_EVENTS)).toBe(0);
 	}, 240000);
 
-	test("Both native and third-party EventEmitters are cleaned up simultaneously", async () => {
+	test("Both native and third-party EventEmitters keep their listeners, unwrapped, after shutdown", async () => {
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST
@@ -171,10 +190,10 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		expect(poolBefore).toBe(12); // 3 emitters × 4 events
 		expect(watcherBefore).toBe(5);
 
-		// Shutdown slothlet - should clean up ALL tracked EventEmitters
+		// Shutdown slothlet - releases ALL tracked EventEmitters
 		await api.shutdown();
 
-		// Verify all listeners were removed from both types
+		// Both types keep every listener, as the functions the modules registered
 		const poolAfter = poolEmitters.reduce(
 			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
@@ -186,7 +205,9 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 			watcher.listenerCount("error") +
 			watcher.listenerCount("ready");
 
-		expect(poolAfter).toBe(0);
-		expect(watcherAfter).toBe(0);
+		expect(poolAfter).toBe(poolBefore);
+		expect(watcherAfter).toBe(watcherBefore);
+		expect(poolEmitters.reduce((sum, e) => sum + wrappedListeners(e, POOL_EVENTS), 0)).toBe(0);
+		expect(wrappedListeners(watcher, WATCHER_EVENTS)).toBe(0);
 	}, 240000);
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,6 +61,29 @@ export const TEST_DIRS = {
 	API_CHAINABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_chainable`),
 	API_TEST_PRIMITIVES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_primitives`),
 	API_TEST_RESERVED_NAME: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reserved_name`),
+	API_TEST_SAME_NAMED_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_same_named_folder`),
+	API_TEST_WRAPPER_PROP_MEMBERS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members`),
+	API_TEST_WRAPPER_PROP_MEMBERS_MOUNT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_mount`),
+	API_TEST_WRAPPER_PROP_MEMBERS_NESTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_nested`),
+	API_TEST_WRAPPER_PROP_MEMBERS_DEEP: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_deep`),
+	API_TEST_REJECT_THEN_FILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_file`),
+	API_TEST_REJECT_THEN_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_folder`),
+	API_TEST_REJECT_RESERVED_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_folder`),
+	API_TEST_REJECT_RESERVED_FOLDER_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_folder_sanitized`),
+	API_TEST_REJECT_RESERVED_FILE_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_file_sanitized`),
+	API_TEST_REJECT_THEN_EXPORT_CJS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_export_cjs`),
+	API_TEST_REJECT_THEN_EXPORT_CJS_PROXY: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_export_cjs_proxy`),
+	API_TEST_REJECT_THEN_DEFAULT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_default`),
+	API_TEST_REJECT_THEN_NESTED_DEFAULT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_nested_default`),
+	API_TEST_REJECT_THEN_ADDAPI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_addapi`),
+	API_TEST_REJECT_THEN_INHERITED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_inherited`),
+	API_TEST_REJECT_THEN_INHERITED_FILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_inherited_file`),
+	API_TEST_REJECT_THEN_GETTER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_getter`),
+	API_TEST_REJECT_THEN_GETTER_FILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_getter_file`),
+	API_TEST_REJECT_THEN_STATIC: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_static`),
+	API_TEST_REJECT_THEN_RPC_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_rpc_folder`),
+	API_TEST_THEN_DATA: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_then_data`),
+	API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_callable`),
 	API_TEST_CJS_DEFAULT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs/default-fn`),
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
@@ -101,7 +124,13 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_SELF_PEER2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_peer2`),
 	API_TEST_ROUTINES_PERM: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_perm`),
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
-	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`)
+	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`),
+	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
+	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`),
+	// #625 — a module cannot change the framework namespace `self.slothlet`.
+	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
+	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
 };
 
 /**

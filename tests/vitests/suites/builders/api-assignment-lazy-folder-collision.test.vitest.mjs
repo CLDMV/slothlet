@@ -656,3 +656,72 @@ describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 
 		expect(targetApi.myFolder).toBeDefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Lazy folder first, loaded file second: the file's getters stay live, and the collision's winner
+// answers a getter both sides define (#585 review).
+// ---------------------------------------------------------------------------
+describe("api-assignment: lazy folder first, file second — getters through the collision", () => {
+	let _api;
+
+	afterEach(async () => {
+		if (_api?.shutdown) await _api.shutdown();
+		_api = null;
+	});
+
+	/**
+	 * Collide a lazy folder (first) with a loaded file (second), then load the folder.
+	 * @param {object} sl - The slothlet instance.
+	 * @param {"merge"|"merge-replace"} mode - Collision mode.
+	 * @returns {Promise<object>} The node holding the slot.
+	 */
+	async function collide(sl, mode) {
+		const folder = new UnifiedWrapper(sl, {
+			mode: "lazy",
+			apiPath: "gauge",
+			materializeFunc: async (setImpl) => {
+				setImpl({
+					get shared() {
+						return "folder";
+					},
+					folderOnly: 1
+				});
+			}
+		});
+		const folderProxy = folder.createProxy();
+		const file = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "gauge",
+			initialImpl: {
+				level: 1,
+				get double() {
+					return this.level * 2;
+				},
+				get shared() {
+					return "file";
+				}
+			}
+		});
+		const targetApi = { gauge: folderProxy };
+		await sl.builders.apiAssignment.assignToApiPath(targetApi, "gauge", file.createProxy(), {
+			useCollisionDetection: true,
+			config: makeConfig(mode),
+			collisionContext: "initial"
+		});
+		await targetApi.gauge._materialize();
+		return targetApi.gauge;
+	}
+
+	it.each([
+		["merge", "folder"],
+		["merge-replace", "file"]
+	])("under %s keeps the file's getter live and answers %s for the shared getter", async (mode, sharedWinner) => {
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		const node = await collide(getSlothletInst(_api, "math"), mode);
+		expect(node.double).toBe(2);
+		node.level = 5;
+		expect(node.double).toBe(10);
+		expect(node.shared).toBe(sharedWinner);
+		expect(node.folderOnly).toBe(1);
+	});
+});

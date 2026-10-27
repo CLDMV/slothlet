@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-10-16T21:19:24-07:00 (1792210764)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -127,6 +127,13 @@ const STATE = Symbol.for("@cldmv/slothlet.instanceImportState");
  *   generated for a CommonJS helper.
  * @property {(url: string) => *} requireESM - Entry point of the CommonJS stub generated for a
  *   `require()` of an ES module.
+ * @property {Map<string, Map<string, Set<string>>>} [graphs] - Per instance ID: for each file of the
+ *   instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
+ *   state object made by an older slothlet copy gains it too.
+ * @property {Map<string, Set<string>>} [leaves] - Per instance ID: the CommonJS leaves it loaded, which its
+ *   private cache does not keep (each load evaluates the leaf anew). Created on first use.
+ * @property {(instanceID: string, parent: string, children: string[]) => void} [recordImports] - Records a
+ *   module's imports; called by the registration the vite plugin appends to each instance module.
  * @internal
  */
 
@@ -142,6 +149,9 @@ function sharedState() {
 		state = { scopes: new Map(), active: null, requireCJS: (filePath, instanceID) => requireInInstance(filePath, instanceID), requireESM };
 		Object.defineProperty(globalThis, STATE, { value: state, enumerable: false, configurable: true });
 	}
+	state.recordImports ??= (instanceID, parent, children) => {
+		for (const child of children) recordImport(instanceID, parent, child);
+	};
 	return state;
 }
 
@@ -342,6 +352,12 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 		served.push(file);
 	}
 
+	if (fresh) {
+		// A leaf is not kept in the scope (it is evaluated anew each load), but its frames are the instance's code.
+		state.leaves ??= new Map();
+		if (!state.leaves.has(instanceID)) state.leaves.set(instanceID, new Set());
+		state.leaves.get(instanceID).add(resolved);
+	}
 	state.active = { instanceID, anchor: resolved };
 	try {
 		return requireFn(resolved);
@@ -358,6 +374,82 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 }
 
 /**
+ * Record that one file of an instance imports or requires another.
+ * @param {string} instanceID - The instance.
+ * @param {string} parent - The importing file's URL or path.
+ * @param {string} child - The imported file's URL or path.
+ * @returns {void}
+ * @private
+ */
+function recordImport(instanceID, parent, child) {
+	const state = sharedState();
+	state.graphs ??= new Map();
+	let graph = state.graphs.get(instanceID);
+	if (!graph) {
+		graph = new Map();
+		state.graphs.set(instanceID, graph);
+	}
+	const childPath = toSlashPath(child);
+	let parents = graph.get(childPath);
+	if (!parents) {
+		parents = new Set();
+		graph.set(childPath, parents);
+	}
+	const before = parents.size;
+	parents.add(toSlashPath(parent));
+	// Counted on the graph, so a reader can tell it changed without walking it.
+	if (parents.size !== before) graph.edges = (graph.edges ?? 0) + 1;
+}
+
+/**
+ * The import graph of an instance's own code: for each file a leaf of the instance reached through an
+ * import or require that carries the instance (#601 review), the files that import it. The live runtime
+ * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * @param {string} instanceID - The instance ID.
+ * @returns {Map<string, Set<string>>|null} Importers by imported file (forward-slash paths), or null.
+ * @internal
+ * @example
+ * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
+ */
+export function instanceImporters(instanceID) {
+	return globalThis[STATE]?.graphs?.get(instanceID) ?? null;
+}
+
+/**
+ * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
+ * They run under their plain path, with no import query, so the live runtime looks a stack frame up
+ * here to tell the instance's code from the host's (#601 review).
+ * @param {string} instanceID - The instance ID.
+ * @returns {string[]} Absolute paths, as Node's require cache keys them.
+ * @internal
+ * @example
+ * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
+ */
+export function instanceCommonJSFiles(instanceID) {
+	const scope = globalThis[STATE]?.scopes.get(instanceID);
+	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
+	return [...(scope ? scope.keys() : []), ...(leaves ?? [])];
+}
+
+/**
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object
+ * the instance's CommonJS state lives in, dropped by {@link releaseInstanceScope}, and how many files
+ * the instance has. Files are only ever added while the instance lives, so an equal count means the same
+ * files.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
+ * @internal
+ * @example
+ * instanceCommonJSVersion("inst-a"); // { key: Set {…}, count: 3 }
+ */
+export function instanceCommonJSVersion(instanceID) {
+	const scope = globalThis[STATE]?.scopes.get(instanceID);
+	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
+	const key = leaves ?? scope;
+	return key ? { key, count: (scope?.size ?? 0) + (leaves?.size ?? 0) } : null;
+}
+
+/**
  * Drop an instance's private CommonJS copies (#534): on shutdown, and for the old instance ID on a
  * full reload. Its ES module copies stay in Node's module cache (which has no eviction) but are no
  * longer reachable from a live instance.
@@ -368,7 +460,10 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
  * releaseInstanceScope(oldInstanceID);
  */
 export function releaseInstanceScope(instanceID) {
-	if (instanceID != null) globalThis[STATE]?.scopes.delete(instanceID);
+	if (instanceID == null) return;
+	globalThis[STATE]?.scopes.delete(instanceID);
+	globalThis[STATE]?.graphs?.delete(instanceID);
+	globalThis[STATE]?.leaves?.delete(instanceID);
 }
 
 /**
@@ -555,10 +650,22 @@ function applyToResult(specifier, context, result) {
 	const parentURL = context?.parentURL;
 	if (typeof parentURL === "string" && parentURL.includes(MARKER)) {
 		const url = propagateInstanceQuery(specifier, parentURL, result?.url);
+		// The child is the instance's own copy: an edge of its import graph.
+		if (typeof url === "string" && url.includes(MARKER)) {
+			const instanceID = new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance");
+			if (instanceID) recordImport(instanceID, parentURL, url);
+		}
 		return url === result?.url ? result : { ...result, url };
 	}
 	const active = globalThis[STATE]?.active;
-	return active ? markScopedRequire(specifier, context, result, active) : result;
+	if (!active) return result;
+	// A require inside an instance's CommonJS scope (see requireInInstance): its relative files are the
+	// instance's copies, so the require is an edge of the instance's graph.
+	const url = result?.url;
+	if (typeof parentURL === "string" && parentURL.startsWith("file:") && typeof url === "string" && url.startsWith("file:")) {
+		if (isFileSpecifier(specifier) && isInstanceScopedFile(url, parentURL)) recordImport(active.instanceID, parentURL, url);
+	}
+	return markScopedRequire(specifier, context, result, active);
 }
 
 /**
@@ -673,6 +780,56 @@ export function slothletInstanceImports() {
 			if (!resolved || resolved.external) return resolved;
 			const id = propagateInstanceQuery(source, importer, resolved.id);
 			return id === resolved.id ? resolved : { ...resolved, id };
+		},
+		/**
+		 * Record an instance module's imports where the module runs. A vite module graph is resolved in the
+		 * server, not in the process that evaluates the modules, so each instance ES module gets one statement
+		 * appended that records the files it imports into that process's instance graph (see
+		 * {@link instanceImporters}). Appended, so no line of the module moves.
+		 */
+		transform: {
+			order: "post",
+			/**
+			 * @param {string} code - The module's code, already compiled to JavaScript.
+			 * @param {string} id - The module id.
+			 * @returns {Promise<object|null>} The code with the registration appended, or null.
+			 */
+			async handler(code, id) {
+				if (typeof id !== "string" || !id.includes(MARKER)) return null;
+				const [base, query = ""] = splitQuery(id);
+				const instanceID = new URLSearchParams(query).get("slothlet_instance");
+				if (instanceID === null || isCommonJSFile(base)) return null;
+				let ast;
+				try {
+					ast = this.parse(code);
+				} catch {
+					// Code this parser cannot read is left as it is; its imports go unrecorded.
+					return null;
+				}
+				// Static imports and re-exports, and dynamic import() calls with a literal specifier anywhere in the module.
+				const specifiers = new Set();
+				const visit = (node) => {
+					if (!node || typeof node !== "object") return;
+					if (Array.isArray(node)) {
+						for (const child of node) visit(child);
+						return;
+					}
+					if (typeof node.type !== "string") return;
+					const isImport = /^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/.test(node.type);
+					const source = isImport ? node.source?.value : undefined;
+					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
+					for (const key of Object.keys(node)) if (key !== "type") visit(node[key]);
+				};
+				visit(ast.body);
+				const children = [];
+				for (const specifier of specifiers) {
+					const resolved = await this.resolve(specifier, id);
+					if (resolved && !resolved.external && resolved.id.includes(MARKER)) children.push(resolved.id);
+				}
+				if (!children.length) return null;
+				const registration = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`;
+				return { code: `${code}\n;${registration}\n`, map: null };
+			}
 		},
 		/**
 		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper.

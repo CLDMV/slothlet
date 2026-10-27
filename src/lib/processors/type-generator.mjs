@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@ import fs from "fs";
 import path from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
@@ -163,8 +164,9 @@ function describeMembers(value, apiPath, context, ancestors) {
 	try {
 		const members = [];
 		for (const key of Object.keys(value)) {
-			// Skip internal properties and the framework's own root surface (typed by SlothletAPI).
-			if (key.startsWith("_") || (apiPath === "" && FRAMEWORK_ROOT_KEYS.has(key))) {
+			// Skip the framework's reserved names and its own root surface (typed by SlothletAPI). A module's
+			// `_`/`__`-prefixed export is a member of the api like any other, so it is typed.
+			if (isFrameworkReservedKey(key) || (apiPath === "" && FRAMEWORK_ROOT_KEYS.has(key))) {
 				continue;
 			}
 			const childPath = apiPath ? `${apiPath}.${key}` : key;

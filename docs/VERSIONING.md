@@ -330,6 +330,8 @@ const info = api.slothlet.versioning.list("auth");
 // }
 ```
 
+The result is a copy, made for each call: changing it changes nothing in the registry a version dispatcher routes by.
+
 ### `api.slothlet.versioning.setDefault(logicalPath, versionTag)`
 
 Override the default version for a logical path at runtime.
@@ -355,6 +357,8 @@ Retrieve the VersionManager-only metadata stored at registration time via `versi
 const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
 // { version: "v1", logicalPath: "auth", deprecated: false, stable: true }
 ```
+
+The result is a copy, made for each call: only `setVersionMetadata()` changes the stored version metadata.
 
 ### `api.slothlet.versioning.setVersionMetadata(logicalPath, versionTag, patch)`
 

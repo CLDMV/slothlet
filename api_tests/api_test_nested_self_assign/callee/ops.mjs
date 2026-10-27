@@ -1,0 +1,268 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_nested_self_assign/callee/ops.mjs
+ *	@Date: 2026-10-17T21:07:21-07:00 (1792296441)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-18T21:34:34-07:00 (1792384474)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+// Mounted at apiPath "callee" (moduleID "callee") by the nested self-assign ownership tests (#625).
+// `useSecret` is the member another module tries to replace; `writeOwnNested` writes under the
+// module's own subtree, which stays allowed.
+import { self } from "@cldmv/slothlet/runtime";
+
+/**
+ * The member a foreign module tries to replace.
+ * @returns {string} The callee's own answer.
+ */
+export function useSecret() {
+	return "callee-original";
+}
+
+/**
+ * Write a value under this module's own mount point, below the top level.
+ * @param {*} value - Value to write.
+ * @returns {*} The value read back through `self`.
+ */
+export function writeOwnNested(value) {
+	self.callee.ops.note = value;
+	return self.callee.ops.note;
+}
+
+/**
+ * An array member: another module setting its prototype would reach the module's own array.
+ * @type {string[]}
+ */
+export const list = ["a", "b"];
+
+/**
+ * Stay suspended on the gate: a call of this module in flight while another module's code runs.
+ * @param {Promise<void>} gate - Released by the test.
+ * @returns {Promise<string>} `"held"`.
+ */
+export async function hold(gate) {
+	await gate;
+	return "held";
+}
+
+/**
+ * Keep this module's own node, read through `self`, and hand back a function that writes into it later,
+ * outside any call into this module.
+ * @returns {function(*): *} The deferred write; returns what it reads back.
+ */
+export function deferOwnWrite() {
+	const ops = self.callee.ops;
+	return (value) => {
+		ops.later = value;
+		return ops.later;
+	};
+}
+
+/**
+ * Hand back this module's own node, read through `self`.
+ * @returns {object} The node.
+ */
+export function ownNode() {
+	return self.callee.ops;
+}
+
+/**
+ * Hand back the receiver it was called on.
+ * @returns {*} `this`.
+ */
+export function getThis() {
+	return this;
+}
+
+/**
+ * Hand back the receiver it was called on, asynchronously.
+ * @returns {Promise<*>} `this`.
+ */
+export async function getThisAsync() {
+	return this;
+}
+
+/**
+ * Hand back a function that writes into the receiver this was called on, later.
+ * @returns {Function} The deferred write.
+ */
+export function writerForThis() {
+	const node = this;
+	return () => {
+		node.useSecret = () => "pwned-by-kept-receiver";
+	};
+}
+
+/**
+ * Hand back a function that writes into the receiver this was called on, later, and reads it back.
+ * @returns {function(*): *} The deferred write.
+ */
+export function keepThisWriter() {
+	const node = this;
+	return (value) => {
+		node.kept = value;
+		return node.kept;
+	};
+}
+
+/**
+ * Whether the receiver is this module's own node as it reads it through `self`.
+ * @returns {boolean} `this === self.callee.ops`.
+ */
+export function isThisSelf() {
+	return this === self.callee.ops;
+}
+
+/**
+ * Whether an argument is this module's own node as it reads it through `self`.
+ * @param {*} arg - The argument.
+ * @returns {boolean} `arg === self.callee.ops`.
+ */
+export function isArgSelf(arg) {
+	return arg === self.callee.ops;
+}
+
+/**
+ * Hand back this module's own node, read through `self`, after an await.
+ * @returns {Promise<object>} The node.
+ */
+export async function ownNodeAsync() {
+	await null;
+	return self.callee.ops;
+}
+
+/**
+ * Hand back this module's own node, read through `self`, through a thenable that is not a native promise.
+ * @returns {{then: Function}} The thenable.
+ */
+export function ownNodeThenable() {
+	const ops = self.callee.ops;
+	return {
+		then(resolve) {
+			resolve(ops);
+		}
+	};
+}
+
+/**
+ * Hand back this module's own node, read through `self`, inside a plain object: the module shares it.
+ * @returns {{ops: object}} The container.
+ */
+export function ownNodeInContainer() {
+	return { ops: self.callee.ops };
+}
+
+/**
+ * Hand back its argument inside a plain object.
+ * @param {*} x - The argument.
+ * @returns {{x: *}} The container.
+ */
+export function box(x) {
+	return { x };
+}
+
+/**
+ * Hand back its argument inside an array, after an await.
+ * @param {*} x - The argument.
+ * @returns {Promise<Array<*>>} The container.
+ */
+export async function boxAsync(x) {
+	await null;
+	return [x];
+}
+
+const items = [];
+
+/**
+ * Keep its argument.
+ * @param {*} x - The argument.
+ * @returns {void}
+ */
+export function keep(x) {
+	items.push(x);
+}
+
+/**
+ * Everything {@link keep} kept.
+ * @returns {Array<*>} The kept values.
+ */
+export function all() {
+	return items;
+}
+
+/**
+ * Hand back the receiver it was called on inside a plain object.
+ * @returns {{t: *}} The container.
+ */
+export function boxThis() {
+	return { t: this };
+}
+
+/**
+ * Call a callback with the receiver it was called on.
+ * @param {Function} cb - The callback.
+ * @returns {void}
+ */
+export function callWith(cb) {
+	cb(this);
+}
+
+/**
+ * Write the receiver's `secret`.
+ * @param {string} value - Value to write.
+ * @returns {void}
+ */
+export function setSecret(value) {
+	this.secret = value;
+}
+
+/**
+ * How many arguments it was called with.
+ * @param {...*} xs - The arguments.
+ * @returns {number} Their count.
+ */
+export function count(...xs) {
+	return xs.length;
+}
+
+/**
+ * Throw this module's own node, read through `self`.
+ * @returns {never}
+ * @throws {object} The node.
+ */
+export function throwOwnNode() {
+	throw self.callee.ops;
+}
+
+/**
+ * Add a permission rule from this module's code (#625).
+ * @param {object} rule - The rule.
+ * @returns {string} The rule's id, or the error code it was refused with.
+ */
+export function grant(rule) {
+	try {
+		return self.slothlet.permissions.addRule(rule);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}
+
+/**
+ * Remove a permission rule from this module's code (#625).
+ * @param {string} ruleId - The rule's id.
+ * @returns {*} What `removeRule` returned, or the error code it was refused with.
+ */
+export function revoke(ruleId) {
+	try {
+		return self.slothlet.permissions.removeRule(ruleId);
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+}

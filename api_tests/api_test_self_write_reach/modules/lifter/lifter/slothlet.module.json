@@ -1,0 +1,10 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["lifter"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"permissions": [
+		{ "caller": "**", "target": "slothlet.**:write", "effect": "allow" },
+		{ "caller": "**", "target": "**.__metadata:write", "effect": "allow" }
+	]
+}

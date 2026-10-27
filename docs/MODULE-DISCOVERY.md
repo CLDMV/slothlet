@@ -62,7 +62,7 @@ Every slothlet module ships a `slothlet.module.json` at the package root:
 | `kind`          | no       | Free-form category (e.g. `"driver"`, `"extension"`, `"reranker"`). Slothlet stores but does not interpret; the host filters on it via `discover()`'s `filter` callback.                    |
 | `priority`      | no       | Default-comparator key for `sort()`. Higher first. Defaults to `0`.                                                                                                                        |
 | `dependencies`  | no       | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here.                                                                               |
-| `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Advisory by default; host opts in to applying them.                                                  |
+| `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Applied at mount, at the `manifest` layer (#407); see [PERMISSIONS.md](PERMISSIONS.md).              |
 | `events`        | no       | Array of `{caller, event, effect}` event-delivery rules (the manifest layer of the event-rule pool; see [EVENTS.md](EVENTS.md)).                                                           |
 | `metadata`      | no       | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`.                       |
 

@@ -43,18 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.22.1 (October 2026)
+### Latest: v3.23.0 (October 2026)
 
-- **`require()` returns the same function as `import`** — the CommonJS entry now loads the ES module build through Node's synchronous `require(esm)` and returns its own default export, so `slothlet.defaults` and the named `slothlet` alias are set the moment `require()` returns and CommonJS and ESM consumers share one identical function, whichever loads first (#568, #570). `@cldmv/slothlet/devcheck`, a source-checkout guard, is no longer published.
-- **Tooling only otherwise** — every file header was restamped by `@cldmv/fix-headers` 2.2.0 with the shared `@cldmv/configs` config (comments only), and dev dependencies moved forward (#564, #566, #569, #572). No runtime dependency changed.
-- [View full v3.22.1 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.1.md)
+- **Permission modes and module ownership** — `permissions.mode` is `"on"`, `"off"` (the default with no config) or `"disabled"`; even off, module code cannot change the framework's own `slothlet` namespace, root functions or node keys. While permissions are on, module code may change data only under the api path it owns, at any depth of `self`, through a node or data object another module handed it, through `api.add`/`api.remove`/`api.reload`, or through the framework's setters. New `:write` permission rules let the host or a manifest grant one module writes into another's subtree, rules a module registers are limited to its own subtree, and a removed module's leftover code, hooks and listeners keep no standing (#628).
+- **Eager and lazy compose the same api, and many composition fixes** — a structure check now compares both modes; arrays, frozen nodes, class-instance and object defaults, and members named `name`/`length`/`then` behave as plain JavaScript; live-runtime callers are attributed correctly across overlapping calls and instances; the browser no longer needs `setImmediate`; and emitters a module listens to are collectable again (#585, #603, #580, #601, #579, #634, #656).
+- [View full v3.23.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.23.0.md)
 
 ### Recent Releases
 
+- **v3.22.1** (October 2026) — `require("@cldmv/slothlet")` returns the same function as `import`, with `defaults` and the named `slothlet` alias set at once (CommonJS loads the ES module build through `require(esm)`); `@cldmv/slothlet/devcheck` is no longer published; header restamp and dev dependency updates otherwise (#568, #570, #569) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.1.md))
 - **v3.22.0** (October 2026) — requires Node.js 22.15+; `api.slothlet.restart()`, `around` hooks, host-controlled event delivery, `permissions.owner`, per-instance helper modules and origin-based typegen, plus new host-only defaults for lifecycle methods and a set of reload, remove and ownership fixes (#518, #504, #496, #497, #509, #484, #529) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.0.md))
 - **v3.21.0** (September 2026) — principals for permission conditions: named, module-owned async resolvers whose cached, read-only facts reach the sync conditions of rules that declare `requires`; plus instances with no base directory and `metadata.caller()` / `.self()` allowed by default (#459, #471, #468) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.21.0.md))
 - **v3.20.0** (September 2026) — permission-rule function conditions receive a second argument, `condition(ctx, { args, target })`, carrying the call's own arguments and the concrete target path, so a rule can authorize on the resource named in the call itself; additive and backward-compatible (#455) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.20.0.md))
-- **v3.19.0** (September 2026) — new `impl:collision` lifecycle event carrying both writers and how a compose-time collision resolved (`dropped` / `replaced` / `merged`), surfacing dropped or shadowed leaves that `impl:created` structurally cannot; plus two ES Proxy `getOwnPropertyDescriptor` invariant fixes for routine selectors and virtual properties read through the composed wrapper (#441, #443, #446) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.19.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 

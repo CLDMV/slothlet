@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:48:44-07:00 (1791092924)
+ *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,3 +77,73 @@ export const WRAPPER_INTERNAL_KEYS = new Set([
  * @type {Set<string>}
  */
 export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+
+/**
+ * Whether a property name belongs to the framework rather than to a module's exports.
+ *
+ * @param {string|symbol} key - Property name to classify.
+ * @returns {boolean} True when the name is reserved by the framework.
+ * @package
+ *
+ * @description
+ * Matched against the framework's own reserved names — {@link WRAPPER_INTERNAL_KEYS} (wrapper state
+ * and control props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. Every check of
+ * whether a key is the framework's goes through here, so the rule cannot drift between sites. The documented hidden-entry
+ * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
+ * export names, and a module that writes `export const __priv` has deliberately put that member on
+ * its surface. Treating the prefix as internal silently dropped such exports from the composed api
+ * in lazy mode while eager served them.
+ *
+ * @example
+ * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("__priv"); // false — a module's own export
+ */
+export function isFrameworkReservedKey(key) {
+	if (typeof key !== "string") return false;
+	return WRAPPER_INTERNAL_KEYS.has(key) || IMPL_METADATA_KEYS.has(key);
+}
+
+/**
+ * The framework's root members (`slothlet`, `shutdown`, `destroy`), which only the host's write rules may name (#625).
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const FRAMEWORK_WRITE_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+
+/**
+ * The framework's own keys on api nodes, which only the host's write rules may name (#625).
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const FRAMEWORK_INTERNAL_WRITE_KEYS = Object.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+
+/**
+ * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
+ * @param {string} pattern - The path pattern (`victim.store.*`).
+ * @returns {string[]} The literal segments (`["victim", "store"]`).
+ * @example
+ * writeTargetLiteralPrefix("victim.**"); // ["victim"]
+ */
+export function writeTargetLiteralPrefix(pattern) {
+	const prefix = [];
+	for (const segment of String(pattern).split(".")) {
+		if (/[*?{}[\]!()]/.test(segment)) break;
+		prefix.push(segment);
+	}
+	return prefix;
+}
+
+/**
+ * Whether a write rule's path pattern names the framework's own: its namespace or root functions as the first
+ * segment, or one of its internal keys as any segment. Such a target is the host's alone (#625).
+ * @param {string} pattern - The path pattern.
+ * @returns {boolean} Whether it names the framework's own.
+ * @example
+ * isFrameworkWriteTarget("slothlet.**"); // true
+ * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ */
+export function isFrameworkWriteTarget(pattern) {
+	const segments = String(pattern).split(".");
+	if (FRAMEWORK_WRITE_ROOTS.has(segments[0])) return true;
+	return segments.some((segment) => FRAMEWORK_INTERNAL_WRITE_KEYS.has(segment));
+}

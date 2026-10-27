@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { runtime_selfModuleReader, runtime_selfView } from "#handlers/unified-wrapper";
 
 /**
  * Lifecycle event manager for impl changes
@@ -49,6 +50,9 @@ export class Lifecycle extends ComponentBase {
 		// consumers. Those see the sanitized, post-placement PUBLIC `impl:created` / `impl:changed` emitted
 		// via emit(), which carries the wrapped callable + metadata, never the raw unwrapped impl.
 		this.internalSubscribers = new Map();
+		// The module each public subscriber was subscribed from (#625), per event: such a subscriber is handed
+		// its module's view of the node an event is about, never the node or its implementation itself.
+		this.subscriberReaders = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
 	}
@@ -71,16 +75,16 @@ export class Lifecycle extends ComponentBase {
 	subscribe(event, handler) {
 		if (!this.subscribers.has(event)) {
 			this.subscribers.set(event, new Set());
+			this.subscriberReaders.set(event, new Map());
 		}
 		this.subscribers.get(event).add(handler);
+		// Who subscribed: a module executing now (#625), or the host. The host is handed what it always was.
+		const reader = runtime_selfModuleReader(this.slothlet);
+		if (reader) this.subscriberReaders.get(event).set(handler, reader);
+		else this.subscriberReaders.get(event).delete(handler);
 
 		// Return unsubscribe function
-		return () => {
-			const handlers = this.subscribers.get(event);
-			if (handlers) {
-				handlers.delete(handler);
-			}
-		};
+		return () => this.off(event, handler);
 	}
 
 	/**
@@ -143,6 +147,7 @@ export class Lifecycle extends ComponentBase {
 		const handlers = this.subscribers.get(event);
 		if (handlers) {
 			handlers.delete(handler);
+			this.subscriberReaders.get(event)?.delete(handler);
 		}
 	}
 
@@ -160,6 +165,9 @@ export class Lifecycle extends ComponentBase {
 	 * Emit lifecycle event
 	 * @param {string} event - Event name
 	 * @param {object} data - Event data
+	 * @param {{impl?: object|null}} [nodes] - The api node the event's `impl` is about, when `data.impl` is
+	 *   its implementation rather than the node: a subscriber a module subscribed is handed its module's
+	 *   view of that node (#625), or null when there is none.
 	 * @private
 	 *
 	 * @description
@@ -180,9 +188,9 @@ export class Lifecycle extends ComponentBase {
 	 *   filePath: "/path/to/math.mjs"
 	 * });
 	 */
-	async emit(event, data) {
+	async emit(event, data, nodes) {
 		this.#logEvent(event, data);
-		await this.#notify(this.subscribers.get(event), event, data);
+		await this.#notify(this.subscribers.get(event), event, data, this.subscriberReaders.get(event), nodes);
 	}
 
 	/**
@@ -231,15 +239,77 @@ export class Lifecycle extends ComponentBase {
 	}
 
 	/**
+	 * Report a handler that threw, unless the instance is silent. The warning carries the thrown
+	 * value as its `cause` (#578), and names the api path and module when the event is about one
+	 * (the `impl:*` events), so a failing handler can be traced to the leaf that triggered it.
+	 * @param {string} event - Event name.
+	 * @param {object} data - Event data.
+	 * @param {*} error - What the handler threw or rejected with.
+	 * @returns {void}
+	 * @private
+	 */
+	#warnHandlerError(event, data, error) {
+		if (this.____config?.silent) return;
+		if (data.apiPath) {
+			new this.SlothletWarning(
+				"WARNING_LIFECYCLE_HANDLER_ERROR",
+				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, apiPath: data.apiPath, moduleID: data.moduleID },
+				error
+			);
+			return;
+		}
+		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
+	}
+
+	/**
+	 * The event as a subscriber a module subscribed is handed it (#625): its `impl` is that module's view of
+	 * the node the event is about, the one it reads through `self`, so the module cannot keep the node or
+	 * its implementation and write another module's subtree through it later. Null when there is no node
+	 * to view.
+	 * @param {object} data - Event data.
+	 * @param {object} reader - The module the subscriber was subscribed from.
+	 * @param {{impl?: object|null}} [nodes] - The node the event's `impl` is about.
+	 * @returns {object} The event data for the subscriber.
+	 * @private
+	 */
+	#viewFor(data, reader, nodes) {
+		if (!data || typeof data !== "object" || !("impl" in data)) return data;
+		const node = nodes && "impl" in nodes ? nodes.impl : data.impl;
+		if (node === null || (typeof node !== "object" && typeof node !== "function")) return { ...data, impl: node ?? null };
+		const view = runtime_selfView(node, reader);
+		// Something that is no api node is never handed over: it would be the implementation itself.
+		return { ...data, impl: view === node ? null : view };
+	}
+
+	/**
+	 * Call a subscriber a module subscribed as that module (#625), the way the event manager calls a module's
+	 * listener: whatever triggered the event — the module that owns a node writing it, another module's
+	 * `api.add`, the host — the subscriber's own `self` writes are held to the module that subscribed it.
+	 * @param {Function} handler - The subscriber.
+	 * @param {object} reader - The module it was subscribed from.
+	 * @param {Array} args - `[data]`: a module's subscriber is handed the event, never the instance token.
+	 * @returns {*} What the subscriber returns.
+	 * @private
+	 */
+	#invokeAs(handler, reader, args) {
+		const contextManager = this.slothlet.contextManager;
+		// Code the live runtime could not attribute is no module to run as: its subscriber is called as it was.
+		if (!reader.____slothletInternal || !contextManager?.runInContext) return handler(...args);
+		return contextManager.runInContext(this.slothlet.instanceID, handler, undefined, args, reader, true);
+	}
+
+	/**
 	 * Notify a set of handlers, awaiting any async ones and isolating handler errors (shared by
 	 * emit + emitInternal).
 	 * @param {Set<Function>|undefined} handlers - The subscriber set for the event, if any.
 	 * @param {string} event - Event name (for error context).
 	 * @param {object} data - Event data.
+	 * @param {Map<Function, object>} [readers] - The module each subscriber was subscribed from (public tier).
+	 * @param {{impl?: object|null}} [nodes] - The node the event's `impl` is about (see {@link Lifecycle#emit}).
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async #notify(handlers, event, data) {
+	async #notify(handlers, event, data, readers, nodes) {
 		if (!handlers) return;
 
 		// Collect all handler promises (both sync and async)
@@ -248,23 +318,24 @@ export class Lifecycle extends ComponentBase {
 		const token = getInstanceToken(this.slothlet);
 		for (const handler of handlers) {
 			try {
-				const result = handler(data, token);
+				const reader = readers?.get(handler);
+				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
+				// event only: the instance's token is the framework's own.
+				const apiManager = this.slothlet.handlers?.apiManager;
+				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
+				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
 				// If handler returns a promise, track it
 				if (result && typeof result.then === "function") {
 					handlerPromises.push(
 						result.catch((error) => {
 							// Log error but don't stop other handlers
-							if (!this.____config?.silent) {
-								new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
-							}
+							this.#warnHandlerError(event, data, error);
 						})
 					);
 				}
 			} catch (error) {
 				// Log synchronous errors but don't stop other handlers
-				if (!this.____config?.silent) {
-					new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
-				}
+				this.#warnHandlerError(event, data, error);
 			}
 		}
 

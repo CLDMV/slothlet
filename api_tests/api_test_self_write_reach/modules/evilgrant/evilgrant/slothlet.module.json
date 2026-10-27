@@ -1,0 +1,10 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["guest", "sub"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"permissions": [
+		{ "caller": "guest.**", "target": "victim.**:write", "effect": "allow" },
+		{ "caller": "guest.**", "target": "slothlet.permissions.addRule", "effect": "allow" }
+	]
+}

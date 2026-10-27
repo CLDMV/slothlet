@@ -36,6 +36,13 @@ export class ApiManager extends ComponentBase {
         replaceShadows: Map<string, object[]>;
     };
     /**
+     * The module whose code performed each `api.add`, by the mount it made (moduleID and mount point, see
+     * {@link ApiManager#mountKey}); null for the host (#625). That module may remove the mount, and scoped-remove
+     * within it, without a grant. Cleared with the mount, and when the mounting module is removed.
+     * @type {Map<string, string|null>}
+     */
+    mountedBy: Map<string, string | null>;
+    /**
      * Normalize and validate an API path.
      * @param {string|string[]} apiPath - Dot-delimited API path, array of path segments, or empty/null for root.
      * @returns {{ apiPath: string, parts: string[] }} Normalized path data.
@@ -137,7 +144,8 @@ export class ApiManager extends ComponentBase {
      * Called from the runtime `self` set traps when a module does
      * `self.X = value` (TOP-LEVEL assignments only — deep-path writes like
      * `self.X.Y = …` flow through the wrapper at `self.X` instead, not this
-     * method). Ownership rule: a caller whose own apiPath is `P` may only
+     * method, and are held to the same rule there through
+     * {@link ApiManager#assertOwnedWrite} (#625)). Ownership rule: a caller whose own apiPath is `P` may only
      * write under `P.*` (e.g. caller `lib.config` may write
      * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
      * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
@@ -165,6 +173,142 @@ export class ApiManager extends ComponentBase {
      * @public
      */
     public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null): void;
+    /**
+     * Refuse a write a module makes outside the subtree it owns.
+     *
+     * The one ownership rule every write into the api tree from inside a module follows, whether it
+     * is a top-level `self.X = …` ({@link setOwnedProperty}) or an assignment below it,
+     * `self.X.Y = …`, which the wrapper at `self.X` receives (#625). A caller whose module is
+     * mounted at `P` may write only under `P.*`; the base module (endpoint `"."`), a caller with no
+     * module, and code outside any module (no `callerWrapper`) own the whole tree. A module no longer
+     * mounted owns nothing.
+     *
+     * The write rules of the permission system answer first ({@link PermissionManager#decideWrite}), for module
+     * code only: a denying rule refuses the write whatever the module owns, and an allowing one grants it whatever
+     * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
+     * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
+     * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
+     * module writes anywhere outside the framework's own; with it disabled nothing is checked.
+     *
+     * @param {string[]} parts - Segments of the api path being written.
+     * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+     * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
+     *   being checked (see {@link ApiManager#ownsPath}).
+     * @returns {void}
+     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
+     *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+     * @public
+     */
+    public assertOwnedWrite(parts: string[], callerWrapper: object | null, inFlight?: {
+        moduleID: string;
+        prior: Map<string, any>;
+    } | null): void;
+    /**
+     * Whether module writes are held to the ownership rule at all: only while the permission system is on. With no
+     * permissions, nothing restricts where a module writes.
+     *
+     * @returns {boolean} Whether the ownership rule applies now.
+     * @public
+     *
+     * @example
+     * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
+     */
+    public ownershipEnforced(): boolean;
+    /**
+     * Whether the framework's own namespace, root functions, and keys on api nodes are kept from module code now:
+     * unless the permission system is disabled (`mode: "disabled"`), with no permissions config included.
+     *
+     * @returns {boolean} Whether the built-in write rules apply.
+     * @public
+     *
+     * @example
+     * if (apiManager.frameworkProtected()) apiManager.assertOwnedWrite(parts, writer);
+     */
+    public frameworkProtected(): boolean;
+    /**
+     * Whether a write at `parts` is checked now: every write while the permission system is on, only a write to the
+     * framework's own (what a built-in write rule covers) while it is off, none while it is disabled.
+     *
+     * @param {string[]} parts - Segments of the api path written.
+     * @returns {boolean} Whether the write is checked.
+     * @public
+     *
+     * @example
+     * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+     */
+    public writeChecked(parts: string[]): boolean;
+    /**
+     * Whether a module may write an api path at all: it owns the path, or a write rule grants it the write (#625).
+     * Used where a write is held to a module that read a node rather than the code running now.
+     *
+     * @param {string[]} parts - Segments of the api path.
+     * @param {object} callerWrapper - The module's wrapper.
+     * @returns {boolean} Whether the module owns the path or is granted the write.
+     * @public
+     *
+     * @example
+     * apiManager.mayWrite(["victim", "v", "note"], guestWrapper); // true when a write rule grants it
+     */
+    public mayWrite(parts: string[], callerWrapper: object): boolean;
+    /**
+     * Whether a caller owns an api path: the caller's module is on the ownership stack of the path, or of its
+     * nearest registered ancestor. The
+     * base module (endpoint `"."`), a caller with no module, and code outside any module (no
+     * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.
+     *
+     * @param {string[]} parts - Segments of the api path.
+     * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
+     * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight, which registered its
+     *   content before its writes are checked: the module it mounts, and the paths that module owned before it began.
+     *   That module's entries at any other path are the add's own content, and do not count.
+     * @returns {boolean} Whether the caller owns the path.
+     * @public
+     *
+     * @example
+     * apiManager.ownsPath(["lib", "config", "x"], configWrapper); // true for a module mounted at lib.config
+     */
+    public ownsPath(parts: string[], callerWrapper: object | null, inFlight?: {
+        moduleID: string;
+        prior: Map<string, any>;
+    } | null): boolean;
+    /**
+     * The token of the live mount of a module (#625): the same object for as long as the module is mounted under
+     * `moduleID` (across a reload too), and a new one once it has been removed and an id-sharing module is mounted.
+     * Every wrapper records it at construction, so code built for an earlier module under the id is told apart.
+     *
+     * @param {string|null|undefined} moduleID - The module's id.
+     * @returns {object|undefined} The token, or undefined for a module mounted without one (the base module).
+     * @public
+     *
+     * @example
+     * apiManager.incarnationOf("guest");
+     */
+    public incarnationOf(moduleID: string | null | undefined): object | undefined;
+    /**
+     * Whether `callerWrapper` is code of a module that is gone: it has a module, and that module owns nothing (#625).
+     * Such code is granted nothing by a rule: no write, and no call while the permission system is on.
+     *
+     * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+     * @returns {boolean} Whether the caller's module is gone.
+     * @public
+     *
+     * @example
+     * if (apiManager.isRemovedCaller(wrapper)) refuse();
+     */
+    public isRemovedCaller(callerWrapper: object | null): boolean;
+    /**
+     * Whether `callerWrapper` is code of the module removed last under `moduleID`, and no module has been mounted under
+     * the id since (#625): the module whose removal an event about `moduleID` tells of. Its subscribers hear that.
+     *
+     * @param {object} callerWrapper - The subscribing module's wrapper.
+     * @param {string|null|undefined} moduleID - The module an event is about.
+     * @returns {boolean} Whether the event tells of the subscriber's own removal.
+     * @public
+     *
+     * @example
+     * apiManager.isOwnRetired(reader, data.moduleID);
+     */
+    public isOwnRetired(callerWrapper: object, moduleID: string | null | undefined): boolean;
     /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
@@ -220,6 +364,16 @@ export class ApiManager extends ComponentBase {
      * + child so the re-attach restores both.
      */
     private _recordReplaceShadows;
+    /**
+     * Park or unpark the lazy wrappers of a member a forced replace hides, so the materialization count
+     * leaves out what is off the api surface (#588).
+     * @param {unknown} node - The hidden member, or one of its descendants.
+     * @param {boolean} parked - True to park, false to put back in the count.
+     * @param {Set<object>} [seen] - Wrappers already visited.
+     * @returns {void}
+     * @private
+     */
+    private _setShadowParked;
     /**
      * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
      * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
@@ -325,6 +479,60 @@ export class ApiManager extends ComponentBase {
      */
     private restoreApiPath;
     /**
+     * The key of one mount in {@link ApiManager#mountedBy}: the moduleID and the mount point.
+     *
+     * @param {string} moduleID - The mounted module's id.
+     * @param {string} mount - Its mount point.
+     * @returns {string} The key.
+     * @public
+     *
+     * @example
+     * apiManager.mountKey("kid", "guest.kid");
+     */
+    public mountKey(moduleID: string, mount: string): string;
+    /**
+     * Refuse module code a write at an api path made through one of the framework's setters (metadata, versioning)
+     * (#625). Host code is not checked.
+     *
+     * @param {string|string[]} apiPath - The path written.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleWrite("victim.v"); // throws inside another module's call
+     */
+    public assertModuleWrite(apiPath: string | string[]): void;
+    /**
+     * Refuse module code removing a module by its moduleID when it may not write every path the removal reaches
+     * (#625), as {@link ApiManager#removeApiComponent} checks it. Lets a caller removing several modules check them
+     * all before removing any.
+     *
+     * @param {string} moduleID - The module removed.
+     * @param {object} writer - The removing module's wrapper.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleRemovalOf("victim", guestWrapper); // throws: the guest may not remove it
+     */
+    public assertModuleRemovalOf(moduleID: string, writer: object): void;
+    /**
+     * Refuse module code reloading what it may not write (#625): a reload rebuilds every path it reaches, as a removal
+     * reaches them ({@link ApiManager#assertModuleRemoval}). Host code is not checked.
+     *
+     * @param {string|null} moduleID - The module reloaded by its moduleID.
+     * @param {string|null} apiPath - The path reloaded.
+     * @returns {void}
+     * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
+     * @public
+     *
+     * @example
+     * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
+     */
+    public assertModuleReload(moduleID: string | null, apiPath: string | null): void;
+    /**
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
      * @param {string} params.apiPath - API path to attach.
@@ -429,6 +637,8 @@ export class ApiManager extends ComponentBase {
      *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
      *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
      * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
+     * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
+     *   it before an await; read from the runtime otherwise (#625).
      * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
      * @throws {SlothletError} When inputs are invalid.
      * @package
@@ -452,6 +662,7 @@ export class ApiManager extends ComponentBase {
     removeApiComponent(pathOrModuleId: string, options?: {
         scopedApiPath?: string | undefined;
         recordHistory?: boolean | undefined;
+        writer?: object | null | undefined;
     }): Promise<boolean>;
     /**
      * Reload API modules using cache system.

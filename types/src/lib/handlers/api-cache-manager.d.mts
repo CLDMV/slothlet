@@ -41,6 +41,11 @@ export class ApiCacheManager extends ComponentBase {
      */
     private caches;
     /**
+     * Counts changes to the cached modules, so a reader can keep what it derived from them until one happens.
+     * @type {number}
+     */
+    version: number;
+    /**
      * Store cache entry for moduleID
      * @param {string} moduleID - Module identifier
      * @param {CacheEntry} entry - Cache entry with api tree and rebuild parameters
