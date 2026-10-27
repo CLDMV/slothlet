@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:01:49-07:00 (1791763309)
+ *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,13 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_SELF_PEER2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_peer2`),
 	API_TEST_ROUTINES_PERM: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_perm`),
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
-	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`)
+	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`),
+	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
+	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`),
+	// #625 — a module cannot change the framework namespace `self.slothlet`.
+	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
+	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
 };
 
 /**

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T23:33:52-07:00 (1792910032)
+ *	@Last modified time: 2026-10-25T19:07:49-07:00 (1792980469)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -418,6 +418,15 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			const survey = await waitOutcome(api, "probe", "survey");
 			expect(survey.read).toEqual({ error: "PERMISSION_DENIED" });
 			expect(JSON.stringify(survey)).not.toContain("S3CRET");
+		});
+
+		it.each([
+			["a top-level node", {}],
+			["capture off", { references: { capture: false } }]
+		])("a closed node lists its keys for a reader denied one of them: %s", async (_label, extra) => {
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { ...denyProbe(["listed.1"]), ...extra } });
+			const keys = JSON.stringify(["0", "1", "2", "length"]);
+			expect(await api.probe.rootKeysNow("listed")).toEqual({ ownKeys: { value: keys }, names: { value: keys } });
 		});
 
 		it("a hidden member the reader may not read stays hidden once the view closes", async () => {

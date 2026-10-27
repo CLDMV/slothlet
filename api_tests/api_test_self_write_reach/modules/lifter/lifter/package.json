@@ -1,0 +1,5 @@
+{
+	"name": "@local/lifter",
+	"version": "0.1.0",
+	"description": "Test fixture: slothlet module whose manifest tries to lift the built-in write rules (#625)."
+}

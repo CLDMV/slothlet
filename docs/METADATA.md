@@ -185,7 +185,7 @@ api.slothlet.metadata.getFor("math.add"); // → { category: "addition" }
 api.slothlet.metadata.getFor("plugins-core_abc123"); // resolved to its registered apiPath
 ```
 
-Returns a merged plain object (not frozen). Includes globals set via `setGlobal()` and inherited ancestor metadata, but **excludes immutable system metadata** (`filePath`, `moduleID`, `apiPath`, `taggedAt`) — those live on individual function wrappers and are accessed via `metadata.get(fn)` or `fn.__metadata`.
+Returns a merged plain object (not frozen), copied for each call: changing it, at any depth, changes only the copy, never what is stored for the path. Only `setFor()` and its siblings change that. Includes globals set via `setGlobal()` and inherited ancestor metadata, but **excludes immutable system metadata** (`filePath`, `moduleID`, `apiPath`, `taggedAt`) — those live on individual function wrappers and are accessed via `metadata.get(fn)` or `fn.__metadata`.
 
 Returns `{}` (with any global user metadata merged in) when no path metadata has been set.
 

@@ -55,4 +55,18 @@ export function runtime_isClassInstance(val: any): boolean;
  * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, creatingWrapper);
  */
 export function runtime_wrapClassInstance(instance: object, contextManager: object, instanceID: string, instanceCache: WeakMap<any, any>, capturedWrapper?: object): ProxyConstructor;
+/**
+ * @function runtime_unwrapClassInstance
+ * @package
+ * @param {*} value - A value that may be a Proxy {@link runtime_wrapClassInstance} produced.
+ * @returns {*} The instance the Proxy wraps, or `value` when it is not one.
+ *
+ * @description
+ * The class instance a context-preserving Proxy stands for, so code that keeps track of instances by
+ * identity (#625) can tell the Proxy and the instance are the same value.
+ *
+ * @example
+ * runtime_unwrapClassInstance(runtime_wrapClassInstance(instance, manager, id, new WeakMap())) === instance; // true
+ */
+export function runtime_unwrapClassInstance(value: any): any;
 //# sourceMappingURL=class-instance-wrapper.d.mts.map

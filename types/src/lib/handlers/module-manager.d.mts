@@ -91,7 +91,7 @@ export class ModuleManager extends ComponentBase {
      * @throws {SlothletError} `MODULE_PACKAGE_NOT_FOUND` when a name cannot be resolved.
      * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
      */
-    addModule(nameOrResult: string | DiscoverResult, options?: AddModuleOptions): Promise<MountResult>;
+    addModule(nameOrResult: string | DiscoverResult, options?: AddModuleOptions, writer?: any): Promise<MountResult>;
     /**
      * Mount a list of modules.
      *
@@ -99,7 +99,7 @@ export class ModuleManager extends ComponentBase {
      * @param {AddModulesOptions} [options]
      * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
      */
-    addModules(items: Array<string | DiscoverResult>, options?: AddModulesOptions): Promise<MountResult[] | {
+    addModules(items: Array<string | DiscoverResult>, options?: AddModulesOptions, writer?: any): Promise<MountResult[] | {
         mounted: MountResult[];
         failed: FailureEntry[];
     }>;
@@ -110,11 +110,15 @@ export class ModuleManager extends ComponentBase {
      * @param {string} name - Package name.
      * @param {object} [opts]
      * @param {string} [opts.version] - Disambiguator when more than one mounted entry shares the name.
+     * @param {object|null} [writer] - The calling module's wrapper, or null for host code; read where the call enters,
+     *   before any await, as the live runtime no longer knows the caller after one (#625).
      * @returns {Promise<boolean>} `true` when something was unmounted, `false` when no matching mount was found.
+     * @throws {SlothletError} What {@link ApiManager#assertModuleRemovalOf} throws: module code removes every match or
+     *   none.
      */
     removeModule(name: string, opts?: {
         version?: string | undefined;
-    }): Promise<boolean>;
+    }, writer?: object | null): Promise<boolean>;
     #private;
 }
 export type DiscoverResult = import("../helpers/module-discovery.mjs").DiscoverResult;
@@ -123,7 +127,7 @@ export type AddModuleOptions = {
     /**
      * - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
      */
-    collisionMode?: "merge" | "replace" | "skip" | "warn" | "merge-replace" | "error" | undefined;
+    collisionMode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error" | undefined;
     /**
      * - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
      */
@@ -137,7 +141,7 @@ export type AddModulesOptions = {
     /**
      * - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
      */
-    collisionMode?: "merge" | "replace" | "skip" | "warn" | "merge-replace" | "error" | undefined;
+    collisionMode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error" | undefined;
     /**
      * - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
      */

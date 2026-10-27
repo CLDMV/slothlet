@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-24T08:38:14-07:00 (1792856294)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,6 +117,13 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#strategy = null;
+
+	/**
+	 * The module that installed {@link EventManager#strategy}'s current strategy, by base id, or null for the host.
+	 * @type {string|null}
+	 * @private
+	 */
+	#strategyOwner = null;
 
 	/**
 	 * @param {object} slothlet - Slothlet instance.
@@ -318,6 +325,11 @@ export class EventManager extends ComponentBase {
 		const promises = [];
 
 		for (const sub of subs) {
+			// A removed module's listener hears nothing more (#625), however it outlived the module's removal.
+			if (sub.ownerWrapper && this.slothlet.handlers?.apiManager?.isRemovedCaller(sub.ownerWrapper)) {
+				this.#removeSub(event, sub);
+				continue;
+			}
 			const level = this.#levelFor(sub, event);
 			// A (gated) rule change may have downgraded this subscriber to deny → drop it.
 			if (level === "deny") {
@@ -377,6 +389,9 @@ export class EventManager extends ComponentBase {
 
 		const listeners = [];
 		const levels = {};
+		// The mount each recipient's module was at emit (#625): a held event goes to that module's listener only, which
+		// a reload of the module keeps, never to another module given the same id since.
+		const recipients = new Map();
 		for (const sub of subs) {
 			// Informational only: rules are enforced again when each listener is actually delivered.
 			// A listener denied at emit time is not a recipient.
@@ -384,6 +399,7 @@ export class EventManager extends ComponentBase {
 			if (level === "deny") continue;
 			listeners.push(sub.id);
 			levels[sub.id] = level;
+			recipients.set(sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
 		}
 		Object.freeze(listeners);
 
@@ -398,7 +414,7 @@ export class EventManager extends ComponentBase {
 			levels: Object.freeze(levels),
 			listeners
 		});
-		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow });
+		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow, recipients });
 
 		let delivery = null;
 		const defaultDeliver = () => {
@@ -436,7 +452,21 @@ export class EventManager extends ComponentBase {
 		if (fn !== null && typeof fn !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "fn", expected: "a function or null", received: typeof fn });
 		}
-		this.#strategy = fn;
+		// A strategy module code installs (a host grant lets it, or the permission system is off) runs as that module,
+		// whoever emits (#625): its own writes are held to the module, as its listeners' are. Once the module is gone it
+		// does nothing, and delivery is immediate again.
+		const installer = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
+		if (fn === null || installer === null) {
+			this.#strategy = fn;
+			this.#strategyOwner = null;
+			return;
+		}
+		const slothlet = this.slothlet;
+		this.#strategy = function slothlet_moduleStrategy(envelope, listeners, defaultDeliver) {
+			if (slothlet.handlers.apiManager.isRemovedCaller(installer)) return defaultDeliver();
+			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [envelope, listeners, defaultDeliver], installer, true);
+		};
+		this.#strategyOwner = ownerIdOf(installer);
 	}
 
 	/**
@@ -510,7 +540,10 @@ export class EventManager extends ComponentBase {
 				break;
 			}
 		}
-		if (!sub) return { delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE };
+		// A listener under the id now that belongs to another module than the one the event was held for is not it.
+		if (!sub || (sub.ownerWrapper?.____slothletInternal?.incarnation ?? null) !== record.recipients.get(listenerId)) {
+			return { delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE };
+		}
 
 		const level = this.#levelFor(sub, event);
 		if (level === "deny") {
@@ -532,6 +565,11 @@ export class EventManager extends ComponentBase {
 	 */
 	onModuleRemoved(moduleID) {
 		this.#dropOwner(moduleID);
+		// A strategy the module installed goes with it, as its listeners do (#625).
+		if (this.#strategyOwner !== null && this.#strategyOwner === String(moduleID).split(MODULE_ID_SEPARATOR)[0]) {
+			this.#strategy = null;
+			this.#strategyOwner = null;
+		}
 	}
 
 	/**

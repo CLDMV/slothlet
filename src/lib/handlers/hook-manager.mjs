@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:58:29-07:00 (1792213109)
+ *	@Last modified time: 2026-10-26T11:41:12-07:00 (1793040072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -156,6 +157,19 @@ const UNMARKABLE_PROCESSED = (() => {
 	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
 	return globalThis[key];
 })();
+
+/**
+ * Call a hook's handler with its payload as a plain function, with no receiver (#625). Called as a method of the
+ * hook's record, a handler would get the record itself as `this` and could change its own registration.
+ *
+ * @param {object} hook - The hook's record.
+ * @param {object} payload - What the handler is handed.
+ * @returns {*} What the handler returns.
+ * @private
+ */
+function runtime_callHookHandler(hook, payload) {
+	return Reflect.apply(hook.handler, undefined, [payload]);
+}
 
 /**
  * Record that error hooks have run for an error, so an outer hooked call does not report it again.
@@ -437,6 +451,8 @@ export class HookManager extends ComponentBase {
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+		// The registering module's code itself (#625): once that module is removed the hook no longer fires.
+		const ownerModule = replayIdentity ? (replayIdentity.ownerModule ?? null) : ownerWrapper;
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -555,8 +571,12 @@ export class HookManager extends ComponentBase {
 		// plain one — where the native brand check reads sync. The check has zero false positives, so
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
-		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
-		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		const handlerIsAsync =
+			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler._slothletOriginal : handler);
+		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
+		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
+		if (lockCaller && ownerWrapper) effectiveHandler = runtime_selfHookHandler(effectiveHandler, this.slothlet, ownerWrapper);
 
 		// Create hook object
 		const hook = {
@@ -568,6 +588,7 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
+			ownerModule,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -620,8 +641,9 @@ export class HookManager extends ComponentBase {
 	 *   nothing to pin.
 	 */
 	#pinHandler(handler) {
-		// Already locked (manual lockCaller, or a re-registered hook) — respect it.
-		if (typeof handler._slothletOriginal === "function") return handler;
+		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
+		// record, never by a property: a module can put `_slothletOriginal` on any function (#625).
+		if (runtime_isCallerLocked(handler)) return handler;
 
 		// `slothlet` is the long-lived instance object; a full reload() swaps both
 		// `contextManager` and `instanceID` on it (and carries this pinned handler
@@ -641,7 +663,7 @@ export class HookManager extends ComponentBase {
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;
-		return pinned;
+		return runtime_markCallerLocked(pinned);
 	}
 
 	/**
@@ -934,7 +956,12 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
-		const hooks = this.#matchHooksForPath(type, apiPath);
+		// A removed module's hook fires no more, permissions on or off, whoever is mounted at its old path or under
+		// its old id since (#625).
+		const apiManager = this.slothlet.handlers?.apiManager;
+		const hooks = this.#matchHooksForPath(type, apiPath).filter(
+			(hook) => hook.ownerModule === null || !apiManager?.isRemovedCaller(hook.ownerModule)
+		);
 
 		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
 		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
@@ -1079,7 +1106,7 @@ export class HookManager extends ComponentBase {
 			try {
 				// `version` is the structured which-version-fired-me signal for version-dispatched
 				// registrations (#250); ordinary hooks see undefined.
-				const result = hook.handler({ path, args, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
@@ -1154,7 +1181,7 @@ export class HookManager extends ComponentBase {
 					ctx,
 					version: hook.version
 				};
-				const transformed = hook.handler(hookContext);
+				const transformed = runtime_callHookHandler(hook, hookContext);
 
 				// A thenable from a sync-pipeline after hook is the silent-corruption cell (#251): the
 				// pending Promise would replace the result and surface as NaN far from the cause. It can
@@ -1233,7 +1260,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, api, ctx, version: hook.version });
 				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Check for short-circuit (hook returns value directly)
@@ -1301,7 +1328,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, result: currentResult, api, ctx, version: hook.version });
+				const raw = runtime_callHookHandler(hook, { path, args, result: currentResult, api, ctx, version: hook.version });
 				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
@@ -1505,7 +1532,7 @@ export class HookManager extends ComponentBase {
 			const rest = () => invoke(index + 1, forwarded);
 			// A pinned handler runs as the module that registered it. The rest of the pipeline belongs
 			// to the call being intercepted, so the target must see the call's own caller again.
-			state.returned = runInCallerFlow && typeof hook.handler._slothletOriginal === "function" ? runInCallerFlow(rest) : rest();
+			state.returned = runInCallerFlow && runtime_isCallerLocked(hook.handler) ? runInCallerFlow(rest) : rest();
 			return state.returned;
 		};
 
@@ -1516,7 +1543,7 @@ export class HookManager extends ComponentBase {
 				const state = { called: false, returned: undefined };
 				const next = makeNext(hook, index, currentArgs, state, invokeAsync);
 				try {
-					const raw = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+					const raw = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 					return raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 				} catch (error) {
 					sinkAround(hook, error);
@@ -1532,7 +1559,7 @@ export class HookManager extends ComponentBase {
 			const state = { called: false, returned: undefined };
 			const next = makeNext(hook, index, currentArgs, state, invokeSync);
 			try {
-				const result = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+				const result = runtime_callHookHandler(hook, { path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 				// Object-only thenable test, as everywhere else on a value path: a lazy callable wrapper
 				// answers `.then` on purpose (see executeAfterHooks).
 				if (!(result && typeof result === "object" && typeof result.then === "function")) return result;
@@ -1569,7 +1596,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
@@ -1613,7 +1640,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({
+				runtime_callHookHandler(hook, {
 					path,
 					args,
 					error,
@@ -1964,6 +1991,7 @@ export class HookManager extends ComponentBase {
 				// preserves the original module attribution across reload (the ALS context is gone at
 				// replay) without exposing a spoofable public knob (#138 review).
 				ownerPath: hook.ownerPath,
+				ownerModule: hook.ownerModule,
 				// Version-dispatched entries replay literally (the stored pattern is already the
 				// physical `tag.pattern`); the binding travels outside options for the same
 				// non-spoofable reason and is re-stamped through the private channel (#250).
@@ -1990,7 +2018,11 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				[REPLAY_IDENTITY]: {
+					ownerPath: reg.ownerPath ?? null,
+					ownerFilePath: reg.ownerFilePath ?? null,
+					ownerModule: reg.ownerModule ?? null
+				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).
 				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})

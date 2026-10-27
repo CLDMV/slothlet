@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:07:41-07:00 (1791806861)
+ *	@Last modified time: 2026-10-26T16:14:58-07:00 (1793056498)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,10 +32,29 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
+import {
+	TYPE_STATES,
+	resolveWrapper,
+	isCallableValue,
+	runtime_selfModuleReader,
+	runtime_selfRootView,
+	runtime_selfView,
+	runtime_markCallerLocked,
+	runtime_registerFrameworkMember,
+	runtime_registerFrameworkMemberCopy,
+	runtime_selfFrameworkView,
+	runtime_frameworkViewCaller
+} from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
+
+/**
+ * Root members the framework itself serves on the api, handed to module code as they are (#625).
+ * @type {Set<string>}
+ * @private
+ */
+const SELF_FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy"]);
 
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
@@ -167,24 +186,34 @@ function describeScopeReceived(value) {
 function makeCopyOnWriteSelf(parentSelf) {
 	const overlay = new Map(); // prop → value written inside this scope
 	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
+	/**
+	 * What the scope reads at `prop`: its own write, or the live value, an object child as its memoized COW view.
+	 * @param {string|symbol} prop - Member read.
+	 * @returns {*} The value.
+	 */
+	const read = (prop) => {
+		if (overlay.has(prop)) return overlay.get(prop);
+		const real = parentSelf[prop];
+		// Wrap object children in their own COW so deep-path writes are
+		// captured. Memoized so `self.X` returns the same view each time
+		// and in-scope writes to it are read back consistently.
+		if (real !== null && typeof real === "object") {
+			let view = childViews.get(prop);
+			if (view === undefined) {
+				// The framework's namespace read in the scope is still the framework's: module code is handed its
+				// view of it, with the limits that view keeps, over the scope's copy (#625).
+				view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
+				childViews.set(prop, view);
+			}
+			return view;
+		}
+		return real;
+	};
 	return new Proxy(
 		{},
 		{
 			get(_t, prop) {
-				if (overlay.has(prop)) return overlay.get(prop);
-				const real = parentSelf[prop];
-				// Wrap object children in their own COW so deep-path writes are
-				// captured. Memoized so `self.X` returns the same view each time
-				// and in-scope writes to it are read back consistently.
-				if (real !== null && typeof real === "object") {
-					let view = childViews.get(prop);
-					if (view === undefined) {
-						view = makeCopyOnWriteSelf(real);
-						childViews.set(prop, view);
-					}
-					return view;
-				}
-				return real;
+				return read(prop);
 			},
 			set(_t, prop, value) {
 				overlay.set(prop, value);
@@ -194,11 +223,17 @@ function makeCopyOnWriteSelf(parentSelf) {
 			has(_t, prop) {
 				return overlay.has(prop) || prop in parentSelf;
 			},
-			/* v8 ignore next 5 */
+			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
+			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
+			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
 			deleteProperty(_t, prop) {
-				// Defensive completeness — the runtime `self` proxy has no
-				// deleteProperty trap, so `delete self.X` never reaches here.
 				overlay.delete(prop);
+				childViews.delete(prop);
+				return true;
+			},
+			defineProperty(_t, prop, descriptor) {
+				if (!("value" in descriptor)) return false;
+				overlay.set(prop, descriptor.value);
 				childViews.delete(prop);
 				return true;
 			},
@@ -213,8 +248,15 @@ function makeCopyOnWriteSelf(parentSelf) {
 				}
 				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
 				// Always configurable — the proxy target is an empty object, so a
-				// non-configurable descriptor would violate proxy invariants.
-				return desc ? { ...desc, configurable: true } : undefined;
+				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
+				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
+				if (!desc) return undefined;
+				return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
+			},
+			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
+			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
+			preventExtensions() {
+				return false;
 			}
 		}
 	);
@@ -370,6 +412,8 @@ export class ApiBuilder extends ComponentBase {
 			slothlet: slothletNamespace,
 			destroy: destroyWithApi
 		};
+		// Module code reads these through `self` as views that run as the module (#625).
+		for (const [name, member] of Object.entries(this.slothlet._ownBuiltins)) runtime_registerFrameworkMember(member, this.slothlet, name);
 
 		return userApi;
 	}
@@ -415,6 +459,14 @@ export class ApiBuilder extends ComponentBase {
 			}
 			const callerWrapper = identity?.currentWrapper;
 			if (!callerWrapper) return;
+			// Code of a module that is gone reaches none of the framework's surface, permissions on or off (#625): what it
+			// could register there (a hook, a listener, a subscriber) would outlive it.
+			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
+					target: targetPath
+				});
+			}
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
@@ -466,6 +518,7 @@ export class ApiBuilder extends ComponentBase {
 			// tryGetContext() returning non-null without currentWrapper is an impossible state.
 			/* v8 ignore next */
 			if (!callerWrapper) return false;
+			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return false;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			// Defensive guard: this proxy helper runs only when permissionManager is initialized.
@@ -1257,6 +1310,8 @@ export class ApiBuilder extends ComponentBase {
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
+						// Module code rebuilds only what it may write (#625): the base reaches the whole tree.
+						slothlet.handlers.apiManager.assertModuleReload(null, "");
 						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options });
 					}
 
@@ -1273,6 +1328,8 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
+						// Module code rebuilds only what it may write (#625).
+						slothlet.handlers.apiManager.assertModuleReload(pathOrModuleId, null);
 						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options });
 					}
 
@@ -1297,6 +1354,8 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
+					// Module code rebuilds only what it may write (#625).
+					slothlet.handlers.apiManager.assertModuleReload(null, normalizedPath);
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
 				},
@@ -1338,7 +1397,8 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.addModule(nameOrResult, options);
+						// The calling module, read before any await (#625): see ModuleManager#addModule.
+						return slothlet.handlers.moduleManager.addModule(nameOrResult, options, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -1352,7 +1412,7 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.addModules(items, options);
+						return slothlet.handlers.moduleManager.addModules(items, options, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -1367,7 +1427,8 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						return slothlet.handlers.moduleManager.removeModule(name, opts);
+						// The calling module, read before any await (#625): see ModuleManager#removeModule.
+						return slothlet.handlers.moduleManager.removeModule(name, opts, runtime_selfModuleReader(slothlet));
 					},
 
 					/**
@@ -1383,9 +1444,11 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
+						// The calling module, read before the discovery's await loses it (#625).
+						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
 						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
-						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency });
+						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
 					},
 
 					/**
@@ -1513,7 +1576,7 @@ export class ApiBuilder extends ComponentBase {
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;
-				return locked;
+				return runtime_markCallerLocked(locked);
 			},
 
 			/**
@@ -2016,6 +2079,8 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
 				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
+					// The calling module, checked once the arguments are valid (#625).
+					const caller = runtime_selfModuleReader(slothlet);
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if setGlobal is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
@@ -2101,6 +2166,7 @@ export class ApiBuilder extends ComponentBase {
 
 					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
 						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
+						slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
 						for (const [key, nestedValue] of Object.entries(normalizedMetadata)) {
 							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
 						}
@@ -2117,6 +2183,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					validateGlobalMetadataKeyPath(keyOrObj);
+					slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
 
 					return slothlet.handlers.metadata.setGlobalMetadata(keyOrObj, value);
 				},
@@ -2156,6 +2223,9 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
+					// Module code sets a node's metadata only where it may write (#625).
+					const node = resolveWrapper(fn);
+					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
 					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
 				},
 
@@ -2178,6 +2248,9 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.remove(api.math.add);
 				 */
 				remove: function slothlet_metadata_remove(fn, key) {
+					// Module code removes a node's metadata only where it may write (#625).
+					const node = resolveWrapper(fn);
+					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
 					return slothlet.handlers.metadata.removeUserMetadata(fn, key);
 				},
 
@@ -2228,6 +2301,8 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					// Module code sets metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
 				},
 
@@ -2261,6 +2336,8 @@ export class ApiBuilder extends ComponentBase {
 				removeFor: function slothlet_metadata_removeFor(pathOrModuleId, key) {
 					if (!slothlet.handlers?.metadata) return;
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					// Module code removes metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
 				},
 
@@ -2305,7 +2382,8 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return {};
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
-					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
+					// A copy: changing it never changes what is stored for the path, which only the setters do (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
 				},
 
 				/**
@@ -2342,6 +2420,8 @@ export class ApiBuilder extends ComponentBase {
 					}
 					const { moduleID } = info.versions[versionTag];
 					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					// Module code sets a version's metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
 					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
 				},
 
@@ -2369,7 +2449,8 @@ export class ApiBuilder extends ComponentBase {
 					if (!info || !info.versions?.[versionTag]) return {};
 					const { moduleID } = info.versions[versionTag];
 					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
-					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
+					// A copy, as getFor's (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
 				}
 			},
 
@@ -2557,22 +2638,25 @@ export class ApiBuilder extends ComponentBase {
 				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
 				/* v8 ignore start */
 				if (!mgr) {
-					return Object.freeze({
+					return {
 						get materialized() {
 							return getMaterializedState();
 						},
 						get: getMaterializeStats,
 						wait: waitForMaterialization
-					});
+					};
 				}
 				/* v8 ignore stop */
-				return Object.freeze({
+				// Not frozen: a frozen member is handed to a module as it is, so a module could change `get` / `wait`
+				// themselves; as configurable members they come to it as the framework's view of them, which refuses
+				// any change and runs a kept one as the module that read it (#625).
+				return {
 					get materialized() {
 						return getMaterializedState();
 					},
 					get: getMaterializeStats,
 					wait: waitForMaterialization
-				});
+				};
 			})(),
 
 			/**
@@ -2644,8 +2728,10 @@ export class ApiBuilder extends ComponentBase {
 					deliver: handler.deliver.bind(handler),
 					rules: {
 						/**
-						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
-						 * The rule enters the highest "runtime" precedence layer.
+						 * Add an event rule at runtime (gated by `config.api.mutations.events`). The host's rule enters the
+						 * highest "runtime" precedence layer. Module code reaches this only while the permission system is
+						 * off (a built-in rule keeps it host-only otherwise), and is then held to its own events, as its
+						 * `permissions.addRule` is (#625).
 						 * @param {object} rule - `{ caller, event, effect }` (effect: deny/notify/allow).
 						 * @returns {string} The rule id.
 						 */
@@ -2662,13 +2748,20 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
 							}
 							/* v8 ignore stop */
-							const ruleId = permissionManager.addEventRule(rule, null, null, "runtime");
+							// The rule is read once; module code's is placed as its call rules are, at the module layer, and
+							// its condition runs as the module.
+							rule = permissionManager.snapshotEventRule(rule);
+							const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule({ target: rule?.event });
+							if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
+							const ruleLayer = layer ?? "runtime";
+							const ruleId = permissionManager.addEventRule(rule, ownerModuleID, null, ruleLayer);
 							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
 									type: "addEventRule",
 									rule,
-									ownerModuleID: null,
+									ownerModuleID,
 									ruleId,
+									layer: ruleLayer,
 									timestamp: Date.now()
 								});
 							}
@@ -2676,7 +2769,8 @@ export class ApiBuilder extends ComponentBase {
 						},
 
 						/**
-						 * Remove an event rule by id at runtime (host-only; gated by `config.api.mutations.events`).
+						 * Remove an event rule by id at runtime (gated by `config.api.mutations.events`). Module code removes
+						 * only the event rules it could add (#625).
 						 * @param {string} ruleId - The event-rule id.
 						 * @returns {boolean} True if a rule was removed.
 						 */
@@ -2695,6 +2789,7 @@ export class ApiBuilder extends ComponentBase {
 							/* v8 ignore stop */
 							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
@@ -2762,7 +2857,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
-					return slothlet.handlers.versionManager.list(logicalPath);
+					// A copy: changing it never changes the registry a version dispatcher routes by (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.list(logicalPath));
 				},
 
 				/**
@@ -2778,6 +2874,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
+					// Module code points the dispatcher at a version only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(logicalPath);
 					return slothlet.handlers.versionManager.setDefault(logicalPath, versionTag);
 				},
 
@@ -2823,7 +2921,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
-					return slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag);
+					// A copy: changing it never changes the stored version metadata, which only setVersionMetadata does (#625).
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag));
 				},
 
 				/**
@@ -2842,6 +2941,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
+					// Module code changes a version's metadata only where it may write: that version's mount (#625).
+					slothlet.handlers.apiManager.assertModuleWrite([String(versionTag), ...String(logicalPath).trim().split(".")]);
 					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
 				}
 			},
@@ -2884,15 +2985,23 @@ export class ApiBuilder extends ComponentBase {
 					}
 					/* v8 ignore stop */
 
-					const ruleId = permissionManager.addRule(rule, null);
+					// The rule is read once, and that copy is what is placed, registered, and replayed (#625). A rule module
+					// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
+					// that module's rule, at the module layer, below the host's.
+					rule = permissionManager.snapshotRule(rule);
+					const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule(rule);
+					// Its condition runs as the module, whichever call it is checked for.
+					if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
+					const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
 
 					// Record in operationHistory for replay on reload
 					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 						slothlet.handlers.apiManager.state.operationHistory.push({
 							type: "addPermissionRule",
 							rule,
-							ownerModuleID: null,
+							ownerModuleID,
 							ruleId,
+							layer,
 							timestamp: Date.now()
 						});
 					}
@@ -2934,6 +3043,8 @@ export class ApiBuilder extends ComponentBase {
 					// module drop another's rule.
 					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+					// Module code removes only the rules it could add (#625).
+					permissionManager.assertModuleRuleRemoval(ruleId);
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 					// Record in operationHistory for replay on reload
@@ -3289,6 +3400,21 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
+					 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that
+					 * keep module code off the framework's own namespace, root functions, and keys on api nodes), or
+					 * `"disabled"` (nothing applies). `enable()` turns it on and `disable()` off; disabled is chosen in
+					 * the config only.
+					 *
+					 * @returns {"on"|"off"|"disabled"} The mode.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.mode; // "off" with no permissions config
+					 */
+					get mode() {
+						return slothlet.handlers.permissionManager.mode();
+					},
+
+					/**
 					 * Enable permission enforcement globally.
 					 *
 					 * @returns {void}
@@ -3441,8 +3567,18 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				describe: (showAll = false) => {
 					if (showAll) {
-						// Return full API structure (like v2 eager mode)
-						return { ...userApi };
+						// Return full API structure (like v2 eager mode). Module code gets its own views of the
+						// nodes, as it reads them through `self`, never the nodes themselves (#625).
+						const reader = runtime_selfModuleReader(slothlet);
+						if (!reader) return { ...userApi };
+						const described = {};
+						for (const key of Reflect.ownKeys(userApi)) {
+							const value = userApi[key];
+							if (typeof key !== "string") described[key] = value;
+							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
+							else described[key] = runtime_selfView(value, reader);
+						}
+						return described;
 					}
 					// Return top-level keys (like v2)
 					return Reflect.ownKeys(userApi);
@@ -3473,7 +3609,10 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {Object} The bound API proxy
 				 */
 				getAPI: () => {
-					return slothlet.getAPI();
+					// Module code gets the api as it reads it through `self` (#625).
+					const reader = runtime_selfModuleReader(slothlet);
+					const api = slothlet.getAPI();
+					return reader ? runtime_selfRootView(slothlet, reader) : api;
 				},
 
 				/**
@@ -3646,8 +3785,10 @@ export class ApiBuilder extends ComponentBase {
 				});
 			}
 			// The identity metadata.caller() reports right now — null when the current leaf was
-			// called from outside any module, which pins "no module caller" (run as the host).
-			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			// called from outside any module, which pins "no module caller" (run as the host). A module
+			// that kept this function and calls it later from outside any call has no caller either, but
+			// is no host: it is pinned to that module (#625).
+			const capturedCaller = slothlet.handlers.metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
 			const locked = function slothlet_lockedCallerCaller(...args) {
 				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
 				// so a callback held across a reload() targets the current instance.
@@ -3657,15 +3798,17 @@ export class ApiBuilder extends ComponentBase {
 			};
 			// Parity with lockCaller / the EventEmitter patch metadata.
 			locked._slothletOriginal = fn;
-			return locked;
+			return runtime_markCallerLocked(locked);
 		};
 		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
 		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
+		// Configurable (still read-only) so the view a module reads `self.slothlet` through can hand it
+		// over wrapped, as it does every other member: kept and called later, it runs as that module (#625).
 		Object.defineProperty(namespace.lockCaller, "caller", {
 			value: lockCallerCaller,
 			enumerable: true,
 			writable: false,
-			configurable: false
+			configurable: true
 		});
 
 		return createInternalRouteProxy(namespace, "slothlet");

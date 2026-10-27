@@ -35,6 +35,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Owner Grant](#owner-grant)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
+- [Write Permissions](#write-permissions)
 - [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
@@ -46,6 +47,18 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 
 ---
 
+## Modes
+
+The permission system runs in one of three modes:
+
+| Mode                  | How                                                                                    | What applies                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `"on"`                | a `permissions` config (`mode: "on"`, or `enabled` not `false`), or `control.enable()` | Every rule: calls, reads, writes, and ownership.                                                                                                                                                                                                                                                                                                                         |
+| `"off"` (the default) | no `permissions` config, `mode: "off"`, `enabled: false`, or `control.disable()`       | No call or read rule is evaluated (except those on `slothlet.permissions.control.**` and `.principal.**`) and no write is refused on ownership, but the built-in write rules, and host rules on what they cover, still keep module code from changing the framework's own namespace, root functions, or keys on api nodes (see [Write Permissions](#write-permissions)). |
+| `"disabled"`          | `mode: "disabled"` in the config only                                                  | Nothing but the reserved names `slothlet`, `shutdown` and `destroy` on `self`. A module may change the framework's own namespace, and call `control.*` and `principal.*` too, so it can turn the system on or off itself.                                                                                                                                                |
+
+`api.slothlet.permissions.control.mode` reports the mode. From `"disabled"`, `control.enable()` and `control.disable()` move to `"on"` and `"off"`.
+
 ## Configuration
 
 Configure permissions when creating a slothlet instance:
@@ -55,7 +68,7 @@ const api = await slothlet({
 	dir: "./api",
 	permissions: {
 		defaultPolicy: "deny", // "allow" (default) or "deny"
-		enabled: true, // global toggle (default: true when permissions config is provided)
+		mode: "on", // "on" (default with a permissions config), "off", or "disabled"
 		audit: "verbose", // "default" or "verbose"
 		readGating: false, // opt out of gating data-value reads (default: true)
 		rules: [
@@ -71,13 +84,14 @@ const api = await slothlet({
 | Option                   | Type      | Default     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------ | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `defaultPolicy`          | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `enabled`                | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                                                                                                                                                                                                                                             |
+| `mode`                   | `string`  | `"on"`      | `"on"`: every rule applies. `"off"`: no rule is evaluated and no write is refused on ownership, but the built-in write rules still keep module code off the framework's own namespace, root functions, and keys on api nodes; with no `permissions` config the system is off. `"disabled"`: nothing is checked at all. See [Modes](#modes). Takes precedence over `enabled`.                                                                                                                |
+| `enabled`                | `boolean` | `true`      | `true` for `mode: "on"`, `false` for `mode: "off"`.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `audit`                  | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                                                                                                                                                                                                                          |
 | `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement).                                                                                                                                                                                                         |
 | `references.capture`     | `boolean` | `true`      | When `true` (the default), a function read out of the api carries the identity of the module that read it, so it stays enforced as that module wherever it is later invoked. Costs a per-reader object per wrapper read — see the measured overhead below. Set `false` to restore the older behavior, where a reference invoked with no active caller was treated as host-initiated. See [Captured references remember who captured them](#captured-references-remember-who-captured-them). |
 | `owner`                  | `boolean` | `false`     | When `true`, a module may access every leaf it currently owns — across its own subdirectories — wherever `defaultPolicy` would otherwise deny. An explicit deny rule still wins. See [Owner Grant](#owner-grant).                                                                                                                                                                                                                                                                           |
-| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order); each is stored by value (see [Rules are stored by value](#rules-are-stored-by-value))                                                                                                                                                                                                                                                                                                                            |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
 
@@ -317,7 +331,7 @@ self.slothlet.permissions.principal.register("roles", {
 });
 ```
 
-- **`key(ctx)`** maps the per-request context to this principal's identity key. It must be synchronous. A `null`/`undefined` key means "no identity" — rules requiring the principal do not match for that call.
+- **`key(ctx)`** maps the per-request context to this principal's identity key. It must be synchronous. A `null`/`undefined` key means "no identity" — rules requiring the principal do not match for that call. Like `resolve`, a module's `key` runs as the module that registered it.
 - **`resolve(identityKey)`** returns the facts. It may be async. It runs **as the module that registered it**, so anything it calls through `self` is attributed to that module — not to whichever caller's call triggered the resolve. (A host-registered resolver is invoked directly, in the flow of the call that needed it.)
 - **`maxAge`** (ms) is optional. Without it, a resolved value stays current until it is invalidated.
 
@@ -486,9 +500,42 @@ const ruleId = api.slothlet.permissions.addRule({
 	effect: "deny"
 });
 
-// Later, remove it (another module must do this — self-modification is blocked)
+// Later, remove it
 api.slothlet.permissions.removeRule(ruleId);
 ```
+
+Module code can call the same `addRule` / `removeRule`, and pass `permissions` to an `api.add` it makes, but by default only for **its own subtree**: the rule's target pattern (a call, hook, or `:write` target alike) must have a non-empty literal prefix — its segments before the first glob segment — inside the subtree the module owns, and must not name the framework's namespace, root functions, or internal keys. `victim.**` and `victim.store.*` are fine for the module mounted at `victim`; `**`, `*.x`, `other.**`, and `slothlet.**` are refused with `INVALID_PERMISSION_RULE`, and so is removing such a rule. A rule module code adds is that module's rule, at the module layer, so a host rule outranks it at equal specificity.
+
+That default is the built-in rule `{ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }`. It decides only what module code may register beyond its own subtree; calling `addRule` for the module's own subtree is not gated by it. An explicit allow on that target for a module — the host's, or the module's own manifest's — lifts it, and the module then manages rules for any target, as the host does (`defaultPolicy: "allow"` alone lifts nothing):
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: { rules: [{ caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" }] }
+});
+```
+
+#### Rules are stored by value
+
+`addRule(rule)`, the config's `permissions.rules`, a manifest's rules, and the `permissions` option of an `api.add` each store their own copy of the rule, its `condition` included (copied deeply into frozen data: its plain objects and arrays are copied, and a value of any other kind — a `Map`, a `Date`, a class instance — is kept as the same value, since a condition compares such a value to the context's by identity). Editing the object afterwards does not change the installed rule, and a reload replays the copy. To change a rule, remove it and add the new one. A function condition is kept as the same function, and it is still evaluated on every check, against that call's context. When module code registered the rule (through `addRule`, a manifest it mounted, or the `permissions` option of an `api.add` it made), the function runs as that module, whichever caller's call is being checked: what it reads, calls, or writes through `self` is judged with that module's standing, never the caller's. A rule whose fields are accessors, or whose condition holds a `Proxy`, is refused.
+
+```javascript
+const rule = { caller: "reports.**", target: "billing.**", effect: "deny" };
+const id = api.slothlet.permissions.addRule(rule);
+rule.effect = "allow"; // no effect: the installed rule still denies
+api.slothlet.permissions.removeRule(id);
+api.slothlet.permissions.addRule({ ...rule }); // now it allows
+```
+
+Module code removes only the rules its own module owns. A module allowed to manage rules beyond its subtree also removes other modules' rules, but never a host rule (config or runtime) or a built-in one; to override one, it adds a rule of its own, which normal precedence weighs. A module keeps its rules — call, write, and event rules alike: its manifest's, its code's, and those registered with its `api.add` — and its principals, event listeners, and moduleID until its last live mount is gone: removed by its moduleID, or its mount path removed (removing a path removes everything under it, so a mount inside it is gone). Then they all go, do not come back on a reload, and the moduleID is free again. A moduleID the host mounted at several paths keeps all of it while one mount remains; removing one mount removes only that mount's paths. Removing a module by its moduleID removes the paths it owns: a container of it that still holds another module's paths stays for them, an emptied one goes, and a module mounted below it stays mounted with its rules. The host's own rules naming a module's paths stay. A module's right to remove a mount it added goes when that module is removed, so a module that later takes the freed moduleID inherits nothing. The removed module's own code stays without standing too: a function it kept or handed out (one pinned with `lockCaller` included) owns nothing once its module is gone, no rule grants it a write (while the permission system is on, a write it makes is refused with `LOOSE_SET_NOT_OWNED`, or with `RUNTIME_NO_ACTIVE_CONTEXT_SELF` when it runs outside any call, as code of no module does), and while the permission system is on every call it makes is refused (`PERMISSION_DENIED`), since the rules naming its old path may now be another module's. The function conditions of rules it registered stop matching. All of this holds even after another module is mounted under the freed moduleID, at any path, its old one included.
+
+A module owns the paths under its mount point that no other module's deeper mount covers: a module mounted at `outer` does not write into a module mounted at `outer.inner`, and does not register a rule whose target's literal prefix lies in it (`outer.inner.**`). Modules mounted at the same point share that point's subtree, not each other's other mounts. The base module keeps the whole tree. A rule a module registers for its subtree matches its pattern as written, so `outer.**` covers everything mounted under `outer`, other modules mounted below it included, as a host rule would.
+
+`api.add`, `api.remove`, and `api.modules.addModule` / `addModules` / `addDiscovered` / `removeModule` from module code are writes: mounting at a path writes there, replacing an existing subtree (`forceOverwrite`, or the `replace` / `merge-replace` collision modes) writes at every path it replaces, and removing a module, a path, or a module's share of a path deletes there. A removal reaches every path it would delete — every mount and path of a module removed by its moduleID, every registered path under a removed path — and is checked whole before anything changes: if one path is refused, nothing is removed. `api.modules.removeModule` checks every mount matching the name (and version) before removing any. A refused `api.add` leaves nothing behind: what it registered, what loading lazy content for its checks registered included, is reverted.
+
+A module may store a reference to another module's node under its own path (`self.reports.ref = self.cache.store`); reads and calls through it work as through the node itself. The node stays its owner's: every write `api.add`, `api.remove`, `api.reload`, and the metadata and versioning setters make is judged by the real path and owner of each node it walks, not by the path the node was reached at. So an `api.add` at or below `reports.ref` writes into `cache.store` and, while the permission system is on, needs the write there (`LOOSE_SET_NOT_OWNED` otherwise), and nothing is removed through such a reference. `api.remove("reports.ref")` removes only the reference, the member of the module's own node holding it, and leaves `cache.store` whole; so does removing a module or path that holds one, from module or host code. A reference to a node of the module's own is that node, and writes through it as such. A stored version dispatcher stands for the versioned node it routes to, and is judged by that node's path and owner. A path that runs through an accessor (a getter defined on a node, or on an object stored there) or through a Proxy a module stored is refused to module code without running the getter or trap, since what it answers is not known until it runs; the host's own adds through a getter still place where it points. While the permission system is on, each needs the module to own the path, a `:write` allow naming it, or to be inside a mount the module itself performed, and is refused as any other write is (`LOOSE_SET_NOT_OWNED`, or `PERMISSION_DENIED` from a write rule), the framework's own write rules included. An `api.add` from module code also writes at every path its content creates or merges into below the mount, whatever the collision mode, so content cannot land in a module mounted below it or past a write deny there; in lazy mode the content is loaded for that check. A path is checked as it is mounted (trimmed). The framework's setters are writes too when module code calls them: `metadata.set` / `remove` / `setFor` / `removeFor` / `setForVersion`, `versioning.setDefault` / `setVersionMetadata`, and `api.reload` (at every path it rebuilds). A versioned `api.add` writes at both the version-tagged mount path (`<versionTag>.<apiPath>`) and the path where its version dispatcher sits, and module code needs both. A module mounting below its own path hands that path to the module it mounts, and its code may always remove that mount, or part of it, without a grant; the mounted module may remove itself. A mount the host made below a module's path is not that module's to remove without a grant. Host code mounts and removes anywhere, as before. Module code mounts with its own moduleID or one not in use; a moduleID of another mounted module is refused (`MODULE_ID_IN_USE`). The host may re-use a moduleID.
+
+A manifest's rules apply as declared only when the host mounts its module. When module code mounts one (`api.modules.addModule` / `addModules` / `addDiscovered`), the manifest's rules, event rules included, are that module's rules and placed like its `addRule`'s: a rule beyond its subtree refuses the whole mount with `INVALID_PERMISSION_RULE`. A manifest the host mounts is not restricted this way: its rules apply at mount, at the `manifest` layer, whatever they target. Mounting a module is the consumer's choice to accept them.
 
 ---
 
@@ -504,7 +551,7 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Single-segment glob (`*`, `?`, `{a,b}`) = 2 points
    - Multi-segment glob (`**`) = 1 point
    - Combined score = caller specificity + target specificity (range: 2–6)
-5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > `manifest` (a module's own `slothlet.module.json` rules) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
+5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > module rules (a module's own `slothlet.module.json` rules, and the rules its code adds) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
 7. **Owner grant** (only with `owner: true`): if the default policy just denied, and the caller leaf and the target are currently owned by the same module, allow instead. An explicit rule — allow or deny — that matched in steps 3–5 has already decided, so it is never overridden. See [Owner Grant](#owner-grant).
 
@@ -713,6 +760,74 @@ See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating an
 
 ---
 
+## Write Permissions
+
+While the permission system is on, a module writes into the api only under the subtree it owns (a module mounted at `P` writes under `P.*`). The base module (loaded from `base`) owns the whole tree; a module mounted with `api.add` or `api.modules.*` owns its own subtree only, so it cannot write another module's paths or the framework namespace (`LOOSE_SET_NOT_OWNED`). Ownership itself is always tracked (it is what `api.slothlet.api.remove()`, `reload()`, and collisions work from), but a write is refused on it only while the permission system is on. With the system off (no `permissions` config, `mode: "off"`, `enabled: false`, or after `control.disable()`) no write is refused on ownership and none of the refusals below applies, except that module code still never changes the framework's own namespace, root functions, or keys on api nodes; with it disabled nothing restricts where a module writes.
+
+While the permission system is on (`mode: "on"`, a `permissions` config whose `enabled` is not `false`, or after `control.enable()`), writing is a permission like calling, and a `:write` rule grants or refuses it: a target with the `pattern:write` **suffix** matches a module assigning, defining, or deleting a member at that path, or changing the prototype or extensibility of the node there (`Object.setPrototypeOf`, `Object.preventExtensions`, `Object.freeze`, `Object.seal`).
+
+- A denying write rule refuses the write with `PERMISSION_DENIED`, whatever the module owns.
+- An allowing write rule **grants** the write to the callers it names: another module's subtree, or a member a built-in write rule protects (below), becomes writable for them, and the ownership rule is not applied to that write. What the writer places there becomes part of that subtree: a function it stores runs as the module that owns the path, with that module's standing, when anyone calls it. Granting writes into a module's subtree therefore lets the writer add code to that module; grant it only to callers that may act as the module.
+- With no matching write rule, ownership alone decides (`LOOSE_SET_NOT_OWNED`). `defaultPolicy: "allow"` grants nothing here.
+- Precedence is the usual one: most specific first, then the higher layer (host over module rules), then the last registered. A more specific deny beats a broader grant.
+- A **symbol-keyed** member is matched against the path of the node it is written on: `self.victim.v[sym] = …` is a write to `victim.v`. A plain value reached through a node — a class's `prototype`, a method of it, an object a prototype holds — is matched against the path it was reached at: `self.billing.Account.prototype.balance = …` is a write to `billing.Account.prototype.balance`. An instance another module's method returns is data that module chose to share, and is handed out as it is; so are the realm's built-ins (`Object`, `Map.prototype.get`, …).
+- A module's **data objects** — a `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `ArrayBuffer`, `SharedArrayBuffer`, typed array, `DataView`, `RegExp`, `Promise`, or `WeakRef` it holds on its api, one made in another realm (`node:vm`) included — are held to the same rule, at the path they were reached at. Reaching one at all follows the read rules, as any member does. A module that may write the path — it owns it, or a write rule grants it the write — is handed the object itself, so native code taking it (`fs.write`, `crypto`, a socket, `structuredClone`, `ArrayBuffer.isView`) works as on the object. Any other module is handed a live, read-only view: it reads the object itself, so it sees every later change the owner makes. Through the view, the methods of the object's kind that only read it work as plain JS: `get`, `has`, iteration, `forEach`, a `Date`'s `get…` and `to…` methods, a typed array's `slice`, `map`, `indexOf`, a regular expression's `test` and `exec` (which move its `lastIndex`, as using a regular expression does), a `Set`'s comparisons (`union`, `isSubsetOf`, …), a promise's `then`. Every other method the engine gives the kind is a write — `set`, `delete`, `clear`, `add`, `setFullYear`, `fill`, `transfer`, `compile`, and any method the engine adds later — as are assigning, defining, or deleting a member or an element and changing the prototype or extensibility. A method the owning module defined on its own subclass of the kind runs on the object it belongs to, as any call through a view does, and what it returns is data the module chose to share; called with another value's view as `this`, it gets that view. A module handed the object itself keeps it, as any reference: a write rule removed later does not take it back. What the object holds — a value `get` returns, what iteration yields, what a callback or a promise is handed, and what a promise's `then()`, `catch()`, or `finally()` passes on (the object itself is handed as the view), what a `WeakRef`'s `deref()` returns, a typed array's shared `buffer` and `subarray`, its own members and prototype — comes back held to the same rule; a copy a method makes (`slice()`, `union()`) is the caller's own. Native code refuses a view, and so does `Map.prototype.get.call(view, …)`; call the method on the view, and copy what native code needs (`Buffer.from(view)`, `view.slice()`).
+- Host code (no module executing) is never subject to write rules.
+
+The host grants a write in its config or with `api.slothlet.permissions.addRule`:
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		rules: [
+			// `reports` may write into `cache`, which `cache` itself owns.
+			{ caller: "reports.**", target: "cache.**:write", effect: "allow" },
+			{ caller: "reports.**", target: "cache:write", effect: "allow" }
+		]
+	}
+});
+```
+
+A module grants or refuses writes into its own subtree, through its manifest, its code, or the `permissions` option of an `api.add` it makes (see [Declaring Permissions](#3-programmatically-via-apislothletpermissions) for what module code may target):
+
+```javascript
+// api/cache/setup.mjs — the module mounted at `cache`
+import { self } from "@cldmv/slothlet/runtime";
+
+export function initialize() {
+	self.slothlet.permissions.addRule({ caller: "reports.**", target: "cache.**:write", effect: "allow" });
+}
+```
+
+Write rules belong to the permission system. While it is on, every write rule is evaluated. While it is off (no `permissions` config, `mode: "off"`, `enabled: false`, or after `control.disable()`) only the built-in ones below are, with any host rule on what they cover: module code never changes the framework's own namespace, root functions, or keys on api nodes, however it reached them (a reference to `self.slothlet` stored elsewhere included), and no other write is refused, by a rule or on ownership. While it is disabled (`mode: "disabled"`) none is. The limits on what rules module code may register stay on regardless (see [Declaring Permissions](#3-programmatically-via-apislothletpermissions)), and a rule registered while the system is off takes effect once the host turns it on. `slothlet`, `shutdown`, and `destroy` are reserved names on `self` in every mode, refused when defined or deleted as when assigned (`INVALID_CONFIG_API_PATH_INVALID`). Ownership is recorded in every mode: what a module writes while the system is off is that module's, and is held to its ownership once the system is on. The built-in rules:
+
+| Built-in rule                                                              | What it keeps modules from changing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slothlet:write`, `slothlet.**:write`                                      | The framework namespace and everything under it, at any depth (`self.slothlet.lockCaller`, `self.slothlet.lockCaller.caller`, `self.slothlet.permissions.addRule`, …)                                                                                                                                                                                                                                                                                                                                                                           |
+| `shutdown:write`, `shutdown.**:write`, `destroy:write`, `destroy.**:write` | The framework's root functions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `<key>:write`, `**.<key>:write` for each framework-internal key            | The framework's own keys on any api node: wrapper state (`____slothletInternal`, `____slothlet`, `___setImpl`, `___getState`, `___resetLazy`, `___invalidate`, `_impl`, `_materialize`), what a node reports about itself (`__state`, `__invalid`, `__mode`, `__apiPath`, `__slothletPath`, `__isCallable`, `__materializeOnCreate`, `__displayName`, `__type`, `__metadata`, `__filePath`, `__sourceFolder`, `__moduleID`, `__materialized`, `__inFlight`, `__impl`), and impl metadata (`__childFilePaths`, `__childFilePathsPreMaterialize`) |
+
+They are defaults. The host lifts one with a rule of equal or higher specificity, and so may a module's manifest, or module code the host or its manifest let manage rules beyond its subtree. A rule module code adds for its own subtree never lifts one. A lift grants the write to the callers it names, as any write allow does. Module code assigning, defining, or deleting an internal key is refused alike; the host's assignment or deletion of one is absorbed silently (it reports success and changes nothing).
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		rules: [
+			// Only the `config` module may set one extra member on the namespace.
+			{ caller: "config.**", target: "slothlet.featureFlags:write", effect: "allow" }
+		]
+	}
+});
+```
+
+Ownership is judged for the module **executing** the write, as caller identity tracks it (see [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement)). A callback one module hands to another and that the other calls synchronously runs inside the other's call, so its writes are judged as that module's. To keep a callback to the module that made it, wrap it with `self.slothlet.lockCaller`.
+
+**Known limitation.** Module code the host invokes inside its own `context.run()` — a function, thenable, or getter a module returned — currently runs with the host's standing, so its writes are not held to that module's ownership or write rules.
+
+---
+
 ## Event Rules
 
 The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order), and control what each subscriber receives:
@@ -750,10 +865,10 @@ The permissions namespace is organized into four groups:
 
 ### Top-Level — Mutation Operations
 
-| Method               | Description                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `addRule(rule)`      | Add a permission rule. Returns the rule ID. Gated by `config.api.mutations.permissions`. |
-| `removeRule(ruleId)` | Remove a rule by ID. Self-modification blocked (throws `PERMISSION_SELF_MODIFY`).        |
+| Method               | Description                                                                                                                                                                                                                                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addRule(rule)`      | Add a permission rule. Returns the rule ID. Gated by `config.api.mutations.permissions`. From module code, limited to the module's own subtree unless an explicit allow on `slothlet.permissions.addRule` lifts that default (see [Declaring Permissions](#3-programmatically-via-apislothletpermissions)). |
+| `removeRule(ruleId)` | Remove a rule by ID. From module code, limited the same way; a module cannot remove the rules registered on its behalf (`PERMISSION_SELF_MODIFY`).                                                                                                                                                          |
 
 ### `principal.*` — Principals (Host-Only by Default)
 
@@ -832,8 +947,9 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 | Method                      | Description                                                                                                                                                                                                                                                                                                                              |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `control.enable()`          | Enable permission enforcement globally.                                                                                                                                                                                                                                                                                                  |
-| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                                                                                                                                                                                                                             |
+| `control.disable()`         | Turn the system off (`mode: "off"`): rules are no longer evaluated, apart from the built-in write rules and the control and principal surfaces.                                                                                                                                                                                          |
 | `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                                                                                                                                                                                                                                 |
+| `control.mode`              | Accessor — the current [mode](#modes): `"on"`, `"off"`, or `"disabled"`.                                                                                                                                                                                                                                                                 |
 | `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean.                                                                                                                                                                                                    |
 | `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                                                                                                                                                                                                                        |
 | `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, `readGating`, and `principal.register` / `principal.unregister` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running, `principal.invalidate` keeps working, and `shutdown()` is never blocked. |
@@ -850,7 +966,7 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 { caller: "**", target: "slothlet.restart", effect: "deny" }
 ```
 
-Like every built-in rule, it is enforced only when the instance has a `permissions` config. With no `permissions` block the permission system is off entirely, so modules can call `restart()`; configure `permissions` (even just `{ defaultPolicy: "allow" }`) to make it host-only. The host is never gated. To let a trusted module restart the instance, add an instance rule on the same exact target — equal specificity, higher layer, so it outranks the built-in (this holds under both `defaultPolicy: "allow"` and `"deny"`):
+Like every built-in call rule, it is enforced only while the permission system is on. With no `permissions` block the system is off, so modules can call `restart()`; configure `permissions` (even just `{ defaultPolicy: "allow" }`) to make it host-only. The host is never gated. To let a trusted module restart the instance, add an instance rule on the same exact target — equal specificity, higher layer, so it outranks the built-in (this holds under both `defaultPolicy: "allow"` and `"deny"`):
 
 ```javascript
 { caller: "admin.**", target: "slothlet.restart", effect: "allow" }
@@ -887,7 +1003,7 @@ A renamed routine, a default's name with a different mode, a replaced list or `r
 
 The root entry points (`api.shutdown()`, `api.destroy()`, a routine's root cascade) are checked **at entry only**. Framework-internal teardown is never gated: `destroy()`'s own shutdown, the routines and hooks the dispose path runs, and a restart's teardown all run as the host, so a module that is allowed to trigger them is not refused halfway.
 
-As with every built-in, these rules apply only when the instance has a `permissions` config — with no `permissions` block the permission system is off and modules can call all of these. The host is never gated. To grant one to a trusted module, add an instance rule on the same exact target; it outranks the built-in under both `defaultPolicy: "allow"` and `"deny"`:
+As with every built-in call rule, these apply only while the permission system is on — with no `permissions` block the system is off and modules can call all of these. The host is never gated. To grant one to a trusted module, add an instance rule on the same exact target; it outranks the built-in under both `defaultPolicy: "allow"` and `"deny"`:
 
 ```javascript
 { caller: "admin.**", target: "slothlet.reload", effect: "allow" }
@@ -929,6 +1045,16 @@ A module without the grant gets `PERMISSION_DENIED`. See [`lockCaller.caller`](H
 ```
 
 `slothlet.metadata.get(path)` — which reads arbitrary metadata — is **not** covered and stays gated. As with the other built-ins, a user rule of equal or higher specificity overrides them (e.g. `{ caller: "untrusted.**", target: "slothlet.metadata.caller", effect: "deny" }`).
+
+`slothlet.metadata.setGlobal` is **denied to modules by default**: global metadata is what every node reports, every other module's included, so it is the host's. The deny is checked once the call's arguments are valid, so a malformed call still reports what is wrong with it. A host or manifest allow lifts it for the modules it names:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.metadata.setGlobal", effect: "deny" }
+
+// Host grant — let the `config` module set global metadata:
+{ caller: "config.**", target: "slothlet.metadata.setGlobal", effect: "allow" }
+```
 
 ---
 
@@ -1034,13 +1160,15 @@ const apiB = await slothlet({
 
 This holds true even when both instances use `runtime: "live"` (synchronous stack-based context). The enforcement code uses explicit instance IDs to look up the correct context store, preventing cross-contamination between instances.
 
+A module of one instance that calls into another's api (through a reference the host handed it, say) is that module to both: the instance it calls holds the call to its own rules by the module's api path. Being no module of that instance, it is not one of its removed modules either. The other instance's framework surface (`slothlet.*`) does not yet tell such a module from its own host: code that holds another instance's api reaches that instance as its host does, so hand a module another instance's api only if you would trust it with that instance's host access.
+
 ---
 
 ## Error Reference
 
 | Code                      | When                                                                                                                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context.                                                                                        |
+| `PERMISSION_DENIED`       | A call or a module write was blocked by a permission rule. Includes `caller` and `target` in the error context; a write's target carries the `:write` suffix.                        |
 | `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                                                                              |
 | `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                                                                        |
 | `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating` / `principal.register` / `principal.unregister`) was called after `control.seal()`. |

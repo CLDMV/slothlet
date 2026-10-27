@@ -1,0 +1,5 @@
+{
+	"name": "@local/vault-manager",
+	"version": "0.1.0",
+	"description": "Test fixture: a module whose manifest lets it manage rules beyond its subtree and call past a host deny (#625)."
+}

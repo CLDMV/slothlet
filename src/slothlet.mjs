@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:28-07:00 (1792210768)
+ *	@Last modified time: 2026-10-26T17:07:50-07:00 (1793059670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,6 +252,14 @@ class Slothlet {
 		// node at the same path in the live tree (see unified-wrapper.mjs).
 		this._buildEpoch = 0;
 		this._liveEpoch = 0;
+		// Module incarnations (#625): for each moduleID mounted with api.add, a token that stands for that mount for
+		// as long as the module is there. Every wrapper records its module's token at construction; code whose token
+		// is not the module's current one belongs to a removed module, and has no standing, even once another module
+		// takes the id. Kept across a reload, which keeps the modules it rebuilds; a restart starts over.
+		this._moduleIncarnations = new Map();
+		// The last token of each id whose module was removed, until a module is mounted under the id again: what that
+		// module subscribed still hears about its own removal (#625).
+		this._retiredIncarnations = new Map();
 		// In-flight restart() promise — concurrent calls share it.
 		this._restartPromise = null;
 		// True for the duration of restart() (tags the `shutdown` / `init` lifecycle events).
@@ -517,6 +525,9 @@ class Slothlet {
 		// ownership is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
+			// The api node a public impl:created / impl:changed is about. A subscriber a module subscribed is
+			// handed its module's view of it instead of the implementation (#625).
+			const nodeOf = (data) => ({ impl: data.__wrapperRef?.____slothletInternal?.proxy ?? null });
 			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
 			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
 			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
@@ -580,20 +591,26 @@ class Slothlet {
 				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
 					// its own handler errors and never rejects, so no unhandled rejection can escape.
-					void this.handlers.lifecycle.emit("impl:created", {
-						apiPath: data.apiPath,
-						// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
-						// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
-						// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
-						// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
-						// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
-						// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
-						impl: data.wrapper?.__impl ?? null,
-						source: data.source,
-						moduleID: data.moduleID,
-						filePath: data.filePath,
-						sourceFolder: data.sourceFolder
-					});
+					void this.handlers.lifecycle.emit(
+						"impl:created",
+						{
+							apiPath: data.apiPath,
+							// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
+							// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
+							// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
+							// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
+							// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
+							// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
+							// `impl` is the implementation the wrapper holds, handed to host subscribers only: a
+							// subscriber a module subscribed gets its module's view of the node (`nodeOf`) instead (#625).
+							impl: data.wrapper?.__impl ?? null,
+							source: data.source,
+							moduleID: data.moduleID,
+							filePath: data.filePath,
+							sourceFolder: data.sourceFolder
+						},
+						nodeOf(data)
+					);
 				}
 			});
 
@@ -647,15 +664,20 @@ class Slothlet {
 				// public change). Wrapped callable + metadata, never the raw impl.
 				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget — see the impl:created subscriber's note.
-					void this.handlers.lifecycle.emit("impl:changed", {
-						apiPath: data.apiPath,
-						// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above.
-						impl: data.wrapper?.__impl ?? null,
-						source: data.source,
-						moduleID: data.moduleID,
-						filePath: data.filePath,
-						sourceFolder: data.sourceFolder
-					});
+					void this.handlers.lifecycle.emit(
+						"impl:changed",
+						{
+							apiPath: data.apiPath,
+							// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above,
+							// also for what a subscriber a module subscribed gets instead (#625).
+							impl: data.wrapper?.__impl ?? null,
+							source: data.source,
+							moduleID: data.moduleID,
+							filePath: data.filePath,
+							sourceFolder: data.sourceFolder
+						},
+						nodeOf(data)
+					);
 				}
 			});
 		}
@@ -1247,6 +1269,9 @@ class Slothlet {
 		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
 		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
 		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
+		// The mode the host moved the system to (`control.enable()` / `disable()`) holds across the reload too, so a
+		// system the host turned on from "disabled" does not fall back to it (#625).
+		const savedMode = this.handlers.permissionManager?.mode?.() ?? null;
 
 		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
@@ -1323,7 +1348,8 @@ class Slothlet {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
 				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+					// A module's write rule keeps the module layer it was added at (#625).
+					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
 				}
 			} else if (operation.type === "removePermissionRule") {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
@@ -1335,7 +1361,8 @@ class Slothlet {
 				// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
 				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+					// An event rule keeps the layer it was added at (#625).
+					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
 				}
 			} else if (operation.type === "registerPrincipal") {
 				// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
@@ -1388,6 +1415,9 @@ class Slothlet {
 		// addRule, which a sealed manager would reject). This preserves seal()'s documented
 		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
 		// without this a reload would silently unseal the control surface.
+		const permissionManager = this.handlers.permissionManager;
+		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;
@@ -1522,6 +1552,9 @@ class Slothlet {
 				config.base = this._originalBase;
 			}
 			this._buildEpoch = this._liveEpoch + 1;
+			// A restart mounts none of the modules added before it: a module added later under one of their ids is new.
+			this._moduleIncarnations = new Map();
+			this._retiredIncarnations = new Map();
 			await this.load(config);
 
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path

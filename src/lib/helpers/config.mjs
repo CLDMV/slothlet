@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-26T16:15:02-07:00 (1793056502)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1185,7 +1185,11 @@ export class Config extends ComponentBase {
 	 *
 	 * @param {object|null} [permissions] - Raw permissions config from user.
 	 * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
-	 * @param {boolean} [permissions.enabled=true] - Global toggle.
+	 * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
+	 *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
+	 *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
+	 *   Takes precedence over `enabled`.
+	 * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
 	 * @param {object} [permissions.references] - Options governing api functions held as references.
@@ -1207,7 +1211,7 @@ export class Config extends ComponentBase {
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, owner: false, rules: [...] }
+	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, rules: [...] }
 	 */
 	normalizePermissions(permissions) {
 		if (!permissions || typeof permissions !== "object") {
@@ -1234,7 +1238,25 @@ export class Config extends ComponentBase {
 			);
 		}
 
-		const enabled = permissions.enabled !== false;
+		let mode;
+		if (permissions.mode === "on" || permissions.mode === "off" || permissions.mode === "disabled") {
+			mode = permissions.mode;
+		} else if (permissions.mode === undefined) {
+			mode = permissions.enabled === false ? "off" : "on";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.mode",
+					value: permissions.mode,
+					expected: '"on", "off" or "disabled"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		const enabled = mode === "on";
 
 		// Validate audit
 		let audit;
@@ -1472,6 +1494,7 @@ export class Config extends ComponentBase {
 		return {
 			defaultPolicy,
 			enabled,
+			mode,
 			audit,
 			readGating,
 			failOpenOnAbsentCaller,

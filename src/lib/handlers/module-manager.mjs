@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,6 +37,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
 
@@ -214,7 +215,7 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} `MODULE_PACKAGE_NOT_FOUND` when a name cannot be resolved.
 	 * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
 	 */
-	async addModule(nameOrResult, options = {}) {
+	async addModule(nameOrResult, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
 		const collisionMode = options.collisionMode ?? DEFAULT_MODULE_COLLISION_MODE;
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
 		await this.#emit("modules:mount-start", { items: [nameOrResult], options });
@@ -222,7 +223,7 @@ export class ModuleManager extends ComponentBase {
 		// (a single DiscoverResult cannot be "multiple versions of itself").
 		// Callers that want multi-version mounting use addModules with the
 		// resolved DiscoverResult[] of every version.
-		const mountResult = await this.#mountSingle(discoverResult, collisionMode, null);
+		const mountResult = await this.#mountSingle(discoverResult, collisionMode, null, writer);
 		// Reinstall routine stacks for the just-mounted module (#362) — see the fuller rationale on the
 		// identical call in addModules(). addModule() has its own single-item mount path (not routed
 		// through addModules()), so it needs its own rebuildStacks() call; without it a module mounted
@@ -239,7 +240,7 @@ export class ModuleManager extends ComponentBase {
 	 * @param {AddModulesOptions} [options]
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
 	 */
-	async addModules(items, options = {}) {
+	async addModules(items, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
 		if (!Array.isArray(items)) {
 			throw new SlothletError(
 				"INVALID_ARGUMENT",
@@ -287,9 +288,9 @@ export class ModuleManager extends ComponentBase {
 		await this.#emit("modules:mount-start", { items, options });
 		let outcome;
 		if (concurrency === 1) {
-			outcome = await this.#mountSerial(resolved, collisionMode, onFailure, versionConfigs);
+			outcome = await this.#mountSerial(resolved, collisionMode, onFailure, versionConfigs, writer);
 		} else {
-			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs);
+			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs, writer);
 		}
 		// Reinstall routine stacks for whatever just mounted (#362). Every other post-load mount path
 		// that composes a component onto the live tree — `api.slothlet.api.add()` (see api_builder's
@@ -316,9 +317,13 @@ export class ModuleManager extends ComponentBase {
 	 * @param {string} name - Package name.
 	 * @param {object} [opts]
 	 * @param {string} [opts.version] - Disambiguator when more than one mounted entry shares the name.
+	 * @param {object|null} [writer] - The calling module's wrapper, or null for host code; read where the call enters,
+	 *   before any await, as the live runtime no longer knows the caller after one (#625).
 	 * @returns {Promise<boolean>} `true` when something was unmounted, `false` when no matching mount was found.
+	 * @throws {SlothletError} What {@link ApiManager#assertModuleRemovalOf} throws: module code removes every match or
+	 *   none.
 	 */
-	async removeModule(name, opts = {}) {
+	async removeModule(name, opts = {}, writer = runtime_selfModuleReader(this.slothlet)) {
 		const matches = [];
 		for (const [key, mountResult] of this.#mounted) {
 			if (mountResult.packageName !== name) continue;
@@ -326,8 +331,11 @@ export class ModuleManager extends ComponentBase {
 			matches.push({ key, mountResult });
 		}
 		if (matches.length === 0) return false;
+		// Module code: every match is checked before any is removed, so the removal is all or nothing (#625).
+		const apiManager = this.slothlet.handlers.apiManager;
+		if (writer !== null) for (const { mountResult } of matches) apiManager.assertModuleRemovalOf(mountResult.moduleID, writer);
 		for (const { key, mountResult } of matches) {
-			await this.slothlet.handlers.apiManager.removeApiComponent(mountResult.moduleID);
+			await apiManager.removeApiComponent(mountResult.moduleID, { writer });
 			this.#mounted.delete(key);
 		}
 		return true;
@@ -411,7 +419,7 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult>}
 	 * @private
 	 */
-	async #mountSingle(discoverResult, collisionMode, versionConfig) {
+	async #mountSingle(discoverResult, collisionMode, versionConfig, writer) {
 		const mountPathDotted = discoverResult.mountPath.join(".");
 		const effectiveMountPath = versionConfig?.version ? `${versionConfig.version}.${mountPathDotted}` : mountPathDotted;
 
@@ -446,6 +454,21 @@ export class ModuleManager extends ComponentBase {
 		const version = discoverResult.manifest.version;
 		const underlyingCollisionMode = collisionMode === "error" ? "merge" : collisionMode;
 
+		// A manifest's rules apply as declared when the host mounts its module: mounting it is the consumer's opt-in.
+		// Mounted by module code, they are that module's rules, placed as its addRule's are — its own subtree only,
+		// unless it may manage rules beyond it — and a rule out of its reach refuses the whole mount before anything
+		// is mounted (#625). Each rule is read once.
+		const permissionManager = this.slothlet.handlers.permissionManager;
+		const manifest = discoverResult.manifest;
+		const declaredRules = manifest.permissions;
+		const declaredEvents = manifest.events;
+		const manifestRules = Array.isArray(declaredRules) ? Array.from(declaredRules, (rule) => permissionManager.snapshotRule(rule)) : [];
+		const manifestEvents = Array.isArray(declaredEvents)
+			? Array.from(declaredEvents, (rule) => permissionManager.snapshotEventRule(rule))
+			: [];
+		const rulePlacements = manifestRules.map((rule) => permissionManager.placeModuleRule(rule, writer));
+		const eventPlacements = manifestEvents.map((rule) => permissionManager.placeModuleRule({ target: rule?.event }, writer));
+
 		const moduleID = await this.slothlet.handlers.apiManager.addApiComponent({
 			apiPath: mountPathDotted,
 			folderPath: discoverResult.apiDir,
@@ -453,7 +476,8 @@ export class ModuleManager extends ComponentBase {
 				collisionMode: underlyingCollisionMode,
 				metadata: { _module: { manifest: discoverResult.manifest } }
 			},
-			versionConfig: versionConfig ?? null
+			versionConfig: versionConfig ?? null,
+			writer
 		});
 
 		// #407: register the module's own manifest-declared rules at the "manifest" precedence layer,
@@ -461,21 +485,28 @@ export class ModuleManager extends ComponentBase {
 		// equal specificity; a module overrides only the framework built-in defaults. Both manifest CALL
 		// rules (permissions) and EVENT rules (events) register here — the general manifest→enforcement
 		// wiring the permission system previously validated but never applied.
-		const permissionManager = this.slothlet.handlers?.permissionManager;
-		/* v8 ignore next - permissionManager is always registered; guard for parity with other handler access */
-		if (permissionManager) {
-			const manifest = discoverResult.manifest;
-			if (Array.isArray(manifest.permissions)) {
-				for (const rule of manifest.permissions) {
-					permissionManager.addRule(rule, moduleID, null, "manifest");
-				}
-			}
-			if (Array.isArray(manifest.events)) {
-				for (const rule of manifest.events) {
-					permissionManager.addEventRule(rule, moduleID, null, "manifest");
-				}
-			}
-		}
+		// Registered for the mounted module (removed with it), at the manifest layer for the host's mount and at the
+		// placed module layer for module code's (#625).
+		// A function condition among them runs as the module code that mounted it, as its addRule's do.
+		// Each is recorded as the module's rule, so a reload, which replays the mount as a plain add, registers it again
+		// after it, at the same layer and with the same id; the module's removal drops the record (#625).
+		const history = this.slothlet.handlers.apiManager.state?.operationHistory;
+		manifestRules.forEach((rule, i) => {
+			const placed = rulePlacements[i].writer
+				? { ...rule, condition: permissionManager.pinConditions(rule.condition, rulePlacements[i].writer) }
+				: rule;
+			const layer = rulePlacements[i].layer ?? "manifest";
+			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
+			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+		});
+		manifestEvents.forEach((rule, i) => {
+			const placed = eventPlacements[i].writer
+				? { ...rule, condition: permissionManager.pinConditions(rule.condition, eventPlacements[i].writer) }
+				: rule;
+			const layer = eventPlacements[i].layer ?? "manifest";
+			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
+			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+		});
 
 		const result = {
 			packageName: discoverResult.packageName,
@@ -576,13 +607,13 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>}
 	 * @private
 	 */
-	async #mountSerial(resolved, collisionMode, onFailure, versionConfigs) {
+	async #mountSerial(resolved, collisionMode, onFailure, versionConfigs, writer) {
 		const mounted = [];
 		const failed = [];
 		for (let i = 0; i < resolved.length; i++) {
 			const item = resolved[i];
 			try {
-				const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null);
+				const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null, writer);
 				mounted.push(mountResult);
 			} catch (err) {
 				if (onFailure === "throw") {
@@ -613,7 +644,7 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>}
 	 * @private
 	 */
-	async #mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs) {
+	async #mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs, writer) {
 		const mounted = [];
 		const failed = [];
 		let firstError = null;
@@ -626,7 +657,7 @@ export class ModuleManager extends ComponentBase {
 				if (i >= resolved.length) return;
 				const item = resolved[i];
 				try {
-					const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null);
+					const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null, writer);
 					mounted.push(mountResult);
 				} catch (err) {
 					if (onFailure === "best-effort") {

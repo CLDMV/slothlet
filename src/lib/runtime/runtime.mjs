@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,6 +122,20 @@ export const self = new Proxy(
 				return { ...desc, configurable: true };
 			}
 			return undefined;
+		},
+		// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
+		// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
+		deleteProperty(_, prop) {
+			return Reflect.deleteProperty(getCurrentRuntime().self, prop);
+		},
+		defineProperty(_, prop, descriptor) {
+			return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
+		},
+		setPrototypeOf(_, proto) {
+			return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
+		},
+		preventExtensions() {
+			return Reflect.preventExtensions(getCurrentRuntime().self);
 		},
 		set(_, prop, value) {
 			// Forward to the active per-runtime self proxy. Without this trap, JS

@@ -142,7 +142,7 @@ export type SlothletOptions = {
         /**
          * - Fallback when no rule matches.
          */
-        defaultPolicy?: "allow" | "deny" | undefined;
+        defaultPolicy?: "deny" | "allow" | undefined;
         /**
          * - Global enforcement toggle.
          */
@@ -150,7 +150,7 @@ export type SlothletOptions = {
         /**
          * - Audit level; `true`/`false` normalize to `"default"`.
          */
-        audit?: boolean | "default" | "verbose" | undefined;
+        audit?: boolean | "verbose" | "default" | undefined;
         /**
          * - Gate terminal data-value reads the same way calls are gated.
          */
@@ -294,7 +294,7 @@ export type SlothletOptions = {
      * - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
      * See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
      */
-    typescript?: boolean | object | "strict" | "fast" | undefined;
+    typescript?: boolean | object | "fast" | "strict" | undefined;
     /**
      * - Version routing discriminator for versioned API paths.
      * - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.

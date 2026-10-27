@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,13 @@
 
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import {
+	runtime_assertFrameworkRootChange,
+	runtime_selfChangeTarget,
+	runtime_selfFrameworkView,
+	runtime_selfView,
+	runtime_unwrapSelfView
+} from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT } from "#handlers/trusted-root";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
@@ -94,6 +101,29 @@ function runtime_resolveExecutingContext() {
 }
 
 /**
+ * Members of `self` that are the framework's own namespace and functions rather than nodes of the api.
+ * @type {Set<string>}
+ * @private
+ */
+const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
+ * so a node a module keeps and writes into later, outside any call, is held to that module's ownership rather
+ * than taking the host's. The framework's own members come back as a view that runs what the module later does
+ * with them, outside any call, as that module. Everything else is returned as is.
+ *
+ * @param {string|symbol} prop - Member read.
+ * @param {*} value - Its value.
+ * @returns {*} The value, or a view of the node.
+ * @private
+ */
+function runtime_selfMember(prop, value) {
+	if (typeof prop !== "string") return value;
+	return FRAMEWORK_SELF_ROOTS.has(prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
+}
+
+/**
  * Live binding to the current API (self-reference)
  * @type {Proxy}
  * @public
@@ -117,7 +147,7 @@ export const self = new Proxy(
 			if (!ctx) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			return ctx.self[prop];
+			return runtime_selfMember(prop, ctx.self[prop]);
 		},
 		// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
 		// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to
@@ -140,11 +170,47 @@ export const self = new Proxy(
 			// If the property exists, return a descriptor that's always configurable
 			// to avoid proxy invariant violations (since the proxy target is an empty object)
 			if (desc) {
-				return { ...desc, configurable: true };
+				return "value" in desc
+					? { ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
+					: { ...desc, configurable: true };
 			}
 			return undefined;
 		},
+		// A change to `self` itself follows the rule a top-level `self.X = …` does and lands on the running
+		// instance's api, never on the object behind `self`, which every module of every instance shares (#625).
+		deleteProperty(_, prop) {
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
+		},
+		defineProperty(_, prop, descriptor) {
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			const target = runtime_selfChangeTarget(ctx, prop);
+			// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
+			if (descriptor.configurable === false) return false;
+			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+			return Reflect.defineProperty(target, prop, descriptor);
+		},
+		// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
+		// one instance. The change is refused, after the rule for `self` as a whole has been applied.
+		setPrototypeOf() {
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.self) runtime_selfChangeTarget(ctx, null);
+			return false;
+		},
+		preventExtensions() {
+			const ctx = runtime_resolveExecutingContext();
+			if (ctx?.self) runtime_selfChangeTarget(ctx, null);
+			return false;
+		},
 		set(_, prop, value) {
+			// A view `self` handed out stands for its node: the node is what is stored (#625).
+			value = runtime_unwrapSelfView(value);
 			// Route through `apiManager.setOwnedProperty` so the assignment is
 			// validated against the caller's owned apiPath. Falls back to a
 			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
@@ -163,11 +229,15 @@ export const self = new Proxy(
 			// "Symbol(…)" and set THAT string key instead of the symbol-keyed
 			// property the assignment targeted. Write straight to `ctx.self` (the
 			// copy-on-write set trap under isolation, or `boundApi`) so ordinary
-			// JS semantics hold; apiPath ownership validation does not apply.
+			// JS semantics hold. A symbol is no api path of its own: the write is
+			// held to the root of the tree, as a change to `self` as a whole is (#625).
 			if (typeof prop === "symbol") {
+				runtime_selfChangeTarget(ctx, prop);
 				ctx.self[prop] = value;
 				return true;
 			}
+			// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
+			if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
 			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
 			// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
 			// object from `slothlet.boundApi` that reads through to the live tree but
