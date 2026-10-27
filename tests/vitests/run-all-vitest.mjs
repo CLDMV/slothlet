@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:15-07:00 (1791091695)
+ *	@Last modified time: 2026-10-26T19:58:02-07:00 (1793069882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { run } from "@cldmv/vitest-runner";
+import { run, runMergeReports, printMergeOutput, printCoverageSummary, resolveBin, resolveVitestConfig } from "@cldmv/vitest-runner";
 import { cleanTmpArtifacts } from "../lib/clean-tmp-artifacts.mjs";
 import { stageI18nPack, STAGED_ENV } from "./setup/i18n-pack-fixture.mjs";
 
@@ -103,6 +103,22 @@ function releaseCoverageLock() {
 const DEFAULT_TEST_DIR = "tests/vitests/suites";
 const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
+
+/**
+ * Heap ceiling for the coverage merge step, in MB (`VITEST_MERGE_HEAP_MB` overrides).
+ * The merge reads every per-file blob into one process; with 500+ files it outgrows
+ * Node's default ~4 GB heap and dies with "heap out of memory" after every test passed.
+ * It runs once, after all test workers have exited, so it can take a larger heap than
+ * the workers without raising the run's peak memory.
+ * @type {number}
+ */
+const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB ? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10) : 8192;
+
+/**
+ * Directory the coverage run writes its per-file blobs to before the merge.
+ * @type {string}
+ */
+const COVERAGE_BLOBS_DIR = path.join(projectRoot, ".vitest-coverage-blobs");
 
 /**
  * Escape all regex metacharacters in a string so it can be safely used
@@ -450,7 +466,49 @@ function buildRunOptions(parsed) {
 		runOptions.vitestArgs.unshift("--coverage");
 	}
 
+	// Coverage runs merge their blobs here (mergeCoverage) rather than in the runner, so the
+	// merge can have its own heap ceiling.
+	if (hasCoverage || parsed.coverageQuiet) {
+		runOptions.blobsDir = COVERAGE_BLOBS_DIR;
+		runOptions.mergeReports = false;
+	}
+
 	return runOptions;
+}
+
+/**
+ * Merge the coverage blobs a run left in `COVERAGE_BLOBS_DIR` into the final report, with
+ * `MERGE_HEAP_MB` of heap, and print the summary as the runner would.
+ * @param {import("@cldmv/vitest-runner").RunOptions} runOptions - Options the run used.
+ * @returns {Promise<number>} The merge's exit code (1 when there are no blobs to merge).
+ * @example
+ * const code = await mergeCoverage(buildRunOptions(parsed));
+ */
+async function mergeCoverage(runOptions) {
+	const blobs = fs.existsSync(COVERAGE_BLOBS_DIR) ? fs.readdirSync(COVERAGE_BLOBS_DIR).filter((f) => f.endsWith(".blob")) : [];
+	if (blobs.length === 0) return 1;
+
+	const extraCoverageArgs = runOptions.vitestArgs.filter((arg) => arg.startsWith("--coverage."));
+	if (!runOptions.coverageQuiet) {
+		console.log(`\n${"=".repeat(80)}`);
+		console.log(`📊 Merging ${blobs.length} coverage blobs into final report (heap ${MERGE_HEAP_MB} MB)...`);
+		console.log("=".repeat(80));
+	}
+
+	const { exitCode, output } = await runMergeReports(COVERAGE_BLOBS_DIR, {
+		cwd: projectRoot,
+		vitestBin: resolveBin(projectRoot, "vitest", "vitest"),
+		vitestConfig: await resolveVitestConfig(projectRoot, runOptions.vitestConfig),
+		conditions: runOptions.conditions,
+		nodeEnv: runOptions.nodeEnv,
+		maxOldSpaceMb: Math.max(MERGE_HEAP_MB, runOptions.maxOldSpaceMb ?? 0),
+		extraCoverageArgs,
+		quietOutput: runOptions.coverageQuiet
+	});
+	if (runOptions.coverageQuiet) printMergeOutput(exitCode, output);
+	await printCoverageSummary(projectRoot, extraCoverageArgs, runOptions.worstCoverageCount);
+	fs.rmSync(COVERAGE_BLOBS_DIR, { recursive: true, force: true });
+	return exitCode;
 }
 
 /**
@@ -496,7 +554,12 @@ async function main() {
 	process.env[STAGED_ENV] = "1";
 	process.once("exit", restoreI18nPack);
 
-	const code = await run(buildRunOptions(parsed));
+	const runOptions = buildRunOptions(parsed);
+	const code = await run(runOptions);
+	if (runOptions.mergeReports === false) {
+		const mergeCode = await mergeCoverage(runOptions);
+		process.exit(code || mergeCode);
+	}
 	process.exit(code);
 }
 
