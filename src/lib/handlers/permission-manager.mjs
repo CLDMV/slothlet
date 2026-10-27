@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:15:01-07:00 (1793056501)
+ *	@Last modified time: 2026-10-26T17:07:44-07:00 (1793059664)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -167,6 +167,13 @@ function runtime_isPrivateName(targetPath) {
 const FRAMEWORK_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
+ * The framework's own keys on api nodes the built-in write rules keep from module code.
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const FRAMEWORK_WRITE_KEYS = new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]);
+
+/**
  * Whether two source files belong to the same module — the same directory of files (#260).
  *
  * @param {string} callerFilePath - Absolute path of the caller's source file.
@@ -306,14 +313,6 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#disabled = false;
-
-	/**
-	 * Whether each target is one a built-in rule covers, by target (`pattern` or `pattern:write`): what the built-in
-	 * rules cover is evaluated while the system is off, everything else only while it is on.
-	 * @type {Map<string, boolean>}
-	 * @private
-	 */
-	#builtinCoverCache = new Map();
 
 	/**
 	 * Audit level: "default" or "verbose".
@@ -2041,7 +2040,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
-		if (!this.#evaluates(targetPath, this.#writeRules, "writePathPattern")) return null;
+		if (!this.#enabled && !this.coversWrite(targetPath)) return null;
 		const winner = this.#decideWrite(callerPath, targetPath, runtimeContext);
 		if (winner === null) return null;
 		if (winner.effect === "allow") return "grant";
@@ -2066,7 +2065,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.isWriteGranted("guest.x", "victim.v.note"); // true under { caller: "guest.**", target: "victim.**:write", effect: "allow" }
 	 */
 	isWriteGranted(callerPath, targetPath, runtimeContext = null) {
-		if (!this.#evaluates(targetPath, this.#writeRules, "writePathPattern")) return false;
+		if (!this.#enabled && !this.coversWrite(targetPath)) return false;
 		return this.#decideWrite(callerPath, targetPath, runtimeContext)?.effect === "allow";
 	}
 
@@ -2376,48 +2375,11 @@ export class PermissionManager extends ComponentBase {
 	 */
 	coversWrite(targetPath) {
 		if (this.#disabled) return false;
-		return this.#builtinCovers(targetPath, this.#writeRules, "writePathPattern");
-	}
-
-	/**
-	 * Whether a target is evaluated in the current mode: every target while the system is on, only what a built-in
-	 * rule covers while it is off, none while it is disabled.
-	 *
-	 * @param {string} targetPath - Api path of the target (`path` for a call or read, `path:write` for a write).
-	 * @param {Map<string, object>} rules - The rules of that kind ({@link #callRules} or {@link #writeRules}).
-	 * @param {string} patternKey - The key of each rule's target pattern (`target` or `writePathPattern`).
-	 * @returns {boolean} Whether the target is evaluated.
-	 * @private
-	 */
-	#evaluates(targetPath, rules, patternKey) {
-		if (this.#enabled) return true;
-		if (this.#disabled) return false;
-		return this.#builtinCovers(targetPath, rules, patternKey);
-	}
-
-	/**
-	 * Whether a built-in rule of `rules` covers `targetPath`.
-	 *
-	 * @param {string} targetPath - Api path of the target.
-	 * @param {Map<string, object>} rules - The rules of that kind.
-	 * @param {string} patternKey - The key of each rule's target pattern.
-	 * @returns {boolean} Whether one covers it.
-	 * @private
-	 */
-	#builtinCovers(targetPath, rules, patternKey) {
-		const cacheKey = `${patternKey}\u0000${targetPath}`;
-		let covered = this.#builtinCoverCache.get(cacheKey);
-		if (covered === undefined) {
-			covered = false;
-			for (const entry of rules.values()) {
-				if (entry.layer === "builtin" && entry.hookType == null && this.#getCompiledPattern(entry[patternKey])(targetPath)) {
-					covered = true;
-					break;
-				}
-			}
-			this.#builtinCoverCache.set(cacheKey, covered);
-		}
-		return covered;
+		// The built-in write rules cover `<root>`, `<root>.**` for each framework root, and `<key>`, `**.<key>` for
+		// each framework key on api nodes: decided from the path's first and last segments.
+		const first = targetPath.indexOf(".");
+		if (FRAMEWORK_ROOTS.has(first === -1 ? targetPath : targetPath.slice(0, first))) return true;
+		return FRAMEWORK_WRITE_KEYS.has(targetPath.slice(targetPath.lastIndexOf(".") + 1));
 	}
 
 	/**
@@ -3146,7 +3108,6 @@ export class PermissionManager extends ComponentBase {
 	#clearCache() {
 		this.#resolvedCache.clear();
 		this.#writeCache.clear();
-		this.#builtinCoverCache.clear();
 	}
 
 	/**

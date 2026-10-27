@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:11-07:00 (1793056571)
+ *	@Last modified time: 2026-10-26T17:08:47-07:00 (1793059727)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -230,6 +230,17 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			}
 		});
 
+		it("keeps the framework's keys on a node from a module's view of it kept and used later, unless disabled", async () => {
+			await load(options);
+			globalThis[Symbol.for(PROBE)] = (self) => {
+				const v = self.victim.v;
+				return () => outcome(() => Object.defineProperty(v, "__filePath", { value: "/elsewhere", configurable: true }));
+			};
+			const later = await api.guest.x.runWithSelf(PROBE);
+			const expected = { on: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", off: "PERMISSION_DENIED", disabled: "done" }[systemMode];
+			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(expected);
+		});
+
 		it("lands a module's write into another module's subtree unless the system is on", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => {
@@ -349,6 +360,17 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(report.afterClose).toBe("object");
 			expect([api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([undefined, undefined]);
 		});
+	});
+
+	it.each([
+		["on, from disabled", { permissions: { mode: "disabled" } }, "enable", "on"],
+		["off, from on", { permissions: {} }, "disable", "off"],
+		["on, from off", { permissions: { mode: "off" } }, "enable", "on"]
+	])("keeps the mode the host moved the system to across a reload (%s)", async (_label, options, move, expected) => {
+		await load(options);
+		api.slothlet.permissions.control[move]();
+		await api.slothlet.reload();
+		expect(api.slothlet.permissions.control.mode).toBe(expected);
 	});
 
 	it("refuses an unknown mode in the config", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:15-07:00 (1792834935)
+ *	@Last modified time: 2026-10-26T17:07:50-07:00 (1793059670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1269,6 +1269,9 @@ class Slothlet {
 		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
 		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
 		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
+		// The mode the host moved the system to (`control.enable()` / `disable()`) holds across the reload too, so a
+		// system the host turned on from "disabled" does not fall back to it (#625).
+		const savedMode = this.handlers.permissionManager?.mode?.() ?? null;
 
 		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
@@ -1412,6 +1415,9 @@ class Slothlet {
 		// addRule, which a sealed manager would reject). This preserves seal()'s documented
 		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
 		// without this a reload would silently unseal the control surface.
+		const permissionManager = this.handlers.permissionManager;
+		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;

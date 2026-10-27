@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:15:01-07:00 (1793056501)
+ *	@Last modified time: 2026-10-26T17:07:45-07:00 (1793059665)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -244,11 +244,12 @@ function runtime_selfWriteHasStanding(slothlet) {
  * @private
  */
 function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
-	if (!slothlet.handlers.apiManager.ownershipEnforced() || runtime_selfWriteHasStanding(slothlet)) return;
+	const parts = owner ? String(owner.____slothletInternal.apiPath).split(".").filter(Boolean) : [];
+	if (owner && typeof prop === "string") parts.push(prop);
+	// With the system off only a change to the framework's own is checked (its keys on the node); disabled, none.
+	if (!slothlet.handlers.apiManager.writeChecked(parts) || runtime_selfWriteHasStanding(slothlet)) return;
 	if (reader === HOST_READER) return;
 	if (reader !== UNATTRIBUTED_READER && owner) {
-		const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
-		if (typeof prop === "string") parts.push(prop);
 		// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
 		if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 	}
