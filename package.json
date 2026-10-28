@@ -319,7 +319,7 @@
 		"@vitest/istanbul-lib-coverage": "^1.0.1",
 		"acorn": "^8.18.0",
 		"chalk": "^6.0.0",
-		"chokidar": "^5.0.0",
+		"chokidar": "^6.0.0",
 		"dmd": "^7.1.1",
 		"esbuild": "^0.28.1",
 		"eslint": "^10.7.0",
