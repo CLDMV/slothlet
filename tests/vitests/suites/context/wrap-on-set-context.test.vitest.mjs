@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-10-31T20:52:28-07:00 (1793505148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,18 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import slothlet from "@cldmv/slothlet";
+import slothletInstance from "@cldmv/slothlet";
+
+/**
+ * Create an instance with `permissions.provenance` pinned off (#597, #682). These cases run this file's own code
+ * inside module calls; under vitest vite transforms it, so it cannot be verified as the host's own source and
+ * provenance would refuse it. Host code inside module calls with provenance on is covered under Node's own loader by
+ * provenance-host-code.
+ * @param {object} config - The instance's configuration.
+ * @returns {Promise<object>} The api.
+ */
+const slothlet = (config) =>
+	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
 import { self } from "@cldmv/slothlet/runtime";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 

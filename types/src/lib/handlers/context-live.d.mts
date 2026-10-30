@@ -1,49 +1,4 @@
 /**
- * Reduce a source location — a filesystem path or a URL — to a form two spellings of the same file
- * compare equal in.
- *
- * A stack frame names a module by URL (`file:///…/x.mjs?slothlet_instance=…`, percent-encoded),
- * while a wrapper records its file and a module its root folder as whatever the loader was handed —
- * usually a plain path. The scheme, query, hash and percent-encoding are dropped from a URL,
- * separators are made forward slashes, and a trailing slash is removed, so a root compares as a
- * prefix of the files inside it.
- *
- * @param {string} value - A path or URL.
- * @returns {string} The comparable form.
- * @internal
- *
- * @example
- * toComparablePath("file:///srv/app/api/x.mjs?slothlet_instance=a"); // "/srv/app/api/x.mjs"
- * toComparablePath("C:\\app\\api\\"); // "C:/app/api"
- */
-export function toComparablePath(value: string): string;
-/**
- * Split one stack-trace line into the text naming the function and the location it runs at.
- *
- * Attribution must be decided by the location alone. The function name is printed first and is not
- * trustworthy — a computed method key (`{ ["/path/to/other/module.mjs"]() {} }`) puts arbitrary text,
- * including another module's path, into it. So the location is taken from where each engine puts
- * it, never searched for anywhere in the line:
- *
- * - V8: `at name (location)` — the last balanced parenthesis group — or `at [async ]location`.
- * - SpiderMonkey / JavaScriptCore: `name@location` — after the last `@` that starts a URL or path.
- *
- * The trailing `:line:column` is removed and the location reduced with {@link toComparablePath}.
- *
- * @param {string} line - One line of `Error#stack`.
- * @returns {{head: string, path: string}|null} The text before the location and the location's
- *   comparable path, or null for a line that is not a frame (the message line, an unbalanced one).
- * @internal
- *
- * @example
- * parseStackFrame("    at run (file:///srv/app/api/run.mjs?q=1:4:9)"); // { head: "at run ", path: "/srv/app/api/run.mjs" }
- * parseStackFrame("run@http://host/api/run.mjs:4:9"); // { head: "run", path: "http://host/api/run.mjs" }
- */
-export function parseStackFrame(line: string): {
-    head: string;
-    path: string;
-} | null;
-/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -65,6 +20,12 @@ export class LiveContextManager {
      * @internal
      */
     get suspendedStoreCount(): number;
+    /**
+     * How many calls are suspended right now, across every instance.
+     * @type {number}
+     * @internal
+     */
+    get suspendedCallCount(): number;
     public set currentInstanceID(value: string | null);
     /**
      * The instance whose flow is executing right now.
@@ -153,6 +114,36 @@ export class LiveContextManager {
      */
     public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;
     /**
+     * Run `fn` outside every instance (#597), as the async manager does: no instance is active while its synchronous
+     * body runs, so code an instance that has shut down made reaches no instance's api through the active one.
+     * @param {Function} fn - What to run.
+     * @param {*} thisArg - `this` for it.
+     * @param {Array} args - Its arguments.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runDetached(fn: Function, thisArg: any, args: any[]): any;
+    /**
+     * Run `fn` attributed to no module (#597), as the async manager does: inside a module's call, neither the call nor
+     * the host is executing while `fn` runs — nor, for a promise `fn` returns, until it settles — so a permission check
+     * made from it fails closed instead of reading the store's emptied fields as the host. Tracked as suspended like a
+     * host-pinned call, so a module call resuming meanwhile is resolved from its own stack. Outside any module's call
+     * `fn` runs as it is.
+     *
+     * While it is suspended, code it runs is told from the host's by the stack: a stack holding the instance's code — a
+     * frame of one of its modules, or of a folder being built — fails closed, and one holding none of it is the host's.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {function(): *} fn - What to run.
+     * @param {{slothlet?: object, roots?: Array<string>}} [building] - The instance, and the folders being built for it.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runUnattributed(instanceID: string, fn: () => any, building?: {
+        slothlet?: object;
+        roots?: Array<string>;
+    }): any;
+    /**
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
@@ -175,10 +166,24 @@ export class LiveContextManager {
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
      *   `lockCaller.caller()` when the pinned caller is the host.
+     * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+     *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+     * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+     *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+     *   again. Ignored for another store.
+     * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+     *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+     * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+     *   (#597): the call is always checked for code another module made running inside it.
+     * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
+     *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
+        store: object | null;
+        identity: object;
+    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *
@@ -203,7 +208,7 @@ export class LiveContextManager {
      * back whatever was active before. Only the synchronous portion runs under the captured identity;
      * a call started inside it holds its own identity until it settles, as every live call does.
      *
-     * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved?: boolean}} flow - Captured flow.
+     * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, ceiling?: object|null, callerCeiling?: object|null, unresolved?: boolean}} flow - Captured flow.
      * @param {function(): *} fn - Callback to run.
      * @returns {*} The callback's return value.
      * @public
@@ -213,7 +218,27 @@ export class LiveContextManager {
         store: object;
         currentWrapper: object | null;
         callerWrapper: object | null;
+        ceiling?: object | null;
+        callerCeiling?: object | null;
         unresolved?: boolean;
+    }, fn: () => any): any;
+    /**
+     * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+     * keeps whoever ends up calling it. Its synchronous part runs under that identity, as {@link LiveContextManager#runInFlow}
+     * runs a captured flow, on the store executing now (or the instance's base store).
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+     * @internal
+     */
+    runAsIdentity(instanceID: string, identity: {
+        currentWrapper: object;
+        ceiling?: object | ReadonlyArray<object> | null;
+        callerWrapper?: object | null;
+        callerCeiling?: object | ReadonlyArray<object> | null;
     }, fn: () => any): any;
     /**
      * Get current active context
@@ -282,4 +307,7 @@ export class LiveContextManager {
  * @public
  */
 export const liveContextManager: LiveContextManager;
+import { parseStackFrame } from "#handlers/frame-placement";
+import { toComparablePath } from "#handlers/frame-placement";
+export { parseStackFrame, toComparablePath };
 //# sourceMappingURL=context-live.d.mts.map

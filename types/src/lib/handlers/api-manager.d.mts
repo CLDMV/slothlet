@@ -161,7 +161,8 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
      * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
-     * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+     * @param {object|Array<object>|null} callerWrapper - Caller's wrapper from ALS (may be null for external code); a list,
+     *   the executing wrapper first, when the writer acts for several modules (#597) — each has to own the path.
      * @returns {void}
      * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
      *   writes outside its own namespace.
@@ -172,7 +173,7 @@ export class ApiManager extends ComponentBase {
      *   (`slothlet`, `shutdown`, `destroy`).
      * @public
      */
-    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null): void;
+    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | Array<object> | null): void;
     /**
      * Refuse a write a module makes outside the subtree it owns.
      *

@@ -71,6 +71,18 @@ export function copyForComposition(value: unknown, { addsMembers }?: {
     addsMembers?: boolean | undefined;
 }): unknown;
 /**
+ * The same layer laid over another value: what the layer holds and hides, over `underlying` (#597). Used where the
+ * value a layer composes over is replaced by a stand-in for it.
+ * @param {object} layered - A layer {@link copyForComposition} returned.
+ * @param {object|Function} underlying - The value to lay it over.
+ * @returns {object|Function} The new layer.
+ * @package
+ *
+ * @example
+ * const impl = layerOnto(layer, standIn);
+ */
+export function layerOnto(layered: object, underlying: object | Function): object | Function;
+/**
  * Lay a layer again over the value a layer composes over, starting with `members` in their order; a
  * member the value itself holds keeps coming from the value, unless the layer being relaid held it over
  * the value's own. Members that layer hid stay hidden. Used where a folder's members must appear in

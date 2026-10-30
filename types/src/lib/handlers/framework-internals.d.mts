@@ -61,4 +61,24 @@ export function versionDispatcherRecord(obj: any): {
     slothlet: object;
     resolve: () => (object | null);
 } | null;
+/**
+ * Record a Proxy as one slothlet made on its own account (see {@link isSlothletProxy}). No-op for non-objects.
+ *
+ * @param {*} proxy - The Proxy.
+ * @returns {*} The same `proxy`, for call-site chaining.
+ * @internal
+ * @example
+ * const view = markSlothletProxy(new Proxy(value, handler));
+ */
+export function markSlothletProxy(proxy: any): any;
+/**
+ * Whether a value is a Proxy slothlet made on its own account (see {@link markSlothletProxy}).
+ *
+ * @param {*} value - Candidate value.
+ * @returns {boolean} True for slothlet's own Proxy.
+ * @internal
+ * @example
+ * if (isSlothletProxy(value)) return value;
+ */
+export function isSlothletProxy(value: any): boolean;
 //# sourceMappingURL=framework-internals.d.mts.map

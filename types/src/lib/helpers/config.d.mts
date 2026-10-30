@@ -318,12 +318,19 @@ export class Config extends ComponentBase {
      * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
      *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
      *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
+     * @param {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
+     *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
+     *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
+     * @param {boolean} [permissions.provenance=true] - Code is told apart by where it was written: a module's function
+     *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
+     *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
+     *   call runs it.
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
      *
      * @example
      * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, rules: [...] }
+     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, rules: [...] }
      */
     normalizePermissions(permissions?: object | null): object | null;
     #private;

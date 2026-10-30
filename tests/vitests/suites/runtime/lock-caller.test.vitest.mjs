@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-10-31T15:24:58-07:00 (1793485498)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,13 +56,14 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	/**
 	 * Build the lock-caller fixture API and register the producer's emitter listener.
+	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
 	 * @returns {Promise<object>} The Slothlet API proxy.
 	 */
-	async function makeApi() {
+	async function makeApi(extra = {}) {
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: PERMISSION_RULES }
+			permissions: { defaultPolicy: "allow", rules: PERMISSION_RULES, ...extra }
 		});
 		await api.producer.relay.setup();
 		return api;
@@ -82,7 +83,8 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 	});
 
 	it("a plain (un-pinned) callback inherits the ambient (wrong) caller identity", async () => {
-		await makeApi();
+		// With provenance off, nothing tells the callback's code apart from the module running it.
+		await makeApi({ provenance: false });
 		const plainProbe = await api.consumer.probe.makePlainIdentityProbe();
 		// No pinning — the callback is attributed to whatever module is ambient.
 		expect(await api.producer.relay.viaEmitter(plainProbe)).toBe("producer");
@@ -97,7 +99,8 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 	});
 
 	it("a plain callback is denied because the ambient caller fails the permission rule", async () => {
-		await makeApi();
+		// The ambient caller decides only with provenance off; with it on, see provenance-native (#597).
+		await makeApi({ provenance: false });
 		const plainGuarded = await api.consumer.probe.makePlainGuardedCall();
 		await withSuppressedSlothletErrorOutput(async () => {
 			let error;

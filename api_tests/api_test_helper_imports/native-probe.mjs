@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:27:48-07:00 (1791091668)
+ *	@Last modified time: 2026-10-30T23:03:00-07:00 (1793426580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,11 @@ for (const mode of ["eager", "lazy"]) {
 	r.ts = [await a.tsleaf.tsCount(), await a.tsleaf.tsCount(), await b.tsleaf.tsCount(), await a.tsleaf.count(), await b.tsleaf.count()];
 	const refsA = await a.shared.refs();
 	const refsB = await b.shared.refs();
-	r.sharedRefs = refsA.runtime === refsB.runtime && refsA.EventEmitter === refsB.EventEmitter && refsA.Parser === refsB.Parser;
+	r.sharedRefs =
+		refsA.runtime === refsB.runtime &&
+		refsA.EventEmitter === refsB.EventEmitter &&
+		(await a.shared.sameParser()) &&
+		(await b.shared.sameParser());
 	r.viaSelf = [await a.shared.viaSelf(), await b.shared.viaSelf()];
 	// An api.add mount shares the base leaves' helper copy within each instance.
 	await a.slothlet.api.add("plugins", mount);

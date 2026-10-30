@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T17:08:47-07:00 (1793059727)
+ *	@Last modified time: 2026-10-31T20:52:53-07:00 (1793505173)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,18 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
-import slothlet from "@cldmv/slothlet";
+import slothletInstance from "@cldmv/slothlet";
+
+/**
+ * Create an instance with `permissions.provenance` pinned off (#597, #682). These cases run this file's own code
+ * inside module calls; under vitest vite transforms it, so it cannot be verified as the host's own source and
+ * provenance would refuse it. Host code inside module calls with provenance on is covered under Node's own loader by
+ * provenance-host-code.
+ * @param {object} config - The instance's configuration.
+ * @returns {Promise<object>} The api.
+ */
+const slothlet = (config) =>
+	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -112,7 +123,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		api.slothlet.permissions.control.enable();
 		const later = await api.guest.x.keepVictimFrozenMembers();
 		const report = withSuppressedSlothletErrorOutputSync(() => later());
-		expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+		// The closure the module handed back runs as that module (#597), held to its ownership.
+		expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 		expect(api.victim.v.shelf[0].planted).toBeUndefined();
 	});
 
@@ -237,7 +249,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				return () => outcome(() => Object.defineProperty(v, "__filePath", { value: "/elsewhere", configurable: true }));
 			};
 			const later = await api.guest.x.runWithSelf(PROBE);
-			const expected = { on: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", off: "PERMISSION_DENIED", disabled: "done" }[systemMode];
+			// The closure runs as the module that made it (#597), so the built-in rule refuses it in both modes that keep it.
+			const expected = { on: "PERMISSION_DENIED", off: "PERMISSION_DENIED", disabled: "done" }[systemMode];
 			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(expected);
 		});
 
