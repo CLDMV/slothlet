@@ -33,6 +33,7 @@
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { recordSharedExports } from "../handlers/shared-values.mjs";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -70,6 +71,8 @@ const originalMethods = new Map();
  */
 function runtime_installPatch(name, layer, patch) {
 	markLayer(patch, layer);
+	// The patch is slothlet's own, made by no module: `EventEmitter` handed on by a module stays the class itself (#597).
+	recordSharedExports(patch);
 	EventEmitter.prototype[name] = patch;
 	originalMethods.set(name, { layer, patch });
 }

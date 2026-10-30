@@ -130,6 +130,57 @@ export function releaseInstanceScope(instanceID: string | null | undefined): voi
  */
 export function commonJSWrapperSource(filePath: string, instanceID: string, source: string | null | undefined | Uint8Array): string;
 /**
+ * Add a hash to a list of the newest {@link SCRIPTS_PER_KEY}: one already there becomes the newest again.
+ * @param {Array<string>} hashes - The list, oldest first.
+ * @param {string} hash - The hash.
+ * @returns {void}
+ * @internal
+ */
+export function rememberNewest(hashes: Array<string>, hash: string): void;
+/**
+ * Register how a URL is reduced to the key its script hashes are kept under (see {@link scriptKeyOf}).
+ * @param {function(string): string} keyOf - The URL's key.
+ * @returns {void}
+ * @internal
+ */
+export function setScriptKey(keyOf: (arg0: string) => string): void;
+/**
+ * Whether sources are recorded for a script key, and whether a given one is among them (see
+ * {@link recordLoadedSource}).
+ * @param {string} key - The script key.
+ * @param {string} [hash] - A script's hash.
+ * @returns {{known: boolean, has: boolean}} The answer.
+ * @internal
+ */
+export function loadedScriptLookup(key: string, hash?: string): {
+    known: boolean;
+    has: boolean;
+};
+/**
+ * The hashes recorded for the script a URL loads, oldest first.
+ * @param {string} url - The URL.
+ * @returns {Array<string>} The hashes.
+ * @internal
+ * @example
+ * recordedScriptHashes("file:///app/api/x.mjs?slothlet_instance=a"); // ["…"]
+ */
+export function recordedScriptHashes(url: string): Array<string>;
+/**
+ * How many script keys have hashes recorded.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * recordedScriptCount(); // 12
+ */
+export function recordedScriptCount(): number;
+/**
+ * The instance a script key names, or null for code no instance tagged.
+ * @param {string} key - A script key: path, instance tag and mount tag, NUL-separated.
+ * @returns {string|null} The instance ID.
+ * @internal
+ */
+export function scriptKeyInstance(key: string): string | null;
+/**
  * Register the resolve and load hooks with Node, once per process (idempotent across slothlet copies).
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
@@ -186,6 +237,13 @@ export function slothletInstanceImports(): object;
  */
 export const INSTANCE_QUERY_KEYS: ReadonlyArray<string>;
 /**
+ * How many script hashes are kept for one script key; a file loaded again with another source past that forgets its
+ * oldest. Frame placement keeps the scripts it learns to the same number, newest kept.
+ * @type {number}
+ * @internal
+ */
+export const SCRIPTS_PER_KEY: number;
+/**
  * Process-wide instance-import state.
  */
 export type InstanceImportState = {
@@ -228,6 +286,19 @@ export type InstanceImportState = {
      * module's imports; called by the registration the vite plugin appends to each instance module.
      */
     recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
+    /**
+     * - The frozen reader of
+     * the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
+     */
+    scripts?: {
+        lookup: Function;
+        hashes: Function;
+        count: Function;
+    } | undefined;
+    /**
+     * - How a URL is reduced to its script key, fixed once set.
+     */
+    scriptKeyOf?: ((url: string) => string) | undefined;
 };
 /**
  * Resolve-result shape shared by Node's resolve hooks.

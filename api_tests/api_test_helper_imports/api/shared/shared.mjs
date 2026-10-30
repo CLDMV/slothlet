@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:27:48-07:00 (1791091668)
+ *	@Last modified time: 2026-10-30T23:02:59-07:00 (1793426579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,10 +25,22 @@ import { Parser } from "acorn";
 
 /**
  * The module objects this leaf imported, for identity comparison across instances.
- * @returns {{ runtime: object, EventEmitter: Function, Parser: Function }} The imported references.
+ * @returns {{ runtime: object, EventEmitter: Function }} The imported references.
  */
 export function refs() {
-	return { runtime, EventEmitter, Parser };
+	return { runtime, EventEmitter };
+}
+
+/**
+ * Whether the package this instance's copy of the leaf imported is the one the first instance's copy did: the first
+ * call keeps its own on the global object. Compared here, since the package's class handed out of the api comes back
+ * as each instance's own stand-in (#597).
+ * @returns {boolean} True when it is the same `Parser`.
+ */
+export function sameParser() {
+	const key = Symbol.for("api_test_helper_imports.firstParser");
+	globalThis[key] ??= Parser;
+	return Parser === globalThis[key];
 }
 
 /**

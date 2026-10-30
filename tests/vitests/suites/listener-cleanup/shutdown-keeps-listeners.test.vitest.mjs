@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T16:03:41-07:00 (1791846221)
+ *	@Last modified time: 2026-10-30T23:04:16-07:00 (1793426656)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,6 +33,14 @@ import net from "node:net";
 import { join, resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
+
+/**
+ * The names of the functions on an emitter's listener table. A function the module returns comes back as a stand-in
+ * that runs as the module (#597), while the emitter holds the module's own function, so the two are matched by name.
+ * @param {Function[]} listeners - The listeners.
+ * @returns {string[]} Their names.
+ */
+const names = (listeners) => listeners.map((listener) => listener.name);
 
 const CONN = `
 import { EventEmitter } from "node:events";
@@ -97,11 +105,11 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		api = null;
 
 		expect(conn.listenerCount("error")).toBe(1);
-		expect(conn.listeners("error")).toEqual([onError]);
-		expect(conn.listeners("close")).toEqual([onClose]);
+		expect(names(conn.listeners("error"))).toEqual([onError.name]);
+		expect(names(conn.listeners("close"))).toEqual([onClose.name]);
 		// The once listener that has not fired yet holds nothing of slothlet's.
 		const [pendingOnce] = conn.rawListeners("close");
-		expect(pendingOnce.listener).toBe(onClose);
+		expect(pendingOnce.listener.name).toBe(onClose.name);
 		expect(pendingOnce._slothletOriginal).toBeUndefined();
 		expect(pendingOnce._slothletResource).toBeUndefined();
 		expect(() => conn.emit("error", new Error("late"))).not.toThrow();
@@ -130,8 +138,8 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		api = null;
 		const [laterClose] = later.conn.rawListeners("close");
 		const [laterReady] = later.conn.rawListeners("ready");
-		expect(laterClose.listener).toBe(later.onClose);
-		expect(laterReady.listener).toBe(later.onReady);
+		expect(laterClose.listener.name).toBe(later.onClose.name);
+		expect(laterReady.listener.name).toBe(later.onReady.name);
 		laterClose.call(later.conn);
 		laterClose.call(later.conn);
 		laterReady.call(later.conn);
@@ -148,7 +156,7 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		Object.freeze(frozen.conn._events);
 		await expect(api.shutdown()).resolves.not.toThrow();
 		api = null;
-		expect(open.conn.listeners("error")).toEqual([open.onError]);
+		expect(names(open.conn.listeners("error"))).toEqual([open.onError.name]);
 		expect(frozen.conn.listenerCount("error")).toBe(1);
 	});
 

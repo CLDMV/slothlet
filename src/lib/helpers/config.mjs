@@ -1206,12 +1206,15 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
 	 *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
 	 *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
+	 * @param {boolean} [permissions.ceilingChain=false] - Code a caller hands to a leaf runs as the caller with the
+	 *   leaf as its ceiling (#597). When `false` (the default) that ceiling is the leaf the code is running inside;
+	 *   when `true` it accumulates across every leaf the code was handed through, and all of them are enforced.
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
 	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, rules: [...] }
+	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceilingChain: false, rules: [...] }
 	 */
 	normalizePermissions(permissions) {
 		if (!permissions || typeof permissions !== "object") {
@@ -1341,6 +1344,27 @@ export class Config extends ComponentBase {
 				{
 					option: "permissions.owner",
 					value: permissions.owner,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Validate ceilingChain (#597) — whether code handed on through several leaves stays under all of them, or
+		// only under the leaf it is running inside. Defaults to false.
+		let ceilingChain;
+		if (permissions.ceilingChain === true) {
+			ceilingChain = true;
+		} else if (permissions.ceilingChain === false || permissions.ceilingChain === undefined) {
+			ceilingChain = false;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.ceilingChain",
+					value: permissions.ceilingChain,
 					expected: "boolean",
 					hint: "HINT_INVALID_CONFIG"
 				},
@@ -1499,6 +1523,7 @@ export class Config extends ComponentBase {
 			readGating,
 			failOpenOnAbsentCaller,
 			owner,
+			ceilingChain,
 			references: { capture },
 			private: { host: privateHost },
 			rules,

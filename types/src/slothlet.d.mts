@@ -167,6 +167,12 @@ export type SlothletOptions = {
          */
         owner?: boolean | undefined;
         /**
+         * - Code a caller hands to a leaf runs as that caller, under the leaf
+         * it is running inside as its ceiling (#597); `true` keeps every leaf the code was handed through as its ceiling instead.
+         * See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
+         */
+        ceilingChain?: boolean | undefined;
+        /**
          * - Options for api functions held as references (`{ capture?: boolean }`).
          */
         references?: object | undefined;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T17:07:50-07:00 (1793059670)
+ *	@Last modified time: 2026-10-31T10:15:46-07:00 (1793466946)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
+import { resolveWrapper, isCallableValue, releaseModuleMakers } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
@@ -111,8 +111,9 @@ import {
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { forgetInstanceScripts } from "#handlers/frame-placement";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -1235,6 +1236,7 @@ class Slothlet {
 		if (!keepInstanceID) {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+			forgetInstanceScripts(oldInstanceID);
 			releaseInstanceScope(oldInstanceID);
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
@@ -1697,14 +1699,16 @@ class Slothlet {
 					// during shutdown. Children are stored as own enumerable properties on the
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.
+					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
+					// getter (#597).
 					for (const key of Object.keys(wrapper)) {
-						if (!isFrameworkReservedKey(key)) collect(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
 				for (const key of Object.keys(obj)) {
-					collect(obj[key], depth + 1);
+					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
 				// Drain is best-effort; ignore errors from partially-constructed or
@@ -1713,7 +1717,7 @@ class Slothlet {
 		};
 
 		for (const key of Object.keys(this.api)) {
-			collect(this.api[key]);
+			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
@@ -1781,8 +1785,11 @@ class Slothlet {
 		// Shutdown event manager (#407) — clears all subscriptions.
 		this.handlers.eventManager?.shutdown();
 
-		// Drop this instance's private CommonJS helper copies (#518, #534).
+		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
+		// files, and the records of what its modules made (#597).
+		forgetInstanceScripts(this.instanceID);
 		releaseInstanceScope(this.instanceID);
+		releaseModuleMakers(this);
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
@@ -2003,6 +2010,9 @@ export default slothlet;
  *   by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
  *   wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
  *   gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+ * @property {boolean} [permissions.ceilingChain=false] - Code a caller hands to a leaf runs as that caller, under the leaf
+ *   it is running inside as its ceiling (#597); `true` keeps every leaf the code was handed through as its ceiling instead.
+ *   See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.

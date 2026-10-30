@@ -35,10 +35,22 @@ export class AsyncContextManager {
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
      *   `lockCaller.caller()` when the pinned caller is the host.
+     * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+     *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+     * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+     *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+     *   again. Ignored for another store.
+     * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+     *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+     * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+     *   (#597): the call is always checked for code another module made running inside it.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
+        store: object | null;
+        identity: object;
+    } | null, attribute?: boolean, madeCode?: boolean): any;
     /**
      * Capture the executing async flow's slothlet store so it can be re-entered later.
      *
@@ -65,6 +77,46 @@ export class AsyncContextManager {
     public runInFlow(flow: {
         store: object | undefined;
     }, fn: () => any): any;
+    /**
+     * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+     * keeps whoever ends up calling it. Built on the store executing now (or the instance's base store), so the call
+     * keeps that flow's context; the identity is the one given, with the call it is made from as its parent.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+     * @internal
+     */
+    runAsIdentity(instanceID: string, identity: {
+        currentWrapper: object;
+        ceiling?: object | ReadonlyArray<object> | null;
+        callerWrapper?: object | null;
+        callerCeiling?: object | ReadonlyArray<object> | null;
+    }, fn: () => any): any;
+    /**
+     * Run `fn` attributed to no module (#597): inside a module's call, the flow keeps its context but no module is
+     * executing and it is not the host's, so a permission check made from it fails closed. Outside any module's call
+     * `fn` runs as it is. Used where slothlet runs code that is no caller's — a module being built at a module's
+     * request.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runUnattributed(instanceID: string, fn: () => any): any;
+    /**
+     * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
+     * instance that has shut down made reaches no instance's api and no module's identity.
+     * @param {Function} fn - What to run.
+     * @param {*} thisArg - `this` for it.
+     * @param {Array} args - Its arguments.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runDetached(fn: Function, thisArg: any, args: any[]): any;
     /**
      * Get current active context
      * @returns {Object} Current context store
@@ -100,13 +152,15 @@ export class AsyncContextManager {
      *   instance's own store reports no caller for that nested boot (base store has none) while still
      *   returning the real caller when this instance's own flow is active (#290). Omit for the legacy
      *   "active flow caller" behavior.
-     * @returns {{currentWrapper: object, callerWrapper: object}|undefined} Identity, or undefined
+     * @returns {{currentWrapper: object, callerWrapper: object, made: boolean}|undefined} Identity (`made` when the call
+     *   runs code a module made and handed out), or undefined
      *   when there is no active context.
      * @public
      */
     public getCallerIdentity(instanceID?: string): {
         currentWrapper: object;
         callerWrapper: object;
+        made: boolean;
     } | undefined;
     /**
      * Capture the parts of this instance's executing flow that a later, out-of-band run must

@@ -178,7 +178,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		it("holds a write through another module's class prototype a module kept, made later from outside any call, to ownership", async () => {
 			const api = await load();
 			const later = await api.guest.x.keepVictimPrototype();
-			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(off ? "done" : "RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(off ? "done" : "LOOSE_SET_NOT_OWNED");
 			if (!off) expect(new api.victim.v.Account().balance()).toBe(100);
 		});
 
@@ -195,9 +195,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const api = await load();
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
-			expect(report).toEqual(
-				off ? allDone(report) : Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]))
-			);
+			expect(report).toEqual(off ? allDone(report) : Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
 			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
@@ -215,7 +213,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
-			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-31T09:03:57-07:00 (1793462637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { attributeResult, carriesCallerCode, enterCall, isHandedOut, resolveSupplier } from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -92,10 +93,31 @@ export class AsyncContextManager {
 	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
 	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
 	 *   `lockCaller.caller()` when the pinned caller is the host.
+	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+	 *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+	 *   again. Ignored for another store.
+	 * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false) {
+	runInContext(
+		instanceID,
+		fn,
+		thisArg,
+		args,
+		currentWrapper,
+		rawErrors = false,
+		asHost = false,
+		ceiling = null,
+		resolved = null,
+		attribute = false,
+		madeCode = false
+	) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -117,27 +139,58 @@ export class AsyncContextManager {
 			}
 		}
 
-		// Create a new store with currentWrapper for this execution
+		// Create a new store with currentWrapper for this execution. The call record (#597) is set explicitly
+		// on every path: spreading the base store must never leave a nested call holding its parent's.
 		const executionStore = { ...baseStore };
+		executionStore.record = this.#recordOf(baseStore);
 		if (asHost) {
 			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
 			executionStore.callerWrapper = null;
 			executionStore.currentWrapper = null;
+			executionStore.callerCeiling = null;
+			executionStore.currentCeiling = null;
+			executionStore.record = null;
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
 			Object.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
 		} else if (currentWrapper) {
-			executionStore.callerWrapper = baseStore.currentWrapper;
+			const parent = executionStore.record;
+			// The caller is the call executing in this flow — or, when that call was handed code and the code is
+			// what is calling, the call that supplied it, with the executing call as its ceiling (#597). An
+			// unflagged call never reads the stack.
+			if (parent?.flagged) {
+				const identity = resolved?.identity && resolved.store === baseStore ? resolved.identity : this.#identityOf(baseStore);
+				executionStore.callerWrapper = identity.currentWrapper;
+				executionStore.callerCeiling = identity.ceiling ?? null;
+			} else {
+				executionStore.callerWrapper = baseStore.currentWrapper;
+				executionStore.callerCeiling = parent ? (parent.ceiling ?? null) : (baseStore.currentCeiling ?? null);
+			}
 			executionStore.currentWrapper = currentWrapper;
+			executionStore.currentCeiling = null;
+			executionStore.record = {
+				wrapper: currentWrapper,
+				parent:
+					parent ??
+					(baseStore.currentWrapper
+						? { wrapper: baseStore.currentWrapper, parent: null, flagged: false, ceiling: baseStore.currentCeiling ?? null }
+						: null),
+				flagged: madeCode || carriesCallerCode(thisArg, args),
+				ceiling,
+				made: madeCode
+			};
 		}
+
+		// A leaf's own call hands back what its module made as that module's (#597).
+		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
 			// Already in correct context - use a child ALS context so currentWrapper/callerWrapper propagate correctly
 			return this.als.run(executionStore, () => {
 				try {
-					const result = fn.apply(thisArg, args);
+					const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
 					// Wrap class instances to preserve context. For an async leaf the synchronous
 					// return is a pending Promise (Promise is excluded from class-instance detection),
 					// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -145,9 +198,11 @@ export class AsyncContextManager {
 					// handler: async rejections already propagate untouched here, matching the leaf
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (result instanceof Promise) {
-						return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+						return nativeThen(result, (value) =>
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
+						);
 					}
-					return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -167,7 +222,7 @@ export class AsyncContextManager {
 		// Not in context or switching instance - create new ALS context
 		return this.als.run(executionStore, () => {
 			try {
-				const result = fn.apply(thisArg, args);
+				const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
 				// Wrap class instances to preserve context. For an async leaf the synchronous
 				// return is a pending Promise (Promise is excluded from class-instance detection),
 				// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -175,9 +230,9 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (result instanceof Promise) {
-					return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
 				}
-				return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -206,7 +261,11 @@ export class AsyncContextManager {
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
+			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
+			// the module comes back as itself (#597).
+			if (currentWrapper) return attributeResult(currentWrapper, value);
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}
@@ -224,7 +283,21 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	captureFlow() {
-		return { store: this.als.getStore() };
+		const store = this.als.getStore();
+		const record = store ? this.#recordOf(store) : null;
+		if (!record?.flagged) return { store };
+		// Resolved now, while the code that is running is on the stack: re-entered later from another stack,
+		// the supplier of the code (#597) could no longer be told apart, so the flow keeps the answer.
+		const identity = this.#identityOf(store);
+		const ceiling = identity.ceiling ?? null;
+		return {
+			store: {
+				...store,
+				currentWrapper: identity.currentWrapper,
+				currentCeiling: ceiling,
+				record: { wrapper: identity.currentWrapper, parent: record.parent, flagged: false, ceiling }
+			}
+		};
 	}
 
 	/**
@@ -239,6 +312,79 @@ export class AsyncContextManager {
 	 */
 	runInFlow(flow, fn) {
 		return this.als.run(flow.store, fn);
+	}
+
+	/**
+	 * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+	 * keeps whoever ends up calling it. Built on the store executing now (or the instance's base store), so the call
+	 * keeps that flow's context; the identity is the one given, with the call it is made from as its parent.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+	 * @internal
+	 */
+	runAsIdentity(instanceID, identity, fn) {
+		const active = this.als.getStore();
+		const base =
+			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
+		if (!base) {
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Array.from(this.instances.keys()) });
+		}
+		const ceiling = identity.ceiling ?? null;
+		const parent =
+			this.#recordOf(base) ??
+			(base.currentWrapper ? { wrapper: base.currentWrapper, parent: null, flagged: false, ceiling: base.currentCeiling ?? null } : null);
+		const store = {
+			...base,
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: identity.callerWrapper ?? null,
+			currentCeiling: ceiling,
+			callerCeiling: identity.callerCeiling ?? null,
+			record: { wrapper: identity.currentWrapper, parent, flagged: false, ceiling }
+		};
+		return this.als.run(store, fn);
+	}
+
+	/**
+	 * Run `fn` attributed to no module (#597): inside a module's call, the flow keeps its context but no module is
+	 * executing and it is not the host's, so a permission check made from it fails closed. Outside any module's call
+	 * `fn` runs as it is. Used where slothlet runs code that is no caller's — a module being built at a module's
+	 * request.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runUnattributed(instanceID, fn) {
+		const active = this.als.getStore();
+		if (!active || (active.instanceID !== instanceID && active.parentInstanceID !== instanceID)) return fn();
+		if (!active.currentWrapper && !active.record) return fn();
+		const store = {
+			...active,
+			currentWrapper: null,
+			callerWrapper: null,
+			currentCeiling: null,
+			callerCeiling: null,
+			record: null
+		};
+		return this.als.run(store, fn);
+	}
+
+	/**
+	 * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
+	 * instance that has shut down made reaches no instance's api and no module's identity.
+	 * @param {Function} fn - What to run.
+	 * @param {*} thisArg - `this` for it.
+	 * @param {Array} args - Its arguments.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runDetached(fn, thisArg, args) {
+		return this.als.exit(() => Reflect.apply(fn, thisArg, args));
 	}
 
 	/**
@@ -296,14 +442,49 @@ export class AsyncContextManager {
 	 *   instance's own store reports no caller for that nested boot (base store has none) while still
 	 *   returning the real caller when this instance's own flow is active (#290). Omit for the legacy
 	 *   "active flow caller" behavior.
-	 * @returns {{currentWrapper: object, callerWrapper: object}|undefined} Identity, or undefined
+	 * @returns {{currentWrapper: object, callerWrapper: object, made: boolean}|undefined} Identity (`made` when the call
+	 *   runs code a module made and handed out), or undefined
 	 *   when there is no active context.
 	 * @public
 	 */
 	getCallerIdentity(instanceID) {
 		const store = this.tryGetContext(instanceID);
 		if (!store) return undefined;
-		return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		const identity = this.#identityOf(store);
+		return {
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: store.callerWrapper,
+			ceiling: identity.ceiling,
+			callerCeiling: store.callerCeiling ?? undefined,
+			made: this.#recordOf(store)?.made === true
+		};
+	}
+
+	/**
+	 * The call record a store's flow is executing, when it is the call the store names.
+	 * @param {object} store - A context store.
+	 * @returns {object|null} The record, or null.
+	 * @private
+	 */
+	#recordOf(store) {
+		const record = store.record;
+		return record && record.wrapper === store.currentWrapper ? record : null;
+	}
+
+	/**
+	 * Who is executing in a store's flow: the call it names, or — when that call was handed code by a call
+	 * above it and that code is what is running — the supplier, with the call as its ceiling (#597).
+	 *
+	 * @param {object} store - A context store.
+	 * @returns {{currentWrapper: object|undefined, ceiling: object|undefined}} The identity.
+	 * @private
+	 */
+	#identityOf(store) {
+		const record = this.#recordOf(store);
+		if (!record) return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		const supplier = resolveSupplier(record);
+		if (supplier) return { currentWrapper: supplier.wrapper, ceiling: supplier.ceiling };
+		return { currentWrapper: record.wrapper, ceiling: record.ceiling ?? undefined };
 	}
 
 	/**
@@ -326,6 +507,8 @@ export class AsyncContextManager {
 			context: store.context,
 			currentWrapper: identity.currentWrapper ?? null,
 			callerWrapper: identity.callerWrapper ?? null,
+			ceiling: identity.ceiling ?? null,
+			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
 			trusted: store[TRUSTED_ROOT] === true
 		};

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-18T08:00:51-07:00 (1792335651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -551,7 +551,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 
 	it.each([
 		["a registry running the handlers other modules gave it", "registry", ["PERMISSION_DENIED"]],
-		["a module running a function another module's call returned", "user", "PERMISSION_DENIED"]
+		// Returned code runs as the module that made it (#597).
+		["a module running a function another module's call returned", "user", "reached"]
 	])("%s after an await runs them as itself", async (_label, module, expected) => {
 		api = await slothlet({
 			base: API,
