@@ -1,4 +1,13 @@
 /**
+ * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
+ * @package
+ * @param {*} value - The value.
+ * @returns {boolean} True for slothlet's own class-instance Proxy.
+ * @example
+ * runtime_isWrappedClassInstance(runtime_wrapClassInstance(instance, cm, id, new WeakMap())); // true
+ */
+export function runtime_isWrappedClassInstance(value: any): boolean;
+/**
  * @function runtime_shouldWrapMethod
  * @package
  * @param {*} value - The value to check

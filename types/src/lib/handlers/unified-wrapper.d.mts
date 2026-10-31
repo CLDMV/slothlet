@@ -17,8 +17,9 @@
 export function runtime_frameworkWrite(node: object, write: () => any): any;
 /**
  * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
- * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
- * else is returned as is.
+ * holds it fixed, stands for its node, which is what is stored when the view is written into the api. A function a
+ * module was handed, as the module sees it ({@link runtime_inboundFunction}), stands for the function. Anything else
+ * is returned as is.
  *
  * @param {*} value - A value about to be stored.
  * @returns {*} The node a view stands for, or `value`.
@@ -42,6 +43,21 @@ export function runtime_unwrapSelfView(value: any): any;
  * return reader ? runtime_selfRootView(slothlet, reader) : slothlet.api;
  */
 export function runtime_selfModuleReader(slothlet: object): object | null;
+/**
+ * The calls the code running now acts under besides its own module, when it is code a caller supplied to another
+ * module's call (#597): each has to be allowed a change the module makes as well. Empty for a module's own code and
+ * for the host.
+ *
+ * @param {object} slothlet - Instance the code runs in.
+ * @param {object|null} [writer] - The module the change is made as; the ceilings are read only while it is the one
+ *   executing, so a writer captured earlier gets none from whatever runs now.
+ * @returns {ReadonlyArray<object>} The ceiling's calls.
+ * @internal
+ *
+ * @example
+ * for (const call of [writer, ...runtime_selfModuleCeilings(slothlet, writer)]) apiManager.assertOwnedWrite(parts, call);
+ */
+export function runtime_selfModuleCeilings(slothlet: object, writer?: object | null): ReadonlyArray<object>;
 /**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
@@ -247,6 +263,26 @@ export function runtime_isCallerLocked(fn: any): boolean;
  * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
  */
 export function runtime_selfHookHandler(handler: Function, slothlet: object, reader: object): Function;
+/**
+ * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
+ * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {string} [moduleID] - The module, or every module of the instance when omitted.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseModuleMakers(slothlet, "plugins-core");
+ */
+export function releaseModuleMakers(slothlet: object, moduleID?: string): void;
+/**
+ * How many module records an instance holds (see {@link runtime_makerOf}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * moduleMakerCount(slothlet); // 3
+ */
+export function moduleMakerCount(slothlet: object): number;
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain

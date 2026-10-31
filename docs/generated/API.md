@@ -240,6 +240,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-readGating"></a>[permissions.readGating] | <code>boolean</code> | <code>true</code> | Gate terminal data-value reads the same way calls are gated. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-failOpenOnAbsentCaller"></a>[permissions.failOpenOnAbsentCaller] | <code>boolean</code> | <code>false</code> | Restore the legacy fail-open treatment of calls with no resolvable caller. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-owner"></a>[permissions.owner] | <code>boolean</code> | <code>false</code> | Owner grant (#509): a caller leaf may access any target leaf currently owned by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories — wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace gets nothing; an explicit deny rule still wins. See <a href="docs/PERMISSIONS.md#owner-grant">PERMISSIONS.md</a>. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-ceilingChain"></a>[permissions.ceilingChain] | <code>boolean</code> | <code>false</code> | Code a caller hands to a leaf runs as that caller, under the leaf it is running inside as its ceiling (#597); `true` keeps every leaf the code was handed through as its ceiling instead. See <a href="docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller">PERMISSIONS.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-references"></a>[permissions.references] | <code>object</code> |  | Options for api functions held as references (`{ capture?: boolean }`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-private"></a>[permissions.private] | <code>object</code> |  | Module-privacy host policy (`{ host?: "deny"\|"allow" }`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-rules"></a>[permissions.rules] | <code>Array.<object></code> |  | Initial `{ caller, target, effect, condition?, requires? }` rules. |
@@ -327,6 +328,37 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 > <p>Runtime is unaffected — the user runs this on demand (e.g. via <code>prebuild</code> or
 > <code>predev</code> scripts) and ships the generated <code>.d.ts</code> alongside (or instead of)
 > the source. Slothlet does NOT auto-regenerate types at load time.</p></strong></p>
+> 
+
+
+
+
+
+
+
+
+<a id="at_cldmv_slash_slothlet_slash_helpers_slash_cjs-export-names"></a>
+
+## @cldmv/slothlet/helpers/cjs-export-names
+> <p><strong style="font-size: 1.1em;"><p>When an ESM leaf imports a CommonJS helper, Node exposes <code>default</code> (= <code>module.exports</code>) plus the
+> names its built-in lexer (cjs-module-lexer) finds by reading the source — the module has not run
+> yet when the importer links, so the names must come from the text. Slothlet's per-instance wrapper
+> for such a helper (see <code>instance-imports.mjs</code>) has to declare its export names at the same point,
+> so it reads them the same way.</p>
+> <p>The scan recognises the patterns Node's lexer documents:</p>
+> <ul>
+> <li><code>exports.name = …</code>, <code>exports[&quot;name&quot;] = …</code>, and the <code>module.exports.</code> forms of both;</li>
+> <li><code>Object.defineProperty(exports, &quot;name&quot;, …)</code> (also on <code>module.exports</code>);</li>
+> <li><code>module.exports = { a, b: c, &quot;d&quot;: e, f() {}, ...require(&quot;./x&quot;) }</code> object literals, including
+> esbuild's <code>0 &amp;&amp; (module.exports = { … })</code> annotation;</li>
+> <li>re-exports: <code>module.exports = require(&quot;./x&quot;)</code>, <code>...require(&quot;./x&quot;)</code> in the literal,
+> <code>__exportStar(require(&quot;./x&quot;), exports)</code> and <code>__export(require(&quot;./x&quot;))</code>, followed into the
+> required file.</li>
+> </ul>
+> <p>It errs towards MORE names than Node's lexer, never fewer: an object-literal key is taken whatever
+> its value expression is, and a pattern inside a comment-free string still counts. An extra name is
+> harmless (it reads <code>undefined</code> from <code>module.exports</code>, as a real import of a missing key would),
+> while a missing one would turn an import that links natively into a SyntaxError.</p></strong></p>
 > 
 
 
@@ -430,7 +462,19 @@ const api = await slothlet({
 > <p>What stays shared: bare specifiers (<code>node_modules</code> packages, <code>node:</code> builtins, subpath <code>#imports</code>,
 > <code>@cldmv/slothlet</code> and its runtime), any file inside a <code>node_modules</code> package other than the
 > importer's own, and slothlet's own source files — the live-binding runtime must remain one
-> module per process.</p></strong></p>
+> module per process.</p>
+> <p>Crossing module systems (#534). Node caches CommonJS by file path, so a query on a CommonJS URL is
+> ignored, and <code>require(esm)</code> loads an ES module under its plain file URL. Two more hooks close that:</p>
+> <ul>
+> <li><strong>ESM → CommonJS</strong> — a <code>load</code> hook turns an instance-marked CommonJS URL into a small ES module
+> wrapper that runs the file through the instance's private CommonJS cache
+> ({@link requireInInstance}, the same cache a <code>.cjs</code> leaf's own requires use). Its export names come
+> from a static scan of the source (see <code>cjs-export-names.mjs</code>), as Node's own are.</li>
+> <li><strong>CommonJS → ESM</strong> — while {@link requireInInstance} runs its synchronous require, the scope is
+> active: a relative <code>require()</code> from a file of that scope resolving to an ES module is marked, and
+> the <code>load</code> hook answers it with a CommonJS stub that returns the ES module imported under the
+> instance query — the same module record an ESM leaf of the instance imports.</li>
+> </ul></strong></p>
 > 
 
 

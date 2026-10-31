@@ -54,11 +54,24 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
 const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
 
 /**
- * The instance behind each Proxy {@link runtime_wrapClassInstance} produced.
+ * The instance behind each Proxy {@link runtime_wrapClassInstance} produced. Its keys are also how one is told from
+ * a module's own Proxy without reading anything through it (reading the sentinel would run a module Proxy's `get` trap).
  * @type {WeakMap<object, object>}
  * @private
  */
 const WRAPPED_INSTANCES = new WeakMap();
+
+/**
+ * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
+ * @package
+ * @param {*} value - The value.
+ * @returns {boolean} True for slothlet's own class-instance Proxy.
+ * @example
+ * runtime_isWrappedClassInstance(runtime_wrapClassInstance(instance, cm, id, new WeakMap())); // true
+ */
+export function runtime_isWrappedClassInstance(value) {
+	return value !== null && typeof value === "object" && WRAPPED_INSTANCES.has(value);
+}
 
 /**
  * Abstract %TypedArray% base constructor (the shared prototype of every

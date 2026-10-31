@@ -450,7 +450,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.captureCallee();
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -459,7 +459,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.captureSelf();
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -496,7 +496,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.descriptorLeak(all);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -508,7 +508,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.thisLeak(async);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -531,7 +531,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.borrowedReceiver();
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(api.vault.secret.useSecret).toBeUndefined();
 		expect(await api.vault.secret()).toBe("vault-secret");
@@ -549,7 +549,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			await mountModules();
 			const later = await api.supplier.attack.argLeak(how);
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 			});
 			expect(await api.callee.ops.useSecret()).toBe("callee-original");
 		}
@@ -559,7 +559,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules({ hook: true });
 		const later = await api.supplier.attack.hookLeak();
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -570,7 +570,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			await mountModules();
 			const later = await api.supplier.attack.steeredThisLeak(how);
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 			});
 			expect(await api.callee.other.ping()).toBe("other");
 		}
@@ -585,16 +585,20 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountModules();
 		const later = await api.supplier.attack.returnedNodeLeak(how);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("lets a module write later through a node another module shared inside a returned object", async () => {
+	// The closure runs as the module that made it (#597): its write is held to that module's ownership later, as the
+	// same write inside one of its calls is.
+	it("holds a module's later write through a node another module shared inside a returned object to its ownership", async () => {
 		await mountModules();
 		const later = await api.supplier.attack.containerShare();
-		expect(later("shared-later")).toBe("shared-later");
-		expect(api.callee.ops.shared).toBe("shared-later");
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later("shared-later")).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(api.callee.ops.shared).toBeUndefined();
 	});
 
 	it.each([
@@ -611,7 +615,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 		expect(outcome.now).toBe("LOOSE_SET_NOT_OWNED");
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => outcome.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => outcome.later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.svc[name].read()).toBe(`${name}-secret`);
 	});
@@ -634,7 +638,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const later = await api.supplier.attack.captureCallee();
 		await api.slothlet.api.remove("supplier");
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -659,7 +663,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const own = await api.callee.ops.deferOwnWrite();
 		await api.slothlet.reload();
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => foreign()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => foreign()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		// The module's own node stays writable to it. A full reload replaces an added module's nodes, so the
 		// write lands on the node the module kept, as a write through a reference the host kept does.
@@ -676,7 +680,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => write()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => write()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		// The module that read them is gone: its views refuse it even the read.
 		withSuppressedSlothletErrorOutputSync(() => {
@@ -757,7 +761,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 				}
 				expect(() => {
 					kept.api.callee = { pwned: true };
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/LOOSE_SET_NOT_OWNED/);
 			});
 			expect(await api.callee.ops.useSecret()).toBe("callee-original");
 			// What the hook handed back unchanged is what the call returned: the host may still write through it.
@@ -775,7 +779,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountSideChannels({ diagnostics: true });
 		const later = await api.evil.x.keepDiag(how);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 		// The host still gets the api itself.
@@ -842,7 +846,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), {}, { version: "v2" });
 			const later = await api.evil.x.dispatcherLeak(how);
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 			});
 			expect(api.v1.auth.login("a").version).toBe("v1");
 			expect(api.auth.login("a").version).toBe("v1");
@@ -853,7 +857,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountSideChannels({ diagnostics: true });
 		const kept = await api.evil.x.keepFrameworkFn(how);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => kept.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => kept.later()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});

@@ -112,7 +112,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		api.slothlet.permissions.control.enable();
 		const later = await api.guest.x.keepVictimFrozenMembers();
 		const report = withSuppressedSlothletErrorOutputSync(() => later());
-		expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"])));
+		// The closure the module handed back runs as that module (#597), held to its ownership.
+		expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 		expect(api.victim.v.shelf[0].planted).toBeUndefined();
 	});
 
@@ -237,7 +238,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				return () => outcome(() => Object.defineProperty(v, "__filePath", { value: "/elsewhere", configurable: true }));
 			};
 			const later = await api.guest.x.runWithSelf(PROBE);
-			const expected = { on: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", off: "PERMISSION_DENIED", disabled: "done" }[systemMode];
+			// The closure runs as the module that made it (#597), so the built-in rule refuses it in both modes that keep it.
+			const expected = { on: "PERMISSION_DENIED", off: "PERMISSION_DENIED", disabled: "done" }[systemMode];
 			expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe(expected);
 		});
 
