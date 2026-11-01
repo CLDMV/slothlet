@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-01T09:10:55-08:00 (1793553055)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,8 +41,10 @@ suppressSlothletDebugOutput();
  * ensureDevEnvFlags();
  */
 function ensureDevEnvFlags() {
-	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../dist");
-	if (existsSync(distPath)) {
+	// Source mode only: with src/ present devcheck.mjs requires the condition (even when dist/ is
+	// built); in the post-build dist-only run there is no src/ and nothing to add.
+	const srcPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../src");
+	if (!existsSync(srcPath)) {
 		return;
 	}
 

@@ -7,20 +7,26 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:50-07:00 (1791090890)
+ *	@Last modified time: 2026-11-01T09:10:46-08:00 (1793553046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
-import { existsSync } from "node:fs";
+// Development check for a CLDMV package's source checkout. The same file is used unchanged in
+// every repo: the package name comes from the package.json next to it, and the dev condition is
+// `<name without scope>-dev` (`@cldmv/uuid` -> `uuid-dev`). It is never published.
+//
+// Load it synchronously from the package entry, before anything else can run (see
+// docs/conventions/package-layout.md in CLDMV/.github). It exits the process when the checkout is
+// run without the dev condition, because imports then resolve to dist/ instead of src/: a stale
+// build if one exists, and ERR_MODULE_NOT_FOUND before this file can run if none does.
+
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const srcPath = path.join(__dirname, "src");
-const distPath = path.join(__dirname, "dist");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Detect if we're running in a CI environment
 const isCI = !!(
@@ -34,72 +40,76 @@ const isCI = !!(
 	process.env.TF_BUILD // Azure DevOps
 );
 
-if (existsSync(srcPath) && !existsSync(distPath) && !isCI) {
-	const nodeEnv = process.env.NODE_ENV?.toLowerCase();
-	// Dev resolver conditions arrive either via NODE_OPTIONS (env) or on the CLI, where Node puts
-	// them in process.execArgv — which is also how vitest passes conditions to its workers. Fold
-	// both into one haystack so the CLI/worker form is detected, not just the env form. (#270)
-	const conditionFlags = (process.env.NODE_OPTIONS || "") + " " + process.execArgv.join(" ");
+// Skip when installed as a dependency (a `node_modules` segment anywhere above this file, which
+// covers scoped installs too). The npm package ships neither src/ nor this file, but a git or
+// tarball install includes both, and the check must never exit a consumer's app.
+const isInstalledPackage = __dirname.split(path.sep).includes("node_modules");
 
-	// Detect an installed copy by a `node_modules` segment anywhere above this file. Matching only
-	// basename(dirname(__dirname)) misses a scoped install — node_modules/@cldmv/slothlet, whose
-	// parent is the `@cldmv` scope dir, not `node_modules`. (#270)
-	const isInstalledPackage = __dirname.split(path.sep).includes("node_modules");
+// The package's own name, from the package.json beside this file. Without one there is no
+// condition to check, so the check is skipped.
+function readPackageName() {
+	try {
+		const { name } = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
+		return typeof name === "string" && name ? name : undefined;
+	} catch {
+		return undefined;
+	}
+}
 
-	// Parse conditions from NODE_OPTIONS / execArgv
-	const hasSlothletDev = conditionFlags.includes("slothlet-dev");
-	const hasGenericDev = conditionFlags.includes("--conditions=development") || conditionFlags.includes("--conditions development");
-	const hasDevEnv = nodeEnv === "dev" || nodeEnv === "development";
+// Only meaningful in a source checkout: with src/ present the developer should be loading from
+// it via the dev condition, so warn even after a build, since a built checkout has both src/ and
+// dist/ and the condition is the only thing that selects src/.
+const packageName = existsSync(path.join(__dirname, "src")) && !isCI && !isInstalledPackage ? readPackageName() : undefined;
 
-	// Only check if we're in the slothlet repo (not installed in node_modules)
-	if (!isInstalledPackage && !hasSlothletDev) {
-		let errorMessage;
+if (packageName) {
+	const devCondition = `${packageName.split("/").pop()}-dev`;
 
-		// Determine which error message to show based on current state
-		if (hasDevEnv && hasGenericDev) {
-			// They have generic dev settings - tell them to switch to slothlet-dev
-			errorMessage =
-				"❌ Incorrect development environment detected!\n" +
-				"📁 You have generic development settings (NODE_ENV=development, --conditions=development).\n" +
-				"\n" +
-				"⚠️  This causes slothlet to load from src/ which breaks tests and builds!\n" +
-				"\n" +
-				"🔧 Switch to slothlet-specific development settings:\n" +
-				"   Windows (cmd):\n" +
-				"     set NODE_OPTIONS=--conditions=slothlet-dev\n" +
-				"\n" +
-				"   Windows (PowerShell):\n" +
-				"     $env:NODE_OPTIONS='--conditions=slothlet-dev'\n" +
-				"\n" +
-				"   Unix/Linux/macOS:\n" +
-				"     export NODE_OPTIONS=--conditions=slothlet-dev\n" +
-				"\n" +
-				"💡 Using 'slothlet-dev' prevents conflicts with apps that use slothlet.";
-		} else {
-			// They don't have proper settings at all
-			errorMessage =
-				"❌ Development environment not properly configured!\n" +
-				"📁 Source folder detected but NODE_ENV/NODE_OPTIONS not set for slothlet development.\n" +
-				"\n" +
-				"🔧 To fix this, run one of these commands:\n" +
-				"   Windows (cmd):\n" +
-				"     set NODE_ENV=development\n" +
-				"     set NODE_OPTIONS=--conditions=slothlet-dev\n" +
-				"\n" +
-				"   Windows (PowerShell):\n" +
-				"     $env:NODE_ENV='development'\n" +
-				"     $env:NODE_OPTIONS='--conditions=slothlet-dev'\n" +
-				"\n" +
-				"   Unix/Linux/macOS:\n" +
-				"     export NODE_ENV=development\n" +
-				"     export NODE_OPTIONS=--conditions=slothlet-dev\n" +
-				"\n" +
-				"💡 This ensures slothlet loads from src/ instead of dist/ for development.\n" +
-				"🔧 Using 'slothlet-dev' prevents conflicts with consumer development settings.\n" +
-				"🚀 CI environments automatically skip this check.";
+	// The condition can come from NODE_OPTIONS or the node CLI (`--conditions=x`,
+	// `--conditions x`, `-C x`), which lands in execArgv; vitest passes it to workers that way.
+	// Each flag carries ONE literal value: Node does not split on `,` or `|`, and repeated flags
+	// add more. So collect each value whole and match exactly: `not-uuid-dev`, `uuid-dev,x` and
+	// `uuid-dev|production` don't count. The condition is namespaced, not the generic
+	// `development`, so a consumer's own `--conditions=development` can't switch this package to
+	// a source tree it doesn't ship. NODE_ENV is not consulted: it doesn't affect resolution.
+	const conditions = [];
+	const scan = (tokens) => {
+		for (let i = 0; i < tokens.length; i++) {
+			if (tokens[i] === "--conditions" || tokens[i] === "-C") {
+				// Space form: take the next token as the value and skip it, so a value that looks
+				// like a flag isn't read again on the next iteration.
+				if (tokens[i + 1] !== undefined) {
+					conditions.push(tokens[i + 1]);
+					i++;
+				}
+			} else if (tokens[i].startsWith("--conditions=")) {
+				conditions.push(tokens[i].slice("--conditions=".length));
+			}
+			// `-C=x` isn't handled: Node rejects it ("bad option"), so it never reaches here.
 		}
+	};
+	scan(process.execArgv);
+	scan((process.env.NODE_OPTIONS || "").split(/\s+/).filter(Boolean));
 
-		console.error(errorMessage);
+	if (!conditions.includes(devCondition)) {
+		console.error("❌ Development environment not properly configured!");
+		console.error(`📁 ${packageName}: source folder detected but the '${devCondition}' condition is not set,`);
+		console.error("   so imports resolve to dist/ (or fail if it isn't built) instead of src/.");
+		console.error("");
+		console.error("🔧 To load from src/ for development, set the condition:");
+		console.error("   Windows (cmd):");
+		console.error(`     set NODE_OPTIONS=--conditions=${devCondition}`);
+		console.error("");
+		console.error("   Windows (PowerShell):");
+		console.error(`     $env:NODE_OPTIONS='--conditions=${devCondition}'`);
+		console.error("");
+		console.error("   Unix/Linux/macOS:");
+		console.error(`     export NODE_OPTIONS=--conditions=${devCondition}`);
+		console.error("");
+		console.error(`   ...or pass it directly: node --conditions=${devCondition} <file>`);
+		console.error("");
+		console.error(`💡 '${devCondition}' is namespaced so it can't conflict with a consumer's own`);
+		console.error("   development conditions.");
+		console.error("🚀 CI environments automatically skip this check.");
 		process.exit(1);
 	}
 }

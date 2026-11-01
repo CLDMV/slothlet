@@ -7,136 +7,196 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-01T09:11:10-08:00 (1793553070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
-/**
- * @fileoverview Regression tests for the root `devcheck.mjs` dev-environment guard (#270).
- *
- * `devcheck.mjs` runs at import time and calls `process.exit(1)` when it thinks a dev is
- * running against `src/` without slothlet's dev resolver condition. It cannot be imported
- * in-process (it would kill the worker), so each case copies the real `devcheck.mjs` into a
- * throwaway layout — a sibling `src/` dir and no `dist/`, satisfying the outer
- * `existsSync(src) && !existsSync(dist)` guard — and spawns a fresh Node against it with a
- * CI-free, per-case environment. The two bugs covered:
- *
- *   1. Dev-condition detection only read `NODE_OPTIONS`, missing the CLI/worker form where the
- *      flag lands in `process.execArgv` (`node --conditions=slothlet-dev file.mjs`, and how
- *      vitest passes conditions to its workers) — so the guard fired a false `exit(1)`.
- *   2. The installed-package guard checked `basename(dirname(__dirname)) === "node_modules"`,
- *      which is `@cldmv` (the scope dir) for slothlet's own scoped install — so it never
- *      tripped, and a git/tarball install (ships `src/`, no `dist/`) would `exit(1)` inside a
- *      consumer.
- */
-import { describe, it, expect, afterAll } from "vitest";
-import { spawn } from "node:child_process";
-import { mkdir, copyFile, rm } from "node:fs/promises";
+import { test, expect, describe, beforeAll, afterAll } from "vitest";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, mkdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
-const DEVCHECK_SRC = path.join(REPO_ROOT, "devcheck.mjs");
+// devcheck.mjs resolves `src/` relative to its own file location and reads process.env
+// / process.execArgv, so each case runs a COPY of it in a purpose-built fixture
+// directory with a from-scratch env (only PATH), preventing the real CI environment
+// this suite runs in from leaking `CI`/`GITHUB_ACTIONS`/`NODE_OPTIONS` into the
+// subprocess.
+// The repo root is the nearest directory above this test that holds devcheck.mjs, so the file
+// works unchanged wherever a repo keeps its tests.
+function findRepoRoot(dir) {
+	while (!existsSync(path.join(dir, "devcheck.mjs"))) {
+		const parent = path.dirname(dir);
+		if (parent === dir) throw new Error("devcheck.mjs not found above the devcheck test");
+		dir = parent;
+	}
+	return dir;
+}
+const repoRoot = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
+const devcheckSrc = path.join(repoRoot, "devcheck.mjs");
 
-// Every CI signal devcheck.mjs consults — cleared from the child so the guard is actually
-// exercised under CI (otherwise `isCI` short-circuits the whole block and every case exits 0).
-const CI_ENV_KEYS = ["CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "GITLAB_CI", "BUILDKITE", "JENKINS_URL", "TF_BUILD"];
+// The suite is the same in every repo: the package name and its dev condition come from the
+// repo's own package.json, exactly as devcheck.mjs works them out.
+const packageName = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).name;
+const shortName = packageName.split("/").pop();
+const COND = `${shortName}-dev`;
 
-const tempRoots = [];
+let tmpRoot;
+let counter = 0;
 
-/**
- * Stage a copy of the real `devcheck.mjs` at `<tmp>/<subpath>/devcheck.mjs` with a sibling
- * `src/` dir and no `dist/`, so the guard's outer condition is satisfied.
- * @param {string} subpath - Layout under the temp root (e.g. "slothlet" or "node_modules/@cldmv/slothlet").
- * @returns {Promise<string>} Absolute path to the staged devcheck.mjs.
- */
-async function stageDevcheck(subpath) {
-	const root = await makeTestTmpDir("devcheck");
-	tempRoots.push(root);
-	const dir = path.join(root, subpath);
-	await mkdir(path.join(dir, "src"), { recursive: true });
-	await copyFile(DEVCHECK_SRC, path.join(dir, "devcheck.mjs"));
-	return path.join(dir, "devcheck.mjs");
+beforeAll(() => {
+	tmpRoot = mkdtempSync(path.join(tmpdir(), `${shortName}-devcheck-`));
+});
+
+afterAll(() => {
+	if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// Materialize a fixture dir with a copy of devcheck.mjs, a package.json carrying `name`
+// (omitted when null), and optional src/ and dist/, optionally nested under
+// node_modules/<scope>/<pkg> to simulate an installed package.
+function makeFixture({ src = true, dist = false, installed = false, name = packageName } = {}) {
+	const base = path.join(tmpRoot, `f${counter++}`);
+	const pkgDir = installed ? path.join(base, "node_modules", ...packageName.split("/")) : path.join(base, shortName);
+	mkdirSync(pkgDir, { recursive: true });
+	if (src) mkdirSync(path.join(pkgDir, "src"), { recursive: true });
+	if (dist) mkdirSync(path.join(pkgDir, "dist"), { recursive: true });
+	if (name !== null) writeFileSync(path.join(pkgDir, "package.json"), JSON.stringify({ name }));
+	copyFileSync(devcheckSrc, path.join(pkgDir, "devcheck.mjs"));
+	return path.join(pkgDir, "devcheck.mjs");
 }
 
-/**
- * Spawn `node [execArgs] <file>` with a CI-free, controlled environment. The runner's own
- * `NODE_OPTIONS` / `NODE_ENV` are dropped unless a case sets them, so detection is deterministic.
- * @param {string} file - Absolute path to a staged devcheck.mjs.
- * @param {{ execArgs?: string[], env?: Record<string, string> }} [opts]
- * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
- */
-function runDevcheck(file, { execArgs = [], env = {} } = {}) {
-	return new Promise((resolve, reject) => {
-		const childEnv = { ...process.env, ...env };
-		for (const key of CI_ENV_KEYS) delete childEnv[key];
-		if (!("NODE_OPTIONS" in env)) delete childEnv.NODE_OPTIONS;
-		if (!("NODE_ENV" in env)) delete childEnv.NODE_ENV;
-		const child = spawn(process.execPath, [...execArgs, file], { env: childEnv });
-		let stdout = "";
-		let stderr = "";
-		child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
-		child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
-		child.on("error", reject);
-		child.on("close", (code) => resolve({ code: code ?? 0, stdout, stderr }));
+// nodeArgs are passed on the node CLI (i.e. become process.execArgv); env is a
+// from-scratch environment (only PATH plus whatever is given).
+function runDevcheck(fixtureOpts, { env = {}, nodeArgs = [] } = {}) {
+	const devcheck = makeFixture(fixtureOpts);
+	const result = spawnSync(process.execPath, [...nodeArgs, devcheck], {
+		env: { PATH: process.env.PATH, ...env },
+		encoding: "utf8"
 	});
+	return { status: result.status, stderr: result.stderr || "" };
 }
 
-describe("devcheck.mjs dev-environment guard (#270)", () => {
-	afterAll(async () => {
-		await Promise.allSettled(tempRoots.map((r) => rm(r, { recursive: true, force: true })));
+describe("devcheck", () => {
+	test("nags in a source checkout when the dev condition is not set", () => {
+		const { status, stderr } = runDevcheck({ src: true });
+		expect(status).toBe(1);
+		expect(stderr).toContain("Development environment not properly configured");
+		expect(stderr).toContain(`--conditions=${COND}`);
 	});
 
-	describe("guard is active (baseline)", () => {
-		it("exits 1 with a config message when no dev condition is set at all", async () => {
-			const file = await stageDevcheck("slothlet");
-			const { code, stderr } = await runDevcheck(file);
-			expect(code).toBe(1);
-			expect(stderr).toMatch(/not properly configured/);
-		});
+	test("stays silent when the condition is set via NODE_OPTIONS", () => {
+		const { status, stderr } = runDevcheck({ src: true }, { env: { NODE_OPTIONS: `--conditions=${COND}` } });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
 	});
 
-	describe("dev-condition detection reads execArgv, not just NODE_OPTIONS (bug 1)", () => {
-		it("does not fire when --conditions=slothlet-dev is passed on the CLI (execArgv)", async () => {
-			const file = await stageDevcheck("slothlet");
-			const { code, stderr } = await runDevcheck(file, { execArgs: ["--conditions=slothlet-dev"] });
-			expect(code).toBe(0);
-			expect(stderr).toBe("");
-		});
-
-		it("still detects slothlet-dev via NODE_OPTIONS (original path preserved)", async () => {
-			const file = await stageDevcheck("slothlet");
-			const { code } = await runDevcheck(file, { env: { NODE_OPTIONS: "--conditions=slothlet-dev" } });
-			expect(code).toBe(0);
-		});
-
-		it("shows the generic-dev redirect message when --conditions=development is on the CLI", async () => {
-			const file = await stageDevcheck("slothlet");
-			const { code, stderr } = await runDevcheck(file, {
-				execArgs: ["--conditions=development"],
-				env: { NODE_ENV: "development" }
-			});
-			expect(code).toBe(1);
-			expect(stderr).toMatch(/Incorrect development environment detected/);
-		});
+	test("stays silent when the condition is passed on the node CLI (execArgv, = form)", () => {
+		// vitest passes --conditions to workers this way, so devcheck must detect it here too.
+		const { status, stderr } = runDevcheck({ src: true }, { nodeArgs: [`--conditions=${COND}`] });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
 	});
 
-	describe("installed-package guard detects a node_modules segment anywhere (bug 2)", () => {
-		it("does not fire for a scoped install under node_modules/@cldmv/slothlet", async () => {
-			const file = await stageDevcheck(path.join("node_modules", "@cldmv", "slothlet"));
-			const { code, stderr } = await runDevcheck(file);
-			expect(code).toBe(0);
-			expect(stderr).toBe("");
-		});
+	test("stays silent when the condition is passed space-separated (--conditions <name>-dev)", () => {
+		const { status, stderr } = runDevcheck({ src: true }, { nodeArgs: ["--conditions", COND] });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
+	});
 
-		it("does not fire for an unscoped install under node_modules/slothlet (original path preserved)", async () => {
-			const file = await stageDevcheck(path.join("node_modules", "slothlet"));
-			const { code } = await runDevcheck(file);
-			expect(code).toBe(0);
-		});
+	test("stays silent when the dev condition is one of several repeated --conditions flags", () => {
+		const { status } = runDevcheck({ src: true }, { nodeArgs: ["--conditions=foo", `--conditions=${COND}`] });
+		expect(status).toBe(0);
+	});
+
+	test("stays silent via the -C short flag (Node's alias for --conditions)", () => {
+		// Node accepts `-C <value>` (space form) but rejects `-C=<value>`, so only the
+		// space form is a real input to detect.
+		const { status, stderr } = runDevcheck({ src: true }, { nodeArgs: ["-C", COND] });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
+	});
+
+	test("NODE_ENV=development alone does NOT silence it (only the condition selects src/)", () => {
+		// Keying off NODE_ENV would be a false negative: dev env set but no condition means
+		// the package is still resolving to dist/, which is exactly what should be flagged.
+		const { status } = runDevcheck({ src: true }, { env: { NODE_ENV: "development" } });
+		expect(status).toBe(1);
+	});
+
+	test("STILL nags when dist/ has been built but the condition is not set", () => {
+		// A build must NOT silence the check: with src/ present the developer should be on
+		// src/ via the condition, not the stale dist/.
+		const { status } = runDevcheck({ src: true, dist: true });
+		expect(status).toBe(1);
+	});
+
+	test("does NOT accept a generic development condition (namespacing)", () => {
+		const { status } = runDevcheck({ src: true }, { nodeArgs: ["--conditions=development"] });
+		expect(status).toBe(1);
+	});
+
+	test("does NOT match a condition that merely contains the dev condition as a substring", () => {
+		// Exact-value match, not substring: --conditions=not-<name>-dev must NOT silence it.
+		const { status } = runDevcheck({ src: true }, { nodeArgs: [`--conditions=not-${COND}`] });
+		expect(status).toBe(1);
+	});
+
+	test("does NOT treat a comma-joined value as separate conditions", () => {
+		// Node does not split --conditions on `,`: `foo,<name>-dev,bar` is one literal
+		// condition, so <name>-dev is NOT enabled and devcheck must still nag.
+		const { status } = runDevcheck({ src: true }, { nodeArgs: [`--conditions=foo,${COND},bar`] });
+		expect(status).toBe(1);
+	});
+
+	test("does NOT treat a pipe-joined value as separate conditions", () => {
+		// Likewise Node does not split on `|` (it's a valid condition character, e.g.
+		// Vite's `development|production`): `<name>-dev|production` does not enable <name>-dev.
+		const { status } = runDevcheck({ src: true }, { nodeArgs: [`--conditions=${COND}|production`] });
+		expect(status).toBe(1);
+	});
+
+	test("skips in CI", () => {
+		const { status, stderr } = runDevcheck({ src: true }, { env: { CI: "true" } });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
+	});
+
+	test("skips when installed as a dependency (node_modules/<scope>/<pkg>)", () => {
+		const { status, stderr } = runDevcheck({ src: true, installed: true });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
+	});
+
+	test("does nothing when there is no src/ (published dist-only layout)", () => {
+		const { status, stderr } = runDevcheck({ src: false, dist: true });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
+	});
+
+	test("names the package and its condition in the message", () => {
+		const { stderr } = runDevcheck({ src: true });
+		expect(stderr).toContain(packageName);
+		expect(stderr).toContain(`'${COND}'`);
+	});
+
+	test("derives the condition from whatever package.json it sits next to", () => {
+		// Same file in another repo: @cldmv/other-pkg checks other-pkg-dev, not this repo's.
+		const other = { src: true, name: "@cldmv/other-pkg" };
+		expect(runDevcheck(other, { nodeArgs: [`--conditions=${COND}`] }).status).toBe(1);
+		expect(runDevcheck(other, { nodeArgs: ["--conditions=other-pkg-dev"] }).status).toBe(0);
+	});
+
+	test("derives the condition from an unscoped name", () => {
+		expect(runDevcheck({ src: true, name: "plainpkg" }, { nodeArgs: ["--conditions=plainpkg-dev"] }).status).toBe(0);
+	});
+
+	test("skips when there is no package.json beside it", () => {
+		const { status, stderr } = runDevcheck({ src: true, name: null });
+		expect(status).toBe(0);
+		expect(stderr).toBe("");
 	});
 });
