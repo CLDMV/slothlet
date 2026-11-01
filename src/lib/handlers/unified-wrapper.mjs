@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:46-07:00 (1793426626)
+ *	@Last modified time: 2026-11-01T11:04:03-08:00 (1793559843)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5863,9 +5863,18 @@ function runtime_liveThis(value) {
 		return live === node ? value : runtime_selfView(live, SELF_VIEW_READERS.get(value));
 	}
 	const wrapper = _proxyRegistry.get(value);
-	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper);
+	// A stand-in for a chain below the wrapper resolves to the chain's live end (`new.target` of a construction
+	// through one, #685).
+	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper, WAITING_CHAINS.get(value));
 	return value;
 }
+
+/**
+ * The property chain each waiting proxy stands for below its wrapper, for {@link runtime_liveThis}.
+ * @type {WeakMap<object, Array<string|symbol>>}
+ * @private
+ */
+const WAITING_CHAINS = new WeakMap();
 
 /**
  * Whether `prop` is a non-configurable own property of a proxy target. Proxy invariants tie the
@@ -9386,7 +9395,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapper.___createWaitingProxy([...propChain, prop]);
 			},
 
-			async apply(___target, ___thisArg, args) {
+			// `invoke` runs the chain's end once it has loaded: a call, or `new` from the construct trap below (#685).
+			async apply(___target, ___thisArg, args, invoke = (fn, self) => Reflect.apply(fn, self, args)) {
 				// As get: a kept node's access offered to a stand-in is dropped first (#661).
 				runtime_takeCapturedAccess(wrapper);
 				// Capture caller context synchronously before any await.
@@ -9648,7 +9658,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged (an async leaf's rejection already does; #252).
 							return wrapper.slothlet.contextManager.runInContext(
 								wrapper.instanceID,
-								() => Reflect.apply(current, lastObject, args),
+								() => invoke(current, lastObject),
 								null,
 								[],
 								___capturedCallerWrapper,
@@ -9672,21 +9682,16 @@ export class UnifiedWrapper extends ComponentBase {
 						!___liveIdentity?.unresolved &&
 						typeof wrapper.slothlet.contextManager?.runRegisteredAsHost === "function"
 					) {
-						return wrapper.slothlet.contextManager.runRegisteredAsHost(
-							___invocationStoreID,
-							() => Reflect.apply(current, lastObject, args),
-							null,
-							[]
-						);
+						return wrapper.slothlet.contextManager.runRegisteredAsHost(___invocationStoreID, () => invoke(current, lastObject), null, []);
 					}
 					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
-					if (!___identityStore) return Reflect.apply(current, lastObject, args);
+					if (!___identityStore) return invoke(current, lastObject);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
 					const ___previousAuthoritativeCeiling = ___identityStore.__authoritativeCeiling;
 					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
 					___identityStore.__authoritativeCeiling = ___capturedCeiling;
 					try {
-						return Reflect.apply(current, lastObject, args);
+						return invoke(current, lastObject);
 					} finally {
 						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
 						___identityStore.__authoritativeCeiling = ___previousAuthoritativeCeiling;
@@ -9729,6 +9734,16 @@ export class UnifiedWrapper extends ComponentBase {
 					{ validationError: true }
 				);
 			},
+			// `new` before the chain loads: an instance of what it stands for, once loaded, as a lazy node's own construction
+			// in flight answers (#685). The engine's default would read `prototype` through the stand-in.
+			construct(target, args, newTarget) {
+				// A subclass's `super()` has to finish now, which nothing not yet loaded can.
+				if (newTarget !== waitingProxy) {
+					const apiPath = [wrapper.____slothletInternal.apiPath, ...propChain.map(String)].filter(Boolean).join(".");
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath }, null, { validationError: true });
+				}
+				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
+			},
 			getPrototypeOf: () => null
 		};
 		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
@@ -9738,6 +9753,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
 		// worked on waiting proxies before step 2 blocked the property on regular proxies.
 		_proxyRegistry.set(waitingProxy, wrapper);
+		WAITING_CHAINS.set(waitingProxy, propChain);
 		STAND_INS.add(waitingProxy);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
@@ -11984,6 +12000,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// Propagates the original materialization rejection rather than replacing it with a
 			// generic error, and avoids busy-polling the event loop with setImmediate().
 			if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
+				// A subclass's `super()` has to finish now, which nothing still loading can (#685).
+				if (newTarget !== wrapper.____slothletInternal.proxy) {
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
+						validationError: true
+					});
+				}
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
 				/* v8 ignore next */
@@ -12000,17 +12022,12 @@ export class UnifiedWrapper extends ComponentBase {
 						);
 					}
 					const impl = wrapper.____slothletInternal.impl;
-					if (typeof impl === "function") {
-						// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
-						// to impl.prototype (the real class prototype) rather than flowing through the
-						// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
-						// subclass), forward it unchanged so derived construction semantics are preserved.
-						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
-						return runtime_constructAsNode(wrapper, impl, args, effectiveNewTarget);
-					}
+					// newTarget is the proxy itself here (a subclass was refused above): impl stands in for it, so
+					// [[Prototype]] resolves to impl.prototype (the real class prototype) rather than flowing
+					// through the proxy getTrap.
+					if (typeof impl === "function") return Reflect.construct(impl, args, impl);
 					if (impl && typeof impl === "object" && typeof impl.default === "function") {
-						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
-						return runtime_constructAsNode(wrapper, impl.default, args, effectiveNewTarget);
+						return Reflect.construct(impl.default, args, impl.default);
 					}
 					throw new wrapper.slothlet.SlothletError(
 						"INVALID_CONFIG_NOT_A_FUNCTION",

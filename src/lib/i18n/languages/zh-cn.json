@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "此路径的 lazy API 模块加载失败。检查模块文件是否存在并导出有效的值。",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' 不是可调用的或不存在。",
 		"HINT_CHAIN_NOT_CALLABLE": "链式属性解析为非函数值。确保 API 路径指向函数，或检查模块是否导出了期望的函数。",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}' 在加载之前无法被继承。",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "请先等待该节点 (await api.{apiPath}) 并继承其结果，或以 eager 模式加载。",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript {mode} 模式需要安装 'esbuild'。",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "请安装：npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} 模式需要安装 'typescript'。",

@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "Lazy-модуль по этому пути не загрузился. Проверьте файл и экспорты.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' не является вызываемым или не существует.",
 		"HINT_CHAIN_NOT_CALLABLE": "Убедитесь, что путь API указывает на функцию или модуль экспортирует ожидаемую функцию.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "Нельзя наследовать от '{apiPath}' до его загрузки.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "Сначала дождитесь узла (await api.{apiPath}) и наследуйте от полученного значения или загрузите его в режиме eager.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Для режима TypeScript {mode} требуется 'esbuild'.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Установите: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "Для режима TypeScript {mode} требуется 'typescript'.",

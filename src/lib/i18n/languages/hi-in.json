@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "इस पथ पर lazy API मॉड्यूल लोड होने में विफल रहा। जांचें कि मॉड्यूल फ़ाइल मौजूद है और मान्य मान निर्यात करती है।",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' कॉल करने योग्य नहीं है या मौजूद नहीं है।",
 		"HINT_CHAIN_NOT_CALLABLE": "जंजीर वाला गुण गैर-फ़ंक्शन मान के रूप में हल हुआ। सुनिश्चित करें कि API पथ एक फ़ंक्शन को संदर्भित करता है, या जांचें कि मॉड्यूल अपेक्षित फ़ंक्शन निर्यात करता है।",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}' को लोड होने से पहले इनहेरिट नहीं किया जा सकता।",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "पहले नोड की प्रतीक्षा करें (await api.{apiPath}) और उसके परिणाम से इनहेरिट करें, या इसे eager मोड में लोड करें।",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript {mode} मोड के लिए 'esbuild' स्थापित होना आवश्यक है।",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "इसे इसके साथ स्थापित करें: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} मोड के लिए 'typescript' स्थापित होना आवश्यक है।",
