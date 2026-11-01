@@ -110,6 +110,8 @@ if (isNode) {
 	({ createRequire } = moduleMod);
 	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
+	// What every generator object and every async generator object inherits from.
+	const GENERATOR_PROTOTYPES = [Object.getPrototypeOf(function* () {}).prototype, Object.getPrototypeOf(async function* () {}).prototype];
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
@@ -135,7 +137,13 @@ if (isNode) {
 			// false negatives (a bound or wrapped async function) are the same detection blind
 			// spots the Node check has, and fail in the same conservative direction — the sync
 			// pipeline, whose thenable refusal names the `{ async: true }` declaration fix.
-			isAsyncFunction: (fn) => typeof fn === "function" && fn.constructor?.name === "AsyncFunction"
+			isAsyncFunction: (fn) => typeof fn === "function" && fn.constructor?.name === "AsyncFunction",
+			// Prototype check: the browser stand-in for Node's brand check of a generator object, an async
+			// generator's included. An object merely inheriting from a generator function's `prototype` passes too.
+			isGeneratorObject: (value) =>
+				value !== null &&
+				typeof value === "object" &&
+				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value))
 		}
 	};
 }

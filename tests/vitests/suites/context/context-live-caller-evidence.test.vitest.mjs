@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-31T15:24:34-07:00 (1793485474)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -402,6 +402,20 @@ beforeAll(() => {
 		"\tout[mode].instances = await Promise.all(both);",
 		"\tawait denying.shutdown();",
 		"\tawait allowing.shutdown();",
+		// The registry runs the plugin's handler after an await: with provenance on as the plugin under the registry,
+		// with it off as the registry (#597).
+		"\tout[mode].registry = {};",
+		"\tfor (const [name, extra, denied] of [",
+		'\t\t["onBoth", {}, null], ["onRegistryDenied", {}, "registry"], ["onPluginDenied", {}, "plugin"],',
+		'\t\t["offPluginDenied", { provenance: false }, "plugin"]',
+		"\t]) {",
+		'\t\tconst rules = denied ? [{ caller: `${denied}.**`, target: "c.**", effect: "deny" }] : [];',
+		'\t\tconst reg = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { defaultPolicy: "allow", rules, ...extra } });',
+		'\t\tfor (const module of ["registry", "plugin", "c"]) await reg[module];',
+		"\t\treg.plugin.install();",
+		"\t\tout[mode].registry[name] = (await gated((gate) => reg.registry.fire(gate)))[0];",
+		"\t\tawait reg.shutdown();",
+		"\t}",
 		"}",
 		"console.log(JSON.stringify(out));"
 	]);
@@ -551,14 +565,16 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 
 	it.each([
 		["a registry running the handlers other modules gave it", "registry", ["PERMISSION_DENIED"]],
-		["a module running a function another module's call returned", "user", "PERMISSION_DENIED"]
+		// Returned code runs as the module that made it (#597).
+		["a module running a function another module's call returned", "user", "reached"]
 	])("%s after an await runs them as itself", async (_label, module, expected) => {
 		api = await slothlet({
 			base: API,
 			mode,
 			runtime: "live",
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: `${module}.**`, target: "c.**", effect: "deny" }] }
+			// The registry's own identity, as before provenance: the native probe below covers it on (#597).
+			permissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: `${module}.**`, target: "c.**", effect: "deny" }] }
 		});
 		for (const name of ["registry", "plugin", "maker", "user", "c"]) await api[name];
 		api.plugin.install();
@@ -629,6 +645,14 @@ describe("Live runtime: the running code decides the caller (native Node resolve
 			});
 			for (const refused of [stealVia, dotted, outside, viaLent, viaLeaf, rcjs, pkg, instances[0]]) expect(refused).not.toBe("reached");
 			expect(instances[1]).not.toBe("PERMISSION_DENIED");
+			// The plugin's handler runs as the plugin under the registry: both have to be allowed (#597).
+			expect({ mode, ...out[mode].registry }).toEqual({
+				mode,
+				onBoth: "reached",
+				onRegistryDenied: "PERMISSION_DENIED",
+				onPluginDenied: "PERMISSION_DENIED",
+				offPluginDenied: "reached"
+			});
 		}
 	});
 });

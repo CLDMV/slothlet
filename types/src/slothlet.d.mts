@@ -167,6 +167,19 @@ export type SlothletOptions = {
          */
         owner?: boolean | undefined;
         /**
+         * - Code a caller hands to a leaf runs as that caller, under the
+         * leaf it is running inside as its ceiling (#597); `"chain"` keeps every leaf the code was handed through as its ceiling
+         * instead. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
+         */
+        ceiling?: "leaf" | "chain" | undefined;
+        /**
+         * - A module's function reached by a route slothlet does not see — a
+         * callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
+         * the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
+         * call runs it.
+         */
+        provenance?: boolean | undefined;
+        /**
          * - Options for api functions held as references (`{ capture?: boolean }`).
          */
         references?: object | undefined;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T20:04:50-07:00 (1792206290)
+ *	@Last modified time: 2026-10-31T15:24:34-07:00 (1793485474)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -147,22 +147,35 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			expect(await callThrough(path.join(root, "api"), module)).toBe("PERMISSION_DENIED");
 		});
 
-		it("a function named after another module's suspended entry does not borrow that module's identity", async () => {
-			api = await slothlet({ base: path.join(REAL, "api"), mode, runtime: "live", silent: true, permissions: ROGUE_RULES });
-			await api.admin;
-			await api.rogue;
-			await api.c;
-			let releaseAdmin;
-			const adminGate = new Promise((resolve) => (releaseAdmin = resolve));
-			const admin = api.admin.hold(adminGate);
-			let release;
-			const gate = new Promise((resolve) => (release = resolve));
-			const pending = api.rogue.named(gate);
-			release();
-			expect(await pending.catch((error) => error.code)).toBe("PERMISSION_DENIED");
-			releaseAdmin();
-			expect(await admin).toBe("held");
-		});
+		it.each([
+			["off", { provenance: false }, ["PERMISSION_DENIED"]],
+			// With provenance on, the rogue code running inside the call is refused as code of no module.
+			["on", {}, ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]]
+		])(
+			"a function named after another module's suspended entry does not borrow that module's identity (provenance %s)",
+			async (_label, extra, refusals) => {
+				api = await slothlet({
+					base: path.join(REAL, "api"),
+					mode,
+					runtime: "live",
+					silent: true,
+					permissions: { ...ROGUE_RULES, ...extra }
+				});
+				await api.admin;
+				await api.rogue;
+				await api.c;
+				let releaseAdmin;
+				const adminGate = new Promise((resolve) => (releaseAdmin = resolve));
+				const admin = api.admin.hold(adminGate);
+				let release;
+				const gate = new Promise((resolve) => (release = resolve));
+				const pending = api.rogue.named(gate);
+				release();
+				expect(refusals).toContain(await pending.catch((error) => error.code));
+				releaseAdmin();
+				expect(await admin).toBe("held");
+			}
+		);
 
 		it("a callback from a boundary slothlet does not patch is refused, not run as another module whose call is suspended", async () => {
 			api = await slothlet({ base: path.join(REAL, "api"), mode, runtime: "live", silent: true, permissions: ROGUE_RULES });

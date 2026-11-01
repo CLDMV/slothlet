@@ -30,6 +30,7 @@
 // synchronous require(esm), so this module's import graph must stay free of top-level await
 // (the wrapper classes reach `helpers/platform`, which uses it).
 import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
@@ -82,17 +83,19 @@ function freezeSet(set) {
 	// target keeps that introspection honest. The Proxy layer below is what actually stops
 	// `add`/`delete`/`clear`, which `Object.freeze()` alone never touches.
 	Object.freeze(set);
-	return new Proxy(set, {
-		get(target, prop) {
-			if (prop === "add" || prop === "delete" || prop === "clear") {
-				return () => {
-					throw new TypeError("This Set is frozen and cannot be mutated.");
-				};
+	return markSlothletProxy(
+		new Proxy(set, {
+			get(target, prop) {
+				if (prop === "add" || prop === "delete" || prop === "clear") {
+					return () => {
+						throw new TypeError("This Set is frozen and cannot be mutated.");
+					};
+				}
+				const value = Reflect.get(target, prop, target);
+				return typeof value === "function" ? value.bind(target) : value;
 			}
-			const value = Reflect.get(target, prop, target);
-			return typeof value === "function" ? value.bind(target) : value;
-		}
-	});
+		})
+	);
 }
 
 /**

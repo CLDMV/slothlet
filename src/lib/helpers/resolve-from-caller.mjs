@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-18T12:56:02-07:00 (1792353362)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,10 +86,17 @@ export class Resolver extends ComponentBase {
 	 */
 	#getStack() {
 		const originalPrepare = Error.prepareStackTrace;
+		const originalLimit = Error.stackTraceLimit;
 		Error.prepareStackTrace = (___, stack) => stack;
-		const stack = new Error().stack;
-		Error.prepareStackTrace = originalPrepare;
-		return stack;
+		// The whole stack: a module's call reaches slothlet through wrapper frames enough to push its own file past the
+		// default ten (#597).
+		Error.stackTraceLimit = Infinity;
+		try {
+			return new Error().stack;
+		} finally {
+			Error.prepareStackTrace = originalPrepare;
+			Error.stackTraceLimit = originalLimit;
+		}
 	}
 
 	/**
@@ -152,12 +159,15 @@ export class Resolver extends ComponentBase {
 		const stack = this.#getStack();
 		const files = stack.map((s) => this.toFsPath(s.getFileName())).filter(Boolean);
 
-		// Find slothlet.mjs in the stack
-		const slothletIndex = files.findIndex((f) => path.basename(f).toLowerCase() === "slothlet.mjs");
+		// Find slothlet's own slothlet.mjs in the stack. The whole stack is read, so a file of the application's that
+		// happens to be named slothlet.mjs, further down, is no entry of slothlet's (#597).
+		const slothletIndex = files.findIndex((f) => path.basename(f).toLowerCase() === "slothlet.mjs" && this.#isSlothletInternal(f));
 
 		if (slothletIndex === -1) {
 			// No slothlet.mjs in stack, find first non-internal file
 			for (const file of files) {
+				// A Node builtin's frame (an async context's `run`) is no caller's file.
+				if (file.startsWith("node:")) continue;
 				if (!this.#isSlothletInternal(file)) {
 					return file;
 				}
