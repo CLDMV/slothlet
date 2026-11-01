@@ -457,7 +457,7 @@ function runtime_structuredFrames(_error, callSites) {
 					// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
 					evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
 					// The script the frame runs in — the SHA-256 of the source it was compiled from, on every Node slothlet
-					// supports (22.15+): code compiled under another module's location runs in a script of its own, with its
+					// supports (22.22+): code compiled under another module's location runs in a script of its own, with its
 					// own hash (#597).
 					hash: evaluated ? null : (site.getScriptHash?.() ?? null),
 					key: described.key,

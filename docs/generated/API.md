@@ -447,7 +447,7 @@ const api = await slothlet({
 > at any depth:</p>
 > <ul>
 > <li><strong>Native Node</strong> — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
-> hook (<code>module.registerHooks()</code>, Node &gt;= 22.15 — slothlet's engines floor) that copies the
+> hook (<code>module.registerHooks()</code>, added in Node 22.15, within slothlet's engines floor) that copies the
 > importing module's instance parameter onto the child. Registered once per process; a no-op
 > for every import whose parent carries no slothlet query.</li>
 > <li><strong>Vite / vitest</strong> — {@link slothletInstanceImports} is the same rule as a vite <code>resolveId</code>
