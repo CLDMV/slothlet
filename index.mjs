@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T23:41:04-07:00 (1791096064)
+ *	@Last modified time: 2026-11-01T09:24:29-08:00 (1793553869)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,23 +93,6 @@ const __slothletUncaughtHandler = (error) => {
 };
 if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
 
-// Development environment check. devcheck.mjs exits the process when a source checkout runs
-// without the `slothlet-dev` condition, so it is loaded synchronously here, before this module
-// finishes evaluating and before any export can be used. A fire-and-forget `import()` would let
-// the caller run first. It goes through `createRequire` (Node's synchronous require(esm)) rather
-// than a top-level await, which index.cjs's require(esm) would reject (ERR_REQUIRE_ASYNC_MODULE).
-// `node:module` comes from `process.getBuiltinModule`, not a static import, so the browser graph
-// never sees a `node:*` specifier; the whole block is skipped outside Node. devcheck.mjs is never
-// published, so MODULE_NOT_FOUND (an installed copy) is ignored and anything else is rethrown.
-const __nodeModule = __isNode ? process.getBuiltinModule?.("node:module") : undefined;
-if (__nodeModule) {
-	try {
-		__nodeModule.createRequire(import.meta.url)("./devcheck.mjs");
-	} catch (error) {
-		if (error?.code !== "MODULE_NOT_FOUND") throw error;
-	}
-}
-
 /**
  * The framework surface of a composed api: `api.slothlet.*`, `api.shutdown()`, `api.destroy()`.
  * `slothlet typegen` output extends `SlothletSelf` with it, so `self.slothlet.*` is typed too.
@@ -138,7 +121,7 @@ if (__nodeModule) {
  *
  */
 const slothlet = async (options = {}) => {
-	// Loaded lazily so the implementation graph is only pulled in on first call
+	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 
 	const slothletImpl = mod.slothlet ?? mod.default;

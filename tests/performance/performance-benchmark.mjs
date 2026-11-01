@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-01T09:24:36-08:00 (1793553876)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const BENCHMARK_ITERATIONS = 100; // Number of iterations for benchmark tests
 const BENCHMARK_ITERATIONS_COMPLEX = 100; // Number of iterations for complex benchmark tests
 const BENCHMARK_ITERATIONS_MULTI = 50; // Number of iterations for multi benchmark tests
 
-// Must NOT be a static top-level import — index.mjs runs devcheck while it loads, before respawn can act.
+// Loaded with a dynamic import once the respawn with the dev conditions has happened.
 let slothlet;
 
 /**

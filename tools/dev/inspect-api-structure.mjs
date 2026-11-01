@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:28:50-07:00 (1791836930)
+ *	@Last modified time: 2026-11-01T09:25:30-08:00 (1793553930)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,8 +64,8 @@ import { pathToFileURL, fileURLToPath } from "url";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import util from "node:util";
-// Must NOT be a static top-level import — index.mjs runs devcheck while it loads, which would
-// happen before ensureDevEnvFlags() can respawn with the correct conditions.
+// Loaded with a dynamic import once ensureDevEnvFlags() has respawned with the dev conditions,
+// so it resolves to src/.
 let slothlet;
 
 /**
@@ -309,8 +309,7 @@ async function inspectApi(apiName, options = {}) {
 		return;
 	}
 
-	// Dynamic import after the dev-env gate so index.mjs's devcheck
-	// only runs once slothlet-dev conditions are active.
+	// Dynamic import after the dev-env gate so it resolves under the slothlet-dev condition.
 	if (!slothlet) {
 		slothlet = (await import("@cldmv/slothlet")).default;
 	}

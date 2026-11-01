@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:10:55-08:00 (1793553055)
+ *	@Last modified time: 2026-11-01T09:24:38-08:00 (1793553878)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,27 +24,21 @@ import { suppressSlothletDebugOutput } from "./vitest-helper.mjs";
 suppressSlothletDebugOutput();
 
 /**
- * @fileoverview Global setup for vitest - triggers devcheck validation
- *
- * This setup runs before any tests in the main process and imports slothlet,
- * which triggers devcheck validation. If devcheck fails, it should stop
- * vitest execution before any workers are spawned.
+ * @fileoverview Vitest setup file: makes sure the slothlet-dev condition is set so the
+ * suite runs against src/, and suppresses SlothletWarning console output.
  */
 
 /**
- * Ensure the main Vitest process has slothlet dev flags before devcheck runs.
- * Vitest applies `test.env` and `nodeOptions` to workers, but devcheck executes
- * in the main process, so we set defaults here to avoid manual export/sets.
+ * Ensure slothlet dev flags are set when no dist/ build exists, so imports resolve to src/
+ * without a manual export/set.
  * @returns {void}
  * @example
  * // Automatically invoked by setup(); no manual call required.
  * ensureDevEnvFlags();
  */
 function ensureDevEnvFlags() {
-	// Source mode only: with src/ present devcheck.mjs requires the condition (even when dist/ is
-	// built); in the post-build dist-only run there is no src/ and nothing to add.
-	const srcPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../src");
-	if (!existsSync(srcPath)) {
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../dist");
+	if (existsSync(distPath)) {
 		return;
 	}
 
@@ -61,27 +55,16 @@ function ensureDevEnvFlags() {
 }
 // ensureDevEnvFlags();
 /**
- * Run devcheck prior to all Vitest workers with ensured dev env flags.
- * @returns {Promise<void>} Resolves when devcheck completes.
+ * Set the slothlet dev flags and quiet SlothletWarning output before the tests run.
+ * @returns {Promise<void>} Resolves when setup completes.
  */
 // export async function globalSetup() {
 // export default async function setup() {
 export async function setup() {
-	// console.log("🚀 GLOBAL SETUP: Starting devcheck validation...");
 	// console.log("🚀 GLOBAL SETUP: NODE_ENV =", process.env.NODE_ENV);
 	// console.log("🚀 GLOBAL SETUP: NODE_OPTIONS =", process.env.NODE_OPTIONS);
 
 	ensureDevEnvFlags();
-
-	// eslint-disable-next-line no-useless-catch
-	try {
-		// Import devcheck directly to avoid index.mjs try/catch
-		await import("../../../devcheck.mjs");
-		// console.log("🚀 GLOBAL SETUP: Devcheck completed");
-	} catch (error) {
-		// console.log("🚀 GLOBAL SETUP: Devcheck failed:", error.message);
-		throw error;
-	}
 
 	// Suppress SlothletWarning console output during tests (still captured for assertions).
 	// Import via the package export (resolves to src under the slothlet-dev condition, dist otherwise),
