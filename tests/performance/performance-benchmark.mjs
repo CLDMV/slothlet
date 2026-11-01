@@ -39,7 +39,7 @@ const BENCHMARK_ITERATIONS = 100; // Number of iterations for benchmark tests
 const BENCHMARK_ITERATIONS_COMPLEX = 100; // Number of iterations for complex benchmark tests
 const BENCHMARK_ITERATIONS_MULTI = 50; // Number of iterations for multi benchmark tests
 
-// Must NOT be a static top-level import — triggers devcheckPromise before respawn can act.
+// Must NOT be a static top-level import — index.mjs runs devcheck while it loads, before respawn can act.
 let slothlet;
 
 /**

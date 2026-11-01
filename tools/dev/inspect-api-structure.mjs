@@ -64,8 +64,8 @@ import { pathToFileURL, fileURLToPath } from "url";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import util from "node:util";
-// Must NOT be a static top-level import — that triggers the devcheckPromise IIFE
-// in index.mjs before ensureDevEnvFlags() can respawn with the correct conditions.
+// Must NOT be a static top-level import — index.mjs runs devcheck while it loads, which would
+// happen before ensureDevEnvFlags() can respawn with the correct conditions.
 let slothlet;
 
 /**
@@ -309,8 +309,8 @@ async function inspectApi(apiName, options = {}) {
 		return;
 	}
 
-	// Dynamic import after the dev-env gate so the devcheckPromise
-	// in index.mjs only fires once slothlet-dev conditions are active.
+	// Dynamic import after the dev-env gate so index.mjs's devcheck
+	// only runs once slothlet-dev conditions are active.
 	if (!slothlet) {
 		slothlet = (await import("@cldmv/slothlet")).default;
 	}
