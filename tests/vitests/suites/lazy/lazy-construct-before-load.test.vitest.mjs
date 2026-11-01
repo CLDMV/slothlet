@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T10:21:37-08:00 (1793557297)
+ *	@Last modified time: 2026-11-01T10:57:17-08:00 (1793559437)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,42 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("new before a lazy fo
 	it("constructs for a module through self", async () => {
 		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
 		expect(await api.user.make(3)).toBe("made:3");
+	});
+
+	it("constructs through a stand-in held across a restart", async () => {
+		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
+		const Maker = api.lz.deep.Maker;
+		await api.slothlet.restart();
+		const made = await new Maker(7);
+		expect(made.say()).toBe("made:7");
+	});
+
+	it("refuses a subclass's construction before the class has loaded", async () => {
+		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
+		class Sub extends api.lz.deep.Maker {}
+		expect(() => new Sub(5)).toThrow(expect.objectContaining({ code: "LAZY_SUBCLASS_BEFORE_LOAD" }));
+	});
+
+	it("refuses another new.target while a lazy node that is the class is loading", async () => {
+		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
+		expect(api.widget.__materialized).toBe(false);
+		/** A constructor other than the node. */
+		function Other() {}
+		expect(() => Reflect.construct(api.widget, [5], Other)).toThrow(expect.objectContaining({ code: "LAZY_SUBCLASS_BEFORE_LOAD" }));
+		expect((await new api.widget(2)).size).toBe(2);
+	});
+
+	it("subclasses what the class resolves to once awaited", async () => {
+		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
+		const Maker = await api.lz.deep.Maker;
+		class Sub extends Maker {
+			say() {
+				return `sub:${super.say()}`;
+			}
+		}
+		const made = new Sub(5);
+		expect(made).toBeInstanceOf(Sub);
+		expect(made.say()).toBe("sub:made:5");
 	});
 
 	it("rejects with a TypeError when what the chain ends at cannot be constructed", async () => {

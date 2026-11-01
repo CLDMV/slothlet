@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T10:21:13-08:00 (1793557273)
+ *	@Last modified time: 2026-11-01T10:56:55-08:00 (1793559415)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5863,9 +5863,18 @@ function runtime_liveThis(value) {
 		return live === node ? value : runtime_selfView(live, SELF_VIEW_READERS.get(value));
 	}
 	const wrapper = _proxyRegistry.get(value);
-	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper);
+	// A stand-in for a chain below the wrapper resolves to the chain's live end (`new.target` of a construction
+	// through one, #685).
+	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper, WAITING_CHAINS.get(value));
 	return value;
 }
+
+/**
+ * The property chain each waiting proxy stands for below its wrapper, for {@link runtime_liveThis}.
+ * @type {WeakMap<object, Array<string|symbol>>}
+ * @private
+ */
+const WAITING_CHAINS = new WeakMap();
 
 /**
  * Whether `prop` is a non-configurable own property of a proxy target. Proxy invariants tie the
@@ -9728,9 +9737,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// `new` before the chain loads: an instance of what it stands for, once loaded, as a lazy node's own construction
 			// in flight answers (#685). The engine's default would read `prototype` through the stand-in.
 			construct(target, args, newTarget) {
-				return waitingHandler.apply(target, undefined, args, (fn) =>
-					Reflect.construct(fn, args, newTarget === waitingProxy ? fn : newTarget)
-				);
+				// A subclass's `super()` has to finish now, which nothing not yet loaded can.
+				if (newTarget !== waitingProxy) {
+					const apiPath = [wrapper.____slothletInternal.apiPath, ...propChain.map(String)].filter(Boolean).join(".");
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath }, null, { validationError: true });
+				}
+				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
 			},
 			getPrototypeOf: () => null
 		};
@@ -9741,6 +9753,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
 		// worked on waiting proxies before step 2 blocked the property on regular proxies.
 		_proxyRegistry.set(waitingProxy, wrapper);
+		WAITING_CHAINS.set(waitingProxy, propChain);
 		STAND_INS.add(waitingProxy);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
@@ -11987,6 +12000,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// Propagates the original materialization rejection rather than replacing it with a
 			// generic error, and avoids busy-polling the event loop with setImmediate().
 			if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
+				// A subclass's `super()` has to finish now, which nothing still loading can (#685).
+				if (newTarget !== wrapper.____slothletInternal.proxy) {
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
+						validationError: true
+					});
+				}
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
 				/* v8 ignore next */

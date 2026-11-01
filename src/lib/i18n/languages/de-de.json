@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "Das Lazy-API-Modul unter diesem Pfad konnte nicht geladen werden. Prüfen Sie, ob die Moduldatei existiert und gültige Werte exportiert.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' ist nicht aufrufbar oder existiert nicht.",
 		"HINT_CHAIN_NOT_CALLABLE": "Die verkettete Eigenschaft wurde als Nicht-Funktions-Wert aufgelöst. Stellen Sie sicher, dass der API-Pfad auf eine Funktion verweist oder dass das Modul die erwartete Funktion exportiert.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}' kann nicht abgeleitet werden, bevor es geladen ist.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "Warten Sie zuerst auf den Knoten (await api.{apiPath}) und leiten Sie von dem ab, was er liefert, oder laden Sie ihn im eager-Modus.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Der TypeScript {mode} Modus erfordert die Installation von 'esbuild'.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Installieren Sie es mit: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "Der TypeScript {mode} Modus erfordert die Installation von 'typescript'.",

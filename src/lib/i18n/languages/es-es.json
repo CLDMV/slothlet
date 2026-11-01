@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "El módulo de API diferido en esta ruta falló al cargar. Comprueba que el fichero del módulo existe y exporta valores válidos.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' no se puede llamar o no existe.",
 		"HINT_CHAIN_NOT_CALLABLE": "La propiedad encadenada se resolvió como un valor que no es una función. Asegúrate de que la ruta de la API se refiere a una función, o comprueba que el módulo exporta la función esperada.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "No se puede heredar de '{apiPath}' antes de que se haya cargado.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "Espere primero al nodo (await api.{apiPath}) y herede de lo que devuelve, o cárguelo en modo eager.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "El modo TypeScript {mode} requiere que 'esbuild' esté instalado.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Instálalo con: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "El modo TypeScript {mode} requiere que 'typescript' esté instalado.",

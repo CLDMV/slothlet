@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "このパスの遅延 API モジュールの読み込みに失敗しました。モジュールファイルが存在し、有効な値をエクスポートしていることを確認してください。",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' は呼び出し可能ではないか、存在しません。",
 		"HINT_CHAIN_NOT_CALLABLE": "チェーンされたプロパティが関数でない値に解決されました。 API パスが関数を参照していることを確認するか、モジュールが期待される関数をエクスポートしているか確認してください。",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}' は読み込まれる前に継承できません。",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "先にノードを待機し (await api.{apiPath})、その結果を継承するか、eager モードで読み込んでください。",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript の {mode} モードには 'esbuild' のインストールが必要です。",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "インストール方法: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript の {mode} モードには 'typescript' のインストールが必要です。",
