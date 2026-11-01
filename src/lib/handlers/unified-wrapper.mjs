@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:46-07:00 (1793426626)
+ *	@Last modified time: 2026-11-01T10:21:13-08:00 (1793557273)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -9386,7 +9386,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapper.___createWaitingProxy([...propChain, prop]);
 			},
 
-			async apply(___target, ___thisArg, args) {
+			// `invoke` runs the chain's end once it has loaded: a call, or `new` from the construct trap below (#685).
+			async apply(___target, ___thisArg, args, invoke = (fn, self) => Reflect.apply(fn, self, args)) {
 				// As get: a kept node's access offered to a stand-in is dropped first (#661).
 				runtime_takeCapturedAccess(wrapper);
 				// Capture caller context synchronously before any await.
@@ -9648,7 +9649,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged (an async leaf's rejection already does; #252).
 							return wrapper.slothlet.contextManager.runInContext(
 								wrapper.instanceID,
-								() => Reflect.apply(current, lastObject, args),
+								() => invoke(current, lastObject),
 								null,
 								[],
 								___capturedCallerWrapper,
@@ -9672,21 +9673,16 @@ export class UnifiedWrapper extends ComponentBase {
 						!___liveIdentity?.unresolved &&
 						typeof wrapper.slothlet.contextManager?.runRegisteredAsHost === "function"
 					) {
-						return wrapper.slothlet.contextManager.runRegisteredAsHost(
-							___invocationStoreID,
-							() => Reflect.apply(current, lastObject, args),
-							null,
-							[]
-						);
+						return wrapper.slothlet.contextManager.runRegisteredAsHost(___invocationStoreID, () => invoke(current, lastObject), null, []);
 					}
 					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
-					if (!___identityStore) return Reflect.apply(current, lastObject, args);
+					if (!___identityStore) return invoke(current, lastObject);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
 					const ___previousAuthoritativeCeiling = ___identityStore.__authoritativeCeiling;
 					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
 					___identityStore.__authoritativeCeiling = ___capturedCeiling;
 					try {
-						return Reflect.apply(current, lastObject, args);
+						return invoke(current, lastObject);
 					} finally {
 						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
 						___identityStore.__authoritativeCeiling = ___previousAuthoritativeCeiling;
@@ -9727,6 +9723,13 @@ export class UnifiedWrapper extends ComponentBase {
 					},
 					null,
 					{ validationError: true }
+				);
+			},
+			// `new` before the chain loads: an instance of what it stands for, once loaded, as a lazy node's own construction
+			// in flight answers (#685). The engine's default would read `prototype` through the stand-in.
+			construct(target, args, newTarget) {
+				return waitingHandler.apply(target, undefined, args, (fn) =>
+					Reflect.construct(fn, args, newTarget === waitingProxy ? fn : newTarget)
 				);
 			},
 			getPrototypeOf: () => null
