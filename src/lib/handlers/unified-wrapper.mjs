@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T10:56:55-08:00 (1793559415)
+ *	@Last modified time: 2026-11-01T11:04:03-08:00 (1793559843)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -12022,17 +12022,12 @@ export class UnifiedWrapper extends ComponentBase {
 						);
 					}
 					const impl = wrapper.____slothletInternal.impl;
-					if (typeof impl === "function") {
-						// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
-						// to impl.prototype (the real class prototype) rather than flowing through the
-						// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
-						// subclass), forward it unchanged so derived construction semantics are preserved.
-						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
-						return runtime_constructAsNode(wrapper, impl, args, effectiveNewTarget);
-					}
+					// newTarget is the proxy itself here (a subclass was refused above): impl stands in for it, so
+					// [[Prototype]] resolves to impl.prototype (the real class prototype) rather than flowing
+					// through the proxy getTrap.
+					if (typeof impl === "function") return Reflect.construct(impl, args, impl);
 					if (impl && typeof impl === "object" && typeof impl.default === "function") {
-						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
-						return runtime_constructAsNode(wrapper, impl.default, args, effectiveNewTarget);
+						return Reflect.construct(impl.default, args, impl.default);
 					}
 					throw new wrapper.slothlet.SlothletError(
 						"INVALID_CONFIG_NOT_A_FUNCTION",
