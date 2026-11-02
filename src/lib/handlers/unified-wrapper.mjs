@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T11:04:03-08:00 (1793559843)
+ *	@Last modified time: 2026-11-01T18:27:10-08:00 (1793586430)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -354,11 +354,36 @@ function runtime_selfViewResult(result, reader) {
  */
 const SELF_MEMBER_VIEW_CACHE = new WeakMap();
 /**
- * What each member view stands for: the value, who read it, the instance, and the api path it was reached at.
- * @type {WeakMap<object, {value: object, reader: object, slothlet: object, parts: string[]}>}
+ * What each member or data view stands for: the value, who read it, the instance, the api path it was reached at,
+ * the view itself, and the member or data view it was read through, if any ({@link runtime_selfLap}).
+ * @type {WeakMap<object, {value: object, reader: object, slothlet: object, parts: string[], view: object|null, parent: WeakRef<object>|null}>}
  * @private
  */
 const SELF_MEMBER_VIEWS = new WeakMap();
+
+/**
+ * The view a member read walking back into a value already on the walk hands out (#688): that value's view, the one
+ * the walk went through. Following `conn.self = conn` round its cycle therefore hands back the same view on every
+ * lap, so the cycle closes through the views as on the value, and deep equality finds it. A lap is held to the
+ * path of that earlier view, the shorter one. A value at two paths that are no cycle keeps a view per path.
+ *
+ * Each view links to the one it was read through weakly, so the walk keeps no value alive that the views it went
+ * through would not.
+ *
+ * @param {object} record - Record of the view the member is read through.
+ * @param {object|Function} value - The member read.
+ * @returns {object|null} The view of `value` on the walk, or null when `value` is not on it.
+ * @private
+ *
+ * @example
+ * runtime_selfLap(SELF_MEMBER_VIEWS.get(conn), raw.self); // conn's view, when raw.self === raw
+ */
+function runtime_selfLap(record, value) {
+	for (let step = record; step !== undefined; step = step.parent?.deref()) {
+		if (step.value === value) return step.view;
+	}
+	return null;
+}
 /**
  * The well-known symbols (`Symbol.iterator`, `Symbol.hasInstance`, …) and Node's inspect hook. What a member
  * holds under one of them is the language's protocol, not data of the member, and is read as is.
@@ -519,16 +544,23 @@ function runtime_isPlainMember(value) {
  * @param {object} slothlet - Instance the api belongs to.
  * @param {string[]} parts - The api path the value was reached at.
  * @param {string|symbol|null} prop - The key it was read under, or null for a prototype.
+ * @param {object} [through] - Record of the member or data view it was read through, if any: a value already on
+ *   that walk is handed out as the view the walk went through ({@link runtime_selfLap}).
  * @returns {*} What the reader is handed.
  * @private
  */
-function runtime_selfMemberOf(value, reader, slothlet, parts, prop) {
+function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return value;
 	if (FRAMEWORK_MEMBERS.has(value)) return runtime_selfFrameworkView(value, reader);
-	if (runtime_hasInternalSlots(value) && !SELF_MEMBER_VIEWS.has(value)) return runtime_selfDataView(value, reader, slothlet, parts);
+	if (through !== undefined) {
+		const lap = runtime_selfLap(through, value);
+		if (lap !== null) return lap;
+	}
+	if (runtime_hasInternalSlots(value) && !SELF_MEMBER_VIEWS.has(value))
+		return runtime_selfDataView(value, reader, slothlet, parts, through);
 	if (!runtime_isPlainMember(value)) return runtime_selfView(value, reader);
-	return runtime_selfMemberView(value, reader, slothlet, parts);
+	return runtime_selfMemberView(value, reader, slothlet, parts, through);
 }
 
 /**
@@ -762,10 +794,11 @@ const SELF_DATA_VIEW_CACHE = new WeakMap();
  * @param {object} reader - Who read it.
  * @param {object} slothlet - Instance the api belongs to.
  * @param {string[]} parts - The api path it was reached at.
+ * @param {object} [through] - Record of the member or data view it was read through, if any.
  * @returns {object} The view.
  * @private
  */
-function runtime_selfDataView(value, reader, slothlet, parts) {
+function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	// The host owns the whole tree: it is handed the value itself, as is a module that may change it.
 	if (reader === HOST_READER) return value;
 	if (reader !== UNATTRIBUTED_READER && runtime_readerMayWrite(slothlet, reader, parts)) return value;
@@ -784,6 +817,7 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 	if (cached) return cached;
 
 	const raw = value;
+	const record = { value: raw, reader, slothlet, parts, view: null, parent: through === undefined ? null : new WeakRef(through) };
 	const shadow = {};
 	// Values it holds are handed back viewed; the buffer a typed array or DataView shares with it too.
 	const kind = runtime_dataKind(raw);
@@ -805,12 +839,12 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
 	};
 	let view = null;
-	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null));
+	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null, record));
 	const memberAt = (prop, child) =>
-		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop, record);
 	const viewedProto = () => {
 		const proto = Reflect.getPrototypeOf(raw);
-		return proto === null ? null : runtime_selfMemberOf(proto, reader, slothlet, parts, null);
+		return proto === null ? null : runtime_selfMemberOf(proto, reader, slothlet, parts, null, record);
 	};
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
@@ -986,8 +1020,9 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
 			return true;
 		}
 	});
+	record.view = view;
 	byPath.set(pathKey, view);
-	SELF_MEMBER_VIEWS.set(view, { value: raw, reader, slothlet, parts });
+	SELF_MEMBER_VIEWS.set(view, record);
 	return view;
 }
 
@@ -1010,14 +1045,18 @@ function runtime_selfDataView(value, reader, slothlet, parts) {
  * The proxy's target is a shadow, never the value: what the view reports of a member the value holds fixed is
  * mirrored onto the shadow, so the view can hand that member out as a view too.
  *
+ * A member read walking back into a value already on the walk is that value's view ({@link runtime_selfLap}), so a
+ * cycle closes on the views (#688).
+ *
  * @param {object|Function} value - The plain value.
  * @param {object} reader - Who read it.
  * @param {object} slothlet - Instance the api belongs to.
  * @param {string[]} parts - The api path the value was reached at.
+ * @param {object} [through] - Record of the member or data view it was read through, if any.
  * @returns {object|Function} The view.
  * @private
  */
-function runtime_selfMemberView(value, reader, slothlet, parts) {
+function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// The host owns the whole tree: it is handed the value itself.
 	if (reader === HOST_READER) return value;
 	let byReader = SELF_MEMBER_VIEW_CACHE.get(value);
@@ -1035,6 +1074,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 	if (cached) return cached;
 
 	const raw = value;
+	const record = { value: raw, reader, slothlet, parts, view: null, parent: through === undefined ? null : new WeakRef(through) };
 	// A shadow of the same kind, so the view calls, constructs, and answers `Array.isArray` as the value does,
 	// and carries no fixed member the value lacks.
 	let shadow;
@@ -1044,7 +1084,8 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 	else if (hasOwn(raw, "prototype")) shadow = function () {};
 	else shadow = function () {}.bind(null);
 
-	const member = (prop, child) => runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop);
+	const member = (prop, child) =>
+		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop, record);
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
 			? { ...descriptor, value: member(prop, descriptor.value) }
@@ -1158,8 +1199,9 @@ function runtime_selfMemberView(value, reader, slothlet, parts) {
 			return true;
 		}
 	});
+	record.view = view;
 	byPath.set(pathKey, view);
-	SELF_MEMBER_VIEWS.set(view, { value: raw, reader, slothlet, parts });
+	SELF_MEMBER_VIEWS.set(view, record);
 	return view;
 }
 
