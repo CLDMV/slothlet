@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:49-07:00 (1792834969)
+ *	@Last modified time: 2026-10-31T20:52:49-07:00 (1793505169)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,18 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
-import slothlet from "@cldmv/slothlet";
+import slothletInstance from "@cldmv/slothlet";
+
+/**
+ * Create an instance with `permissions.provenance` pinned off (#597, #682). These cases run this file's own code
+ * inside module calls; under vitest vite transforms it, so it cannot be verified as the host's own source and
+ * provenance would refuse it. Host code inside module calls with provenance on is covered under Node's own loader by
+ * provenance-host-code.
+ * @param {object} config - The instance's configuration.
+ * @returns {Promise<object>} The api.
+ */
+const slothlet = (config) =>
+	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:14:59-07:00 (1793056499)
+ *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,10 +56,13 @@ import {
 	isWrapperAnsweredName,
 	isFrameworkReservedKey,
 	runtime_frameworkWrite,
+	runtime_selfModuleCeilings,
 	runtime_selfModuleReader,
-	runtime_unwrapSelfView
+	runtime_unwrapSelfView,
+	releaseModuleMakers
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, versionDispatcherRecord } from "#handlers/framework-internals";
+import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -533,7 +536,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
 	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
-	 * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+	 * @param {object|Array<object>|null} callerWrapper - Caller's wrapper from ALS (may be null for external code); a list,
+	 *   the executing wrapper first, when the writer acts for several modules (#597) — each has to own the path.
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
@@ -571,8 +575,14 @@ export class ApiManager extends ComponentBase {
 		// built-in namespace and brick the instance.
 		// A module replacing the framework's own namespace or root functions meets the write rules (#625), before
 		// the reserved-name check the host meets.
+		// Code a caller supplied to another module's call writes as every module it acts for (#597): a list of
+		// wrappers, the executing one first, each of which has to own the path. The first owns what is created.
+		const writers = (Array.isArray(callerWrapper) ? callerWrapper : [callerWrapper]).filter(Boolean);
+		callerWrapper = writers[0] ?? null;
 		const rootSegment = coercedPath.split(".")[0];
-		if (callerWrapper && FRAMEWORK_ROOT_SEGMENTS.has(rootSegment)) this.assertOwnedWrite(coercedPath.split("."), callerWrapper);
+		if (callerWrapper && FRAMEWORK_ROOT_SEGMENTS.has(rootSegment)) {
+			for (const writer of writers) this.assertOwnedWrite(coercedPath.split("."), writer);
+		}
 		const { parts } = this.normalizeApiPath(apiPath);
 		// normalizeApiPath returns parts: [] for empty/null input — root-level writes
 		// don't make sense here (no key to set), so reject explicitly. The runtime
@@ -589,7 +599,7 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		this.assertOwnedWrite(parts, callerWrapper);
+		for (const writer of writers) this.assertOwnedWrite(parts, writer);
 		// A view `self` handed out stands for its node: the node is what is stored (#625).
 		value = runtime_unwrapSelfView(value);
 
@@ -810,16 +820,19 @@ export class ApiManager extends ComponentBase {
 	 * @param {object} writer - The module's wrapper ({@link runtime_selfModuleReader}).
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
 	 *   being checked (see {@link ApiManager#ownsPath}).
+	 * @param {ReadonlyArray<object>} [ceilings] - The calls the writer acts under when it is code supplied to another
+	 *   module's call (#597), each held to the same write; read from the code running now when omitted.
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_UNATTRIBUTED` for code the live runtime cannot attribute, and what
 	 *   {@link ApiManager#assertOwnedWrite} throws.
 	 * @private
 	 */
-	#assertModuleMountWrite(parts, writer, inFlight = null) {
+	#assertModuleMountWrite(parts, writer, inFlight = null, ceilings = runtime_selfModuleCeilings(this.slothlet, writer)) {
 		if (!this.ownershipEnforced()) return;
 		if (!writer.____slothletInternal) {
 			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
 		}
+		for (const ceiling of ceilings) this.assertOwnedWrite(parts, ceiling, inFlight);
 		this.assertOwnedWrite(parts, writer, inFlight);
 		const { paths, opaque } = this.#walkReach(parts);
 		// A path running through an accessor is not walked: what the getter answers is not known without running it,
@@ -1004,6 +1017,28 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Mark a removed node and every node under it as removed (#625; see {@link ApiManager#isRemovedCaller}). Members are
+	 * read by descriptor, so no module's getter runs.
+	 * @param {object} wrapper - The removed node's wrapper.
+	 * @param {WeakSet<object>} [visited] - Cycle guard.
+	 * @param {string} [root] - The removed node's api path; nodes stored under it from elsewhere (aliases) are left alone.
+	 * @returns {void}
+	 * @private
+	 */
+	#markRemovedSubtree(wrapper, visited = new WeakSet(), root = String(wrapper?.____slothletInternal?.apiPath ?? "")) {
+		if (!wrapper || visited.has(wrapper)) return;
+		visited.add(wrapper);
+		wrapper.____slothletInternal.removed = true;
+		for (const key of Object.keys(wrapper)) {
+			if (isFrameworkReservedKey(key)) continue;
+			const child = resolveWrapper(dataMemberOf(wrapper, key));
+			// Only nodes under the removed path: an alias stored there is another node, which stays (#625).
+			const childPath = String(child?.____slothletInternal?.apiPath ?? "");
+			if (child && childPath.startsWith(root + ".")) this.#markRemovedSubtree(child, visited, root);
+		}
+	}
+
+	/**
 	 * Whether `callerWrapper` is code of a module that is gone: it has a module, and that module owns nothing (#625).
 	 * Such code is granted nothing by a rule: no write, and no call while the permission system is on.
 	 *
@@ -1015,6 +1050,8 @@ export class ApiManager extends ComponentBase {
 	 * if (apiManager.isRemovedCaller(wrapper)) refuse();
 	 */
 	isRemovedCaller(callerWrapper) {
+		// A node removed from the tree, its module still mounted elsewhere (a node of the base tree), is gone all the same.
+		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.slothlet === this.slothlet) return true;
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
 		// Code of another instance is not this instance's to judge: this instance holds no record of its module.
 		if (callerWrapper.slothlet !== this.slothlet) return false;
@@ -1611,9 +1648,12 @@ export class ApiManager extends ComponentBase {
 		// Object.entries(api) leaves nothing to enumerate — the recursive descent below would never
 		// reach a single nested wrapper, so any in-flight background materialization on a deeper
 		// node survives this call entirely (#372/#373 review, suppressed finding).
-		for (const [key, value] of Object.entries(api)) {
+		// Members are read by descriptor: an accessor holds no wrapper of its own, and it is the module's code, which
+		// runs when something reads it, never as a side effect of this walk (#597).
+		for (const key of Object.keys(api)) {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) continue;
+			const value = dataMemberOf(api, key);
 			if (typeof value === "function" || (value && typeof value === "object")) {
 				this.invalidateSpeculativeWrappers(value, visited, liveKept);
 			}
@@ -2123,6 +2163,9 @@ export class ApiManager extends ComponentBase {
 				// guard, but nothing here previously stopped the wrapper itself from finishing (#372/
 				// #373 review, suppressed finding).
 				wrapper.____slothletInternal.invalid = true;
+				// The removed node and every node under it are gone: code they made, a function handed out among it, has
+				// no standing left (#625), as a removed module's has none.
+				this.#markRemovedSubtree(wrapper);
 				// Set impl to null to prevent stale access
 				if (wrapper.____slothletInternal.impl !== undefined) {
 					wrapper.____slothletInternal.impl = null;
@@ -2420,11 +2463,12 @@ export class ApiManager extends ComponentBase {
 	 * @param {object} writer - The adding module's wrapper.
 	 * @param {{moduleID: string, prior: Map<string, *>}} inFlight - The module the add mounts, and the paths it owned
 	 *   before the add began (see {@link ApiManager#ownsPath}).
+	 * @param {ReadonlyArray<object>} [ceilings=[]] - The calls the writer acts under (see {@link ApiManager#assertModuleMountWrite}).
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @private
 	 */
-	async #assertModuleContent(baseParts, content, writer, inFlight) {
+	async #assertModuleContent(baseParts, content, writer, inFlight, ceilings = []) {
 		const seen = new WeakSet();
 		// Read through the wrapper itself, never its proxy: the content is the framework's own until it is placed, and
 		// reading it through the proxy would meet the read gates as the adding module.
@@ -2440,17 +2484,19 @@ export class ApiManager extends ComponentBase {
 				if (internal.mode === "lazy" && !internal.state.materialized) await raw._materialize();
 				const impl = internal.impl;
 				members = new Map();
+				// Members are read by descriptor: an accessor is still a path the content writes, but it is the module's code,
+				// which runs when something reads it, never as a side effect of this check (#597).
 				if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
-					for (const key of Object.keys(impl)) members.set(key, impl[key]);
+					for (const key of Object.keys(impl)) members.set(key, dataMemberOf(impl, key));
 				}
-				for (const key of Object.keys(raw)) members.set(key, raw[key]);
+				for (const key of Object.keys(raw)) members.set(key, dataMemberOf(raw, key));
 			} else {
-				members = new Map(Object.entries(node));
+				members = new Map(Object.keys(node).map((key) => [key, dataMemberOf(node, key)]));
 			}
 			for (const [key, value] of members) {
 				if (isFrameworkReservedKey(key)) continue;
 				const childParts = [...parts, key];
-				this.#assertModuleMountWrite(childParts, writer, inFlight);
+				this.#assertModuleMountWrite(childParts, writer, inFlight, ceilings);
 				await walk(value, childParts);
 			}
 		};
@@ -2464,16 +2510,17 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Segments of the mount path.
 	 * @param {object} writer - The adding module's wrapper.
 	 * @param {object} options - The add's options.
+	 * @param {ReadonlyArray<object>} [ceilings=[]] - The calls the writer acts under (see {@link ApiManager#assertModuleMountWrite}).
 	 * @returns {void}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @private
 	 */
-	#assertModuleReplace(parts, writer, options) {
+	#assertModuleReplace(parts, writer, options, ceilings = []) {
 		if (options.forceOverwrite !== true && options.collisionMode !== "replace" && options.collisionMode !== "merge-replace") return;
 		const mountPath = parts.join(".");
 		for (const registered of this.slothlet.handlers.ownership.pathToModule.keys()) {
 			if (mountPath === "" || registered === mountPath || registered.startsWith(`${mountPath}.`)) {
-				this.#assertModuleMountWrite(registered.split("."), writer);
+				this.#assertModuleMountWrite(registered.split("."), writer, null, ceilings);
 			}
 		}
 	}
@@ -2701,6 +2748,9 @@ export class ApiManager extends ComponentBase {
 		// The module code making the add, when an entry point captured it before an await lost it: the live runtime
 		// attributes code by its stack, which an `await` leaves (#625). Otherwise it is read here.
 		const callerWriter = params && "writer" in params ? params.writer : runtime_selfModuleReader(this.slothlet);
+		// The calls it acts under when it is code supplied to another module's call, captured with it (#597).
+		const callerCeilings =
+			params && "writerCeilings" in params ? params.writerCeilings : runtime_selfModuleCeilings(this.slothlet, callerWriter);
 
 		// Handle array of paths - process each sequentially
 		if (Array.isArray(folderPath)) {
@@ -2711,7 +2761,8 @@ export class ApiManager extends ComponentBase {
 					folderPath: singlePath,
 					options,
 					versionConfig,
-					writer: callerWriter
+					writer: callerWriter,
+					writerCeilings: callerCeilings
 				});
 				moduleIDs.push(moduleID);
 			}
@@ -2764,7 +2815,7 @@ export class ApiManager extends ComponentBase {
 		if (writer !== null) {
 			// An array path names its segments as given; a string path splits on ".".
 			const mountParts = this.#modulePathParts(apiPath);
-			this.#assertModuleMountWrite(mountParts, writer);
+			this.#assertModuleMountWrite(mountParts, writer, null, callerCeilings);
 			// Module code mounts with its own moduleID or one not in use: taking over another mounted module's id would
 			// hand the new mount that module's ownership and rules. The host may re-use an id (one module at several
 			// paths, a re-add).
@@ -2775,7 +2826,7 @@ export class ApiManager extends ComponentBase {
 					throw new this.SlothletError("MODULE_ID_IN_USE", { moduleID: requested, validationError: true });
 				}
 			}
-			this.#assertModuleReplace(mountParts, writer, restOptions);
+			this.#assertModuleReplace(mountParts, writer, restOptions, callerCeilings);
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
@@ -2793,7 +2844,8 @@ export class ApiManager extends ComponentBase {
 			for (const effect of ["deny", "allow"]) {
 				for (const entry of Array.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
 					const { target } = this.#normalizePermissionShorthandEntry(entry);
-					ruleLayers[effect].push(this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }));
+					// Placed for the module code making the add, read before the build ran as no module (#597).
+					ruleLayers[effect].push(this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
 				}
 			}
 		}
@@ -2865,8 +2917,8 @@ export class ApiManager extends ComponentBase {
 		// A versioned add mounts at `<versionTag>.<apiPath>` too, besides the dispatcher at `apiPath` checked above:
 		// module code needs that path as well, checked before anything changes (#625).
 		if (writer !== null && effectivePath !== normalizedPath) {
-			this.#assertModuleMountWrite(effectiveParts, writer);
-			this.#assertModuleReplace(effectiveParts, writer, restOptions);
+			this.#assertModuleMountWrite(effectiveParts, writer, null, callerCeilings);
+			this.#assertModuleReplace(effectiveParts, writer, restOptions, callerCeilings);
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
@@ -3314,10 +3366,13 @@ export class ApiManager extends ComponentBase {
 		if (writer !== null) {
 			const content = parts.length === 0 ? (isSynthetic ? apiToMerge : newApi) : apiToMerge;
 			try {
-				await this.#assertModuleContent(parts.length === 0 ? [] : effectiveParts, content, writer, {
-					moduleID: String(moduleID),
-					prior: priorEntriesForModule
-				});
+				await this.#assertModuleContent(
+					parts.length === 0 ? [] : effectiveParts,
+					content,
+					writer,
+					{ moduleID: String(moduleID), prior: priorEntriesForModule },
+					callerCeilings
+				);
 			} catch (err) {
 				// A live node handed in as content is left alone: only what the add built is dropped.
 				this.invalidateSpeculativeWrappers(content, new WeakSet(), []);
@@ -3523,7 +3578,7 @@ export class ApiManager extends ComponentBase {
 					// Check wrapper child properties for nested wrappers that might be materializing
 					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
-						collectPendingMaterializations(wrapper[key], depth + 1);
+						collectPendingMaterializations(dataMemberOf(wrapper, key), depth + 1);
 					}
 					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
 					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
@@ -3537,7 +3592,7 @@ export class ApiManager extends ComponentBase {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
 					if (key !== "____slothletInternal") {
-						collectPendingMaterializations(obj[key], depth + 1);
+						collectPendingMaterializations(dataMemberOf(obj, key), depth + 1);
 					}
 				}
 			};
@@ -4196,6 +4251,8 @@ export class ApiManager extends ComponentBase {
 			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
 			if (writer !== null) this.#assertModuleRemoval(writer, moduleID, apiPath, scopedApiPath);
 		}
+		// A module removed whole takes the record of what it made with it (#597).
+		if (scopedApiPath === null && apiPath === null && moduleID) releaseModuleMakers(this.slothlet, moduleID);
 
 		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else there
 		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.

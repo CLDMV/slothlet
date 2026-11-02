@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "이 경로의 지연 API 모듈 로드에 실패했습니다. 모듈 파일이 존재하고 유효한 값을 내보내는지 확인하십시오.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' 호출이 불가능하거나 존재하지 않습니다.",
 		"HINT_CHAIN_NOT_CALLABLE": "체인된 속성이 함수가 아닌 값으로 확인되었습니다. API 경로가 함수를 가리키는지 확인하거나 모듈이 예상된 함수를 내보내는지 확인하십시오.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}'은(는) 로드되기 전에 상속할 수 없습니다.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "먼저 노드를 기다린 후 (await api.{apiPath}) 그 결과를 상속하거나 eager 모드로 로드하세요.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript {mode} 모드에는 'esbuild' 설치가 필요합니다.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "설치 명령: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} 모드에는 'typescript' 설치가 필요합니다.",

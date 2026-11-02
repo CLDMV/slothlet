@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:33-07:00 (1791091713)
+ *	@Last modified time: 2026-10-30T23:04:13-07:00 (1793426653)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,9 @@ describe.each(CONFIGS)("Isolation > helper imports per instance (#518) > '$name'
 		const refsB = await b.shared.refs();
 		expect(refsA.runtime).toBe(refsB.runtime);
 		expect(refsA.EventEmitter).toBe(refsB.EventEmitter);
-		expect(refsA.Parser).toBe(refsB.Parser);
+		// Compared inside each instance's copy of the leaf: handed out, the package's class is each instance's stand-in.
+		expect(await a.shared.sameParser()).toBe(true);
+		expect(await b.shared.sameParser()).toBe(true);
 		// The single live-binding runtime still serves each instance its own api.
 		expect(await a.shared.viaSelf()).toBe(1);
 		expect(await a.shared.viaSelf()).toBe(2);

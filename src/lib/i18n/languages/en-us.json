@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "The lazy API module at this path failed to load. Check that the module file exists and exports valid values.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' is not callable or does not exist.",
 		"HINT_CHAIN_NOT_CALLABLE": "The chained property resolved to a non-function value. Ensure the API path refers to a function, or check that the module exports the expected function.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "'{apiPath}' cannot be subclassed before it has loaded.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "Await the node first (await api.{apiPath}) and extend what it resolves to, or load it with eager mode.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript {mode} mode requires 'esbuild' to be installed.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Install it with: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} mode requires 'typescript' to be installed.",

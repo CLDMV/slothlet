@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:25-07:00 (1792210765)
+ *	@Last modified time: 2026-11-01T08:08:14-08:00 (1793549294)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,6 +96,28 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 }
 
 /**
+ * The `then` wrappers this copy installed, so a `then` read off a promise can be told to be the engine's own under
+ * the patch rather than code of a module's.
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const THEN_WRAPPERS = new WeakSet();
+
+/**
+ * The engine's `Promise.prototype.then` a function stands for: the engine's itself, or a wrapper of this copy's
+ * installed over it (see {@link enablePromisePatching}). Anything else, a module's own `then` among them, is null.
+ * @param {*} fn - A function read as a promise's `then`.
+ * @returns {Function|null} The engine's `then`, or null.
+ * @internal
+ * @example
+ * engineThenOf(Promise.prototype.then) === engineThenOf(Promise.resolve().then); // true
+ */
+export function engineThenOf(fn) {
+	if (fn === NATIVE_THEN) return NATIVE_THEN;
+	return THEN_WRAPPERS.has(fn) ? NATIVE_THEN : null;
+}
+
+/**
  * The patch currently installed, with what {@link disablePromisePatching} needs to restore.
  * @type {{layer: {active: boolean, below: PropertyDescriptor}, wrapper: Function}|null}
  * @private
@@ -142,6 +164,7 @@ export function enablePromisePatching() {
 		}
 	}.then;
 	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
+	THEN_WRAPPERS.add(wrapper);
 	markLayer(wrapper, layer);
 
 	Object.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });

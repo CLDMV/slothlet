@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-10-31T15:24:49-07:00 (1793485489)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,10 +84,11 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 	 * Build the fixture api.
 	 * @param {object[]} rules - Permission rules.
 	 * @param {"allow"|"deny"} [defaultPolicy="allow"] - Default policy.
+	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (rules, defaultPolicy = "allow") => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy, rules } });
+	const build = async (rules, defaultPolicy = "allow", extra = {}) => {
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy, rules, ...extra } });
 		await api.scheduler.service.clear();
 		return api;
 	};
@@ -101,13 +102,15 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 	});
 
 	it("plain lockCaller in the same leaf pins the service itself (the problem lockCaller.caller solves)", async () => {
-		await build([GRANT]);
+		// With provenance off, the client's job code runs as whatever the service pinned.
+		await build([GRANT], "allow", { provenance: false });
 		await api.client.app.scheduleWhoamiAsService();
 		expect(await api.scheduler.service.fire()).toEqual(["scheduler.service.everyAsSelf"]);
 	});
 
 	it("a permission rule keyed to the caller applies inside the pinned job", async () => {
-		await build([GRANT, ...GUARD_RULES]);
+		// What a plain lockCaller pins decides only with provenance off; with it on, see provenance-native (#597).
+		await build([GRANT, ...GUARD_RULES], "allow", { provenance: false });
 		await api.client.app.scheduleGuarded();
 		expect(await api.scheduler.service.fire()).toEqual(["guarded-ok"]);
 

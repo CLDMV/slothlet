@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T23:41:04-07:00 (1791096064)
+ *	@Last modified time: 2026-11-01T09:24:29-08:00 (1793553869)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,23 +93,6 @@ const __slothletUncaughtHandler = (error) => {
 };
 if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
 
-// Development environment check (must happen before slothlet imports)
-// devcheck is a Node-only dev-environment check; skip it entirely in a browser.
-// devcheck.mjs exists only in a source checkout — it is never published — so it is imported by
-// relative path and a failed import is ignored. It runs inside an async function rather than as a
-// top-level await: index.cjs loads this file through Node's synchronous require(esm), which rejects
-// any module graph containing top-level await (ERR_REQUIRE_ASYNC_MODULE).
-const devcheckPromise = __isNode
-	? (async () => {
-			try {
-				await import("./devcheck.mjs");
-			} catch {
-				// Ignore errors (devcheck.mjs is not published, so it is absent from an installed copy)
-				// devcheck.mjs uses process.exit() for environment errors
-			}
-		})()
-	: Promise.resolve();
-
 /**
  * The framework surface of a composed api: `api.slothlet.*`, `api.shutdown()`, `api.destroy()`.
  * `slothlet typegen` output extends `SlothletSelf` with it, so `self.slothlet.*` is typed too.
@@ -138,9 +121,6 @@ const devcheckPromise = __isNode
  *
  */
 const slothlet = async (options = {}) => {
-	// Wait for devcheck to complete before proceeding
-	await devcheckPromise;
-
 	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 

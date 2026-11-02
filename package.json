@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "3.23.0",
+	"version": "3.24.0",
 	"moduleVersions": {
 		"lazy": "3.0.0",
 		"eager": "3.0.0",
@@ -266,6 +266,13 @@
 	"engines": {
 		"node": ">=22.15.0"
 	},
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": ">=22.22.0",
+			"onFail": "error"
+		}
+	},
 	"author": {
 		"name": "Shinrai",
 		"company": "CLDMV",
@@ -316,10 +323,10 @@
 		"@vitest/browser": "^5.0.0",
 		"@vitest/browser-playwright": "^5.0.0",
 		"@vitest/coverage-v8": "^5.0.0",
-		"@vitest/istanbul-lib-coverage": "^1.0.1",
+		"@vitest/istanbul-lib-coverage": "^2.1.0",
 		"acorn": "^8.18.0",
 		"chalk": "^6.0.0",
-		"chokidar": "^5.0.0",
+		"chokidar": "^6.0.0",
 		"dmd": "^7.1.1",
 		"esbuild": "^0.28.1",
 		"eslint": "^10.7.0",
@@ -335,6 +342,10 @@
 		"shx": "^0.4.0",
 		"typescript": "^6.0.3",
 		"vitest": "^5.0.0"
+	},
+	"overrides": {
+		"katex": ">=0.19.1 <1.0.0",
+		"minimatch": "^11.0.3"
 	},
 	"repository": {
 		"type": "git",

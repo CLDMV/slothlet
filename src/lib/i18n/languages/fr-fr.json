@@ -359,6 +359,8 @@
 		"HINT_CHAIN_MATERIALIZE_FAILED": "La matérialisation du module de l'API lazy à ce chemin a échoué. Vérifiez que le fichier du module existe et exporte des valeurs valides.",
 		"CHAIN_NOT_CALLABLE": "'{apiPath}.{chainLabel}' n'est pas appelable ou n'existe pas.",
 		"HINT_CHAIN_NOT_CALLABLE": "La propriété chaînée a été résolue en une valeur non appelée. Assurez-vous que le chemin d'API fait référence à une fonction, ou vérifiez que le module exporte la fonction attendue.",
+		"LAZY_SUBCLASS_BEFORE_LOAD": "Impossible d'hériter de '{apiPath}' avant son chargement.",
+		"HINT_LAZY_SUBCLASS_BEFORE_LOAD": "Attendez d'abord le nœud (await api.{apiPath}) et héritez de ce qu'il renvoie, ou chargez-le en mode eager.",
 		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Le mode TypeScript {mode} nécessite l'installation de 'esbuild'.",
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Installez-le avec : npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "Le mode TypeScript {mode} nécessite l'installation de 'typescript'.",

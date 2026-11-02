@@ -43,18 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.23.0 (October 2026)
+### Latest: v3.24.0 (November 2026)
 
-- **Permission modes and module ownership** — `permissions.mode` is `"on"`, `"off"` (the default with no config) or `"disabled"`; even off, module code cannot change the framework's own `slothlet` namespace, root functions or node keys. While permissions are on, module code may change data only under the api path it owns, at any depth of `self`, through a node or data object another module handed it, through `api.add`/`api.remove`/`api.reload`, or through the framework's setters. New `:write` permission rules let the host or a manifest grant one module writes into another's subtree, rules a module registers are limited to its own subtree, and a removed module's leftover code, hooks and listeners keep no standing (#628).
-- **Eager and lazy compose the same api, and many composition fixes** — a structure check now compares both modes; arrays, frozen nodes, class-instance and object defaults, and members named `name`/`length`/`then` behave as plain JavaScript; live-runtime callers are attributed correctly across overlapping calls and instances; the browser no longer needs `setImmediate`; and emitters a module listens to are collectable again (#585, #603, #580, #601, #579, #634, #656).
-- [View full v3.23.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.23.0.md)
+- **Code a module made runs as that module** — with permissions on, a callback, getter, conversion or Proxy trap a caller hands to a leaf now runs as the caller, with the leaf it runs inside as its ceiling, so both have to be allowed; closures, factories, classes, instances and accessors a module hands out keep running as the module that made them, wherever they are called later. New `permissions.ceiling: "chain"` holds supplied code to every leaf it passed through, and frames are matched to the script that runs them, so code compiled under another module's file name is not that module's (#597).
+- **Fixes** — `new` on a lazy folder that has not loaded yet constructs the class (subclassing one before it loads throws `LAZY_SUBCLASS_BEFORE_LOAD`), a cyclic object read through `self` inside a module closes its cycle again so deep equality finishes, and development moves to Node 22.22 while the runtime floor stays at 22.15 (#686, #694, #689).
+- [View full v3.24.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.24.0.md)
 
 ### Recent Releases
 
+- **v3.23.0** (October 2026) — permission modes (`"on"`, `"off"` by default, `"disabled"`) with the framework namespace protected even when off; module ownership enforced at any depth with new `:write` rules; eager and lazy compose the same api, plus many composition and live-runtime fixes (#628, #585, #580, #656) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.23.0.md))
 - **v3.22.1** (October 2026) — `require("@cldmv/slothlet")` returns the same function as `import`, with `defaults` and the named `slothlet` alias set at once (CommonJS loads the ES module build through `require(esm)`); `@cldmv/slothlet/devcheck` is no longer published; header restamp and dev dependency updates otherwise (#568, #570, #569) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.1.md))
 - **v3.22.0** (October 2026) — requires Node.js 22.15+; `api.slothlet.restart()`, `around` hooks, host-controlled event delivery, `permissions.owner`, per-instance helper modules and origin-based typegen, plus new host-only defaults for lifecycle methods and a set of reload, remove and ownership fixes (#518, #504, #496, #497, #509, #484, #529) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.0.md))
 - **v3.21.0** (September 2026) — principals for permission conditions: named, module-owned async resolvers whose cached, read-only facts reach the sync conditions of rules that declare `requires`; plus instances with no base directory and `metadata.caller()` / `.self()` allowed by default (#459, #471, #468) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.21.0.md))
-- **v3.20.0** (September 2026) — permission-rule function conditions receive a second argument, `condition(ctx, { args, target })`, carrying the call's own arguments and the concrete target path, so a rule can authorize on the resource named in the call itself; additive and backward-compatible (#455) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.20.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
@@ -168,7 +168,8 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 
 ### Requirements
 
-- **Node.js v22.15.0 or higher**
+- **Node.js v22.15.0 or higher** to use slothlet
+- **Node.js v22.22.0 or higher** to develop on it (build, tests, tooling; enforced through `devEngines`)
 
 ### Install
 

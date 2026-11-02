@@ -37,6 +37,10 @@
 
 // Import context managers
 import { asyncRuntime, liveRuntime } from "#factories/context";
+import { markSlothletProxy } from "#handlers/framework-internals";
+import { recordSharedExports } from "#handlers/shared-values";
+// This module's own namespace, recorded below as made by no module.
+import * as runtimeNamespace from "./runtime.mjs";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -213,3 +217,10 @@ export const instanceID = new Proxy(
 		}
 	}
 );
+
+// The runtime's own Proxies are slothlet's, never a module's (#597).
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
+
+// The runtime is made by no module and shared by every instance: a module handing it out hands out the runtime itself
+// (#597).
+recordSharedExports(runtimeNamespace);

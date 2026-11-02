@@ -38,6 +38,22 @@ export function writeTargetLiteralPrefix(pattern: string): string[];
  */
 export function isFrameworkWriteTarget(pattern: string): boolean;
 /**
+ * A member's value when the member holds data, read from its descriptor; `undefined` for an accessor.
+ *
+ * Walks over the api tree that look for wrappers still loading (draining loads on mount and on shutdown) read
+ * members this way: a getter holds no load in flight, and it is the module's own code, which runs when something
+ * reads it, as that reader — never as a side effect of the framework walking the tree (#597).
+ *
+ * @param {object|Function} owner - The object holding the member.
+ * @param {string|symbol} key - The member.
+ * @returns {*} Its value, or `undefined` for an accessor.
+ * @internal
+ *
+ * @example
+ * dataMemberOf({ get x() { return 1; }, y: 2 }, "y"); // 2 — and "x" gives undefined without running the getter
+ */
+export function dataMemberOf(owner: object | Function, key: string | symbol): any;
+/**
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/reserved-keys.mjs

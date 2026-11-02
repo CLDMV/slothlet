@@ -140,6 +140,7 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 		const report = withSuppressedSlothletErrorOutputSync(() => api.other.x.writeVictim());
 		expect(report).toEqual(every(report, "LOOSE_SET_NOT_OWNED"));
 		const later = await api.other.x.keepVictimNode();
-		expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+		// The closure runs as the module that made it (#597), which the grant does not name.
+		expect(withSuppressedSlothletErrorOutputSync(() => later())).toBe("LOOSE_SET_NOT_OWNED");
 	});
 });
