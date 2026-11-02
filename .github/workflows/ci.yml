@@ -54,7 +54,7 @@ on:
                 required: false
                 default: "lts/*"
             min_node_version:
-                description: "Minimum Node.js version for matrix testing (default: 22.22.0 — slothlet's engines floor)"
+                description: "Minimum Node.js version for matrix testing (default: 22.22.0 — slothlet's dev floor (devEngines); the runtime floor in engines is 22.15.0)"
                 type: string
                 required: false
                 default: "22.22.0"

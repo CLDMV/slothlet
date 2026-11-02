@@ -28,7 +28,7 @@
  * at any depth:
  *
  * - **Native Node** — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
- *   hook (`module.registerHooks()`, added in Node 22.15, within slothlet's engines floor) that copies the
+ *   hook (`module.registerHooks()`, Node >= 22.15 — slothlet's engines floor) that copies the
  *   importing module's instance parameter onto the child. Registered once per process; a no-op
  *   for every import whose parent carries no slothlet query.
  * - **Vite / vitest** — {@link slothletInstanceImports} is the same rule as a vite `resolveId`
@@ -998,8 +998,8 @@ function applyToResult(specifier, context, result) {
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
  * (#534) and passes every unmarked URL straight through.
- * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, within slothlet's
- * engines floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
+ * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, slothlet's engines
+ * floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
  * trip to every import in the process and reorders module evaluation enough to break leaves that
  * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
  * @param {object} nodeModule - The `node:module` namespace.
