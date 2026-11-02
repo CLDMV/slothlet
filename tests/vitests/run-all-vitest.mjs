@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T19:58:02-07:00 (1793069882)
+ *	@Last modified time: 2026-11-01T21:20:38-08:00 (1793596838)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run, runMergeReports, printMergeOutput, printCoverageSummary, resolveBin, resolveVitestConfig } from "@cldmv/vitest-runner";
@@ -42,6 +43,30 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");
 
 const DEFAULT_WORKERS = process.env.VITEST_WORKERS ? parseInt(process.env.VITEST_WORKERS, 10) : 4;
+
+/**
+ * Memory each worker is budgeted on CI, in MB. A worker's heap peaks around 1–3 GB on the heavier
+ * suites, and the hosted runner (4 cores, 16 GB) has to keep its own agent alive alongside them:
+ * eight workers starved it until GitHub dropped the runner mid-run ("The hosted runner lost
+ * communication with the server"). `VITEST_CI_WORKER_MB` overrides.
+ * @type {number}
+ */
+const CI_WORKER_MB = process.env.VITEST_CI_WORKER_MB ? parseInt(process.env.VITEST_CI_WORKER_MB, 10) : 3072;
+
+/**
+ * Cap the worker count to what the CI machine can hold. Outside CI the requested count is kept.
+ * @param {number} requested - Worker count from `--workers` or `VITEST_WORKERS`.
+ * @param {NodeJS.ProcessEnv} [env=process.env] - Environment to read `CI` from.
+ * @returns {number} Worker count to run with, at least 1.
+ * @example
+ * ciWorkerBudget(8, { CI: "true" }); // 4 on a 4-core, 16 GB runner
+ */
+function ciWorkerBudget(requested, env = process.env) {
+	if (!env.CI || env.CI === "false") return requested;
+	const byMemory = Math.floor(os.totalmem() / (1024 * 1024) / CI_WORKER_MB);
+	const byCpu = os.availableParallelism();
+	return Math.max(1, Math.min(requested, byMemory, byCpu));
+}
 
 /**
  * Absolute path to the coverage run lock file.
@@ -523,6 +548,14 @@ async function main() {
 	if (parsed.help) {
 		showHelp();
 		process.exit(0);
+	}
+
+	const budgeted = ciWorkerBudget(parsed.workers);
+	if (budgeted !== parsed.workers) {
+		console.log(
+			`🧮 CI: running ${budgeted} workers instead of ${parsed.workers} (${os.availableParallelism()} cores, ${Math.round(os.totalmem() / 1024 ** 3)} GB)`
+		);
+		parsed.workers = budgeted;
 	}
 
 	// Precheck: sweep stale per-run temp folders left behind by crashed/killed runs.
