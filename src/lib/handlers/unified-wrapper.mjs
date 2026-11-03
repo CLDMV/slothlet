@@ -5480,11 +5480,9 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// A closed view reports what its shadow holds, the module's own prototype for an emitter of its own: reaching it
 			// is checked as a call of the node, for the module holding the view (#632).
 			const fixed = Reflect.getPrototypeOf(shadow);
-			// Checked for the module holding the view, as every read through it is (see handOut); a view gating nothing
-			// leaves it to whoever reads.
-			const context = inner?.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			const holder = gated ? { currentWrapper: capturedCaller, ceiling, context } : undefined;
-			if (inner) runtime_readOnBehalf(holder, () => runtime_enforceCodeMember(inner, fixed));
+			// Checked for whoever reads it now, as the view's other traps and its open branch are: a view handed on to another
+			// module answers that module as the node would, never as the module that kept it.
+			if (inner) runtime_enforceCodeMember(inner, fixed);
 			return fixed;
 		},
 		isExtensible() {
