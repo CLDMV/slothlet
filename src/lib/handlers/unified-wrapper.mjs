@@ -516,9 +516,22 @@ const DATA_KINDS = (() => {
  */
 function runtime_dataKind(value) {
 	if (value === null || typeof value !== "object") return null;
-	for (const [kind, is] of DATA_KINDS) if (is(value)) return kind;
-	return null;
+	internalProbes++;
+	try {
+		for (const [kind, is] of DATA_KINDS) if (is(value)) return kind;
+		return null;
+	} finally {
+		internalProbes--;
+	}
 }
+
+/**
+ * How many of slothlet's own checks of a value are running: a brand check made by `instanceof` walks a node's
+ * prototype chain, which no caller's rules decide (#632), so a node answers it with the prototype it holds.
+ * @type {number}
+ * @private
+ */
+let internalProbes = 0;
 
 /**
  * Whether `value` is a plain value of the api rather than a node: no node, view, version dispatcher, or
@@ -2368,7 +2381,13 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
  * @private
  */
 function runtime_isTerminalData(value) {
-	return value !== Object(value) || runtime_dataKind(value) !== null || value instanceof Error;
+	if (value !== Object(value) || runtime_dataKind(value) !== null) return true;
+	internalProbes++;
+	try {
+		return value instanceof Error;
+	} finally {
+		internalProbes--;
+	}
 }
 
 /**
@@ -2678,6 +2697,92 @@ function runtime_isCodeMemberWithheld(wrapper, descriptor, kept = null) {
 }
 
 /**
+ * The views of a module's prototypes a sealed node reports (see {@link runtime_prototypeView}), per node.
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const PROTOTYPE_VIEWS = new WeakMap();
+
+/**
+ * The views made by {@link runtime_prototypeView}, which are slothlet's own values.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const PROTOTYPE_VIEW_SET = new WeakSet();
+
+/**
+ * A view of a module's prototype for a sealed node to report (#632): a sealed node has to report one prototype to
+ * every reader (proxy invariant), so the module's own is reported as this view, which hands out the module's code it
+ * holds — a method, the class as its `constructor`, a prototype above it holding code — only to a caller that may call
+ * the node, and refuses changes to it from any other. Its keys, and a prototype above it holding no code, read as
+ * they are, so `instanceof` against the language's or Node's own classes holds for every reader.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} prototype - The module's prototype.
+ * @returns {object} The view, the same one for the same node and prototype.
+ * @private
+ */
+function runtime_prototypeView(wrapper, prototype) {
+	let views = PROTOTYPE_VIEWS.get(wrapper);
+	if (!views) {
+		views = new WeakMap();
+		PROTOTYPE_VIEWS.set(wrapper, views);
+	}
+	const existing = views.get(prototype);
+	if (existing) return existing;
+	const gate = (value) => runtime_enforceCodeMember(wrapper, value);
+	const holdsCode = (value) => runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties });
+	const view = new Proxy(prototype, {
+		get(target, prop, receiver) {
+			const value = Reflect.get(target, prop, receiver === view ? target : receiver);
+			gate(value);
+			return value;
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (!descriptor) return descriptor;
+			const code = "value" in descriptor ? descriptor.value : holdsCode(descriptor.get) ? descriptor.get : descriptor.set;
+			// A member the invariants require described is refused rather than withheld.
+			if (!descriptor.configurable || !Reflect.isExtensible(target)) {
+				gate(code);
+				return descriptor;
+			}
+			return runtime_isCodeMemberWithheld(wrapper, { value: code }) ? undefined : descriptor;
+		},
+		getPrototypeOf(target) {
+			const next = Reflect.getPrototypeOf(target);
+			if (!Reflect.isExtensible(target)) {
+				gate(next);
+				return next;
+			}
+			return holdsCode(next) ? runtime_prototypeView(wrapper, next) : next;
+		},
+		set(target, prop, value, receiver) {
+			gate(target);
+			return Reflect.set(target, prop, value, receiver === view ? target : receiver);
+		},
+		defineProperty(target, prop, descriptor) {
+			gate(target);
+			return Reflect.defineProperty(target, prop, descriptor);
+		},
+		deleteProperty(target, prop) {
+			gate(target);
+			return Reflect.deleteProperty(target, prop);
+		},
+		setPrototypeOf(target, next) {
+			gate(target);
+			return Reflect.setPrototypeOf(target, next);
+		},
+		preventExtensions(target) {
+			gate(target);
+			return Reflect.preventExtensions(target);
+		}
+	});
+	PROTOTYPE_VIEW_SET.add(view);
+	views.set(prototype, view);
+	return view;
+}
+
+/**
  * The accessor a wrapper's impl holds or inherits for a key, found by descriptors alone so nothing of the impl's
  * runs to find it (#597): `{ descriptor }` for an accessor adoption did not put there, `{ proxy: true }` when the
  * walk reaches a module's own Proxy before any descriptor (its traps answer the key), and null otherwise —
@@ -2694,7 +2799,9 @@ function runtime_implAccessor(wrapper, prop) {
 			holder !== null && holder !== undefined && holder !== Object.prototype && depth < 64;
 			depth++
 		) {
-			if (util.types.isProxy(holder)) return runtime_isModuleProxy(holder) ? { proxy: true } : null;
+			// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
+			// with the module's traps: reading through it is a run of the module's code (#632).
+			if (util.types.isProxy(holder)) return runtime_isModuleProxy(holder) || runtime_isModuleStandIn(holder) ? { proxy: true } : null;
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
 				const adopted = ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set);
@@ -3019,11 +3126,24 @@ function runtime_isSlothletValue(value) {
 		_proxyRegistry.has(value) ||
 		capturedViewSet.has(value) ||
 		STAND_IN_RECORDS.has(value) ||
+		PROTOTYPE_VIEW_SET.has(value) ||
 		INBOUND_VIEWS.has(value) ||
 		genuineWrappers.has(value) ||
 		isSlothletProxy(value) ||
 		runtime_isWrappedClassInstance(value)
 	);
+}
+
+/**
+ * Whether a value is the stand-in slothlet hands a module's Proxy or object holding code out as (see
+ * {@link runtime_membrane}), directly or behind a composition layer: its traps run the module's code.
+ * @param {object} value - A Proxy.
+ * @returns {boolean} True for such a stand-in.
+ * @private
+ */
+function runtime_isModuleStandIn(value) {
+	const underlying = isCompositionLayer(value) ? layerUnderlying(value) : value;
+	return util.types.isProxy(underlying) && STAND_IN_RECORDS.has(underlying);
 }
 
 /**
@@ -5159,7 +5279,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		return out;
 	};
 	Reflect.defineProperty(shadow, util.inspect.custom, {
-		value: (depth, options, inspect) => inspect(shown(), { ...options, depth }),
+		// Called by hand, with none of inspect's arguments, it shows the node as `util.inspect` would.
+		value: (depth, options, inspect = util.inspect) => inspect(shown(), depth === undefined ? { ...options } : { ...options, depth }),
 		configurable: true
 	});
 	// What the view hands out for a member it read: terminal data read-gated against the reader, a child node as its
@@ -6689,9 +6810,14 @@ function runtime_inspectReaderIsModule(wrapper) {
  */
 function runtime_codeLabel(fn) {
 	const isProxy = util.types.isProxy(fn);
-	const nameDescriptor = isProxy ? undefined : Reflect.getOwnPropertyDescriptor(fn, "name");
-	const name = typeof nameDescriptor?.value === "string" && nameDescriptor.value !== "" ? nameDescriptor.value : "(anonymous)";
-	if (!isProxy && /^class[\s{]/.test(Reflect.apply(FUNCTION_TO_STRING, fn, []))) return `[class ${name}]`;
+	const name = isProxy ? "" : runtime_dataName(fn);
+	const named = name === "" ? " (anonymous)" : null;
+	if (!isProxy && /^class[\s{]/.test(Reflect.apply(FUNCTION_TO_STRING, fn, []))) {
+		// As util.inspect gives it: the class it extends, by that class's own name.
+		const parent = Reflect.getPrototypeOf(fn);
+		const parentName = typeof parent === "function" && !util.types.isProxy(parent) ? runtime_dataName(parent) : "";
+		return `[class${named ?? ` ${name}`}${parentName ? ` extends ${parentName}` : ""}]`;
+	}
 	const async = util.types.isAsyncFunction(fn);
 	const kind = util.types.isGeneratorFunction(fn)
 		? async
@@ -6700,7 +6826,18 @@ function runtime_codeLabel(fn) {
 		: async
 			? "AsyncFunction"
 			: "Function";
-	return `[${kind}: ${name}]`;
+	return `[${kind}${named ?? `: ${name}`}]`;
+}
+
+/**
+ * A function's own `name` when it is a data property holding a string, read by its descriptor so no getter runs.
+ * @param {Function} fn - A function that is not a Proxy.
+ * @returns {string} The name, empty when there is none.
+ * @private
+ */
+function runtime_dataName(fn) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(fn, "name");
+	return typeof descriptor?.value === "string" ? descriptor.value : "";
 }
 
 /**
@@ -9184,9 +9321,11 @@ export class UnifiedWrapper extends ComponentBase {
 									typeof current.____slothletInternal.impl === "object" &&
 									util.types.isProxy(current.____slothletInternal.impl)
 								) {
-									let result = current.____slothletInternal.impl;
-									// Delegate this chainProp and all remaining to custom proxy
-									for (let i = __chainIndex; i < propChain.length; i++) {
+									// Delegate this chainProp and all remaining to custom proxy. The first read runs the module's
+									// trap, read for the reader the chain was read by as a call of the node, as getTrap reads it (#632).
+									let result = runtime_readOnBehalf(__readGateCaller ?? null, () => runtime_readImplMember(current, chainProp));
+									for (let i = __chainIndex + 1; i < propChain.length; i++) {
+										if (result === null || result === undefined) return undefined;
 										result = result[propChain[i]];
 									}
 									return result;
@@ -9252,11 +9391,14 @@ export class UnifiedWrapper extends ComponentBase {
 								return undefined;
 							}
 
-							// If we get here with no propChain consumed, return the impl itself
+							// If we get here with no propChain consumed, return the impl itself — to the host. A module gets the
+							// node, as it does once the node has loaded: the Proxy's traps are its module's code, which a read
+							// through the node checks as a call of the node, and a read of the Proxy itself would not (#632).
 							if (
 								current.____slothletInternal.impl &&
 								typeof current.____slothletInternal.impl === "object" &&
-								util.types.isProxy(current.____slothletInternal.impl)
+								util.types.isProxy(current.____slothletInternal.impl) &&
+								!(__readGateCaller?.currentWrapper && wrapper.slothlet.handlers?.permissionManager?.isEnabled())
 							) {
 								return current.____slothletInternal.impl;
 							}
@@ -10828,7 +10970,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A Proxy a function node holds as a member of its function is the module's code like any other such member, and
 			// is checked as a call of the node before it is handed out (#632).
 			if (value && typeof value === "object" && util.types.isProxy(value)) {
-				if (typeof wrapper.____slothletInternal.impl === "function") runtime_enforceCodeMember(wrapper, value, kept);
+				runtime_enforceCodeMember(wrapper, value, kept);
 				return value;
 			}
 
@@ -12392,7 +12534,14 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one the node
 				// holds, whoever seals it — not the one reported to the sealing caller, which may be withheld from it (#632).
-				if (typeof target !== "function") Reflect.setPrototypeOf(target, heldPrototype());
+				// A prototype of the module's own is fixed there as a view that checks what it hands out as a call of the node,
+				// since every reader is reported the same one from then on.
+				if (typeof target !== "function") {
+					const held = heldPrototype();
+					const holdsCode =
+						!Array.isArray(target) && runtime_memberHoldsCode(held, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties });
+					Reflect.setPrototypeOf(target, holdsCode ? runtime_prototypeView(wrapper, held) : held);
+				}
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				for (const key of keys) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
@@ -12556,15 +12705,12 @@ export class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
 				if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
-				if (!Reflect.isExtensible(target)) {
-					// A sealed node reports its shell's prototype, as the invariants require, which is the module's own prototype
-					// when the node is one of its emitters: reaching it is checked as a call of the node (#632).
-					const fixed = Reflect.getPrototypeOf(target);
-					runtime_enforceCodeMember(wrapper, fixed, runtime_takeCapturedAccess(wrapper));
-					return fixed;
-				}
+				// A sealed node reports its shell's prototype, as the invariants require: for an emitter of the module's
+				// own class, a view of that prototype checking what it hands out (see sealShell).
+				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
 				let prototype = heldPrototype();
-				if (prototype === null) return null;
+				// Slothlet's own brand checks see the prototype the node holds, whoever is running.
+				if (prototype === null || internalProbes > 0) return prototype;
 				// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 				// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
 				// holding none of the module's code, so `instanceof` against the language's or Node's own classes still holds.
