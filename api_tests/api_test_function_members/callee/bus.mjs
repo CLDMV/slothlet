@@ -7,33 +7,19 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T00:00:00-08:00 (1793692800)
+ *	@Last modified time: 2026-11-03T03:43:46-08:00 (1793706226)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview #632 — an emitter of a class of the module's own: the node reports that class as its `constructor`.
+ * @fileoverview #632 — an emitter of a class of the callee's own: the node reports that class as its `constructor`.
  *
  * @module api_tests/api_test_function_members/callee/bus
  */
 
-import { EventEmitter } from "node:events";
-
-/**
- * An emitter class of this module's.
- * @public
- */
-class Bus extends EventEmitter {
-	/**
-	 * A marker method.
-	 * @returns {string} A marker.
-	 */
-	kind() {
-		return "bus";
-	}
-}
+import { Bus } from "../../api_test_function_members_lib/bus-class.mjs";
 
 /**
  * The module's emitter.

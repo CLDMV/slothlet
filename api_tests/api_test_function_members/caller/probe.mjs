@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T02:35:49-08:00 (1793702149)
+ *	@Last modified time: 2026-11-03T03:43:46-08:00 (1793706226)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,6 +68,13 @@ const SHAPES = {
 	frozenEmitterAwait: async () => typeof (await self.callee.bus),
 	frozenEmitterTag: () => Object.prototype.toString.call(self.callee.bus),
 	frozenEmitterPassed: () => self.other.sink.take(self.callee.bus),
+	hijackError: () => runHijacked(Error),
+	hijackWeakRef: () => runHijacked(WeakRef),
+	prototypeGetter: () => Object.getPrototypeOf(self.callee.bus).info,
+	hubMethod: () => self.callee.hub.kind(),
+	hubGetter: () => self.callee.hub.info,
+	hubInstanceOf: () => self.callee.hub instanceof EventEmitter,
+	permittedOwnerView: async () => (await self.other.sink.isBus(self.callee.bus)).join(","),
 	inspectHook: () => typeof self.callee.ops.fn[util.inspect.custom](),
 	inspectHookRun: () => self.callee.ops.fn[util.inspect.custom]()(),
 	inspectInherited: () => self.callee.ops.Sub[util.inspect.custom]().baseStatic(),
@@ -89,9 +96,45 @@ const SHAPES = {
 	frozenEmitterClass: () => new (Object.getPrototypeOf(self.callee.bus).constructor)().kind(),
 	dataMember: () => self.callee.ops.fn.label,
 	name: () => self.callee.ops.Client.name,
+	arrowInstanceOf: () => ({}) instanceof self.callee.ops.anonymous,
 	instanceOf: () => ({}) instanceof self.callee.ops.Client,
 	keys: () => Object.keys(self.callee.ops.fn).join(",")
 };
+
+/**
+ * Give a global class a `Symbol.hasInstance` of this module's, which takes the callee's emitter's prototype if it is
+ * ever run, then hand a permitted module a value and try the prototype's method.
+ * @param {Function} global - The class to give the hook to.
+ * @returns {string} The method's result, or what kept it from running.
+ */
+function runHijacked(global) {
+	let leaked;
+	let running = false;
+	Object.defineProperty(global, Symbol.hasInstance, {
+		configurable: true,
+		value() {
+			if (running) return false;
+			running = true;
+			try {
+				leaked ??= Object.getPrototypeOf(self.callee.bus);
+			} catch {
+				leaked ??= null;
+			} finally {
+				running = false;
+			}
+			return false;
+		}
+	});
+	try {
+		self.other.sink.take({ x: 1 });
+		self.other.sink.take(self.callee.bus);
+	} finally {
+		delete global[Symbol.hasInstance];
+	}
+	if (leaked === undefined) return "not-run";
+	if (leaked === null) return "refused";
+	return typeof leaked.kind === "function" ? leaked.kind.call({}) : "no-method";
+}
 
 /**
  * Run one shape and report what it did.

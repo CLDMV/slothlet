@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T02:37:25-08:00 (1793702245)
+ *	@Last modified time: 2026-11-03T03:45:47-08:00 (1793706347)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,6 +161,8 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		await load();
 		expect(await attempt("instanceOf")).toEqual({ value: false });
 		expect(await attempt("keys")).toEqual({ value: "" });
+		// A function with no `prototype` of its own (an arrow function) refuses `instanceof`, as the language does.
+		expect((await attempt("arrowInstanceOf")).error).toMatch(/prototype/);
 		// A node that is not callable has no `instanceof` of its own, as an object has none.
 		expect((await attempt("objectNodeInstanceOf")).error).toMatch(/not callable/);
 		// An emitter of a class of the module's reports the nearest prototype holding none of the module's code.
@@ -275,13 +277,16 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("objectHiddenProxyDescriptor")).toEqual({ value: "opx" });
 	});
 
+	/** How many times the callee's emitter prototypes' `info` getters have run. */
+	const getterRuns = () => (globalThis.__slothletBusInfoReads ?? 0) + (globalThis.__slothletHubInfoReads ?? 0);
+
 	describe.each([
 		["freeze", true],
 		["seal", true],
 		["preventExtensions", true],
 		["freeze", false]
 	])("an emitter the host closed with %s (read gating %s)", (closing, readGating) => {
-		it("still reads as an emitter to a module denied the node, which reaches none of its module's code", async () => {
+		it("still works as a value for a module denied the node, which is refused its prototype and none of whose code runs", async () => {
 			await build({ defaultPolicy: "allow", readGating, rules: DENY_CALLEE });
 			await load();
 			Object[closing](api.callee.bus);
@@ -291,10 +296,59 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 			expect(await attempt("frozenEmitterAwait")).toEqual({ value: "object" });
 			expect(await attempt("frozenEmitterTag")).toEqual({ value: "[object Object]" });
 			expect(await attempt("frozenEmitterPassed")).toEqual({ value: "object" });
-			expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
+			// A closed node reports one prototype to every reader, the module's own: reading it is a call of the node.
+			expect(await attempt("emitterInstanceOf")).toEqual({ error: "PERMISSION_DENIED" });
 			expect(await attempt("frozenEmitterMethod")).toEqual({ error: "PERMISSION_DENIED" });
 			expect(await attempt("frozenEmitterClass")).toEqual({ error: "PERMISSION_DENIED" });
+			const runs = getterRuns();
+			expect(await attempt("prototypeGetter")).toEqual({ error: "PERMISSION_DENIED" });
+			expect(getterRuns()).toBe(runs);
 		});
+
+		it("keeps its own prototype for the host, its module and a module allowed it", async () => {
+			await build({ defaultPolicy: "allow", readGating, rules: DENY_CALLEE });
+			await load();
+			Object[closing](api.callee.bus);
+			const prototype = Object.getPrototypeOf(api.callee.bus);
+			expect(prototype.constructor.name).toBe("Bus");
+			expect(api.callee.bus instanceof prototype.constructor).toBe(true);
+			expect(prototype.kind.call({})).toBe("bus");
+			expect(await api.callee.checks.owner()).toEqual([true, true]);
+			await api.shutdown();
+			await build({ defaultPolicy: "allow", readGating, rules: [] });
+			await load();
+			Object[closing](api.callee.bus);
+			expect(await attempt("permittedOwnerView")).toEqual({ value: "true,true" });
+			expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
+			expect(await attempt("prototypeGetter")).toEqual({ value: "info" });
+		});
+	});
+
+	it.each(["hijackError", "hijackWeakRef"])(
+		"slothlet's own checks never run a module's %s Symbol.hasInstance, open or closed emitter",
+		async (shape) => {
+			await build();
+			await load();
+			expect(["not-run", "refused"]).toContain((await attempt(shape)).value);
+			Object.freeze(api.callee.bus);
+			expect(["not-run", "refused"]).toContain((await attempt(shape)).value);
+		}
+	);
+
+	it("a module denied an emitter whose module exports its class by name runs none of its code", async () => {
+		await build();
+		await load();
+		await api.callee.hub;
+		const runs = getterRuns();
+		expect(await attempt("hubMethod")).toEqual({ error: "PERMISSION_DENIED" });
+		expect(await attempt("hubGetter")).toEqual({ error: "PERMISSION_DENIED" });
+		expect(getterRuns()).toBe(runs);
+		expect(await attempt("hubInstanceOf")).toEqual({ value: true });
+		await api.shutdown();
+		await build({ defaultPolicy: "allow", rules: [] });
+		await load();
+		expect(await attempt("hubMethod")).toEqual({ value: "hub" });
+		expect(await attempt("hubGetter")).toEqual({ value: "hubinfo" });
 	});
 
 	it("the inspect hook of a module's view of a frozen node shows it when called with no arguments", async () => {
