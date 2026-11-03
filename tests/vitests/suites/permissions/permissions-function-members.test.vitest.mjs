@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T01:52:31-08:00 (1793699551)
+ *	@Last modified time: 2026-11-03T02:37:25-08:00 (1793702245)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,9 @@ const ALLOWED_LOADED = {
 	accessorDescriptor: "helper",
 	customInstanceOf: true,
 	proxyMember: "px",
+	objectRun: "run",
+	objectProxy: "epx",
+	objectHiddenProxy: "opx",
 	emitterConstructor: "bus",
 	emitterPrototype: "Bus",
 	emitterInstanceOf: true
@@ -82,7 +85,9 @@ const ALLOWED_AWAITED = {
 	prototypeConstructor: "fn",
 	hiddenMember: "hidden",
 	nestedMember: "deep",
-	proxyMember: "px"
+	proxyMember: "px",
+	objectProxyAwaited: "epx",
+	objectProxyChain: "epx"
 };
 
 /**
@@ -256,6 +261,56 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("frozenEmitterMethod")).toEqual({ value: "bus" });
 		expect(await attempt("frozenEmitterClass")).toEqual({ value: "bus" });
 		expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
+	});
+
+	it("a Proxy an object node holds is reached through its own node, whose reads run the module's traps", async () => {
+		await build();
+		await load();
+		expect(await attempt("objectProxyDescriptor")).toEqual({ error: "PERMISSION_DENIED" });
+		expect(await attempt("objectHiddenProxyDescriptor")).toEqual({ error: "PERMISSION_DENIED" });
+		await api.shutdown();
+		await build({ defaultPolicy: "allow", rules: [] });
+		await load();
+		expect(await attempt("objectProxyDescriptor")).toEqual({ value: "epx" });
+		expect(await attempt("objectHiddenProxyDescriptor")).toEqual({ value: "opx" });
+	});
+
+	describe.each([
+		["freeze", true],
+		["seal", true],
+		["preventExtensions", true],
+		["freeze", false]
+	])("an emitter the host closed with %s (read gating %s)", (closing, readGating) => {
+		it("still reads as an emitter to a module denied the node, which reaches none of its module's code", async () => {
+			await build({ defaultPolicy: "allow", readGating, rules: DENY_CALLEE });
+			await load();
+			Object[closing](api.callee.bus);
+			// A frozen node describes its members as fixed, so a member's value is read as the read gate allows it: the
+			// emitter's own `_eventsCount` is module-private data, refused under read gating as it is when not frozen.
+			if (closing !== "freeze" || !readGating) expect((await attempt("frozenEmitterKeys")).value).toContain("_events");
+			expect(await attempt("frozenEmitterAwait")).toEqual({ value: "object" });
+			expect(await attempt("frozenEmitterTag")).toEqual({ value: "[object Object]" });
+			expect(await attempt("frozenEmitterPassed")).toEqual({ value: "object" });
+			expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
+			expect(await attempt("frozenEmitterMethod")).toEqual({ error: "PERMISSION_DENIED" });
+			expect(await attempt("frozenEmitterClass")).toEqual({ error: "PERMISSION_DENIED" });
+		});
+	});
+
+	it("the inspect hook of a module's view of a frozen node shows it when called with no arguments", async () => {
+		await build({ defaultPolicy: "allow", rules: [] });
+		await load();
+		Object.freeze(api.callee.ops.obj);
+		expect(await attempt("viewInspectRead")).toEqual({ value: "string" });
+		expect(await attempt("viewInspectDescriptor")).toEqual({ value: "string" });
+	});
+
+	it("the form the inspect hook shows a module is the one util.inspect gives the host", async () => {
+		await build({ defaultPolicy: "allow", rules: [] });
+		await load();
+		expect(await attempt("inspectSubLabel")).toEqual({ value: util.inspect(api.callee.ops.Sub) });
+		expect(await attempt("inspectSubLabel")).toEqual({ value: "[class Sub extends Base]" });
+		expect(await attempt("inspectAnonymous")).toEqual({ value: util.inspect(api.callee.ops.anonymous) });
 	});
 
 	it("the module the node belongs to reaches its own members through self", async () => {

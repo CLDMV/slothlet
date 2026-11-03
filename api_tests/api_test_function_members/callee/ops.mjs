@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T01:51:00-08:00 (1793699460)
+ *	@Last modified time: 2026-11-03T02:35:48-08:00 (1793702148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -147,6 +147,38 @@ Object.defineProperty(fn, "px", {
 });
 
 Object.defineProperty(fn, "label", { value: "data", enumerable: false, configurable: true, writable: true });
+
+/**
+ * A function with no name of its own.
+ * @public
+ */
+export const anonymous = (
+	() => () =>
+		"anonymous"
+)();
+
+/**
+ * An object node whose members include Proxies holding the module's code.
+ * @public
+ */
+export const obj = {
+	/**
+	 * A method of the object.
+	 * @returns {string} A marker.
+	 */
+	run() {
+		return "run";
+	}
+};
+
+obj.epx = new Proxy({}, { get: (_target, prop) => (prop === "then" ? undefined : () => "epx") });
+
+Object.defineProperty(obj, "opx", {
+	value: new Proxy({}, { get: (_target, prop) => (prop === "then" ? undefined : () => "opx") }),
+	enumerable: false,
+	configurable: true,
+	writable: true
+});
 
 /**
  * Reach this module's own members through `self`, as the module is allowed to.

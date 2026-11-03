@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T01:51:01-08:00 (1793699461)
+ *	@Last modified time: 2026-11-03T02:35:49-08:00 (1793702149)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,6 +57,17 @@ const SHAPES = {
 	awaitedNested: async () => (await self.callee.ops.Client.prototype.method).call({}),
 	awaitedMissing: async () => String(await self.callee.ops.fn.hiddenNs.missing?.deeper),
 	proxyMember: () => self.callee.ops.fn.px.any(),
+	objectRun: () => self.callee.ops.obj.run(),
+	objectProxy: () => self.callee.ops.obj.epx.any(),
+	objectHiddenProxy: () => self.callee.ops.obj.opx.any(),
+	objectProxyAwaited: async () => (await self.callee.ops.obj.epx).any(),
+	objectProxyChain: async () => (await self.callee.ops.obj.epx.any)(),
+	objectProxyDescriptor: () => Object.getOwnPropertyDescriptor(self.callee.ops.obj, "epx")?.value.any(),
+	objectHiddenProxyDescriptor: () => Object.getOwnPropertyDescriptor(self.callee.ops.obj, "opx")?.value.any(),
+	frozenEmitterKeys: () => Object.keys(self.callee.bus).join(","),
+	frozenEmitterAwait: async () => typeof (await self.callee.bus),
+	frozenEmitterTag: () => Object.prototype.toString.call(self.callee.bus),
+	frozenEmitterPassed: () => self.other.sink.take(self.callee.bus),
 	inspectHook: () => typeof self.callee.ops.fn[util.inspect.custom](),
 	inspectHookRun: () => self.callee.ops.fn[util.inspect.custom]()(),
 	inspectInherited: () => self.callee.ops.Sub[util.inspect.custom]().baseStatic(),
@@ -69,6 +80,10 @@ const SHAPES = {
 		await self.callee.tool;
 		return held[util.inspect.custom]();
 	},
+	viewInspectDescriptor: () => typeof Object.getOwnPropertyDescriptor(self.callee.ops.obj, util.inspect.custom)?.value(),
+	viewInspectRead: () => typeof self.callee.ops.obj[util.inspect.custom]?.(),
+	inspectSubLabel: () => self.callee.ops.Sub[util.inspect.custom](),
+	inspectAnonymous: () => self.callee.ops.anonymous[util.inspect.custom](),
 	inspectShown: () => util.inspect(self.callee.ops.fn),
 	frozenEmitterMethod: () => Object.getPrototypeOf(self.callee.bus).kind.call({}),
 	frozenEmitterClass: () => new (Object.getPrototypeOf(self.callee.bus).constructor)().kind(),
