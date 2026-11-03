@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:43:46-08:00 (1793706226)
+ *	@Last modified time: 2026-11-03T04:18:25-08:00 (1793708305)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,6 +19,8 @@
  * @module api_tests/api_test_function_members/other/sink
  */
 
+import { EventEmitter } from "node:events";
+import { self } from "@cldmv/slothlet/runtime";
 import { Bus } from "../../api_test_function_members_lib/bus-class.mjs";
 
 /**
@@ -43,4 +45,27 @@ export function take(value) {
  */
 export function isBus(value) {
 	return [value instanceof Bus, Object.getPrototypeOf(value) === Bus.prototype];
+}
+
+/**
+ * Use the prototype of an emitter handed over: run its method and test it against `EventEmitter`.
+ * @param {*} value - The emitter.
+ * @returns {Array<*>} `[the method's result, instanceof EventEmitter]`.
+ * @public
+ * @example
+ * protoOf(bus); // ["bus", true]
+ */
+export function protoOf(value) {
+	return [Object.getPrototypeOf(value).kind.call({}), value instanceof EventEmitter];
+}
+
+/**
+ * Hand the callee's emitter to the caller module.
+ * @returns {Promise<Array<string>>} What the caller could do with its prototype.
+ * @public
+ * @example
+ * await handToCaller(); // ["PERMISSION_DENIED", "PERMISSION_DENIED"]
+ */
+export async function handToCaller() {
+	return self.caller.probe.protoOfHanded(self.callee.bus);
 }

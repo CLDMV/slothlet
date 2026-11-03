@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:45:47-08:00 (1793706347)
+ *	@Last modified time: 2026-11-03T04:20:11-08:00 (1793708411)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -321,6 +321,25 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 			expect(await attempt("permittedOwnerView")).toEqual({ value: "true,true" });
 			expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
 			expect(await attempt("prototypeGetter")).toEqual({ value: "info" });
+		});
+	});
+
+	describe.each(["freeze", "seal", "preventExtensions"])("an emitter the host closed with %s, handed between modules", (closing) => {
+		it("reaches a module allowed the node with its prototype, whoever handed it over", async () => {
+			await build();
+			await load();
+			Object[closing](api.callee.bus);
+			expect(await attempt("passedClosedPrototype")).toEqual({ value: "bus,true" });
+		});
+
+		it("stays refused to a module denied the node, whoever handed it over", async () => {
+			await build();
+			await load();
+			Object[closing](api.callee.bus);
+			expect(await withSuppressedSlothletErrorOutput(() => api.other.sink.handToCaller())).toEqual([
+				"PERMISSION_DENIED",
+				"PERMISSION_DENIED"
+			]);
 		});
 	});
 

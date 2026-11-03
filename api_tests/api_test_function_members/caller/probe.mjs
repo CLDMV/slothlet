@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:43:46-08:00 (1793706226)
+ *	@Last modified time: 2026-11-03T04:18:25-08:00 (1793708305)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,6 +75,7 @@ const SHAPES = {
 	hubGetter: () => self.callee.hub.info,
 	hubInstanceOf: () => self.callee.hub instanceof EventEmitter,
 	permittedOwnerView: async () => (await self.other.sink.isBus(self.callee.bus)).join(","),
+	passedClosedPrototype: async () => (await self.other.sink.protoOf(self.callee.bus)).join(","),
 	inspectHook: () => typeof self.callee.ops.fn[util.inspect.custom](),
 	inspectHookRun: () => self.callee.ops.fn[util.inspect.custom]()(),
 	inspectInherited: () => self.callee.ops.Sub[util.inspect.custom]().baseStatic(),
@@ -150,4 +151,23 @@ export async function attempt(shape) {
 	} catch (error) {
 		return { error: error?.code ?? error?.message };
 	}
+}
+
+/**
+ * Try the prototype of an emitter another module handed over: read it, and test it against `EventEmitter`.
+ * @param {*} value - The emitter.
+ * @returns {string[]} For each, what it gave or the code of the error it threw.
+ * @public
+ * @example
+ * protoOfHanded(bus); // ["PERMISSION_DENIED", "PERMISSION_DENIED"]
+ */
+export function protoOfHanded(value) {
+	const tryIt = (run) => {
+		try {
+			return String(run());
+		} catch (error) {
+			return error?.code ?? error?.message;
+		}
+	};
+	return [tryIt(() => typeof Object.getPrototypeOf(value).kind), tryIt(() => value instanceof EventEmitter)];
 }
