@@ -6624,6 +6624,93 @@ function runtime_inspectMembers(wrapper) {
 }
 
 /**
+ * What a node shows to `util.inspect`: its members for a namespace, the node itself for a lazy node not loaded yet,
+ * and otherwise its value — which, to a module, is never the module's runnable code (#632). A function or an object
+ * holding code is shown to a module as its form instead (see {@link runtime_inspectSafe}), so a hook a module reads
+ * and calls does not hand it the function behind the node, nor a class's inherited statics.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {Array<*>} args - The hook's arguments (`depth`, `options`, `inspect`).
+ * @param {boolean} [forModule] - Show it as to a module, whoever is reading.
+ * @returns {*} What is shown.
+ * @private
+ */
+function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
+	const internal = wrapper.____slothletInternal;
+	const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
+	// A lazy node not loaded yet shows itself. impl is always null (not undefined) at this point; the || undefined
+	// branch is never evaluated.
+	/* v8 ignore next */
+	if (internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined))
+		return internal.proxy;
+	if (!forModule || !runtime_memberHoldsCode(internal.impl, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
+		return internal.impl;
+	// The node's own members, read through it as the module reading them may.
+	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
+	const label = runtime_codeLabel(internal.impl);
+	const members = runtime_inspectMembers(wrapper);
+	if (Object.keys(members).length === 0) return label;
+	const [, options, inspect] = args;
+	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(members, options)}`;
+}
+
+/**
+ * A value as an inspect hook shows it to `forModule`'s reader: the module's code — a function, or an object holding code —
+ * as its form, a label that runs nothing, and anything else as it is.
+ * @param {*} value - The value.
+ * @param {Array<*>} args - The hook's arguments.
+ * @param {boolean} forModule - Whether a module is reading.
+ * @returns {*} What is shown.
+ * @private
+ */
+function runtime_inspectSafe(value, args, forModule) {
+	if (!forModule || !runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })) return value;
+	return typeof value === "function" ? runtime_codeLabel(value) : "[Object]";
+}
+
+/**
+ * Whether a module's code is what reads a node's inspect hook now (not the host's).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for a module, or a reader that cannot be told.
+ * @private
+ */
+function runtime_inspectReaderIsModule(wrapper) {
+	const identity = wrapper.slothlet?.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+	return Boolean(identity?.currentWrapper || identity?.unresolved);
+}
+
+/**
+ * The form `util.inspect` gives a function (`[Function: name]`, `[class Name]`, `[AsyncFunction: name]`, …), made
+ * without running any of it: its source is read by the language's own `toString`, and its name only from a data
+ * descriptor of a function that is not a Proxy.
+ * @param {Function} fn - The function.
+ * @returns {string} Its form.
+ * @private
+ */
+function runtime_codeLabel(fn) {
+	const isProxy = util.types.isProxy(fn);
+	const nameDescriptor = isProxy ? undefined : Reflect.getOwnPropertyDescriptor(fn, "name");
+	const name = typeof nameDescriptor?.value === "string" && nameDescriptor.value !== "" ? nameDescriptor.value : "(anonymous)";
+	if (!isProxy && /^class[\s{]/.test(Reflect.apply(FUNCTION_TO_STRING, fn, []))) return `[class ${name}]`;
+	const async = util.types.isAsyncFunction(fn);
+	const kind = util.types.isGeneratorFunction(fn)
+		? async
+			? "AsyncGeneratorFunction"
+			: "GeneratorFunction"
+		: async
+			? "AsyncFunction"
+			: "Function";
+	return `[${kind}: ${name}]`;
+}
+
+/**
+ * The language's own `Function.prototype.toString`, taken before any module runs.
+ * @type {Function}
+ * @private
+ */
+const FUNCTION_TO_STRING = Function.prototype.toString;
+
+/**
  * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
  * (or its impl), unless the target already has one.
  *
@@ -6661,25 +6748,8 @@ function runtime_defineProxyInspect(wrapper, target) {
 	}
 	if (!(util.inspect.custom in target)) {
 		Object.defineProperty(target, util.inspect.custom, {
-			value: runtime_registerInspectHook(function () {
-				// Show children from wrapper (filter internal properties)
-				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) return runtime_inspectMembers(wrapper);
-				// For lazy unmaterialized wrappers with null _impl, return the proxy itself
-				// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
-				/* v8 ignore start */
-				if (
-					wrapper.____slothletInternal.mode === "lazy" &&
-					!wrapper.____slothletInternal.state.materialized &&
-					(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
-				) {
-					/* v8 ignore stop */
-					// proxy is always set here; the || wrapper fallback is dead.
-					/* v8 ignore next */
-					return wrapper.____slothletInternal.proxy || wrapper;
-				}
-				// Otherwise return _impl (functions, primitives, etc)
-				return wrapper.____slothletInternal.impl;
+			value: runtime_registerInspectHook(function (...args) {
+				return runtime_inspectShown(wrapper, args);
 			}),
 			writable: false,
 			enumerable: false,
@@ -9290,17 +9360,14 @@ export class UnifiedWrapper extends ComponentBase {
 					// impl is always non-null when state.materialized is true; missing-impl is a structurally impossible state.
 					/* v8 ignore next */
 					if (wrapper.____slothletInternal.impl) {
-						let current = wrapper.____slothletInternal.impl;
+						// The chain is read through the node, as each of its reads is gated, and what it resolves to is shown as
+						// the node's hook shows a value: never as the module's runnable code to a module (#632).
+						let current = wrapper.____slothletInternal.proxy;
 						for (const chainProp of propChain) {
-							if (!current) {
-								return undefined;
-							}
+							if (current === null || current === undefined) return undefined;
 							current = current[chainProp];
 						}
-						// Return the actual value for inspection
-						// propChain walk always encounters null before completing; the successful-walk return is not reached in tests.
-						/* v8 ignore next */
-						return current;
+						return runtime_inspectSafe(current, [], runtime_inspectReaderIsModule(wrapper));
 					}
 					// `impl` is always non-null when `state.materialized` is true; `materialized=true && !impl` is a structurally impossible state.
 					/* v8 ignore next */
@@ -10340,33 +10407,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return Object.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
-				// Return function that builds object from wrapper or returns _impl
-				return () => {
-					// If wrapper has children and we're not a callable, show children
-					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) return runtime_inspectMembers(wrapper);
-					// For lazy wrappers with null _impl, return the wrapper or proxy itself
-					// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
-					/* v8 ignore start */
-					if (
-						wrapper.____slothletInternal.mode === "lazy" &&
-						!wrapper.____slothletInternal.state.materialized &&
-						(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
-					) {
-						/* v8 ignore stop */
-						this.slothlet.debug("wrapper", {
-							key: "DEBUG_MODE_INSPECT_LAZY_UNMATERIALIZED",
-							apiPath: wrapper.apiPath,
-							wrapper: wrapper,
-							____proxy: wrapper.____slothletInternal.proxy
-						});
-						// wrapper is always truthy in this block; the || .proxy fallback is dead.
-						/* v8 ignore next */
-						return wrapper || wrapper.____slothletInternal.proxy;
-					}
-					// Otherwise return _impl
-					return wrapper.____slothletInternal.impl;
-				};
+				// What the node shows to `util.inspect` (see runtime_inspectShown): the same as its target's own hook.
+				return (...args) => runtime_inspectShown(wrapper, args);
 			}
 			if (prop === Symbol.toStringTag) {
 				// Return "Object" for object exports, "Function" for function exports
@@ -10783,9 +10825,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// Return custom Proxy objects directly without wrapping
 			// Custom proxies (like LGTVControllers) need direct access for array indices and special get traps
 			// Wrapping them breaks array access patterns like proxy[0]
-			// util.types.isProxy only detects Proxy objects created by native code paths not exercised in tests.
-			/* v8 ignore next */
+			// A Proxy a function node holds as a member of its function is the module's code like any other such member, and
+			// is checked as a call of the node before it is handed out (#632).
 			if (value && typeof value === "object" && util.types.isProxy(value)) {
+				if (typeof wrapper.____slothletInternal.impl === "function") runtime_enforceCodeMember(wrapper, value, kept);
 				return value;
 			}
 
@@ -11500,7 +11543,8 @@ export class UnifiedWrapper extends ComponentBase {
 					return {
 						...hookDescriptor,
 						value: function (...args) {
-							const shown = Reflect.apply(hook, this, args);
+							// Shown as to a module, whoever calls the copy later: it never hands out the module's code (#632).
+							const shown = Array.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
 							if (shown === null || typeof shown !== "object") return shown;
 							const completed = Array.isArray(shown) ? [] : {};
 							for (const key of Object.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
@@ -12312,6 +12356,18 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {boolean} Whether the shell is now non-extensible.
 		 * @private
 		 */
+		/**
+		 * The prototype the node holds for every reader: its array's for an array member, its impl's own for an emitter or a
+		 * live grafted object, null for any other node. Unchecked; the getPrototypeOf trap decides what a caller is reported.
+		 * @returns {object|null} The prototype.
+		 */
+		const heldPrototype = () => {
+			const internal = wrapper.____slothletInternal;
+			const impl = internal.impl;
+			if (Array.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && impl instanceof EventEmitter);
+			return isLiveIdentity && impl && typeof impl === "object" ? Object.getPrototypeOf(impl) : null;
+		};
 		const sealShell = (target) => {
 			if (target !== wrapper && Reflect.isExtensible(target)) {
 				// A lazy node not loaded yet has no members to fix in place, and loading it would have to add
@@ -12334,9 +12390,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// A shell whose `length` is already read-only (an export with a fixed length) holds the array's.
 					if (Reflect.getOwnPropertyDescriptor(target, "length").writable) target.length = array.length;
 				}
-				// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
-				// the node reports now.
-				if (typeof target !== "function") Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
+				// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one the node
+				// holds, whoever seals it — not the one reported to the sealing caller, which may be withheld from it (#632).
+				if (typeof target !== "function") Reflect.setPrototypeOf(target, heldPrototype());
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				for (const key of keys) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
@@ -12497,23 +12553,25 @@ export class UnifiedWrapper extends ComponentBase {
 				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
 			},
 			getPrototypeOf: (target) => {
-				const internal = wrapper.____slothletInternal;
-				const impl = internal.impl;
+				const impl = wrapper.____slothletInternal.impl;
 				// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
 				if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
-				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
-				const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && impl instanceof EventEmitter);
-				if (isLiveIdentity && impl && typeof impl === "object") {
-					// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
-					// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
-					// holding none of the module's code, so `instanceof` against the language's or Node's own classes still holds.
-					let prototype = Object.getPrototypeOf(impl);
-					if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, runtime_takeCapturedAccess(wrapper))) return prototype;
-					while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
-						prototype = Object.getPrototypeOf(prototype);
-					return prototype;
+				if (!Reflect.isExtensible(target)) {
+					// A sealed node reports its shell's prototype, as the invariants require, which is the module's own prototype
+					// when the node is one of its emitters: reaching it is checked as a call of the node (#632).
+					const fixed = Reflect.getPrototypeOf(target);
+					runtime_enforceCodeMember(wrapper, fixed, runtime_takeCapturedAccess(wrapper));
+					return fixed;
 				}
-				return null;
+				let prototype = heldPrototype();
+				if (prototype === null) return null;
+				// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
+				// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
+				// holding none of the module's code, so `instanceof` against the language's or Node's own classes still holds.
+				if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, runtime_takeCapturedAccess(wrapper))) return prototype;
+				while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
+					prototype = Object.getPrototypeOf(prototype);
+				return prototype;
 			}
 		};
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
