@@ -30,7 +30,9 @@ import {
 	copyForComposition,
 	setApiNodeCheck,
 	isCompositionLayer,
+	layerForwards,
 	layerHeldKeys,
+	layerMethodOriginal,
 	layerUnderlying,
 	layerOnto,
 	holdMember
@@ -2746,10 +2748,14 @@ function runtime_isCodeMemberWithheld(wrapper, descriptor, kept = null) {
  * a data member, no member, or `Object.prototype`'s own accessors (`__proto__`), which are left as they are.
  * @param {object} wrapper - The node's wrapper.
  * @param {PropertyKey} prop - The member's key.
- * @returns {{descriptor?: PropertyDescriptor, proxy?: boolean}|null} What answers the key.
+ * @returns {{descriptor?: PropertyDescriptor, receiver?: object, proxy?: boolean}|null} What answers the key, with the
+ *   receiver an accessor runs on.
  * @private
  */
 function runtime_implAccessor(wrapper, prop) {
+	// What the accessor runs on: the impl, or the value under a composition layer that answers the key (see
+	// layerForwards), as plain JS would read the key there.
+	let receiver = wrapper.____slothletInternal.impl;
 	try {
 		for (
 			let holder = wrapper.____slothletInternal.impl, depth = 0;
@@ -2760,16 +2766,18 @@ function runtime_implAccessor(wrapper, prop) {
 			// with the module's traps: reading through it is a run of the module's code (#632).
 			if (util.types.isProxy(holder)) {
 				if (runtime_isModuleProxy(holder) || runtime_isModuleStandIn(holder)) return { proxy: true };
-				// A composition layer over a plain value (named exports put onto a module's instance) answers a key it does
-				// not hold from that value, so its accessors are found there, as on the value itself (#632).
-				if (!isCompositionLayer(holder) || layerHeldKeys(holder).includes(prop)) return null;
+				// A composition layer over a plain value (named exports put onto a module's instance) answers a key it
+				// neither holds nor hides from that value, which its getters and setters then run on, as on the value
+				// itself (#632).
+				if (!layerForwards(holder, prop)) return null;
 				holder = layerUnderlying(holder);
+				receiver = holder;
 				continue;
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
 				const adopted = ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set);
-				return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function") ? { descriptor } : null;
+				return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function") ? { descriptor, receiver } : null;
 			}
 			holder = Reflect.getPrototypeOf(holder);
 		}
@@ -2792,7 +2800,9 @@ function runtime_readImplMember(wrapper, prop) {
 	const accessor = runtime_implAccessor(wrapper, prop);
 	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
 	if (accessor)
-		return typeof accessor.descriptor.get === "function" ? runtime_runAccessor(wrapper, accessor.descriptor.get, impl, []) : undefined;
+		return typeof accessor.descriptor.get === "function"
+			? runtime_runAccessor(wrapper, accessor.descriptor.get, accessor.receiver, [])
+			: undefined;
 	return impl[prop];
 }
 
@@ -2812,7 +2822,7 @@ function runtime_writeImplMember(wrapper, prop, value) {
 	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => Reflect.set(impl, prop, value), undefined, []);
 	if (!accessor) return Reflect.set(impl, prop, value);
 	if (typeof accessor.descriptor.set !== "function") return false;
-	runtime_runAccessor(wrapper, accessor.descriptor.set, impl, [value]);
+	runtime_runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
 	return true;
 }
 
@@ -9341,7 +9351,7 @@ export class UnifiedWrapper extends ComponentBase {
 									// trap, read for the reader the chain was read by as a call of the node, as getTrap reads it (#632).
 									let result = runtime_readOnBehalf(__readGateCaller ?? null, () => {
 										const read = runtime_readImplMember(current, chainProp);
-										runtime_enforceCodeMember(current, read);
+										runtime_enforceCodeMember(current, layerMethodOriginal(read) ?? read);
 										return read;
 									});
 									for (let i = __chainIndex + 1; i < propChain.length; i++) {
@@ -10827,7 +10837,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// own, so the module's code among it — a method of a class instance behind a composition layer — is checked
 					// as a call of the node before it is handed out (#632).
 					const proxied = runtime_readImplMember(wrapper, prop);
-					runtime_enforceCodeMember(wrapper, proxied, kept);
+					// A layer hands a method of the value under it out bound to that value: the method is what decides, so
+					// a built-in's (a Map's `get`) is the language's, not the module's.
+					runtime_enforceCodeMember(wrapper, layerMethodOriginal(proxied) ?? proxied, kept);
 					return proxied;
 				}
 
