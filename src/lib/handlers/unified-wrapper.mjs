@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T18:27:10-08:00 (1793586430)
+ *	@Last modified time: 2026-11-03T05:23:46-08:00 (1793712226)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5483,7 +5483,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
+	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: runtime_readTargetFailure(wrapper, error).stack });
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
@@ -5612,6 +5612,48 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 }
 
 /**
+ * What a target's failure was, keyed by what the target threw or rejected with (see runtime_readTargetFailure).
+ * @type {WeakMap<object, {originalError: *, stack: *}>}
+ * @private
+ */
+const TARGET_FAILURES = new WeakMap();
+
+/**
+ * Unwrap a target's failure and read its stack as the target (#599).
+ *
+ * Reading `stack` makes the engine format it on first access, which reads the error's `name` and `message`, and
+ * unwrapping reads `name`. Either can be an accessor the target defined, so it is the target's code: read in the
+ * caller's flow, after the target returned, it would run with the caller's identity. The read runs as the target's
+ * module instead, once per error; the stack is cached by the engine and the unwrapped error here, so later reads in
+ * the caller's flow run no code.
+ *
+ * @param {object} wrapper - The target's wrapper.
+ * @param {*} error - What the target threw or rejected with.
+ * @returns {{originalError: *, stack: *}} The unwrapped error and its stack.
+ * @private
+ */
+function runtime_readTargetFailure(wrapper, error) {
+	if (error === null || (typeof error !== "object" && typeof error !== "function")) return { originalError: error, stack: undefined };
+	let read = TARGET_FAILURES.get(error);
+	if (!read) {
+		read = runtime_runAsMaker(wrapper, runtime_readFailure, undefined, [error], false);
+		TARGET_FAILURES.set(error, read);
+	}
+	return read;
+}
+
+/**
+ * Unwrap an error and read its stack (run as the target by {@link runtime_readTargetFailure}).
+ * @param {*} error - What the target threw or rejected with.
+ * @returns {{originalError: *, stack: *}} The unwrapped error and its stack.
+ * @private
+ */
+function runtime_readFailure(error) {
+	const originalError = unwrapError(error);
+	return { originalError, stack: originalError?.stack };
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -5619,6 +5661,10 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
  * @private
  */
 function unwrapError(error) {
+	// A target's failure already read as the target (see runtime_readTargetFailure) is never read again here: its
+	// accessors are the target's code, and this runs in the caller's flow.
+	const read = error !== null && (typeof error === "object" || typeof error === "function") ? TARGET_FAILURES.get(error) : undefined;
+	if (read) return read.originalError;
 	// If error is a SlothletError with an originalError, return that
 	if (error && error.name === "SlothletError" && error.originalError) {
 		return error.originalError;
@@ -10853,15 +10899,15 @@ export class UnifiedWrapper extends ComponentBase {
 							}
 							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 						} catch (error) {
-							// Target failure: same error-hook + suppression semantics as the sync path.
-							const originalError = unwrapError(error);
+							// Target failure: same error-hook + suppression semantics as the sync path. Read as the target (#599).
+							const { originalError, stack } = runtime_readTargetFailure(wrapper, error);
 							// The processed marker stops DUPLICATE error hooks for a failure an inner
 							// hooked call already reported — it says nothing about `always`, which is a
 							// per-call observer the sync path runs unconditionally from its `finally`.
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!isHookProcessed(error)) {
-								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError?.stack };
+								const sourceInfo = { type: "function", timestamp: Date.now(), stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -11129,13 +11175,13 @@ export class UnifiedWrapper extends ComponentBase {
 							}
 						},
 						(error) => {
-							// Async function error
+							// Async function error, read as the target (#599)
 							if (hasHooks && !isHookProcessed(error)) {
-								const originalError = unwrapError(error);
+								const { originalError, stack } = runtime_readTargetFailure(wrapper, error);
 								const sourceInfo = {
 									type: "function",
 									timestamp: Date.now(),
-									stack: originalError?.stack
+									stack
 								};
 								hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 							}
@@ -11172,11 +11218,12 @@ export class UnifiedWrapper extends ComponentBase {
 				lastSyncError = error; // Flag for finally block
 				syncThrew = true;
 				if (hasHooks && !hookReported && !isHookProcessed(error)) {
-					const originalError = unwrapError(error);
+					// The target's failure, read as the target (#599).
+					const { originalError, stack } = runtime_readTargetFailure(wrapper, error);
 					const sourceInfo = {
 						type: "function",
 						timestamp: Date.now(),
-						stack: originalError?.stack
+						stack
 					};
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
