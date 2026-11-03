@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T05:24:30-08:00 (1793712270)
+ *	@Last modified time: 2026-11-03T06:32:22-08:00 (1793716342)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -316,3 +316,106 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 		await expect(api.a.use.give("rejects", reason)).rejects.toBe(reason);
 	});
 });
+
+/**
+ * Errors carrying code of `b`'s in places slothlet looks when it reports a failure.
+ * @type {Array<[string, string]>}
+ */
+const CARRIERS = [
+	["processedGetter", "a getter and setter on the old processed-mark symbol"],
+	["proxy", "a Proxy error, every trap recorded"],
+	["constructorGetter", "an own constructor getter"],
+	["staticName", "a static name getter on the error's class"],
+	["forgedMark", "a hand-set processed mark with a name getter behind it"]
+];
+
+/** How each carrier fails. @type {Array<string>} */
+const HOWS = ["throw", "reject", "thenable"];
+
+describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > examining a failure > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	describe.each(Object.entries(PIPELINES))("with %s", (_pipeline, register) => {
+		/**
+		 * Build the api and register the pipeline's hooks, when hooks are on.
+		 * @returns {Promise<void>}
+		 */
+		const setup = async () => {
+			api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+			if (config.hook?.enabled) register(api);
+		};
+
+		describe.each(CARRIERS)("%s (%s)", (kind) => {
+			it.each(HOWS)("%s: whatever slothlet runs of it never runs as a", async (how) => {
+				await setup();
+				const label = `${kind}, ${how}`;
+				expect(await api.a.use.fails("failWith", kind, "secret", how)).toBe(true);
+				expect(await api.b.give.drain(), label).not.toContainEqual(expect.objectContaining({ ok: true }));
+				expect(await api.a.use.fails("failWith", kind, "whoami", how)).toBe(true);
+				for (const outcome of await api.b.give.drain()) {
+					if (outcome.ok) expect(outcome.value, label).toMatch(/^b\.give\./);
+				}
+			});
+		});
+	});
+});
+
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
+	"Permissions > sync leaf thenable (#599) > reporting a failure > $name",
+	({ config }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		/**
+		 * Build the fixture api under the deny-by-default rules.
+		 * @returns {Promise<object>} The api.
+		 */
+		const build = async () => {
+			api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+			return api;
+		};
+
+		it.each(HOWS)("%s: a hand-set processed mark does not silence the error hook", async (how) => {
+			await build();
+			const seen = [];
+			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			expect(await api.a.use.fails("failWith", "forgedMark", "whoami", how)).toBe(true);
+			expect(seen).toEqual(["Error"]);
+		});
+
+		it.each(HOWS)("%s: the error hook gets the class's own name as errorType, read as b", async (how) => {
+			await build();
+			const seen = [];
+			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			expect(await api.a.use.fails("failWith", "staticName", "secret", how)).toBe(true);
+			expect(seen).toEqual(["NamedError"]);
+			expect(await api.b.give.drain()).not.toContainEqual(expect.objectContaining({ ok: true }));
+		});
+
+		it.each(Object.entries(PIPELINES))(
+			"with %s, a leaf's thrown error reaches the caller as itself (#252)",
+			async (_pipeline, register) => {
+				await build();
+				register(api);
+				const original = new Error("orig");
+				await expect(api.a.use.give("rethrow", original)).rejects.toBe(original);
+				let caught;
+				try {
+					await api.b.give.rethrow(original);
+				} catch (error) {
+					caught = error;
+				}
+				expect(caught).toBe(original);
+			}
+		);
+	}
+);

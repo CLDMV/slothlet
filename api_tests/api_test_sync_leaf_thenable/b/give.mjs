@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T05:23:26-08:00 (1793712206)
+ *	@Last modified time: 2026-11-03T06:29:36-08:00 (1793716176)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -314,4 +314,130 @@ export function proxy(target = "secret") {
 			}
 		}
 	);
+}
+
+/**
+ * The symbol slothlet once marked a reported error with; a module can name it.
+ * @type {symbol}
+ */
+const PROCESSED_MARK = Symbol.for("@cldmv/slothlet/hook-error-processed");
+
+/**
+ * The traps a Proxy error records itself through: every one slothlet could run on it.
+ * @type {Array<string>}
+ */
+const PROXY_TRAPS = [
+	"get",
+	"set",
+	"has",
+	"defineProperty",
+	"deleteProperty",
+	"getOwnPropertyDescriptor",
+	"getPrototypeOf",
+	"setPrototypeOf",
+	"ownKeys",
+	"isExtensible",
+	"preventExtensions"
+];
+
+/**
+ * Build an error carrying code of this module's that runs when the error is examined.
+ * @param {"processedGetter"|"proxy"|"constructorGetter"|"staticName"|"forgedMark"} kind - Where the code sits.
+ * @param {"secret"|"whoami"} target - Which vault leaf the code calls.
+ * @returns {object} The error.
+ * @private
+ */
+function errorCarrying(kind, target) {
+	const record = () => recorded.push(attempt(target));
+	if (kind === "processedGetter") {
+		const error = new Error("x");
+		Object.defineProperty(error, PROCESSED_MARK, {
+			get() {
+				record();
+				return false;
+			},
+			set() {
+				record();
+			},
+			configurable: true
+		});
+		return error;
+	}
+	if (kind === "proxy") {
+		const handler = {};
+		for (const trap of PROXY_TRAPS) {
+			handler[trap] = (...args) => {
+				record();
+				return Reflect[trap](...args);
+			};
+		}
+		return new Proxy(new Error("x"), handler);
+	}
+	if (kind === "constructorGetter") {
+		const error = new Error("x");
+		Object.defineProperty(error, "constructor", {
+			get() {
+				record();
+				return Error;
+			},
+			configurable: true
+		});
+		return error;
+	}
+	if (kind === "staticName") {
+		class NamedError extends Error {
+			static get name() {
+				record();
+				return "NamedError";
+			}
+		}
+		return new NamedError("x");
+	}
+	// forgedMark: the old processed mark set by hand, with a `name` getter behind it.
+	const error = new Error("x");
+	error[PROCESSED_MARK] = true;
+	Object.defineProperty(error, "name", {
+		get() {
+			record();
+			return "Error";
+		},
+		configurable: true
+	});
+	return error;
+}
+
+/**
+ * Fail with an error carrying code of this module's (see {@link errorCarrying}).
+ * @param {"processedGetter"|"proxy"|"constructorGetter"|"staticName"|"forgedMark"} kind - Where the code sits.
+ * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf the code calls.
+ * @param {"throw"|"reject"|"thenable"} [how="throw"] - Throw it, return a rejected Promise, or return a
+ *   thenable that rejects with it.
+ * @returns {never|Promise<never>|{then: function}} Never returns normally.
+ * @public
+ * @example
+ * await api.b.give.failWith("proxy", "whoami"); // throws; the traps' calls are recorded
+ */
+export function failWith(kind, target = "secret", how = "throw") {
+	const error = errorCarrying(kind, target);
+	if (how === "reject") return Promise.reject(error);
+	if (how === "thenable") {
+		return {
+			then(_resolve, reject) {
+				reject(error);
+			}
+		};
+	}
+	throw error;
+}
+
+/**
+ * Throw what it is handed, as it is.
+ * @param {*} error - What to throw.
+ * @returns {never} Never returns.
+ * @public
+ * @example
+ * api.b.give.rethrow(new Error("orig")); // throws that same Error
+ */
+export function rethrow(error) {
+	throw error;
 }
