@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T00:00:00-08:00 (1793692800)
+ *	@Last modified time: 2026-11-03T01:51:01-08:00 (1793699461)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,6 +21,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import util from "node:util";
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
@@ -55,6 +56,22 @@ const SHAPES = {
 	awaitedMember: async () => (await self.callee.ops.Client.open)(),
 	awaitedNested: async () => (await self.callee.ops.Client.prototype.method).call({}),
 	awaitedMissing: async () => String(await self.callee.ops.fn.hiddenNs.missing?.deeper),
+	proxyMember: () => self.callee.ops.fn.px.any(),
+	inspectHook: () => typeof self.callee.ops.fn[util.inspect.custom](),
+	inspectHookRun: () => self.callee.ops.fn[util.inspect.custom]()(),
+	inspectInherited: () => self.callee.ops.Sub[util.inspect.custom]().baseStatic(),
+	inspectDescriptor: () => typeof Object.getOwnPropertyDescriptor(self.callee.ops.fn, util.inspect.custom).value(),
+	inspectDescriptorRun: () => Object.getOwnPropertyDescriptor(self.callee.ops.fn, util.inspect.custom).value()(),
+	inspectEmitter: () => typeof self.callee.bus[util.inspect.custom]()?.kind,
+	inspectWaiting: async () => {
+		await self.callee;
+		const held = self.callee.tool.open;
+		await self.callee.tool;
+		return held[util.inspect.custom]();
+	},
+	inspectShown: () => util.inspect(self.callee.ops.fn),
+	frozenEmitterMethod: () => Object.getPrototypeOf(self.callee.bus).kind.call({}),
+	frozenEmitterClass: () => new (Object.getPrototypeOf(self.callee.bus).constructor)().kind(),
 	dataMember: () => self.callee.ops.fn.label,
 	name: () => self.callee.ops.Client.name,
 	instanceOf: () => ({}) instanceof self.callee.ops.Client,

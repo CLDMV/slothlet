@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T00:00:00-08:00 (1793692800)
+ *	@Last modified time: 2026-11-03T01:52:31-08:00 (1793699551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import util from "node:util";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
@@ -57,6 +58,7 @@ const ALLOWED_LOADED = {
 	descriptors: "fn",
 	accessorDescriptor: "helper",
 	customInstanceOf: true,
+	proxyMember: "px",
 	emitterConstructor: "bus",
 	emitterPrototype: "Bus",
 	emitterInstanceOf: true
@@ -79,7 +81,19 @@ const ALLOWED_AWAITED = {
 	staticMethod: "open",
 	prototypeConstructor: "fn",
 	hiddenMember: "hidden",
-	nestedMember: "deep"
+	nestedMember: "deep",
+	proxyMember: "px"
+};
+
+/**
+ * Shapes that take what the node's inspect hook shows and run it, each with the marker its module code returns.
+ * @type {Record<string, string>}
+ */
+const INSPECT_RUNS = {
+	inspectHookRun: "fn",
+	inspectInherited: "baseStatic",
+	inspectDescriptorRun: "fn",
+	inspectWaiting: "tool.open"
 };
 
 describe.each(getMatrixConfigs())("Permissions > members of an api function (#632) > $name", ({ config }) => {
@@ -196,6 +210,54 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		}
 	});
 
+	it.each([
+		["denied", DENY_CALLEE],
+		["allowed", []]
+	])("the inspect hook shows a module the node, never its runnable code (%s)", async (_label, rules) => {
+		await build({ defaultPolicy: "allow", rules });
+		await load();
+		for (const [shape, marker] of Object.entries(INSPECT_RUNS)) {
+			const result = await attempt(shape);
+			expect(result.value, shape).not.toBe(marker);
+			expect(result.error, shape).toBeDefined();
+		}
+		expect(await attempt("inspectHook")).toEqual({ value: "string" });
+		expect(await attempt("inspectDescriptor")).toEqual({ value: "string" });
+		expect((await attempt("inspectEmitter")).value).not.toBe("function");
+		// What the hook shows still reads as the function it stands for.
+		expect((await attempt("inspectShown")).value).toMatch(/\[Function: fn\]/);
+	});
+
+	it("the inspect hook of a node read before it loads shows a module no runnable code", async () => {
+		await build();
+		for (const [shape, marker] of Object.entries(INSPECT_RUNS)) {
+			expect((await attempt(shape)).value, shape).not.toBe(marker);
+		}
+		expect((await attempt("inspectEmitter")).value).not.toBe("function");
+	});
+
+	it("the host still sees the function when it inspects the node", async () => {
+		await build();
+		await load();
+		expect(util.inspect(api.callee.ops.fn)).toMatch(/\[Function: fn\]/);
+		expect(util.inspect(api.callee.ops.Client)).toMatch(/\[class Client\]/);
+	});
+
+	it("an emitter the host froze reports its module's prototype only to a module allowed the node", async () => {
+		await build();
+		await load();
+		Object.freeze(api.callee.bus);
+		expect(await attempt("frozenEmitterMethod")).toEqual({ error: "PERMISSION_DENIED" });
+		expect(await attempt("frozenEmitterClass")).toEqual({ error: "PERMISSION_DENIED" });
+		await api.shutdown();
+		await build({ defaultPolicy: "allow", rules: [] });
+		await load();
+		Object.freeze(api.callee.bus);
+		expect(await attempt("frozenEmitterMethod")).toEqual({ value: "bus" });
+		expect(await attempt("frozenEmitterClass")).toEqual({ value: "bus" });
+		expect(await attempt("emitterInstanceOf")).toEqual({ value: true });
+	});
+
 	it("the module the node belongs to reaches its own members through self", async () => {
 		await build();
 		expect(await api.callee.ops.ownMembers()).toEqual(["open", "fn", "hidden"]);
@@ -217,6 +279,9 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("prototypeConstructor")).toEqual({ error: "PERMISSION_DENIED" });
 		// A data member runs no code: it is not checked as a call.
 		expect(await attempt("dataMember")).toEqual({ value: "data" });
+		// A member holding code is still not described, nor is one holding a Proxy reached.
+		expect(await attempt("descriptor")).toEqual({ value: undefined });
+		expect(await attempt("proxyMember")).toEqual({ error: "PERMISSION_DENIED" });
 	});
 
 	it("nothing is checked with the permission system disabled", async () => {

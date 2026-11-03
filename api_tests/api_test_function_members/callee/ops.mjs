@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T00:00:00-08:00 (1793692800)
+ *	@Last modified time: 2026-11-03T01:51:00-08:00 (1793699460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,6 +87,25 @@ export class Checker {
 }
 
 /**
+ * A base class no node stands for, reached only through the class extending it.
+ */
+class Base {
+	/**
+	 * A static method of the base class.
+	 * @returns {string} A marker.
+	 */
+	static baseStatic() {
+		return "baseStatic";
+	}
+}
+
+/**
+ * A class extending one the module does not export.
+ * @public
+ */
+export class Sub extends Base {}
+
+/**
  * A plain function declaration: its own `prototype.constructor` is the function itself.
  * @returns {string} A marker.
  * @public
@@ -110,6 +129,18 @@ Object.defineProperty(fn, "hiddenNs", {
 			return "deep";
 		}
 	},
+	enumerable: false,
+	configurable: true,
+	writable: true
+});
+
+Object.defineProperty(fn, "px", {
+	value: new Proxy(
+		{},
+		{
+			get: () => () => "px"
+		}
+	),
 	enumerable: false,
 	configurable: true,
 	writable: true
