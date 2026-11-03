@@ -2635,6 +2635,49 @@ function runtime_enforceAccessorReader(wrapper, reader, args) {
 }
 
 /**
+ * Check that whoever reads a member of a node holding the module's code — a static method, a function's own
+ * `prototype` and the methods on it, a member the module defined on its function — may call the node (#632). The
+ * member is handed out as it is, not as a node of its own, so it carries no gate when it is called: reading it is
+ * where the node's own call check is made, as running one of the node's getters is (see {@link runtime_runAccessor}).
+ * Data, the language's own values and slothlet's own nodes are read as before.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} value - The member read.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}).
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not call the node.
+ * @private
+ */
+function runtime_enforceCodeMember(wrapper, value, kept = null) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled()) return;
+	if (!runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })) return;
+	if (accessorReader === undefined) enforcePermission(wrapper, [], false, kept);
+	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, []);
+}
+
+/**
+ * Whether a member holding the module's code is withheld from whoever describes it (see
+ * {@link runtime_enforceCodeMember}): a description is not a read that fails, so the member is left out, as the read
+ * gate leaves out data it denies.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyDescriptor|undefined} descriptor - The member's descriptor.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+ * @returns {boolean} True when the description must be withheld.
+ * @private
+ */
+function runtime_isCodeMemberWithheld(wrapper, descriptor, kept = null) {
+	if (!descriptor || !("value" in descriptor)) return false;
+	try {
+		runtime_enforceCodeMember(wrapper, descriptor.value, kept);
+		return false;
+	} catch {
+		// Denied, or the check could not be completed: either way the member is not described (fail closed).
+		return true;
+	}
+}
+
+/**
  * The accessor a wrapper's impl holds or inherits for a key, found by descriptors alone so nothing of the impl's
  * runs to find it (#597): `{ descriptor }` for an accessor adoption did not put there, `{ proxy: true }` when the
  * walk reaches a module's own Proxy before any descriptor (its traps answer the key), and null otherwise —
@@ -4117,6 +4160,48 @@ function runtime_ownArguments(wrapper, args) {
 const UNLOADED_HAS_INSTANCE = () => false;
 
 /**
+ * The function a callable node's impl stands for: the impl itself, or the `default` of a `{ default: fn }` impl (the
+ * CJS shape), or null for any other impl.
+ * @param {*} impl - The node's impl.
+ * @returns {Function|null} The function.
+ * @private
+ */
+function runtime_functionOf(impl) {
+	if (typeof impl === "function") return impl;
+	return impl && typeof impl === "object" && typeof impl.default === "function" ? impl.default : null;
+}
+
+/**
+ * The `Symbol.hasInstance` a loaded callable node answers for each function, the same one every read.
+ * @type {WeakMap<Function, Function>}
+ * @private
+ */
+const HAS_INSTANCE_BY_IMPL = new WeakMap();
+
+/**
+ * The `Symbol.hasInstance` a loaded callable node answers (#632): the language's own test against its function, which
+ * walks the instance's prototype chain to the function's `prototype` without running any of the module's code.
+ * @param {Function} fn - The node's function.
+ * @returns {Function} The test.
+ * @private
+ */
+function runtime_hasInstanceOf(fn) {
+	let test = HAS_INSTANCE_BY_IMPL.get(fn);
+	if (!test) {
+		test = (value) => Reflect.apply(FUNCTION_HAS_INSTANCE, fn, [value]);
+		HAS_INSTANCE_BY_IMPL.set(fn, test);
+	}
+	return test;
+}
+
+/**
+ * The language's own `Function.prototype[Symbol.hasInstance]`, taken before any module runs.
+ * @type {Function}
+ * @private
+ */
+const FUNCTION_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+
+/**
  * Whether `prop` is an api member of the wrapper, so a read must resolve to it rather than to
  * anything the wrapper or its proxy target would otherwise answer for that name (the wrapper's own
  * `name` / `length` / `toString` / …, or a function target's own `prototype`). A member is an export
@@ -4275,6 +4360,9 @@ function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 	const impl = wrapper.____slothletInternal.impl;
 	const isMember = Array.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
 	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
+	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
+	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
+	if (runtime_functionOf(impl) !== null) runtime_enforceCodeMember(wrapper, value, kept);
 }
 
 /**
@@ -9003,15 +9091,9 @@ export class UnifiedWrapper extends ComponentBase {
 							// Resolve the remaining chain below a value that has no wrapper to route through — an
 							// adopted non-wrapper child, or an impl member that was never adopted. Plain property
 							// access hop by hop; segments beyond a nullish hop resolve to undefined, exactly as raw
-							// member access would. The condition is real — a walk truncating here is #257's second
-							// bug — but every route to a non-wrapper mid-chain hop is now closed upstream: collision
-							// slots settle during build (no chain forms through them), function props (prototype,
-							// name, length, toString) are served by the wrapper trap or the waiting proxy's named
-							// target before a chain can extend through them, and adoption wraps every enumerable
-							// member — primitives included — so surviving hops land on wrappers. Kept as the guard
-							// that a future composition regression (the very class #257 fixed) can never make the
-							// walk silently truncate again; not reproducible from the current public surface.
-							/* v8 ignore start */
+							// member access would. A function node's members that are not adopted — its own
+							// `prototype`, a static method, a member defined non-enumerable on it — are such hops
+							// (`await fn.prototype.method`, #632).
 							const __descendRest = (startValue, nextIndex) => {
 								let descended = startValue;
 								for (let __di = nextIndex; __di < propChain.length; __di++) {
@@ -9020,7 +9102,6 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 								return descended;
 							};
-							/* v8 ignore stop */
 							for (let __chainIndex = 0; __chainIndex < propChain.length; __chainIndex++) {
 								const chainProp = propChain[__chainIndex];
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
@@ -9057,8 +9138,8 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
-									// A chain continuing below a non-wrapper child must descend, not return the member —
-									// see the note on __descendRest for why the suite cannot drive this arm.
+									// A chain continuing below a non-wrapper child must descend, not return the member. Every
+									// enumerable member is adopted as a wrapper, so the suite builds no non-wrapper child to drive this arm.
 									/* v8 ignore start */
 									if (__chainIndex < propChain.length - 1) {
 										const descendedChild = __descendRest(child, __chainIndex + 1);
@@ -9078,9 +9159,13 @@ export class UnifiedWrapper extends ComponentBase {
 									? runtime_readOnBehalf(__readGateCaller ?? null, () => current.____slothletInternal.impl[chainProp])
 									: undefined;
 								if (implValue !== undefined) {
+									// An impl member holding the module's code — a static method, a function's `prototype` — is
+									// read for the reader the chain was read by as a call of the node, as getTrap reads it (#632).
+									// Checked before descending, so nothing reached through it escapes the check.
+									runtime_readOnBehalf(__readGateCaller ?? null, () => runtime_enforceCodeMember(current, implValue));
 									// Same chain-consumption rule as the child arm above: an impl member mid-chain is a
-									// waypoint, not the destination — and the same reachability note applies.
-									/* v8 ignore start */
+									// waypoint, not the destination. A function's own `prototype`, or a member the module
+									// defined on its function, is one (`await fn.prototype.method`).
 									if (__chainIndex < propChain.length - 1) {
 										const descendedImpl = __descendRest(implValue, __chainIndex + 1);
 										if (descendedImpl !== undefined) {
@@ -9088,7 +9173,6 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										return descendedImpl;
 									}
-									/* v8 ignore stop */
 									// Lazy read-level permission gating — this path reads impl directly,
 									// bypassing getTrap, so the gate must be applied explicitly here.
 									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
@@ -9136,8 +9220,15 @@ export class UnifiedWrapper extends ComponentBase {
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
 								Object.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
+							// function behind it: that function carries no gate, so calling it would skip the node's call check
+							// (#632). The host, which no rule gates, still gets the function itself.
+							const __permissionManager = wrapper.slothlet.handlers?.permissionManager;
+							const callableReadByModule =
+								typeof finalImpl === "function" && Boolean(__readGateCaller?.currentWrapper) && __permissionManager?.isEnabled() === true;
 							if (
 								callableCarriesWrapperMembers ||
+								callableReadByModule ||
 								(finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
 							) {
 								const resolvedProxy = current.____slothletInternal.proxy;
@@ -9722,6 +9813,16 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 
 				if (typeof current === "function") {
+					// A function the walk reached as a member of a node rather than as a node of its own — a static method, a
+					// method of a function's `prototype` — carries no gate of its own: running it is a call of the last node
+					// the walk passed through, checked as the call runs, under the caller the call is made for (#632).
+					const ___memberOf = resolveWrapper(current) === null ? lastWrapper : null;
+					const ___invokeChainEnd = ___memberOf
+						? (fn, self) => {
+								runtime_enforceCodeMember(___memberOf, fn);
+								return invoke(fn, self);
+							}
+						: invoke;
 					// Both the module that captured this chain and the one invoking it have to pass. The live
 					// caller is enforced by the resolved leaf's own applyTrap below; the capturer is enforced
 					// here, because by then it is no longer anywhere in the flow. Without this a module could
@@ -9772,7 +9873,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged (an async leaf's rejection already does; #252).
 							return wrapper.slothlet.contextManager.runInContext(
 								wrapper.instanceID,
-								() => invoke(current, lastObject),
+								() => ___invokeChainEnd(current, lastObject),
 								null,
 								[],
 								___capturedCallerWrapper,
@@ -9796,16 +9897,21 @@ export class UnifiedWrapper extends ComponentBase {
 						!___liveIdentity?.unresolved &&
 						typeof wrapper.slothlet.contextManager?.runRegisteredAsHost === "function"
 					) {
-						return wrapper.slothlet.contextManager.runRegisteredAsHost(___invocationStoreID, () => invoke(current, lastObject), null, []);
+						return wrapper.slothlet.contextManager.runRegisteredAsHost(
+							___invocationStoreID,
+							() => ___invokeChainEnd(current, lastObject),
+							null,
+							[]
+						);
 					}
 					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
-					if (!___identityStore) return invoke(current, lastObject);
+					if (!___identityStore) return ___invokeChainEnd(current, lastObject);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
 					const ___previousAuthoritativeCeiling = ___identityStore.__authoritativeCeiling;
 					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
 					___identityStore.__authoritativeCeiling = ___capturedCeiling;
 					try {
-						return invoke(current, lastObject);
+						return ___invokeChainEnd(current, lastObject);
 					} finally {
 						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
 						___identityStore.__authoritativeCeiling = ___previousAuthoritativeCeiling;
@@ -10226,7 +10332,10 @@ export class UnifiedWrapper extends ComponentBase {
 				const constructorImpl = internal.impl;
 				const constructorIsLiveIdentity = internal.deferChildAdopt || (EventEmitter && constructorImpl instanceof EventEmitter);
 				if (constructorIsLiveIdentity && constructorImpl && typeof constructorImpl === "object" && constructorImpl.constructor) {
-					return constructorImpl.constructor;
+					// A class of the module's is its code, checked as a call of the node (#632).
+					const liveConstructor = constructorImpl.constructor;
+					runtime_enforceCodeMember(wrapper, liveConstructor, kept);
+					return liveConstructor;
 				}
 				return Object.prototype.constructor;
 			}
@@ -10274,8 +10383,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// is answered here rather than through `prototype`, which stays unset until the node loads, so a
 			// `class extends` of an unloaded node fails loudly instead of extending a stand-in.
 			if (prop === Symbol.hasInstance) {
-				const { mode, state } = wrapper.____slothletInternal;
+				const { mode, state, impl } = wrapper.____slothletInternal;
 				if (mode === "lazy" && !state.materialized) return UNLOADED_HAS_INSTANCE;
+				// A loaded callable node answers `instanceof` from its function's own `prototype`, as the engine would,
+				// without reading `prototype` through the node: that read is checked as a call of the node (#632), and a
+				// module the node is closed to may still test an instance against it.
+				const fnImpl = runtime_functionOf(impl);
+				if (fnImpl && !runtime_hasOwnSymbolMember(wrapper, prop)) return runtime_hasInstanceOf(fnImpl);
 			}
 			// A symbol the module's value holds as its own key is a member, as in plain JS (`obj[sym]`); any other
 			// symbol is not one, and the wrapper has no answer of its own for it.
@@ -10295,11 +10409,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// The impl function's own `prototype`, as the function itself reads it (so `instanceof`
 				// against a callable wrapper tests the class's instances); a namespace has none.
 				// The class's own prototype, which the module's instances report as theirs as well (#597).
+				// It holds the class's methods and its `constructor`, so reading it is checked as a call of the node (#632).
 				const impl = wrapper.____slothletInternal.impl;
-				if (typeof impl === "function") return runtime_exposePrototype(wrapper, impl.prototype);
-				if (impl && typeof impl === "object" && typeof impl.default === "function")
-					return runtime_exposePrototype(wrapper, impl.default.prototype);
-				return undefined;
+				const fnImpl = runtime_functionOf(impl);
+				if (!fnImpl) return undefined;
+				const prototype = fnImpl.prototype;
+				runtime_enforceCodeMember(wrapper, prototype, kept);
+				return runtime_exposePrototype(wrapper, prototype);
 			}
 			if (prop === "name" && !memberShadowsWrapperProp) {
 				// Return name derived from API path, not the internal function name
@@ -10321,12 +10437,13 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			if (prop === "toString" && !memberShadowsWrapperProp) {
 				// Return toString bound to the actual impl, not the proxy target
+				// A `toString` the module defined on its function is its code, checked as a call of the node (#632).
 				const impl = wrapper.____slothletInternal.impl;
-				if (typeof impl === "function") {
-					return impl.toString.bind(impl);
-				}
-				if (impl && typeof impl === "object" && typeof impl.default === "function") {
-					return impl.default.toString.bind(impl.default);
+				const fnImpl = runtime_functionOf(impl);
+				if (fnImpl) {
+					const method = fnImpl.toString;
+					runtime_enforceCodeMember(wrapper, method, kept);
+					return method.bind(fnImpl);
 				}
 				// For non-callable wrappers, return a descriptive string
 				if (typeof target === "function") {
@@ -10336,12 +10453,13 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			if (prop === "valueOf" && !memberShadowsWrapperProp) {
 				// Return valueOf bound to the actual impl, not the proxy target
+				// A `valueOf` the module defined on its function is its code, checked as a call of the node (#632).
 				const impl = wrapper.____slothletInternal.impl;
-				if (typeof impl === "function") {
-					return impl.valueOf.bind(impl);
-				}
-				if (impl && typeof impl === "object" && typeof impl.default === "function") {
-					return impl.default.valueOf.bind(impl.default);
+				const fnImpl = runtime_functionOf(impl);
+				if (fnImpl) {
+					const method = fnImpl.valueOf;
+					runtime_enforceCodeMember(wrapper, method, kept);
+					return method.bind(fnImpl);
 				}
 				return Function.prototype.valueOf.bind(target);
 			}
@@ -10352,9 +10470,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// the wrapper is opaque to the outside — JSON.stringify(wrapper) yields the real value,
 				// not undefined. (Array impls are handled by the array-delegation block above.)
 				const impl = wrapper.____slothletInternal.impl;
-				// No in-repo fixture defines toJSON on its impl; the true branch is never entered.
-				/* v8 ignore next 3 */
+				// A function node's own `toJSON` (a static method of a class) is the module's code, checked as a call of
+				// the node (#632).
 				if (impl && typeof impl.toJSON === "function") {
+					runtime_enforceCodeMember(wrapper, impl.toJSON, kept);
 					return impl.toJSON.bind(impl);
 				}
 				// The snapshot for the given readers (`undefined` for whoever is reading now), read through `node`: a
@@ -10679,8 +10798,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// the function's OWN properties, not child endpoints. Return them directly: wrapping one
 			// registered a phantom child and flipped the leaf's record from function to namespace on a mere
 			// read (#304). Only a user-added ENUMERABLE own property of the impl materializes as a child.
+			// Such a member holding the module's code — a static method, a member defined on the function — is handed out
+			// as it is, so reading it is checked as a call of the node (#632).
 			const currentImpl = wrapper.____slothletInternal.impl;
 			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+				runtime_enforceCodeMember(wrapper, value, kept);
 				return value;
 			}
 
@@ -11497,6 +11619,9 @@ export class UnifiedWrapper extends ComponentBase {
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 			) {
 				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Object.getOwnPropertyDescriptor(impl, prop) : null));
+				// A member holding the module's code is described only to a caller that may call the node, as reading it
+				// is checked (#632).
+				if (implDescriptor !== null && redact && !asHeld && runtime_isCodeMemberWithheld(wrapper, implDescriptor, kept)) return undefined;
 				if (implDescriptor !== null) return virtualizeDescriptor(runtime_describeImplMember(wrapper, implDescriptor));
 			}
 
@@ -12378,7 +12503,16 @@ export class UnifiedWrapper extends ComponentBase {
 				if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
 				const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && impl instanceof EventEmitter);
-				if (isLiveIdentity && impl && typeof impl === "object") return Object.getPrototypeOf(impl);
+				if (isLiveIdentity && impl && typeof impl === "object") {
+					// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
+					// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
+					// holding none of the module's code, so `instanceof` against the language's or Node's own classes still holds.
+					let prototype = Object.getPrototypeOf(impl);
+					if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, runtime_takeCapturedAccess(wrapper))) return prototype;
+					while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
+						prototype = Object.getPrototypeOf(prototype);
+					return prototype;
+				}
 				return null;
 			}
 		};
