@@ -19,7 +19,7 @@
  * @internal
  */
 
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
@@ -1542,7 +1542,7 @@ export class HookManager extends ComponentBase {
 			throw error;
 		};
 		const observed = settleThenable(thenable, onFulfilled, fail);
-		if (observed instanceof Promise) return observed.then(undefined, fail);
+		if (inheritsFrom(observed, Promise)) return observed.then(undefined, fail);
 		return this.recordRejections(observed, record, onUnviewable);
 	}
 
