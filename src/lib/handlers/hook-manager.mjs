@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T11:41:12-07:00 (1793040072)
+ *	@Last modified time: 2026-11-03T06:30:20-08:00 (1793716220)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -143,22 +143,55 @@ export function settleThenable(thenable, onFulfilled, onRejected) {
 }
 
 /**
- * Symbol to mark errors that have already been processed by hook error handlers
- * @private
- */
-const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
-
-/**
- * Processed errors that could not carry {@link ERROR_HOOK_PROCESSED} (a frozen or non-extensible error).
- * Shared through the global object, as the mark is, so every slothlet copy in the realm sees it.
+ * Errors the error hooks have already been run for, so an outer hooked call does not report them again.
+ *
+ * Kept here only, never on the error: a mark written onto the error, or read back from it, runs whatever the module
+ * that threw it put there (a setter or getter on the mark, a Proxy's traps) in the caller's flow, and a module that
+ * could set the mark itself could stop its own failures from reaching the error hooks (#599). Membership in a WeakSet
+ * runs no code of the error's.
  * @type {WeakSet<object>}
  * @private
  */
-const UNMARKABLE_PROCESSED = (() => {
-	const key = Symbol.for("@cldmv/slothlet/hook-error-processed-unmarkable");
-	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
-	return globalThis[key];
-})();
+const HOOK_PROCESSED = new WeakSet();
+
+/**
+ * A target's failure as it was read as the target (see {@link rememberFailure}), keyed by both what the target threw
+ * and the error unwrapped from it.
+ * @type {WeakMap<object, {originalError: *, stack: *, errorType: string}>}
+ * @private
+ */
+const TARGET_FAILURES = new WeakMap();
+
+/**
+ * Whether a value can key a WeakMap or WeakSet.
+ * @param {*} value - The value.
+ * @returns {boolean} True for an object or function.
+ * @private
+ */
+const isObjectLike = (value) => value !== null && (typeof value === "object" || typeof value === "function");
+
+/**
+ * Remember what a target's failure was, read as the target (#599), so reporting it never reads it again in the
+ * caller's flow: the error hooks' `errorType` and an around hook's `source.stack` come from here.
+ * @param {*} error - What the target threw or rejected with.
+ * @param {{originalError: *, stack: *, errorType: string}} read - What was read of it.
+ * @returns {void}
+ * @public
+ */
+export function rememberFailure(error, read) {
+	if (isObjectLike(error)) TARGET_FAILURES.set(error, read);
+	if (isObjectLike(read.originalError)) TARGET_FAILURES.set(read.originalError, read);
+}
+
+/**
+ * What was read of a target's failure as the target (see {@link rememberFailure}).
+ * @param {*} error - The error, as thrown or unwrapped.
+ * @returns {{originalError: *, stack: *, errorType: string}|undefined} The read, or undefined when it was not read.
+ * @public
+ */
+export function rememberedFailure(error) {
+	return isObjectLike(error) ? TARGET_FAILURES.get(error) : undefined;
+}
 
 /**
  * Call a hook's handler with its payload as a plain function, with no receiver (#625). Called as a method of the
@@ -180,13 +213,7 @@ function runtime_callHookHandler(hook, payload) {
  * @private
  */
 function markHookProcessed(error) {
-	if (!error || (typeof error !== "object" && typeof error !== "function")) return;
-	try {
-		error[ERROR_HOOK_PROCESSED] = true;
-	} catch {
-		// A frozen or non-extensible error rejects the mark; the thrown value must stay as it is.
-		UNMARKABLE_PROCESSED.add(error);
-	}
+	if (isObjectLike(error)) HOOK_PROCESSED.add(error);
 }
 
 /**
@@ -196,8 +223,7 @@ function markHookProcessed(error) {
  * @public
  */
 export function isHookProcessed(error) {
-	if (!error || (typeof error !== "object" && typeof error !== "function")) return false;
-	return error[ERROR_HOOK_PROCESSED] === true || UNMARKABLE_PROCESSED.has(error);
+	return isObjectLike(error) && HOOK_PROCESSED.has(error);
 }
 
 /**
@@ -1538,7 +1564,11 @@ export class HookManager extends ComponentBase {
 			timestamp: Date.now(),
 			stack
 		});
-		const sinkAround = (hook, error) => errorSink(error, aroundSource(hook, error?.stack));
+		// A target's failure an around hook rethrows keeps the stack read as the target (#599).
+		const sinkAround = (hook, error) => {
+			const read = rememberedFailure(error);
+			errorSink(error, aroundSource(hook, read ? read.stack : error?.stack));
+		};
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
@@ -1674,6 +1704,9 @@ export class HookManager extends ComponentBase {
 		markHookProcessed(error);
 
 		const hooks = this.getHooksForPath("error", path);
+		// A target's failure was classified as the target (#599); anything else (a hook's own failure) is read here.
+		const read = rememberedFailure(error);
+		const errorType = read ? read.errorType : hooks.length ? error?.constructor?.name || "Error" : "Error";
 
 		for (const hook of hooks) {
 			try {
@@ -1681,7 +1714,7 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					error,
-					errorType: error?.constructor?.name || "Error",
+					errorType,
 					source,
 					timestamp: new Date(),
 					api,
