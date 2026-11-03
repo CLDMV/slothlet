@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T04:20:11-08:00 (1793708411)
+ *	@Last modified time: 2026-11-03T05:36:51-08:00 (1793713011)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -363,6 +363,8 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("hubGetter")).toEqual({ error: "PERMISSION_DENIED" });
 		expect(getterRuns()).toBe(runs);
 		expect(await attempt("hubInstanceOf")).toEqual({ value: true });
+		// A method the emitter inherits from Node's own class is no code of its module's, and stays the emitter's to use.
+		expect(await attempt("hubSharedMethod")).toEqual({ value: 0 });
 		await api.shutdown();
 		await build({ defaultPolicy: "allow", rules: [] });
 		await load();

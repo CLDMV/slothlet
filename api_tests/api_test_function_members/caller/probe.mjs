@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T04:18:25-08:00 (1793708305)
+ *	@Last modified time: 2026-11-03T05:35:01-08:00 (1793712901)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,6 +73,7 @@ const SHAPES = {
 	prototypeGetter: () => Object.getPrototypeOf(self.callee.bus).info,
 	hubMethod: () => self.callee.hub.kind(),
 	hubGetter: () => self.callee.hub.info,
+	hubSharedMethod: () => self.callee.hub.listenerCount("none"),
 	hubInstanceOf: () => self.callee.hub instanceof EventEmitter,
 	permittedOwnerView: async () => (await self.other.sink.isBus(self.callee.bus)).join(","),
 	passedClosedPrototype: async () => (await self.other.sink.protoOf(self.callee.bus)).join(","),
