@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T06:29:36-08:00 (1793716176)
+ *	@Last modified time: 2026-11-03T07:40:04-08:00 (1793720404)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -440,4 +440,23 @@ export function failWith(kind, target = "secret", how = "throw") {
  */
 export function rethrow(error) {
 	throw error;
+}
+
+/**
+ * Hand out an object whose method, run later by whoever holds it, throws an error carrying code of this module's.
+ * @param {"message"|"proxy"|"processedGetter"|"constructorGetter"|"staticName"} [kind="message"] - The error: one with
+ *   a `message` getter, or one of {@link errorCarrying}'s.
+ * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf its code calls.
+ * @returns {{boom: function(): never}} The object.
+ * @public
+ * @example
+ * const made = await api.b.give.made("proxy");
+ * made.boom(); // throws
+ */
+export function made(kind = "message", target = "secret") {
+	return {
+		boom() {
+			throw kind === "message" ? errorWithGetter(target, false, "message") : errorCarrying(kind, target);
+		}
+	};
 }

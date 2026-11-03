@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T06:32:22-08:00 (1793716342)
+ *	@Last modified time: 2026-11-03T07:41:01-08:00 (1793720461)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -417,5 +417,95 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 				expect(caught).toBe(original);
 			}
 		);
+	}
+);
+
+/**
+ * Errors a module's handed-out method throws when a hook runs it.
+ * @type {Array<string>}
+ */
+const MADE_ERRORS = ["message", "proxy", "constructorGetter", "staticName"];
+
+/**
+ * Hooks that run a method `b` handed out. Each takes the method's holder.
+ * @type {Record<string, function(object, object): void>}
+ */
+const MADE_HOOKS = {
+	"an after hook calling the result's method": (api) =>
+		api.slothlet.hook.on("b.give.made:after", ({ result }) => result.boom(), { id: "i599-made-after" }),
+	"a before hook": (api, made) =>
+		api.slothlet.hook.on(
+			"b.give.made:before",
+			() => {
+				made.boom();
+			},
+			{ id: "i599-made-before" }
+		),
+	"an always hook": (api, made) => api.slothlet.hook.on("b.give.made:always", () => made.boom(), { id: "i599-made-always" }),
+	"an around hook": (api, made) =>
+		api.slothlet.hook.on(
+			"b.give.made:around",
+			({ next }) => {
+				next();
+				made.boom();
+			},
+			{ id: "i599-made-around" }
+		)
+};
+
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
+	"Permissions > sync leaf thenable (#599) > a hook's own failure > $name",
+	({ config }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		describe.each(Object.entries(MADE_HOOKS))("%s", (_hook, register) => {
+			describe.each([
+				["without an error hook", false],
+				["with an error hook", true]
+			])("%s", (_errorHook, withErrorHook) => {
+				it.each(MADE_ERRORS)("%s: what slothlet reads of the error never runs as a", async (kind) => {
+					api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+					if (withErrorHook) api.slothlet.hook.on("**:error", () => {}, { id: "i599-error-all" });
+					for (const target of ["secret", "whoami"]) {
+						const made = await api.b.give.made(kind, target);
+						await api.b.give.drain();
+						register(api, made);
+						await api.a.use.fails("made", kind, target);
+						const outcomes = await api.b.give.drain();
+						if (target === "secret") expect(outcomes, kind).not.toContainEqual(expect.objectContaining({ ok: true }));
+						else for (const outcome of outcomes) if (outcome.ok) expect(outcome.value, kind).toMatch(/^b\.give\./);
+						for (const id of ["i599-made-after", "i599-made-before", "i599-made-always", "i599-made-around"]) api.slothlet.hook.off(id);
+					}
+				});
+			});
+		});
+	}
+);
+
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
+	"Permissions > sync leaf thenable (#599) > reads only what a hook asks for > $name",
+	({ config }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		describe.each(Object.entries(PIPELINES).filter(([name]) => name !== "an error hook"))("with %s", (_pipeline, register) => {
+			it.each([["constructorGetter"], ["staticName"]])("%s: with no error hook, the error's class is never looked at", async (kind) => {
+				api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+				register(api);
+				for (const how of HOWS) {
+					expect(await api.a.use.fails("failWith", kind, "whoami", how)).toBe(true);
+					expect(await api.b.give.drain(), `${kind}, ${how}`).toEqual([]);
+				}
+			});
+		});
 	}
 );
