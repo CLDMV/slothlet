@@ -88,6 +88,7 @@ export const TEST_DIRS = {
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
 	API_TEST_EXPORT_SHADOW: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_export_shadow`),
+	API_TEST_FUNCTION_MEMBERS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_function_members`),
 	API_TEST_PERMISSION_PRINCIPALS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permission_principals`),
 	API_TEST_EVENTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_events`),
 	API_TEST_CROSS_INSTANCE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cross_instance`),
