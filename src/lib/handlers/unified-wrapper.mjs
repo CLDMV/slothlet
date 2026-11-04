@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T07:52:09-08:00 (1793807529)
+ *	@Last modified time: 2026-11-04T08:24:05-08:00 (1793809445)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2348,7 +2348,28 @@ function runtime_standInPath(wrapper, chain) {
  * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
  * @private
  */
-function runtime_applyStandInChange(wrapper, change, replayed) {
+function runtime_applyStandInChange(wrapper, change, replayed, holders = null) {
+	// No code the walk or the change runs (a getter, a setter, a trap of the module's) hands a change on as this one.
+	const outer = replayHolders;
+	replayHolders = null;
+	try {
+		return runtime_makeStandInChange(wrapper, change, replayed, holders);
+	} finally {
+		replayHolders = outer;
+	}
+}
+
+/**
+ * Make a change through a stand-in on the node it stands for (see {@link runtime_applyStandInChange}).
+ * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+ * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+ * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+ * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
+ * @returns {boolean} Whether the node took the change.
+ * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+ * @private
+ */
+function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 	let node = wrapper.createProxy();
 	for (const key of change.chain) node = node[key];
 	// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
@@ -2357,12 +2378,21 @@ function runtime_applyStandInChange(wrapper, change, replayed) {
 	const { op, prop, payload } = change;
 	// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
 	// members it adopts as it loads would replace what was written (#653).
-	const nodeWrapper = STAND_INS.has(node) ? null : resolveWrapper(node);
+	const standIn = STAND_INS.has(node);
+	const nodeWrapper = standIn ? null : resolveWrapper(node);
 	if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
-		runtime_queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
+		replayHolders = holders;
+		try {
+			runtime_queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
+		} finally {
+			replayHolders = null;
+		}
 		if (!nodeWrapper.____slothletInternal.state.inFlight) nodeWrapper._materialize().catch(() => {});
 		return true;
 	}
+	// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
+	// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
+	if (standIn) replayHolders = holders;
 	if (op === "lock") {
 		runtime_lockAsStandIn(node, payload);
 		return true;
@@ -2428,9 +2458,10 @@ function runtime_changeAuthor(identity) {
 }
 
 /**
- * The nodes the change being replayed was queued on, while it is made (#653): a change it moves down to a node further
- * down, directly or through that node's stand-in, keeps them (see {@link REFUSED_CHANGES}).
- * @type {{holders: Array<{owner: object, generation: number}>, path: string}|null}
+ * The nodes the change being replayed was queued on, while it is handed to the stand-in of a node further down that has
+ * not loaded (#653): the change that stand-in queues keeps them (see {@link REFUSED_CHANGES}). Only for that hand-over,
+ * which runs no code of a module: a change a getter or setter makes is its own.
+ * @type {Array<{owner: object, generation: number}>|null}
  * @private
  */
 let replayHolders = null;
@@ -2450,16 +2481,17 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 	// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
 	// makes the refusal no longer anyone's.
 	const holders = [...(change.holders ?? []), { owner: wrapper, generation }];
-	const apply = () => {
-		const outer = replayHolders;
-		replayHolders = { holders, path: String(wrapper.____slothletInternal.apiPath ?? "") };
-		try {
-			return runtime_applyStandInChange(wrapper, change, true);
-		} finally {
-			replayHolders = outer;
-		}
-	};
-	const make = () => contextManager.runInContext(instanceID, apply, null, [], change.writer, true, change.writer === null, change.ceiling);
+	const make = () =>
+		contextManager.runInContext(
+			instanceID,
+			() => runtime_applyStandInChange(wrapper, change, true, holders),
+			null,
+			[],
+			change.writer,
+			true,
+			change.writer === null,
+			change.ceiling
+		);
 	try {
 		if (change.flow) contextManager.runInSnapshotFlowSync(instanceID, change.flow, make);
 		else make();
@@ -2547,10 +2579,8 @@ export function refusedChangeCount(slothlet) {
 function runtime_queueStandInChange(wrapper, change) {
 	if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
 	const captured = runtime_captureChange(wrapper, change);
-	// A replayed change that moves down to a node further down keeps the nodes it was queued on before. A change some
-	// setter it runs makes elsewhere is that change's own.
-	const below = String(wrapper.____slothletInternal.apiPath ?? "");
-	if (replayHolders && below.startsWith(`${replayHolders.path}.`)) captured.holders = replayHolders.holders;
+	// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
+	if (replayHolders) captured.holders = replayHolders;
 	wrapper.____slothletInternal.pendingChanges.push(captured);
 	if (!PENDING_CHANGES.has(wrapper.slothlet)) PENDING_CHANGES.set(wrapper.slothlet, new Set());
 	PENDING_CHANGES.get(wrapper.slothlet).add(wrapper);
@@ -9697,7 +9727,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const changeThroughStandIn = (op, prop, payload) => {
 			assertChange(prop);
 			const change = { chain: [...propChain], op, prop, payload };
-			if (wrapper.____slothletInternal.state.materialized) return runtime_applyStandInChange(wrapper, change, false);
+			if (wrapper.____slothletInternal.state.materialized) return runtime_applyStandInChange(wrapper, change, false, replayHolders);
 			runtime_queueStandInChange(wrapper, change);
 			return true;
 		};
