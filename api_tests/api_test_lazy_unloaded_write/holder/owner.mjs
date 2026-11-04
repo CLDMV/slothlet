@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T22:02:27-08:00 (1793772147)
+ *	@Last modified time: 2026-11-04T01:50:44-08:00 (1793785844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,4 +49,14 @@ export function closeOwnInner(kind) {
 	} catch (error) {
 		return error?.code ?? error?.name ?? String(error);
 	}
+}
+
+/**
+ * Return the module's own `deep.cfg.getterOnly` node, synchronously.
+ * @returns {object} The node.
+ * @example
+ * syncNode().g; // 1
+ */
+export function syncNode() {
+	return self.holder.deep.cfg.getterOnly;
 }

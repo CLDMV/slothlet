@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:59:48-08:00 (1793782788)
+ *	@Last modified time: 2026-11-04T01:51:59-08:00 (1793785919)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -553,16 +553,62 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		}
 	});
 
-	it("fails the next await or call of a node that loaded another way, once, for a refusal made on it", async () => {
+	it("leaves a loaded node as it is when a change made on it was refused, as eager mode does", async () => {
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			const made = outcome(() => {
+				api.holder.deep.cfg.getterOnly.g = 2;
+			});
+			// Loaded through a sibling, so no stand-in for the node is awaited.
+			await api.holder.deep.cfg.plain;
+			const returned = api.holder.owner.syncNode();
+			reports[mode] = {
+				made,
+				sync: !(returned instanceof Promise),
+				then: typeof api.holder.deep.cfg.getterOnly.then,
+				g: returned instanceof Promise ? "promise" : returned.g
+			};
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(reports.lazy).toEqual({ ...reports.eager, made: "done" });
+		expect(reports.lazy).toEqual({ made: "done", sync: true, then: "undefined", g: 1 });
+	});
+
+	it("hands back a promise from a stand-in's `then` called with one callback", async () => {
 		await load("lazy");
 		api.holder.deep.cfg.getterOnly.g = 2;
-		api.holder.deep.cfg.guarded.g = 2;
-		// Loaded through a sibling: neither node is reached through a stand-in afterwards.
-		await api.holder.deep.cfg.plain;
-		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
-		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
-		expect(outcome(() => api.holder.deep.cfg.guarded.run())).toBe("LAZY_WRITE_REFUSED");
-		expect(api.holder.deep.cfg.guarded.run()).toBe("ran");
+		let returned;
+		expect(
+			outcome(() => {
+				returned = api.holder.deep.cfg.getterOnly.then((value) => value);
+			})
+		).toBe("done");
+		expect(returned).toBeInstanceOf(Promise);
+		expect(await settled(returned)).toBe("LAZY_WRITE_REFUSED");
+		expect(await api.holder.deep.inner.then((inner) => typeof inner.leaf)).toBe("function");
+	});
+
+	it("loads, on a module reload, only the nodes holding changes made under that module", async () => {
+		const gate = Symbol.for("slothlet.test.i653.gate");
+		let open;
+		globalThis[gate] = new Promise((resolve) => {
+			open = resolve;
+		});
+		try {
+			await load("lazy");
+			await api.slothlet.api.add("slow", path.join(FIXTURE, "slow"), { moduleID: "slow" });
+			// The node holding this change cannot load until the gate opens.
+			api.slow.hold.wait.x = 1;
+			const reloaded = api.slothlet.api.reload("writer").then(() => "reloaded");
+			const timer = new Promise((resolve) => setTimeout(() => resolve("waiting"), 2000));
+			expect(await Promise.race([reloaded, timer])).toBe("reloaded");
+		} finally {
+			open();
+			delete globalThis[gate];
+		}
+		expect((await api.slow.hold.wait).x).toBe(1);
 	});
 
 	describe("refusals of queued changes", () => {
