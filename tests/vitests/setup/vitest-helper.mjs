@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
+ *	@Last modified time: 2026-11-03T05:23:52-08:00 (1793712232)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,6 +95,7 @@ export const TEST_DIRS = {
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
 	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
 	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
+	API_TEST_SYNC_LEAF_THENABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_sync_leaf_thenable`),
 	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
 	API_TEST_CALLER_SUPPLIED_ROUND2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round2`),
 	API_TEST_CALLER_SUPPLIED_ROUND3: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round3`),
