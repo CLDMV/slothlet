@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T01:51:59-08:00 (1793785919)
+ *	@Last modified time: 2026-11-04T07:24:11-08:00 (1793805851)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,6 +25,8 @@
  * holder/deep/cfg.mjs        frozen, getterOnly, guarded, plain
  * writer/ops.mjs             assign(), touch()          — another module, mounted as `writer` and as `intruder`
  * broken/deep/bad.mjs        fails to load while the test asks it to
+ * race/a/x.mjs               getterOnly                 — its load waits on a gate the test opens
+ * race/b/y.mjs               y()                        — a sibling reloaded on its own
  * ```
  * Reading a member of a node a lazy instance has not loaded hands back a stand-in for it until it loads. An
  * assignment, a definition, a deletion, or a new prototype made through the stand-in is judged at once, as the same
@@ -632,6 +634,31 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			}
 			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
 		});
+
+		it.each([["race.b"], ["race.a"], ["race"]])(
+			"are dropped when the module is reloaded while the load making them runs (reload %s)",
+			async (reloadPath) => {
+				const gate = Symbol.for("slothlet.test.i653.raceGate");
+				let open;
+				globalThis[gate] = new Promise((resolve) => {
+					open = resolve;
+				});
+				try {
+					await load("lazy");
+					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { moduleID: "race" });
+					await api.race;
+					// The read starts `a`'s load, which waits on the gate; the change is refused when it finishes.
+					api.race.a.x.getterOnly.g = 2;
+					const reloaded = api.slothlet.api.reload(reloadPath);
+					open();
+					await reloaded;
+				} finally {
+					open();
+					delete globalThis[gate];
+				}
+				expect(await settled(api.race.a.x.getterOnly)).toBe("ok");
+			}
+		);
 
 		it("are dropped when the module is removed and added again", async () => {
 			await load("lazy");
