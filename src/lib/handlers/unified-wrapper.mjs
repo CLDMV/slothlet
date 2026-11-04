@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T07:23:42-08:00 (1793805822)
+ *	@Last modified time: 2026-11-04T07:52:09-08:00 (1793807529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2262,9 +2262,10 @@ export function isLazyStandIn(value) {
 /**
  * The changes queued through stand-ins that their loaded node refused, per instance (#653): each fails the next await
  * or call made through a stand-in at or below the node it was made on, once, while that node is the one the change was
- * made on. A reload, a removal, or a shutdown drops the refusals of the nodes it replaces (see
- * {@link runtime_dropRefusedChanges}).
- * @type {WeakMap<object, Array<{path: string, error: Error, owner: object, generation: number}>>}
+ * made on. `holders` are the nodes the change was queued on, from the first to the one that refused it, each with its
+ * change generation when its load started: the refusal stands while every one of them is still that node. A reload, a
+ * removal, or a shutdown drops the refusals of the nodes it replaces (see {@link runtime_dropRefusedChanges}).
+ * @type {WeakMap<object, Array<{path: string, error: Error, holders: Array<{owner: object, generation: number}>}>>}
  * @private
  */
 const REFUSED_CHANGES = new WeakMap();
@@ -2427,6 +2428,14 @@ function runtime_changeAuthor(identity) {
 }
 
 /**
+ * The nodes the change being replayed was queued on, while it is made (#653): a change it moves down to a node further
+ * down, directly or through that node's stand-in, keeps them (see {@link REFUSED_CHANGES}).
+ * @type {{holders: Array<{owner: object, generation: number}>, path: string}|null}
+ * @private
+ */
+let replayHolders = null;
+
+/**
  * Make a change captured through a stand-in, on its node, as the code that made it (#653). One the node refuses is
  * reported twice, so that it is never lost: a warning names it at once (unless the instance is silent), and the next
  * await or call through that node rejects with `LAZY_WRITE_REFUSED` (see {@link runtime_takeRefusedChange}).
@@ -2438,17 +2447,19 @@ function runtime_changeAuthor(identity) {
  */
 function runtime_makeQueuedChange(wrapper, change, generation) {
 	const { contextManager, instanceID } = wrapper.slothlet;
-	const make = () =>
-		contextManager.runInContext(
-			instanceID,
-			() => runtime_applyStandInChange(wrapper, change, true),
-			null,
-			[],
-			change.writer,
-			true,
-			change.writer === null,
-			change.ceiling
-		);
+	// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
+	// makes the refusal no longer anyone's.
+	const holders = [...(change.holders ?? []), { owner: wrapper, generation }];
+	const apply = () => {
+		const outer = replayHolders;
+		replayHolders = { holders, path: String(wrapper.____slothletInternal.apiPath ?? "") };
+		try {
+			return runtime_applyStandInChange(wrapper, change, true);
+		} finally {
+			replayHolders = outer;
+		}
+	};
+	const make = () => contextManager.runInContext(instanceID, apply, null, [], change.writer, true, change.writer === null, change.ceiling);
 	try {
 		if (change.flow) contextManager.runInSnapshotFlowSync(instanceID, change.flow, make);
 		else make();
@@ -2458,9 +2469,9 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		if (!REFUSED_CHANGES.has(wrapper.slothlet)) REFUSED_CHANGES.set(wrapper.slothlet, []);
-		// Recorded for the node the load was for: one replaced while it loaded (reloaded, or rebuilt away) does not
+		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 		// hand the refusal to the node that took its place.
-		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, owner: wrapper, generation });
+		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, holders });
 	}
 }
 
@@ -2475,17 +2486,33 @@ function runtime_takeRefusalAt(slothlet, path) {
 	const refused = REFUSED_CHANGES.get(slothlet);
 	if (!refused?.length) return null;
 	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
-	const current = refused.filter(
-		(entry) => !entry.owner.____slothletInternal.invalid && entry.owner.____slothletInternal.changeGeneration === entry.generation
-	);
-	refused.splice(0, refused.length, ...current);
+	runtime_pruneRefusedChanges(refused);
 	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
 	return index === -1 ? null : refused.splice(index, 1)[0].error;
 }
 
 /**
- * Drop the refusals recorded for a node and the nodes below it (#653), when it is reloaded or removed: an await of the
- * node that takes its place has nothing to do with them.
+ * Keep only the refusals whose nodes are all still the nodes the change was queued on (#653).
+ * @param {Array<{path: string, error: Error, holders: Array<{owner: object, generation: number}>}>} refused - The
+ *   instance's refusals, pruned in place.
+ * @param {object|null} [dropped] - A node whose refusals go too, as it is given another value.
+ * @returns {void}
+ * @private
+ */
+function runtime_pruneRefusedChanges(refused, dropped = null) {
+	const current = refused.filter((entry) =>
+		entry.holders.every(
+			({ owner, generation }) =>
+				owner !== dropped && !owner.____slothletInternal.invalid && owner.____slothletInternal.changeGeneration === generation
+		)
+	);
+	refused.splice(0, refused.length, ...current);
+}
+
+/**
+ * Drop the refusals of changes made on a node (#653), when it is reloaded or removed, and the ones of nodes already
+ * replaced: an await of the node that takes its place has nothing to do with them. A refusal another module's node
+ * holds below it stays while that node does, as when modules share a mount and one of them reloads.
  * @param {object} wrapper - The node's wrapper.
  * @returns {void}
  * @private
@@ -2493,9 +2520,7 @@ function runtime_takeRefusalAt(slothlet, path) {
 function runtime_dropRefusedChanges(wrapper) {
 	const refused = REFUSED_CHANGES.get(wrapper.slothlet);
 	if (!refused?.length) return;
-	const path = String(wrapper.____slothletInternal.apiPath ?? "");
-	const kept = refused.filter((entry) => path !== "" && entry.path !== path && !entry.path.startsWith(`${path}.`));
-	refused.splice(0, refused.length, ...kept);
+	runtime_pruneRefusedChanges(refused, wrapper);
 }
 
 /**
@@ -2521,7 +2546,12 @@ export function refusedChangeCount(slothlet) {
  */
 function runtime_queueStandInChange(wrapper, change) {
 	if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
-	wrapper.____slothletInternal.pendingChanges.push(runtime_captureChange(wrapper, change));
+	const captured = runtime_captureChange(wrapper, change);
+	// A replayed change that moves down to a node further down keeps the nodes it was queued on before. A change some
+	// setter it runs makes elsewhere is that change's own.
+	const below = String(wrapper.____slothletInternal.apiPath ?? "");
+	if (replayHolders && below.startsWith(`${replayHolders.path}.`)) captured.holders = replayHolders.holders;
+	wrapper.____slothletInternal.pendingChanges.push(captured);
 	if (!PENDING_CHANGES.has(wrapper.slothlet)) PENDING_CHANGES.set(wrapper.slothlet, new Set());
 	PENDING_CHANGES.get(wrapper.slothlet).add(wrapper);
 }
