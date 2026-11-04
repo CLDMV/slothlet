@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T07:24:11-08:00 (1793805851)
+ *	@Last modified time: 2026-11-04T07:52:38-08:00 (1793807558)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,10 @@
  * writer/ops.mjs             assign(), touch()          — another module, mounted as `writer` and as `intruder`
  * broken/deep/bad.mjs        fails to load while the test asks it to
  * race/a/x.mjs               getterOnly                 — its load waits on a gate the test opens
+ * race/a/sub/z.mjs           getterOnly                 — one folder below `a`
  * race/b/y.mjs               y()                        — a sibling reloaded on its own
+ * co/c1/k/v.mjs              getterOnly                 — mounted at `co` with c2, which lacks `k`
+ * co/c2/other.mjs            other()                    — reloaded on its own
  * ```
  * Reading a member of a node a lazy instance has not loaded hands back a stand-in for it until it loads. An
  * assignment, a definition, a deletion, or a new prototype made through the stand-in is judged at once, as the same
@@ -659,6 +662,48 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 				expect(await settled(api.race.a.x.getterOnly)).toBe("ok");
 			}
 		);
+
+		it.each([["race.b"], ["race.a"], ["race"], [null]])(
+			"are dropped for a node further down a node reloaded away while it loaded (reload %s)",
+			async (reloadPath) => {
+				const gate = Symbol.for("slothlet.test.i653.raceGate");
+				let open;
+				globalThis[gate] = new Promise((resolve) => {
+					open = resolve;
+				});
+				try {
+					await load("lazy");
+					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { moduleID: "race" });
+					await api.race;
+					// Queued on `a`, whose load waits on the gate; once `a` has loaded, the change moves down to `a.sub`.
+					api.race.a.sub.z.getterOnly.g = 2;
+					const reloaded = reloadPath ? api.slothlet.api.reload(reloadPath) : Promise.resolve();
+					open();
+					await reloaded;
+					// Let a load the reload did not wait for finish before reading the rebuilt node.
+					await new Promise((resolve) => setTimeout(resolve, 50));
+				} finally {
+					open();
+					delete globalThis[gate];
+				}
+				expect(await settled(api.race.a.sub.z.getterOnly)).toBe("ok");
+			}
+		);
+
+		it.each([
+			["c2", "LAZY_WRITE_REFUSED"],
+			[null, "LAZY_WRITE_REFUSED"],
+			["c1", "ok"]
+		])("of one module mounted with another are kept when the other reloads (reload %s)", async (reloadID, expected) => {
+			await load("lazy");
+			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c1"), { moduleID: "c1" });
+			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c2"), { moduleID: "c2", collisionMode: "merge" });
+			// Only c1 provides `k.v`.
+			const standIn = api.co.k.v.getterOnly;
+			standIn.g = 2;
+			if (reloadID) await api.slothlet.api.reload(reloadID);
+			expect(await settled(standIn)).toBe(expected);
+		});
 
 		it("are dropped when the module is removed and added again", async () => {
 			await load("lazy");
