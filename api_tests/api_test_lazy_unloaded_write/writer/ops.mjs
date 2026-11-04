@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T22:02:28-08:00 (1793772148)
+ *	@Last modified time: 2026-11-04T00:03:12-08:00 (1793779392)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,4 +69,14 @@ export async function touch() {
  */
 export function close(kind) {
 	return attempt(() => Object[kind](self.holder.deep.inner));
+}
+
+/**
+ * Define a callable `then` on `holder.deep.inner`.
+ * @returns {string} The outcome.
+ * @example
+ * defineThen(); // "API_MEMBER_THEN_RESERVED"
+ */
+export function defineThen() {
+	return attempt(() => Object.defineProperty(self.holder.deep.inner, "then", { value: () => {} }));
 }

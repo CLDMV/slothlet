@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T22:05:00-08:00 (1793772300)
+ *	@Last modified time: 2026-11-04T00:04:34-08:00 (1793779474)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { refusedChangeCount, resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -389,6 +390,122 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		}
 	});
 
+	it.each(["freeze", "seal"])("closes an object node with %s once it loads, refusing nothing, as eager mode does", async (kind) => {
+		const warned = SlothletWarning.captured.length;
+		SlothletWarning.suppressConsole = true;
+		try {
+			const reports = {};
+			for (const mode of ["eager", "lazy"]) {
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime });
+				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+				const made = outcome(() => Object[kind](api.holder.deep.cfg.plain));
+				const awaited = await settled(api.holder.deep.cfg.plain);
+				reports[mode] = [made, awaited, lockState(api.holder.deep.cfg.plain), api.holder.deep.cfg.plain.p];
+				await api.slothlet.shutdown();
+				api = null;
+			}
+			expect(reports.lazy).toEqual(reports.eager);
+			expect(reports.lazy).toEqual(["done", "ok", kind === "freeze" ? "frozen" : "sealed", 1]);
+			expect(SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
+		} finally {
+			SlothletWarning.suppressConsole = false;
+		}
+	});
+
+	it("refuses a callable `then` defined through an unloaded node at once, as eager mode does", async () => {
+		const codes = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			codes[mode] = [
+				outcome(() => Object.defineProperty(api.holder.deep.inner, "then", { value: () => {}, configurable: true })),
+				outcome(() => Object.defineProperty(api.holder.deep.inner, "then", { get: () => () => {}, configurable: true }))
+			];
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(codes.lazy).toEqual(codes.eager);
+		expect(codes.lazy).toEqual(["API_MEMBER_THEN_RESERVED", "API_MEMBER_THEN_RESERVED"]);
+	});
+
+	it("runs a queued assignment's setter in the context it was made in, not the one that loads the node", async () => {
+		const tenants = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			await api.slothlet.context.run({ tenant: "A" }, () => {
+				api.holder.deep.ctx.probe.s = 1;
+			});
+			await api.slothlet.context.run({ tenant: "B" }, async () => {
+				await api.holder.deep.ctx.probe;
+			});
+			tenants[mode] = await api.holder.deep.ctx.tenants();
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(tenants.lazy).toEqual(tenants.eager);
+		expect(tenants.lazy).toEqual(["A"]);
+	});
+
+	it("answers `in` and the descriptor for a member its reader assigned through it, until deleted", async () => {
+		await load("lazy");
+		const inner = api.holder.deep.inner;
+		inner.planted = 1;
+		Object.defineProperty(inner, "defined", { get: () => 2, enumerable: true, configurable: true });
+		expect(await api.writer.ops.assign("byWriter", 3)).toBe("done");
+		expect(["planted" in inner, "defined" in inner, "never" in inner]).toEqual([true, true, false]);
+		expect(Object.getOwnPropertyDescriptor(inner, "planted")).toEqual({ value: 1, writable: true, enumerable: true, configurable: true });
+		expect(typeof Object.getOwnPropertyDescriptor(inner, "defined").get).toBe("function");
+		// Another module's queued value is read through the node's gates once it loads, not through the host's stand-in.
+		expect("byWriter" in inner).toBe(false);
+		delete inner.planted;
+		expect("planted" in inner).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(inner, "planted")).toBeUndefined();
+		const node = await api.holder.deep.inner;
+		expect(["planted" in node, node.defined, node.byWriter]).toEqual([false, 2, 3]);
+	});
+
+	describe("refusals of queued changes", () => {
+		/**
+		 * Queue a change the loaded node refuses, then load the node through another member so nothing takes the refusal.
+		 * @returns {Promise<void>}
+		 */
+		async function leaveRefusal() {
+			api.holder.deep.cfg.getterOnly.g = 2;
+			await api.holder.deep.cfg.plain;
+		}
+
+		it("are dropped when the node is reloaded", async () => {
+			await load("lazy");
+			const instance = resolveWrapper(api.holder).slothlet;
+			for (let round = 0; round < 3; round++) {
+				await leaveRefusal();
+				expect(refusedChangeCount(instance)).toBe(1);
+				await api.slothlet.api.reload("holder");
+				expect(refusedChangeCount(instance)).toBe(0);
+			}
+			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
+		});
+
+		it("are dropped when the module is removed and added again", async () => {
+			await load("lazy");
+			const instance = resolveWrapper(api.holder).slothlet;
+			await leaveRefusal();
+			await api.slothlet.api.remove("holder");
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			expect(refusedChangeCount(instance)).toBe(0);
+			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
+		});
+
+		it("are dropped when the instance shuts down", async () => {
+			await load("lazy");
+			const instance = resolveWrapper(api.holder).slothlet;
+			await leaveRefusal();
+			expect(refusedChangeCount(instance)).toBe(1);
+			await api.slothlet.shutdown();
+			api = null;
+			expect(refusedChangeCount(instance)).toBe(0);
+		});
+	});
+
 	it("refuses a callable `then` at once, as eager mode does", async () => {
 		const codes = {};
 		for (const mode of ["eager", "lazy"]) {
@@ -520,6 +637,21 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 				granted: ["done", "sealed"],
 				intruder: ["LOOSE_SET_NOT_OWNED", "open"]
 			});
+		});
+
+		it("refuses a callable `then` a module defines through an unloaded node with the code eager mode gives", async () => {
+			const codes = {};
+			for (const mode of ["eager", "lazy"]) {
+				await load(mode, grant);
+				codes[mode] = await withSuppressedSlothletErrorOutput(async () => [
+					await api.writer.ops.defineThen(),
+					await api.intruder.ops.defineThen()
+				]);
+				await api.slothlet.shutdown();
+				api = null;
+			}
+			expect(codes.lazy).toEqual(codes.eager);
+			expect(codes.lazy).toEqual(["API_MEMBER_THEN_RESERVED", "API_MEMBER_THEN_RESERVED"]);
 		});
 
 		it("makes each queued write as the one who made it, whoever loads the node", async () => {
