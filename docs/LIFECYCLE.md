@@ -7,6 +7,7 @@ This document covers the lifecycle event system, module type inspection, and bac
 - [Lifecycle Events](#lifecycle-events)
 - [Routines](#routines)
 - [Module Type Inspection](#module-type-inspection)
+- [Changes Before a Node Loads](#changes-before-a-node-loads)
 - [Background Materialization](#background-materialization)
 - [API Reference](#api-reference)
 
@@ -653,6 +654,49 @@ if (api.math.__type === UNMATERIALIZED) {
 	console.log("Loaded, type:", api.math.__type); // "object" or "function"
 }
 ```
+
+---
+
+## Changes Before a Node Loads
+
+In lazy mode, reading a member of a node that has not loaded yet hands back a stand-in for it until it loads. A change made through the stand-in is made on the node:
+
+- **Assigning, defining, or deleting a member, or setting the prototype**, is checked at once, by the same write rules and ownership checks a loaded node applies (see [PERMISSIONS.md](PERMISSIONS.md#write-permissions)), and refused there exactly as it would be in eager mode. A change that passes is made on the node when it loads, in the order the changes were made, as the code that made it and in the context it was made in (the `context.run()` data a setter reads), whoever's access loads the node. Any `await` of the node, or call through it, sees the change. A stand-in kept after its node has loaded makes the change at once.
+- **Freezing, sealing, or closing the node to extension** closes the stand-in at once, so a later change through it fails as it would on the closed object: an assignment to a frozen stand-in, or a new member defined on a closed one, is refused there and then. When the node loads it is closed the same way, after the changes made before the close, as the code that closed it and in the context it was closed in; if several stand-ins for the node were closed, the node ends up in the strongest state any of them reached.
+- **Assigning a callable `then`** is refused at once with `API_MEMBER_THEN_RESERVED`, as on any node.
+
+```javascript
+const api = await slothlet({ dir: "./api", mode: "lazy" });
+
+api.holder.deep.inner.planted = 1; // checked now, made when `inner` loads
+const inner = await api.holder.deep.inner;
+inner.planted; // 1, as in eager mode
+
+Object.freeze(api.other.node); // the stand-in is frozen now
+api.other.node.late = 1; // refused: the stand-in is frozen
+Object.isFrozen(await api.other.node); // true once it loads
+```
+
+### Reloads
+
+`api.slothlet.api.reload()` first loads the nodes that hold changes queued at or below the reloaded module's mount path (or the reloaded path), so each change is made, or refused and reported, before the reload rebuilds the module. From then on it is a change made on a loaded node: in lazy mode a module reload builds fresh nodes, and changes made on the old ones, queued or not, do not carry over (eager mode keeps them). `api.slothlet.reload()` of the whole instance drops queued changes and refusals, as eager mode drops the changes made on the nodes it replaces.
+
+### What a stand-in reports before the node loads
+
+A stand-in answers `in` and `Object.getOwnPropertyDescriptor()` for a member the code asking assigned or defined through a stand-in for that node, until it deletes it again, as the node will once it loads: a module sees what any of its functions queued, and the host what host code queued. A member defined non-configurable through the stand-in reads as defined. It does not know what the module exports until the module loads, so `Object.keys()` and `in` for the module's own members only answer correctly after an `await`. A change another module queued is that module's: it shows on the node once it loads, read through the node's own permission checks, not through this reader's stand-in.
+
+A queued change is checked again when it is made, as the code that queued it. In eager mode it would already have been made, so a change that no longer passes by then is refused and reported as below: one queued by a module that was removed before the node loaded, or one that a write rule added after it was queued now denies. This fails closed on purpose.
+
+### A refused change is reported late
+
+Some changes depend on what the module exports: assigning a member that only has a getter, or writing below a path the module does not have. In eager mode the assignment itself throws. In lazy mode the shape is only known once the node loads, after the assignment has returned. The change is then dropped. It is always reported by a `WARNING_LAZY_WRITE_REFUSED` warning naming it, as soon as it is refused, unless the instance is `silent`. It is also reported by a rejection when an `await` of the node, or a call through it, goes through a stand-in for the node before the node is replaced: the first such `await` or call rejects with `LAZY_WRITE_REFUSED`, whose `cause` is the error the change raised, and the ones after it are answered as usual. The loaded node itself never changes because of a refusal: reached directly (after it loaded through a sibling or `api.add`), it reads, awaits and calls as usual. Reloading the node or the whole instance, removing its module, or shutting the instance down drops a refusal not yet delivered. A change made through a stand-in closed to extension, adding a member the loaded node does not have, is refused this way too. If a node fails to load, the changes queued for it are dropped with it, and the awaits fail with the load error as they would without them.
+
+```javascript
+api.config.limits.max = 10; // `limits` exports `max` as a getter only; no error yet
+await api.config.limits; // rejects: LAZY_WRITE_REFUSED, cause: TypeError
+```
+
+To get the refusal where the change is made, await the node before changing it.
 
 ---
 

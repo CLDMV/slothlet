@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T10:15:46-07:00 (1793466946)
+ *	@Last modified time: 2026-11-04T00:59:24-08:00 (1793782764)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue, releaseModuleMakers } from "#handlers/unified-wrapper";
+import { resolveWrapper, isCallableValue, releaseModuleMakers, releaseStandInChanges } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
@@ -1216,6 +1216,10 @@ class Slothlet {
 				validationError: true
 			});
 		}
+
+		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
+		// eager mode's changes go with those nodes too (#653).
+		releaseStandInChanges(this);
 
 		// 1. Save operation history from api-manager for replay
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:03:57-07:00 (1793462637)
+ *	@Last modified time: 2026-11-03T23:03:10-08:00 (1793775790)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
+import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
@@ -197,7 +197,7 @@ export class AsyncContextManager {
 					// instance never gets context-preserving method wrapping (#328). No rejection
 					// handler: async rejections already propagate untouched here, matching the leaf
 					// error contract pinned by sync-leaf-error-propagation (#252).
-					if (result instanceof Promise) {
+					if (inheritsFrom(result, Promise)) {
 						return nativeThen(result, (value) =>
 							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
 						);
@@ -207,7 +207,7 @@ export class AsyncContextManager {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 					// their original error type/code/status.
-					if (rawErrors || error instanceof SlothletError) throw error;
+					if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
@@ -229,7 +229,7 @@ export class AsyncContextManager {
 				// instance never gets context-preserving method wrapping (#328). No rejection
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
-				if (result instanceof Promise) {
+				if (inheritsFrom(result, Promise)) {
 					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
 				}
 				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
@@ -237,7 +237,7 @@ export class AsyncContextManager {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 				// their original error type/code/status.
-				if (rawErrors || error instanceof SlothletError) throw error;
+				if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
@@ -536,6 +536,28 @@ export class AsyncContextManager {
 		this.instances.set(childStore.instanceID, childStore);
 		try {
 			return await this.als.run(childStore, fn);
+		} finally {
+			this.instances.delete(childStore.instanceID);
+		}
+	}
+
+	/**
+	 * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+	 * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+	 * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {function(): *} fn - Synchronous function to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @internal
+	 */
+	runInSnapshotFlowSync(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		this.instances.set(childStore.instanceID, childStore);
+		try {
+			return this.als.run(childStore, fn);
 		} finally {
 			this.instances.delete(childStore.instanceID);
 		}

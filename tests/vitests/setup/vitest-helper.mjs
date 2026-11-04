@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
+ *	@Last modified time: 2026-11-03T08:39:33-08:00 (1793723973)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,6 +88,7 @@ export const TEST_DIRS = {
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
 	API_TEST_EXPORT_SHADOW: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_export_shadow`),
+	API_TEST_FUNCTION_MEMBERS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_function_members`),
 	API_TEST_PERMISSION_PRINCIPALS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permission_principals`),
 	API_TEST_EVENTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_events`),
 	API_TEST_CROSS_INSTANCE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cross_instance`),
@@ -95,6 +96,7 @@ export const TEST_DIRS = {
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
 	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
 	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
+	API_TEST_SYNC_LEAF_THENABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_sync_leaf_thenable`),
 	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
 	API_TEST_CALLER_SUPPLIED_ROUND2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round2`),
 	API_TEST_CALLER_SUPPLIED_ROUND3: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round3`),
@@ -139,7 +141,9 @@ export const TEST_DIRS = {
 	// #625 — a module cannot change the framework namespace `self.slothlet`.
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
-	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
+	// #653 — writes through a lazy node that has not loaded yet.
+	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`)
 };
 
 /**
