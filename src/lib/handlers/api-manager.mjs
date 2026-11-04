@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:59:19-08:00 (1793782759)
+ *	@Last modified time: 2026-11-04T01:51:32-08:00 (1793785892)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4910,7 +4910,9 @@ export class ApiManager extends ComponentBase {
 
 		// Changes made through lazy stand-ins are made first, so the reload keeps them as it keeps any change made on a
 		// node, as in eager mode, where they were made already (#653).
-		await settleStandInChanges(this.slothlet);
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		const scope = moduleID ? (cacheManager?.has(moduleID) ? cacheManager.get(moduleID).endpoint : undefined) : apiPath;
+		if (scope !== undefined) await settleStandInChanges(this.slothlet, scope);
 
 		// ModuleID-based reload: rebuild single cache and restore all paths
 		if (moduleID) {

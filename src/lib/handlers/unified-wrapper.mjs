@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:59:21-08:00 (1793782761)
+ *	@Last modified time: 2026-11-04T01:51:33-08:00 (1793785893)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2281,18 +2281,28 @@ const PENDING_CHANGES = new WeakMap();
  * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
  * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
  * @param {object} slothlet - The instance.
+ * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
+ *   for the whole instance.
  * @returns {Promise<void>}
  * @internal
  * @example
  * await settleStandInChanges(slothlet);
  */
-export async function settleStandInChanges(slothlet) {
+export async function settleStandInChanges(slothlet, scope = null) {
 	const pending = PENDING_CHANGES.get(slothlet);
+	if (!pending) return;
+	const whole = !scope || scope === ".";
+	const within = (path) => path === scope || path.startsWith(`${scope}.`);
+	// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
+	const qualifies = (holder) =>
+		whole || (holder.____slothletInternal.pendingChanges ?? []).some((change) => within(runtime_standInPath(holder, change.chain)));
+	const tried = new Set();
 	// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
-	// queued there and made by the next. A path has finitely many levels.
-	while (pending?.size) {
-		const holders = [...pending];
-		pending.clear();
+	// queued there and made by the next. Each holder is loaded once.
+	for (;;) {
+		const holders = [...pending].filter((holder) => !tried.has(holder) && qualifies(holder));
+		if (holders.length === 0) return;
+		for (const holder of holders) tried.add(holder);
 		await Promise.all(holders.map((holder) => holder._materialize().catch(() => {})));
 	}
 }
@@ -2469,19 +2479,6 @@ function runtime_takeRefusalAt(slothlet, path) {
 	refused.splice(0, refused.length, ...current);
 	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
 	return index === -1 ? null : refused.splice(index, 1)[0].error;
-}
-
-/**
- * The refusal an await or call of a loaded node takes (#653): one made on it, or above it, that it loaded another way
- * than through the stand-in the change was made on (a sibling's load, an `api.add`), so the refusal reaches the code
- * that uses the node and is not left only to a warning.
- * @param {object} wrapper - The loaded node's wrapper.
- * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
- * @private
- */
-function runtime_takeNodeRefusal(wrapper) {
-	if (!REFUSED_CHANGES.get(wrapper.slothlet)?.length) return null;
-	return runtime_takeRefusalAt(wrapper.slothlet, String(wrapper.____slothletInternal.apiPath ?? ""));
 }
 
 /**
@@ -9917,7 +9914,9 @@ export class UnifiedWrapper extends ComponentBase {
 						};
 
 						// A change queued through a stand-in that the node it reached refused fails this await (#653).
-						waitingProxy_thenResolve()
+						// The chain is handed back, so a `then` called with one callback leaves the rejection to the promise it
+						// returns, as a promise's own `then` does, instead of losing it.
+						return waitingProxy_thenResolve()
 							.then((value) => {
 								const refused = runtime_takeRefusedChange(wrapper, propChain);
 								if (refused) throw refused;
@@ -11515,9 +11514,6 @@ export class UnifiedWrapper extends ComponentBase {
 			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
 			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
-			// A queued change refused on this node, or one above it, that loaded another way fails this call (#653).
-			const refusedChange = runtime_takeNodeRefusal(wrapper);
-			if (refusedChange) throw refusedChange;
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -13052,15 +13048,6 @@ export class UnifiedWrapper extends ComponentBase {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => {
-				// A queued change this node, loaded another way, refused fails the next await of it (#653).
-				if (prop === "then") {
-					const refused = runtime_takeNodeRefusal(wrapper);
-					if (refused) {
-						return (___onFulfilled, onRejected) => {
-							onRejected(refused);
-						};
-					}
-				}
 				const value = getTrap(target, prop, receiver);
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
