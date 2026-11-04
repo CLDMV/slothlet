@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T01:51:33-08:00 (1793785893)
+ *	@Last modified time: 2026-11-04T07:23:42-08:00 (1793805822)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2432,10 +2432,11 @@ function runtime_changeAuthor(identity) {
  * await or call through that node rejects with `LAZY_WRITE_REFUSED` (see {@link runtime_takeRefusedChange}).
  * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
  * @param {object} change - The change, as {@link runtime_captureChange} returned it.
+ * @param {number} generation - The node's change generation when the load making the change started.
  * @returns {void}
  * @private
  */
-function runtime_makeQueuedChange(wrapper, change) {
+function runtime_makeQueuedChange(wrapper, change, generation) {
 	const { contextManager, instanceID } = wrapper.slothlet;
 	const make = () =>
 		contextManager.runInContext(
@@ -2457,7 +2458,8 @@ function runtime_makeQueuedChange(wrapper, change) {
 		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		if (!REFUSED_CHANGES.has(wrapper.slothlet)) REFUSED_CHANGES.set(wrapper.slothlet, []);
-		const generation = wrapper.____slothletInternal.changeGeneration;
+		// Recorded for the node the load was for: one replaced while it loaded (reloaded, or rebuilt away) does not
+		// hand the refusal to the node that took its place.
 		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, owner: wrapper, generation });
 	}
 }
@@ -2529,15 +2531,35 @@ function runtime_queueStandInChange(wrapper, change) {
  * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
  * {@link runtime_takeRefusedChange}); the rest still land.
  * @param {object} wrapper - The wrapper, loaded.
+ * @param {number} generation - Its change generation when the load started.
  * @returns {void}
  * @private
  */
-function runtime_replayStandInChanges(wrapper) {
+function runtime_replayStandInChanges(wrapper, generation) {
 	const pending = wrapper.____slothletInternal.pendingChanges;
 	if (!pending) return;
 	wrapper.____slothletInternal.pendingChanges = null;
 	PENDING_CHANGES.get(wrapper.slothlet)?.delete(wrapper);
-	for (const change of pending) runtime_makeQueuedChange(wrapper, change);
+	for (const change of pending) runtime_makeQueuedChange(wrapper, change, generation);
+}
+
+/**
+ * Retire the refusals of a node a reload rebuilt away, and of the loaded nodes below it (#653): the node built in
+ * its place is another, so a refusal a load of the old one records later is not its own.
+ * @param {object} wrapper - The replaced node's wrapper.
+ * @param {Set<object>} [seen] - Wrappers already retired.
+ * @returns {void}
+ * @private
+ */
+function runtime_retireChanges(wrapper, seen = new Set()) {
+	if (seen.has(wrapper)) return;
+	seen.add(wrapper);
+	wrapper.____slothletInternal.changeGeneration++;
+	runtime_dropRefusedChanges(wrapper);
+	for (const key of Object.keys(wrapper)) {
+		const child = resolveWrapper(wrapper[key]);
+		if (child) runtime_retireChanges(child, seen);
+	}
 }
 
 /**
@@ -8291,6 +8313,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Create and store the materialization promise
 		this.____slothletInternal.materializationPromise = (async () => {
 			this.____slothletInternal.state.inFlight = true;
+			// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
+			const changeGeneration = this.____slothletInternal.changeGeneration;
 
 			try {
 				if (this.____slothletInternal.materializeFunc) {
@@ -8342,7 +8366,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
 					this.___trackLazyLoad("loaded");
 					// Changes made through stand-ins for it while it loaded, now that it has (#653).
-					runtime_replayStandInChanges(this);
+					runtime_replayStandInChanges(this, changeGeneration);
 
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
@@ -9030,6 +9054,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// nested wrapper regardless of deferChildAdopt, and the `wrapped === null` branch
 				// just below — which defines the live-forwarding accessor for exactly this case —
 				// would never fire (#340).
+				// A child wrapper this one replaces (a lazy reload builds fresh nodes) is another node from now on (#653).
+				const displaced = existingChild ? resolveWrapper(existingChild) : null;
+				if (displaced) runtime_retireChanges(displaced);
 				wrapped = this.___createChildWrapper(key, value, adoptVisited, this.____slothletInternal.deferChildAdopt);
 				// Symbol keys are not used as API module names in practice.
 				/* v8 ignore next */
@@ -9701,7 +9728,8 @@ export class UnifiedWrapper extends ComponentBase {
 					const change = { chain: [...propChain], op: "lock", prop: null, payload: target };
 					if (wrapper.____slothletInternal.state.materialized) {
 						const queued = runtime_captureChange(wrapper, change);
-						queueMicrotask(() => runtime_makeQueuedChange(wrapper, queued));
+						const generation = wrapper.____slothletInternal.changeGeneration;
+						queueMicrotask(() => runtime_makeQueuedChange(wrapper, queued, generation));
 					} else runtime_queueStandInChange(wrapper, change);
 				}
 				// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
