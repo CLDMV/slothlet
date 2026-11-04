@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:04:34-08:00 (1793779474)
+ *	@Last modified time: 2026-11-04T00:59:48-08:00 (1793782788)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -463,6 +463,108 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		expect(["planted" in node, node.defined, node.byWriter]).toEqual([false, 2, 3]);
 	});
 
+	it("reads a member defined fixed through an unloaded node, new or existing, as eager mode does", async () => {
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			const inner = api.holder.deep.inner;
+			Object.defineProperty(inner, "fixedNew", { value: 1, configurable: false, writable: false });
+			Object.defineProperty(inner, "leaf", { value: () => "fixed", configurable: false, writable: false });
+			reports[mode] = [
+				inner.fixedNew,
+				api.holder.deep.inner.fixedNew,
+				inner.leaf(),
+				Object.getOwnPropertyDescriptor(inner, "fixedNew").value
+			];
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(reports.lazy).toEqual(reports.eager);
+		expect(reports.lazy).toEqual([1, 1, "fixed", 1]);
+	});
+
+	it("shows a module the members it queued from any of its functions, and the host only its own", async () => {
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			expect(await api.writer.ops.assign("byWriter", 1)).toBe("done");
+			api.holder.deep.inner.byHost = 2;
+			reports[mode] = [await api.writer.ops.peek("byWriter"), await api.writer.ops.peek("byHost"), "byHost" in api.holder.deep.inner];
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(reports.lazy[0]).toBe(reports.eager[0]);
+		expect(reports.lazy[2]).toBe(reports.eager[2]);
+		expect(reports.lazy).toEqual([true, false, true]);
+	});
+
+	it("treats writes queued before a module reload as writes made on the loaded node", async () => {
+		const grant = { permissions: { rules: [{ caller: "writer.**", target: "holder.**:write", effect: "allow" }] } };
+		const reports = {};
+		for (const variant of ["loaded", "queued"]) {
+			await load("lazy", grant);
+			if (variant === "loaded") await api.holder.deep.inner;
+			api.holder.deep.inner.planted = 1;
+			expect(await api.writer.ops.assign("byWriter", 2)).toBe("done");
+			await api.slothlet.api.reload("holder");
+			const inner = await api.holder.deep.inner;
+			reports[variant] = [inner.planted, inner.byWriter];
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(reports.queued).toEqual(reports.loaded);
+	});
+
+	it("makes a write queued before a module reload before the reload, so a refused one is still reported", async () => {
+		const warned = SlothletWarning.captured.length;
+		SlothletWarning.suppressConsole = true;
+		try {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			api.holder.deep.cfg.getterOnly.g = 2;
+			await api.slothlet.api.reload("holder");
+			const warnings = SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.cfg.getterOnly"]);
+		} finally {
+			SlothletWarning.suppressConsole = false;
+		}
+	});
+
+	it("handles a whole-instance reload as eager mode does, with nothing left to replay or refuse", async () => {
+		const warned = SlothletWarning.captured.length;
+		SlothletWarning.suppressConsole = true;
+		try {
+			const reports = {};
+			for (const mode of ["eager", "lazy"]) {
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime });
+				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+				api.holder.deep.inner.planted = 1;
+				await api.slothlet.reload();
+				const awaited = await settled(api.holder.deep.inner);
+				reports[mode] = [awaited, api.holder.deep.inner.planted];
+				await api.slothlet.shutdown();
+				api = null;
+			}
+			expect(reports.lazy).toEqual(reports.eager);
+			expect(reports.lazy[0]).toBe("ok");
+			expect(SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
+		} finally {
+			SlothletWarning.suppressConsole = false;
+		}
+	});
+
+	it("fails the next await or call of a node that loaded another way, once, for a refusal made on it", async () => {
+		await load("lazy");
+		api.holder.deep.cfg.getterOnly.g = 2;
+		api.holder.deep.cfg.guarded.g = 2;
+		// Loaded through a sibling: neither node is reached through a stand-in afterwards.
+		await api.holder.deep.cfg.plain;
+		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
+		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
+		expect(outcome(() => api.holder.deep.cfg.guarded.run())).toBe("LAZY_WRITE_REFUSED");
+		expect(api.holder.deep.cfg.guarded.run()).toBe("ran");
+	});
+
 	describe("refusals of queued changes", () => {
 		/**
 		 * Queue a change the loaded node refuses, then load the node through another member so nothing takes the refusal.
@@ -492,6 +594,17 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			await api.slothlet.api.remove("holder");
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			expect(refusedChangeCount(instance)).toBe(0);
+			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
+		});
+
+		it("are dropped when the whole instance reloads", async () => {
+			await load("lazy");
+			const instance = resolveWrapper(api.holder).slothlet;
+			for (let round = 0; round < 3; round++) {
+				await leaveRefusal();
+				await api.slothlet.reload();
+				expect(refusedChangeCount(instance)).toBe(0);
+			}
 			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
 		});
 

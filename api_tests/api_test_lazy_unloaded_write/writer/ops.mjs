@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:03:12-08:00 (1793779392)
+ *	@Last modified time: 2026-11-04T00:58:31-08:00 (1793782711)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,4 +79,15 @@ export function close(kind) {
  */
 export function defineThen() {
 	return attempt(() => Object.defineProperty(self.holder.deep.inner, "then", { value: () => {} }));
+}
+
+/**
+ * Whether `holder.deep.inner` has a member, as this module sees it.
+ * @param {string} key - The member's name.
+ * @returns {boolean} Whether `key in` the node.
+ * @example
+ * peek("byWriter"); // true
+ */
+export function peek(key) {
+	return key in self.holder.deep.inner;
 }
