@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T07:40:23-08:00 (1793720423)
+ *	@Last modified time: 2026-11-04T08:24:05-08:00 (1793809445)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2186,9 +2186,24 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
  */
 function runtime_assertOwnedWrite(wrapper, prop) {
 	if (FRAMEWORK_WRITES.has(wrapper)) return;
-	const slothlet = wrapper.slothlet;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
 	if (typeof prop === "string") parts.push(prop);
+	runtime_assertOwnedWriteAt(wrapper, parts);
+}
+
+/**
+ * The rule {@link runtime_assertOwnedWrite} applies, for a change at a full api path: the one a loaded node applies to
+ * a change to its member, and a lazy stand-in to a change at the path it stands for, before the node has loaded (#653).
+ *
+ * @param {object} wrapper - A wrapper of the instance the change is made in.
+ * @param {string[]} parts - Segments of the api path changed.
+ * @returns {void}
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED`, `LOOSE_SET_UNATTRIBUTED`, or `PERMISSION_DENIED`, as
+ *   {@link runtime_assertOwnedWrite}.
+ * @private
+ */
+function runtime_assertOwnedWriteAt(wrapper, parts) {
+	const slothlet = wrapper.slothlet;
 	if (!slothlet.handlers.apiManager.writeChecked(parts)) return;
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
 	// names whichever call entered last, which is not who is running once calls overlap.
@@ -2229,6 +2244,394 @@ let VOUCHED_CHANGE = null;
  * @private
  */
 const STAND_INS = new WeakSet();
+
+/**
+ * Whether a value is a stand-in a lazy node handed out for a member it has not loaded (#653): a change made through
+ * one is made on the node it stands for once that node loads.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
+ * @internal
+ *
+ * @example
+ * if (isLazyStandIn(parent)) parent = walkAgain();
+ */
+export function isLazyStandIn(value) {
+	return STAND_INS.has(value);
+}
+
+/**
+ * The changes queued through stand-ins that their loaded node refused, per instance (#653): each fails the next await
+ * or call made through a stand-in at or below the node it was made on, once, while that node is the one the change was
+ * made on. `holders` are the nodes the change was queued on, from the first to the one that refused it, each with its
+ * change generation when its load started: the refusal stands while every one of them is still that node. A reload, a
+ * removal, or a shutdown drops the refusals of the nodes it replaces (see {@link runtime_dropRefusedChanges}).
+ * @type {WeakMap<object, Array<{path: string, error: Error, holders: Array<{owner: object, generation: number}>}>>}
+ * @private
+ */
+const REFUSED_CHANGES = new WeakMap();
+
+/**
+ * The wrappers of each instance holding changes queued through stand-ins (#653), so a reload can make or drop them.
+ * @type {WeakMap<object, Set<object>>}
+ * @private
+ */
+const PENDING_CHANGES = new WeakMap();
+
+/**
+ * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
+ * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
+ * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
+ *   for the whole instance.
+ * @returns {Promise<void>}
+ * @internal
+ * @example
+ * await settleStandInChanges(slothlet);
+ */
+export async function settleStandInChanges(slothlet, scope = null) {
+	const pending = PENDING_CHANGES.get(slothlet);
+	if (!pending) return;
+	const whole = !scope || scope === ".";
+	const within = (path) => path === scope || path.startsWith(`${scope}.`);
+	// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
+	const qualifies = (holder) =>
+		whole || (holder.____slothletInternal.pendingChanges ?? []).some((change) => within(runtime_standInPath(holder, change.chain)));
+	const tried = new Set();
+	// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
+	// queued there and made by the next. Each holder is loaded once.
+	for (;;) {
+		const holders = [...pending].filter((holder) => !tried.has(holder) && qualifies(holder));
+		if (holders.length === 0) return;
+		for (const holder of holders) tried.add(holder);
+		await Promise.all(holders.map((holder) => holder._materialize().catch(() => {})));
+	}
+}
+
+/**
+ * Drop the changes queued through stand-ins of an instance, and the refusals of those already made, when the whole
+ * instance reloads or shuts down (#653): the nodes they were made on are gone, as eager mode's changes are.
+ * @param {object} slothlet - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseStandInChanges(slothlet);
+ */
+export function releaseStandInChanges(slothlet) {
+	for (const holder of PENDING_CHANGES.get(slothlet) ?? []) holder.____slothletInternal.pendingChanges = null;
+	PENDING_CHANGES.delete(slothlet);
+	REFUSED_CHANGES.delete(slothlet);
+}
+
+/**
+ * The api path of the node a stand-in stands for: its wrapper's path and the chain read below it.
+ * @param {object} wrapper - The wrapper the stand-in waits for.
+ * @param {Array<string|symbol>} chain - The members read below it.
+ * @returns {string} The dotted path.
+ * @private
+ */
+function runtime_standInPath(wrapper, chain) {
+	return [wrapper.____slothletInternal.apiPath, ...chain.map(String)].filter(Boolean).join(".");
+}
+
+/**
+ * Make a change through a stand-in on the node it stands for, through the node's own traps, as the same change made on
+ * the node itself would be (#653). The chain is read from the wrapper the stand-in waits for, so a node further down
+ * that has not loaded either hands out its own stand-in, which queues the change in turn.
+ *
+ * Made as it is asked for, the change answers as a trap does (`false` when the node refuses it). Replayed once the node
+ * has loaded, nothing is left to answer to, so a refusal throws, as the same change does in strict-mode code.
+ * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+ * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+ * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+ * @returns {boolean} Whether the node took the change.
+ * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+ * @private
+ */
+function runtime_applyStandInChange(wrapper, change, replayed, holders = null) {
+	// No code the walk or the change runs (a getter, a setter, a trap of the module's) hands a change on as this one.
+	const outer = replayHolders;
+	replayHolders = null;
+	try {
+		return runtime_makeStandInChange(wrapper, change, replayed, holders);
+	} finally {
+		replayHolders = outer;
+	}
+}
+
+/**
+ * Make a change through a stand-in on the node it stands for (see {@link runtime_applyStandInChange}).
+ * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+ * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+ * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+ * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
+ * @returns {boolean} Whether the node took the change.
+ * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+ * @private
+ */
+function runtime_makeStandInChange(wrapper, change, replayed, holders) {
+	let node = wrapper.createProxy();
+	for (const key of change.chain) node = node[key];
+	// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
+	// reading: the node's own traps judge the change as the module making it (#625).
+	node = runtime_nodeBehind(node);
+	const { op, prop, payload } = change;
+	// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
+	// members it adopts as it loads would replace what was written (#653).
+	const standIn = STAND_INS.has(node);
+	const nodeWrapper = standIn ? null : resolveWrapper(node);
+	if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
+		replayHolders = holders;
+		try {
+			runtime_queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
+		} finally {
+			replayHolders = null;
+		}
+		if (!nodeWrapper.____slothletInternal.state.inFlight) nodeWrapper._materialize().catch(() => {});
+		return true;
+	}
+	// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
+	// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
+	if (standIn) replayHolders = holders;
+	if (op === "lock") {
+		runtime_lockAsStandIn(node, payload);
+		return true;
+	}
+	if (replayed) {
+		if (op === "set") node[prop] = payload;
+		else if (op === "defineProperty") Object.defineProperty(node, prop, payload);
+		else if (op === "deleteProperty") delete node[prop];
+		else Object.setPrototypeOf(node, payload);
+		return true;
+	}
+	if (op === "set") return Reflect.set(node, prop, payload);
+	if (op === "defineProperty") return Reflect.defineProperty(node, prop, payload);
+	if (op === "deleteProperty") return Reflect.deleteProperty(node, prop);
+	return Reflect.setPrototypeOf(node, payload);
+}
+
+/**
+ * Close a node the way a stand-in for it was closed (#653): frozen when the stand-in's target reads as frozen, sealed
+ * when it reads as sealed, and closed to extension otherwise. The target's own members are fixed so that only a
+ * freeze reads as one (see ___createWaitingProxy). The node closes through its own traps, as a node closed directly.
+ * @param {object} node - The node.
+ * @param {Function} target - The stand-in's target, closed.
+ * @returns {void}
+ * @throws {TypeError} When the node refuses to close.
+ * @private
+ */
+function runtime_lockAsStandIn(node, target) {
+	if (Object.isFrozen(target)) Object.freeze(node);
+	else if (Object.isSealed(target)) Object.seal(node);
+	else Object.preventExtensions(node);
+}
+
+/**
+ * A change made through a stand-in, with who made it: it is made as them later, whoever's access leads to it (#653).
+ * Code no call accounts for is made as the host, which hands it no module's standing: what it writes counts as handed
+ * to the node's module (#597).
+ * @param {object} wrapper - The wrapper the stand-in waits for.
+ * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+ * @returns {object} The change, with its writer and the writer's ceiling.
+ * @private
+ */
+function runtime_captureChange(wrapper, change) {
+	const { contextManager, instanceID } = wrapper.slothlet;
+	const identity = contextManager.getCallerIdentity(instanceID);
+	const writer = identity?.unresolved ? null : (identity?.currentWrapper ?? null);
+	// The flow it was made in goes with it, so a setter it runs reads that flow's context, not the loader's.
+	const flow = contextManager.snapshotFlow(instanceID);
+	return { ...change, writer, ceiling: writer ? (identity.ceiling ?? null) : null, flow, by: runtime_changeAuthor(identity) };
+}
+
+/**
+ * Who made a change through a stand-in, as {@link runtime_captureChange} records it and a stand-in's `in` compares it
+ * (#653): the module, for module code (any of its functions); the host; or, for code no call accounts for, a value of
+ * its own that matches nothing, so such code and the host never see each other's queued members.
+ * @param {object|null} identity - The caller identity.
+ * @returns {object|string} The author.
+ * @private
+ */
+function runtime_changeAuthor(identity) {
+	if (identity?.unresolved) return {};
+	return identity?.currentWrapper ? runtime_makerOf(identity.currentWrapper) : "host";
+}
+
+/**
+ * The nodes the change being replayed was queued on, while it is handed to the stand-in of a node further down that has
+ * not loaded (#653): the change that stand-in queues keeps them (see {@link REFUSED_CHANGES}). Only for that hand-over,
+ * which runs no code of a module: a change a getter or setter makes is its own.
+ * @type {Array<{owner: object, generation: number}>|null}
+ * @private
+ */
+let replayHolders = null;
+
+/**
+ * Make a change captured through a stand-in, on its node, as the code that made it (#653). One the node refuses is
+ * reported twice, so that it is never lost: a warning names it at once (unless the instance is silent), and the next
+ * await or call through that node rejects with `LAZY_WRITE_REFUSED` (see {@link runtime_takeRefusedChange}).
+ * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+ * @param {object} change - The change, as {@link runtime_captureChange} returned it.
+ * @param {number} generation - The node's change generation when the load making the change started.
+ * @returns {void}
+ * @private
+ */
+function runtime_makeQueuedChange(wrapper, change, generation) {
+	const { contextManager, instanceID } = wrapper.slothlet;
+	// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
+	// makes the refusal no longer anyone's.
+	const holders = [...(change.holders ?? []), { owner: wrapper, generation }];
+	const make = () =>
+		contextManager.runInContext(
+			instanceID,
+			() => runtime_applyStandInChange(wrapper, change, true, holders),
+			null,
+			[],
+			change.writer,
+			true,
+			change.writer === null,
+			change.ceiling
+		);
+	try {
+		if (change.flow) contextManager.runInSnapshotFlowSync(instanceID, change.flow, make);
+		else make();
+	} catch (error) {
+		const apiPath = runtime_standInPath(wrapper, change.chain);
+		const operation = change.op === "lock" ? "preventExtensions" : change.op;
+		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
+		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
+		if (!REFUSED_CHANGES.has(wrapper.slothlet)) REFUSED_CHANGES.set(wrapper.slothlet, []);
+		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
+		// hand the refusal to the node that took its place.
+		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, holders });
+	}
+}
+
+/**
+ * Take the refusal of a queued change made on a node at or above `path`, still current (#653).
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The api path an await or call goes through.
+ * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
+ * @private
+ */
+function runtime_takeRefusalAt(slothlet, path) {
+	const refused = REFUSED_CHANGES.get(slothlet);
+	if (!refused?.length) return null;
+	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
+	runtime_pruneRefusedChanges(refused);
+	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
+	return index === -1 ? null : refused.splice(index, 1)[0].error;
+}
+
+/**
+ * Keep only the refusals whose nodes are all still the nodes the change was queued on (#653).
+ * @param {Array<{path: string, error: Error, holders: Array<{owner: object, generation: number}>}>} refused - The
+ *   instance's refusals, pruned in place.
+ * @param {object|null} [dropped] - A node whose refusals go too, as it is given another value.
+ * @returns {void}
+ * @private
+ */
+function runtime_pruneRefusedChanges(refused, dropped = null) {
+	const current = refused.filter((entry) =>
+		entry.holders.every(
+			({ owner, generation }) =>
+				owner !== dropped && !owner.____slothletInternal.invalid && owner.____slothletInternal.changeGeneration === generation
+		)
+	);
+	refused.splice(0, refused.length, ...current);
+}
+
+/**
+ * Drop the refusals of changes made on a node (#653), when it is reloaded or removed, and the ones of nodes already
+ * replaced: an await of the node that takes its place has nothing to do with them. A refusal another module's node
+ * holds below it stays while that node does, as when modules share a mount and one of them reloads.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_dropRefusedChanges(wrapper) {
+	const refused = REFUSED_CHANGES.get(wrapper.slothlet);
+	if (!refused?.length) return;
+	runtime_pruneRefusedChanges(refused, wrapper);
+}
+
+/**
+ * How many refusals of queued changes an instance holds (see {@link runtime_takeRefusedChange}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * refusedChangeCount(slothlet); // 0
+ */
+export function refusedChangeCount(slothlet) {
+	return REFUSED_CHANGES.get(slothlet)?.length ?? 0;
+}
+
+/**
+ * Queue a change made through a stand-in whose node has not loaded, with who made it: it is made as them once the node
+ * loads (see {@link runtime_replayStandInChanges}), whoever loads it (#653). Code no call accounts for is made as the
+ * host, which hands it no module's standing: what it writes counts as handed to the node's module (#597).
+ * @param {object} wrapper - The wrapper the stand-in waits for.
+ * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+ * @returns {void}
+ * @private
+ */
+function runtime_queueStandInChange(wrapper, change) {
+	if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
+	const captured = runtime_captureChange(wrapper, change);
+	// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
+	if (replayHolders) captured.holders = replayHolders;
+	wrapper.____slothletInternal.pendingChanges.push(captured);
+	if (!PENDING_CHANGES.has(wrapper.slothlet)) PENDING_CHANGES.set(wrapper.slothlet, new Set());
+	PENDING_CHANGES.get(wrapper.slothlet).add(wrapper);
+}
+
+/**
+ * Make the changes queued through stand-ins for a wrapper that has just loaded, in the order they were made, each as
+ * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
+ * {@link runtime_takeRefusedChange}); the rest still land.
+ * @param {object} wrapper - The wrapper, loaded.
+ * @param {number} generation - Its change generation when the load started.
+ * @returns {void}
+ * @private
+ */
+function runtime_replayStandInChanges(wrapper, generation) {
+	const pending = wrapper.____slothletInternal.pendingChanges;
+	if (!pending) return;
+	wrapper.____slothletInternal.pendingChanges = null;
+	PENDING_CHANGES.get(wrapper.slothlet)?.delete(wrapper);
+	for (const change of pending) runtime_makeQueuedChange(wrapper, change, generation);
+}
+
+/**
+ * Retire the refusals of a node a reload rebuilt away, and of the loaded nodes below it (#653): the node built in
+ * its place is another, so a refusal a load of the old one records later is not its own.
+ * @param {object} wrapper - The replaced node's wrapper.
+ * @param {Set<object>} [seen] - Wrappers already retired.
+ * @returns {void}
+ * @private
+ */
+function runtime_retireChanges(wrapper, seen = new Set()) {
+	if (seen.has(wrapper)) return;
+	seen.add(wrapper);
+	wrapper.____slothletInternal.changeGeneration++;
+	runtime_dropRefusedChanges(wrapper);
+	for (const key of Object.keys(wrapper)) {
+		const child = resolveWrapper(wrapper[key]);
+		if (child) runtime_retireChanges(child, seen);
+	}
+}
+
+/**
+ * Take the refusal of a queued change made on a node a stand-in's chain goes through, if there is one (#653).
+ * @param {object} wrapper - The wrapper the stand-in waits for.
+ * @param {Array<string|symbol>} chain - The stand-in's chain.
+ * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
+ * @private
+ */
+function runtime_takeRefusedChange(wrapper, chain) {
+	return runtime_takeRefusalAt(wrapper.slothlet, runtime_standInPath(wrapper, chain));
+}
 
 /**
  * The access a node a module kept is making while a read it made runs one of the node's getters: the getter takes it
@@ -3212,6 +3615,8 @@ export function releaseModuleMakers(slothlet, moduleID) {
 	if (!slothlet) return;
 	if (moduleID === undefined) {
 		MAKERS.delete(slothlet);
+		// The changes queued through its stand-ins, and the refusals of those made, go with the instance too (#653).
+		releaseStandInChanges(slothlet);
 		return;
 	}
 	MAKERS.get(slothlet)?.byID.delete(moduleID);
@@ -7126,6 +7531,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 		internal.waitingProxyCache = new Map(); // Cache waiting proxies for the no-context (external) reader bucket
 		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
+		internal.pendingChanges = null; // Changes made through stand-ins while it has not loaded, made once it has (#653)
+		internal.changeGeneration = 0; // Bumped when the node is reloaded or removed, so its old refusals are not its own (#653)
 		internal.proxy = null;
 		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
 		// the proxy is callable (or before it exists).
@@ -7805,6 +8212,11 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 		/* v8 ignore stop */
+		// A loaded node given a new value is another node: the refusals of changes made on the old one are not its own (#653).
+		if (this.____slothletInternal.state.materialized && this.____slothletInternal.impl !== newImpl) {
+			this.____slothletInternal.changeGeneration++;
+			runtime_dropRefusedChanges(this);
+		}
 
 		const priorAdoptOwner = this.____slothletInternal.adoptOwner;
 		if (attributeChildren && moduleID) this.____slothletInternal.adoptOwner = moduleID;
@@ -7861,6 +8273,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	___resetLazy(newMaterializeFunc, memberNames = null) {
+		// The node is about to be another; the refusals of changes made on the old one are not its own (#653).
+		this.____slothletInternal.changeGeneration++;
+		runtime_dropRefusedChanges(this);
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
@@ -7958,6 +8373,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Create and store the materialization promise
 		this.____slothletInternal.materializationPromise = (async () => {
 			this.____slothletInternal.state.inFlight = true;
+			// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
+			const changeGeneration = this.____slothletInternal.changeGeneration;
 
 			try {
 				if (this.____slothletInternal.materializeFunc) {
@@ -8008,6 +8425,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
 					this.___trackLazyLoad("loaded");
+					// Changes made through stand-ins for it while it loaded, now that it has (#653).
+					runtime_replayStandInChanges(this, changeGeneration);
 
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
@@ -8032,6 +8451,11 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				throw error;
 			} finally {
+				// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
+				if (!this.____slothletInternal.state.materialized) {
+					this.____slothletInternal.pendingChanges = null;
+					PENDING_CHANGES.get(this.slothlet)?.delete(this);
+				}
 				// CRITICAL: Always clear inFlight flag and promise reference
 				this.____slothletInternal.state.inFlight = false;
 				this.____slothletInternal.materializationPromise = null;
@@ -8223,6 +8647,11 @@ export class UnifiedWrapper extends ComponentBase {
 	___invalidate() {
 		// A discarded wrapper never loads, so it stops counting toward the materialization total (#588).
 		this.___trackLazyLoad("discard");
+		// Nor takes the changes queued for it, and the refusals of those made on it go with it (#653).
+		this.____slothletInternal.pendingChanges = null;
+		PENDING_CHANGES.get(this.slothlet)?.delete(this);
+		this.____slothletInternal.changeGeneration++;
+		runtime_dropRefusedChanges(this);
 		this.____slothletInternal.invalid = true;
 		this.____slothletInternal.impl = null;
 		// Clear all child properties from wrapper (filter internals)
@@ -8685,6 +9114,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// nested wrapper regardless of deferChildAdopt, and the `wrapped === null` branch
 				// just below — which defines the live-forwarding accessor for exactly this case —
 				// would never fire (#340).
+				// A child wrapper this one replaces (a lazy reload builds fresh nodes) is another node from now on (#653).
+				const displaced = existingChild ? resolveWrapper(existingChild) : null;
+				if (displaced) runtime_retireChanges(displaced);
 				wrapped = this.___createChildWrapper(key, value, adoptVisited, this.____slothletInternal.deferChildAdopt);
 				// Symbol keys are not used as API module names in practice.
 				/* v8 ignore next */
@@ -9255,47 +9687,123 @@ export class UnifiedWrapper extends ComponentBase {
 		// Waiting proxies always use function target since they represent unknown/in-flight values
 		// Native typeof will always return "function" - use __type property for actual state
 		const waitingTarget = createNamedProxyTarget(`${wrapper.____slothletInternal.apiPath}_waitingProxy`, "waitingProxyTarget");
+		// Its `name` is writable, as a bound function's `length` and `name` are not, so that only a freeze makes the target
+		// read as frozen: a seal or a preventExtensions leaves it as it was (#653, see runtime_lockAsStandIn).
+		Reflect.defineProperty(waitingTarget, "name", { writable: true });
 		// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
 		// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
-		// A change through the stand-in is a write at the path it stands for (#625): judged as one before it is made.
-		const assertWaitingWrite = (prop) => {
-			const slothlet = wrapper.slothlet;
-			if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
-			const parts = [...String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean), ...propChain.map(String)];
+		// A change through the stand-in is a change at the path it stands for (#625, #653): judged at once, by the rule a
+		// loaded node applies, then made on the node through its own traps — at once when it has loaded, and as it loads,
+		// as whoever made it, when it has not (see runtime_replayStandInChanges).
+		const nodePath = () => runtime_standInPath(wrapper, propChain);
+		const assertChange = (prop) => {
+			const parts = nodePath().split(".").filter(Boolean);
 			if (typeof prop === "string") parts.push(prop);
-			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-			if (identity?.unresolved) {
-				throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			runtime_assertOwnedWriteAt(wrapper, parts);
+		};
+		// What the code reading now (its module, or the host) last did to `prop` through a stand-in for this node while it
+		// has not loaded: the member it assigned or defined, as a descriptor, or null when it deleted it or did neither. Only
+		// its own changes: another module's queued value is that module's, read through the node's gates once it loads.
+		const queuedMember = (prop) => {
+			const pending = wrapper.____slothletInternal.pendingChanges;
+			if (!pending) return null;
+			const reader = runtime_changeAuthor(wrapper.slothlet.contextManager.getCallerIdentity(wrapper.slothlet.instanceID));
+			let member = null;
+			for (const change of pending) {
+				if (change.prop !== prop || change.by !== reader) continue;
+				if (change.chain.length !== propChain.length || change.chain.some((key, index) => key !== propChain[index])) continue;
+				if (change.op === "set") member = { value: change.payload, writable: true, enumerable: true, configurable: true };
+				else if (change.op === "defineProperty") {
+					const { get, set, value, writable, enumerable } = change.payload;
+					member =
+						"get" in change.payload || "set" in change.payload
+							? { get, set, enumerable: enumerable === true, configurable: true }
+							: { value, writable: writable === true, enumerable: enumerable === true, configurable: true };
+				} else if (change.op === "deleteProperty") member = null;
 			}
-			if (identity?.currentWrapper) {
-				for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) {
-					slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
-				}
-			}
+			return member;
+		};
+		const changeThroughStandIn = (op, prop, payload) => {
+			assertChange(prop);
+			const change = { chain: [...propChain], op, prop, payload };
+			if (wrapper.____slothletInternal.state.materialized) return runtime_applyStandInChange(wrapper, change, false, replayHolders);
+			runtime_queueStandInChange(wrapper, change);
+			return true;
 		};
 		const waitingHandler = {
-			set(target, prop, value, receiver) {
-				assertWaitingWrite(prop);
-				return Reflect.set(target, prop, value, receiver);
+			set(target, prop, value) {
+				// A stand-in frozen (below) takes no write, as a frozen object takes none: the node will be frozen too.
+				if (Object.isFrozen(target)) return false;
+				// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
+				if (prop === "then" && isAwaitableThen({ value })) {
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
+				}
+				// A member defined fixed through the stand-in (below) takes no write, on the stand-in or the node.
+				if (runtime_isFixedReadOnly(target, prop)) {
+					assertChange(prop);
+					return false;
+				}
+				return changeThroughStandIn("set", prop, value);
 			},
 			defineProperty(target, prop, descriptor) {
-				assertWaitingWrite(prop);
-				return Reflect.defineProperty(target, prop, descriptor);
+				// A callable `then` would make the node awaitable (#571): refused at once and first, as a loaded node refuses it.
+				if (prop === "then" && isAwaitableThen(descriptor)) {
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
+				}
+				if (!Reflect.isExtensible(target)) {
+					// Freezing or sealing the stand-in fixes the members its target holds (its own `name` and `length`) once it
+					// is closed. Those are the stand-in's, not the node's, which is closed the same way when it loads.
+					if (hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
+					// A stand-in closed to extension may not report a member it does not hold.
+					return false;
+				}
+				// A member defined fixed is fixed on the stand-in too, which may not report one its target does not hold; one
+				// already fixed there refuses a definition it cannot take, before anything is queued.
+				if (descriptor.configurable === false || Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false) {
+					assertChange(prop);
+					if (!Reflect.defineProperty(target, prop, descriptor)) return false;
+				}
+				return changeThroughStandIn("defineProperty", prop, { ...descriptor });
 			},
 			deleteProperty(target, prop) {
-				assertWaitingWrite(prop);
-				return Reflect.deleteProperty(target, prop);
+				// What the stand-in holds fixed it keeps, as the proxy invariants require; the node keeps it too.
+				if (Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false) {
+					assertChange(prop);
+					return false;
+				}
+				return changeThroughStandIn("deleteProperty", prop);
 			},
 			setPrototypeOf(target, proto) {
-				assertWaitingWrite(null);
-				return Reflect.setPrototypeOf(target, proto);
+				// A stand-in closed to extension keeps the prototype it reports, as a closed object does.
+				if (!Reflect.isExtensible(target)) return Reflect.setPrototypeOf(target, proto);
+				return changeThroughStandIn("setPrototypeOf", null, proto);
 			},
 			preventExtensions(target) {
-				assertWaitingWrite(null);
+				assertChange(null);
+				// Freeze, seal, and preventExtensions all reach a proxy as this one operation, then define its members. The
+				// stand-in is closed as the engine closes it, and the node is closed the same way after the changes made
+				// before it: what the stand-in's target reads as once the operation is done (see runtime_lockAsStandIn).
+				if (Reflect.isExtensible(target)) {
+					const change = { chain: [...propChain], op: "lock", prop: null, payload: target };
+					if (wrapper.____slothletInternal.state.materialized) {
+						const queued = runtime_captureChange(wrapper, change);
+						const generation = wrapper.____slothletInternal.changeGeneration;
+						queueMicrotask(() => runtime_makeQueuedChange(wrapper, queued, generation));
+					} else runtime_queueStandInChange(wrapper, change);
+				}
 				// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
 				Reflect.setPrototypeOf(target, null);
 				return Reflect.preventExtensions(target);
+			},
+			// A member the stand-in's reader assigned or defined through it, and has not deleted since, is there to that
+			// reader as it would be on the node (#653). What the module will export is not known until it loads.
+			has(target, prop) {
+				return queuedMember(prop) ? true : Reflect.has(target, prop);
+			},
+			getOwnPropertyDescriptor(target, prop) {
+				const queued = Reflect.isExtensible(target) && !hasOwn(target, prop) ? queuedMember(prop) : null;
+				return queued ?? Reflect.getOwnPropertyDescriptor(target, prop);
 			},
 			get(___target, prop) {
 				// A stand-in is no node of its own: a kept node's access offered to it is dropped, before any code its
@@ -9304,6 +9812,9 @@ export class UnifiedWrapper extends ComponentBase {
 				runtime_takeCapturedAccess(wrapper);
 				const kept = standInKeptRead?.standIn === wrapper ? standInKeptRead : null;
 				standInKeptRead = null;
+				// A member defined fixed through the stand-in reads as defined (proxy invariant), as it does on the node.
+				const fixed = Reflect.getOwnPropertyDescriptor(waitingTarget, prop);
+				if (fixed && !fixed.configurable && "value" in fixed && !fixed.writable) return fixed.value;
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
@@ -9490,7 +10001,16 @@ export class UnifiedWrapper extends ComponentBase {
 							return finalImpl;
 						};
 
-						waitingProxy_thenResolve().then(onFulfilled, onRejected);
+						// A change queued through a stand-in that the node it reached refused fails this await (#653).
+						// The chain is handed back, so a `then` called with one callback leaves the rejection to the promise it
+						// returns, as a promise's own `then` does, instead of losing it.
+						return waitingProxy_thenResolve()
+							.then((value) => {
+								const refused = runtime_takeRefusedChange(wrapper, propChain);
+								if (refused) throw refused;
+								return value;
+							})
+							.then(onFulfilled, onRejected);
 					};
 				}
 				if (prop === "____slothletInternal") return undefined; // blocked: do not expose internal state through waiting proxy
@@ -10041,6 +10561,10 @@ export class UnifiedWrapper extends ComponentBase {
 					lastObject = current; // Track parent before moving to next property
 					current = current[prop];
 				}
+
+				// A change queued through a stand-in that the node it reached refused fails this call (#653).
+				const refusedChange = runtime_takeRefusedChange(wrapper, propChain);
+				if (refusedChange) throw refusedChange;
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY",
