@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:44:57-08:00 (1793706297)
+ *	@Last modified time: 2026-11-03T23:03:14-08:00 (1793775794)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,7 +91,7 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		// promise — which reads its `then` through the proxy — and react to that one instead. Anything
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
-		if (!(error instanceof TypeError) || !inheritsFrom(promise, Promise)) throw error;
+		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
 		return NATIVE_THEN.call(Promise.resolve(promise), onFulfilled, onRejected);
 	}
 }

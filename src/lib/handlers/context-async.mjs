@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:44:52-08:00 (1793706292)
+ *	@Last modified time: 2026-11-03T23:03:10-08:00 (1793775790)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -207,7 +207,7 @@ export class AsyncContextManager {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 					// their original error type/code/status.
-					if (rawErrors || error instanceof SlothletError) throw error;
+					if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
@@ -237,7 +237,7 @@ export class AsyncContextManager {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 				// their original error type/code/status.
-				if (rawErrors || error instanceof SlothletError) throw error;
+				if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
