@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T07:52:38-08:00 (1793807558)
+ *	@Last modified time: 2026-11-04T08:24:44-08:00 (1793809484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,9 @@
  * race/b/y.mjs               y()                        — a sibling reloaded on its own
  * co/c1/k/v.mjs              getterOnly                 — mounted at `co` with c2, which lacks `k`
  * co/c2/other.mjs            other()                    — reloaded on its own
+ * relay/a/w.mjs              obj                        — its `s` setter writes through a node the test hands over
+ * relay/a/deep/t.mjs         getterOnly                 — one folder below `a`
+ * relay/b/y.mjs              y()                        — a sibling reloaded on its own
  * ```
  * Reading a member of a node a lazy instance has not loaded hands back a stand-in for it until it loads. An
  * assignment, a definition, a deletion, or a new prototype made through the stand-in is judged at once, as the same
@@ -703,6 +706,61 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			standIn.g = 2;
 			if (reloadID) await api.slothlet.api.reload(reloadID);
 			expect(await settled(standIn)).toBe(expected);
+		});
+
+		describe("of a change a setter makes while a queued change replays", () => {
+			const RELAY = Symbol.for("slothlet.test.i653.relay");
+			const GATE = Symbol.for("slothlet.test.i653.relayGate");
+			let other;
+
+			afterEach(async () => {
+				delete globalThis[RELAY];
+				delete globalThis[GATE];
+				if (other?.slothlet?.shutdown) await other.slothlet.shutdown();
+				other = null;
+			});
+
+			it.each([["relay.b"], [null]])(
+				"stand with the node the setter wrote through, not the node replaying (reload %s)",
+				async (reloadPath) => {
+					let open;
+					globalThis[GATE] = new Promise((resolve) => {
+						open = resolve;
+					});
+					await load("lazy");
+					await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+					await api.relay;
+					// Queued on `a`, whose load waits on the gate. Replayed once it loads, the setter writes through the
+					// api as it is by then: below a node `a` that loaded, through a stand-in for `a.deep`.
+					api.relay.a.w.obj.s = 1;
+					let held;
+					globalThis[RELAY] = () => (held = api.relay.a.deep.t.getterOnly);
+					if (reloadPath) await api.slothlet.api.reload(reloadPath);
+					delete globalThis[GATE];
+					open();
+					await api.relay.a;
+					await new Promise((resolve) => setTimeout(resolve, 50));
+					delete globalThis[RELAY];
+					expect(await settled(held)).toBe("LAZY_WRITE_REFUSED");
+				}
+			);
+
+			it.each([["relay"], [null]])("stand with the other instance's node it was written through (reload %s)", async (reloadPath) => {
+				await load("lazy");
+				await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+				other = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true });
+				await other.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+				await other.relay.a;
+				// Replayed when this instance's `a` loads, the setter writes through a stand-in for the other's `a.deep`.
+				let held;
+				globalThis[RELAY] = () => (held = other.relay.a.deep.t.getterOnly);
+				await api.relay;
+				api.relay.a.w.obj.s = 1;
+				await api.relay.a;
+				delete globalThis[RELAY];
+				if (reloadPath) await api.slothlet.api.reload(reloadPath);
+				expect(await settled(held)).toBe("LAZY_WRITE_REFUSED");
+			});
 		});
 
 		it("are dropped when the module is removed and added again", async () => {
