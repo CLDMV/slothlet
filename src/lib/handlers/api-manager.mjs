@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
+ *	@Last modified time: 2026-11-03T08:39:26-08:00 (1793723966)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,6 +54,7 @@ import {
 	runtime_nodeBehind,
 	loadApiMember,
 	isWrapperAnsweredName,
+	isLazyStandIn,
 	isFrameworkReservedKey,
 	runtime_frameworkWrite,
 	runtime_selfModuleCeilings,
@@ -1828,10 +1829,8 @@ export class ApiManager extends ComponentBase {
 				if (!node || (typeof node !== "object" && typeof node !== "function")) break;
 			}
 		}
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: options.moduleID,
-			sourceFolder: options.sourceFolder
-		});
+		const parentOptions = { moduleID: options.moduleID, sourceFolder: options.sourceFolder };
+		let parent = this.ensureParentPath(root, parts, parentOptions);
 		const finalKey = parts[parts.length - 1];
 
 		// Materialize a lazy-unmaterialized parent BEFORE probing for an existing child.
@@ -1847,9 +1846,23 @@ export class ApiManager extends ComponentBase {
 		// effect of a root ("") add. Materializing first makes the probe reflect the real child
 		// set, so an absent key correctly reads as `undefined` (no collision) and the new value
 		// is assigned as a genuine nested namespace.
-		const parentWrapper = resolveWrapper(parent);
-		if (parentWrapper && parentWrapper.____slothletInternal.mode === "lazy" && !parentWrapper.____slothletInternal.state.materialized) {
+		// A parent reached through a node that had not loaded is a stand-in for the path below it, which a write is made
+		// on only once that node loads (#653): the path is walked again once it has, so the mount lands on the real
+		// parent, created where the loaded node has none.
+		// Each walk loads a node further down the path, so the path's length bounds the walks.
+		let parentWrapper = resolveWrapper(parent);
+		for (
+			let walk = 0;
+			walk < parts.length &&
+			parentWrapper &&
+			parentWrapper.____slothletInternal.mode === "lazy" &&
+			!parentWrapper.____slothletInternal.state.materialized;
+			walk += 1
+		) {
 			await parentWrapper._materialize();
+			if (!isLazyStandIn(parent)) break;
+			parent = this.ensureParentPath(root, parts, parentOptions);
+			parentWrapper = resolveWrapper(parent);
 		}
 
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
