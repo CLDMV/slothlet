@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T05:23:52-08:00 (1793712232)
+ *	@Last modified time: 2026-11-03T08:39:33-08:00 (1793723973)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -141,7 +141,9 @@ export const TEST_DIRS = {
 	// #625 — a module cannot change the framework namespace `self.slothlet`.
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
-	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
+	// #653 — writes through a lazy node that has not loaded yet.
+	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`)
 };
 
 /**
