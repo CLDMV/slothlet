@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:04:04-08:00 (1793779444)
+ *	@Last modified time: 2026-11-04T00:59:21-08:00 (1793782761)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2270,6 +2270,49 @@ export function isLazyStandIn(value) {
 const REFUSED_CHANGES = new WeakMap();
 
 /**
+ * The wrappers of each instance holding changes queued through stand-ins (#653), so a reload can make or drop them.
+ * @type {WeakMap<object, Set<object>>}
+ * @private
+ */
+const PENDING_CHANGES = new WeakMap();
+
+/**
+ * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
+ * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
+ * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
+ * @param {object} slothlet - The instance.
+ * @returns {Promise<void>}
+ * @internal
+ * @example
+ * await settleStandInChanges(slothlet);
+ */
+export async function settleStandInChanges(slothlet) {
+	const pending = PENDING_CHANGES.get(slothlet);
+	// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
+	// queued there and made by the next. A path has finitely many levels.
+	while (pending?.size) {
+		const holders = [...pending];
+		pending.clear();
+		await Promise.all(holders.map((holder) => holder._materialize().catch(() => {})));
+	}
+}
+
+/**
+ * Drop the changes queued through stand-ins of an instance, and the refusals of those already made, when the whole
+ * instance reloads or shuts down (#653): the nodes they were made on are gone, as eager mode's changes are.
+ * @param {object} slothlet - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseStandInChanges(slothlet);
+ */
+export function releaseStandInChanges(slothlet) {
+	for (const holder of PENDING_CHANGES.get(slothlet) ?? []) holder.____slothletInternal.pendingChanges = null;
+	PENDING_CHANGES.delete(slothlet);
+	REFUSED_CHANGES.delete(slothlet);
+}
+
+/**
  * The api path of the node a stand-in stands for: its wrapper's path and the chain read below it.
  * @param {object} wrapper - The wrapper the stand-in waits for.
  * @param {Array<string|symbol>} chain - The members read below it.
@@ -2357,7 +2400,20 @@ function runtime_captureChange(wrapper, change) {
 	const writer = identity?.unresolved ? null : (identity?.currentWrapper ?? null);
 	// The flow it was made in goes with it, so a setter it runs reads that flow's context, not the loader's.
 	const flow = contextManager.snapshotFlow(instanceID);
-	return { ...change, writer, ceiling: writer ? (identity.ceiling ?? null) : null, flow };
+	return { ...change, writer, ceiling: writer ? (identity.ceiling ?? null) : null, flow, by: runtime_changeAuthor(identity) };
+}
+
+/**
+ * Who made a change through a stand-in, as {@link runtime_captureChange} records it and a stand-in's `in` compares it
+ * (#653): the module, for module code (any of its functions); the host; or, for code no call accounts for, a value of
+ * its own that matches nothing, so such code and the host never see each other's queued members.
+ * @param {object|null} identity - The caller identity.
+ * @returns {object|string} The author.
+ * @private
+ */
+function runtime_changeAuthor(identity) {
+	if (identity?.unresolved) return {};
+	return identity?.currentWrapper ? runtime_makerOf(identity.currentWrapper) : "host";
 }
 
 /**
@@ -2394,6 +2450,38 @@ function runtime_makeQueuedChange(wrapper, change) {
 		const generation = wrapper.____slothletInternal.changeGeneration;
 		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, owner: wrapper, generation });
 	}
+}
+
+/**
+ * Take the refusal of a queued change made on a node at or above `path`, still current (#653).
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The api path an await or call goes through.
+ * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
+ * @private
+ */
+function runtime_takeRefusalAt(slothlet, path) {
+	const refused = REFUSED_CHANGES.get(slothlet);
+	if (!refused?.length) return null;
+	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
+	const current = refused.filter(
+		(entry) => !entry.owner.____slothletInternal.invalid && entry.owner.____slothletInternal.changeGeneration === entry.generation
+	);
+	refused.splice(0, refused.length, ...current);
+	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
+	return index === -1 ? null : refused.splice(index, 1)[0].error;
+}
+
+/**
+ * The refusal an await or call of a loaded node takes (#653): one made on it, or above it, that it loaded another way
+ * than through the stand-in the change was made on (a sibling's load, an `api.add`), so the refusal reaches the code
+ * that uses the node and is not left only to a warning.
+ * @param {object} wrapper - The loaded node's wrapper.
+ * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
+ * @private
+ */
+function runtime_takeNodeRefusal(wrapper) {
+	if (!REFUSED_CHANGES.get(wrapper.slothlet)?.length) return null;
+	return runtime_takeRefusalAt(wrapper.slothlet, String(wrapper.____slothletInternal.apiPath ?? ""));
 }
 
 /**
@@ -2435,6 +2523,8 @@ export function refusedChangeCount(slothlet) {
 function runtime_queueStandInChange(wrapper, change) {
 	if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
 	wrapper.____slothletInternal.pendingChanges.push(runtime_captureChange(wrapper, change));
+	if (!PENDING_CHANGES.has(wrapper.slothlet)) PENDING_CHANGES.set(wrapper.slothlet, new Set());
+	PENDING_CHANGES.get(wrapper.slothlet).add(wrapper);
 }
 
 /**
@@ -2449,6 +2539,7 @@ function runtime_replayStandInChanges(wrapper) {
 	const pending = wrapper.____slothletInternal.pendingChanges;
 	if (!pending) return;
 	wrapper.____slothletInternal.pendingChanges = null;
+	PENDING_CHANGES.get(wrapper.slothlet)?.delete(wrapper);
 	for (const change of pending) runtime_makeQueuedChange(wrapper, change);
 }
 
@@ -2460,16 +2551,7 @@ function runtime_replayStandInChanges(wrapper) {
  * @private
  */
 function runtime_takeRefusedChange(wrapper, chain) {
-	const refused = REFUSED_CHANGES.get(wrapper.slothlet);
-	if (!refused?.length) return null;
-	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
-	const current = refused.filter(
-		(entry) => !entry.owner.____slothletInternal.invalid && entry.owner.____slothletInternal.changeGeneration === entry.generation
-	);
-	refused.splice(0, refused.length, ...current);
-	const path = runtime_standInPath(wrapper, chain);
-	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
-	return index === -1 ? null : refused.splice(index, 1)[0].error;
+	return runtime_takeRefusalAt(wrapper.slothlet, runtime_standInPath(wrapper, chain));
 }
 
 /**
@@ -3454,8 +3536,8 @@ export function releaseModuleMakers(slothlet, moduleID) {
 	if (!slothlet) return;
 	if (moduleID === undefined) {
 		MAKERS.delete(slothlet);
-		// The refusals of queued changes go with the instance too (#653).
-		REFUSED_CHANGES.delete(slothlet);
+		// The changes queued through its stand-ins, and the refusals of those made, go with the instance too (#653).
+		releaseStandInChanges(slothlet);
 		return;
 	}
 	MAKERS.get(slothlet)?.byID.delete(moduleID);
@@ -8052,7 +8134,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		/* v8 ignore stop */
 		// A loaded node given a new value is another node: the refusals of changes made on the old one are not its own (#653).
-		if (this.____slothletInternal.state.materialized) {
+		if (this.____slothletInternal.state.materialized && this.____slothletInternal.impl !== newImpl) {
 			this.____slothletInternal.changeGeneration++;
 			runtime_dropRefusedChanges(this);
 		}
@@ -8289,7 +8371,10 @@ export class UnifiedWrapper extends ComponentBase {
 				throw error;
 			} finally {
 				// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
-				if (!this.____slothletInternal.state.materialized) this.____slothletInternal.pendingChanges = null;
+				if (!this.____slothletInternal.state.materialized) {
+					this.____slothletInternal.pendingChanges = null;
+					PENDING_CHANGES.get(this.slothlet)?.delete(this);
+				}
 				// CRITICAL: Always clear inFlight flag and promise reference
 				this.____slothletInternal.state.inFlight = false;
 				this.____slothletInternal.materializationPromise = null;
@@ -8483,6 +8568,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this.___trackLazyLoad("discard");
 		// Nor takes the changes queued for it, and the refusals of those made on it go with it (#653).
 		this.____slothletInternal.pendingChanges = null;
+		PENDING_CHANGES.get(this.slothlet)?.delete(this);
 		this.____slothletInternal.changeGeneration++;
 		runtime_dropRefusedChanges(this);
 		this.____slothletInternal.invalid = true;
@@ -9532,14 +9618,16 @@ export class UnifiedWrapper extends ComponentBase {
 			if (typeof prop === "string") parts.push(prop);
 			runtime_assertOwnedWriteAt(wrapper, parts);
 		};
-		// What the stand-in's reader last did to `prop` through a stand-in for this node while it has not loaded: the member
-		// it assigned or defined, as a descriptor, or null when it deleted it or did neither. Only its own changes: another
-		// module's queued value is that module's, read through the node's gates once it loads.
+		// What the code reading now (its module, or the host) last did to `prop` through a stand-in for this node while it
+		// has not loaded: the member it assigned or defined, as a descriptor, or null when it deleted it or did neither. Only
+		// its own changes: another module's queued value is that module's, read through the node's gates once it loads.
 		const queuedMember = (prop) => {
-			const reader = __readGateCaller?.currentWrapper ?? null;
+			const pending = wrapper.____slothletInternal.pendingChanges;
+			if (!pending) return null;
+			const reader = runtime_changeAuthor(wrapper.slothlet.contextManager.getCallerIdentity(wrapper.slothlet.instanceID));
 			let member = null;
-			for (const change of wrapper.____slothletInternal.pendingChanges ?? []) {
-				if (change.prop !== prop || change.writer !== reader) continue;
+			for (const change of pending) {
+				if (change.prop !== prop || change.by !== reader) continue;
 				if (change.chain.length !== propChain.length || change.chain.some((key, index) => key !== propChain[index])) continue;
 				if (change.op === "set") member = { value: change.payload, writable: true, enumerable: true, configurable: true };
 				else if (change.op === "defineProperty") {
@@ -9639,6 +9727,9 @@ export class UnifiedWrapper extends ComponentBase {
 				runtime_takeCapturedAccess(wrapper);
 				const kept = standInKeptRead?.standIn === wrapper ? standInKeptRead : null;
 				standInKeptRead = null;
+				// A member defined fixed through the stand-in reads as defined (proxy invariant), as it does on the node.
+				const fixed = Reflect.getOwnPropertyDescriptor(waitingTarget, prop);
+				if (fixed && !fixed.configurable && "value" in fixed && !fixed.writable) return fixed.value;
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
@@ -11424,6 +11515,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
 			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
+			// A queued change refused on this node, or one above it, that loaded another way fails this call (#653).
+			const refusedChange = runtime_takeNodeRefusal(wrapper);
+			if (refusedChange) throw refusedChange;
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -12958,6 +13052,15 @@ export class UnifiedWrapper extends ComponentBase {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => {
+				// A queued change this node, loaded another way, refused fails the next await of it (#653).
+				if (prop === "then") {
+					const refused = runtime_takeNodeRefusal(wrapper);
+					if (refused) {
+						return (___onFulfilled, onRejected) => {
+							onRejected(refused);
+						};
+					}
+				}
 				const value = getTrap(target, prop, receiver);
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.

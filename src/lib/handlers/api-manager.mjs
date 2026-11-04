@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T08:39:26-08:00 (1793723966)
+ *	@Last modified time: 2026-11-04T00:59:19-08:00 (1793782759)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,6 +55,7 @@ import {
 	loadApiMember,
 	isWrapperAnsweredName,
 	isLazyStandIn,
+	settleStandInChanges,
 	isFrameworkReservedKey,
 	runtime_frameworkWrite,
 	runtime_selfModuleCeilings,
@@ -4906,6 +4907,10 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
+
+		// Changes made through lazy stand-ins are made first, so the reload keeps them as it keeps any change made on a
+		// node, as in eager mode, where they were made already (#653).
+		await settleStandInChanges(this.slothlet);
 
 		// ModuleID-based reload: rebuild single cache and restore all paths
 		if (moduleID) {
