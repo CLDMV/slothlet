@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T18:53:05-08:00 (1793847185)
+ *	@Last modified time: 2026-11-04T19:58:28-08:00 (1793851108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -156,4 +156,15 @@ export async function keptSocket(port) {
  */
 export function hash() {
 	return createHash("sha256");
+}
+
+/**
+ * Take a value handed in, so it counts as handed to this module.
+ * @param {*} value - The value.
+ * @returns {boolean} True.
+ * @example
+ * await api.maker.accept(value);
+ */
+export function accept(value) {
+	return value !== undefined;
 }

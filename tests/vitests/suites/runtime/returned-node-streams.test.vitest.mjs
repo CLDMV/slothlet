@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T18:54:25-08:00 (1793847265)
+ *	@Last modified time: 2026-11-04T19:59:41-08:00 (1793851181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -172,6 +172,40 @@ describe.each(CONFIGS)("Node's streams a module hands out (#708) — $mode / $ru
 			socket.destroy();
 		}
 		expect(socket.destroyed).toBe(true);
+	});
+
+	it("keeps a socket of the module's own class working once the module was handed its handle's prototype", async () => {
+		await create();
+		const plain = await api.maker.socket(port);
+		plain.on("error", () => {});
+		const handlePrototype = Object.getPrototypeOf(plain._handle);
+		plain.destroy();
+		expect(await api.maker.accept(handlePrototype)).toBe(true);
+		const socket = await api.maker.keptSocket(port);
+		socket.on("error", () => {});
+		try {
+			expect(types.isProxy(socket)).toBe(true);
+			expect(() => socket.setKeepAlive(true, 1000)).not.toThrow();
+			expect(typeof socket.address().port).toBe("number");
+		} finally {
+			socket.destroy();
+		}
+		expect(socket.destroyed).toBe(true);
+	});
+
+	it("reports the native class of a handle reached through a socket of the module's own class as the class itself", async () => {
+		await create();
+		const plain = await api.maker.socket(port);
+		plain.on("error", () => {});
+		const handleClass = plain._handle.constructor;
+		plain.destroy();
+		const socket = await api.maker.keptSocket(port);
+		socket.on("error", () => {});
+		try {
+			expect(socket._handle.constructor).toBe(handleClass);
+		} finally {
+			socket.destroy();
+		}
 	});
 
 	it("hands another module a socket of the module's own class, its native methods working through the stand-in", async () => {
