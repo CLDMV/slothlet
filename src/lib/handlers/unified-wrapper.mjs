@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:18:47-08:00 (1793848727)
+ *	@Last modified time: 2026-11-04T19:58:55-08:00 (1793851135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3348,7 +3348,7 @@ const INTRINSICS = (() => {
 /**
  * Whether a function read from `holder` is a method of a native binding (#708): the engine's native code, held by the
  * prototype of a native class that is none of the language's (a socket's `TCP` handle, a hash's handle, a native
- * addon's object), as its own class's `prototype`. Such a method works on its receiver's internal state, so it works
+ * addon's object), as its own class's `prototype`, and not that class itself. Such a method works on its receiver's internal state, so it works
  * only on the native object itself, and runs none of a module's code on it. The language's own methods are held by its
  * own prototypes, and its hidden ones (an iterator's `next`) by prototypes without a class of their own.
  * @param {Function} fn - A function that is not a Proxy.
@@ -3362,6 +3362,7 @@ function runtime_isBindingMethod(fn, holder) {
 	const constructor = Reflect.getOwnPropertyDescriptor(holder, "constructor")?.value;
 	return (
 		typeof constructor === "function" &&
+		constructor !== fn &&
 		!util.types.isProxy(constructor) &&
 		!INTRINSICS.has(constructor) &&
 		runtime_isBuiltinFunction(constructor) &&
@@ -3459,8 +3460,9 @@ if (isNode) runtime_recordNodeObjectPrototypes();
  * The prototypes of the state Node keeps on the streams it makes (a stream's `ReadableState` and `WritableState`, a
  * socket's `TCP` handle and idle `Timeout`, a zlib stream's or a hash's native handle), read from streams made before any module's code runs (#708).
  * Like an emitter's listener table, that state holds Node's own closures and the callbacks handed to the stream (a
- * `write` callback, a pipe destination), which run as whoever handed them, so it is not read for code (see
- * {@link runtime_slotHoldsCode}).
+ * `write` callback, a pipe destination), so it is not read for code (see {@link runtime_slotHoldsCode}). With
+ * `permissions.provenance` on (the default) such a callback, or a module's function planted there, still runs as the
+ * module whose file it is in; with it off, it runs with the permissions of whichever call runs it.
  * @type {WeakSet<object>}
  * @private
  */
@@ -4452,7 +4454,8 @@ function runtime_membrane(maker, owner, original) {
 	};
 	/**
 	 * A member read from an ordinary original, its holder found by descriptors alone. A native binding's method comes
-	 * back as one that runs on the original (see slotMethod), told apart by the holder it was found on (#708).
+	 * back as one that runs on the original (see slotMethod), told apart by the holder it was found on, whether or not
+	 * that holder was handed to the module (#708).
 	 */
 	const read = (prop, receiver) => {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
@@ -4473,6 +4476,8 @@ function runtime_membrane(maker, owner, original) {
 					return runtime_runAsMaker(owner, descriptor.get, receiver, []);
 				}
 				const value = descriptor.value;
+				// A native binding's method needs the object itself as its receiver, whether or not its holder was handed in (#708).
+				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value)) return value;
@@ -4484,7 +4489,6 @@ function runtime_membrane(maker, owner, original) {
 					}
 					return source;
 				}
-				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				return out(value);
 			}
 			holder = Reflect.getPrototypeOf(holder);
