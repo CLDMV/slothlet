@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T08:24:05-08:00 (1793809445)
+ *	@Last modified time: 2026-11-04T19:58:55-08:00 (1793851135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3346,6 +3346,31 @@ const INTRINSICS = (() => {
 })();
 
 /**
+ * Whether a function read from `holder` is a method of a native binding (#708): the engine's native code, held by the
+ * prototype of a native class that is none of the language's (a socket's `TCP` handle, a hash's handle, a native
+ * addon's object), as its own class's `prototype`, and not that class itself. Such a method works on its receiver's internal state, so it works
+ * only on the native object itself, and runs none of a module's code on it. The language's own methods are held by its
+ * own prototypes, and its hidden ones (an iterator's `next`) by prototypes without a class of their own.
+ * @param {Function} fn - A function that is not a Proxy.
+ * @param {object|null} holder - The object holding it as an own member.
+ * @returns {boolean} True for a binding's method.
+ * @private
+ */
+function runtime_isBindingMethod(fn, holder) {
+	if (holder === null || typeof holder !== "object" || INTRINSICS.has(holder) || util.types.isProxy(holder)) return false;
+	if (!runtime_isBuiltinFunction(fn)) return false;
+	const constructor = Reflect.getOwnPropertyDescriptor(holder, "constructor")?.value;
+	return (
+		typeof constructor === "function" &&
+		constructor !== fn &&
+		!util.types.isProxy(constructor) &&
+		!INTRINSICS.has(constructor) &&
+		runtime_isBuiltinFunction(constructor) &&
+		Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === holder
+	);
+}
+
+/**
  * Node's built-in modules slothlet itself loads, whose exports are recorded as made by no module (see
  * recordSharedExports) when this file loads, before any module's code runs: a module handing one out (the
  * `EventEmitter` class, `fs.promises`) hands it out as it is, the same value for every module and instance. Only these:
@@ -3365,9 +3390,11 @@ const SHARED_BUILTINS = [
 	"net",
 	"os",
 	"path",
+	"stream",
 	"url",
 	"util",
-	"vm"
+	"vm",
+	"zlib"
 ];
 
 if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(globalThis.process.getBuiltinModule(`node:${id}`));
@@ -3428,6 +3455,77 @@ function runtime_recordNodeObjectPrototypes() {
 }
 
 if (isNode) runtime_recordNodeObjectPrototypes();
+
+/**
+ * The prototypes of the state Node keeps on the streams it makes (a stream's `ReadableState` and `WritableState`, a
+ * socket's `TCP` handle and idle `Timeout`, a zlib stream's or a hash's native handle), read from streams made before any module's code runs (#708).
+ * Like an emitter's listener table, that state holds Node's own closures and the callbacks handed to the stream (a
+ * `write` callback, a pipe destination), so it is not read for code (see {@link runtime_slotHoldsCode}). With
+ * `permissions.provenance` on (the default) such a callback, or a module's function planted there, still runs as the
+ * module whose file it is in; with it off, it runs with the permissions of whichever call runs it.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const NODE_STREAM_STATE_PROTOTYPES = new WeakSet();
+
+/**
+ * Record {@link NODE_STREAM_STATE_PROTOTYPES} from one sample of each of Node's stream kinds, crypto's among them. The socket gets its
+ * handle from `connect()`, which makes it at once and connects on a later tick; destroyed straight away, it never
+ * connects.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordNodeStreamState() {
+	const stream = globalThis.process.getBuiltinModule("node:stream");
+	const zlib = globalThis.process.getBuiltinModule("node:zlib");
+	const net = globalThis.process.getBuiltinModule("node:net");
+	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const gzip = zlib.createGzip();
+	const socket = new net.Socket();
+	socket.on("error", () => {});
+	socket.connect({ port: 9, host: "127.0.0.1" });
+	// Its idle timer: the `Timeout` a socket keeps once `setTimeout()` is called on it.
+	socket.setTimeout(60000);
+	const secret = new Uint8Array(16);
+	const samples = [
+		new stream.Readable(),
+		new stream.Writable(),
+		new stream.Duplex(),
+		new stream.PassThrough(),
+		gzip,
+		socket,
+		crypto.createHash("sha256"),
+		crypto.createHmac("sha256", secret),
+		crypto.createCipheriv("aes-128-cbc", secret, secret),
+		crypto.createDecipheriv("aes-128-cbc", secret, secret),
+		crypto.createSign("sha256"),
+		crypto.createVerify("sha256")
+	];
+	for (const sample of samples)
+		for (const key of Reflect.ownKeys(sample)) {
+			if (key === "_events") continue;
+			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
+			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
+			const prototype = Object.getPrototypeOf(member);
+			if (prototype !== null && !INTRINSICS.has(prototype)) NODE_STREAM_STATE_PROTOTYPES.add(prototype);
+		}
+	socket.destroy();
+	gzip.close();
+}
+
+if (isNode) runtime_recordNodeStreamState();
+
+/**
+ * Whether a member of an emitter of Node's own class is state Node keeps for it (see
+ * {@link NODE_STREAM_STATE_PROTOTYPES}), which is not read for code (#708).
+ * @param {*} member - The member's value.
+ * @returns {boolean} True for Node's state of a stream.
+ * @private
+ */
+function runtime_isNodeStreamState(member) {
+	if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
+	return NODE_STREAM_STATE_PROTOTYPES.has(Reflect.getPrototypeOf(member));
+}
 
 /**
  * Whether a value is made by no module (#597) and can be handed out as it is: a built-in's export or slothlet's
@@ -3793,6 +3891,17 @@ const SLOT_CALLBACK_METHODS = new Set([
  */
 const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script : null;
 
+/**
+ * The native class `vm.Script` extends, whose instances hold compiled code the same way (#708): one made directly is a
+ * script too, its native `runInContext` the module's code, never a binding's method run on the object as it is.
+ * @type {Function|null}
+ * @private
+ */
+const VM_NATIVE_SCRIPT = (() => {
+	const parent = VM_SCRIPT === null ? null : Object.getPrototypeOf(VM_SCRIPT);
+	return typeof parent === "function" && parent !== Function.prototype ? parent : null;
+})();
+
 const SLOT_READERS = {
 	mapEntries: Map.prototype.entries,
 	setValues: Set.prototype.values,
@@ -3860,6 +3969,7 @@ function runtime_slotHoldsCode(value, depth, budget) {
 			for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
 			continue;
 		}
+		if (isEmitter && runtime_isNodeStreamState(descriptor.value)) continue;
 		if (runtime_memberHoldsCode(descriptor.value, depth, budget)) return true;
 	}
 	return false;
@@ -4205,9 +4315,13 @@ function runtime_membrane(maker, owner, original) {
 	// is read for work on its slots, so they run on the object itself, not on its stand-in.
 	const isSlot = !isProxy && !isFunction && runtime_isSlotObject(original);
 	// A compiled script of the module's: what its methods run is the module's code.
-	const isScript = !isProxy && !isFunction && VM_SCRIPT !== null && runtime_inherits(original, VM_SCRIPT);
+	const isScript =
+		!isProxy &&
+		!isFunction &&
+		((VM_SCRIPT !== null && runtime_inherits(original, VM_SCRIPT)) ||
+			(VM_NATIVE_SCRIPT !== null && runtime_inherits(original, VM_NATIVE_SCRIPT)));
 	/** @type {WeakMap<Function, Function>} The engine's methods as read from the stand-in, the same each read. */
-	const slotMethods = isSlot || isScript ? new WeakMap() : null;
+	const slotMethods = !isProxy && !isFunction ? new WeakMap() : null;
 	/**
 	 * An argument of an engine method that calls back with what the object holds (see SLOT_CALLBACK_METHODS), handed
 	 * to the object: a callback gets each of those values handed out as the module's, and the object as its stand-in.
@@ -4223,15 +4337,20 @@ function runtime_membrane(maker, owner, original) {
 		};
 	};
 	/**
-	 * An engine method read from a slot object's stand-in: one called on the stand-in runs on the object, and what it
+	 * An engine method read from a slot object's stand-in, or a native binding's method read from any object's stand-in
+	 * (#708): one called on the stand-in runs on the object, which native code needs as its receiver, and what it
 	 * returns (a `Map`'s value, a `WeakRef`'s target, an iterator) is handed out as the module's.
 	 */
-	const slotMethod = (value) => {
-		if (!(isSlot || isScript) || typeof value !== "function" || util.types.isProxy(value)) return value;
+	const slotMethod = (value, holder) => {
+		if (slotMethods === null || typeof value !== "function" || util.types.isProxy(value)) return value;
 		// The live runtime's `then`, installed over the engine's, is the engine's `then` with its reactions pinned.
 		const engine = engineThenOf(value) ?? value;
+		if (!(isSlot || isScript)) {
+			// Any other object: only a binding's method, which reads nothing of the object a module's code could run in.
+			if (!runtime_isBindingMethod(engine, holder)) return value;
+		}
 		// A script's methods are Node's own, written in JavaScript.
-		if (!runtime_isBuiltinFunction(engine) && !(isScript && isSharedExport(engine))) return value;
+		else if (!runtime_isBuiltinFunction(engine) && !(isScript && isSharedExport(engine))) return value;
 		let method = slotMethods.get(value);
 		if (!method) {
 			const name = engine.name;
@@ -4333,7 +4452,11 @@ function runtime_membrane(maker, owner, original) {
 		if ("value" in held) return held.writable ? value : held.value;
 		return held.get === undefined ? undefined : value;
 	};
-	/** A member read from an ordinary original, its holder found by descriptors alone. */
+	/**
+	 * A member read from an ordinary original, its holder found by descriptors alone. A native binding's method comes
+	 * back as one that runs on the original (see slotMethod), told apart by the holder it was found on, whether or not
+	 * that holder was handed to the module (#708).
+	 */
 	const read = (prop, receiver) => {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
@@ -4353,6 +4476,8 @@ function runtime_membrane(maker, owner, original) {
 					return runtime_runAsMaker(owner, descriptor.get, receiver, []);
 				}
 				const value = descriptor.value;
+				// A native binding's method needs the object itself as its receiver, whether or not its holder was handed in (#708).
+				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value)) return value;
@@ -4414,7 +4539,7 @@ function runtime_membrane(maker, owner, original) {
 				);
 			const own = Reflect.getOwnPropertyDescriptor(original, prop);
 			if (own && !own.configurable) sync(prop, reported(own));
-			return fixedValue(prop, slotMethod(read(prop, from)));
+			return fixedValue(prop, slotMethod(read(prop, from), null));
 		},
 		set: (_shadow, prop, value, receiver) => {
 			const into = runtime_handIn(maker, value);
