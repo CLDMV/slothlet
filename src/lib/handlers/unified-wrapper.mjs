@@ -782,13 +782,18 @@ function runtime_inheritedEngineMember(impl, prop, value) {
 	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
 	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
 	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
-	// An accessor (`__proto__`) is the engine's when its getter, run on the value, answers what the value did.
+	// An accessor (`__proto__`) is the engine's when its getter, run on the value, answers what the value did, and what
+	// it answers is the engine's too: a prototype that is a class of the module's stays the module's code, behind the
+	// node's checks like any other member holding it.
 	const isEngines = INHERITED_HOLDERS.some((holder) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 		if (!descriptor) return false;
-		return "value" in descriptor
-			? descriptor.value === original
-			: typeof descriptor.get === "function" && Reflect.apply(descriptor.get, impl, []) === original;
+		if ("value" in descriptor) return descriptor.value === original;
+		return (
+			typeof descriptor.get === "function" &&
+			(original === null || INHERITED_HOLDERS.includes(original)) &&
+			Reflect.apply(descriptor.get, impl, []) === original
+		);
 	});
 	return isEngines ? { value: original } : null;
 }
