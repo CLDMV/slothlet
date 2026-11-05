@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:19:33-08:00 (1793848773)
+ *	@Last modified time: 2026-11-04T19:59:41-08:00 (1793851181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,8 @@
  * sides, a TLS socket, a child process and its stdio, a UDP socket, a socket with an idle timer and a server's side of
  * a connection.
  * @description
- * Each is usable from the host and from another module: native calls on it work and it closes. A socket with an idle
+ * The TLS socket is used twice: once before any handshake (its server is a plain TCP one) and once after a real
+ * handshake with a TLS echo server, writing and reading over it. Each is usable from the host and from another module: native calls on it work and it closes. A socket with an idle
  * timer and a server's side of a connection hold only Node's own state and come back as themselves.
  */
 
@@ -28,6 +29,8 @@ import net from "node:net";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { types } from "node:util";
+import crypto from "node:crypto";
+import tls from "node:tls";
 import slothlet from "@cldmv/slothlet";
 
 const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stream_handout");
@@ -41,6 +44,48 @@ for (const mode of ["eager", "lazy"])
 let server;
 let port;
 const connections = new Set();
+let tlsServer;
+let tlsPort;
+
+/**
+ * A throwaway self-signed Ed25519 key and certificate for `localhost`, made for this test run only and never stored:
+ * the TLS server the fixture's sockets complete a real handshake with. Node has no API that writes a certificate, so
+ * the X.509 structure is encoded here by hand (DER), signed with the key.
+ * @returns {{key: string, cert: string}} The PEM key and certificate.
+ */
+function selfSignedCertificate() {
+	const der = (tag, ...parts) => {
+		const body = Buffer.concat(parts);
+		const length = [];
+		for (let left = body.length; left > 0; left >>= 8) length.unshift(left & 0xff);
+		const header = body.length < 0x80 ? [body.length] : [0x80 | length.length, ...length];
+		return Buffer.concat([Buffer.from([tag, ...header]), body]);
+	};
+	const ed25519 = der(0x30, der(0x06, Buffer.from([0x2b, 0x65, 0x70])));
+	const name = der(0x30, der(0x31, der(0x30, der(0x06, Buffer.from([0x55, 0x04, 0x03])), der(0x0c, Buffer.from("localhost")))));
+	const validity = der(0x30, der(0x17, Buffer.from("250101000000Z")), der(0x17, Buffer.from("491231235959Z")));
+	const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+	const version = der(0xa0, der(0x02, Buffer.from([2])));
+	const tbs = der(
+		0x30,
+		version,
+		der(0x02, Buffer.from([1])),
+		ed25519,
+		name,
+		validity,
+		name,
+		publicKey.export({ type: "spki", format: "der" })
+	);
+	const certificate = der(0x30, tbs, ed25519, der(0x03, Buffer.from([0]), crypto.sign(null, tbs, privateKey)));
+	const lines = certificate
+		.toString("base64")
+		.match(/.{1,64}/g)
+		.join("\n");
+	return {
+		key: privateKey.export({ type: "pkcs8", format: "pem" }),
+		cert: `-----BEGIN CERTIFICATE-----\n${lines}\n-----END CERTIFICATE-----\n`
+	};
+}
 
 beforeAll(async () => {
 	server = net.createServer((connection) => {
@@ -51,12 +96,21 @@ beforeAll(async () => {
 	server.listen(0, "127.0.0.1");
 	await once(server, "listening");
 	port = server.address().port;
+	// An echo server that completes a real TLS handshake.
+	tlsServer = tls.createServer(selfSignedCertificate(), (connection) => {
+		connection.on("error", () => {});
+		connection.pipe(connection);
+	});
+	tlsServer.listen(0, "127.0.0.1");
+	await once(tlsServer, "listening");
+	tlsPort = tlsServer.address().port;
 });
 
 afterAll(async () => {
 	for (const connection of connections) connection.destroy();
 	server.close();
-	await once(server, "close");
+	tlsServer.close();
+	await Promise.all([once(server, "close"), once(tlsServer, "close")]);
 });
 
 /**
@@ -77,6 +131,18 @@ async function useFromHost(api, kind) {
 			socket.setNoDelay(true);
 			socket.destroy();
 			return { proxy, destroyed: socket.destroyed };
+		}
+		case "tlsSession": {
+			const socket = await api.shapes.tlsSession(tlsPort);
+			socket.setKeepAlive(true, 1000);
+			const echoed = once(socket, "data");
+			socket.write("hello");
+			const [data] = await echoed;
+			const protocol = socket.getProtocol();
+			const closed = once(socket, "close");
+			socket.end();
+			await closed;
+			return { data: String(data), protocol, closed: true };
 		}
 		case "serverSide": {
 			const { server: own, client, socket } = await api.shapes.serverSide();
@@ -137,6 +203,7 @@ const EXPECTED = {
 	serverSide: { proxy: [false, false, false], port: true, destroyed: true },
 	httpExchange: { status: 200, body: "yz" },
 	tlsSocket: { destroyed: true },
+	tlsSession: { data: "hello", protocol: "TLSv1.3", closed: true },
 	child: { pid: true, out: "hi", code: 0 },
 	udp: { message: "ping" }
 };
@@ -173,7 +240,7 @@ describe.each(CONFIGS)(
 
 		it.each(Object.keys(EXPECTED))("hands another module a %s it can use and close", async (kind) => {
 			await create();
-			expect(await api.shapesUser.use(kind, port)).toMatchObject(EXPECTED[kind]);
+			expect(await api.shapesUser.use(kind, kind === "tlsSession" ? tlsPort : port)).toMatchObject(EXPECTED[kind]);
 		});
 	}
 );

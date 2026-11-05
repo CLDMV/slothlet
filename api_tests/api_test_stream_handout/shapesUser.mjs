@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:18:25-08:00 (1793848705)
+ *	@Last modified time: 2026-11-04T19:58:29-08:00 (1793851109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,8 +23,8 @@ import { self } from "@cldmv/slothlet/runtime";
 
 /**
  * Get one of `shapes`' objects, make native calls on it and close it.
- * @param {string} kind - `"timedSocket"`, `"serverSide"`, `"httpExchange"`, `"tlsSocket"`, `"child"` or `"udp"`.
- * @param {number} port - The port of the test's plain TCP server.
+ * @param {string} kind - `"timedSocket"`, `"serverSide"`, `"httpExchange"`, `"tlsSocket"`, `"tlsSession"`, `"child"` or `"udp"`.
+ * @param {number} port - The port of the test's plain TCP server, or of its TLS echo server for `"tlsSession"`.
  * @returns {Promise<object>} What it saw: which values were stand-ins, and what the calls gave.
  * @example
  * await api.shapesUser.use("udp", port);
@@ -41,6 +41,18 @@ export async function use(kind, port) {
 			socket.setNoDelay(true);
 			socket.destroy();
 			return { proxy, destroyed: socket.destroyed };
+		}
+		case "tlsSession": {
+			const socket = await self.shapes.tlsSession(port);
+			socket.setKeepAlive(true, 1000);
+			const echoed = once(socket, "data");
+			socket.write("hello");
+			const [data] = await echoed;
+			const protocol = socket.getProtocol();
+			const closed = once(socket, "close");
+			socket.end();
+			await closed;
+			return { data: String(data), protocol, closed: true };
 		}
 		case "serverSide": {
 			const { server, client, socket } = await self.shapes.serverSide();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:18:25-08:00 (1793848705)
+ *	@Last modified time: 2026-11-04T19:58:28-08:00 (1793851108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,6 +87,19 @@ export async function tlsSocket(port) {
 	const socket = tls.connect({ port, host: "127.0.0.1", rejectUnauthorized: false });
 	socket.on("error", () => {});
 	await once(socket, "connect");
+	return socket;
+}
+
+/**
+ * A TLS socket that has finished its handshake with the TLS server at `port`.
+ * @param {number} port - The TLS server's port.
+ * @returns {Promise<tls.TLSSocket>} The socket.
+ * @example
+ * await api.shapes.tlsSession(port);
+ */
+export async function tlsSession(port) {
+	const socket = tls.connect({ port, host: "127.0.0.1", rejectUnauthorized: false });
+	await once(socket, "secureConnect");
 	return socket;
 }
 
