@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T18:53:32-08:00 (1793847212)
+ *	@Last modified time: 2026-11-04T19:18:47-08:00 (1793848727)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4448,11 +4448,11 @@ function runtime_membrane(maker, owner, original) {
 		if ("value" in held) return held.writable ? value : held.value;
 		return held.get === undefined ? undefined : value;
 	};
-	/** A member read from an ordinary original, its holder found by descriptors alone. */
-	/** The object the last `read` found a data member on, or null: where a binding's method is told apart (#708). */
-	let readHolder = null;
+	/**
+	 * A member read from an ordinary original, its holder found by descriptors alone. A native binding's method comes
+	 * back as one that runs on the original (see slotMethod), told apart by the holder it was found on (#708).
+	 */
 	const read = (prop, receiver) => {
-		readHolder = null;
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
 				if (!runtime_isModuleProxy(holder)) return Reflect.get(holder, prop, receiver);
@@ -4471,7 +4471,6 @@ function runtime_membrane(maker, owner, original) {
 					return runtime_runAsMaker(owner, descriptor.get, receiver, []);
 				}
 				const value = descriptor.value;
-				readHolder = holder;
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value)) return value;
@@ -4483,6 +4482,7 @@ function runtime_membrane(maker, owner, original) {
 					}
 					return source;
 				}
+				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				return out(value);
 			}
 			holder = Reflect.getPrototypeOf(holder);
@@ -4533,8 +4533,7 @@ function runtime_membrane(maker, owner, original) {
 				);
 			const own = Reflect.getOwnPropertyDescriptor(original, prop);
 			if (own && !own.configurable) sync(prop, reported(own));
-			const value = read(prop, from);
-			return fixedValue(prop, slotMethod(value, readHolder));
+			return fixedValue(prop, slotMethod(read(prop, from), null));
 		},
 		set: (_shadow, prop, value, receiver) => {
 			const into = runtime_handIn(maker, value);
