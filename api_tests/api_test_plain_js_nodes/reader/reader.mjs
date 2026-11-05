@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T08:16:33-08:00 (1793895393)
+ *	@Last modified time: 2026-11-05T10:26:36-08:00 (1793903196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,82 +19,73 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import { attempt, reads, frozenAtLoad, refreeze, refreezeAtLoad } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 
 /**
- * Run `step`, answering what it returned or how it threw.
- * @param {Function} step - The step.
- * @returns {*} Its result, or `"threw <name>"`.
- */
-function attempt(step) {
-	try {
-		return step();
-	} catch (error) {
-		return `threw ${error?.code ?? error?.name}`;
-	}
-}
-
-/**
- * Each read the issue lists, made through `self`.
+ * The reads, made through `self`.
  * @returns {object} What each answered.
  */
 export function read() {
-	const owner = self.owner;
-	return {
-		isFrozen: attempt(() => Object.isFrozen(owner.frozenBox)),
-		isFrozenList: attempt(() => Object.isFrozen(owner.frozenList)),
-		isExtensible: attempt(() => Object.isExtensible(owner.frozenBox)),
-		subPrototype: attempt(() => Object.getPrototypeOf(owner.Sub) === owner.Base),
-		subProtoAccessor: attempt(() => owner.Sub.__proto__ === owner.Base),
-		inheritedStatic: attempt(() => owner.Sub.kind()),
-		clone: attempt(() => structuredClone(owner.frozenBox)),
-		descriptorValue: attempt(() => Object.getOwnPropertyDescriptor(owner.frozenBox, "inner").value === owner.frozenBox.inner),
-		openDescriptorValue: attempt(() => Object.getOwnPropertyDescriptor(owner, "open").value === owner.open),
-		instConstructor: attempt(() => owner.inst.constructor === owner.Foo),
-		instConstructorName: attempt(() => owner.inst.constructor.name),
-		instIsFoo: attempt(() => owner.inst instanceof owner.Foo),
-		ownCheck: attempt(() => [{ tag: "own" } instanceof owner.OwnCheck, {} instanceof owner.OwnCheck]),
-		inheritedCheck: attempt(() => [{ tag: "own" } instanceof owner.InheritedCheck, {} instanceof owner.InheritedCheck])
-	};
+	return reads(self.owner);
 }
 
 /**
- * Changes plain JS refuses or a module may not make to another module's members, made through `self`.
+ * The reads of the object export frozen when it loaded, made through `self`.
+ * @returns {object} What each answered.
+ */
+export function readFrozenAtLoad() {
+	return frozenAtLoad(self.owner);
+}
+
+/**
+ * Freeze the owner's already frozen members through `self`.
+ * @returns {object} The outcome of each.
+ */
+export function refreezeOwner() {
+	return refreeze(self.owner);
+}
+
+/**
+ * Freeze the owner's object export frozen when it loaded, through `self`.
+ * @returns {string} The outcome.
+ */
+export function refreezeOwnerAtLoad() {
+	return refreezeAtLoad(self.owner);
+}
+
+/**
+ * Changes a module may not make to another module's members, made through `self`.
  * @returns {object} The outcome of each.
  */
 export function change() {
 	const owner = self.owner;
 	return {
-		freezeOpen: attempt(() => (Object.freeze(owner.open), "ok")),
-		redefineFrozen: attempt(() => (Object.defineProperty(owner.frozenBox, "a", { value: 2 }), "ok")),
-		writeFrozen: attempt(() => {
-			owner.frozenBox.a = 2;
-			return "ok";
+		freezeOpen: attempt(() => (Object.freeze(owner.open), "done")),
+		writeOpen: attempt(() => {
+			owner.open.o = 2;
+			return "done";
 		}),
-		frozenValue: owner.frozenBox.a,
+		openValue: owner.open.o,
 		openFrozen: Object.isFrozen(owner.open)
 	};
 }
 
 /**
- * Calls reached through a class's reported prototype and its inherited `Symbol.hasInstance`.
+ * Calls reached through a class's reported prototype, an instance's class, and an inherited `Symbol.hasInstance`.
  * @returns {object} The outcome of each.
  */
 export function callThrough() {
 	const owner = self.owner;
 	return {
 		baseKind: attempt(() => Object.getPrototypeOf(owner.Sub).kind()),
+		classMethod: attempt(() => owner.Foo.prototype.hi.call(owner.inst)),
+		instanceClassMethod: attempt(() => owner.inst.constructor.prototype.hi.call(owner.inst)),
+		instancePrototypeMethod: attempt(() => Object.getPrototypeOf(owner.inst).hi.call(owner.inst)),
+		writeInstanceClassPrototype: attempt(() => {
+			owner.inst.constructor.prototype.hi = () => "replaced";
+			return "done";
+		}),
+		instIsFoo: attempt(() => owner.inst instanceof owner.Foo),
 		inheritedCheck: attempt(() => ({ tag: "own" }) instanceof owner.InheritedCheck)
 	};
-}
-
-/**
- * Freeze the owner's already frozen objects through `self`.
- * @returns {string[]} The outcome of each freeze.
- */
-export function refreeze() {
-	return [
-		attempt(() => (Object.freeze(self.owner.frozenBox), "ok")),
-		attempt(() => (Object.freeze(self.owner.frozenList), "ok")),
-		attempt(() => (Object.freeze(self.owner.later), "ok"))
-	];
 }

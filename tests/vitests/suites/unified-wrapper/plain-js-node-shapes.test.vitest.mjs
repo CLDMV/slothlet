@@ -2,35 +2,38 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/unified-wrapper/plain-js-node-shapes.test.vitest.mjs
- *	@Date: 2026-11-05T06:17:14-08:00 (1793888234)
+ *	@Date: 2026-11-05T08:19:57-08:00 (1793895597)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T08:18:31-08:00 (1793895511)
+ *	@Last modified time: 2026-11-05T10:28:22-08:00 (1793903302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Frozen and class members read through `self` answer as the plain values do (#667).
+ * @fileoverview Frozen and class members read through an api node answer as the plain values do (#667).
  *
  * @description
- * One module exports frozen objects, a frozen array of frozen objects, a derived class, a class instance and classes
- * with a static `Symbol.hasInstance`, and another reads them through `self`. Each read is the one plain JS makes on
- * the values themselves: `Object.isFrozen`, `Object.getPrototypeOf`, a member's descriptor against a read of it,
- * re-freezing a frozen object, the owner writing to its own frozen member, `instanceof`. Checked in eager and lazy
- * mode, async and live runtime, with permissions off, on, and on with reference capture off. The write rules still
- * hold: a module may not freeze or redefine another module's member, and a deny rule still refuses a call reached
- * through a reported prototype.
+ * One module exports frozen objects, a frozen array of frozen objects, a derived class, a class with an exported
+ * instance, and classes with a static `Symbol.hasInstance`; another module reads them through `self`, and the host
+ * reads them through `api`. Every case runs the same code on the node and on a plain import of the same module
+ * (see `api_test_plain_js_nodes_lib/cases.mjs`), and the node must answer what the plain value answers, including
+ * the same error. Each mode is checked against plain JS, so lazy mode answers as eager mode does. Checked in eager
+ * and lazy mode, async and live runtime, with permissions off, on, and on with reference capture off. The write
+ * rules still hold where plain JS has none: a module may not freeze or write another module's member, and a deny
+ * rule still refuses a call reached through a reported prototype or an instance's class.
  * @module tests/vitests/suites/unified-wrapper/plain-js-node-shapes
  */
 
 import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import util from "node:util";
 import slothlet from "@cldmv/slothlet";
+import { reads, refreeze, freezeLater } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_plain_js_nodes");
 
@@ -43,6 +46,13 @@ const PERMISSIONS = [
 ];
 
 const DENY_READER = { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
+
+let twinCount = 0;
+/**
+ * The owner module imported as plain JS: a new module instance each time, untouched by any slothlet instance.
+ * @returns {Promise<object>} Its namespace.
+ */
+const plainOwner = () => import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain=${++twinCount}`);
 
 /**
  * Build an instance with the owner and the reader mounted as modules of their own.
@@ -59,7 +69,7 @@ async function mount(options) {
 }
 
 describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry })))))(
-	"frozen and class nodes through self > $mode / $runtime / $name",
+	"frozen and class nodes > $mode / $runtime / $name",
 	({ mode, runtime, permissions }) => {
 		let api;
 
@@ -70,85 +80,63 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 
 		const load = () => mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 
-		// Blocked: an object export frozen by its module gives its node an open shell. Giving the node the object's integrity
-		// makes both of these hold, but lazy-unloaded-writes.test.vitest.mjs (#653) asserts the host's write to a frozen export
-		// lands (`frozenA: 2`) and that `Object.seal` leaves it reading "sealed", so that test has to change first.
-		it.todo("refuses the owner's write to its own frozen members, as strict mode does (blocked on lazy-unloaded-writes)");
-		it.todo("reports an object export its module froze as frozen (blocked on lazy-unloaded-writes)");
-
-		it("reports a frozen array export frozen", async () => {
+		it("answers each read through self as the plain module does", async () => {
 			api = await load();
-			expect((await api.reader.read()).isFrozenList).toBe(true);
+			const plain = reads(await plainOwner());
+			expect(await api.reader.read()).toEqual(plain);
+			expect(await api.owner.readOwn()).toEqual(plain);
 		});
 
-		it("reports an export its module froze through self as frozen", async () => {
+		it("answers each read through the host's api as the plain module does", async () => {
 			api = await load();
+			expect(reads(api.owner)).toEqual(reads(await plainOwner()));
+		});
+
+		it("re-freezes another module's frozen member as plain JS does", async () => {
+			api = await load();
+			const plain = await plainOwner();
+			freezeLater(plain);
+			expect(await api.owner.freezeOwn()).toBe(true);
+			expect(await api.reader.refreezeOwner()).toEqual(refreeze(plain));
+		});
+
+		it("inspects a frozen member as the plain value", async () => {
+			api = await load();
+			const plain = await plainOwner();
+			freezeLater(plain);
 			await api.owner.freezeOwn();
-			expect(Object.isFrozen(api.owner.later)).toBe(true);
+			expect(util.inspect(api.owner.later)).toBe(util.inspect(plain.later));
+			expect(util.inspect(api.owner.frozenBox)).toBe(util.inspect(plain.frozenBox));
+			expect(util.inspect(api.owner.frozenList)).toBe(util.inspect(plain.frozenList));
 		});
 
-		it("inspects a frozen export as the object it fronts", async () => {
-			api = await load();
-			await api.owner.freezeOwn();
-			expect(util.inspect(api.owner.frozenBox)).toBe(util.inspect({ a: 1, inner: { b: 2 } }));
-			expect(util.inspect(api.owner.frozenList)).toBe(util.inspect([{ deep: 1 }]));
-			expect(util.inspect(api.owner.later)).toBe(util.inspect({ q: 1 }));
-		});
-
-		it("reports a derived class's base class as its prototype", async () => {
-			api = await load();
-			expect((await api.reader.read()).subPrototype).toBe(true);
-			expect((await api.owner.readOwn()).subPrototype).toBe(true);
-			expect(Object.getPrototypeOf(api.owner.Sub) === api.owner.Base).toBe(true);
-			expect((await api.reader.read()).inheritedStatic).toBe("base");
-		});
+		// Blocked on how an unloaded lazy node answers for a module frozen when it loads (#653): see the #667 report. Eager
+		// mode can give a frozen export's node the export's integrity; a lazy stand-in cannot know it before the module loads.
+		it.todo("answers an object export frozen when it loaded as frozen, as the plain module does (frozenAtLoad)");
+		it.todo("refuses the owner's own write to a member frozen when it loaded, as strict mode does (ownerWrites)");
+		it.todo("re-freezes an object export frozen when it loaded as a no-op (refreezeAtLoad)");
 
 		// V8's structured serializer refuses every Proxy (`#<Object> could not be cloned`), and a node is one by design: it
 		// cannot hand out the module's object itself, which would skip the read and write rules for everything it holds.
 		it.todo("clones a frozen export with structuredClone (blocked: V8 refuses to serialize any Proxy)");
 
-		it("describes a member holding what reading it gives", async () => {
-			api = await load();
-			const read = await api.reader.read();
-			expect(read.descriptorValue).toBe(true);
-			expect(read.openDescriptorValue).toBe(true);
-		});
-
-		it("re-freezes another module's frozen export as a no-op", async () => {
-			api = await load();
-			await api.owner.freezeOwn();
-			const [, list, later] = await api.reader.refreeze();
-			expect([list, later]).toEqual(["ok", "ok"]);
-		});
-
-		it("asks a class's inherited static Symbol.hasInstance, as instanceof does", async () => {
-			api = await load();
-			const read = await api.reader.read();
-			expect(read.ownCheck).toEqual([true, false]);
-			expect(read.inheritedCheck).toEqual([true, false]);
-		});
-
-		// Blocked: a class instance's node answers `constructor` as `Object` and no prototype, and
-		// inherited-proto-member.test.vitest.mjs (#630) asserts `inst.constructor.prototype.secret` reads `undefined`.
-		// Answering `Foo` as plain JS does makes it read the method, so that test has to change first.
-		it.todo("answers a class instance's constructor as its class (blocked on inherited-proto-member's constructor assertion)");
-
 		if (permissions) {
-			it("still refuses another module's changes to members it does not own", async () => {
+			it("refuses another module's changes to members it does not own", async () => {
 				api = await load();
 				const outcome = await api.reader.change();
-				expect(outcome.freezeOpen).toBe("threw LOOSE_SET_NOT_OWNED");
-				expect(outcome.redefineFrozen).toMatch(/^threw (LOOSE_SET_NOT_OWNED|TypeError)$/);
-				expect(outcome.writeFrozen).toMatch(/^threw (LOOSE_SET_NOT_OWNED|TypeError)$/);
-				expect(outcome.frozenValue).toBe(1);
-				expect(outcome.openFrozen).toBe(false);
+				expect(outcome).toEqual({
+					freezeOpen: "threw LOOSE_SET_NOT_OWNED",
+					writeOpen: "threw LOOSE_SET_NOT_OWNED",
+					openValue: 1,
+					openFrozen: false
+				});
 			});
 		}
 	}
 );
 
 describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime }))))(
-	"frozen and class nodes through self, deny rule > $mode / $runtime",
+	"frozen and class nodes, deny rule > $mode / $runtime",
 	({ mode, runtime }) => {
 		let api;
 
@@ -157,9 +145,29 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			api = null;
 		});
 
-		it("refuses a denied module a call through the reported prototype and the inherited Symbol.hasInstance", async () => {
+		it("refuses a denied module every call to the module's code, however it reached the class", async () => {
 			api = await mount({ mode, runtime, permissions: DENY_READER });
-			expect(await api.reader.callThrough()).toEqual({ baseKind: "threw PERMISSION_DENIED", inheritedCheck: "threw PERMISSION_DENIED" });
+			const outcome = await api.reader.callThrough();
+			// Reached through an instance, the class and its prototype are refused exactly as the class read directly is.
+			expect(outcome.instanceClassMethod).toBe(outcome.classMethod);
+			expect(outcome).toMatchObject({
+				baseKind: "threw PERMISSION_DENIED",
+				classMethod: "threw PERMISSION_DENIED",
+				writeInstanceClassPrototype: "threw PERMISSION_DENIED",
+				inheritedCheck: "threw PERMISSION_DENIED"
+			});
+			// The prototype of the module's class is withheld from it, so it reaches none of the class's methods that way.
+			expect(outcome.instancePrototypeMethod).toMatch(/^threw (TypeError|PERMISSION_DENIED)$/);
+			// The owner's class is unchanged.
+			const plain = await plainOwner();
+			expect(api.owner.inst.hi()).toBe(plain.inst.hi());
+			expect(Object.getOwnPropertyNames(api.owner.Foo.prototype).sort()).toEqual(Object.getOwnPropertyNames(plain.Foo.prototype).sort());
+		});
+
+		it("still answers instanceof against the class for a denied module, as plain JS does", async () => {
+			api = await mount({ mode, runtime, permissions: DENY_READER });
+			const plain = await plainOwner();
+			expect((await api.reader.callThrough()).instIsFoo).toBe(plain.inst instanceof plain.Foo);
 		});
 	}
 );

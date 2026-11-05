@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T08:16:33-08:00 (1793895393)
+ *	@Last modified time: 2026-11-05T10:26:36-08:00 (1793903196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,6 +19,7 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import { ownerWrites, freezeLater, reads } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 
 /** A base class with a static method its derived class inherits. */
 export class Base {
@@ -62,6 +63,9 @@ export const frozenBox = Object.freeze({ a: 1, inner: { b: 2 } });
 /** A frozen array holding a frozen object. */
 export const frozenList = Object.freeze([Object.freeze({ deep: 1 })]);
 
+/** An open object holding an object. */
+export const shelf = { item: { n: 1 } };
+
 /** An object no module freezes. */
 export const open = { o: 1 };
 
@@ -69,52 +73,25 @@ export const open = { o: 1 };
 export const later = { q: 1 };
 
 /**
- * Run `step`, answering what it returned or how it threw.
- * @param {Function} step - The step.
- * @returns {*} Its result, or `"threw <name>"`.
+ * This module's own writes, through `self`, to members it froze when it loaded.
+ * @returns {object} The outcome of each.
  */
-function attempt(step) {
-	try {
-		return step();
-	} catch (error) {
-		return `threw ${error?.code ?? error?.name}`;
-	}
+export function writeOwnFrozen() {
+	return ownerWrites(self.owner);
 }
 
 /**
- * Add a property to this module's deep-frozen element through `self`.
- * @returns {string} The outcome.
- */
-export function writeDeepFrozen() {
-	return {
-		add: attempt(() => {
-			self.owner.frozenList[0].added = 1;
-			return "added";
-		}),
-		write: attempt(() => {
-			self.owner.frozenBox.a = 2;
-			return "written";
-		}),
-		value: self.owner.frozenBox.a
-	};
-}
-
-/**
- * Freeze this module's own objects through `self`.
- * @returns {boolean[]} Whether each is frozen afterwards.
+ * Freeze `later` through `self`.
+ * @returns {boolean} Whether it is frozen afterwards.
  */
 export function freezeOwn() {
-	Object.freeze(self.owner.later);
-	return [Object.isFrozen(self.owner.later), Object.isFrozen(self.owner.frozenBox)];
+	return freezeLater(self.owner);
 }
 
 /**
- * Read this module's own frozen and class members through `self`.
- * @returns {object} What each read answered.
+ * The reads, made by this module on its own members through `self`.
+ * @returns {object} What each answered.
  */
 export function readOwn() {
-	return {
-		isFrozen: attempt(() => Object.isFrozen(self.owner.frozenBox)),
-		subPrototype: attempt(() => Object.getPrototypeOf(self.owner.Sub) === self.owner.Base)
-	};
+	return reads(self.owner);
 }
