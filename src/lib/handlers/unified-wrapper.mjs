@@ -761,6 +761,60 @@ function runtime_isEngineMember(value, prop) {
 }
 
 /**
+ * The member `prop` an api node's value inherits from the engine (#630): `hasOwnProperty`, `__lookupGetter__`, `valueOf`
+ * and the rest of `Object.prototype`, and `call`, `apply`, `bind` and the rest of `Function.prototype`. Such a member is
+ * the value's own surface, not an api child, and runs on whatever it is called on, as it does on a plain value: a
+ * composition layer's form of it, bound to the value under the layer, is unbound again, so a call through the node
+ * reads, defines and calls through the node.
+ * @param {object|Function} impl - The node's value.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - What the value answered for `prop`.
+ * @returns {{value: *}|null} The engine's member, or `null` when `prop` is the value's own or a member its own code
+ *   defined (a class's method).
+ * @private
+ */
+function runtime_inheritedEngineMember(impl, prop, value) {
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return null;
+	if (hasOwn(impl, prop)) return null;
+	const answered = layerMethodOriginal(value) ?? value;
+	// A callable node's own answer for `valueOf` (see runtime_valueOfFor), read through a layer over that node.
+	const original = NODE_VALUE_OFS.has(answered) ? Object.prototype.valueOf : answered;
+	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
+	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
+	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
+	// An accessor (`__proto__`) is the engine's when its getter, run on the value, answers what the value did.
+	const isEngines = INHERITED_HOLDERS.some((holder) => {
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
+		if (!descriptor) return false;
+		return "value" in descriptor
+			? descriptor.value === original
+			: typeof descriptor.get === "function" && Reflect.apply(descriptor.get, impl, []) === original;
+	});
+	return isEngines ? { value: original } : null;
+}
+
+/**
+ * The `valueOf` a callable node answers (#630): `Object.prototype.valueOf` on whatever it is called on, as a function's
+ * own `valueOf()` answers the function, and the node when it is called detached.
+ * @param {Function} node - The node's proxy.
+ * @returns {Function} The method.
+ * @private
+ */
+function runtime_valueOfFor(node) {
+	const method = function valueOf() {
+		return this === undefined || this === null ? node : Reflect.apply(Object.prototype.valueOf, this, []);
+	};
+	NODE_VALUE_OFS.add(method);
+	return method;
+}
+
+/** Every method {@link runtime_valueOfFor} made. @type {WeakSet<Function>} @private */
+const NODE_VALUE_OFS = new WeakSet();
+
+/** The engine's prototypes every api node's value inherits from. @type {ReadonlyArray<object>} @private */
+const INHERITED_HOLDERS = Object.freeze([Object.prototype, Function.prototype]);
+
+/**
  * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
  * reports itself the same way.
  * @param {Function} fn - A function.
@@ -9690,7 +9744,10 @@ export class UnifiedWrapper extends ComponentBase {
 		const keyName = typeof key === "symbol" ? null : key;
 		let childExportPath = null;
 		if (childFilePath && keyName !== null) {
-			const recordedMember = sameFileAsParent ? parentInternal.memberExportPaths?.[keyName] : undefined;
+			// The map is a plain object: only a key it holds as its own is a recorded member, never one it inherits
+			// (`hasOwnProperty`, `toString`, …), which is no export path (#630).
+			const memberExportPaths = sameFileAsParent ? parentInternal.memberExportPaths : null;
+			const recordedMember = memberExportPaths && hasOwn(memberExportPaths, keyName) ? memberExportPaths[keyName] : undefined;
 			if (recordedMember) {
 				childExportPath = [...recordedMember];
 			} else if (sameFileAsParent && parentInternal.exportPath) {
@@ -11265,6 +11322,15 @@ export class UnifiedWrapper extends ComponentBase {
 				// so it keeps the previous generic `Object.prototype.constructor`, exactly as before.
 				const internal = wrapper.____slothletInternal;
 				const constructorImpl = internal.impl;
+				// A function node answers its function's own `constructor` (`Function`, `AsyncFunction`, …), as the
+				// function does, rather than `Object` (#630); one the module defined on it is its code (#632).
+				if (typeof constructorImpl === "function") {
+					const fnConstructor = constructorImpl.constructor;
+					const inherited = runtime_inheritedEngineMember(constructorImpl, prop, fnConstructor);
+					if (inherited) return inherited.value;
+					runtime_enforceCodeMember(wrapper, fnConstructor, kept);
+					return fnConstructor;
+				}
 				const constructorIsLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(constructorImpl, EventEmitter));
 				if (constructorIsLiveIdentity && constructorImpl && typeof constructorImpl === "object" && constructorImpl.constructor) {
 					// A class of the module's is its code, checked as a call of the node (#632).
@@ -11355,23 +11421,31 @@ export class UnifiedWrapper extends ComponentBase {
 					runtime_enforceCodeMember(wrapper, method, kept);
 					return method.bind(fnImpl);
 				}
-				// For non-callable wrappers, return a descriptive string
-				if (typeof target === "function") {
-					return Function.prototype.toString.bind(target);
+				// A loaded object node answers its `toString` as the object does, through the member read below (#630).
+				if (impl === null || typeof impl !== "object") {
+					// For non-callable wrappers, return a descriptive string
+					if (typeof target === "function") {
+						return Function.prototype.toString.bind(target);
+					}
+					return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 				}
-				return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 			}
 			if (prop === "valueOf" && !memberShadowsWrapperProp) {
-				// Return valueOf bound to the actual impl, not the proxy target
-				// A `valueOf` the module defined on its function is its code, checked as a call of the node (#632).
+				// A `valueOf` the module defined on its function is its code, bound to the impl and checked as a call of
+				// the node (#632). The inherited one answers the node itself, as a value's own `valueOf()` answers the
+				// value: called on a node it answers that node, and called detached the node it was read from, where
+				// binding it to the impl handed out the raw function behind the node (#630).
 				const impl = wrapper.____slothletInternal.impl;
 				const fnImpl = runtime_functionOf(impl);
 				if (fnImpl) {
 					const method = fnImpl.valueOf;
+					const inherited = runtime_inheritedEngineMember(fnImpl, prop, method);
+					if (inherited) return runtime_valueOfFor(wrapper.____slothletInternal.proxy);
 					runtime_enforceCodeMember(wrapper, method, kept);
 					return method.bind(fnImpl);
 				}
-				return Function.prototype.valueOf.bind(target);
+				// A loaded object node reads its `valueOf` through the member read below.
+				if (impl === null || typeof impl !== "object") return Function.prototype.valueOf.bind(target);
 			}
 			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
@@ -11717,10 +11791,22 @@ export class UnifiedWrapper extends ComponentBase {
 			// read (#304). Only a user-added ENUMERABLE own property of the impl materializes as a child.
 			// Such a member holding the module's code — a static method, a member defined on the function — is handed out
 			// as it is, so reading it is checked as a call of the node (#632).
+			// A member inherited from the engine runs on the node, as on the plain value (#630).
 			const currentImpl = wrapper.____slothletInternal.impl;
 			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
+				if (inherited) return inherited.value;
 				runtime_enforceCodeMember(wrapper, value, kept);
 				return value;
+			}
+			// The same holds for an object node: a member it inherits from the engine (`hasOwnProperty`,
+			// `__lookupGetter__`, `valueOf`, … from `Object.prototype`) is the object's own surface, not a child
+			// endpoint. Wrapping one listed it among the node's keys and gave it an api path, where a `__`-prefixed
+			// name read as a module-private export and was denied with permissions on (#630). A member of a class
+			// the module wrote is still the module's, and stays a child.
+			if (currentImpl !== null && typeof currentImpl === "object") {
+				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
+				if (inherited) return inherited.value;
 			}
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
