@@ -29,4 +29,9 @@ describe("vitest worker flags (#710)", () => {
 	it("runs env-preload.mjs in the worker via --import", () => {
 		expect(process.execArgv.some((arg) => arg.includes("env-preload.mjs"))).toBe(true);
 	});
+
+	it("never carries slothlet-dev in NODE_OPTIONS in dist mode", () => {
+		if (useSource) return;
+		expect(process.env.NODE_OPTIONS ?? "").not.toContain("slothlet-dev");
+	});
 });
