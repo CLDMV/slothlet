@@ -3457,7 +3457,7 @@ if (isNode) runtime_recordNodeObjectPrototypes();
 
 /**
  * The prototypes of the state Node keeps on the streams it makes (a stream's `ReadableState` and `WritableState`, a
- * socket's `TCP` handle, a zlib stream's or a hash's native handle), read from streams made before any module's code runs (#708).
+ * socket's `TCP` handle and idle `Timeout`, a zlib stream's or a hash's native handle), read from streams made before any module's code runs (#708).
  * Like an emitter's listener table, that state holds Node's own closures and the callbacks handed to the stream (a
  * `write` callback, a pipe destination), which run as whoever handed them, so it is not read for code (see
  * {@link runtime_slotHoldsCode}).
@@ -3482,6 +3482,8 @@ function runtime_recordNodeStreamState() {
 	const socket = new net.Socket();
 	socket.on("error", () => {});
 	socket.connect({ port: 9, host: "127.0.0.1" });
+	// Its idle timer: the `Timeout` a socket keeps once `setTimeout()` is called on it.
+	socket.setTimeout(60000);
 	const secret = new Uint8Array(16);
 	const samples = [
 		new stream.Readable(),
