@@ -153,6 +153,25 @@ function runtime_takeInvariantRead(wrapper, prop) {
 }
 
 /**
+ * Whether defining `descriptor` on `holder`'s `prop` would change nothing (#667): the member is fixed (non-configurable)
+ * and every attribute the descriptor gives is the one it has. Freezing an already frozen object defines each member
+ * so, and on a plain object that is no change at all, so no write rule decides it.
+ * @param {object} holder - What holds the member as it is reported: a proxy's target or shadow.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {boolean} True when the definition changes nothing.
+ * @private
+ */
+function runtime_isUnchangingDefinition(holder, prop, descriptor) {
+	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
+	if (!current || current.configurable) return false;
+	for (const field of ["value", "writable", "get", "set", "enumerable", "configurable"]) {
+		if (field in descriptor && !(field in current && Object.is(descriptor[field], current[field]))) return false;
+	}
+	return true;
+}
+
+/**
  * The reader each view {@link runtime_selfView} built belongs to.
  * @type {WeakMap<object, object>}
  */
@@ -1124,6 +1143,9 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			return done;
 		},
 		defineProperty(_, prop, descriptor) {
+			// A definition that changes nothing (freezing an already frozen value) is no write (#667).
+			mirrorClosed();
+			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
 			assertWrite(prop);
 			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
 			if (!Reflect.defineProperty(raw, prop, stored)) return false;
@@ -1143,6 +1165,11 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
 		},
 		preventExtensions() {
+			// Closing a value already closed changes nothing (#667).
+			if (!Reflect.isExtensible(raw)) {
+				mirrorClosed();
+				return true;
+			}
 			assertWrite(null);
 			if (!Reflect.preventExtensions(raw)) return false;
 			mirrorClosed();
@@ -1301,6 +1328,9 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			return done;
 		},
 		defineProperty(_, prop, descriptor) {
+			// A definition that changes nothing (freezing an already frozen value) is no write (#667).
+			mirrorClosed();
+			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
 			assertWrite(prop);
 			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
 			if (!Reflect.defineProperty(raw, prop, stored)) return false;
@@ -1321,6 +1351,11 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
 		},
 		preventExtensions() {
+			// Closing a value already closed changes nothing (#667).
+			if (!Reflect.isExtensible(raw)) {
+				mirrorClosed();
+				return true;
+			}
 			assertWrite(null);
 			// A value that is itself a proxy may decline.
 			if (!Reflect.preventExtensions(raw)) return false;
@@ -1569,7 +1604,10 @@ export function runtime_selfView(node, reader) {
 			return vouched(() => Reflect.set(node, prop, runtime_unwrapSelfView(value)));
 		},
 		defineProperty(_, prop, descriptor) {
-			refuseWithoutStanding(prop);
+			// A definition that changes nothing (freezing an already frozen node) is no write of the reader's (#667): it goes
+			// on to the node, which decides whether it changes what the node holds.
+			if (Reflect.isExtensible(node) || !runtime_isUnchangingDefinition(capturedViewShadows.get(node) ?? node, prop, descriptor))
+				refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			const defined = vouched(() => Reflect.defineProperty(node, prop, descriptor));
 			// The engine now reads the node's descriptor to check the definition (freezing a node through its view
@@ -1586,14 +1624,19 @@ export function runtime_selfView(node, reader) {
 			return vouched(() => Reflect.setPrototypeOf(node, proto));
 		},
 		preventExtensions(_) {
-			refuseWithoutStanding(null);
+			// Closing a node already closed is no write of the reader's (#667): the node answers it.
+			if (Reflect.isExtensible(node)) refuseWithoutStanding(null);
 			return vouched(() => Reflect.preventExtensions(node));
 		},
 		has(_, prop) {
 			return Reflect.has(node, prop);
 		},
 		getPrototypeOf(_) {
-			return Reflect.getPrototypeOf(node);
+			// A node reported as the prototype (a class's base class, #667) is viewed for the reader, as reading it is.
+			const prototype = Reflect.getPrototypeOf(node);
+			if (prototype === null || !(resolveWrapper(prototype) !== null || capturedViewChildren.has(prototype))) return prototype;
+			if (!Reflect.isExtensible(node)) return prototype;
+			return runtime_selfView(prototype, reader);
 		},
 		isExtensible(_) {
 			return Reflect.isExtensible(node);
@@ -4906,6 +4949,53 @@ function runtime_ownArguments(wrapper, args) {
 }
 
 /**
+ * The node fronting each function of a module's, per instance (#667): a class's base class is reported as the node
+ * that fronts it, so `Object.getPrototypeOf(self.v.Sub)` answers `self.v.Base` as it answers `Base` on the classes.
+ * Held weakly, so a node never outlives its instance through the module's function.
+ * @type {WeakMap<object, WeakMap<Function, WeakRef<Function>>>}
+ * @private
+ */
+const FUNCTION_NODES = new WeakMap();
+
+/**
+ * Record `wrapper`'s node as the one fronting its function, unless another node of the instance already does.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordFunctionNode(wrapper) {
+	const { impl, proxy } = wrapper.____slothletInternal;
+	if (typeof impl !== "function" || !wrapper.slothlet) return;
+	let byFunction = FUNCTION_NODES.get(wrapper.slothlet);
+	if (!byFunction) FUNCTION_NODES.set(wrapper.slothlet, (byFunction = new WeakMap()));
+	if (byFunction.get(impl)?.deref() === undefined) byFunction.set(impl, new WeakRef(proxy));
+}
+
+/**
+ * The prototype a function node reports (#667), as its function's own `[[Prototype]]` is: the engine's
+ * (`Function.prototype`, `AsyncFunction.prototype`, …) as it is, and a class of the module's (the base class a derived
+ * class extends) as the node fronting it, bound to the reading module as a read of that node is. A class of the module's
+ * no node fronts is not reported: handing it out would hand out the module's code with no node's checks around it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {Function} fn - Its function.
+ * @returns {object|Function|null} The prototype to report, or `null`.
+ * @private
+ */
+function runtime_functionNodePrototype(wrapper, fn) {
+	const prototype = Object.getPrototypeOf(fn);
+	if (prototype === null || prototype === Function.prototype) return prototype;
+	if (typeof prototype !== "function") {
+		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
+	}
+	const node = FUNCTION_NODES.get(wrapper.slothlet)?.get(prototype)?.deref();
+	if (node === undefined) return null;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
+	const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	return identity?.currentWrapper ? runtime_capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
+}
+
+/**
  * The `Symbol.hasInstance` an unloaded lazy node answers: it has made no instances yet, so `instanceof`
  * against it is false until it loads.
  * @type {Function}
@@ -6122,7 +6212,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		},
 		getPrototypeOf() {
 			mirrorClosed();
-			if (Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(child);
+			if (Reflect.isExtensible(shadow)) return shownValue(Reflect.getPrototypeOf(child));
 			// A closed view reports what its shadow holds, the module's own prototype for an emitter of its own: reaching it
 			// is checked as a call of the node, for the module holding the view (#632).
 			const fixed = Reflect.getPrototypeOf(shadow);
@@ -6140,7 +6230,10 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return Reflect.set(child, prop, value, receiver === view ? child : receiver);
 		},
 		defineProperty(_, prop, descriptor) {
-			refuseWithoutStanding(prop);
+			// A definition that changes nothing (freezing an already frozen node) is no write of the reader's (#667): it goes
+			// on to the node, which decides whether it changes what the node holds.
+			mirrorClosed();
+			if (Reflect.isExtensible(shadow) || !runtime_isUnchangingDefinition(shadow, prop, descriptor)) refuseWithoutStanding(prop);
 			// A closed shadow lists an inspect hook even for a child that holds none (see ownKeys), such as a lazy node
 			// not loaded yet, which could not define one: freezing the view fixes the shadow's own there.
 			if (prop === util.inspect.custom && !Reflect.isExtensible(shadow) && !rawDescriptor(prop)) {
@@ -6164,7 +6257,9 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return true;
 		},
 		preventExtensions() {
-			refuseWithoutStanding(null);
+			// Closing a node already closed is no write of the reader's (#667): the node answers it.
+			mirrorClosed();
+			if (Reflect.isExtensible(shadow)) refuseWithoutStanding(null);
 			if (!Reflect.preventExtensions(child)) return false;
 			mirrorClosed();
 			return true;
@@ -11370,7 +11465,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// without reading `prototype` through the node: that read is checked as a call of the node (#632), and a
 				// module the node is closed to may still test an instance against it.
 				const fnImpl = runtime_functionOf(impl);
-				if (fnImpl && !runtime_hasOwnSymbolMember(wrapper, prop)) return runtime_hasInstanceOf(fnImpl);
+				if (fnImpl && !runtime_hasOwnSymbolMember(wrapper, prop)) {
+					// A `Symbol.hasInstance` the function inherits from a class of the module's (a base class's own static) is
+					// that class's code, which `instanceof` asks as it asks it on the plain function (#667); it is handed out
+					// as a static method is, so reading it is checked as a call of the node (#632).
+					const inherited = Reflect.get(fnImpl, prop, fnImpl);
+					if (typeof inherited === "function" && inherited !== INTRINSIC_HAS_INSTANCE) {
+						runtime_enforceCodeMember(wrapper, inherited, kept);
+						return inherited;
+					}
+					return runtime_hasInstanceOf(fnImpl);
+				}
 			}
 			// A symbol the module's value holds as its own key is a member, as in plain JS (`obj[sym]`); any other
 			// symbol is not one, and the wrapper has no answer of its own for it.
@@ -13360,11 +13465,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one the node
 				// holds, whoever seals it — not the one reported to the sealing caller, which may be withheld from it (#632).
 				if (typeof target !== "function") Reflect.setPrototypeOf(target, heldPrototype());
+				else if (typeof array === "function") Reflect.setPrototypeOf(target, runtime_functionNodePrototype(wrapper, array));
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				for (const key of keys) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
-					// The array shell's inspect hook stays the shell's own (see runtime_defineProxyInspect).
-					if (Array.isArray(target) && key === util.inspect.custom) continue;
+					// The shell's inspect hook stays the shell's own (see runtime_defineProxyInspect): the node holds no member
+					// there to fix in its place, so an object node frozen with it read the hook as `undefined` (#667).
+					if (
+						key === util.inspect.custom &&
+						(Array.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
+					)
+						continue;
 					const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
 					if (!descriptor) continue;
 					// A data member is held as data, so the sealed node reports and freezes as an object of its own would;
@@ -13409,7 +13520,17 @@ export class UnifiedWrapper extends ComponentBase {
 			apply: applyTrap,
 			construct: constructTrap,
 			has: hasTrap,
-			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
+			// A member is described holding what reading it hands out, the reading module's identity bound to a node as the
+			// get trap binds it, so its description and a read of it give the same value (#667). A member fixed read-only on
+			// a frozen shell is described as the shell holds it (proxy invariant), as it is read.
+			getOwnPropertyDescriptor: (target, prop) => {
+				const descriptor = getOwnPropertyDescriptorTrap(target, prop);
+				if (!descriptor || !("value" in descriptor)) return descriptor;
+				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
+				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return descriptor;
+				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value);
+				return bound === descriptor.value ? descriptor : { ...descriptor, value: bound };
+			},
 			ownKeys: ownKeysTrap,
 			set: setTrap,
 			// A callable `then` is refused here, as in the set trap. A callable node's target is a bare function shell
@@ -13423,6 +13544,8 @@ export class UnifiedWrapper extends ComponentBase {
 						validationError: true
 					});
 				}
+				// A definition that changes nothing (freezing an already frozen node) is no write (#667).
+				if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;
 				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625),
 				// and never a framework-reserved key (the built-in write rules).
 				runtime_assertOwnedWrite(wrapper, prop);
@@ -13491,6 +13614,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// forbid once it is non-extensible. Its reported members are copied onto the shell first, so the
 			// sealed node lists, describes and reads them from there.
 			preventExtensions: (target) => {
+				// Closing a node already closed changes nothing, as on a plain object (#667).
+				runtime_syncArrayIntegrity(wrapper, target);
+				if (!Reflect.isExtensible(target)) return true;
 				// Sealing or freezing a node changes what its owner may write to it, so a module may do it only to a
 				// node it owns (#625). Checked before anything is sealed: a refused freeze leaves the node as it was.
 				runtime_assertOwnedWrite(wrapper, null);
@@ -13532,6 +13658,8 @@ export class UnifiedWrapper extends ComponentBase {
 					if (heldPrototypeRead !== wrapper) runtime_enforceCodeMember(wrapper, fixed, runtime_takeCapturedAccess(wrapper));
 					return fixed;
 				}
+				// A function node reports its function's prototype, a class it extends as that class's node (#667).
+				if (typeof impl === "function") return runtime_functionNodePrototype(wrapper, impl);
 				let prototype = heldPrototype();
 				if (prototype === null) return null;
 				// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
@@ -13560,6 +13688,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
+		runtime_recordFunctionNode(wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real
 		// caller identity (`ctx.currentWrapper`) from a forged object and fail closed on the latter.
 		genuineWrappers.add(wrapper);
