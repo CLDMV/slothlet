@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:47-07:00 (1793426627)
+ *	@Last modified time: 2026-11-05T20:23:34-08:00 (1793939014)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1083,6 +1083,54 @@ export function isCommonJSFile(filePath) {
 }
 
 /**
+ * The global key a host file's registration puts what it captures under (#714): an array of the `Error`s each of the
+ * host's own files vite transformed created as its last statement, read by slothlet's frame placement.
+ * @type {string}
+ * @internal
+ */
+export const VITE_HOST_SCRIPTS = "@cldmv/slothlet.viteHostScripts";
+
+/**
+ * The files of slothlet's own a host-file registration is never appended to: its source or build tree and the package's
+ * entry files.
+ * @type {string[]}
+ * @private
+ */
+const OWN_TREE = [
+	...OWN_PREFIXES,
+	...[new URL("../../", import.meta.url)].filter((u) => u.protocol === "file:").map((u) => toSlashPath(u.href))
+];
+
+/**
+ * A JavaScript or TypeScript ES module file name (`.js`, `.mjs`, `.ts`, `.mts`, `.jsx`, `.tsx`).
+ * @type {RegExp}
+ * @private
+ */
+const MODULE_FILE = /\.(?:m?[jt]sx?)$/;
+
+/**
+ * The registration the vite plugin appends to a file of the host's own (#714): one statement that pushes an `Error`
+ * created by the file's own top-level code. Vite transforms the host's files, so their code never hashes as the files on
+ * disk do; the `Error`'s stack, read once by slothlet, shows the script vite compiled the file into and the runner that
+ * evaluated it, and slothlet takes that script as the file's own source only when the runner is vitest's or vite's own
+ * code. Appended, so no line of the file moves. Instance files, packages under `node_modules`, slothlet's own files,
+ * CommonJS, virtual modules and files that are not JavaScript are left as they are.
+ * @param {string} code - The file's code, already compiled to JavaScript.
+ * @param {string} id - The module id.
+ * @returns {{code: string, map: null}|null} The code with the registration appended, or null.
+ * @private
+ */
+function hostScriptRegistration(code, id) {
+	const [base] = splitQuery(id);
+	const path = toSlashPath(base);
+	if (!/^(?:\/|[a-z]:\/)/i.test(path) || !MODULE_FILE.test(path) || path.includes("/node_modules/")) return null;
+	if (OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`))) return null;
+	if (isCommonJSFile(path)) return null;
+	const registration = `(globalThis[Symbol.for(${JSON.stringify(VITE_HOST_SCRIPTS)})] ??= []).push(new Error());`;
+	return { code: `${code}\n;${registration}\n`, map: null };
+}
+
+/**
  * Vite plugin applying the same rule inside a vite module graph — for leaves a consumer loads
  * through slothlet's `import` hook under vitest (docs/TESTING.md), where Node's resolve hooks
  * never see the leaf's imports. Add it to the consumer's `vitest.config` `plugins`.
@@ -1091,7 +1139,12 @@ export function isCommonJSFile(filePath) {
  * Node load hook generates: the file runs through the instance's private CommonJS cache in the
  * test's own process, so its own `require()`s — CommonJS or ES module — are per instance too, and
  * the copy is shared with the instance's `.cjs` leaves.
- * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `load`).
+ *
+ * Every other JavaScript or TypeScript ES module it transforms that is the host's own — not an instance file, not under
+ * `node_modules`, not slothlet's own — gets one statement appended that records the script vite compiled it into
+ * (#714). With permissions on, the host's code running inside a module's call is then attributed as it is under Node's
+ * own loader, for the files of the package that created the instance (docs/PERMISSIONS.md).
+ * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `transform`, `load`).
  * @public
  * @example
  * // vitest.config.mjs
@@ -1130,7 +1183,8 @@ export function slothletInstanceImports() {
 			 * @returns {Promise<object|null>} The code with the registration appended, or null.
 			 */
 			async handler(code, id) {
-				if (typeof id !== "string" || !id.includes(MARKER)) return null;
+				if (typeof id !== "string") return null;
+				if (!id.includes(MARKER)) return hostScriptRegistration(code, id);
 				const [base, query = ""] = splitQuery(id);
 				const instanceID = new URLSearchParams(query).get("slothlet_instance");
 				if (instanceID === null || isCommonJSFile(base)) return null;

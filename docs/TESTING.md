@@ -150,7 +150,13 @@ export default defineConfig({
 });
 ```
 
-The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A CommonJS helper imported this way (a `.cjs` file, or a `.js` file Node treats as CommonJS) is loaded as the same per-instance wrapper the Node hook uses, so the helper and everything it `require()`s run natively through the instance's CommonJS cache, shared with the instance's `.cjs` leaves. A plain test run that leaves slothlet externalized and sets no `import` importer does not need the plugin — the leaves then load natively and the Node hook covers them.
+The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A CommonJS helper imported this way (a `.cjs` file, or a `.js` file Node treats as CommonJS) is loaded as the same per-instance wrapper the Node hook uses, so the helper and everything it `require()`s run natively through the instance's CommonJS cache, shared with the instance's `.cjs` leaves. A plain test run that leaves slothlet externalized and sets no `import` importer does not need the plugin for this — the leaves then load natively and the Node hook covers them — but still needs it for the host's own files, below.
+
+### The host's own files under vitest
+
+With permissions on, code of the host's own files that runs inside a module's call — a context object the host hands a module's `activate`, whose closures call `api.slothlet.lockCaller`, `api.slothlet.metadata`, `api.slothlet.event` or the host's own leaves — runs as that call. Under Node, slothlet checks such code against the file's source on disk. Under vitest the host's files (the test file, and the source files it imports) are transformed by vite, so that check cannot pass, and without the plugin their code is refused with `PERMISSION_DENIED` and caller `null`.
+
+`slothletInstanceImports()` covers them. It appends one statement to every JavaScript or TypeScript ES module vite transforms that is not an instance file, not under `node_modules` and not slothlet's own. The statement records the script vite compiled the file into. slothlet accepts the record only when vitest's or vite's runner evaluated the file, and uses it only for files of the package that created the instance: the nearest folder holding a `package.json` above the file whose code called `slothlet()`. Code compiled with `vm` under a host file's name, and transformed files of other packages, stay refused. See [PERMISSIONS.md](PERMISSIONS.md#code-passed-by-routes-slothlet-does-not-see).
 
 ## Scope
 

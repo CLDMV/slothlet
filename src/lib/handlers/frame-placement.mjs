@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T17:12:59-08:00 (1793927579)
+ *	@Last modified time: 2026-11-05T20:23:31-08:00 (1793939011)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,8 @@ import {
 	packageImporters,
 	rememberNewest,
 	scriptKeyInstance,
-	setScriptKey
+	setScriptKey,
+	VITE_HOST_SCRIPTS
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
 
@@ -1691,7 +1692,7 @@ function runtime_packageAnswer(record, frame) {
 	if (!importers.size) {
 		if (frame.path.includes("/node_modules/") && !packageImporters(frame.path).length && !isInstanceOwnerFile(leaf.slothlet, frame.path))
 			return UNACCOUNTED_SUPPLIER;
-		return runtime_runsFileSource(frame) ? null : UNACCOUNTED_SUPPLIER;
+		return runtime_runsFileSource(frame) || runtime_runsViteHostSource(leaf.slothlet, frame) ? null : UNACCOUNTED_SUPPLIER;
 	}
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
@@ -1781,6 +1782,165 @@ export function recordInstanceOwner(slothlet) {
 export function isInstanceOwnerFile(slothlet, path) {
 	const owner = OWNER_PACKAGES.get(slothlet);
 	return owner !== undefined && runtime_packageRootOf(path) === owner;
+}
+
+/**
+ * The `name` in the `package.json` of each package root asked about (null when it cannot be read).
+ * @type {Map<string, string|null>}
+ * @private
+ */
+const PACKAGE_NAMES = new Map();
+
+/**
+ * The `name` a package root's `package.json` gives.
+ * @param {string} root - The package root, in comparable form.
+ * @returns {string|null} The name, or null.
+ * @private
+ */
+function runtime_packageName(root) {
+	if (!PACKAGE_NAMES.has(root)) {
+		let name = null;
+		try {
+			const parsed = JSON.parse(globalThis.process.getBuiltinModule("node:fs").readFileSync(`${root}/package.json`, "utf8"));
+			if (typeof parsed?.name === "string") name = parsed.name;
+		} catch {
+			// A manifest that cannot be read or parsed names no package.
+		}
+		PACKAGE_NAMES.set(root, name);
+	}
+	return PACKAGE_NAMES.get(root);
+}
+
+/**
+ * The packages whose code evaluates the modules vite transformed: vitest's module runner and vite's own.
+ * @type {Set<string>}
+ * @private
+ */
+const VITE_RUNNERS = new Set(["vitest", "vite"]);
+
+/**
+ * The `stack` getter V8 gives every error, to tell a genuine error's stack from one a script put on it.
+ * @type {Function|undefined}
+ * @private
+ */
+const PRISTINE_STACK_GET = Object.getOwnPropertyDescriptor(new PristineError(), "stack")?.get;
+
+/**
+ * The frames slothlet itself read off a registration's error, so a stack anyone else produced is not taken for one.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const READ_REGISTRATIONS = new WeakSet();
+
+/**
+ * The script a registration's error was created in, when the registration is genuine (#714): a native error whose
+ * stack is still unread, created by a file's own top-level code — its first frame, compiled code with a script hash,
+ * not code compiled from a string — that vitest's or vite's runner was evaluating: the next frame that is not Node's
+ * own code is a file of the `vitest` or `vite` package running that file's own source. Code a module compiled with `vm` under a host file's name
+ * and registered itself has its own frame, not the runner's, below it.
+ * @param {unknown} entry - What was pushed.
+ * @returns {{key: string, hash: string}|null} The script, or null.
+ * @private
+ */
+function runtime_registeredScript(entry) {
+	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
+	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
+	if (Object.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
+	const previousPrepare = PristineError.prepareStackTrace;
+	PristineError.prepareStackTrace = (error, sites) => {
+		const frames = runtime_structuredFrames(error, sites);
+		READ_REGISTRATIONS.add(frames);
+		return frames;
+	};
+	let frames;
+	try {
+		frames = Reflect.apply(PRISTINE_STACK_GET, entry, []);
+	} finally {
+		PristineError.prepareStackTrace = previousPrepare;
+	}
+	if (!READ_REGISTRATIONS.has(frames)) return null;
+	let own = null;
+	let runner = null;
+	for (const frame of frames) {
+		if (!own) {
+			own = frame;
+			continue;
+		}
+		// Node's own code between them (the microtask queue a module resumes in after its imports) is passed over.
+		if (frame.path.startsWith("node:") && !frame.evaluated && runtime_isNodeScript(frame)) continue;
+		runner = frame;
+		break;
+	}
+	if (!own?.hash || !own.key || own.evaluated || own.path.startsWith(FRAMEWORK_DIR + "/") || own.path.startsWith("node:")) return null;
+	if (!runner?.hash || runner.evaluated || runner.path.startsWith("node:")) return null;
+	const runnerRoot = runtime_packageRootOf(runner.path);
+	if (!runnerRoot || !VITE_RUNNERS.has(runtime_packageName(runnerRoot)) || !runtime_runsFileSource(runner)) return null;
+	return { key: own.key, hash: own.hash };
+}
+
+/**
+ * The registrations of the host's own vite-transformed files (#714), kept on the global object under
+ * {@link VITE_HOST_SCRIPTS}: the array a registration pushes onto, made by the first registration or by slothlet,
+ * whichever runs first, and fixed in place by slothlet with a frozen `registered(key, hash)` reader. What was pushed
+ * is read once, in order, and only what {@link runtime_registeredScript} accepts is kept; anything else is dropped.
+ * @type {{registered: (key: string, hash: string) => boolean}|null}
+ * @private
+ */
+const VITE_HOST_REGISTRY = isNode ? installViteHostRegistry(globalThis) : null;
+
+/**
+ * Fix the registry of {@link VITE_HOST_REGISTRY} on a global object (#714): take over what registrations already
+ * pushed onto a plain array there, and put in its place, unchangeable, an array with a frozen `registered(key, hash)`
+ * reader. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{registered: (key: string, hash: string) => boolean}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteHostRegistry(globalThis).registered(frame.key, frame.hash);
+ */
+export function installViteHostRegistry(target) {
+	const key = Symbol.for(VITE_HOST_SCRIPTS);
+	const current = Object.getOwnPropertyDescriptor(target, key);
+	// Fixed by another copy of slothlet already: its reader answers for every copy.
+	if (current && !current.configurable) return typeof current.value?.registered === "function" ? current.value : null;
+	const queue = [];
+	// What registrations pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
+	if (Array.isArray(current?.value) && !util.types.isProxy(current.value)) {
+		for (let i = 0; i < current.value.length; i++) queue[queue.length] = Object.getOwnPropertyDescriptor(current.value, i)?.value;
+	}
+	/** @type {Map<string, Set<string>>} */
+	const scripts = new Map();
+	const registered = (scriptKey, hash) => {
+		const pending = queue.length;
+		for (let i = 0; i < pending; i++) {
+			const script = runtime_registeredScript(Object.getOwnPropertyDescriptor(queue, i)?.value);
+			if (!script) continue;
+			let hashes = scripts.get(script.key);
+			if (!hashes) scripts.set(script.key, (hashes = new Set()));
+			hashes.add(script.hash);
+		}
+		// What was read is dropped; anything pushed while reading stays for the next read.
+		queue.splice(0, pending);
+		return scripts.get(scriptKey)?.has(hash) === true;
+	};
+	Object.defineProperty(queue, "registered", { value: Object.freeze(registered), enumerable: false, writable: false, configurable: false });
+	Object.defineProperty(target, key, { value: queue, enumerable: false, writable: false, configurable: false });
+	return queue;
+}
+
+/**
+ * Whether a frame of a file vite transformed runs that file's own code, as the registration the vite plugin appended
+ * to it recorded (#714): the frame's script is one vitest's or vite's runner evaluated for the file, and the file is
+ * one of the package that created the instance. A registered file of any other package is not taken for the host's.
+ * @param {object} slothlet - The instance.
+ * @param {{path: string, hash: string|null, key: string|null}} frame - The frame.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_runsViteHostSource(slothlet, frame) {
+	if (!VITE_HOST_REGISTRY || !frame.hash || !frame.key || !isInstanceOwnerFile(slothlet, frame.path)) return false;
+	return VITE_HOST_REGISTRY.registered(frame.key, frame.hash);
 }
 
 /**

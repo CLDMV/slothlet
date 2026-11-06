@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T20:24:34-08:00 (1793939074)
+ *	@Last modified time: 2026-11-05T21:30:02-08:00 (1793943002)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -129,7 +129,8 @@ describe("slothletInstanceImports() > the host-file registration it appends (#71
 		["slothlet's package entry", `${ROOT}/index.mjs`],
 		["a file that is not JavaScript", `${FIXTURE.replaceAll("\\", "/")}/host/style.css`],
 		["a virtual module", "\0virtual:thing"],
-		["a CommonJS file", `${FIXTURE.replaceAll("\\", "/")}/host/legacy.cjs`]
+		["a CommonJS file", `${FIXTURE.replaceAll("\\", "/")}/host/legacy.cjs`],
+		["a .js file of a CommonJS package", `${ROOT}/api_tests/api_test_cjs_js/commonjs/counter/counter.js`]
 	])("leaves %s as it is", async (_kind, id) => {
 		expect(await transform("export const x = 1;", id)).toBeNull();
 	});
