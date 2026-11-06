@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T20:23:31-08:00 (1793939011)
+ *	@Last modified time: 2026-11-06T06:26:25-08:00 (1793975185)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -669,6 +669,9 @@ function runtime_runsFileSource(frame) {
 	if (!isNode || !frame.hash) return true;
 	// The scripts the loader recorded, a CommonJS file's among them, and those learned are its own code's (#597).
 	if (frame.key && runtime_knowsScript(frame.key, frame.hash).has) return true;
+	// Under vitest, the script its runner compiled the code vite gave it for the file into: the file's source as vite
+	// transformed it, as the hash of the file on disk is under Node's own loader (#714).
+	if (runtime_runnerScriptHashes(frame.path)?.has(frame.hash)) return true;
 	let known = FILE_SOURCE_HASHES.get(frame.path);
 	if (known === undefined) {
 		known = runtime_readFileSourceHashes(frame.path);
@@ -1113,6 +1116,22 @@ export function createFramePlacer(candidates) {
 			});
 			// A CommonJS file runs under its plain path, which code compiled by someone can name too (#597).
 			return { matches: owners, byFile: false, unverified: Boolean(commonJSFamilies) };
+		}
+		// A helper vitest's runner loaded for a leaf (slothlet itself run by the runner, so Node's loader never saw the
+		// import): the leaves its record names as importers, directly or through other such helpers (#714).
+		if (!frameInstance) {
+			const importers = runtime_runnerTaggedImporters(frame.path);
+			const owners = importers.length
+				? candidates.filter((entry) =>
+						importers.some(
+							(importer) =>
+								importer.family === entry.family &&
+								(!importer.mount || importer.mount === entry.moduleID) &&
+								isEntryLocation(importer.location, entry)
+						)
+					)
+				: [];
+			if (owners.length) return { matches: owners, byFile: false, unverified: true };
 		}
 		// A CommonJS file only a gone instance loaded: its code is accounted for by no live call.
 		if (isNode && !frameInstance && RETIRED_COMMONJS.has(frame.path)) return { matches: [], byFile: false };
@@ -1613,6 +1632,60 @@ export function resolveSupplier(record) {
 const PACKAGE_WALK = 256;
 
 /**
+ * The files that import a file no instance tags (#714): those slothlet's resolve hook recorded under Node, and, where
+ * vitest's runner evaluated the file, the modules its record of the file names as importers. Under vitest the modules
+ * of an instance and their helpers can be loaded by vitest's runner rather than Node's loader (slothlet in
+ * `server.deps.inline`), so Node's hook sees none of those imports.
+ * @param {string} path - The file, in comparable form.
+ * @returns {Array<string>} The importers' URLs or module ids.
+ * @private
+ */
+function runtime_fileImporters(path) {
+	const importers = packageImporters(path);
+	const records = RUNNER_MODULES?.fileToModulesMap?.get?.(path);
+	if (!(records instanceof Set)) return importers;
+	const all = [...importers];
+	for (const node of records) {
+		if (!(node?.importers instanceof Set)) continue;
+		for (const id of node.importers) if (typeof id === "string") all.push(id);
+	}
+	return all;
+}
+
+/**
+ * The instance copies vitest's runner records as importing a file no instance tags, directly or through other untagged
+ * files (#714): each with its instance, its mount and its location.
+ * @param {string} path - The file, in comparable form.
+ * @returns {Array<{family: string, mount: string|null, location: string}>} The copies.
+ * @private
+ */
+function runtime_runnerTaggedImporters(path) {
+	if (!RUNNER_MODULES) return [];
+	const found = [];
+	const seen = new Set([path]);
+	const queue = [path];
+	while (queue.length && seen.size <= PACKAGE_WALK) {
+		const records = RUNNER_MODULES.fileToModulesMap?.get?.(queue.shift());
+		if (!(records instanceof Set)) continue;
+		for (const node of records) {
+			if (!(node?.importers instanceof Set)) continue;
+			for (const id of node.importers) {
+				if (typeof id !== "string") continue;
+				const query = new URLSearchParams(id.split("?")[1] ?? "");
+				const location = toComparablePath(id);
+				const family = query.get("slothlet_instance");
+				if (family) found.push({ family, mount: query.get("module"), location });
+				else if (!seen.has(location)) {
+					seen.add(location);
+					queue.push(location);
+				}
+			}
+		}
+	}
+	return found;
+}
+
+/**
  * The leaves of an instance whose code loaded a file no instance tags, directly or through other such files and the
  * module's own helper files, as the resolve hook recorded it (#597).
  * @param {object} slothlet - The instance.
@@ -1630,7 +1703,7 @@ function runtime_packageImportingLeaves(slothlet, path) {
 	// The instance's own files reached: each is a leaf's, or a helper of the leaves importing it.
 	const reached = [];
 	while (queue.length && seen.size <= PACKAGE_WALK) {
-		for (const importer of packageImporters(queue.shift())) {
+		for (const importer of runtime_fileImporters(queue.shift())) {
 			const query = new URLSearchParams(importer.split("?")[1] ?? "");
 			const location = toComparablePath(importer);
 			const instance = query.get("slothlet_instance");
@@ -1690,9 +1763,13 @@ function runtime_packageAnswer(record, frame) {
 	// (`vm`, `Module#_compile`, a `data:` URL, a `vm.SourceTextModule` named after a file), is no one's.
 	// The package that created the instance is the host's own, wherever it is installed (#714).
 	if (!importers.size) {
-		if (frame.path.includes("/node_modules/") && !packageImporters(frame.path).length && !isInstanceOwnerFile(leaf.slothlet, frame.path))
+		if (
+			frame.path.includes("/node_modules/") &&
+			!runtime_fileImporters(frame.path).length &&
+			!isInstanceOwnerFile(leaf.slothlet, frame.path)
+		)
 			return UNACCOUNTED_SUPPLIER;
-		return runtime_runsFileSource(frame) || runtime_runsViteHostSource(leaf.slothlet, frame) ? null : UNACCOUNTED_SUPPLIER;
+		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) ? null : UNACCOUNTED_SUPPLIER;
 	}
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
@@ -1760,6 +1837,8 @@ function runtime_packageRootOf(path) {
  */
 export function recordInstanceOwner(slothlet) {
 	if (!isNode) return;
+	// What vitest's runner evaluated before this instance's modules can run (#714).
+	runtime_readRunnerModules();
 	for (const frame of runtime_captureFrames(32)) {
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:") || PACKAGE_ENTRIES.has(frame.path)) continue;
 		if (frame.evaluated) return;
@@ -1941,6 +2020,106 @@ export function installViteHostRegistry(target) {
 function runtime_runsViteHostSource(slothlet, frame) {
 	if (!VITE_HOST_REGISTRY || !frame.hash || !frame.key || !isInstanceOwnerFile(slothlet, frame.path)) return false;
 	return VITE_HOST_REGISTRY.registered(frame.key, frame.hash);
+}
+
+/**
+ * The parameters vitest's module runner compiles each module it transformed as an async function of: vite's SSR
+ * bindings, then (vitest 4, and vitest 5 unless `injectCjsGlobals` is off) the CommonJS globals. The script V8 runs for
+ * a module is `'use strict';async (<parameters>)=>{{<vite's code>\n}}`, which is what {@link runtime_runnerScriptHashes}
+ * hashes.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const RUNNER_PARAMETERS = Object.freeze(
+	[
+		"__vite_ssr_exports__,__vite_ssr_import_meta__,__vite_ssr_import__,__vite_ssr_dynamic_import__,__vite_ssr_exportAll__,__vite_ssr_exportName__"
+	].flatMap((ssr) => [ssr, `${ssr},__filename,__dirname,module,exports,require`])
+);
+
+/**
+ * vitest's record of the modules its runner evaluated in this process (`__vitest_worker__.evaluatedModules`), as it was
+ * when slothlet loaded, or null outside vitest.
+ * @type {{fileToModulesMap?: Map<string, Set<object>>, idToModuleMap?: Map<string, object>}|null}
+ * @private
+ */
+const RUNNER_MODULES = isNode ? (globalThis.__vitest_worker__?.evaluatedModules ?? null) : null;
+
+/**
+ * The script hashes each file's code compiled to by vitest's runner, by comparable path, as first read (#714). The
+ * modules the runner had already evaluated when slothlet loaded are read then, before any instance's module runs;
+ * one evaluated later is read the first time a frame of it is checked, and what was read is not read again.
+ * @type {Map<string, Set<string>>}
+ * @private
+ */
+const RUNNER_SCRIPTS = new Map();
+
+/**
+ * The runner's module records already read into {@link RUNNER_SCRIPTS}.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const RUNNER_READ = new WeakSet();
+
+/**
+ * Read one of the runner's module records into {@link RUNNER_SCRIPTS}: the hashes of the scripts its code compiles to.
+ * @param {object} node - The record.
+ * @returns {void}
+ * @private
+ */
+function runtime_readRunnerModule(node) {
+	if (RUNNER_READ.has(node)) return;
+	RUNNER_READ.add(node);
+	const code = node?.meta?.code;
+	const file = typeof node?.file === "string" ? node.file : null;
+	if (typeof code !== "string" || !file) return;
+	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const path = toComparablePath(file);
+	let hashes = RUNNER_SCRIPTS.get(path);
+	if (!hashes) RUNNER_SCRIPTS.set(path, (hashes = new Set()));
+	for (const parameters of RUNNER_PARAMETERS)
+		hashes.add(crypto.createHash("sha256").update(`'use strict';async (${parameters})=>{{${code}\n}}`).digest("hex"));
+}
+
+/**
+ * Read every module record the runner holds now (see {@link runtime_readRunnerModule}).
+ * @returns {void}
+ * @private
+ */
+function runtime_readRunnerModules() {
+	const nodes = RUNNER_MODULES?.idToModuleMap;
+	if (!(nodes instanceof Map)) return;
+	for (const node of nodes.values()) runtime_readRunnerModule(node);
+}
+
+runtime_readRunnerModules();
+
+/**
+ * The script hashes a file's code compiles to under vitest's runner (see {@link RUNNER_SCRIPTS}), reading the file's
+ * module records the first time it is asked about.
+ * @param {string} path - The file, in comparable form.
+ * @returns {Set<string>|undefined} The hashes.
+ * @private
+ */
+function runtime_runnerScriptHashes(path) {
+	const records = RUNNER_MODULES?.fileToModulesMap?.get?.(path);
+	if (records instanceof Set) for (const node of records) runtime_readRunnerModule(node);
+	return RUNNER_SCRIPTS.get(path);
+}
+
+/**
+ * Whether a frame of a file of the package that created the instance runs that file's own code as vite transformed it
+ * (#714): its script is the one the `slothletInstanceImports()` plugin's registration recorded, or the one vitest's
+ * runner compiles the code vite gave it for the file into. Code compiled under the file's name from any other source —
+ * with `vm`, by a module — runs in a script of its own and is not.
+ * @param {object} slothlet - The instance.
+ * @param {{path: string, hash: string|null, key: string|null, evaluated?: boolean}} frame - The frame.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_runsOwnerTransform(slothlet, frame) {
+	if (!frame.hash || frame.evaluated || !isInstanceOwnerFile(slothlet, frame.path)) return false;
+	if (runtime_runnerScriptHashes(frame.path)?.has(frame.hash)) return true;
+	return runtime_runsViteHostSource(slothlet, frame);
 }
 
 /**
