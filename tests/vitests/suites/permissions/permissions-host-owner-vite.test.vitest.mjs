@@ -23,9 +23,10 @@
  * the module's call it is in, giving what it gives under Node's own loader (`permissions-host-owner-code`): lazy and
  * eager alike, in both runtimes.
  *
- * Three things stay refused: the same closures compiled with `vm` under the host file's name, the same with a
- * registration made from that compiled code instead of from vitest's runner, and a vite-transformed file of a folder
- * with a `package.json` of its own (a package that did not create the instance).
+ * A vite-transformed file of a folder with a `package.json` of its own, which the test imports, runs as the module's
+ * call as well, as such a file the host imports does under Node's own loader. Two things stay refused: the same
+ * closures compiled with `vm` under the host file's name, and the same with a registration made from that compiled code
+ * instead of from vitest's runner.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -105,9 +106,9 @@ describe.each(getMatrixConfigs())(
 			expect(await api.ext.a.activate(forged(api))).toEqual(REFUSED);
 		});
 
-		it("refuses a vite-transformed file of a package that did not create the instance", async () => {
+		it("runs a vite-transformed file of a package the host imported as the module's call, as under Node's own loader", async () => {
 			await boot();
-			expect(await api.ext.a.activate(otherPackageContext(api))).toEqual(REFUSED);
+			expect(await api.ext.a.activate(otherPackageContext(api))).toEqual(HOST_ANSWERS);
 		});
 	}
 );
