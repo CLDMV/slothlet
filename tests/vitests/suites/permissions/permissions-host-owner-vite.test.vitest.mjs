@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T20:18:17-08:00 (1793938697)
+ *	@Last modified time: 2026-11-05T20:24:34-08:00 (1793939074)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@ import slothlet from "@cldmv/slothlet";
 import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 import { makeContext } from "../../../../api_tests/api_test_host_owner_code/host/context.mjs";
+import { makeContext as importingContext } from "../../../../api_tests/api_test_host_owner_code/host/imported.mjs";
 import { makeContext as otherPackageContext } from "../../../../api_tests/api_test_host_owner_code/other-pkg/context.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code");
@@ -85,6 +86,11 @@ describe.each(getMatrixConfigs())(
 		it("runs the code of a file of the owner's package as the module's call", async () => {
 			await boot();
 			expect(await api.ext.a.activate(makeContext(api))).toEqual(HOST_ANSWERS);
+		});
+
+		it("runs the code of a file of the owner's package that imports another as the module's call", async () => {
+			await boot();
+			expect(await api.ext.a.activate(importingContext(api))).toEqual(HOST_ANSWERS);
 		});
 
 		it("refuses the closures compiled with vm under the host file's name", async () => {
