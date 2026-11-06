@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
+ *	@Last modified time: 2026-11-05T17:12:59-08:00 (1793927579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1687,14 +1687,100 @@ function runtime_packageAnswer(record, frame) {
 	// before slothlet) has no known owner and is refused, as a package can be anyone's code. Any other file is the host's
 	// own only when the frame runs its own source: code compiled under a name no file holds, or holding another source
 	// (`vm`, `Module#_compile`, a `data:` URL, a `vm.SourceTextModule` named after a file), is no one's.
+	// The package that created the instance is the host's own, wherever it is installed (#714).
 	if (!importers.size) {
-		if (frame.path.includes("/node_modules/") && !packageImporters(frame.path).length) return UNACCOUNTED_SUPPLIER;
+		if (frame.path.includes("/node_modules/") && !packageImporters(frame.path).length && !isInstanceOwnerFile(leaf.slothlet, frame.path))
+			return UNACCOUNTED_SUPPLIER;
 		return runtime_runsFileSource(frame) ? null : UNACCOUNTED_SUPPLIER;
 	}
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
 	const [first, ...rest] = importers;
 	return { wrapper: first, ceiling: combineCeilings(leaf, record.ceiling, ...rest) };
+}
+
+/**
+ * The root folder of the package that created each instance (#714): the nearest folder holding a `package.json` above
+ * the file whose code called `slothlet()`, in comparable form. Held weakly by instance, out of every module's reach.
+ * @type {WeakMap<object, string>}
+ * @private
+ */
+const OWNER_PACKAGES = new WeakMap();
+
+/**
+ * slothlet's own package entry files (`index.mjs`, and `index.cjs` that loads it), beside its source or build folder:
+ * the `slothlet()` a host imports from the package calls the one {@link recordInstanceOwner} is read in.
+ * @type {Set<string>}
+ * @private
+ */
+const PACKAGE_ENTRIES = new Set(
+	["index.mjs", "index.cjs"].map((file) => `${FRAMEWORK_DIR.slice(0, FRAMEWORK_DIR.lastIndexOf("/"))}/${file}`)
+);
+
+/**
+ * The package root of each file asked about, in comparable form (null when no folder above it holds a `package.json`).
+ * @type {Map<string, string|null>}
+ * @private
+ */
+const PACKAGE_ROOTS = new Map();
+
+/**
+ * The root folder of the package a file belongs to: the nearest folder above it holding a `package.json`.
+ * @param {string} path - The file, in comparable form.
+ * @returns {string|null} The folder, in comparable form, or null when there is none.
+ * @private
+ */
+function runtime_packageRootOf(path) {
+	if (PACKAGE_ROOTS.has(path)) return PACKAGE_ROOTS.get(path);
+	const fs = globalThis.process.getBuiltinModule("node:fs");
+	let root = null;
+	for (let dir = path.slice(0, path.lastIndexOf("/")); dir; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+		if (fs.existsSync(`${dir}/package.json`)) {
+			root = dir;
+			break;
+		}
+	}
+	if (PACKAGE_ROOTS.size >= 4096) PACKAGE_ROOTS.clear();
+	PACKAGE_ROOTS.set(path, root);
+	return root;
+}
+
+/**
+ * Record which package created an instance (#714): the package of the innermost code on the stack that is neither
+ * slothlet's nor Node's, read when `slothlet()` is called. A host installed as a package (rummage, under
+ * `node_modules/@cldmv/rummage`) is loaded before slothlet, so slothlet's loader records no importer for its files; its
+ * own files are the host's, and run inside a module's call as that call, as the host's files anywhere else do. Code
+ * compiled under some location (`eval`, `vm`) names no package.
+ * @param {object} slothlet - The new instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * recordInstanceOwner(instance);
+ */
+export function recordInstanceOwner(slothlet) {
+	if (!isNode) return;
+	for (const frame of runtime_captureFrames(32)) {
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:") || PACKAGE_ENTRIES.has(frame.path)) continue;
+		if (frame.evaluated) return;
+		const root = runtime_packageRootOf(frame.path);
+		if (root) OWNER_PACKAGES.set(slothlet, root);
+		return;
+	}
+}
+
+/**
+ * Whether a file belongs to the package that created an instance (see {@link recordInstanceOwner}): its own nearest
+ * package root is that package's, so a package installed inside the owner's folder is not the owner's.
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @returns {boolean} True when it does.
+ * @internal
+ * @example
+ * isInstanceOwnerFile(instance, "/app/node_modules/host/lib/context.mjs"); // true when host created the instance
+ */
+export function isInstanceOwnerFile(slothlet, path) {
+	const owner = OWNER_PACKAGES.get(slothlet);
+	return owner !== undefined && runtime_packageRootOf(path) === owner;
 }
 
 /**
