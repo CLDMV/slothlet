@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T23:32:54-08:00 (1794036774)
+ *	@Last modified time: 2026-11-07T00:05:57-08:00 (1794038757)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -129,4 +129,17 @@ export function writePrototypes(key) {
  */
 export function writeHeldPrototypes(inst, hiddenInst, key) {
 	return prototypeWrites({ inst, hiddenInst }, key);
+}
+
+/**
+ * Ask an instance whose prototype answers `constructor` through an accessor for its prototype, through `self`, as plain
+ * JS asks it without running that accessor.
+ * @returns {object} What each read answered.
+ */
+export function readAccessedPrototype() {
+	const inst = self.owner.accessedInst;
+	return {
+		prototypeMethod: attempt(() => Object.getPrototypeOf(inst).hi.call(inst)),
+		protoAccessorMethod: attempt(() => inst.__proto__.hi.call(inst))
+	};
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:02:09-08:00 (1794038529)
+ *	@Last modified time: 2026-11-07T00:07:42-08:00 (1794038862)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -153,6 +153,23 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 			expect(refreezeAtLoad(api.owner)).toBe(refreezeAtLoad(plain));
 			expect(frozenAtLoad(api.owner)).toEqual(frozenAtLoad(plain));
 		});
+
+		it("reads an instance's prototype through self without running a constructor accessor of the module's", async () => {
+			api = await load();
+			const plain = await plainOwner();
+			const before = await api.owner.constructorReadCount();
+			const outcome = await api.reader.readAccessedPrototype();
+			const after = await api.owner.constructorReadCount();
+			const plainBefore = plain.constructorReadCount();
+			const plainProtoAccessorMethod = plain.accessedInst.__proto__.hi.call(plain.accessedInst);
+			void Object.getPrototypeOf(plain.accessedInst);
+			expect(after - before).toBe(plain.constructorReadCount() - plainBefore);
+			expect(outcome.protoAccessorMethod).toBe(plainProtoAccessorMethod);
+		});
+
+		// Without running the accessor nothing tells which class the instance's prototype belongs to, so no class node's check
+		// can be applied, and `Object.getPrototypeOf` answers null for it, as every instance node did before #667.
+		it.todo("answers Object.getPrototypeOf of an instance whose prototype's constructor is an accessor as plain JS does");
 
 		// V8's structured serializer refuses every Proxy (`#<Object> could not be cloned`), and a node is one by design: it
 		// cannot hand out the module's object itself, which would skip the read and write rules for everything it holds.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T10:26:36-08:00 (1793903196)
+ *	@Last modified time: 2026-11-07T00:05:57-08:00 (1794038757)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,6 +53,34 @@ class Hidden {
 
 /** An instance of {@link Hidden}. */
 export const hiddenInst = new Hidden();
+
+/** How many times the `constructor` accessor of {@link Accessed}'s prototype ran. */
+let constructorReads = 0;
+
+/** A class whose prototype answers `constructor` through an accessor of this module's. */
+class Accessed {
+	/** @returns {string} Marker. */
+	hi() {
+		return "accessed";
+	}
+}
+Object.defineProperty(Accessed.prototype, "constructor", {
+	configurable: true,
+	get() {
+		constructorReads++;
+		return Accessed;
+	}
+});
+
+/** An instance of {@link Accessed}. */
+export const accessedInst = new Accessed();
+
+/**
+ * @returns {number} How many times the `constructor` accessor of {@link Accessed}'s prototype ran.
+ */
+export function constructorReadCount() {
+	return constructorReads;
+}
 
 /** A class answering `instanceof` with its own static `Symbol.hasInstance`. */
 export class OwnCheck {
