@@ -511,10 +511,15 @@ function parseBareNewErrors(content, filePath) {
 		// fails this check, so adding one stays a deliberate, reviewed edit here.
 		if (filePath.includes("context-live.mjs") && /^\(\s*\)\s*\.\s*stack\b/.test(afterNew)) continue;
 
-		// instance-imports.mjs builds the one statement `slothletInstanceImports()` appends to a host file as a string: its
-		// `new Error()` is text emitted into that file, whose stack slothlet reads, not an error slothlet throws (#714).
-		// Scoped to that file AND to the `const registration = ` template: any other `new Error(` in it is still reported.
-		if (filePath.includes("instance-imports.mjs") && /^\s*const registration = `/.test(currentLine)) continue;
+		// instance-imports.mjs builds the statement `slothletInstanceImports()` appends to a file, and the code of the virtual
+		// module that records who loaded it, as strings: their `new Error(` is text emitted into that code, whose stack
+		// slothlet reads, not an error slothlet throws (#714). Scoped to that file AND to the `const SCRIPT_REGISTRATION = `
+		// template and the virtual module's `return \`const record = ` template: any other `new Error(` in it is reported.
+		if (
+			filePath.includes("instance-imports.mjs") &&
+			/^\s*(?:const SCRIPT_REGISTRATION = `|return `const record = Object\.freeze\(new Error\()/.test(currentLine)
+		)
+			continue;
 
 		// Skip new Error() that is passed as a direct argument to SlothletError/SlothletWarning.
 		// This is the legitimate pattern for wrapping an external string payload (e.g. IPC message)
