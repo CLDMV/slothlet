@@ -5056,6 +5056,42 @@ function runtime_frontsClassInstance(wrapper) {
 }
 
 /**
+ * The member nodes an instance's node built for the class its instance was made by, keyed by that node's wrapper
+ * (see {@link runtime_instanceClassNode}).
+ * @type {WeakMap<UnifiedWrapper, {fn: Function, node: Function}>}
+ * @private
+ */
+const INSTANCE_CLASS_NODES = new WeakMap();
+
+/**
+ * The class of the instance a node fronts, as a member node of that node, when the class is the module's code and no
+ * node of the instance fronts it (#667): an instance whose module keeps its class to itself answers `constructor` with
+ * it, as the plain instance does. Built once per node and class, so `inst.constructor === inst.constructor` holds.
+ * Null for a node fronting no instance held as the module holds it, or one whose class is not the module's.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {Function|null} The class's member node, or null.
+ * @private
+ */
+function runtime_instanceClassNode(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl) return null;
+	const instanceClass = impl.constructor;
+	if (typeof instanceClass !== "function" || instanceClass.prototype !== Object.getPrototypeOf(impl)) return null;
+	if (runtime_isIntrinsic(instanceClass) || runtime_isBuiltinFunction(instanceClass) || runtime_isSharedValue(instanceClass)) return null;
+	const held = INSTANCE_CLASS_NODES.get(wrapper);
+	if (held?.fn === instanceClass) return held.node;
+	const node = wrapper.___createChildWrapper("constructor", instanceClass);
+	if (typeof node !== "function") return null;
+	// Its node sits at the instance's `constructor`, but answers the class's own name, as the class does; a `name` the
+	// class computes (a static getter) is its code, and the node keeps the name its path gives.
+	const name = Reflect.getOwnPropertyDescriptor(instanceClass, "name");
+	if (name && "value" in name && typeof name.value === "string") resolveWrapper(node).____slothletInternal.className = name.value;
+	INSTANCE_CLASS_NODES.set(wrapper, { fn: instanceClass, node });
+	return node;
+}
+
+/**
  * The `Symbol.hasInstance` an unloaded lazy node answers: it has made no instances yet, so `instanceof`
  * against it is false until it loads.
  * @type {Function}
@@ -11507,6 +11543,11 @@ export class UnifiedWrapper extends ComponentBase {
 					runtime_enforceCodeMember(wrapper, liveConstructor, kept);
 					return liveConstructor;
 				}
+				// An instance of a class of the module's that no node fronts (the module keeps the class to itself) answers
+				// its class as a member of the instance's node, as `__proto__` gives its prototype (#667): read through
+				// that node, the class's `prototype` and methods stay behind the node's checks.
+				const instanceClass = runtime_instanceClassNode(wrapper);
+				if (instanceClass !== null) return instanceClass;
 				return Object.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
@@ -11573,6 +11614,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return runtime_exposePrototype(wrapper, prototype);
 			}
 			if (prop === "name" && !memberShadowsWrapperProp) {
+				// A class reached as an instance's `constructor` answers the name the class has, as on the plain instance (#667).
+				if (hasOwn(wrapper.____slothletInternal, "className")) return wrapper.____slothletInternal.className;
 				// Return name derived from API path, not the internal function name
 				// This ensures consistency: api.logger should report as "logger", not "log"
 				// apiPath is always set for valid wrappers; defensive false branch never taken.
