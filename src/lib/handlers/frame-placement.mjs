@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T17:44:23-08:00 (1794015863)
+ *	@Last modified time: 2026-11-06T20:14:59-08:00 (1794024899)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,9 @@ import {
 	rememberNewest,
 	scriptKeyInstance,
 	setScriptKey,
-	VITE_HOST_SCRIPTS
+	LOADED_BY_SPECIFIER,
+	VITE_HOST_SCRIPTS,
+	VITE_LOADED_BY
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
 
@@ -550,6 +552,7 @@ function runtime_structuredFrames(_error, callSites) {
 				yield {
 					head,
 					path: described.path,
+					location: location ?? origin,
 					line: `${head} (${location ?? ""}) ${origin}`,
 					async: Boolean(site.isAsync?.()),
 					// Evaluated code, or code naming a source it was not loaded from (a `//# sourceURL`): its location
@@ -1693,7 +1696,7 @@ export function resolveSupplier(record) {
 			const { matches } = placement;
 			// Placed by its plain path alone (a module's folder, a CommonJS file): it is that file's code only when it runs
 			// the file's own source (#597).
-			if (placement.unverified && !runtime_runsFileSource(frame) && !runtime_runsOwnerTransform(leaf.slothlet, frame)) return fallback;
+			if (placement.unverified && !runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return fallback;
 			if (matches.length === 1 && matches[0].currentWrapper === leaf) {
 				leafSeen = true;
 				continue;
@@ -1739,7 +1742,8 @@ function runtime_fileImporters(path) {
 	const importers = packageImporters(path);
 	// Plus the importers vitest's runner recorded before slothlet loaded (see RUNNER_SNAPSHOT): a record added later is
 	// not read (#714).
-	return [...importers, ...(RUNNER_SNAPSHOT.importers.get(path) ?? [])];
+	// And those the vite plugin recorded as it resolved the imports (#714).
+	return [...importers, ...(RUNNER_SNAPSHOT.importers.get(path) ?? []), ...(VITE_LOADED_REGISTRY?.importersOf(path) ?? [])];
 }
 
 /**
@@ -1855,7 +1859,9 @@ function runtime_packageAnswer(record, frame) {
 			!isInstanceOwnerFile(leaf.slothlet, frame.path)
 		)
 			return UNACCOUNTED_SUPPLIER;
-		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) ? null : UNACCOUNTED_SUPPLIER;
+		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame)
+			? null
+			: UNACCOUNTED_SUPPLIER;
 	}
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
@@ -2001,7 +2007,7 @@ const READ_REGISTRATIONS = new WeakSet();
  * own code is a file of the `vitest` or `vite` package running that file's own source. Code a module compiled with `vm` under a host file's name
  * and registered itself has its own frame, not the runner's, below it.
  * @param {unknown} entry - What was pushed.
- * @returns {{key: string, hash: string}|null} The script, or null.
+ * @returns {{key: string, hash: string, location: string}|null} The script, with the location its frame names, or null.
  * @private
  */
 function runtime_registeredScript(entry) {
@@ -2037,7 +2043,7 @@ function runtime_registeredScript(entry) {
 	if (!runner?.hash || runner.evaluated || runner.path.startsWith("node:")) return null;
 	const runnerRoot = runtime_packageRootOf(runner.path);
 	if (!runnerRoot || !VITE_RUNNERS.has(runtime_packageName(runnerRoot)) || !runtime_runsFileSource(runner)) return null;
-	return { key: own.key, hash: own.hash };
+	return { key: own.key, hash: own.hash, location: own.location };
 }
 
 /**
@@ -2101,8 +2107,104 @@ export function installViteHostRegistry(target) {
  * @private
  */
 function runtime_runsViteHostSource(slothlet, frame) {
-	if (!VITE_HOST_REGISTRY || !frame.hash || !frame.key || !isInstanceOwnerFile(slothlet, frame.path)) return false;
+	return isInstanceOwnerFile(slothlet, frame.path) && runtime_runsRunnerTransform(frame);
+}
+
+/**
+ * Whether a frame runs the code vitest's or vite's runner evaluated for its file, as the registration the vite plugin
+ * appended to the file recorded (#714), whatever package the file is of: under vite, what a frame hashing as its file
+ * on disk is under Node's own loader. Code compiled under the file's name from any other source runs in a script of its
+ * own and is not.
+ * @param {{hash: string|null, key: string|null, evaluated?: boolean}} frame - The frame.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_runsRunnerTransform(frame) {
+	if (!VITE_HOST_REGISTRY || !frame.hash || !frame.key || frame.evaluated) return false;
 	return VITE_HOST_REGISTRY.registered(frame.key, frame.hash);
+}
+
+/**
+ * The record of who loaded a file vite transformed that a registration holds, when it is genuine (#714): an `Error`
+ * {@link runtime_registeredScript} accepts, created by the top-level code of the virtual module the vite plugin writes
+ * for the file (its location names the file, under an id with a leading `\0` that no file on disk has), frozen, its
+ * message the JSON of the importers' ids. The plugin writes that module's code from the imports it resolved, so no
+ * file's code can make such a record, and none can change one once made.
+ * @param {unknown} entry - What was pushed.
+ * @returns {{path: string, importers: Array<string>}|null} The file, in comparable form, and its importers, or null.
+ * @private
+ */
+function runtime_loadedRecord(entry) {
+	const script = runtime_registeredScript(entry);
+	const prefix = `\0${LOADED_BY_SPECIFIER}`;
+	if (typeof script?.location !== "string" || !script.location.startsWith(prefix) || !Object.isFrozen(entry)) return null;
+	const loaded = queryParam(script.location.slice(prefix.length), "id");
+	const message = Object.getOwnPropertyDescriptor(entry, "message");
+	if (!loaded || typeof message?.value !== "string") return null;
+	let importers;
+	try {
+		importers = JSON_PARSE(message.value);
+	} catch {
+		return null;
+	}
+	if (!Array.isArray(importers)) return null;
+	return { path: toComparablePath(loaded), importers: importers.filter((id) => typeof id === "string") };
+}
+
+/**
+ * Fix the registry of {@link VITE_LOADED_REGISTRY} on a global object (#714): read what records were already pushed
+ * onto a plain array there, and put in its place, unchangeable, a frozen object whose `push` reads each record as it
+ * comes and whose `importersOf(path)` gives the ids of the modules recorded as loading a file, or null when no record
+ * of it was made. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{importersOf: (path: string) => Array<string>|null}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteLoadedRegistry(globalThis).importersOf("/app/exts/x/extension.mjs"); // [] when only the host loaded it
+ */
+export function installViteLoadedRegistry(target) {
+	const key = Symbol.for(VITE_LOADED_BY);
+	const current = Object.getOwnPropertyDescriptor(target, key);
+	// Fixed by another copy of slothlet already: its reader answers for every copy.
+	if (current && !current.configurable) return typeof current.value?.importersOf === "function" ? current.value : null;
+	/** @type {Map<string, Set<string>>} */
+	const records = new Map();
+	const take = (entry) => {
+		const record = runtime_loadedRecord(entry);
+		if (!record) return;
+		let importers = records.get(record.path);
+		if (!importers) records.set(record.path, (importers = new Set()));
+		for (let i = 0; i < record.importers.length; i++) importers.add(record.importers[i]);
+	};
+	// What records were pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
+	if (Array.isArray(current?.value) && !util.types.isProxy(current.value)) {
+		for (let i = 0; i < current.value.length; i++) take(Object.getOwnPropertyDescriptor(current.value, i)?.value);
+	}
+	const registry = Object.freeze({
+		push: Object.freeze((...entries) => {
+			for (let i = 0; i < entries.length; i++) take(entries[i]);
+			return 0;
+		}),
+		importersOf: Object.freeze((path) => {
+			const found = records.get(path);
+			return found ? setMembers(found) : null;
+		})
+	});
+	Object.defineProperty(target, key, { value: registry, enumerable: false, writable: false, configurable: false });
+	return registry;
+}
+
+/**
+ * Whether a frame of a file no module loaded runs the file's own code as vite transformed it (#714): its script is the
+ * one vitest's or vite's runner evaluated for the file, and the vite plugin recorded who loaded the file, so the
+ * importers frame placement walks are those it resolved. A file whose loading went unrecorded is not.
+ * @param {{path: string, hash: string|null, key: string|null, evaluated?: boolean}} frame - The frame.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_runsHostLoadedTransform(frame) {
+	return runtime_runsRunnerTransform(frame) && VITE_LOADED_REGISTRY?.importersOf(frame.path) != null;
 }
 
 /**
@@ -2135,6 +2237,15 @@ const RUNNER_PARAMETERS = Object.freeze(
  * @private
  */
 const RUNNER_SNAPSHOT = runtime_snapshotRunner();
+
+/**
+ * The records of who loaded each file vite transformed (#714), kept on the global object under {@link VITE_LOADED_BY}:
+ * read as each is pushed, so none waits where code could take it away, and only what {@link runtime_loadedRecord}
+ * accepts is kept. Made after {@link RUNNER_SNAPSHOT}, which reading a record consults.
+ * @type {{importersOf: (path: string) => Array<string>|null}|null}
+ * @private
+ */
+const VITE_LOADED_REGISTRY = isNode ? installViteLoadedRegistry(globalThis) : null;
 
 /**
  * Read {@link RUNNER_SNAPSHOT} from the runner's records as they stand now, through the methods captured at load.
@@ -2193,8 +2304,9 @@ const AUTHORED = Symbol("authored");
  * @private
  */
 function runtime_authorAnswer(record, frame) {
-	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597).
-	if (!runtime_runsFileSource(frame)) return null;
+	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597). Under vite, the
+	// code its runner evaluated for the file (#714).
+	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
 	const authors = runtime_leavesAt(record.wrapper.slothlet, frame);
 	if (!authors.length) return null;
 	return { wrapper: authors[0], ceiling: combineCeilings(record.wrapper, record.ceiling, ...authors.slice(1)) };

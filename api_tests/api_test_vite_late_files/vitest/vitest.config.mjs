@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T19:39:56-08:00 (1794022796)
+ *	@Last modified time: 2026-11-06T20:13:54-08:00 (1794024834)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,10 +19,13 @@
  * @module api_test_vite_late_files.vitest.config
  */
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Loaded by Node at run time, from a file beside this one, so the build of slothlet the process's export conditions name is
+// the one used: vitest bundles a config's static imports itself, under the default conditions.
+const PLUGIN = pathToFileURL(path.join(here, "plugin.mjs")).href;
+const { slothletInstanceImports } = await import(PLUGIN);
 
 export default {
 	root: here,
@@ -32,6 +35,8 @@ export default {
 	resolve: { conditions: ["slothlet-dev", "node", "import", "module", "default"] },
 	ssr: { resolve: { conditions: ["slothlet-dev", "node", "import", "module", "default"] } },
 	test: {
+		// The plugin under test writes the code vite runs, so no transform cached from an earlier run is reused.
+		fsModuleCache: false,
 		include: ["late-calls.fixture.mjs"],
 		environment: "node",
 		pool: "forks",
