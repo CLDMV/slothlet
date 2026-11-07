@@ -1571,8 +1571,9 @@ export function runtime_selfView(node, reader) {
 	const classPrototype = (prototype) => {
 		const classNode = inner ? runtime_instanceClassFront(inner) : null;
 		if (classNode === null || classNode === undefined) return null;
-		const instance = inner.____slothletInternal.impl;
-		if (prototype !== Object.getPrototypeOf(instance) || instance.constructor.prototype !== prototype) return null;
+		// The class was found by descriptors (see runtime_heldInstanceClass): a `constructor` accessor of the module's is
+		// never run to compare it.
+		if (prototype !== Reflect.getPrototypeOf(inner.____slothletInternal.impl)) return null;
 		return runtime_selfView(classNode, reader).prototype;
 	};
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
@@ -5037,22 +5038,40 @@ function runtime_functionNodeFor(wrapper, fn) {
 }
 
 /**
- * Whether a node fronts an instance of a class a node of the instance fronts too (#667): an object built by a class
- * (not a plain object, not an array), held as the module holds it, so it is the value itself rather than a copy the
- * framework built from it, whose class's prototype is its own prototype. Such a node answers its class and prototype
- * as the instance does, through the class's node. An instance of a class no node fronts keeps answering neither: the
- * class would reach the reader with no node around it.
+ * The class a node's instance was made by (#667): the node holds an object built by a class (not a plain object, not
+ * an array) as the module holds it, so it is the value itself rather than a copy the framework built from it, and the
+ * class's own `prototype` is the instance's prototype. Found by descriptors alone, so none of the module's code runs to
+ * find it: an instance with a `constructor` of its own, one whose prototype holds `constructor` as an accessor, and a
+ * Proxy anywhere on the way answer null, as does any other node.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {boolean} True for such a node.
+ * @returns {Function|null} The class, or null.
  * @private
  */
-function runtime_frontsClassInstance(wrapper) {
+function runtime_heldInstanceClass(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	const impl = internal.impl;
-	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl) return false;
-	const instanceClass = impl.constructor;
-	if (typeof instanceClass !== "function" || instanceClass.prototype !== Object.getPrototypeOf(impl)) return false;
-	return FUNCTION_NODES.get(wrapper.slothlet)?.get(instanceClass)?.deref() !== undefined;
+	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return null;
+	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl || hasOwn(impl, "constructor"))
+		return null;
+	const prototype = Reflect.getPrototypeOf(impl);
+	if (util.types.isProxy(prototype)) return null;
+	const instanceClass = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+	if (typeof instanceClass !== "function" || util.types.isProxy(instanceClass)) return null;
+	return Reflect.getOwnPropertyDescriptor(instanceClass, "prototype")?.value === prototype ? instanceClass : null;
+}
+
+/**
+ * The class of the instance a node fronts, when a node of the instance fronts that class too (#667). Such a node
+ * answers its class and prototype as the instance does, through the class's node. An instance of a class no node
+ * fronts answers null here: the class would reach the reader with no node around it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {Function|null} The class, or null.
+ * @private
+ */
+function runtime_exportedInstanceClass(wrapper) {
+	const instanceClass = runtime_heldInstanceClass(wrapper);
+	if (instanceClass === null) return null;
+	return FUNCTION_NODES.get(wrapper.slothlet)?.get(instanceClass)?.deref() !== undefined ? instanceClass : null;
 }
 
 /**
@@ -5073,11 +5092,8 @@ const INSTANCE_CLASS_NODES = new WeakMap();
  * @private
  */
 function runtime_instanceClassNode(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	const impl = internal.impl;
-	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl) return null;
-	const instanceClass = impl.constructor;
-	if (typeof instanceClass !== "function" || instanceClass.prototype !== Object.getPrototypeOf(impl)) return null;
+	const instanceClass = runtime_heldInstanceClass(wrapper);
+	if (instanceClass === null) return null;
 	if (runtime_isIntrinsic(instanceClass) || runtime_isBuiltinFunction(instanceClass) || runtime_isSharedValue(instanceClass)) return null;
 	const held = INSTANCE_CLASS_NODES.get(wrapper);
 	if (held?.fn === instanceClass) return held.node;
@@ -5102,9 +5118,32 @@ function runtime_instanceClassNode(wrapper) {
  */
 function runtime_instanceClassFront(wrapper) {
 	const internal = wrapper.____slothletInternal;
-	if (runtime_frontsClassInstance(wrapper)) return FUNCTION_NODES.get(wrapper.slothlet).get(internal.impl.constructor).deref();
+	const exported = runtime_exportedInstanceClass(wrapper);
+	if (exported !== null) return FUNCTION_NODES.get(wrapper.slothlet).get(exported).deref();
 	if (internal.deferChildAdopt || (EventEmitter && runtime_inherits(internal.impl, EventEmitter))) return null;
 	return runtime_instanceClassNode(wrapper);
+}
+
+/**
+ * The prototype a node fronting an instance of a class of the module's reports, by `Object.getPrototypeOf` and through
+ * `__proto__` (#667): the instance's own, its class's `prototype`. It holds the class's methods and `constructor`, so
+ * reaching it is checked as a call of the class's node (see runtime_instanceClassFront), whoever holds the instance's
+ * node — read through `self` or handed to the module as an argument — exactly as reading the class's `prototype` is. A
+ * reader the class is closed to is refused it: the prototype is never stood in for by another, so no write meant for
+ * the class lands on a prototype every value shares.
+ * @param {UnifiedWrapper} wrapper - The instance's node's wrapper.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into the instance.
+ * @returns {object|undefined} The prototype, or `undefined` for a node fronting no such instance.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not call the class's node.
+ * @private
+ */
+function runtime_instanceClassPrototype(wrapper, kept = null) {
+	const classNode = runtime_instanceClassFront(wrapper);
+	if (!classNode) return undefined;
+	const classWrapper = resolveWrapper(classNode);
+	const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
+	runtime_enforceCodeMember(classWrapper, prototype, kept);
+	return runtime_exposePrototype(classWrapper, prototype);
 }
 
 /**
@@ -11562,8 +11601,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// An instance of a class of the module's answers its `__proto__` as its class's node's `prototype`, as the instance's
 			// own `__proto__` is its class's prototype (#667); read through the class's node, so it is checked as that read is.
 			if (prop === "__proto__" && !hasOwn(wrapper.____slothletInternal.impl ?? {}, prop)) {
-				const classNode = runtime_instanceClassFront(wrapper);
-				if (classNode) return Reflect.get(classNode, "prototype");
+				const prototype = runtime_instanceClassPrototype(wrapper, kept);
+				if (prototype !== undefined) return prototype;
 			}
 			if (prop === "constructor" && !memberShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
@@ -11586,7 +11625,8 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// An instance of a class a node fronts answers that node, as the instance answers its class (#667): the reader
 				// gets the class as a read of the node gives it.
-				if (runtime_frontsClassInstance(wrapper)) return runtime_functionNodeFor(wrapper, constructorImpl.constructor);
+				const exportedClass = runtime_exportedInstanceClass(wrapper);
+				if (exportedClass !== null) return runtime_functionNodeFor(wrapper, exportedClass);
 				const constructorIsLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(constructorImpl, EventEmitter));
 				if (constructorIsLiveIdentity && constructorImpl && typeof constructorImpl === "object" && constructorImpl.constructor) {
 					// A class of the module's is its code, checked as a call of the node (#632).
@@ -13826,14 +13866,17 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// A function node reports its function's prototype, a class it extends as that class's node (#667).
 				if (typeof impl === "function") return runtime_functionNodePrototype(wrapper, impl);
-				// An instance of a class of the module's reports that class's prototype, as the instance does (#667). Only an open
-				// node: a closed one reports its shell's.
-				let prototype = runtime_instanceClassFront(wrapper) ? Object.getPrototypeOf(wrapper.____slothletInternal.impl) : heldPrototype();
+				const kept = runtime_takeCapturedAccess(wrapper);
+				// An instance of a class of the module's reports that class's prototype, as the instance does, behind the class's
+				// node's checks (#667). Only an open node: a closed one reports its shell's.
+				const classPrototype = runtime_instanceClassPrototype(wrapper, kept);
+				if (classPrototype !== undefined) return classPrototype;
+				let prototype = heldPrototype();
 				if (prototype === null) return null;
 				// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 				// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
 				// holding none of the module's code, so `instanceof` against the language's or Node's own classes still holds.
-				if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, runtime_takeCapturedAccess(wrapper))) return prototype;
+				if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, kept)) return prototype;
 				while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
 					prototype = Object.getPrototypeOf(prototype);
 				return prototype;
