@@ -7150,6 +7150,41 @@ function runtime_adoptArrayIntegrity(wrapper) {
 }
 
 /**
+ * Give an object node the integrity of the object it was built from (#667): a node of an object its module froze,
+ * sealed or closed to new members when it loaded is frozen, sealed or closed the same way, as the framework's write, so
+ * `Object.isFrozen` answers as on the object and a write the object refuses is refused through the node. The node is
+ * built from a copy of the object (see copyForComposition), which is open, so the integrity is read off the object
+ * itself. Only a node built from a value it was handed (an export, a member of one): an unloaded lazy node has no value
+ * yet, and is closed once it loads.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_adoptObjectIntegrity(wrapper); // wrapper built from Object.freeze({ a: 1 }): Object.isFrozen(proxy) is now true
+ */
+function runtime_adoptObjectIntegrity(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (!hasOwn(internal, "sourceValue")) return;
+	const source = internal.sourceValue;
+	if (source === null || typeof source !== "object" || Array.isArray(source) || util.types.isProxy(source)) return;
+	if (Reflect.isExtensible(source)) return;
+	if (internal.mode === "lazy" && !internal.state.materialized) return;
+	const { proxy } = internal;
+	const syncing = internal.integritySyncing;
+	internal.integritySyncing = true;
+	try {
+		runtime_frameworkWrite(wrapper, () => {
+			if (Object.isFrozen(source)) Object.freeze(proxy);
+			else if (Object.isSealed(source)) Object.seal(proxy);
+			else Object.preventExtensions(proxy);
+		});
+	} finally {
+		internal.integritySyncing = syncing;
+	}
+}
+
+/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -13000,6 +13035,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
 			// fixed on the shell when it was sealed, and reflection answers from there.
 			if (!Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
+			// A member fixed read-only on a frozen shell takes no write, as on a frozen object: refused before the node's
+			// own state changes, so a read of it still answers what the shell holds (#667).
+			if (!Array.isArray(target) && runtime_isFixedReadOnly(target, prop)) return false;
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
@@ -13789,6 +13827,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
 		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
 		if (Array.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
+		else runtime_adoptObjectIntegrity(wrapper);
 		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
 		// replacement from the same handler and re-points these traps at it (#533).
 		if (typeof proxyTarget !== "function") {
