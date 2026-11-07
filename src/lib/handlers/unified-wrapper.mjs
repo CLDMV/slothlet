@@ -1421,7 +1421,7 @@ function runtime_selfHasInstance(prototype, instance) {
 	while (SELF_VIEW_NODES.has(behind) || capturedViewTargets.has(behind))
 		behind = SELF_VIEW_NODES.get(behind) ?? capturedViewTargets.get(behind);
 	const instanceNode = resolveWrapper(behind);
-	if (instanceNode && runtime_frontsClassInstance(instanceNode)) instance = instanceNode.____slothletInternal.impl;
+	if (instanceNode && runtime_instanceClassFront(instanceNode) !== null) instance = instanceNode.____slothletInternal.impl;
 	for (let proto = Reflect.getPrototypeOf(instance); proto !== null; proto = Reflect.getPrototypeOf(proto)) {
 		if ((SELF_MEMBER_VIEWS.get(proto)?.value ?? proto) === prototype) return true;
 	}
@@ -1565,15 +1565,15 @@ export function runtime_selfView(node, reader) {
 			reader !== UNATTRIBUTED_READER && genuineWrappers.has(reader) && slothlet.handlers?.permissionManager?.isCaptureEnabled?.() !== false;
 		node = runtime_capturedView(node, reader, holds && "held");
 	}
-	// The prototype an instance of a class the module exports reports (#667) is that class's, read as the reader reads the
-	// class's `prototype` through the node fronting it: the same view that read gives, checked the same way. Null for any
-	// other prototype.
+	// The prototype an instance of a class of the module's reports (#667) is that class's, read as the reader reads the
+	// class's `prototype` through the node standing for it (see runtime_instanceClassFront): the same view that read gives,
+	// checked the same way. Null for any other prototype.
 	const classPrototype = (prototype) => {
-		if (!inner || !runtime_frontsClassInstance(inner)) return null;
+		const classNode = inner ? runtime_instanceClassFront(inner) : null;
+		if (classNode === null || classNode === undefined) return null;
 		const instance = inner.____slothletInternal.impl;
 		if (prototype !== Object.getPrototypeOf(instance) || instance.constructor.prototype !== prototype) return null;
-		const classNode = FUNCTION_NODES.get(slothlet)?.get(instance.constructor)?.deref();
-		return classNode === undefined ? null : runtime_selfView(classNode, reader).prototype;
+		return runtime_selfView(classNode, reader).prototype;
 	};
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
@@ -5089,6 +5089,22 @@ function runtime_instanceClassNode(wrapper) {
 	if (name && "value" in name && typeof name.value === "string") resolveWrapper(node).____slothletInternal.className = name.value;
 	INSTANCE_CLASS_NODES.set(wrapper, { fn: instanceClass, node });
 	return node;
+}
+
+/**
+ * The node standing for the class of the instance a node fronts (#667): the node fronting the class when its module
+ * exports it, or else the class's member node at the instance's `constructor` (see runtime_instanceClassNode), so an
+ * instance of a class its module keeps to itself answers its prototype as one of an exported class does. Null for a
+ * node fronting no such instance, and for an emitter or a live grafted object, which answer their own prototype.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {Function|null} The class's node, or null.
+ * @private
+ */
+function runtime_instanceClassFront(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (runtime_frontsClassInstance(wrapper)) return FUNCTION_NODES.get(wrapper.slothlet).get(internal.impl.constructor).deref();
+	if (internal.deferChildAdopt || (EventEmitter && runtime_inherits(internal.impl, EventEmitter))) return null;
+	return runtime_instanceClassNode(wrapper);
 }
 
 /**
@@ -11543,11 +11559,11 @@ export class UnifiedWrapper extends ComponentBase {
 					return undefined;
 				}
 			}
-			// An instance of a class a node fronts answers its `__proto__` as that node's `prototype`, as the instance's own
-			// `__proto__` is its class's prototype (#667); read through the class's node, so it is checked as that read is.
-			if (prop === "__proto__" && runtime_frontsClassInstance(wrapper) && !hasOwn(wrapper.____slothletInternal.impl, prop)) {
-				const classNode = FUNCTION_NODES.get(wrapper.slothlet).get(wrapper.____slothletInternal.impl.constructor).deref();
-				return Reflect.get(classNode, "prototype");
+			// An instance of a class of the module's answers its `__proto__` as its class's node's `prototype`, as the instance's
+			// own `__proto__` is its class's prototype (#667); read through the class's node, so it is checked as that read is.
+			if (prop === "__proto__" && !hasOwn(wrapper.____slothletInternal.impl ?? {}, prop)) {
+				const classNode = runtime_instanceClassFront(wrapper);
+				if (classNode) return Reflect.get(classNode, "prototype");
 			}
 			if (prop === "constructor" && !memberShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
@@ -13810,9 +13826,9 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// A function node reports its function's prototype, a class it extends as that class's node (#667).
 				if (typeof impl === "function") return runtime_functionNodePrototype(wrapper, impl);
-				// An instance of a class a node fronts reports that class's prototype, as the instance does (#667). Only an open
+				// An instance of a class of the module's reports that class's prototype, as the instance does (#667). Only an open
 				// node: a closed one reports its shell's.
-				let prototype = runtime_frontsClassInstance(wrapper) ? Object.getPrototypeOf(wrapper.____slothletInternal.impl) : heldPrototype();
+				let prototype = runtime_instanceClassFront(wrapper) ? Object.getPrototypeOf(wrapper.____slothletInternal.impl) : heldPrototype();
 				if (prototype === null) return null;
 				// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 				// the node, as its `constructor` is read (#632). Any other caller is reported the nearest prototype above it
