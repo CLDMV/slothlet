@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:34:28-08:00 (1794026068)
+ *	@Last modified time: 2026-11-06T22:14:44-08:00 (1794032084)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@ import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const FIXTURE = path.join(ROOT, "api_tests", "api_test_vite_late_files");
@@ -82,7 +83,8 @@ function childEnv() {
  */
 function run(args, prefix) {
 	const result = spawnSync(process.execPath, [...conditions(), ...args], { cwd: ROOT, env: childEnv(), encoding: "utf8", timeout: 300000 });
-	const line = String(result.stdout)
+	// With colour forced (FORCE_COLOR; CI runs coloured), the reporter writes escape codes before the printed line.
+	const line = stripVTControlCharacters(String(result.stdout))
 		.split("\n")
 		.find((text) => (prefix ? text.startsWith(prefix) : text.startsWith("{")));
 	return { result, out: line ? JSON.parse(line.slice(prefix.length)) : null };

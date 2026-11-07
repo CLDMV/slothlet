@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T17:47:02-08:00 (1794016022)
+ *	@Last modified time: 2026-11-06T22:14:34-08:00 (1794032074)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,7 @@ import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const CONFIG = path.join(ROOT, "api_tests", "api_test_host_owner_code", "vitest", "vitest.config.mjs");
@@ -74,7 +75,8 @@ describe("Permissions > a host like rummage's under vitest, with only server.dep
 		encoding: "utf8",
 		timeout: 300000
 	});
-	const line = String(result.stdout)
+	// With colour forced (FORCE_COLOR; CI runs coloured), the reporter writes escape codes before the printed line.
+	const line = stripVTControlCharacters(String(result.stdout))
 		.split("\n")
 		.find((text) => text.startsWith("HOST-CALLS "));
 	const out = line ? JSON.parse(line.slice("HOST-CALLS ".length)) : {};
