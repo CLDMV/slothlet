@@ -27,11 +27,18 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import slothlet from "@cldmv/slothlet";
 
 const BASE = resolve("api_tests/api_test_inherited_members_proto");
 const INHERITED_BASE = resolve("api_tests/api_test_inherited_members");
+
+/**
+ * The victim module imported as plain JS, untouched by any slothlet instance.
+ * @returns {Promise<object>} Its namespace.
+ */
+const plainVictim = () => import(`${pathToFileURL(join(BASE, "victim", "victim.mjs")).href}?plain`);
 
 const DENY_VICTIM = { defaultPolicy: "allow", rules: [{ caller: "attacker.**", target: "victim.**", effect: "deny" }] };
 
@@ -63,8 +70,12 @@ describe.each(["eager", "lazy"].flatMap((mode) => [null, DENY_VICTIM].map((permi
 			const real = await api.victim.check();
 			expect(real.fooMembers).toEqual(UNCHANGED_FOO);
 			expect(real.secret).toBe("secret");
-			// `constructor` of a class instance's node is not the module's class.
-			expect(outcomes.readConstructorPrototype).toBe("undefined");
+			// `constructor` of a class instance's node is its class, as on the plain instance. A module the rules deny the
+			// owner reads the class's prototype as a call of the node, so it is refused it, as through an exported class.
+			const plain = await plainVictim();
+			expect(outcomes.readConstructorPrototype).toBe(
+				permissions ? "threw PERMISSION_DENIED" : typeof plain.inst.constructor.prototype.secret
+			);
 		});
 
 		if (permissions) {
