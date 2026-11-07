@@ -1317,8 +1317,9 @@ export function slothletInstanceImports() {
 			}
 		},
 		/**
-		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper, and the virtual module
-		 * that records which modules loaded a file (#714), from the imports resolved so far.
+		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper, a JSON file carrying one
+		 * as Node loads a JSON module, and the virtual module that records which modules loaded a file (#714), from the
+		 * imports resolved so far.
 		 * @param {string} id - The module id.
 		 * @returns {object|null} The module's code, or null to defer to vite's own loading.
 		 */
@@ -1330,7 +1331,12 @@ export function slothletInstanceImports() {
 			if (typeof id !== "string" || !id.includes(MARKER)) return null;
 			const [base, query = ""] = splitQuery(id);
 			const instanceID = new URLSearchParams(query).get("slothlet_instance");
-			if (instanceID === null || !isCommonJSFile(base)) return null;
+			if (instanceID === null) return null;
+			// A JSON file a leaf imports carries the instance query, as under Node; vite loads no JSON file under a query of
+			// its own, so it is loaded here, as Node loads a JSON module: its value as the default export (#714).
+			if (/\.json$/i.test(toSlashPath(base)))
+				return { code: `export default ${JSON.stringify(JSON.parse(nodeBuiltin("node:fs").readFileSync(base, "utf8")))};\n`, map: null };
+			if (!isCommonJSFile(base)) return null;
 			return { code: commonJSWrapperSource(base, instanceID, null) };
 		}
 	};
