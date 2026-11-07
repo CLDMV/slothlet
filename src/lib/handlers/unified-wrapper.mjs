@@ -7770,7 +7770,15 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (const key of Object.keys(node)) shown[key] = node[key];
+	for (const key of Object.keys(node)) {
+		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
+		// answers, which reading runs as a call of the node) is left out as well.
+		try {
+			shown[key] = node[key];
+		} catch (error) {
+			if (error?.code !== "PERMISSION_DENIED") throw error;
+		}
+	}
 	return shown;
 }
 
