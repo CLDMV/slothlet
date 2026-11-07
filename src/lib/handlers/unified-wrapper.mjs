@@ -152,6 +152,9 @@ function runtime_takeInvariantRead(wrapper, prop) {
 	return pending !== null && pending.wrapper === wrapper && pending.prop === prop;
 }
 
+/** The fields a property descriptor can give. @type {ReadonlyArray<string>} @private */
+const DESCRIPTOR_FIELDS = Object.freeze(["value", "writable", "get", "set", "enumerable", "configurable"]);
+
 /**
  * Whether defining `descriptor` on `holder`'s `prop` would change nothing (#667): the member is fixed (non-configurable)
  * and every attribute the descriptor gives is the one it has. Freezing an already frozen object defines each member
@@ -165,10 +168,61 @@ function runtime_takeInvariantRead(wrapper, prop) {
 function runtime_isUnchangingDefinition(holder, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
 	if (!current || current.configurable) return false;
-	for (const field of ["value", "writable", "get", "set", "enumerable", "configurable"]) {
+	for (const field of DESCRIPTOR_FIELDS) {
 		if (field in descriptor && !(field in current && Object.is(descriptor[field], current[field]))) return false;
 	}
 	return true;
+}
+
+/**
+ * The traps a self data view and a self member view change their value through (see {@link runtime_selfDataView},
+ * {@link runtime_selfMemberView}): defining, deleting, setting the prototype and closing the value are each a write the
+ * reader has to be allowed, made on the value itself, with the view's shadow kept to what the engine checks it against.
+ * A definition that changes nothing and closing a value already closed are no writes (#667).
+ * @param {object} raw - The value viewed.
+ * @param {object} shadow - The view's proxy target.
+ * @param {function(PropertyKey|null): void} assertWrite - Refuses a write the reader may not make.
+ * @param {function(PropertyKey): void} mirror - Brings a member's description on the shadow up to date.
+ * @param {function(): void} mirrorClosed - Closes the shadow once the value is closed.
+ * @returns {ProxyHandler<object>} The traps.
+ * @private
+ */
+function runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed) {
+	return {
+		defineProperty(_, prop, descriptor) {
+			mirrorClosed();
+			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
+			assertWrite(prop);
+			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
+			if (!Reflect.defineProperty(raw, prop, stored)) return false;
+			// A member defined fixed is fixed on the shadow as defined, which is what the engine checks it against.
+			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
+			else mirror(prop);
+			return true;
+		},
+		deleteProperty(_, prop) {
+			assertWrite(prop);
+			if (!Reflect.deleteProperty(raw, prop)) return false;
+			mirror(prop);
+			return true;
+		},
+		setPrototypeOf(_, proto) {
+			assertWrite(null);
+			if (!Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto))) return false;
+			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
+		},
+		preventExtensions() {
+			if (!Reflect.isExtensible(raw)) {
+				mirrorClosed();
+				return true;
+			}
+			assertWrite(null);
+			// A value that is itself a proxy may decline.
+			if (!Reflect.preventExtensions(raw)) return false;
+			mirrorClosed();
+			return true;
+		}
+	};
 }
 
 /**
@@ -825,12 +879,18 @@ function runtime_inheritedEngineMember(impl, prop, value) {
  * @private
  */
 function runtime_valueOfFor(node) {
-	const method = function valueOf() {
+	let method = NODE_VALUE_OF_BY_NODE.get(node);
+	if (method) return method;
+	method = function valueOf() {
 		return this === undefined || this === null ? node : Reflect.apply(Object.prototype.valueOf, this, []);
 	};
 	NODE_VALUE_OFS.add(method);
+	NODE_VALUE_OF_BY_NODE.set(node, method);
 	return method;
 }
+
+/** The method {@link runtime_valueOfFor} made for each node, made once per node. @type {WeakMap<Function, Function>} @private */
+const NODE_VALUE_OF_BY_NODE = new WeakMap();
 
 /** Every method {@link runtime_valueOfFor} made. @type {WeakSet<Function>} @private */
 const NODE_VALUE_OFS = new WeakSet();
@@ -1142,39 +1202,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			if (done) mirror(prop);
 			return done;
 		},
-		defineProperty(_, prop, descriptor) {
-			// A definition that changes nothing (freezing an already frozen value) is no write (#667).
-			mirrorClosed();
-			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
-			assertWrite(prop);
-			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
-			if (!Reflect.defineProperty(raw, prop, stored)) return false;
-			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
-			else mirror(prop);
-			return true;
-		},
-		deleteProperty(_, prop) {
-			assertWrite(prop);
-			if (!Reflect.deleteProperty(raw, prop)) return false;
-			mirror(prop);
-			return true;
-		},
-		setPrototypeOf(_, proto) {
-			assertWrite(null);
-			if (!Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto))) return false;
-			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
-		},
-		preventExtensions() {
-			// Closing a value already closed changes nothing (#667).
-			if (!Reflect.isExtensible(raw)) {
-				mirrorClosed();
-				return true;
-			}
-			assertWrite(null);
-			if (!Reflect.preventExtensions(raw)) return false;
-			mirrorClosed();
-			return true;
-		}
+		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
 	byPath.set(pathKey, view);
@@ -1327,41 +1355,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			if (done) mirror(prop);
 			return done;
 		},
-		defineProperty(_, prop, descriptor) {
-			// A definition that changes nothing (freezing an already frozen value) is no write (#667).
-			mirrorClosed();
-			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
-			assertWrite(prop);
-			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
-			if (!Reflect.defineProperty(raw, prop, stored)) return false;
-			// A member defined fixed is fixed on the shadow as defined, which is what the engine checks it against.
-			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
-			else mirror(prop);
-			return true;
-		},
-		deleteProperty(_, prop) {
-			assertWrite(prop);
-			if (!Reflect.deleteProperty(raw, prop)) return false;
-			mirror(prop);
-			return true;
-		},
-		setPrototypeOf(_, proto) {
-			assertWrite(null);
-			if (!Reflect.setPrototypeOf(raw, runtime_unwrapSelfView(proto))) return false;
-			return Reflect.isExtensible(shadow) || Reflect.getPrototypeOf(shadow) === proto;
-		},
-		preventExtensions() {
-			// Closing a value already closed changes nothing (#667).
-			if (!Reflect.isExtensible(raw)) {
-				mirrorClosed();
-				return true;
-			}
-			assertWrite(null);
-			// A value that is itself a proxy may decline.
-			if (!Reflect.preventExtensions(raw)) return false;
-			mirrorClosed();
-			return true;
-		}
+		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
 	byPath.set(pathKey, view);
