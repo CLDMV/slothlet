@@ -5186,11 +5186,12 @@ const INSTANCE_CLASS_NODES = new WeakMap();
  * it, as the plain instance does. Built once per node and class, so `inst.constructor === inst.constructor` holds.
  * Null for a node fronting no instance held as the module holds it, or one whose class is not the module's.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {Function|null} [instanceClass] - The class, when the instance answered it itself (a `constructor` accessor
+ *   of its prototype's, run as the module); found by descriptors otherwise.
  * @returns {Function|null} The class's member node, or null.
  * @private
  */
-function runtime_instanceClassNode(wrapper) {
-	const instanceClass = runtime_heldInstanceClass(wrapper);
+function runtime_instanceClassNode(wrapper, instanceClass = runtime_heldInstanceClass(wrapper)) {
 	if (instanceClass === null) return null;
 	if (runtime_isIntrinsic(instanceClass) || runtime_isBuiltinFunction(instanceClass) || runtime_isSharedValue(instanceClass)) return null;
 	const held = INSTANCE_CLASS_NODES.get(wrapper);
@@ -11748,6 +11749,19 @@ export class UnifiedWrapper extends ComponentBase {
 				// that node, the class's `prototype` and methods stay behind the node's checks.
 				const instanceClass = runtime_instanceClassNode(wrapper);
 				if (instanceClass !== null) return instanceClass;
+				// A `constructor` its prototype answers through an accessor of the module's is read as any accessor member
+				// is, run as the module (#597): the class it answers is handed out as above, as the plain instance answers it.
+				const constructorAccessor =
+					constructorImpl !== null && typeof constructorImpl === "object" && !Array.isArray(constructorImpl)
+						? runtime_implAccessor(wrapper, prop)
+						: null;
+				if (constructorAccessor?.descriptor) {
+					const answered = runtime_readImplMember(wrapper, prop);
+					if (answered === null || (typeof answered !== "object" && typeof answered !== "function")) return answered;
+					if (typeof answered !== "function") return wrapper.___createChildWrapper(prop, answered) ?? answered;
+					if (FUNCTION_NODES.get(wrapper.slothlet)?.get(answered)?.deref() !== undefined) return runtime_functionNodeFor(wrapper, answered);
+					return runtime_instanceClassNode(wrapper, answered) ?? answered;
+				}
 				return Object.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
