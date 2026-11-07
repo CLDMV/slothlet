@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T15:40:36-08:00 (1794008436)
+ *	@Last modified time: 2026-11-06T17:47:02-08:00 (1794016022)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,13 +15,13 @@
 
 /**
  * @fileoverview A host set up like rummage under vitest (#714): its package, and slothlet, run through vitest's module
- * runner (`server.deps.inline`) with no slothlet plugin configured, and every attribution comes out as it does under
- * Node's own loader.
+ * runner (`server.deps.inline`) with no slothlet plugin configured, and attribution comes out as it does under Node's own
+ * loader for every file vitest's runner recorded before slothlet loaded.
  * @description
  * The fixture's vitest (`api_tests/api_test_host_owner_code/vitest/`) runs in a child process of its own, with only
  * `server.deps.inline`. Each answer is the one docs/PERMISSIONS.md gives under Node's own loader, as the plain-Node
  * suites (`permissions-host-owner-code`, `permissions-host-owner-calls`) assert it, lazy equal to eager, in both
- * runtimes ("Where the source cannot be checked": under vitest slothlet reads vitest's own record of each file):
+ * runtimes ("Where the source cannot be checked": slothlet reads vitest's records once, when it loads, and never again):
  *
  * - the context the owner package hands a module (`lockCaller`, `metadata`, `event`, a host leaf) is reached: the
  *   host's own file running its own source runs as the module's call ("Code passed by routes slothlet does not see");
@@ -29,12 +29,13 @@
  *   to a leaf runs as the caller"), so the store partition only `host.records.**` may open is refused, as `ext.b.work`;
  * - the host's unpinned `around` hook pins a module leaf's function argument through a helper of another of its files
  *   (docs/HOOKS.md, "Caller Identity in Callbacks");
- * - a module's helper outside its api folder runs as that module, its own dependency;
+ * - a module's helper outside its api folder, which vite evaluates after slothlet loads, has no record taken, so it is
+ *   refused here; attributing a module's code under vitest is #682;
  * - a package that did not create the instance, imported by the host's code, is a file no module loaded, so it runs as
  *   the module's call as well, as under Node's own loader once slothlet is loaded.
  *
  * The owner's closures compiled with `vm` under its file's name stay refused: code compiled under a name, holding
- * another source, is no one's.
+ * another source, is no one's, and no record made after slothlet loaded vouches for it.
  */
 
 import { describe, it, expect } from "vitest";
@@ -92,8 +93,13 @@ describe("Permissions > a host like rummage's under vitest, with only server.dep
 		expect(out[`${config}/records`]).toEqual({ ok: false, code: "PERMISSION_DENIED", caller: "ext.b.work" });
 	});
 
-	it.each(CONFIGS)("runs a module's helper outside its api folder as the module's call — %s", (config) => {
-		expect(out[`${config}/helper`]).toEqual({ ok: true, value: "echo:helper" });
+	it.each(CONFIGS)("refuses a module's helper outside its api folder that vite loads after slothlet (#682) — %s", (config) => {
+		// The helper is evaluated after slothlet loads, so no record of it is taken (docs/PERMISSIONS.md "Where the source
+		// cannot be checked"); attributing a module's code under vitest is #682. The async runtime refuses the access;
+		// the live runtime, which tells the running call from the stack, refuses `self` itself ("`self` requires an
+		// executing module").
+		const code = config.endsWith("/live") ? "RUNTIME_NO_ACTIVE_CONTEXT_SELF" : "PERMISSION_DENIED";
+		expect(out[`${config}/helper`]).toEqual({ ok: false, code, caller: null });
 	});
 
 	it.each(CONFIGS)("runs the host's unpinned hook and its helper file within the call it intercepts — %s", (config) => {

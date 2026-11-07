@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T21:30:02-08:00 (1793943002)
+ *	@Last modified time: 2026-11-06T17:47:03-08:00 (1794016023)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,10 +23,12 @@
  * the module's call it is in, giving what it gives under Node's own loader (`permissions-host-owner-code`): lazy and
  * eager alike, in both runtimes.
  *
- * A vite-transformed file of a folder with a `package.json` of its own, which the test imports, runs as the module's
- * call as well, as such a file the host imports does under Node's own loader. Two things stay refused: the same
- * closures compiled with `vm` under the host file's name, and the same with a registration made from that compiled code
- * instead of from vitest's runner.
+ * Only code the runner itself evaluated is accepted as a file's own source: the records vitest's runner made before
+ * slothlet loaded (read once then, never again), and the registration the plugin appends (verified by its unread error
+ * stack and the runner frame below it). A file the host imported runs as the module's call, as under Node's own loader.
+ * Three things are refused: the same closures compiled with `vm` under the host file's name; the same with a
+ * registration the compiled code makes itself rather than the runner; and a record added to the runner's module map
+ * after slothlet loaded.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -63,6 +65,41 @@ const CONTEXT_SOURCE =
 
 /** The registration the plugin appends, made by the compiled code itself rather than by vitest's runner. */
 const REGISTRATION = '(globalThis[Symbol.for("@cldmv/slothlet.viteHostScripts")] ??= []).push(new Error());';
+
+/** The six vite SSR bindings each module the runner evaluates is wrapped as a function of. */
+const RUNNER_SSR =
+	"__vite_ssr_exports__,__vite_ssr_import_meta__,__vite_ssr_import__,__vite_ssr_dynamic_import__,__vite_ssr_exportAll__,__vite_ssr_exportName__";
+
+/**
+ * A context whose closures a module compiled under the owner context file's name, after planting a record for that
+ * file in vitest's own module map so its code would hash as the file's source. Only code the runner itself evaluated
+ * is accepted, so the plant vouches for nothing and the closures are refused.
+ * @param {object} api - The bound api the test's own `slothlet()` call returned.
+ * @returns {Record<string, Function>} The planted context.
+ */
+function plantedRecordContext(api) {
+	const inner = `__vite_ssr_exports__.make = ${CONTEXT_SOURCE};
+`;
+	const wrapped = `'use strict';async (${RUNNER_SSR})=>{{${inner}
+}}`;
+	const worker = globalThis.__vitest_worker__;
+	const map = worker?.evaluatedModules?.fileToModulesMap;
+	if (map && typeof map.set === "function") {
+		const records = map.get(CONTEXT_FILE) ?? new Set();
+		records.add({ file: CONTEXT_FILE, meta: { code: inner }, importers: new Set() });
+		map.set(CONTEXT_FILE, records);
+	}
+	const exports = {};
+	vm.runInThisContext(wrapped, { filename: CONTEXT_FILE })(
+		exports,
+		{},
+		() => {},
+		() => {},
+		() => {},
+		() => {}
+	);
+	return exports.make(api);
+}
 
 describe.each(getMatrixConfigs())(
 	"Permissions > the host's own vite-transformed files, inside a module's call (#714) > $name",
@@ -106,9 +143,16 @@ describe.each(getMatrixConfigs())(
 			expect(await api.ext.a.activate(forged(api))).toEqual(REFUSED);
 		});
 
-		it("runs a vite-transformed file of a package the host imported as the module's call, as under Node's own loader", async () => {
+		it("runs a vite-transformed file of a package the host imported as the module's call, its record taken from before slothlet loaded", async () => {
 			await boot();
+			// docs/PERMISSIONS.md "Where the source cannot be checked": a record vitest's runner made before slothlet loaded is
+			// taken as the file's source, so a file only the host loaded runs as the module's call, as under Node's own loader.
 			expect(await api.ext.a.activate(otherPackageContext(api))).toEqual(HOST_ANSWERS);
+		});
+
+		it("refuses a record a module plants in the runner's module map under an owner file's name", async () => {
+			await boot();
+			expect(await api.ext.a.activate(plantedRecordContext(api))).toEqual(REFUSED);
 		});
 	}
 );

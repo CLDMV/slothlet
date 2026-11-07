@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T15:40:36-08:00 (1794008436)
+ *	@Last modified time: 2026-11-06T17:47:01-08:00 (1794016021)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,6 +92,34 @@ describe("Permissions > the code of a host installed as a package, inside a modu
 	});
 
 	it.each(CONFIGS)("refuses code compiled under the owner file's name from another source — %s", (config) => {
+		expect(out[`${config}/forged`]).toEqual(Object.fromEntries(CALLS.map((call) => [call, REFUSED])));
+	});
+});
+
+describe("Permissions > the same host, with the built-ins slothlet reads replaced after it loaded (#714)", () => {
+	// docs/PERMISSIONS.md "Where the source cannot be checked": the built-ins slothlet compares a file's source through are
+	// the ones it captured when it loaded. The probe then replaces `process.getBuiltinModule`, the `fs` and `crypto`
+	// functions, `TextDecoder`, `URLSearchParams` and the `Map` and `Set` iterators with ones that report the compiled
+	// closures' source as the owner file's content (api_tests/api_test_host_owner_code/replace-builtins.mjs), and every
+	// answer is the one given without the replacements.
+	const result = spawnSync(process.execPath, [...probeConditions(), PROBE, "--replace-builtins"], { encoding: "utf8", timeout: 120000 });
+	const out = result.status === 0 ? JSON.parse(result.stdout) : {};
+
+	it("runs the probe cleanly", () => {
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(Object.keys(out)).toHaveLength(1 + CONFIGS.length * 3);
+	});
+
+	it.each(CONFIGS)("still runs the owner package's code as the module's call — %s", (config) => {
+		expect(out[`${config}/owner`]).toEqual(HOST_ANSWERS);
+	});
+
+	it.each(CONFIGS)("still refuses a package that did not create the instance — %s", (config) => {
+		expect(out[`${config}/stranger`]).toEqual(Object.fromEntries(CALLS.map((call) => [call, REFUSED])));
+	});
+
+	it.each(CONFIGS)("still refuses code compiled under the owner file's name from another source — %s", (config) => {
 		expect(out[`${config}/forged`]).toEqual(Object.fromEntries(CALLS.map((call) => [call, REFUSED])));
 	});
 });
