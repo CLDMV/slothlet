@@ -21,8 +21,8 @@
  * An inherited `__proto__` answers the engine's own prototypes (`Object.prototype`, `Function.prototype`) as the
  * plain value does. A prototype that is the module's code — a class instance's class prototype, the base class a
  * derived class extends — is still the module's: a module the rules deny the owner cannot call through it, and no
- * write through it reaches the owner's real prototype. Checked in eager and lazy mode, with the deny rule and with
- * permissions off.
+ * write through it reaches the owner's real prototype. With permissions off there is no rule to refuse such a write, so
+ * it lands as it does in plain JS. Checked in eager and lazy mode, with the deny rule and with permissions off.
  * @module tests/vitests/suites/unified-wrapper/inherited-proto-member
  */
 
@@ -34,11 +34,25 @@ import slothlet from "@cldmv/slothlet";
 const BASE = resolve("api_tests/api_test_inherited_members_proto");
 const INHERITED_BASE = resolve("api_tests/api_test_inherited_members");
 
+let twinCount = 0;
 /**
- * The victim module imported as plain JS, untouched by any slothlet instance.
+ * The victim module imported as plain JS: a new module instance each time, untouched by any slothlet instance.
  * @returns {Promise<object>} Its namespace.
  */
-const plainVictim = () => import(`${pathToFileURL(join(BASE, "victim", "victim.mjs")).href}?plain`);
+const plainVictim = () => import(`${pathToFileURL(join(BASE, "victim", "victim.mjs")).href}?plain=${++twinCount}`);
+
+/**
+ * The attacker's writes through `__proto__` (see `attacker/attacker.mjs`), made on a plain import of the victim, which
+ * then reports its real prototypes: what plain JS does with them.
+ * @returns {Promise<object>} The plain victim's `check()` afterwards.
+ */
+async function plainAttack() {
+	const victim = await plainVictim();
+	victim.inst.__proto__.secret = () => "replaced";
+	Object.defineProperty(victim.inst.__proto__, "added", { value: 1, configurable: true });
+	victim.Derived.__proto__.added = 1;
+	return victim.check();
+}
 
 const DENY_VICTIM = { defaultPolicy: "allow", rules: [{ caller: "attacker.**", target: "victim.**", effect: "deny" }] };
 
@@ -64,12 +78,20 @@ describe.each(["eager", "lazy"].flatMap((mode) => [null, DENY_VICTIM].map((permi
 			return api;
 		};
 
-		it("never changes the owner's real class prototype through __proto__", async () => {
+		it("changes the owner's real class prototype through __proto__ only as the permissions allow", async () => {
 			await load();
 			const outcomes = await api.attacker.run();
 			const real = await api.victim.check();
-			expect(real.fooMembers).toEqual(UNCHANGED_FOO);
-			expect(real.secret).toBe("secret");
+			if (permissions) {
+				expect(real.fooMembers).toEqual(UNCHANGED_FOO);
+				expect(real.secret).toBe("secret");
+			} else {
+				// With permissions off no write rule stands between modules, so the writes land on the owner's prototype as
+				// they do in plain JS.
+				const plainReal = await plainAttack();
+				expect(real.fooMembers).toEqual(plainReal.fooMembers);
+				expect(real.secret).toBe(plainReal.secret);
+			}
 			// `constructor` of a class instance's node is its class, as on the plain instance. A module the rules deny the
 			// owner reads the class's prototype as a call of the node, so it is refused it, as through an exported class.
 			const plain = await plainVictim();

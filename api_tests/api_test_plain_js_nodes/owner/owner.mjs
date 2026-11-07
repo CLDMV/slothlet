@@ -43,6 +43,17 @@ export class Foo {
 /** An instance of {@link Foo}. */
 export const inst = new Foo();
 
+/** A class this module keeps to itself: only its instance is exported. */
+class Hidden {
+	/** @returns {string} Marker. */
+	hi() {
+		return "hidden";
+	}
+}
+
+/** An instance of {@link Hidden}. */
+export const hiddenInst = new Hidden();
+
 /** A class answering `instanceof` with its own static `Symbol.hasInstance`. */
 export class OwnCheck {
 	/**

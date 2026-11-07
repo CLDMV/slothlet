@@ -18,7 +18,7 @@
  *
  * @description
  * One module exports frozen objects, a frozen array of frozen objects, a derived class, a class with an exported
- * instance, and classes with a static `Symbol.hasInstance`; another module reads them through `self`, and the host
+ * instance, an instance of a class it keeps to itself, and classes with a static `Symbol.hasInstance`; another module reads them through `self`, and the host
  * reads them through `api`. Every case runs the same code on the node and on a plain import of the same module
  * (see `api_test_plain_js_nodes_lib/cases.mjs`), and the node must answer what the plain value answers, including
  * the same error. Each mode is checked against plain JS, so lazy mode answers as eager mode does. Checked in eager
@@ -182,6 +182,9 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			});
 			// The prototype of the module's class is withheld from it, so it reaches none of the class's methods that way.
 			expect(outcome.instancePrototypeMethod).toMatch(/^threw (TypeError|PERMISSION_DENIED)$/);
+			// The same holds for an instance whose class the module keeps to itself, however its prototype is reached.
+			expect(outcome.hiddenPrototypeMethod).toMatch(/^threw (TypeError|PERMISSION_DENIED)$/);
+			expect(outcome.hiddenProtoAccessorMethod).toBe("threw PERMISSION_DENIED");
 			// The owner's class is unchanged.
 			const plain = await plainOwner();
 			expect(api.owner.inst.hi()).toBe(plain.inst.hi());

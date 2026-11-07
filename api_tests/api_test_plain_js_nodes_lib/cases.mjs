@@ -52,6 +52,13 @@ export function reads(owner) {
 		instProtoAccessor: attempt(() => owner.inst.__proto__ === owner.Foo.prototype),
 		instConstructorPrototype: attempt(() => owner.inst.constructor.prototype === owner.Foo.prototype),
 		instMethod: attempt(() => owner.inst.hi()),
+		hiddenPrototype: attempt(() => Object.getPrototypeOf(owner.hiddenInst) === owner.hiddenInst.constructor.prototype),
+		hiddenProtoAccessor: attempt(() => owner.hiddenInst.__proto__ === owner.hiddenInst.constructor.prototype),
+		hiddenProtoAccessorPrototype: attempt(() => owner.hiddenInst.__proto__ === Object.getPrototypeOf(owner.hiddenInst)),
+		hiddenPrototypeIsObject: attempt(() => Object.getPrototypeOf(owner.hiddenInst) === Object.prototype),
+		hiddenPrototypeMethod: attempt(() => Object.getPrototypeOf(owner.hiddenInst).hi.call(owner.hiddenInst)),
+		hiddenIsInstance: attempt(() => owner.hiddenInst instanceof owner.hiddenInst.constructor),
+		hiddenConstructorName: attempt(() => owner.hiddenInst.constructor.name),
 		getterSibling: attempt(() => owner.withGetter.v),
 		ownCheck: attempt(() => [{ tag: "own" } instanceof owner.OwnCheck, {} instanceof owner.OwnCheck]),
 		inheritedCheck: attempt(() => [{ tag: "own" } instanceof owner.InheritedCheck, {} instanceof owner.InheritedCheck])

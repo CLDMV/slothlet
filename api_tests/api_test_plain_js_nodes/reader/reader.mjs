@@ -81,6 +81,8 @@ export function callThrough() {
 		classMethod: attempt(() => owner.Foo.prototype.hi.call(owner.inst)),
 		instanceClassMethod: attempt(() => owner.inst.constructor.prototype.hi.call(owner.inst)),
 		instancePrototypeMethod: attempt(() => Object.getPrototypeOf(owner.inst).hi.call(owner.inst)),
+		hiddenPrototypeMethod: attempt(() => Object.getPrototypeOf(owner.hiddenInst).hi.call(owner.hiddenInst)),
+		hiddenProtoAccessorMethod: attempt(() => owner.hiddenInst.__proto__.hi.call(owner.hiddenInst)),
 		writeInstanceClassPrototype: attempt(() => {
 			owner.inst.constructor.prototype.hi = () => "replaced";
 			return "done";
