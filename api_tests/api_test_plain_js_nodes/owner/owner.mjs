@@ -69,6 +69,15 @@ export const shelf = { item: { n: 1 } };
 /** An object no module freezes. */
 export const open = { o: 1 };
 
+/** An object whose getter reads a sibling member through `this`. */
+export const withGetter = {
+	_v: 5,
+	/** @returns {number} The sibling's value. */
+	get v() {
+		return this._v;
+	}
+};
+
 /** An object this module freezes through `self`. */
 export const later = { q: 1 };
 

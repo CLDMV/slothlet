@@ -52,6 +52,7 @@ export function reads(owner) {
 		instProtoAccessor: attempt(() => owner.inst.__proto__ === owner.Foo.prototype),
 		instConstructorPrototype: attempt(() => owner.inst.constructor.prototype === owner.Foo.prototype),
 		instMethod: attempt(() => owner.inst.hi()),
+		getterSibling: attempt(() => owner.withGetter.v),
 		ownCheck: attempt(() => [{ tag: "own" } instanceof owner.OwnCheck, {} instanceof owner.OwnCheck]),
 		inheritedCheck: attempt(() => [{ tag: "own" } instanceof owner.InheritedCheck, {} instanceof owner.InheritedCheck])
 	};
