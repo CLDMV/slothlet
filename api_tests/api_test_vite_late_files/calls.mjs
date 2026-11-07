@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T19:39:55-08:00 (1794022795)
+ *	@Last modified time: 2026-11-06T20:28:57-08:00 (1794025737)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,8 @@
 
 /**
  * @fileoverview The host of the late-files fixture (#714): it creates the instance, and only then imports a package's
- * files and hands their context to a module, and has one module hand another a function. The same code runs under
+ * files and hands their context to a module, has one module hand another a function, and mounts a module that imports a
+ * JSON file. The same code runs under
  * Node's own loader (`probe.mjs`) and under vitest with the `slothletInstanceImports()` plugin (`vitest/`).
  * @module api_test_vite_late_files.calls
  */
@@ -72,6 +73,10 @@ export async function runCalls(slothlet) {
 			out[`${mode}/${runtime}/importing`] = await api.runner.activate(importing.makeContext(api));
 			await api.caller.setup();
 			out[`${mode}/${runtime}/handed`] = await outcome(() => api.callee.fire());
+			out[`${mode}/${runtime}/json`] = await outcome(async () => {
+				await api.slothlet.api.add("info", path.join(here, "json-api"), { moduleID: "info" });
+				return api.info.name();
+			});
 			await api.slothlet.shutdown();
 		}
 	return out;

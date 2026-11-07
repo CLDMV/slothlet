@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T19:43:17-08:00 (1794022997)
+ *	@Last modified time: 2026-11-06T20:34:28-08:00 (1794026068)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,9 @@
  * - a file only the host loaded is the host's own and runs as the module's call it is in ("Code passed by routes
  *   slothlet does not see": only a file no module loaded is the host's own), whether or not it imports another;
  * - another module's function, run by a module's call it was not handed to, runs as the leaf its file was built for,
- *   with that call as its ceiling.
+ *   with that call as its ceiling;
+ * - a module that imports a JSON file (`with { type: "json" }`), as rummage's extensions import their `package.json`,
+ *   loads and reads it.
  */
 
 import { describe, it, expect } from "vitest";
@@ -97,7 +99,7 @@ describe.each(Object.keys(RUNS))("Permissions > files vite evaluates after sloth
 	it("runs cleanly", () => {
 		expect(result.status).toBe(0);
 		expect(out).not.toBeNull();
-		expect(Object.keys(out)).toHaveLength(CONFIGS.length * 3);
+		expect(Object.keys(out)).toHaveLength(CONFIGS.length * 4);
 	});
 
 	it.each(CONFIGS)("runs a file only the host loaded, after the instance existed, as the module's call — %s", (config) => {
@@ -114,4 +116,8 @@ describe.each(Object.keys(RUNS))("Permissions > files vite evaluates after sloth
 			expect(out[`${config}/handed`]).toEqual({ ok: true, value: "caller.setup" });
 		}
 	);
+
+	it.each(CONFIGS)("loads a module that imports a JSON file, and reads it — %s", (config) => {
+		expect(out[`${config}/json`]).toEqual({ ok: true, value: "late-files-manifest" });
+	});
 });
