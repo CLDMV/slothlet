@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:50:36-08:00 (1794041436)
+ *	@Last modified time: 2026-11-07T08:24:03-08:00 (1794068643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,7 +85,7 @@ const DENY_CLASSES = {
 const heldOddShapes = (api) => Object.fromEntries(ODD_SHAPES.map((name) => [name, api.owner[name]]));
 
 /** The members the emitter cases write, cleared from the prototypes other cases share. */
-const WRITE_KEYS = ["selfEmitter", "heldEmitter", "selfRelay", "heldRelay", "keptEmitter", "plainEmitter"];
+const WRITE_KEYS = ["hostWrite", "selfEmitter", "heldEmitter", "selfRelay", "heldRelay", "keptEmitter", "plainEmitter"];
 
 /** A member no other code uses, written onto prototypes to see where the write lands. */
 const PROBE_KEY = "__slothlet667PrototypeProbe";
@@ -589,5 +589,89 @@ describe.each(
 		expect(Object.getPrototypeOf(api.owner.relay)).toBe(api.owner.Relay.prototype);
 		expect(Reflect.getPrototypeOf(api.owner.relay)).toBe(api.owner.Relay.prototype);
 		expect(Object.getPrototypeOf(api.owner.bus).constructor.name).toBe("Bus");
+	});
+});
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			["freeze", "seal", "preventExtensions"].flatMap((closing) =>
+				[
+					{ name: "permissions off", permissions: null },
+					{ name: "permissions on, no rules", permissions: {} },
+					{ name: "owner denied", permissions: DENY_READER }
+				].map((entry) => ({ mode, runtime, closing, ...entry }))
+			)
+		)
+	)
+)("a closed emitter's prototype > $mode / $runtime / $closing / $name", ({ mode, runtime, closing, permissions }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		for (const key of WRITE_KEYS) delete Relay.prototype[key];
+	});
+
+	/** Build the instance and close both of the owner's emitters, as the host. */
+	const load = async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		await api.owner.bus;
+		await api.owner.relay;
+		Object[closing](api.owner.bus);
+		Object[closing](api.owner.relay);
+	};
+
+	it("holds a write through its prototype to the rule an open emitter's is held to, on every path", async () => {
+		await load();
+		const plainModule = await plainOwner();
+		const plain = { bus: emitterPrototypes(plainModule.bus, "plainEmitter"), relay: emitterPrototypes(plainModule.relay, "plainEmitter") };
+		for (const [key, emitter, run] of [
+			["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
+			["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],
+			["selfRelay", "relay", () => api.reader.readRelay("selfRelay")],
+			["heldRelay", "relay", () => api.reader.readHeldEmitter(api.owner.relay, "heldRelay")]
+		]) {
+			const outcome = await run();
+			const landed = await api.owner.prototypesHolding(key);
+			if (permissions === null) {
+				expect(outcome, key).toEqual(plain[emitter]);
+				expect(landed[emitter], key).toBe(true);
+				continue;
+			}
+			expect(landed[emitter], key).toBe(false);
+			if (permissions === DENY_READER) {
+				// A closed node reports one prototype to every reader: reaching it is refused to a module denied the node.
+				for (const step of ["prototypeName", "reflectName", "protoAccessorName", "writePrototype", "writeReflect", "writeProtoAccessor"]) {
+					expect(outcome[step], `${key} ${step}`).toBe("threw PERMISSION_DENIED");
+				}
+				continue;
+			}
+			expect(outcome, key).toEqual({
+				...plain[emitter],
+				writePrototype: "threw LOOSE_SET_NOT_OWNED",
+				writeReflect: "threw LOOSE_SET_NOT_OWNED",
+				writeProtoAccessor: "threw LOOSE_SET_NOT_OWNED"
+			});
+		}
+	});
+
+	it("keeps the owner's own answers through self, and the host may still read and write through what it reports", async () => {
+		await load();
+		expect(await api.owner.ownEmitterIdentity()).toEqual({
+			busPrototype: true,
+			busReflect: true,
+			busAccessor: true,
+			relayPrototype: true,
+			relayReflect: true,
+			relayAccessor: true
+		});
+		const prototype = Object.getPrototypeOf(api.owner.relay);
+		expect(prototype.constructor.name).toBe("Relay");
+		expect(prototype.ping()).toBe("relay");
+		prototype.hostWrite = 1;
+		expect((await api.owner.prototypesHolding("hostWrite")).relay).toBe(true);
+		delete prototype.hostWrite;
+		expect((await api.owner.prototypesHolding("hostWrite")).relay).toBe(false);
 	});
 });
