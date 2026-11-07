@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:07:42-08:00 (1794038862)
+ *	@Last modified time: 2026-11-07T00:50:36-08:00 (1794041436)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,10 @@
  * the same error. Each mode is checked against plain JS, so lazy mode answers as eager mode does. Checked in eager
  * and lazy mode, async and live runtime, with permissions off, on, and on with reference capture off. The write
  * rules still hold where plain JS has none: a module may not freeze or write another module's member, and a deny
- * rule still refuses a call reached through a reported prototype or an instance's class.
+ * rule still refuses a call reached through a reported prototype or an instance's class. An instance whose class cannot
+ * be told from descriptors answers its prototype alike on every path, behind its own node's check; a subclass
+ * instance's chain is checked at each level against the class owning it; and an emitter's prototype answers alike on
+ * every path without a write landing on a prototype other values share.
  * @module tests/vitests/suites/unified-wrapper/plain-js-node-shapes
  */
 
@@ -32,6 +35,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import util from "node:util";
+import { EventEmitter } from "node:events";
 import slothlet from "@cldmv/slothlet";
 import {
 	reads,
@@ -40,7 +44,12 @@ import {
 	freezeLater,
 	frozenAtLoad,
 	ownerWrites,
-	refreezeAtLoad
+	refreezeAtLoad,
+	ODD_SHAPES,
+	oddShapeReads,
+	oddShapeWrites,
+	chainReads,
+	emitterPrototypes
 } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_plain_js_nodes");
@@ -64,6 +73,13 @@ const DENY_CLASSES = {
 		effect: "deny"
 	}))
 };
+
+/**
+ * The owner's odd-shaped instance nodes, by export name, for handing to the reader as an argument.
+ * @param {object} api - The api.
+ * @returns {object} The nodes.
+ */
+const heldOddShapes = (api) => Object.fromEntries(ODD_SHAPES.map((name) => [name, api.owner[name]]));
 
 /** A member no other code uses, written onto prototypes to see where the write lands. */
 const PROBE_KEY = "__slothlet667PrototypeProbe";
@@ -167,9 +183,13 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 			expect(outcome.protoAccessorMethod).toBe(plainProtoAccessorMethod);
 		});
 
-		// Without running the accessor nothing tells which class the instance's prototype belongs to, so no class node's check
-		// can be applied, and `Object.getPrototypeOf` answers null for it, as every instance node did before #667.
-		it.todo("answers Object.getPrototypeOf of an instance whose prototype's constructor is an accessor as plain JS does");
+		it("answers every way of asking an instance whose class cannot be told from descriptors for its prototype as plain JS does", async () => {
+			api = await load();
+			const plain = oddShapeReads(await plainOwner());
+			expect(await api.reader.readOddShapes()).toEqual(plain);
+			expect(await api.reader.readHeldOddShapes(heldOddShapes(api))).toEqual(plain);
+			expect(oddShapeReads(api.owner)).toEqual(plain);
+		});
 
 		// V8's structured serializer refuses every Proxy (`#<Object> could not be cloned`), and a node is one by design: it
 		// cannot hand out the module's object itself, which would skip the read and write rules for everything it holds.
@@ -307,3 +327,194 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 		});
 	}
 );
+
+/** What a module the rules refuse an instance's prototype gets for each way of asking for it. */
+const REFUSED_PROTOTYPE = {
+	prototypeMethod: "threw PERMISSION_DENIED",
+	reflectPrototypeMethod: "threw PERMISSION_DENIED",
+	protoAccessorMethod: "threw PERMISSION_DENIED",
+	pathsAgree: "threw PERMISSION_DENIED"
+};
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null },
+				{ name: "permissions on, no rules", permissions: {} },
+				{ name: "classes denied", permissions: DENY_CLASSES },
+				{ name: "owner denied", permissions: DENY_READER }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("an instance whose class cannot be told from descriptors > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	const load = () => mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+
+	it("answers its prototype alike by Object.getPrototypeOf, Reflect.getPrototypeOf and __proto__, behind the instance's check", async () => {
+		api = await load();
+		const plain = oddShapeReads(await plainOwner());
+		// The host is refused nothing.
+		expect(oddShapeReads(api.owner)).toEqual(plain);
+		const throughSelf = await api.reader.readOddShapes();
+		const held = await api.reader.readHeldOddShapes(heldOddShapes(api));
+		if (permissions !== DENY_READER) {
+			// No rule refuses the instance, so every path answers as plain JS does; a rule on the owner's classes does not
+			// reach an instance whose class no node stands for.
+			expect(throughSelf).toEqual(plain);
+			expect(held).toEqual(plain);
+			return;
+		}
+		// The prototype holds the module's code and no class node stands for it: reaching it is a call of the instance's
+		// own node, refused however the instance is asked for it, and `__proto__` never becomes a member of its own.
+		for (const name of ODD_SHAPES) {
+			for (const outcome of [throughSelf[name], held[name]]) {
+				expect(outcome).toMatchObject(REFUSED_PROTOTYPE);
+				expect(outcome.ownProtoKey).not.toBe(true);
+				expect(outcome.inspectShowsProto).toBe(false);
+			}
+		}
+	});
+
+	it("lands a write through its prototype where plain JS does, or refuses it on every path alike", async () => {
+		api = await load();
+		const plainModule = await plainOwner();
+		const plainWrites = oddShapeWrites(plainModule, "plain");
+		const runs = [
+			["self", () => api.reader.writeOddShapes("self")],
+			["held", () => api.reader.writeHeldOddShapes(heldOddShapes(api), "held")]
+		];
+		for (const [key, run] of runs) {
+			const outcome = await run();
+			const landed = { get: await api.owner.prototypesHolding(`${key}Get`), proto: await api.owner.prototypesHolding(`${key}Proto`) };
+			const plainLanded = { get: plainModule.prototypesHolding("plainGet"), proto: plainModule.prototypesHolding("plainProto") };
+			if (permissions === null) {
+				// With permissions off no rule stands between modules: both writes reach the instance's real prototype.
+				expect(outcome).toEqual(plainWrites);
+				expect(landed).toEqual(plainLanded);
+				continue;
+			}
+			for (const name of ODD_SHAPES) {
+				expect(outcome[name].protoAccessor).toBe(outcome[name].prototype);
+				if (permissions === DENY_READER) expect(outcome[name].prototype).toBe("threw PERMISSION_DENIED");
+			}
+			// Both paths reach the same prototype, so they land alike, and never on a prototype every object shares.
+			expect(landed.get).toEqual(landed.proto);
+			expect(landed.get.object).toBe(false);
+		}
+	});
+});
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null },
+				{ name: "permissions on, no rules", permissions: {} },
+				{ name: "classes denied", permissions: DENY_CLASSES }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("a subclass instance's prototype chain > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	it("checks each prototype on the chain against the class that owns it", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const plain = chainReads(await plainOwner());
+		const throughSelf = await api.reader.readChain();
+		const held = await api.reader.readHeldChain(api.owner.subInst, api.owner.FooSub);
+		expect(chainReads(api.owner)).toEqual(plain);
+		if (permissions !== DENY_CLASSES) {
+			expect(throughSelf).toEqual(plain);
+			expect(held).toEqual(plain);
+			return;
+		}
+		// The subclass is allowed, its base class is not: the base's prototype is the base's code, refused one level up the
+		// chain as it is through the base class's own node.
+		const refusedBase = {
+			...plain,
+			baseByPrototypeOf: "threw PERMISSION_DENIED",
+			baseByReflect: "threw PERMISSION_DENIED",
+			baseByProtoAccessor: "threw PERMISSION_DENIED",
+			baseByMixed: "threw PERMISSION_DENIED",
+			baseOfClassPrototype: "threw PERMISSION_DENIED",
+			baseOfClassPrototypeAccessor: "threw PERMISSION_DENIED",
+			baseClassPrototype: "threw PERMISSION_DENIED"
+		};
+		expect(throughSelf).toEqual(refusedBase);
+		expect(held).toEqual(refusedBase);
+	});
+});
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null },
+				{ name: "permissions on, no rules", permissions: {} },
+				{ name: "owner denied", permissions: DENY_READER }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("an emitter's prototype > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		// A write that reached a shared prototype is undone, so it cannot leak into later tests.
+		for (const key of ["selfEmitter", "heldEmitter"]) {
+			delete EventEmitter.prototype[key];
+			delete Object.prototype[key];
+		}
+	});
+
+	it("answers it alike by Object.getPrototypeOf and __proto__, and never lands a write on a shared prototype", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const plainModule = await plainOwner();
+		const plain = emitterPrototypes(plainModule.bus, "plainEmitter");
+		const plainLanded = plainModule.prototypesHolding("plainEmitter");
+		for (const [key, run] of [
+			["selfEmitter", () => api.reader.readEmitter("selfEmitter")],
+			["heldEmitter", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")]
+		]) {
+			const outcome = await run();
+			const landed = await api.owner.prototypesHolding(key);
+			expect(outcome.pathsAgree).toBe(true);
+			expect(landed.emitter).toBe(false);
+			expect(landed.object).toBe(false);
+			if (permissions === null) {
+				expect(outcome).toEqual(plain);
+				expect(landed).toEqual(plainLanded);
+				continue;
+			}
+			expect(outcome.writeProtoAccessor).toBe(outcome.writePrototype);
+			if (permissions === DENY_READER) {
+				// A module denied the emitter is reported the nearest prototype holding none of the module's code, on both
+				// paths, and a write meant for the emitter's class is refused rather than landing on that shared prototype.
+				expect(outcome).toEqual({
+					pathsAgree: true,
+					prototypeName: "EventEmitter",
+					protoAccessorName: "EventEmitter",
+					writePrototype: "threw PERMISSION_DENIED",
+					writeProtoAccessor: "threw PERMISSION_DENIED"
+				});
+				expect(landed.bus).toBe(false);
+			} else {
+				expect(outcome.prototypeName).toBe(plain.prototypeName);
+				expect(outcome.protoAccessorName).toBe(plain.protoAccessorName);
+			}
+		}
+	});
+});

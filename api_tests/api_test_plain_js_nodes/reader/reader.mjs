@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:05:57-08:00 (1794038757)
+ *	@Last modified time: 2026-11-07T00:48:53-08:00 (1794041333)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,11 @@ import {
 	refreeze,
 	refreezeAtLoad,
 	heldReads,
-	prototypeWrites
+	prototypeWrites,
+	oddShapeReads,
+	oddShapeWrites,
+	chainReads,
+	emitterPrototypes
 } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 
 /**
@@ -142,4 +146,77 @@ export function readAccessedPrototype() {
 		prototypeMethod: attempt(() => Object.getPrototypeOf(inst).hi.call(inst)),
 		protoAccessorMethod: attempt(() => inst.__proto__.hi.call(inst))
 	};
+}
+
+/**
+ * Ask the owner's odd-shaped instances for their prototype through `self`.
+ * @returns {object} What each read answered.
+ */
+export function readOddShapes() {
+	return oddShapeReads(self.owner);
+}
+
+/**
+ * Ask odd-shaped instance nodes the host handed this module for their prototype.
+ * @param {object} held - The owner's odd-shaped instance nodes, by export name.
+ * @returns {object} What each read answered.
+ */
+export function readHeldOddShapes(held) {
+	return oddShapeReads(held);
+}
+
+/**
+ * Write onto the odd-shaped instances' prototypes through `self`.
+ * @param {string} key - The member written.
+ * @returns {object} The outcome of each write.
+ */
+export function writeOddShapes(key) {
+	return oddShapeWrites(self.owner, key);
+}
+
+/**
+ * Write onto the prototypes of odd-shaped instance nodes the host handed this module.
+ * @param {object} held - The owner's odd-shaped instance nodes, by export name.
+ * @param {string} key - The member written.
+ * @returns {object} The outcome of each write.
+ */
+export function writeHeldOddShapes(held, key) {
+	return oddShapeWrites(held, key);
+}
+
+/**
+ * Walk the owner's subclass instance's prototype chain through `self`.
+ * @returns {object} What each read answered.
+ */
+export function readChain() {
+	return chainReads(self.owner);
+}
+
+/**
+ * Walk the prototype chain of a subclass instance node and a subclass node the host handed this module.
+ * @param {object} subInst - The owner's `subInst` node.
+ * @param {Function} FooSub - The owner's `FooSub` node.
+ * @returns {object} What each read answered.
+ */
+export function readHeldChain(subInst, FooSub) {
+	return chainReads({ subInst, FooSub });
+}
+
+/**
+ * Ask the owner's emitter for its prototype through `self`, and write through it.
+ * @param {string} key - The member written.
+ * @returns {object} What each read and write answered.
+ */
+export function readEmitter(key) {
+	return emitterPrototypes(self.owner.bus, key);
+}
+
+/**
+ * Ask an emitter node the host handed this module for its prototype, and write through it.
+ * @param {object} bus - The owner's `bus` node.
+ * @param {string} key - The member written.
+ * @returns {object} What each read and write answered.
+ */
+export function readHeldEmitter(bus, key) {
+	return emitterPrototypes(bus, key);
 }

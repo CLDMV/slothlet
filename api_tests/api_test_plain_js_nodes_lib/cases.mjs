@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T23:32:54-08:00 (1794036774)
+ *	@Last modified time: 2026-11-07T00:48:53-08:00 (1794041333)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,6 +19,8 @@
  * value's answer is what the node's is checked against.
  * @module api_test_plain_js_nodes_lib/cases
  */
+
+import util from "node:util";
 
 /**
  * Run `step`, answering what it returned or how it threw.
@@ -168,5 +170,108 @@ export function prototypeWrites(owner, key) {
 		hiddenPrototype: write(() => Object.getPrototypeOf(owner.hiddenInst)),
 		hiddenProtoAccessor: write(() => owner.hiddenInst.__proto__),
 		reachedObjectPrototype: Object.hasOwn(Object.prototype, key)
+	};
+}
+
+/** The instances whose class cannot be told from descriptors alone, each with a `hi()` method on its prototype. */
+export const ODD_SHAPES = ["accessedInst", "ownConstructorInst", "bareInst", "proxiedInst"];
+
+/**
+ * Ask each odd-shaped instance for its prototype every way plain JS offers (#667): `Object.getPrototypeOf`,
+ * `Reflect.getPrototypeOf` and `__proto__`, then whether `__proto__` became a member of its own.
+ * @param {object} owner - The owner's instances: its api node, its plain namespace, or nodes handed over.
+ * @returns {object} What each read answered, per instance.
+ */
+export function oddShapeReads(owner) {
+	const out = {};
+	for (const name of ODD_SHAPES) {
+		const inst = owner[name];
+		out[name] = {
+			prototypeMethod: attempt(() => Object.getPrototypeOf(inst).hi.call(inst)),
+			reflectPrototypeMethod: attempt(() => Reflect.getPrototypeOf(inst).hi.call(inst)),
+			protoAccessorMethod: attempt(() => inst.__proto__.hi.call(inst)),
+			pathsAgree: attempt(
+				() => inst.__proto__ === Object.getPrototypeOf(inst) && Reflect.getPrototypeOf(inst) === Object.getPrototypeOf(inst)
+			),
+			method: attempt(() => inst.hi()),
+			constructorName: attempt(() => (typeof inst.constructor === "function" ? inst.constructor.name : typeof inst.constructor)),
+			ownProtoKey: attempt(() => {
+				void inst.__proto__;
+				return (
+					Object.hasOwn(inst, "__proto__") ||
+					Reflect.ownKeys(inst).includes("__proto__") ||
+					Object.getOwnPropertyDescriptor(inst, "__proto__") !== undefined ||
+					Reflect.ownKeys(Object.getOwnPropertyDescriptors(inst)).includes("__proto__")
+				);
+			}),
+			inspectShowsProto: attempt(() => util.inspect(inst, { showHidden: true }).includes("__proto__"))
+		};
+	}
+	return out;
+}
+
+/**
+ * Write a member onto each odd-shaped instance's prototype, by `Object.getPrototypeOf` and through `__proto__`.
+ * @param {object} owner - The owner's instances, however they were reached.
+ * @param {string} key - The member written, a name no other code uses.
+ * @returns {object} The outcome of each write, per instance and path.
+ */
+export function oddShapeWrites(owner, key) {
+	const out = {};
+	for (const name of ODD_SHAPES) {
+		const inst = owner[name];
+		out[name] = {
+			prototype: attempt(() => {
+				Object.getPrototypeOf(inst)[`${key}Get`] = 1;
+				return "written";
+			}),
+			protoAccessor: attempt(() => {
+				inst.__proto__[`${key}Proto`] = 1;
+				return "written";
+			})
+		};
+	}
+	return out;
+}
+
+/**
+ * Walk a subclass instance's and a subclass's prototype chain two levels up, to the base class's prototype (#667).
+ * @param {{subInst: object, FooSub: Function}} owner - The owner's `subInst` and `FooSub`, however they were reached.
+ * @returns {object} What each read answered.
+ */
+export function chainReads(owner) {
+	const { subInst, FooSub } = owner;
+	return {
+		subMethod: attempt(() => Object.getPrototypeOf(subInst).sub.call(subInst)),
+		baseByPrototypeOf: attempt(() => Object.getPrototypeOf(Object.getPrototypeOf(subInst)).hi.call(subInst)),
+		baseByReflect: attempt(() => Reflect.getPrototypeOf(Reflect.getPrototypeOf(subInst)).hi.call(subInst)),
+		baseByProtoAccessor: attempt(() => subInst.__proto__.__proto__.hi.call(subInst)),
+		baseByMixed: attempt(() => Object.getPrototypeOf(subInst.__proto__).hi.call(subInst)),
+		baseOfClassPrototype: attempt(() => Object.getPrototypeOf(FooSub.prototype).hi.call(subInst)),
+		baseOfClassPrototypeAccessor: attempt(() => FooSub.prototype.__proto__.hi.call(subInst)),
+		baseClassPrototype: attempt(() => Object.getPrototypeOf(FooSub).prototype.hi.call(subInst)),
+		inheritedMethod: attempt(() => subInst.hi())
+	};
+}
+
+/**
+ * Ask an emitter of a class of its module's for its prototype, then write through what each path answers (#667).
+ * @param {object} bus - The owner's emitter, however it was reached.
+ * @param {string} key - The member written, a name no other code uses.
+ * @returns {object} What each read and write answered.
+ */
+export function emitterPrototypes(bus, key) {
+	return {
+		pathsAgree: attempt(() => bus.__proto__ === Object.getPrototypeOf(bus) && Reflect.getPrototypeOf(bus) === Object.getPrototypeOf(bus)),
+		prototypeName: attempt(() => Object.getPrototypeOf(bus).constructor.name),
+		protoAccessorName: attempt(() => bus.__proto__.constructor.name),
+		writePrototype: attempt(() => {
+			Object.getPrototypeOf(bus)[key] = 1;
+			return "written";
+		}),
+		writeProtoAccessor: attempt(() => {
+			bus.__proto__[key] = 1;
+			return "written";
+		})
 	};
 }

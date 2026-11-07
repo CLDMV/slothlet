@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:05:57-08:00 (1794038757)
+ *	@Last modified time: 2026-11-07T00:48:52-08:00 (1794041332)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,6 +18,7 @@
  * @module api_test_plain_js_nodes/owner
  */
 
+import { EventEmitter } from "node:events";
 import { self } from "@cldmv/slothlet/runtime";
 import { ownerWrites, freezeLater, reads } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 
@@ -80,6 +81,84 @@ export const accessedInst = new Accessed();
  */
 export function constructorReadCount() {
 	return constructorReads;
+}
+
+/** A class whose instance carries a `constructor` of its own. */
+class OwnConstructor {
+	/** @returns {string} Marker. */
+	hi() {
+		return "own-constructor";
+	}
+}
+
+/** An instance of {@link OwnConstructor} with an own `constructor` member. */
+export const ownConstructorInst = new OwnConstructor();
+ownConstructorInst.constructor = "own";
+
+/** A prototype that holds no `constructor` of its own. */
+const bareProto = {
+	/** @returns {string} Marker. */
+	hi() {
+		return "bare";
+	}
+};
+
+/** An object made from {@link bareProto}. */
+export const bareInst = Object.create(bareProto);
+
+/** A prototype that is a Proxy. */
+const proxiedProto = new Proxy(
+	{
+		/** @returns {string} Marker. */
+		hi() {
+			return "proxied";
+		}
+	},
+	{}
+);
+
+/** An object made from {@link proxiedProto}. */
+export const proxiedInst = Object.create(proxiedProto);
+
+/** A class extending {@link Foo}, so its instances' prototype chain holds two classes' prototypes. */
+export class FooSub extends Foo {
+	/** @returns {string} Marker. */
+	sub() {
+		return "foo-sub";
+	}
+}
+
+/** An instance of {@link FooSub}. */
+export const subInst = new FooSub();
+
+/** An emitter class with a method of its own. */
+class Bus extends EventEmitter {
+	/** @returns {string} Marker. */
+	ping() {
+		return "bus";
+	}
+}
+
+/** An instance of {@link Bus}. */
+export const bus = new Bus();
+
+/**
+ * Which real prototypes hold `key`, as written through the instances' nodes.
+ * @param {string} key - The member looked for.
+ * @returns {object} Whether each prototype holds it as its own.
+ */
+export function prototypesHolding(key) {
+	return {
+		accessed: Object.hasOwn(Accessed.prototype, key),
+		ownConstructor: Object.hasOwn(OwnConstructor.prototype, key),
+		bare: Object.hasOwn(bareProto, key),
+		proxied: Object.hasOwn(proxiedProto, key),
+		foo: Object.hasOwn(Foo.prototype, key),
+		fooSub: Object.hasOwn(FooSub.prototype, key),
+		bus: Object.hasOwn(Bus.prototype, key),
+		emitter: Object.hasOwn(EventEmitter.prototype, key),
+		object: Object.hasOwn(Object.prototype, key)
+	};
 }
 
 /** A class answering `instanceof` with its own static `Symbol.hasInstance`. */
