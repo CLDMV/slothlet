@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T11:41:12-07:00 (1793040072)
+ *	@Last modified time: 2026-11-03T07:40:23-08:00 (1793720423)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * @internal
  */
 
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
@@ -143,22 +143,160 @@ export function settleThenable(thenable, onFulfilled, onRejected) {
 }
 
 /**
- * Symbol to mark errors that have already been processed by hook error handlers
- * @private
- */
-const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
-
-/**
- * Processed errors that could not carry {@link ERROR_HOOK_PROCESSED} (a frozen or non-extensible error).
- * Shared through the global object, as the mark is, so every slothlet copy in the realm sees it.
+ * Errors the error hooks have already been run for, so an outer hooked call does not report them again.
+ *
+ * Kept here only, never on the error: a mark written onto the error, or read back from it, runs whatever the module
+ * that threw it put there (a setter or getter on the mark, a Proxy's traps) in the caller's flow, and a module that
+ * could set the mark itself could stop its own failures from reaching the error hooks (#599). Membership in a WeakSet
+ * runs no code of the error's.
  * @type {WeakSet<object>}
  * @private
  */
-const UNMARKABLE_PROCESSED = (() => {
-	const key = Symbol.for("@cldmv/slothlet/hook-error-processed-unmarkable");
-	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
-	return globalThis[key];
-})();
+const HOOK_PROCESSED = new WeakSet();
+
+/**
+ * Failures with a record of whose code they are (see {@link failureRecord}), keyed by both what was thrown and the error
+ * unwrapped from it.
+ * @type {WeakMap<object, FailureRecord>}
+ * @private
+ */
+const TARGET_FAILURES = new WeakMap();
+
+/**
+ * Whether a value can key a WeakMap or WeakSet.
+ * @param {*} value - The value.
+ * @returns {boolean} True for an object or function.
+ * @private
+ */
+const isObjectLike = (value) => value !== null && (typeof value === "object" || typeof value === "function");
+
+/**
+ * Extract the original error from a SlothletError wrapper if present.
+ * @param {*} error - What was thrown.
+ * @returns {*} The SlothletError's original error, otherwise the value itself.
+ * @public
+ */
+export function unwrapThrown(error) {
+	if (error && error.name === "SlothletError" && error.originalError) {
+		return error.originalError;
+	}
+	return error;
+}
+
+/**
+ * Read an error's stack.
+ * @param {*} error - The error.
+ * @returns {*} Its stack.
+ * @private
+ */
+const stackOf = (error) => error?.stack;
+
+/**
+ * The class name the error hooks report for an error.
+ * @param {*} error - The error.
+ * @returns {string} Its constructor's name, or "Error".
+ * @private
+ */
+const typeNameOf = (error) => error?.constructor?.name || "Error";
+
+/**
+ * @typedef {object} FailureRecord
+ * @property {function(): *} originalError - The unwrapped error.
+ * @property {function(): *} stack - The unwrapped error's stack.
+ * @property {function(*): string} typeOf - The class name of the error given (the thrown or the unwrapped one).
+ * @private
+ */
+
+/**
+ * A record of a failure that reads it only as the code that made it, and only when something asks (#599).
+ *
+ * Unwrapping an error reads its `name`, formatting its stack reads `name` and `message`, and the error hooks'
+ * `errorType` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
+ * threw it, so each is read through `runAs` — as that module — and at most once. Nothing is read until it is needed,
+ * so a failure no hook looks at runs no more of the error's code than plain JavaScript would.
+ *
+ * @param {*} error - What was thrown or rejected with.
+ * @param {function(Function, *): *} runAs - Runs a reader on a value as the code the failure belongs to.
+ * @returns {FailureRecord} The record.
+ * @public
+ */
+export function failureRecord(error, runAs) {
+	const values = new Map();
+	const once = (key, read) => {
+		if (!values.has(key)) values.set(key, read());
+		return values.get(key);
+	};
+	const types = new Map();
+	const record = {
+		originalError: () =>
+			once("originalError", () => {
+				const original = isObjectLike(error) ? runAs(unwrapThrown, error) : error;
+				if (isObjectLike(original) && !TARGET_FAILURES.has(original)) TARGET_FAILURES.set(original, record);
+				return original;
+			}),
+		stack: () =>
+			once("stack", () => {
+				const original = record.originalError();
+				return isObjectLike(original) ? runAs(stackOf, original) : undefined;
+			}),
+		typeOf: (value) => {
+			if (!isObjectLike(value)) return typeNameOf(value);
+			if (!types.has(value)) types.set(value, runAs(typeNameOf, value));
+			return types.get(value);
+		}
+	};
+	return record;
+}
+
+/**
+ * Remember whose code a failure is (see {@link failureRecord}). The first record kept for an error stands: the
+ * innermost code it was thrown from.
+ * @param {*} error - What was thrown or rejected with.
+ * @param {FailureRecord} record - Its record.
+ * @returns {FailureRecord} The record that stands for it.
+ * @public
+ */
+export function rememberFailure(error, record) {
+	if (!isObjectLike(error)) return record;
+	const kept = TARGET_FAILURES.get(error);
+	if (kept) return kept;
+	TARGET_FAILURES.set(error, record);
+	return record;
+}
+
+/**
+ * The record kept for a failure (see {@link rememberFailure}).
+ * @param {*} error - The error, as thrown or unwrapped.
+ * @returns {FailureRecord|undefined} Its record, or undefined when none was kept.
+ * @public
+ */
+export function rememberedFailure(error) {
+	return isObjectLike(error) ? TARGET_FAILURES.get(error) : undefined;
+}
+
+/**
+ * Give an error hook's `source` a `stack` read from a failure's record on first access (#599), so the stack is formatted
+ * only when a hook reads it, and then as the code the failure belongs to.
+ * @param {object} fields - The source's other fields.
+ * @param {FailureRecord} record - The failure's record.
+ * @returns {object} The source.
+ * @public
+ */
+export function failureSource(fields, record) {
+	let read = false;
+	let stack;
+	return Object.defineProperty(fields, "stack", {
+		get() {
+			if (!read) {
+				stack = record.stack();
+				read = true;
+			}
+			return stack;
+		},
+		enumerable: true,
+		configurable: true
+	});
+}
 
 /**
  * Call a hook's handler with its payload as a plain function, with no receiver (#625). Called as a method of the
@@ -180,13 +318,7 @@ function runtime_callHookHandler(hook, payload) {
  * @private
  */
 function markHookProcessed(error) {
-	if (!error || (typeof error !== "object" && typeof error !== "function")) return;
-	try {
-		error[ERROR_HOOK_PROCESSED] = true;
-	} catch {
-		// A frozen or non-extensible error rejects the mark; the thrown value must stay as it is.
-		UNMARKABLE_PROCESSED.add(error);
-	}
+	if (isObjectLike(error)) HOOK_PROCESSED.add(error);
 }
 
 /**
@@ -196,8 +328,7 @@ function markHookProcessed(error) {
  * @public
  */
 export function isHookProcessed(error) {
-	if (!error || (typeof error !== "object" && typeof error !== "function")) return false;
-	return error[ERROR_HOOK_PROCESSED] === true || UNMARKABLE_PROCESSED.has(error);
+	return isObjectLike(error) && HOOK_PROCESSED.has(error);
 }
 
 /**
@@ -1159,14 +1290,10 @@ export class HookManager extends ComponentBase {
 				}
 			} catch (error) {
 				// Execute error hooks for before hook failure
-				const sourceInfo = {
-					type: "before",
-					subset: hook.subset,
-					hookTag: hook.id,
-					hookId: hook.id,
-					timestamp: Date.now(),
-					stack: error?.stack
-				};
+				const sourceInfo = failureSource(
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
 				// next() so an around hook can catch it. Error hooks and suppression apply only to what
@@ -1239,14 +1366,10 @@ export class HookManager extends ComponentBase {
 				}
 			} catch (error) {
 				// Execute error hooks for after hook failure
-				const sourceInfo = {
-					type: "after",
-					subset: hook.subset,
-					hookTag: hook.id,
-					hookId: hook.id,
-					timestamp: Date.now(),
-					stack: error?.stack
-				};
+				const sourceInfo = failureSource(
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
 				// next() so an around hook can catch it. Error hooks and suppression apply only to what
@@ -1309,14 +1432,10 @@ export class HookManager extends ComponentBase {
 				}
 			} catch (error) {
 				// Execute error hooks for before hook failure
-				const sourceInfo = {
-					type: "before",
-					subset: hook.subset,
-					hookTag: hook.id,
-					hookId: hook.id,
-					timestamp: Date.now(),
-					stack: error?.stack
-				};
+				const sourceInfo = failureSource(
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
 				// next() so an around hook can catch it. Error hooks and suppression apply only to what
@@ -1372,14 +1491,10 @@ export class HookManager extends ComponentBase {
 				}
 			} catch (error) {
 				// Execute error hooks for after hook failure
-				const sourceInfo = {
-					type: "after",
-					subset: hook.subset,
-					hookTag: hook.id,
-					hookId: hook.id,
-					timestamp: Date.now(),
-					stack: error?.stack
-				};
+				const sourceInfo = failureSource(
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
 				// next() so an around hook can catch it. Error hooks and suppression apply only to what
@@ -1427,7 +1542,7 @@ export class HookManager extends ComponentBase {
 			throw error;
 		};
 		const observed = settleThenable(thenable, onFulfilled, fail);
-		if (observed instanceof Promise) return observed.then(undefined, fail);
+		if (inheritsFrom(observed, Promise)) return observed.then(undefined, fail);
 		return this.recordRejections(observed, record, onUnviewable);
 	}
 
@@ -1530,15 +1645,15 @@ export class HookManager extends ComponentBase {
 		const { core, isAsync, caller, entry, errorSink, runInCallerFlow, onUnobserved } = options;
 		const count = hooks.length;
 
-		const aroundSource = (hook, stack) => ({
-			type: "around",
-			subset: hook.subset,
-			hookTag: hook.id,
-			hookId: hook.id,
-			timestamp: Date.now(),
-			stack
-		});
-		const sinkAround = (hook, error) => errorSink(error, aroundSource(hook, error?.stack));
+		// The stack is read from the failure's record, as the code it belongs to (#599).
+		const sinkAround = (hook, error) =>
+			errorSink(
+				error,
+				failureSource(
+					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				)
+			);
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
@@ -1550,7 +1665,8 @@ export class HookManager extends ComponentBase {
 				result,
 				(value) => value,
 				(error) => sinkAround(hook, error),
-				() => onUnobserved(aroundSource(hook, undefined))
+				() =>
+					onUnobserved({ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now(), stack: undefined })
 			);
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
@@ -1645,17 +1761,31 @@ export class HookManager extends ComponentBase {
 				});
 			} catch (error) {
 				// Execute error hooks for always hook failure
-				const sourceInfo = {
-					type: "always",
-					subset: hook.subset,
-					hookTag: hook.id,
-					hookId: hook.id,
-					timestamp: Date.now(),
-					stack: error?.stack
-				};
+				const sourceInfo = failureSource(
+					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					this.failureOf(error)
+				);
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 			}
 		}
+	}
+
+	/**
+	 * The record of a failure (#599): the one kept for it, or — for a failure no record was kept for, such as one a
+	 * hook's own code threw — a new one that reads it outside every instance, so code the error carries runs as no
+	 * module and never as whoever is calling.
+	 * @param {*} error - What was thrown or rejected with.
+	 * @returns {FailureRecord} Its record.
+	 * @public
+	 */
+	failureOf(error) {
+		const kept = rememberedFailure(error);
+		if (kept) return kept;
+		const contextManager = this.slothlet.contextManager;
+		const runAs = contextManager?.runDetached
+			? (read, value) => contextManager.runDetached(read, undefined, [value])
+			: (read, value) => read(value);
+		return rememberFailure(error, failureRecord(error, runAs));
 	}
 
 	/**
@@ -1674,6 +1804,8 @@ export class HookManager extends ComponentBase {
 		markHookProcessed(error);
 
 		const hooks = this.getHooksForPath("error", path);
+		// Read from the failure's record, as the code it belongs to, and only when a hook will receive it (#599).
+		const errorType = hooks.length ? this.failureOf(error).typeOf(error) : "Error";
 
 		for (const hook of hooks) {
 			try {
@@ -1681,7 +1813,7 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					error,
-					errorType: error?.constructor?.name || "Error",
+					errorType,
 					source,
 					timestamp: new Date(),
 					api,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:56-07:00 (1791424196)
+ *	@Last modified time: 2026-11-03T03:44:57-08:00 (1793706297)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -126,7 +126,7 @@ if (isNode) {
 			// Reading the tag runs a value's own `Symbol.toStringTag` getter; one that throws is simply not
 			// a promise, so the check never changes what an ordinary return value does.
 			isPromise: (value) => {
-				if (value instanceof Promise) return true;
+				if (inheritsFrom(value, Promise)) return true;
 				try {
 					return Object.prototype.toString.call(value) === "[object Promise]";
 				} catch {
@@ -259,4 +259,41 @@ function scheduleMacrotask(fn) {
 	setTimeout(fn, 0);
 }
 
-export { isNode, fs, fsp, path, url, util, EventEmitter, AsyncLocalStorage, AsyncResource, createRequire, loadJson, scheduleMacrotask };
+/**
+ * The language's own `Function.prototype[Symbol.hasInstance]`, taken when this file loads, before any module runs.
+ * @type {Function}
+ * @private
+ */
+const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+
+/**
+ * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
+ * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run
+ * with the value slothlet is checking.
+ * @param {*} value - The value.
+ * @param {Function|null|undefined} ctor - The class; anything not a function answers false.
+ * @returns {boolean} Whether `ctor.prototype` is on the value's prototype chain.
+ * @public
+ * @example
+ * inheritsFrom(Promise.resolve(), Promise); // true
+ */
+function inheritsFrom(value, ctor) {
+	if (typeof ctor !== "function" || value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	return Reflect.apply(INTRINSIC_HAS_INSTANCE, ctor, [value]);
+}
+
+export {
+	isNode,
+	fs,
+	fsp,
+	path,
+	url,
+	util,
+	EventEmitter,
+	AsyncLocalStorage,
+	AsyncResource,
+	createRequire,
+	loadJson,
+	scheduleMacrotask,
+	inheritsFrom
+};

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
+ *	@Last modified time: 2026-11-03T23:03:10-08:00 (1793775790)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
@@ -1522,7 +1522,7 @@ export class LiveContextManager {
 			// Rethrow framework errors directly so they propagate with their original code.
 			// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 			// their original error type/code/status.
-			if (rawErrors || error instanceof SlothletError) throw error;
+			if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 			throw new SlothletError(
 				"CONTEXT_EXECUTION_FAILED",
 				{
@@ -1760,6 +1760,31 @@ export class LiveContextManager {
 		try {
 			this.#activeID = childStore.instanceID;
 			return await fn();
+		} finally {
+			this.#activeID = previousInstanceID;
+			this.instances.delete(childStore.instanceID);
+		}
+	}
+
+	/**
+	 * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+	 * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+	 * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {function(): *} fn - Synchronous function to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @internal
+	 */
+	runInSnapshotFlowSync(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		this.instances.set(childStore.instanceID, childStore);
+		const previousInstanceID = this.#activeID;
+		try {
+			this.#activeID = childStore.instanceID;
+			return fn();
 		} finally {
 			this.#activeID = previousInstanceID;
 			this.instances.delete(childStore.instanceID);
