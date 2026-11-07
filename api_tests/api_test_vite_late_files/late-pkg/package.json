@@ -1,0 +1,6 @@
+{
+	"name": "late-pkg",
+	"version": "1.0.0",
+	"type": "module",
+	"exports": "./context.mjs"
+}
