@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:58:55-08:00 (1793851135)
+ *	@Last modified time: 2026-11-06T18:51:06-08:00 (1794019866)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3864,25 +3864,66 @@ const WELL_KNOWN_SYMBOLS = new Set(
 
 /**
  * The engine's methods that call a callback with what an object holds in its internal slots (a `Map`'s entries, what
- * a promise settles to), taken before any module's code runs. Called on a stand-in, their callbacks get those values
- * handed out as the module's (see runtime_membrane).
+ * a promise settles to, the values an iterator steps through), taken before any module's code runs. Called on a
+ * stand-in, their callbacks get those values handed out as the module's (see runtime_membrane).
  * @type {Set<Function>}
  * @private
  */
-const SLOT_CALLBACK_METHODS = new Set([
-	Map.prototype.forEach,
-	Set.prototype.forEach,
-	Promise.prototype.then,
-	Promise.prototype.catch,
-	Promise.prototype.finally
-]);
+const SLOT_CALLBACK_METHODS = new Set(
+	[
+		Map.prototype.forEach,
+		Set.prototype.forEach,
+		Promise.prototype.then,
+		Promise.prototype.catch,
+		Promise.prototype.finally,
+		// The iterator helpers, where the engine has them.
+		...(typeof Iterator === "function"
+			? ["forEach", "some", "every", "find", "reduce", "map", "filter", "flatMap"].map(
+					(name) => Reflect.getOwnPropertyDescriptor(Iterator.prototype, name)?.value
+				)
+			: [])
+	].filter((method) => typeof method === "function")
+);
 
 /**
- * The engine's own readers of what a collection, a promise and an iterator hold in their internal slots, taken before
- * any module's code runs, so a module replacing them on the prototypes changes nothing they read.
- * @type {{mapEntries: Function, setValues: Function, then: Function, arrayIterator: object}}
+ * The prototypes of the language's own iterators whose `next` steps through state held in an internal slot of the
+ * iterator, taken before any module's code runs: an array's iterator (`values()`, `keys()`, `entries()`, and an
+ * array's `Symbol.iterator`), the one `matchAll` returns, an iterator helper, the wrapper `Iterator.from` returns, and
+ * an `Intl.Segmenter`'s. A `Map`'s and a `Set`'s iterators are told by `util.types` (see runtime_isSlotObject).
+ * @type {Set<object>}
  * @private
  */
+const NATIVE_ITERATOR_PROTOTYPES = (() => {
+	const prototypes = new Set();
+	const samples = [
+		() => [][Symbol.iterator](),
+		() => /a/g[Symbol.matchAll](""),
+		() => [].values().map((value) => value),
+		() => Iterator.from({ next: () => ({ done: true, value: undefined }) }),
+		() => new Intl.Segmenter().segment("")[Symbol.iterator]()
+	];
+	for (const sample of samples) {
+		try {
+			const prototype = Reflect.getPrototypeOf(sample());
+			if (prototype !== null) prototypes.add(prototype);
+		} catch {
+			// An engine without the iterator (no iterator helpers, no `Intl`) has no such prototype.
+		}
+	}
+	return prototypes;
+})();
+
+/**
+ * Whether an object is one of the language's own iterators listed in {@link NATIVE_ITERATOR_PROTOTYPES}: its methods
+ * work only on the iterator itself, and what it has left cannot be read without stepping it.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such an iterator.
+ * @private
+ */
+function runtime_isNativeIterator(value) {
+	return NATIVE_ITERATOR_PROTOTYPES.has(Reflect.getPrototypeOf(value));
+}
+
 /**
  * Node's `vm.Script`, taken before any module's code runs: a script's code is held in a slot of its own, so a module's
  * script runs as that module (see runtime_membrane).
@@ -3902,11 +3943,16 @@ const VM_NATIVE_SCRIPT = (() => {
 	return typeof parent === "function" && parent !== Function.prototype ? parent : null;
 })();
 
+/**
+ * The engine's own readers of what a collection and a promise hold in their internal slots, taken before any module's
+ * code runs, so a module replacing them on the prototypes changes nothing they read.
+ * @type {{mapEntries: Function, setValues: Function, then: Function}}
+ * @private
+ */
 const SLOT_READERS = {
 	mapEntries: Map.prototype.entries,
 	setValues: Set.prototype.values,
-	then: Promise.prototype.then,
-	arrayIterator: Object.getPrototypeOf([][Symbol.iterator]())
+	then: Promise.prototype.then
 };
 
 /**
@@ -3999,8 +4045,8 @@ function runtime_holdsCode(value, depth, budget) {
 	try {
 		if (util.types.isGeneratorObject(value)) return true;
 		if (runtime_isSlotObject(value)) return runtime_slotHoldsCode(value, depth, budget);
-		// What an array iterator has left cannot be read without stepping it.
-		if (Reflect.getPrototypeOf(value) === SLOT_READERS.arrayIterator) return true;
+		// What one of the language's own iterators has left cannot be read without stepping it.
+		if (runtime_isNativeIterator(value)) return true;
 		const prototype = Reflect.getPrototypeOf(value);
 		// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
 		// still read below.
@@ -4311,9 +4357,10 @@ function runtime_membrane(maker, owner, original) {
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
 	const isFunction = typeof original === "function";
-	// An object with internal slots carrying the module's code (see runtime_slotHoldsCode): the engine's own methods it
-	// is read for work on its slots, so they run on the object itself, not on its stand-in.
-	const isSlot = !isProxy && !isFunction && runtime_isSlotObject(original);
+	// An object with internal slots carrying the module's code (see runtime_slotHoldsCode), or one of the language's own
+	// iterators: the engine's own methods it is read for work on its slots, so they run on the object itself, not on its
+	// stand-in.
+	const isSlot = !isProxy && !isFunction && (runtime_isSlotObject(original) || runtime_isNativeIterator(original));
 	// A compiled script of the module's: what its methods run is the module's code.
 	const isScript =
 		!isProxy &&

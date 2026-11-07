@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T00:59:24-08:00 (1793782764)
+ *	@Last modified time: 2026-11-05T17:13:09-08:00 (1793927589)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,7 +113,7 @@ import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/h
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
-import { forgetInstanceScripts } from "#handlers/frame-placement";
+import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -1929,6 +1929,8 @@ class Slothlet {
  */
 export async function slothlet(config) {
 	const instance = new Slothlet();
+	// The package whose code is creating the instance is the host's own (#714).
+	recordInstanceOwner(instance);
 	// Retain the config as passed, before anything reads it, so restart() can rebuild from it (#504).
 	instance._retainOriginalConfig(config);
 	const api = await instance.load(config);

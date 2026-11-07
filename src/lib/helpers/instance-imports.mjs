@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:47-07:00 (1793426627)
+ *	@Last modified time: 2026-11-06T20:15:09-08:00 (1794024909)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1083,6 +1083,106 @@ export function isCommonJSFile(filePath) {
 }
 
 /**
+ * The global key a host file's registration puts what it captures under (#714): an array of the `Error`s each of the
+ * host's own files vite transformed created as its last statement, read by slothlet's frame placement.
+ * @type {string}
+ * @internal
+ */
+export const VITE_HOST_SCRIPTS = "@cldmv/slothlet.viteHostScripts";
+
+/**
+ * The global key the records of who loaded each of the host's own vite-transformed files go under (#714): the `Error`
+ * each record's virtual module creates, frozen, its message the JSON of the importers, read by slothlet's frame placement.
+ * @type {string}
+ * @internal
+ */
+export const VITE_LOADED_BY = "@cldmv/slothlet.viteLoadedBy";
+
+/**
+ * The specifier of the virtual module that records who loaded a file (#714), before its `id` parameter: imported by the
+ * statement the vite plugin appends to each of the host's own files, resolved by the plugin to the id with a leading
+ * `\0`, which no file on disk can have.
+ * @type {string}
+ * @internal
+ */
+export const LOADED_BY_SPECIFIER = "virtual:slothlet-loaded-by?";
+
+/**
+ * The files of slothlet's own a host-file registration is never appended to: its source or build tree and the package's
+ * entry files.
+ * @type {string[]}
+ * @private
+ */
+const OWN_TREE = [
+	...OWN_PREFIXES,
+	...[new URL("../../", import.meta.url)].filter((u) => u.protocol === "file:").map((u) => toSlashPath(u.href))
+];
+
+/**
+ * A JavaScript or TypeScript ES module file name (`.js`, `.mjs`, `.ts`, `.mts`, `.jsx`, `.tsx`).
+ * @type {RegExp}
+ * @private
+ */
+const MODULE_FILE = /\.(?:m?[jt]sx?)$/;
+
+/**
+ * The registration the vite plugin appends to a file of the host's own (#714): one statement that pushes an `Error`
+ * created by the file's own top-level code. Vite transforms the host's files, so their code never hashes as the files on
+ * disk do; the `Error`'s stack, read once by slothlet, shows the script vite compiled the file into and the runner that
+ * evaluated it, and slothlet takes that script as the file's own source only when the runner is vitest's or vite's own
+ * code. After it, an import of the virtual module that records which modules loaded the file (see
+ * {@link loadedBySource}); an import is evaluated before the file's own code, wherever it is written. Appended, so no
+ * line of the file moves. Instance files, packages under `node_modules`, slothlet's own files, CommonJS, virtual modules
+ * and files that are not JavaScript are left as they are.
+ * @param {string} code - The file's code, already compiled to JavaScript.
+ * @param {string} id - The module id.
+ * @returns {{code: string, map: null}|null} The code with the registration appended, or null.
+ * @private
+ */
+function hostScriptRegistration(code, id) {
+	if (!isRegisteredFile(id)) return null;
+	const loadedBy = `import ${JSON.stringify(LOADED_BY_SPECIFIER + new URLSearchParams({ id }).toString())};`;
+	return { code: `${code}\n;${SCRIPT_REGISTRATION}\n${loadedBy}\n`, map: null };
+}
+
+/**
+ * The statement that registers the script vite compiled a file into (#714): it pushes an `Error` the file's own
+ * top-level code creates.
+ * @type {string}
+ * @private
+ */
+const SCRIPT_REGISTRATION = `(globalThis[Symbol.for(${JSON.stringify(VITE_HOST_SCRIPTS)})] ??= []).push(new Error());`;
+
+/**
+ * Whether the vite plugin appends a registration to a module id (#714): a JavaScript or TypeScript ES module file of
+ * an absolute path, not under `node_modules`, not slothlet's own and not CommonJS.
+ * @param {string} id - The module id.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function isRegisteredFile(id) {
+	const [base] = splitQuery(id);
+	const path = toSlashPath(base);
+	if (!/^(?:\/|[a-z]:\/)/i.test(path) || !MODULE_FILE.test(path) || path.includes("/node_modules/")) return false;
+	if (OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`))) return false;
+	return !isCommonJSFile(path);
+}
+
+/**
+ * The code of the virtual module that records who loaded a file (#714): one statement that creates an `Error`, freezes
+ * it with the importers as its message, and pushes it. The plugin writes the code, from the imports it resolved, so no
+ * file's code can say what it says; slothlet reads the file it is about from the frame of the `Error`, the virtual
+ * module's own.
+ * @param {Array<string>} importers - The ids of the modules recorded as loading the file.
+ * @returns {string} The code.
+ * @private
+ */
+function loadedBySource(importers) {
+	const registry = `globalThis[Symbol.for(${JSON.stringify(VITE_LOADED_BY)})]`;
+	return `const record = Object.freeze(new Error(${JSON.stringify(JSON.stringify(importers))}));\n(${registry} ??= []).push(record);\n`;
+}
+
+/**
  * Vite plugin applying the same rule inside a vite module graph — for leaves a consumer loads
  * through slothlet's `import` hook under vitest (docs/TESTING.md), where Node's resolve hooks
  * never see the leaf's imports. Add it to the consumer's `vitest.config` `plugins`.
@@ -1091,7 +1191,13 @@ export function isCommonJSFile(filePath) {
  * Node load hook generates: the file runs through the instance's private CommonJS cache in the
  * test's own process, so its own `require()`s — CommonJS or ES module — are per instance too, and
  * the copy is shared with the instance's `.cjs` leaves.
- * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `load`).
+ *
+ * Every JavaScript or TypeScript ES module it transforms that is not under `node_modules` and not slothlet's own, an
+ * instance file among them, gets one statement appended that records the script vite compiled it into (#714). Each such
+ * file that is not an instance file also imports a virtual module that records which modules loaded it, as the plugin
+ * resolved their imports: an instance file, or another file a module loaded. With permissions on, code running inside
+ * a module's call is then attributed as it is under Node's own loader (docs/PERMISSIONS.md).
+ * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `transform`, `load`).
  * @public
  * @example
  * // vitest.config.mjs
@@ -1099,22 +1205,57 @@ export function isCommonJSFile(filePath) {
  * export default defineConfig({ plugins: [slothletInstanceImports()] });
  */
 export function slothletInstanceImports() {
+	/**
+	 * The files no instance tags that a module loaded (#714), by id: the ids of the modules that import each, an instance
+	 * file or another file a module loaded.
+	 * @type {Map<string, Set<string>>}
+	 */
+	const moduleImporters = new Map();
+	/**
+	 * Record that a module loaded a file no instance tags, of an absolute path and not slothlet's own.
+	 * @param {object|null} resolved - What the import resolved to.
+	 * @param {string} importer - The importing module's id.
+	 * @returns {void}
+	 */
+	const noteModuleImport = (resolved, importer) => {
+		if (!resolved || resolved.external || typeof resolved.id !== "string" || resolved.id.includes(MARKER)) return;
+		const path = toSlashPath(splitQuery(resolved.id)[0]);
+		if (!/^(?:\/|[a-z]:\/)/i.test(path) || OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`)))
+			return;
+		let importers = moduleImporters.get(resolved.id);
+		if (!importers) moduleImporters.set(resolved.id, (importers = new Set()));
+		importers.add(importer);
+		// Through a file a module loaded, the modules that loaded it: a file under `node_modules` gets no record of its own.
+		for (const through of moduleImporters.get(importer) ?? []) importers.add(through);
+	};
 	return {
 		name: "slothlet-instance-imports",
 		enforce: "pre",
 		/**
-		 * Resolve a relative/`file:` import of a slothlet leaf with the leaf's instance query.
+		 * Resolve a relative/`file:` import of a slothlet leaf with the leaf's instance query, and record the files no
+		 * instance tags that a module imports by such a specifier or through a file a module loaded (#714).
 		 * @param {string} source - The specifier as written.
 		 * @param {string|undefined} importer - The importing module's id.
 		 * @param {object} [options] - Vite resolve options.
-		 * @returns {Promise<object|null>} The resolution, or null to defer to other resolvers.
+		 * @returns {Promise<object|string|null>} The resolution, or null to defer to other resolvers.
 		 */
 		async resolveId(source, importer, options) {
-			if (typeof importer !== "string" || !importer.includes(MARKER) || !isFileSpecifier(source)) return null;
+			if (typeof source === "string" && source.startsWith(LOADED_BY_SPECIFIER)) return `\0${source}`;
+			if (typeof importer !== "string") return null;
+			const tagged = importer.includes(MARKER);
+			// A file only the host loaded imports as vite resolves it.
+			if (!tagged && !moduleImporters.has(importer)) return null;
+			// A bare specifier an instance file imports is recorded where the file is transformed, below.
+			if (tagged && !isFileSpecifier(source)) return null;
 			const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
-			if (!resolved || resolved.external) return resolved;
-			const id = propagateInstanceQuery(source, importer, resolved.id);
-			return id === resolved.id ? resolved : { ...resolved, id };
+			if (tagged && resolved && !resolved.external) {
+				const id = propagateInstanceQuery(source, importer, resolved.id);
+				if (id !== resolved.id) return { ...resolved, id };
+			}
+			// A file a module loaded that no instance tags (a package's file, an import of a file a module loaded): who
+			// loaded it is recorded, as Node's resolve hook records it.
+			noteModuleImport(resolved, importer);
+			return resolved;
 		},
 		/**
 		 * Record an instance module's imports where the module runs. A vite module graph is resolved in the
@@ -1130,19 +1271,24 @@ export function slothletInstanceImports() {
 			 * @returns {Promise<object|null>} The code with the registration appended, or null.
 			 */
 			async handler(code, id) {
-				if (typeof id !== "string" || !id.includes(MARKER)) return null;
+				if (typeof id !== "string") return null;
+				if (!id.includes(MARKER)) return hostScriptRegistration(code, id);
 				const [base, query = ""] = splitQuery(id);
 				const instanceID = new URLSearchParams(query).get("slothlet_instance");
 				if (instanceID === null || isCommonJSFile(base)) return null;
+				// The script vite compiled an instance file into is registered too, so its code is told to be the file's own
+				// under vitest as it is under Node's own loader (#714).
+				const registration = isRegisteredFile(id) ? `\n;${SCRIPT_REGISTRATION}\n` : "";
 				let ast;
 				try {
 					ast = this.parse(code);
 				} catch {
 					// Code this parser cannot read is left as it is; its imports go unrecorded.
-					return null;
+					return registration ? { code: `${code}${registration}`, map: null } : null;
 				}
 				// Static imports and re-exports, and dynamic import() calls with a literal specifier anywhere in the module.
 				const specifiers = new Set();
+				const bare = new Set();
 				const visit = (node) => {
 					if (!node || typeof node !== "object") return;
 					if (Array.isArray(node)) {
@@ -1153,29 +1299,44 @@ export function slothletInstanceImports() {
 					const isImport = /^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/.test(node.type);
 					const source = isImport ? node.source?.value : undefined;
 					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
+					else if (typeof source === "string") bare.add(source);
 					for (const key of Object.keys(node)) if (key !== "type") visit(node[key]);
 				};
 				visit(ast.body);
+				// A file no instance tags that the module imports by a bare specifier (a linked package, its package's own
+				// `#imports`) is recorded as the module's (#714). A specifier computed at run time is not seen here.
+				for (const specifier of bare) noteModuleImport(await this.resolve(specifier, id), id);
 				const children = [];
 				for (const specifier of specifiers) {
 					const resolved = await this.resolve(specifier, id);
 					if (resolved && !resolved.external && resolved.id.includes(MARKER)) children.push(resolved.id);
 				}
-				if (!children.length) return null;
-				const registration = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`;
-				return { code: `${code}\n;${registration}\n`, map: null };
+				if (!children.length) return registration ? { code: `${code}${registration}`, map: null } : null;
+				const imports = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`;
+				return { code: `${code}${registration}\n;${imports}\n`, map: null };
 			}
 		},
 		/**
-		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper.
+		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper, a JSON file carrying one
+		 * as Node loads a JSON module, and the virtual module that records which modules loaded a file (#714), from the
+		 * imports resolved so far.
 		 * @param {string} id - The module id.
-		 * @returns {object|null} The wrapper code, or null to defer to vite's own loading.
+		 * @returns {object|null} The module's code, or null to defer to vite's own loading.
 		 */
 		load(id) {
+			if (typeof id === "string" && id.startsWith(`\0${LOADED_BY_SPECIFIER}`)) {
+				const loaded = new URLSearchParams(id.slice(1 + LOADED_BY_SPECIFIER.length)).get("id") ?? "";
+				return { code: loadedBySource([...(moduleImporters.get(loaded) ?? [])]), map: null };
+			}
 			if (typeof id !== "string" || !id.includes(MARKER)) return null;
 			const [base, query = ""] = splitQuery(id);
 			const instanceID = new URLSearchParams(query).get("slothlet_instance");
-			if (instanceID === null || !isCommonJSFile(base)) return null;
+			if (instanceID === null) return null;
+			// A JSON file a leaf imports carries the instance query, as under Node; vite loads no JSON file under a query of
+			// its own, so it is loaded here, as Node loads a JSON module: its value as the default export (#714).
+			if (/\.json$/i.test(toSlashPath(base)))
+				return { code: `export default ${JSON.stringify(JSON.parse(nodeBuiltin("node:fs").readFileSync(base, "utf8")))};\n`, map: null };
+			if (!isCommonJSFile(base)) return null;
 			return { code: commonJSWrapperSource(base, instanceID, null) };
 		}
 	};
