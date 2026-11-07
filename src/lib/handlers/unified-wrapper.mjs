@@ -1591,17 +1591,15 @@ export function runtime_selfView(node, reader) {
 	};
 	// The prototype the node reports, as the reader is handed it, by `Object.getPrototypeOf` and through `__proto__`
 	// alike (#667): a node (a class's base class) as its view, a class's prototype as its class's node hands it out, and
-	// the instance's own prototype otherwise, when it is the module's value, as a member view held to the node's path. A
-	// stand-in the node reports for a withheld prototype, or one of the language's, is handed out as it is.
+	// the own prototype of an instance whose class cannot be told as a member view held to the instance's path. Any other
+	// prototype, an emitter's own among them (`Object.getPrototypeOf(bus) === Bus.prototype` for a module allowed it),
+	// or the stand-in for one withheld, is handed out as the node reports it.
 	const shownPrototype = (prototype) => {
 		if (prototype === null || (typeof prototype !== "object" && typeof prototype !== "function")) return prototype;
 		if (resolveWrapper(prototype) !== null || capturedViewChildren.has(prototype)) return runtime_selfView(prototype, reader);
 		const shown = classPrototype(prototype);
 		if (shown !== null) return shown;
-		const impl = inner?.____slothletInternal.impl;
-		if (impl !== null && typeof impl === "object" && !Array.isArray(impl) && prototype === Reflect.getPrototypeOf(impl)) {
-			return viewMember(null, prototype);
-		}
+		if (inner && prototype === runtime_unclassedInstancePrototype(inner)) return viewMember(null, prototype);
 		return prototype;
 	};
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
