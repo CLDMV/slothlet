@@ -33,7 +33,14 @@ import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import util from "node:util";
 import slothlet from "@cldmv/slothlet";
-import { reads, refreeze, freezeLater } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
+import {
+	reads,
+	refreeze,
+	freezeLater,
+	frozenAtLoad,
+	ownerWrites,
+	refreezeAtLoad
+} from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_plain_js_nodes");
 
@@ -110,11 +117,28 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 			expect(util.inspect(api.owner.frozenList)).toBe(util.inspect(plain.frozenList));
 		});
 
-		// Blocked on how an unloaded lazy node answers for a module frozen when it loads (#653): see the #667 report. Eager
-		// mode can give a frozen export's node the export's integrity; a lazy stand-in cannot know it before the module loads.
-		it.todo("answers an object export frozen when it loaded as frozen, as the plain module does (frozenAtLoad)");
-		it.todo("refuses the owner's own write to a member frozen when it loaded, as strict mode does (ownerWrites)");
-		it.todo("re-freezes an object export frozen when it loaded as a no-op (refreezeAtLoad)");
+		it("answers an object export frozen when it loaded as frozen, as the plain module does", async () => {
+			api = await load();
+			const plain = frozenAtLoad(await plainOwner());
+			expect(await api.reader.readFrozenAtLoad()).toEqual(plain);
+			expect(frozenAtLoad(api.owner)).toEqual(plain);
+		});
+
+		it("refuses the owner's own write to a member frozen when it loaded, as strict mode does", async () => {
+			api = await load();
+			const plain = ownerWrites(await plainOwner());
+			expect(await api.owner.writeOwnFrozen()).toEqual(plain);
+			// The host's write, from this strict-mode file, is refused the same way.
+			expect(ownerWrites(api.owner)).toEqual(plain);
+		});
+
+		it("re-freezes an object export frozen when it loaded as a no-op", async () => {
+			api = await load();
+			const plain = await plainOwner();
+			expect(await api.reader.refreezeOwnerAtLoad()).toBe(refreezeAtLoad(plain));
+			expect(refreezeAtLoad(api.owner)).toBe(refreezeAtLoad(plain));
+			expect(frozenAtLoad(api.owner)).toEqual(frozenAtLoad(plain));
+		});
 
 		// V8's structured serializer refuses every Proxy (`#<Object> could not be cloned`), and a node is one by design: it
 		// cannot hand out the module's object itself, which would skip the read and write rules for everything it holds.
