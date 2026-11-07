@@ -21,6 +21,7 @@
 import { EventEmitter } from "node:events";
 import { self } from "@cldmv/slothlet/runtime";
 import { ownerWrites, freezeLater, reads } from "../../api_test_plain_js_nodes_lib/cases.mjs";
+import { Relay } from "../../api_test_plain_js_nodes_lib/relay-class.mjs";
 
 /** A base class with a static method its derived class inherits. */
 export class Base {
@@ -142,6 +143,26 @@ class Bus extends EventEmitter {
 /** An instance of {@link Bus}. */
 export const bus = new Bus();
 
+export { Relay };
+
+/** An instance of {@link Relay}, an emitter class this module exports. */
+export const relay = new Relay();
+
+/**
+ * Whether this module reads its own emitters' prototypes through `self` as the objects themselves.
+ * @returns {object} The answers, per emitter and path.
+ */
+export function ownEmitterIdentity() {
+	return {
+		busPrototype: Object.getPrototypeOf(self.owner.bus) === Bus.prototype,
+		busReflect: Reflect.getPrototypeOf(self.owner.bus) === Bus.prototype,
+		busAccessor: self.owner.bus.__proto__ === Bus.prototype,
+		relayPrototype: Object.getPrototypeOf(self.owner.relay) === Relay.prototype,
+		relayReflect: Reflect.getPrototypeOf(self.owner.relay) === Relay.prototype,
+		relayAccessor: self.owner.relay.__proto__ === Relay.prototype
+	};
+}
+
 /**
  * Which real prototypes hold `key`, as written through the instances' nodes.
  * @param {string} key - The member looked for.
@@ -156,6 +177,7 @@ export function prototypesHolding(key) {
 		foo: Object.hasOwn(Foo.prototype, key),
 		fooSub: Object.hasOwn(FooSub.prototype, key),
 		bus: Object.hasOwn(Bus.prototype, key),
+		relay: Object.hasOwn(Relay.prototype, key),
 		emitter: Object.hasOwn(EventEmitter.prototype, key),
 		object: Object.hasOwn(Object.prototype, key)
 	};

@@ -27,7 +27,8 @@
  * rule still refuses a call reached through a reported prototype or an instance's class. An instance whose class cannot
  * be told from descriptors answers its prototype alike on every path, behind its own node's check; a subclass
  * instance's chain is checked at each level against the class owning it; and an emitter's prototype answers alike on
- * every path without a write landing on a prototype other values share.
+ * every path: a module that may call it but does not own it reads and calls through a view that refuses its writes, and
+ * one denied it is answered a stand-in, so no write lands on a prototype the module does not own.
  * @module tests/vitests/suites/unified-wrapper/plain-js-node-shapes
  */
 
@@ -49,8 +50,10 @@ import {
 	oddShapeReads,
 	oddShapeWrites,
 	chainReads,
-	emitterPrototypes
+	emitterPrototypes,
+	relayInstanceOf
 } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
+import { Relay } from "../../../../api_tests/api_test_plain_js_nodes_lib/relay-class.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_plain_js_nodes");
 
@@ -80,6 +83,9 @@ const DENY_CLASSES = {
  * @returns {object} The nodes.
  */
 const heldOddShapes = (api) => Object.fromEntries(ODD_SHAPES.map((name) => [name, api.owner[name]]));
+
+/** The members the emitter cases write, cleared from the prototypes other cases share. */
+const WRITE_KEYS = ["selfEmitter", "heldEmitter", "selfRelay", "heldRelay", "keptEmitter", "plainEmitter"];
 
 /** A member no other code uses, written onto prototypes to see where the write lands. */
 const PROBE_KEY = "__slothlet667PrototypeProbe";
@@ -474,47 +480,114 @@ describe.each(
 		await api?.shutdown?.();
 		api = null;
 		// A write that reached a shared prototype is undone, so it cannot leak into later tests.
-		for (const key of ["selfEmitter", "heldEmitter"]) {
+		for (const key of WRITE_KEYS) {
 			delete EventEmitter.prototype[key];
 			delete Object.prototype[key];
+			delete Relay.prototype[key];
 		}
 	});
 
-	it("answers it alike by Object.getPrototypeOf and __proto__, and never lands a write on a shared prototype", async () => {
+	/** What a module reading each emitter, on each path, is run as, with the member it writes. */
+	const probes = () => [
+		["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
+		["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],
+		["selfRelay", "relay", () => api.reader.readRelay("selfRelay")],
+		["heldRelay", "relay", () => api.reader.readHeldEmitter(api.owner.relay, "heldRelay")]
+	];
+
+	it("answers each path as this case requires, and lands a write only as plain JS would for the case that allows it", async () => {
 		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 		const plainModule = await plainOwner();
-		const plain = emitterPrototypes(plainModule.bus, "plainEmitter");
-		const plainLanded = plainModule.prototypesHolding("plainEmitter");
-		for (const [key, run] of [
-			["selfEmitter", () => api.reader.readEmitter("selfEmitter")],
-			["heldEmitter", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")]
-		]) {
+		const plain = { bus: emitterPrototypes(plainModule.bus, "plainEmitter"), relay: emitterPrototypes(plainModule.relay, "plainEmitter") };
+		for (const [key, emitter, run] of probes()) {
 			const outcome = await run();
 			const landed = await api.owner.prototypesHolding(key);
-			expect(outcome.pathsAgree).toBe(true);
-			expect(landed.emitter).toBe(false);
-			expect(landed.object).toBe(false);
+			expect(landed.emitter, key).toBe(false);
+			expect(landed.object, key).toBe(false);
 			if (permissions === null) {
-				expect(outcome).toEqual(plain);
-				expect(landed).toEqual(plainLanded);
+				// With permissions off nothing here is refused, so the answers are plain JS's.
+				expect(outcome, key).toEqual(plain[emitter]);
+				expect(landed[emitter], key).toBe(true);
 				continue;
 			}
-			expect(outcome.writeProtoAccessor).toBe(outcome.writePrototype);
+			expect(landed[emitter], key).toBe(false);
 			if (permissions === DENY_READER) {
-				// A module denied the emitter is reported the nearest prototype holding none of the module's code, on both
-				// paths, and a write meant for the emitter's class is refused rather than landing on that shared prototype.
-				expect(outcome).toEqual({
+				// A module denied the emitter is reported the nearest prototype holding none of the module's code, on every
+				// path, and a write meant for the emitter's class is refused rather than landing on that shared prototype.
+				expect(outcome, key).toEqual({
 					pathsAgree: true,
 					prototypeName: "EventEmitter",
+					reflectName: "EventEmitter",
 					protoAccessorName: "EventEmitter",
+					pingByPrototype: "threw TypeError",
+					pingByReflect: "threw TypeError",
+					pingByProtoAccessor: "threw TypeError",
+					instanceOfEmitter: true,
+					prototypeInstanceOfEmitter: true,
+					parentIsEmitterPrototype: true,
 					writePrototype: "threw PERMISSION_DENIED",
+					writeReflect: "threw PERMISSION_DENIED",
 					writeProtoAccessor: "threw PERMISSION_DENIED"
 				});
-				expect(landed.bus).toBe(false);
-			} else {
-				expect(outcome.prototypeName).toBe(plain.prototypeName);
-				expect(outcome.protoAccessorName).toBe(plain.protoAccessorName);
+				continue;
 			}
+			// A module that may call the emitter but does not own it reads and calls as plain JS does, and is refused the write.
+			expect(outcome, key).toEqual({
+				...plain[emitter],
+				writePrototype: "threw LOOSE_SET_NOT_OWNED",
+				writeReflect: "threw LOOSE_SET_NOT_OWNED",
+				writeProtoAccessor: "threw LOOSE_SET_NOT_OWNED"
+			});
 		}
+	});
+
+	it("holds a node a module kept to the same answers, used from outside any call", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const kept = await api.reader.keepEmitter();
+		const outcome = await kept("keptEmitter");
+		const landed = await api.owner.prototypesHolding("keptEmitter");
+		expect(landed.emitter).toBe(false);
+		expect(landed.bus).toBe(permissions === null);
+		if (permissions !== null) expect(outcome.pathsAgree).toBe(true);
+	});
+
+	it("tests instanceof through the node, and against the class itself only as the module may hold its prototype", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const plainModule = await plainOwner();
+		const plain = relayInstanceOf(plainModule.relay, plainModule.Relay, Relay);
+		expect(plain).toEqual({ byNode: true, byOwnConstructor: true, byImport: true, identityByImport: true });
+		const throughSelf = await api.reader.relayClassTests();
+		const held = await api.reader.heldRelayClassTests(api.owner.relay, api.owner.Relay);
+		if (permissions === null) {
+			expect(throughSelf).toEqual(plain);
+			expect(held).toEqual(plain);
+		} else {
+			// Identity against the raw class would need a path back to its raw prototype, which a module not owning it never gets.
+			const expected = {
+				byNode: true,
+				byOwnConstructor: true,
+				byImport: false,
+				identityByImport: false
+			};
+			expect(throughSelf).toEqual(expected);
+			expect(held).toEqual(expected);
+		}
+	});
+
+	it("keeps its own answers for the owner and for the host", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		expect(await api.owner.ownEmitterIdentity()).toEqual({
+			busPrototype: true,
+			busReflect: true,
+			busAccessor: true,
+			relayPrototype: true,
+			relayReflect: true,
+			relayAccessor: true
+		});
+		await api.owner.relay;
+		// This file's own `Relay` is a copy of the class the modules hold, so the host compares with the class's node.
+		expect(Object.getPrototypeOf(api.owner.relay)).toBe(api.owner.Relay.prototype);
+		expect(Reflect.getPrototypeOf(api.owner.relay)).toBe(api.owner.Relay.prototype);
+		expect(Object.getPrototypeOf(api.owner.bus).constructor.name).toBe("Bus");
 	});
 });

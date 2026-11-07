@@ -21,6 +21,7 @@
  */
 
 import util from "node:util";
+import { EventEmitter } from "node:events";
 
 /**
  * Run `step`, answering what it returned or how it threw.
@@ -264,14 +265,41 @@ export function emitterPrototypes(bus, key) {
 	return {
 		pathsAgree: attempt(() => bus.__proto__ === Object.getPrototypeOf(bus) && Reflect.getPrototypeOf(bus) === Object.getPrototypeOf(bus)),
 		prototypeName: attempt(() => Object.getPrototypeOf(bus).constructor.name),
+		reflectName: attempt(() => Reflect.getPrototypeOf(bus).constructor.name),
 		protoAccessorName: attempt(() => bus.__proto__.constructor.name),
+		pingByPrototype: attempt(() => Object.getPrototypeOf(bus).ping()),
+		pingByReflect: attempt(() => Reflect.getPrototypeOf(bus).ping()),
+		pingByProtoAccessor: attempt(() => bus.__proto__.ping()),
+		instanceOfEmitter: attempt(() => bus instanceof EventEmitter),
+		prototypeInstanceOfEmitter: attempt(() => Object.getPrototypeOf(bus) instanceof EventEmitter),
+		parentIsEmitterPrototype: attempt(() => Object.getPrototypeOf(Object.getPrototypeOf(bus)) === EventEmitter.prototype),
 		writePrototype: attempt(() => {
 			Object.getPrototypeOf(bus)[key] = 1;
+			return "written";
+		}),
+		writeReflect: attempt(() => {
+			Reflect.getPrototypeOf(bus)[key] = 1;
 			return "written";
 		}),
 		writeProtoAccessor: attempt(() => {
 			bus.__proto__[key] = 1;
 			return "written";
 		})
+	};
+}
+
+/**
+ * Test an emitter against its class, both as a class's node (or the plain class) and as the class itself.
+ * @param {object} relay - The owner's emitter, however it was reached.
+ * @param {Function} node - Its class as the code running this reads it: a node, or the plain class.
+ * @param {Function} relayClass - The class itself, imported.
+ * @returns {object} What each test answered.
+ */
+export function relayInstanceOf(relay, node, relayClass) {
+	return {
+		byNode: attempt(() => relay instanceof node),
+		byOwnConstructor: attempt(() => relay instanceof relay.constructor),
+		byImport: attempt(() => relay instanceof relayClass),
+		identityByImport: attempt(() => Object.getPrototypeOf(relay) === relayClass.prototype)
 	};
 }

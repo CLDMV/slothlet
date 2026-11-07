@@ -30,8 +30,10 @@ import {
 	oddShapeReads,
 	oddShapeWrites,
 	chainReads,
-	emitterPrototypes
+	emitterPrototypes,
+	relayInstanceOf
 } from "../../api_test_plain_js_nodes_lib/cases.mjs";
+import { Relay } from "../../api_test_plain_js_nodes_lib/relay-class.mjs";
 
 /**
  * The reads, made through `self`.
@@ -219,4 +221,40 @@ export function readEmitter(key) {
  */
 export function readHeldEmitter(bus, key) {
 	return emitterPrototypes(bus, key);
+}
+
+/**
+ * Keep the owner's emitter read through `self`, to ask it for its prototype and write through it from outside any call.
+ * @returns {Function} Takes the member written, and answers what each read and write answered.
+ */
+export function keepEmitter() {
+	const bus = self.owner.bus;
+	return (key) => emitterPrototypes(bus, key);
+}
+
+/**
+ * Ask the owner's emitter of an exported class for its prototype through `self`, and write through it.
+ * @param {string} key - The member written.
+ * @returns {object} What each read and write answered.
+ */
+export function readRelay(key) {
+	return emitterPrototypes(self.owner.relay, key);
+}
+
+/**
+ * Test the owner's emitter against its class through `self`.
+ * @returns {object} What each test answered.
+ */
+export function relayClassTests() {
+	return relayInstanceOf(self.owner.relay, self.owner.Relay, Relay);
+}
+
+/**
+ * Test an emitter node the host handed this module against its class.
+ * @param {object} relay - The owner's `relay` node.
+ * @param {Function} node - The owner's `Relay` node.
+ * @returns {object} What each test answered.
+ */
+export function heldRelayClassTests(relay, node) {
+	return relayInstanceOf(relay, node, Relay);
 }
