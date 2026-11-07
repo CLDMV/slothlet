@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T10:26:36-08:00 (1793903196)
+ *	@Last modified time: 2026-11-06T23:32:54-08:00 (1794036774)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,15 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
-import { attempt, reads, frozenAtLoad, refreeze, refreezeAtLoad } from "../../api_test_plain_js_nodes_lib/cases.mjs";
+import {
+	attempt,
+	reads,
+	frozenAtLoad,
+	refreeze,
+	refreezeAtLoad,
+	heldReads,
+	prototypeWrites
+} from "../../api_test_plain_js_nodes_lib/cases.mjs";
 
 /**
  * The reads, made through `self`.
@@ -90,4 +98,35 @@ export function callThrough() {
 		instIsFoo: attempt(() => owner.inst instanceof owner.Foo),
 		inheritedCheck: attempt(() => ({ tag: "own" }) instanceof owner.InheritedCheck)
 	};
+}
+
+/**
+ * The reads of a class instance's prototype, made on nodes the host handed this module as arguments.
+ * @param {object} inst - The owner's `inst` node.
+ * @param {Function} Foo - The owner's `Foo` node.
+ * @param {object} hiddenInst - The owner's `hiddenInst` node.
+ * @returns {object} What each answered.
+ */
+export function readHeld(inst, Foo, hiddenInst) {
+	return heldReads({ inst, Foo, hiddenInst });
+}
+
+/**
+ * Write onto the prototype the owner's class instances answer, reached through `self`.
+ * @param {string} key - The member written.
+ * @returns {object} The outcome of each write.
+ */
+export function writePrototypes(key) {
+	return prototypeWrites(self.owner, key);
+}
+
+/**
+ * Write onto the prototype the owner's class instances answer, on nodes the host handed this module as arguments.
+ * @param {object} inst - The owner's `inst` node.
+ * @param {object} hiddenInst - The owner's `hiddenInst` node.
+ * @param {string} key - The member written.
+ * @returns {object} The outcome of each write.
+ */
+export function writeHeldPrototypes(inst, hiddenInst, key) {
+	return prototypeWrites({ inst, hiddenInst }, key);
 }

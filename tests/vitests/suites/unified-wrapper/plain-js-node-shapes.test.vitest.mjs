@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T10:28:22-08:00 (1793903302)
+ *	@Last modified time: 2026-11-06T23:34:45-08:00 (1794036885)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,7 @@ import util from "node:util";
 import slothlet from "@cldmv/slothlet";
 import {
 	reads,
+	heldReads,
 	refreeze,
 	freezeLater,
 	frozenAtLoad,
@@ -53,6 +54,19 @@ const PERMISSIONS = [
 ];
 
 const DENY_READER = { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
+
+/** Refuses the reader the owner's classes, exported (`Foo`) and kept to itself (reached as `hiddenInst.constructor`), and nothing else. */
+const DENY_CLASSES = {
+	defaultPolicy: "allow",
+	rules: ["owner.Foo", "owner.Foo.**", "owner.hiddenInst.constructor", "owner.hiddenInst.constructor.**"].map((target) => ({
+		caller: "reader.**",
+		target,
+		effect: "deny"
+	}))
+};
+
+/** A member no other code uses, written onto prototypes to see where the write lands. */
+const PROBE_KEY = "__slothlet667PrototypeProbe";
 
 let twinCount = 0;
 /**
@@ -195,6 +209,83 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			api = await mount({ mode, runtime, permissions: DENY_READER });
 			const plain = await plainOwner();
 			expect((await api.reader.callThrough()).instIsFoo).toBe(plain.inst instanceof plain.Foo);
+		});
+	}
+);
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null },
+				{ name: "permissions on, no rules", permissions: {} },
+				{ name: "classes denied", permissions: DENY_CLASSES }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("a class instance's prototype on a node handed to a module > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	it("answers it behind its class's checks, as plain JS does where the rules allow", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const outcome = await api.reader.readHeld(api.owner.inst, api.owner.Foo, api.owner.hiddenInst);
+		const plain = await plainOwner();
+		const plainOutcome = heldReads({ inst: plain.inst, Foo: plain.Foo, hiddenInst: plain.hiddenInst });
+		if (permissions !== DENY_CLASSES) {
+			expect(outcome).toEqual(plainOutcome);
+			return;
+		}
+		// The class's prototype and its methods are the class's code: reaching them is a call of the class's node,
+		// however the instance is asked for its prototype.
+		expect(outcome).toEqual({
+			...plainOutcome,
+			instPrototype: "threw PERMISSION_DENIED",
+			instPrototypeMethod: "threw PERMISSION_DENIED",
+			instProtoAccessorMethod: "threw PERMISSION_DENIED",
+			hiddenPrototype: "threw PERMISSION_DENIED",
+			hiddenPrototypeMethod: "threw PERMISSION_DENIED",
+			hiddenProtoAccessorMethod: "threw PERMISSION_DENIED"
+		});
+	});
+});
+
+describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime }))))(
+	"a write onto a withheld class prototype > $mode / $runtime",
+	({ mode, runtime }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			// A write that reached the realm's own prototype is undone, so it cannot leak into later tests.
+			delete Object.prototype[PROBE_KEY];
+		});
+
+		const refused = {
+			instPrototype: "threw PERMISSION_DENIED",
+			instProtoAccessor: "threw PERMISSION_DENIED",
+			hiddenPrototype: "threw PERMISSION_DENIED",
+			hiddenProtoAccessor: "threw PERMISSION_DENIED",
+			reachedObjectPrototype: false
+		};
+
+		it("is refused through self, and never lands on Object.prototype", async () => {
+			api = await mount({ mode, runtime, permissions: DENY_READER });
+			const outcome = await api.reader.writePrototypes(PROBE_KEY);
+			expect(Object.hasOwn(Object.prototype, PROBE_KEY)).toBe(false);
+			expect(outcome).toEqual(refused);
+		});
+
+		it("is refused on nodes handed to the module, and never lands on Object.prototype", async () => {
+			api = await mount({ mode, runtime, permissions: DENY_CLASSES });
+			const outcome = await api.reader.writeHeldPrototypes(api.owner.inst, api.owner.hiddenInst, PROBE_KEY);
+			expect(Object.hasOwn(Object.prototype, PROBE_KEY)).toBe(false);
+			expect(outcome).toEqual(refused);
 		});
 	}
 );

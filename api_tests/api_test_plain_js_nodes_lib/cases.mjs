@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T10:26:36-08:00 (1793903196)
+ *	@Last modified time: 2026-11-06T23:32:54-08:00 (1794036774)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -127,4 +127,46 @@ export function refreeze(owner) {
  */
 export function refreezeAtLoad(owner) {
 	return attempt(() => (Object.freeze(owner.frozenBox), "done"));
+}
+
+/**
+ * The reads of a class instance's prototype made on nodes a module holds directly, handed to it as arguments rather
+ * than read through `self` (#667).
+ * @param {{inst: object, Foo: Function, hiddenInst: object}} held - The owner's `inst`, `Foo` and `hiddenInst`.
+ * @returns {object} What each read answered.
+ */
+export function heldReads(held) {
+	return {
+		instPrototype: attempt(() => Object.getPrototypeOf(held.inst) === held.Foo.prototype),
+		instPrototypeMethod: attempt(() => Object.getPrototypeOf(held.inst).hi.call(held.inst)),
+		instProtoAccessorMethod: attempt(() => held.inst.__proto__.hi.call(held.inst)),
+		instMethod: attempt(() => held.inst.hi()),
+		instIsFoo: attempt(() => held.inst instanceof held.Foo),
+		hiddenPrototype: attempt(() => Object.getPrototypeOf(held.hiddenInst) === held.hiddenInst.constructor.prototype),
+		hiddenPrototypeMethod: attempt(() => Object.getPrototypeOf(held.hiddenInst).hi.call(held.hiddenInst)),
+		hiddenProtoAccessorMethod: attempt(() => held.hiddenInst.__proto__.hi.call(held.hiddenInst)),
+		hiddenMethod: attempt(() => held.hiddenInst.hi())
+	};
+}
+
+/**
+ * Write a member onto the prototype a class instance answers, by `Object.getPrototypeOf` and through `__proto__`
+ * (#667), then report whether the write reached the realm's own `Object.prototype`.
+ * @param {{inst: object, hiddenInst: object}} owner - The owner's `inst` and `hiddenInst`, however they were reached.
+ * @param {string} key - The member written, a name no other code uses.
+ * @returns {object} The outcome of each write, and whether `Object.prototype` holds the member afterwards.
+ */
+export function prototypeWrites(owner, key) {
+	const write = (target) =>
+		attempt(() => {
+			target()[key] = 1;
+			return "written";
+		});
+	return {
+		instPrototype: write(() => Object.getPrototypeOf(owner.inst)),
+		instProtoAccessor: write(() => owner.inst.__proto__),
+		hiddenPrototype: write(() => Object.getPrototypeOf(owner.hiddenInst)),
+		hiddenProtoAccessor: write(() => owner.hiddenInst.__proto__),
+		reachedObjectPrototype: Object.hasOwn(Object.prototype, key)
+	};
 }
