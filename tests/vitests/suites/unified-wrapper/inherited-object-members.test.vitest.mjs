@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T22:27:43-08:00 (1793860063)
+ *	@Last modified time: 2026-11-07T00:02:08-08:00 (1794038528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,6 +45,7 @@ let importCount = 0;
 const freshImport = (file) => import(`${pathToFileURL(join(BASE, file)).href}?plain=${++importCount}`);
 
 const MODES = ["eager", "lazy"];
+const RUNTIMES = ["async", "live"];
 
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
@@ -91,13 +92,13 @@ async function nodeAt(api, path) {
 	return node;
 }
 
-describe.each(MODES.flatMap((mode) => PERMISSIONS.map((entry) => ({ mode, ...entry }))))(
-	"inherited members of api nodes > $mode, $name",
-	({ mode, permissions }) => {
+describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry })))))(
+	"inherited members of api nodes > $mode / $runtime, $name",
+	({ mode, runtime, permissions }) => {
 		let api;
 
 		const load = async () => {
-			api = await slothlet({ base: BASE, mode, ...(permissions ? { permissions } : {}) });
+			api = await slothlet({ base: BASE, mode, runtime, ...(permissions ? { permissions } : {}) });
 			await nodeAt(api, "probe");
 			return api;
 		};

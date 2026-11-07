@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T22:54:44-08:00 (1793861684)
+ *	@Last modified time: 2026-11-07T00:02:08-08:00 (1794038528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,8 @@
  * plain value does. A prototype that is the module's code — a class instance's class prototype, the base class a
  * derived class extends — is still the module's: a module the rules deny the owner cannot call through it, and no
  * write through it reaches the owner's real prototype. With permissions off there is no rule to refuse such a write, so
- * it lands as it does in plain JS. Checked in eager and lazy mode, with the deny rule and with permissions off.
+ * it lands as it does in plain JS; with permissions on and no rules a module mounted on its own still writes only the paths it owns.
+ * Checked in eager and lazy mode, async and live runtime, with permissions off, on with no rules, and with the deny rule.
  * @module tests/vitests/suites/unified-wrapper/inherited-proto-member
  */
 
@@ -33,6 +34,8 @@ import slothlet from "@cldmv/slothlet";
 
 const BASE = resolve("api_tests/api_test_inherited_members_proto");
 const INHERITED_BASE = resolve("api_tests/api_test_inherited_members");
+/** A base holding neither the victim nor the attacker, for mounting them as modules of their own. */
+const HOST_BASE = resolve("api_tests/api_test_plain_js_nodes/host");
 
 let twinCount = 0;
 /**
@@ -56,12 +59,22 @@ async function plainAttack() {
 
 const DENY_VICTIM = { defaultPolicy: "allow", rules: [{ caller: "attacker.**", target: "victim.**", effect: "deny" }] };
 
+const PERMISSIONS = [
+	{ name: "permissions off", permissions: null },
+	// The base module owns every path it loads, so the victim and the attacker are mounted as modules of their own here:
+	// otherwise the attacker would own the victim's paths too.
+	{ name: "permissions on, no rules, modules mounted apart", permissions: {}, apart: true },
+	{ name: "deny rule", permissions: DENY_VICTIM }
+];
+
 const UNCHANGED_FOO = ["constructor", "secret"];
 const UNCHANGED_BASE = ["kind", "length", "name", "prototype"];
 
-describe.each(["eager", "lazy"].flatMap((mode) => [null, DENY_VICTIM].map((permissions) => ({ mode, permissions }))))(
-	"__proto__ and constructor of a module's class through an api node > $mode, permissions $permissions.defaultPolicy",
-	({ mode, permissions }) => {
+describe.each(
+	["eager", "lazy"].flatMap((mode) => ["async", "live"].flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry }))))
+)(
+	"__proto__ and constructor of a module's class through an api node > $mode / $runtime, $name",
+	({ mode, runtime, permissions, apart }) => {
 		let api;
 
 		afterEach(async () => {
@@ -70,7 +83,13 @@ describe.each(["eager", "lazy"].flatMap((mode) => [null, DENY_VICTIM].map((permi
 		});
 
 		const load = async () => {
-			api = await slothlet({ base: BASE, mode, ...(permissions ? { permissions } : {}) });
+			if (apart) {
+				api = await slothlet({ base: HOST_BASE, mode, runtime, silent: true, permissions });
+				await api.slothlet.api.add("victim", join(BASE, "victim"), { moduleID: "victim" });
+				await api.slothlet.api.add("attacker", join(BASE, "attacker"), { moduleID: "attacker" });
+			} else {
+				api = await slothlet({ base: BASE, mode, runtime, ...(permissions ? { permissions } : {}) });
+			}
 			await api.victim;
 			await api.victim.inst;
 			await api.victim.Derived;
@@ -96,23 +115,49 @@ describe.each(["eager", "lazy"].flatMap((mode) => [null, DENY_VICTIM].map((permi
 			// owner reads the class's prototype as a call of the node, so it is refused it, as through an exported class.
 			const plain = await plainVictim();
 			expect(outcomes.readConstructorPrototype).toBe(
-				permissions ? "threw PERMISSION_DENIED" : typeof plain.inst.constructor.prototype.secret
+				permissions === DENY_VICTIM ? "threw PERMISSION_DENIED" : typeof plain.inst.constructor.prototype.secret
 			);
 		});
 
-		if (permissions) {
-			it("denies the denied module a call through __proto__ and a write to the base class", async () => {
+		if (permissions === DENY_VICTIM) {
+			it("denies the denied module every read, call and write through __proto__", async () => {
 				await load();
 				const outcomes = await api.attacker.run();
-				expect(outcomes.callProtoMember).toBe("threw PERMISSION_DENIED");
-				expect(outcomes.assignBaseStatic).toBe("threw PERMISSION_DENIED");
-				expect(outcomes.callBaseStatic).toBe("threw PERMISSION_DENIED");
+				expect(outcomes).toEqual({
+					readProtoMember: "threw PERMISSION_DENIED",
+					callProtoMember: "threw PERMISSION_DENIED",
+					assignProtoMember: "threw PERMISSION_DENIED",
+					defineProtoMember: "threw PERMISSION_DENIED",
+					readConstructorPrototype: "threw PERMISSION_DENIED",
+					assignBaseStatic: "threw PERMISSION_DENIED",
+					callBaseStatic: "threw PERMISSION_DENIED"
+				});
+				expect((await api.victim.check()).baseMembers).toEqual(UNCHANGED_BASE);
+			});
+		}
+
+		if (apart) {
+			it("lets a module read and call through __proto__ but refuses its writes to the paths it does not own", async () => {
+				await load();
+				const outcomes = await api.attacker.run();
+				const plain = await plainVictim();
+				// Reads and calls are allowed, as in plain JS; the writes are writes to the owner's paths, which the module does
+				// not own.
+				expect(outcomes).toEqual({
+					readProtoMember: typeof plain.inst.__proto__.secret,
+					callProtoMember: plain.inst.__proto__.secret(),
+					assignProtoMember: "threw LOOSE_SET_NOT_OWNED",
+					defineProtoMember: "threw LOOSE_SET_NOT_OWNED",
+					readConstructorPrototype: typeof plain.inst.constructor.prototype.secret,
+					assignBaseStatic: "threw LOOSE_SET_NOT_OWNED",
+					callBaseStatic: plain.Derived.__proto__.kind()
+				});
 				expect((await api.victim.check()).baseMembers).toEqual(UNCHANGED_BASE);
 			});
 		}
 
 		it("still answers the engine's own prototypes through __proto__", async () => {
-			const inherited = await slothlet({ base: INHERITED_BASE, mode, ...(permissions ? { permissions } : {}) });
+			const inherited = await slothlet({ base: INHERITED_BASE, mode, runtime, ...(permissions ? { permissions } : {}) });
 			try {
 				await inherited.obj;
 				await inherited.obj.box;

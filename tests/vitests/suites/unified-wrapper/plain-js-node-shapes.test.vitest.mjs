@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T23:34:45-08:00 (1794036885)
+ *	@Last modified time: 2026-11-07T00:02:09-08:00 (1794038529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -194,10 +194,11 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 				writeInstanceClassPrototype: "threw PERMISSION_DENIED",
 				inheritedCheck: "threw PERMISSION_DENIED"
 			});
-			// The prototype of the module's class is withheld from it, so it reaches none of the class's methods that way.
-			expect(outcome.instancePrototypeMethod).toMatch(/^threw (TypeError|PERMISSION_DENIED)$/);
+			// Reaching the prototype of the module's class is a call of the class's node, so it is refused, and the module
+			// reaches none of the class's methods that way.
+			expect(outcome.instancePrototypeMethod).toBe("threw PERMISSION_DENIED");
 			// The same holds for an instance whose class the module keeps to itself, however its prototype is reached.
-			expect(outcome.hiddenPrototypeMethod).toMatch(/^threw (TypeError|PERMISSION_DENIED)$/);
+			expect(outcome.hiddenPrototypeMethod).toBe("threw PERMISSION_DENIED");
 			expect(outcome.hiddenProtoAccessorMethod).toBe("threw PERMISSION_DENIED");
 			// The owner's class is unchanged.
 			const plain = await plainOwner();
