@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T06:26:25-08:00 (1793975185)
+ *	@Last modified time: 2026-11-06T17:44:23-08:00 (1794015863)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,6 +49,104 @@ import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "
  * @private
  */
 const PristineError = Error;
+
+/**
+ * The Node built-ins the attribution path reads, captured at module load like {@link PristineError} (#714): the `fs`
+ * and `crypto` functions (taken off their module objects, which code can reassign), the methods of the hash objects
+ * `createHash` returns, `TextDecoder`, `JSON.parse`, the `Map` and `Set` iterators and `URLSearchParams`. Attribution
+ * calls them through these references, so what replaces `process.getBuiltinModule`, a function on `fs` or `crypto`,
+ * `Map.prototype.forEach`, `URLSearchParams` or the like after slothlet loads does not change what a frame is
+ * attributed as.
+ * @private
+ */
+const NODE_FS = isNode ? globalThis.process.getBuiltinModule("node:fs") : null;
+const NODE_CRYPTO = isNode ? globalThis.process.getBuiltinModule("node:crypto") : null;
+const FS_READ_FILE = NODE_FS?.readFileSync;
+const FS_STAT = NODE_FS?.statSync;
+const FS_EXISTS = NODE_FS?.existsSync;
+const FS_REALPATH = NODE_FS?.realpathSync;
+const CRYPTO_CREATE_HASH = NODE_CRYPTO?.createHash;
+const HASH_PROTOTYPE = NODE_CRYPTO ? Object.getPrototypeOf(Reflect.apply(CRYPTO_CREATE_HASH, NODE_CRYPTO, ["sha256"])) : null;
+const HASH_UPDATE = HASH_PROTOTYPE?.update;
+const HASH_DIGEST = HASH_PROTOTYPE?.digest;
+const CapturedTextDecoder = TextDecoder;
+const TEXT_DECODE = TextDecoder.prototype.decode;
+const JSON_PARSE = JSON.parse;
+const MAP_FOREACH = Map.prototype.forEach;
+const SET_FOREACH = Set.prototype.forEach;
+const CapturedURLSearchParams = URLSearchParams;
+const CapturedURLSearchParamsGet = URLSearchParams.prototype.get;
+
+/**
+ * Call one of the captured `fs` functions.
+ * @param {Function} fn - The captured function.
+ * @param {...unknown} args - Its arguments.
+ * @returns {unknown} What it returns.
+ * @private
+ */
+function nodeFs(fn, ...args) {
+	return Reflect.apply(fn, NODE_FS, args);
+}
+
+/**
+ * The SHA-256 of some data, hex-encoded, through the captured `crypto` functions.
+ * @param {string|Uint8Array} data - The data.
+ * @param {string} [encoding] - The string's encoding.
+ * @returns {string} The hash.
+ * @private
+ */
+function sha256(data, encoding) {
+	const hash = Reflect.apply(CRYPTO_CREATE_HASH, NODE_CRYPTO, ["sha256"]);
+	Reflect.apply(HASH_UPDATE, hash, encoding === undefined ? [data] : [data, encoding]);
+	return Reflect.apply(HASH_DIGEST, hash, ["hex"]);
+}
+
+/**
+ * Every value of a `Map` through the captured iterator, an empty array when it is not a genuine `Map`.
+ * @param {unknown} map - A candidate map.
+ * @returns {Array<unknown>} The values.
+ * @private
+ */
+function mapValues(map) {
+	const values = [];
+	try {
+		Reflect.apply(MAP_FOREACH, map, [(value) => values.push(value)]);
+	} catch {
+		return [];
+	}
+	return values;
+}
+
+/**
+ * Every member of a `Set` through the captured iterator, an empty array when it is not a genuine `Set`.
+ * @param {unknown} set - A candidate set.
+ * @returns {Array<unknown>} The members.
+ * @private
+ */
+function setMembers(set) {
+	const members = [];
+	try {
+		Reflect.apply(SET_FOREACH, set, [(member) => members.push(member)]);
+	} catch {
+		return [];
+	}
+	return members;
+}
+
+/**
+ * One query parameter of a URL/id through a genuine `URLSearchParams`, null when absent.
+ * @param {string} query - The query string (no leading `?`).
+ * @param {string} name - The parameter name.
+ * @returns {string|null} The value, or null.
+ * @private
+ */
+function queryParam(query, name) {
+	try {
+		return Reflect.apply(CapturedURLSearchParamsGet, new CapturedURLSearchParams(query), [name]);
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Escape a literal for embedding in a RegExp.
@@ -141,7 +239,7 @@ export function runtime_realComparablePath(filePath) {
 	if (real === undefined) {
 		real = null;
 		try {
-			const resolved = globalThis.process?.getBuiltinModule?.("node:fs")?.realpathSync?.(filePath);
+			const resolved = FS_REALPATH ? nodeFs(FS_REALPATH, filePath) : null;
 			if (resolved && toComparablePath(resolved) !== toComparablePath(filePath)) real = toComparablePath(resolved);
 		} catch {
 			// A path that does not resolve (a synthetic or browser path) has no other spelling.
@@ -637,14 +735,11 @@ const FILE_SOURCE_HASHES = new Map();
  * @private
  */
 function runtime_readFileSourceHashes(path) {
-	const fs = globalThis.process.getBuiltinModule("node:fs");
 	let mtimeMs = -1;
 	try {
-		const crypto = globalThis.process.getBuiltinModule("node:crypto");
-		mtimeMs = fs.statSync(path).mtimeMs;
-		const source = fs.readFileSync(path);
-		const sha256 = (data) => crypto.createHash("sha256").update(data).digest("hex");
-		const text = new TextDecoder().decode(source);
+		mtimeMs = nodeFs(FS_STAT, path).mtimeMs;
+		const source = nodeFs(FS_READ_FILE, path);
+		const text = Reflect.apply(TEXT_DECODE, new CapturedTextDecoder(), [source]);
 		const hashes = new Set([sha256(source), sha256(text)]);
 		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) hashes.add(sha256(source.subarray(3)));
 		return { mtimeMs, hashes };
@@ -669,9 +764,9 @@ function runtime_runsFileSource(frame) {
 	if (!isNode || !frame.hash) return true;
 	// The scripts the loader recorded, a CommonJS file's among them, and those learned are its own code's (#597).
 	if (frame.key && runtime_knowsScript(frame.key, frame.hash).has) return true;
-	// Under vitest, the script its runner compiled the code vite gave it for the file into: the file's source as vite
-	// transformed it, as the hash of the file on disk is under Node's own loader (#714).
-	if (runtime_runnerScriptHashes(frame.path)?.has(frame.hash)) return true;
+	// Under vitest, the script its runner compiles a file's code into, as recorded before slothlet loaded (#714): only a
+	// record that existed then is taken (see RUNNER_SNAPSHOT); one added later is not read.
+	if (RUNNER_SNAPSHOT.scripts.get(frame.path)?.has(frame.hash)) return true;
 	let known = FILE_SOURCE_HASHES.get(frame.path);
 	if (known === undefined) {
 		known = runtime_readFileSourceHashes(frame.path);
@@ -682,7 +777,7 @@ function runtime_runsFileSource(frame) {
 	// The file may have changed since it was read (an edit before a reload): it is read again only then.
 	let mtimeMs;
 	try {
-		mtimeMs = globalThis.process.getBuiltinModule("node:fs").statSync(frame.path).mtimeMs;
+		mtimeMs = nodeFs(FS_STAT, frame.path).mtimeMs;
 	} catch {
 		return false;
 	}
@@ -1598,7 +1693,7 @@ export function resolveSupplier(record) {
 			const { matches } = placement;
 			// Placed by its plain path alone (a module's folder, a CommonJS file): it is that file's code only when it runs
 			// the file's own source (#597).
-			if (placement.unverified && !runtime_runsFileSource(frame)) return fallback;
+			if (placement.unverified && !runtime_runsFileSource(frame) && !runtime_runsOwnerTransform(leaf.slothlet, frame)) return fallback;
 			if (matches.length === 1 && matches[0].currentWrapper === leaf) {
 				leafSeen = true;
 				continue;
@@ -1642,14 +1737,9 @@ const PACKAGE_WALK = 256;
  */
 function runtime_fileImporters(path) {
 	const importers = packageImporters(path);
-	const records = RUNNER_MODULES?.fileToModulesMap?.get?.(path);
-	if (!(records instanceof Set)) return importers;
-	const all = [...importers];
-	for (const node of records) {
-		if (!(node?.importers instanceof Set)) continue;
-		for (const id of node.importers) if (typeof id === "string") all.push(id);
-	}
-	return all;
+	// Plus the importers vitest's runner recorded before slothlet loaded (see RUNNER_SNAPSHOT): a record added later is
+	// not read (#714).
+	return [...importers, ...(RUNNER_SNAPSHOT.importers.get(path) ?? [])];
 }
 
 /**
@@ -1660,25 +1750,21 @@ function runtime_fileImporters(path) {
  * @private
  */
 function runtime_runnerTaggedImporters(path) {
+	// Only the records that existed before slothlet loaded are walked (see RUNNER_SNAPSHOT) (#714).
 	if (!RUNNER_MODULES) return [];
 	const found = [];
 	const seen = new Set([path]);
 	const queue = [path];
 	while (queue.length && seen.size <= PACKAGE_WALK) {
-		const records = RUNNER_MODULES.fileToModulesMap?.get?.(queue.shift());
-		if (!(records instanceof Set)) continue;
-		for (const node of records) {
-			if (!(node?.importers instanceof Set)) continue;
-			for (const id of node.importers) {
-				if (typeof id !== "string") continue;
-				const query = new URLSearchParams(id.split("?")[1] ?? "");
-				const location = toComparablePath(id);
-				const family = query.get("slothlet_instance");
-				if (family) found.push({ family, mount: query.get("module"), location });
-				else if (!seen.has(location)) {
-					seen.add(location);
-					queue.push(location);
-				}
+		for (const id of RUNNER_SNAPSHOT.importers.get(queue.shift()) ?? []) {
+			if (typeof id !== "string") continue;
+			const location = toComparablePath(id);
+			const query = id.split("?")[1] ?? "";
+			const family = queryParam(query, "slothlet_instance");
+			if (family) found.push({ family, mount: queryParam(query, "module"), location });
+			else if (!seen.has(location)) {
+				seen.add(location);
+				queue.push(location);
 			}
 		}
 	}
@@ -1704,13 +1790,13 @@ function runtime_packageImportingLeaves(slothlet, path) {
 	const reached = [];
 	while (queue.length && seen.size <= PACKAGE_WALK) {
 		for (const importer of runtime_fileImporters(queue.shift())) {
-			const query = new URLSearchParams(importer.split("?")[1] ?? "");
+			const query = importer.split("?")[1] ?? "";
 			const location = toComparablePath(importer);
-			const instance = query.get("slothlet_instance");
+			const instance = queryParam(query, "slothlet_instance");
 			// A module's copy of any instance names the module's file: an untagged file is loaded once per process, by
 			// whichever instance came first, and is the same module's code for every instance built from that file.
 			if (instance) {
-				reached.push({ location, mount: query.get("module") });
+				reached.push({ location, mount: queryParam(query, "module") });
 				continue;
 			}
 			if (commonJS.has(location) || LEAF_FILES.get(slothlet)?.has(location)) {
@@ -1810,10 +1896,9 @@ const PACKAGE_ROOTS = new Map();
  */
 function runtime_packageRootOf(path) {
 	if (PACKAGE_ROOTS.has(path)) return PACKAGE_ROOTS.get(path);
-	const fs = globalThis.process.getBuiltinModule("node:fs");
 	let root = null;
 	for (let dir = path.slice(0, path.lastIndexOf("/")); dir; dir = dir.slice(0, dir.lastIndexOf("/"))) {
-		if (fs.existsSync(`${dir}/package.json`)) {
+		if (nodeFs(FS_EXISTS, `${dir}/package.json`)) {
 			root = dir;
 			break;
 		}
@@ -1837,8 +1922,6 @@ function runtime_packageRootOf(path) {
  */
 export function recordInstanceOwner(slothlet) {
 	if (!isNode) return;
-	// What vitest's runner evaluated before this instance's modules can run (#714).
-	runtime_readRunnerModules();
 	for (const frame of runtime_captureFrames(32)) {
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:") || PACKAGE_ENTRIES.has(frame.path)) continue;
 		if (frame.evaluated) return;
@@ -1880,7 +1963,7 @@ function runtime_packageName(root) {
 	if (!PACKAGE_NAMES.has(root)) {
 		let name = null;
 		try {
-			const parsed = JSON.parse(globalThis.process.getBuiltinModule("node:fs").readFileSync(`${root}/package.json`, "utf8"));
+			const parsed = JSON_PARSE(nodeFs(FS_READ_FILE, `${root}/package.json`, "utf8"));
 			if (typeof parsed?.name === "string") name = parsed.name;
 		} catch {
 			// A manifest that cannot be read or parsed names no package.
@@ -2023,10 +2106,17 @@ function runtime_runsViteHostSource(slothlet, frame) {
 }
 
 /**
+ * vitest's record of the modules its runner evaluated in this process (`__vitest_worker__.evaluatedModules`), as it was
+ * when slothlet loaded, or null outside vitest.
+ * @type {{fileToModulesMap?: Map<string, Set<object>>, idToModuleMap?: Map<string, object>}|null}
+ * @private
+ */
+const RUNNER_MODULES = isNode ? (globalThis.__vitest_worker__?.evaluatedModules ?? null) : null;
+
+/**
  * The parameters vitest's module runner compiles each module it transformed as an async function of: vite's SSR
- * bindings, then (vitest 4, and vitest 5 unless `injectCjsGlobals` is off) the CommonJS globals. The script V8 runs for
- * a module is `'use strict';async (<parameters>)=>{{<vite's code>\n}}`, which is what {@link runtime_runnerScriptHashes}
- * hashes.
+ * bindings, then (vitest 4, and vitest 5 unless `injectCjsGlobals` is off) the CommonJS globals. The script V8 runs for a
+ * module is `'use strict';async (<parameters>)=>{{<vite's code>\n}}`.
  * @type {ReadonlyArray<string>}
  * @private
  */
@@ -2037,73 +2127,38 @@ const RUNNER_PARAMETERS = Object.freeze(
 );
 
 /**
- * vitest's record of the modules its runner evaluated in this process (`__vitest_worker__.evaluatedModules`), as it was
- * when slothlet loaded, or null outside vitest.
- * @type {{fileToModulesMap?: Map<string, Set<object>>, idToModuleMap?: Map<string, object>}|null}
+ * vitest's record of the modules its runner had evaluated when this module loaded, read once then and never again
+ * (#714). A record is data any code in the process can add, so only the records that already existed before any module
+ * of an instance could run are taken: one added later is not read. For each file, the script hashes its code compiles to
+ * under the runner, and the ids of the modules that import it.
+ * @type {{scripts: Map<string, Set<string>>, importers: Map<string, Array<string>>}}
  * @private
  */
-const RUNNER_MODULES = isNode ? (globalThis.__vitest_worker__?.evaluatedModules ?? null) : null;
+const RUNNER_SNAPSHOT = runtime_snapshotRunner();
 
 /**
- * The script hashes each file's code compiled to by vitest's runner, by comparable path, as first read (#714). The
- * modules the runner had already evaluated when slothlet loaded are read then, before any instance's module runs;
- * one evaluated later is read the first time a frame of it is checked, and what was read is not read again.
- * @type {Map<string, Set<string>>}
+ * Read {@link RUNNER_SNAPSHOT} from the runner's records as they stand now, through the methods captured at load.
+ * @returns {{scripts: Map<string, Set<string>>, importers: Map<string, Array<string>>}} The snapshot.
  * @private
  */
-const RUNNER_SCRIPTS = new Map();
-
-/**
- * The runner's module records already read into {@link RUNNER_SCRIPTS}.
- * @type {WeakSet<object>}
- * @private
- */
-const RUNNER_READ = new WeakSet();
-
-/**
- * Read one of the runner's module records into {@link RUNNER_SCRIPTS}: the hashes of the scripts its code compiles to.
- * @param {object} node - The record.
- * @returns {void}
- * @private
- */
-function runtime_readRunnerModule(node) {
-	if (RUNNER_READ.has(node)) return;
-	RUNNER_READ.add(node);
-	const code = node?.meta?.code;
-	const file = typeof node?.file === "string" ? node.file : null;
-	if (typeof code !== "string" || !file) return;
-	const crypto = globalThis.process.getBuiltinModule("node:crypto");
-	const path = toComparablePath(file);
-	let hashes = RUNNER_SCRIPTS.get(path);
-	if (!hashes) RUNNER_SCRIPTS.set(path, (hashes = new Set()));
-	for (const parameters of RUNNER_PARAMETERS)
-		hashes.add(crypto.createHash("sha256").update(`'use strict';async (${parameters})=>{{${code}\n}}`).digest("hex"));
-}
-
-/**
- * Read every module record the runner holds now (see {@link runtime_readRunnerModule}).
- * @returns {void}
- * @private
- */
-function runtime_readRunnerModules() {
-	const nodes = RUNNER_MODULES?.idToModuleMap;
-	if (!(nodes instanceof Map)) return;
-	for (const node of nodes.values()) runtime_readRunnerModule(node);
-}
-
-runtime_readRunnerModules();
-
-/**
- * The script hashes a file's code compiles to under vitest's runner (see {@link RUNNER_SCRIPTS}), reading the file's
- * module records the first time it is asked about.
- * @param {string} path - The file, in comparable form.
- * @returns {Set<string>|undefined} The hashes.
- * @private
- */
-function runtime_runnerScriptHashes(path) {
-	const records = RUNNER_MODULES?.fileToModulesMap?.get?.(path);
-	if (records instanceof Set) for (const node of records) runtime_readRunnerModule(node);
-	return RUNNER_SCRIPTS.get(path);
+function runtime_snapshotRunner() {
+	const scripts = new Map();
+	const importers = new Map();
+	if (!RUNNER_MODULES || !NODE_CRYPTO) return { scripts, importers };
+	for (const node of mapValues(RUNNER_MODULES.idToModuleMap)) {
+		const file = typeof node?.file === "string" ? node.file : null;
+		if (!file) continue;
+		const path = toComparablePath(file);
+		const code = node?.meta?.code;
+		if (typeof code === "string") {
+			let hashes = scripts.get(path);
+			if (!hashes) scripts.set(path, (hashes = new Set()));
+			for (const parameters of RUNNER_PARAMETERS) hashes.add(sha256(`'use strict';async (${parameters})=>{{${code}\n}}`));
+		}
+		const ids = setMembers(node?.importers).filter((id) => typeof id === "string");
+		if (ids.length) importers.set(path, [...(importers.get(path) ?? []), ...ids]);
+	}
+	return { scripts, importers };
 }
 
 /**
@@ -2118,7 +2173,6 @@ function runtime_runnerScriptHashes(path) {
  */
 function runtime_runsOwnerTransform(slothlet, frame) {
 	if (!frame.hash || frame.evaluated || !isInstanceOwnerFile(slothlet, frame.path)) return false;
-	if (runtime_runnerScriptHashes(frame.path)?.has(frame.hash)) return true;
 	return runtime_runsViteHostSource(slothlet, frame);
 }
 
@@ -2436,7 +2490,7 @@ function runtime_isNodeScript(frame) {
 	if (source === undefined) return false;
 	let hash = NODE_SOURCE_HASHES.get(id);
 	if (hash === undefined) {
-		hash = globalThis.process.getBuiltinModule("node:crypto").createHash("sha256").update(source, "utf8").digest("hex");
+		hash = sha256(source, "utf8");
 		NODE_SOURCE_HASHES.set(id, hash);
 	}
 	return frame.hash === hash;
