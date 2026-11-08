@@ -923,6 +923,33 @@ export class ApiBuilder extends ComponentBase {
 		 * @example
 		 * const gated = createInternalRouteProxy(namespace, "slothlet");
 		 */
+		/**
+		 * Refuse module code a change to the namespace at `routePath`, however the module came to hold it: through
+		 * `self` (a view of its own, which checks the same), or the namespace the host holds, handed to it as an argument,
+		 * inside plain data, or stored on an object the module holds as itself. The built-in write rules keep the
+		 * framework's namespace from module code with the permission system on or off, and a host rule lifts one for the
+		 * callers it names; only `mode: "disabled"` leaves it open. The host's own changes go through.
+		 *
+		 * @param {string} changedPath - The path changed (`slothlet.planted`, or `slothlet` for the namespace itself).
+		 * @returns {void}
+		 * @throws {SlothletError} `PERMISSION_DENIED` when module code changes what a built-in write rule protects, and
+		 *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+		 * @example
+		 * assertNamespaceChange("slothlet.planted"); // throws inside a module call
+		 */
+		const assertNamespaceChange = (changedPath) => {
+			const apiManager = slothlet.handlers.apiManager;
+			if (!apiManager.frameworkProtected()) return;
+			const parts = changedPath.split(".");
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			if (identity?.unresolved) {
+				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+			}
+			if (!identity?.currentWrapper) return;
+			// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
+			for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) apiManager.assertOwnedWrite(parts, writer);
+		};
+
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
@@ -1066,34 +1093,51 @@ export class ApiBuilder extends ComponentBase {
 					};
 				},
 
+				// A change under a symbol meets the rules of the member it is made on; one under a string, those of its path.
 				set(target, prop, newValue, receiver) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.set(target, prop, newValue, receiver);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.set(target, prop, newValue, receiver);
 				},
 
 				defineProperty(target, prop, descriptor) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.defineProperty(target, prop, descriptor);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.defineProperty(target, prop, descriptor);
 				},
 
 				deleteProperty(target, prop) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.deleteProperty(target, prop);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.deleteProperty(target, prop);
+				},
+
+				setPrototypeOf(target, prototype) {
+					assertNamespaceChange(routePath);
+					return Reflect.setPrototypeOf(target, prototype);
+				},
+
+				preventExtensions(target) {
+					assertNamespaceChange(routePath);
+					return Reflect.preventExtensions(target);
 				},
 
 				ownKeys(target) {
