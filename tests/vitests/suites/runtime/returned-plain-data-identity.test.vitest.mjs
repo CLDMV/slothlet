@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:16:21-08:00 (1794129381)
+ *	@Last modified time: 2026-11-08T10:00:28-08:00 (1794160828)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -120,6 +120,35 @@ export function deepClient(value, depth) {
 	let out = { run: () => who(), write: () => { self.slothlet.planted = 1; } };
 	for (let level = 0; level < depth; level++) out = level % 2 === 0 ? { inner: out } : [out];
 	return { data: value, deep: out };
+}
+
+export class Priv {
+	#x = 7;
+	read() {
+		return this.#x;
+	}
+}
+
+export function same(value) {
+	return value;
+}
+
+/** A class instance of the module's own, handed to its own leaf and back. */
+export function roundTrip() {
+	const p = new Priv();
+	const back = self.bag.same(p);
+	return { same: back === p, read: back.read() };
+}
+
+export async function roundTripAwaited() {
+	const p = new Priv();
+	const back = await self.bag.same(p);
+	return { same: back === p, read: back.read() };
+}
+
+export function plantBox(arg) {
+	arg.box.w = () => who();
+	return { b: arg.box };
 }
 `;
 
@@ -337,5 +366,25 @@ describe.each(MATRIX)("returned data, $label, $mode/$runtime (#726)", ({ config,
 		expect(node.run()).toBe("bag.deepClient");
 		expect(() => node.write()).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
 		expect(api.slothlet.planted).toBeUndefined();
+	});
+
+	it("hands a module's own class instance back as itself through its own leaf", async () => {
+		// Plain JavaScript: the instance handed to `same` is the one it returns.
+		const instance = new plain.Priv();
+		const want = { same: plain.same(instance) === instance, read: instance.read() };
+		expect(want).toEqual({ same: true, read: 7 });
+		expect(await api.bag.roundTrip()).toEqual(want);
+		expect(await api.bag.roundTripAwaited()).toEqual(want);
+	});
+
+	it("hands the caller's class instance back as itself, with what the module wrote onto it", async () => {
+		class HostBox {}
+		const want = new HostBox();
+		expect(plain.plantBox({ box: want }).b).toBe(want);
+		const box = new HostBox();
+		const out = await api.bag.plantBox({ box });
+		expect(types.isProxy(out)).toBe(false);
+		expect(out.b === box).toBe(true);
+		expect(typeof box.w).toBe("function");
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T08:24:12-08:00 (1794155052)
+ *	@Last modified time: 2026-11-08T10:00:28-08:00 (1794160828)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -214,6 +214,93 @@ export function hidden(kind, depth, value) {
 export function namespace() {
 	return { ns: globalThis.__ns726 };
 }
+
+/** A generator, sync or async, yielding a function of the module's, given the prototype of plain data. */
+function plainGenerator(isAsync, prototype) {
+	const generator = isAsync ? (async function* () { yield code(); })() : (function* () { yield code(); })();
+	Object.setPrototypeOf(generator, prototype);
+	return generator;
+}
+
+export function plainGen(isAsync, nullPrototype) {
+	return { g: plainGenerator(isAsync, nullPrototype ? null : Object.prototype) };
+}
+
+export function frozenGen() {
+	return Object.freeze({ g: Object.freeze(plainGenerator(false, Object.prototype)) });
+}
+
+export function plainArrayIterator() {
+	const it = [code()].values();
+	Object.setPrototypeOf(it, Object.prototype);
+	return { it };
+}
+
+export function plainHelper() {
+	const it = [1].values().map(() => code());
+	Object.setPrototypeOf(it, null);
+	return { it };
+}
+
+export function helper() {
+	return {
+		it: [1].values().map(() => {
+			self.slothlet.planted = 1;
+			return who();
+		})
+	};
+}
+
+export function registry(plainPrototype) {
+	const r = new FinalizationRegistry(() => {});
+	if (plainPrototype) Object.setPrototypeOf(r, Object.prototype);
+	return { r };
+}
+
+let given = null;
+export function giveData() {
+	given = { k: 1, inner: { n: 2 } };
+	return given;
+}
+
+export function plantInGiven() {
+	given.w = code();
+	given.inner.w = code();
+	return 1;
+}
+
+export function readW(value) {
+	return value.w;
+}
+
+export function ownW() {
+	return given.w;
+}
+
+/** Hand out fresh plain data while the global \`Error\` is a Proxy counting what it is asked. */
+export function underProxiedError() {
+	const real = globalThis.Error;
+	const counts = { hits: 0 };
+	globalThis.Error = new Proxy(real, {
+		get(target, prop, receiver) {
+			counts.hits++;
+			return Reflect.get(target, prop, receiver);
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			counts.hits++;
+			return Reflect.getOwnPropertyDescriptor(target, prop);
+		},
+		set(target, prop, value, receiver) {
+			counts.hits++;
+			return Reflect.set(target, prop, value, receiver);
+		}
+	});
+	globalThis.__restoreError726 = () => {
+		globalThis.Error = real;
+		return counts.hits;
+	};
+	return { rows: [{ a: 1 }, { b: [2] }], more: { c: "x" } };
+}
 `;
 
 /** A module that stashes its own namespace and throws before its binding is initialised. */
@@ -410,6 +497,113 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 			if (kind === "instance") expect(() => holder.run()).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
 			expect(api.slothlet.planted).toBeUndefined();
 		});
+	});
+
+	describe("objects holding code no member shows, given a plain prototype", () => {
+		const GENERATOR = Object.getPrototypeOf(Object.getPrototypeOf((function* () {})()));
+		const ASYNC_GENERATOR = Object.getPrototypeOf(Object.getPrototypeOf((async function* () {})()));
+		const ARRAY_ITERATOR = Object.getPrototypeOf([].values());
+		const HELPER = Object.getPrototypeOf([].values().map((value) => value));
+
+		/** Step an object through an intrinsic `next`; a refusal hands out nothing. */
+		async function stepped(next, value) {
+			try {
+				return { value: (await Reflect.apply(next, value, [])).value };
+			} catch {
+				return null;
+			}
+		}
+
+		it.each([
+			["a generator", false, false],
+			["a generator with no prototype", false, true],
+			["an async generator", true, false],
+			["an async generator with no prototype", true, true]
+		])("does not hand out what %s yields raw", async (_label, isAsync, nullPrototype) => {
+			const want = plain.plainGen(isAsync, nullPrototype);
+			expect(typeof (await Reflect.apply(isAsync ? ASYNC_GENERATOR.next : GENERATOR.next, want.g, [])).value).toBe("function");
+			const out = await api.bag.plainGen(isAsync, nullPrototype);
+			for (const next of [GENERATOR.next, ASYNC_GENERATOR.next]) {
+				const step = await stepped(next, out.g);
+				if (step && typeof step.value === "function") expectStandIn(step.value);
+			}
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+
+		it("does not take a frozen holder of such a generator for frozen data", async () => {
+			const want = plain.frozenGen();
+			expect(Object.isFrozen(want) && Object.isFrozen(want.g)).toBe(true);
+			const out = await api.bag.frozenGen();
+			const step = await stepped(GENERATOR.next, out.g);
+			if (step) expectStandIn(step.value);
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+
+		it("does not hand out what an array iterator steps to raw", async () => {
+			expect(typeof Reflect.apply(ARRAY_ITERATOR.next, plain.plainArrayIterator().it, []).value).toBe("function");
+			const out = await api.bag.plainArrayIterator();
+			const step = await stepped(ARRAY_ITERATOR.next, out.it);
+			if (step) expectStandIn(step.value);
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+
+		it("does not hand out what an iterator helper steps to raw", async () => {
+			expect(typeof Reflect.apply(HELPER.next, plain.plainHelper().it, []).value).toBe("function");
+			const out = await api.bag.plainHelper();
+			const step = await stepped(HELPER.next, out.it);
+			if (step) expectStandIn(step.value);
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+
+		it("hands out a FinalizationRegistry, with its prototype or a plain one, as a stand-in", async () => {
+			for (const plainPrototype of [false, true]) {
+				const out = await api.bag.registry(plainPrototype);
+				expect(types.isProxy(out.r), `plain prototype: ${plainPrototype}`).toBe(true);
+			}
+			const { r } = await api.bag.registry(false);
+			expect(r.unregister({})).toBe(false);
+			expect(r.register({}, 1)).toBeUndefined();
+		});
+	});
+
+	it("runs an iterator helper's mapper as the module when stepped through its stand-in", async () => {
+		const out = await api.bag.helper();
+		expect(types.isProxy(out.it)).toBe(true);
+		expect(() => out.it.next()).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
+		expect(api.slothlet.planted).toBeUndefined();
+	});
+
+	describe("data the module handed out earlier, handed back to it", () => {
+		it("hands back a function the module later wrote into it as the module's, for every caller", async () => {
+			const want = plain.giveData();
+			plain.plantInGiven();
+			expect(plain.readW(want)).toBe(want.w);
+			expect(plain.ownW()).toBe(want.w);
+			const data = await api.bag.giveData();
+			expect(types.isProxy(data)).toBe(false);
+			await api.bag.plantInGiven();
+			expectStandIn(await api.bag.readW(data));
+			expectStandIn(await api.bag.readW(data.inner));
+			expectStandIn(await api.bag.readW({ data }.data));
+			// Handing it back recorded nothing of the module's as the caller's.
+			expectStandIn(await api.bag.ownW());
+			expectStandIn(await api.bag.readW(data));
+		});
+	});
+
+	it("reads no global the module replaced while searching what it hands out", async () => {
+		const want = plain.underProxiedError();
+		expect(globalThis.__restoreError726()).toBe(0);
+		let hits;
+		try {
+			const out = await api.bag.underProxiedError();
+			hits = globalThis.__restoreError726();
+			expect(out).toEqual(want);
+		} finally {
+			globalThis.__restoreError726?.();
+			delete globalThis.__restoreError726;
+		}
+		expect(hits).toBe(0);
 	});
 
 	it("hands out a module namespace that cannot be described as a stand-in", async () => {
