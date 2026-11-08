@@ -1490,6 +1490,10 @@ function runtime_selfHasInstance(prototype, instance) {
  */
 export function runtime_selfView(node, reader) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
+	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
+	// (#667): itself, or a checked view.
+	const handedPrototype = PROTOTYPE_PATHS.get(node);
+	if (handedPrototype !== undefined) return runtime_prototypeHandedTo(node, reader ?? runtime_selfReader(handedPrototype.slothlet));
 	// A member view handed to another reader is that reader's view of the same value at the same path.
 	const memberRecord = SELF_MEMBER_VIEWS.get(node);
 	if (memberRecord) {
@@ -1567,6 +1571,14 @@ export function runtime_selfView(node, reader) {
 			!SELF_VIEW_NODES.has(value)
 		) {
 			return dispatcherFunction(prop, value);
+		}
+		// A prototype of the module's is the object itself to a reader that may hold it so, and a checked view at its path
+		// to any other (#667).
+		const prototype = runtime_behindMemberView(value);
+		const prototypePath = prop === "prototype" || prop === null ? PROTOTYPE_PATHS.get(prototype) : undefined;
+		if (prototypePath !== undefined) {
+			if (runtime_mayHoldPrototype(slothlet, reader, prototypePath.parts, prototype)) return prototype;
+			return runtime_selfMemberOf(prototype, reader, slothlet, prototypePath.parts, prototypePath.prop);
 		}
 		// A plain value the node holds (a class's prototype, a method of it) is held to the node's path (#625).
 		return runtime_selfMemberOf(value, reader, slothlet, memberParts(prop), prop);
@@ -4285,14 +4297,9 @@ function runtime_handOut(maker, owner, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
-	if (
-		runtime_isSlothletValue(value) ||
-		INTRINSICS.has(value) ||
-		runtime_isSharedValue(value) ||
-		maker.handedIn.has(value) ||
-		maker.exposed.has(value)
-	)
-		return value;
+	if (runtime_isSlothletValue(value) || INTRINSICS.has(value) || runtime_isSharedValue(value) || maker.handedIn.has(value)) return value;
+	// A prototype of a class the module exports is handed out as it is, to whoever may hold it as itself (#597, #667).
+	if (maker.exposed.has(value)) return runtime_prototypeHandedTo(value, runtime_selfModuleReader(owner.slothlet));
 	// A class instance a method got as its receiver stands for its node (#625): it comes back as it is, so a view
 	// hands it to the reader as the node, whose own write rule holds.
 	if (SELF_INSTANCE_NODES.has(value)) return value;
@@ -4396,6 +4403,11 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 	if (record) return record.maker === maker ? record.original : value;
 	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
 	if (maker.made.has(value)) return value;
+	// A prototype of a module's handed on by a module holding it as itself reaches this one as reading it would (#667).
+	if (PROTOTYPE_PATHS.has(value)) {
+		const handed = runtime_prototypeHandedTo(value, owner);
+		if (handed !== value) return handed;
+	}
 	maker.handedIn.add(value);
 	return runtime_inboundView(maker, value, owner);
 }
@@ -5164,13 +5176,61 @@ function runtime_apiPathParts(node) {
 function runtime_prototypeForReader(wrapper, prototype, prop) {
 	if (prototype === null || typeof prototype !== "object") return prototype;
 	const slothlet = wrapper.slothlet;
+	const parts = runtime_apiPathParts(wrapper);
+	if (prop !== null) parts.push(prop);
+	runtime_recordPrototypePath(slothlet, prototype, parts, prop);
 	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
 	const reader = runtime_selfModuleReader(slothlet);
 	if (reader === null) return prototype;
-	const parts = runtime_apiPathParts(wrapper);
-	if (prop !== null) parts.push(prop);
 	if (runtime_mayHoldPrototype(slothlet, reader, parts, prototype)) return prototype;
 	return runtime_selfMemberOf(prototype, reader, slothlet, parts, prop);
+}
+
+/**
+ * The api path each prototype of a module's was first handed out at (#667): a class's `prototype`, an instance's
+ * prototype at its class's `prototype`, or an instance's own prototype at the instance's path when its class cannot
+ * be told. A module handed the object itself may hand it on, and whoever it reaches is held to that path's rules as
+ * though it had read the prototype there (see {@link runtime_prototypeHandedTo}).
+ * @type {WeakMap<object, {slothlet: object, parts: string[], prop: string|null}>}
+ * @private
+ */
+const PROTOTYPE_PATHS = new WeakMap();
+
+/**
+ * Record the path a prototype of a module's is handed out at, unless one is already recorded.
+ * @param {object} slothlet - The instance.
+ * @param {object} prototype - The prototype.
+ * @param {string[]} parts - The path it is handed out at.
+ * @param {string|null} prop - The key it is read under there (`"prototype"`), or null for an instance's own prototype.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordPrototypePath(slothlet, prototype, parts, prop) {
+	if (!slothlet || prototype === null || typeof prototype !== "object" || PROTOTYPE_PATHS.has(prototype)) return;
+	if (INTRINSICS.has(prototype) || runtime_isSharedValue(prototype)) return;
+	PROTOTYPE_PATHS.set(prototype, { slothlet, parts: [...parts], prop });
+}
+
+/**
+ * A prototype of a module's as it reaches `reader` when a module holding the object itself hands it on (#667): as a
+ * return value, an argument, or inside what a module hands out. While the permission system is on, a reader that may
+ * not hold the object itself (see {@link runtime_mayHoldPrototype}) gets the checked view reading it at its path gives,
+ * so its writes are refused as they would be there. Anything else, and everything while the system is off, passes as
+ * it is.
+ * @param {*} value - The value handed on.
+ * @param {object|null} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}), or a reader
+ *   standing for no module.
+ * @returns {*} What the reader gets.
+ * @private
+ */
+function runtime_prototypeHandedTo(value, reader) {
+	if (value === null || typeof value !== "object") return value;
+	const record = PROTOTYPE_PATHS.get(value);
+	if (record === undefined) return value;
+	const { slothlet, parts, prop } = record;
+	if (!slothlet.handlers?.permissionManager?.isEnabled()) return value;
+	if (runtime_mayHoldPrototype(slothlet, reader, parts, value)) return value;
+	return runtime_selfMemberOf(value, reader, slothlet, parts, prop);
 }
 
 /**
@@ -5196,8 +5256,12 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype) {
 	const apiManager = slothlet.handlers.apiManager;
 	const readerPath = String(reader.____slothletInternal.apiPath ?? "");
 	const context = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID)?.context ?? null;
-	const owned = (path) =>
-		apiManager.ownsPath(path, reader) && permissionManager.decideWrite?.(readerPath, path.join("."), context) !== "deny";
+	// The reader may write the path: it owns it or a write rule grants it the write, and no rule denies it.
+	const owned = (path) => {
+		const decision = permissionManager.decideWrite?.(readerPath, path.join("."), context);
+		if (decision === "deny") return false;
+		return apiManager.ownsPath(path, reader) || (decision === "grant" && !apiManager.isRemovedCaller(reader));
+	};
 	if (!owned(parts)) return false;
 	for (let link = Reflect.getPrototypeOf(prototype), depth = 0; link !== null && depth < 64; depth++) {
 		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
@@ -5247,9 +5311,10 @@ function runtime_emitterOwnPrototype(wrapper) {
  */
 function runtime_emitterPrototypeForReader(wrapper, prototype, reader) {
 	const slothlet = wrapper.slothlet;
+	const parts = runtime_apiPathParts(wrapper);
+	runtime_recordPrototypePath(slothlet, prototype, parts, null);
 	if (reader === null || reader === HOST_READER || !slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
 	if (INTRINSICS.has(prototype) || runtime_isSharedValue(prototype)) return prototype;
-	const parts = runtime_apiPathParts(wrapper);
 	if (runtime_mayHoldPrototype(slothlet, reader, parts, prototype)) return prototype;
 	return runtime_selfMemberOf(prototype, reader, slothlet, parts, null);
 }
