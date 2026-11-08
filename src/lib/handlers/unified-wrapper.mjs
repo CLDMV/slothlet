@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:15:20-08:00 (1794129320)
+ *	@Last modified time: 2026-11-08T08:22:54-08:00 (1794154974)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3276,10 +3276,12 @@ function runtime_originalAccessor(descriptor) {
 
 /**
  * Each module's record of the code it made and the values handed to it (#597), by slothlet instance and then by
- * module: `{ owner, made, handedIn, exposed }`. `owner` is the first wrapper of the module seen, `made` maps each
- * value the module handed out to the stand-in it is handed out as, `handedIn` holds the values other code handed the
- * module, which are never the module's own, and `exposed` the prototypes of the classes it exports, handed out as
- * they are (see runtime_exposePrototype).
+ * module: `{ owner, made, handedIn, exposed, holdsCode, walked }`. `owner` is the first wrapper of the module seen, `made` maps
+ * each value the module handed out to the stand-in it is handed out as, `handedIn` holds the values other code handed
+ * the module, which are never the module's own, `exposed` the prototypes of the classes it exports, handed out as
+ * they are (see runtime_exposePrototype), `holdsCode` the objects of the module's found holding its code, and each
+ * object on the way to it (see runtime_holdsModuleCode), and `walked` the objects of arguments already read for what
+ * they hand the module (see runtime_recordArguments).
  * @type {WeakMap<object, {byID: Map<string, object>, byWrapper: WeakMap<object, object>}>}
  * @private
  */
@@ -3677,7 +3679,7 @@ function runtime_isBuiltinFunction(fn) {
  * The record of the module a wrapper belongs to (see {@link MAKERS}): one per module of an instance, so the same
  * value a module hands out from any of its functions is the same stand-in.
  * @param {object} wrapper - A wrapper of the module.
- * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>}} The module's record.
+ * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>, holdsCode: WeakSet<object>, walked: WeakSet<object>}} The module's record.
  * @private
  */
 function runtime_makerOf(wrapper) {
@@ -3689,7 +3691,14 @@ function runtime_makerOf(wrapper) {
 	// A module removed and added again under the same id is a new module: what the old one made is not its.
 	if (maker && maker.owner.____slothletInternal?.invalid && maker.owner !== wrapper && !wrapper.____slothletInternal?.invalid) maker = null;
 	if (!maker) {
-		maker = { owner: wrapper, made: new WeakMap(), handedIn: new WeakSet(), exposed: new WeakSet() };
+		maker = {
+			owner: wrapper,
+			made: new WeakMap(),
+			handedIn: new WeakSet(),
+			exposed: new WeakSet(),
+			holdsCode: new WeakSet(),
+			walked: new WeakSet()
+		};
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
 			for (const [id, other] of makers.byID) if (other.owner.____slothletInternal?.invalid) makers.byID.delete(id);
@@ -4023,9 +4032,10 @@ function runtime_slotHoldsCode(value, depth, budget, holds) {
 }
 
 /**
- * How many levels of objects a returned value is looked into for code, and how many own properties of all of
- * them together, by the quick search (#597). Data reaching past either is searched to its end (see
- * {@link runtime_holdsModuleCode}) before a value is handed out as code (#726).
+ * How many levels of objects, and how many own properties of all of them together, the bounded search
+ * ({@link runtime_holdsCode}) looks into for code before taking a value to hold some (#597): a node's own value as a
+ * module inspects it, a member a module's read is checked for. What a module hands out is searched to its end instead
+ * (see {@link runtime_holdsModuleCode}, #726).
  * @type {{depth: number, properties: number}}
  * @private
  */
@@ -4080,10 +4090,22 @@ function runtime_isOrdinaryPrototype(prototype) {
 }
 
 /**
- * {@link runtime_isSlotObject} for an object whose prototype is plain data's (#726), by the engine's brand checks that
- * throw nothing: an array has no slots of another kind, and a key, a `WeakRef`, an emitter or an event target given a
- * plain prototype is read as the plain object it then looks like — its own members are still searched — since telling
- * one apart costs a thrown error for every object of plain data searched.
+ * Objects with a plain prototype found not to be a `WeakRef` (see {@link runtime_isOrdinarySlotObject}). An object's
+ * kind is fixed when it is made, so the answer never goes stale.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const NOT_WEAK_REFS = new WeakSet();
+
+/**
+ * {@link runtime_isSlotObject} for an object whose prototype is plain data's (#726): an array has no slots of another
+ * kind; anything else is told apart by the engine's brand checks, so a `WeakRef` given a plain prototype is still a
+ * `WeakRef`, and its target, which no member shows, is not handed out as data. No brand check for a `WeakRef` throws
+ * nothing, so `deref`'s runs once per object and its answer is kept (see {@link NOT_WEAK_REFS}). What else keeps state
+ * no member shows holds none of a module's code: a key's and a crypto key's slots hold Node's key material (their
+ * brand checks throw for anything else, so they are not asked), and an emitter or an event target given a plain
+ * prototype keeps its listener table among its own members, which are searched, so a listener of the module's in it is
+ * found.
  * @param {object} value - An object that is not a Proxy, with a plain prototype.
  * @returns {boolean} True for an object with internal slots.
  * @private
@@ -4091,7 +4113,7 @@ function runtime_isOrdinaryPrototype(prototype) {
 function runtime_isOrdinarySlotObject(value) {
 	if (Array.isArray(value)) return false;
 	const types = util.types;
-	return (
+	if (
 		types.isMap(value) ||
 		types.isSet(value) ||
 		types.isWeakMap(value) ||
@@ -4105,7 +4127,31 @@ function runtime_isOrdinarySlotObject(value) {
 		types.isNativeError(value) ||
 		types.isMapIterator(value) ||
 		types.isSetIterator(value)
-	);
+	)
+		return true;
+	if (NOT_WEAK_REFS.has(value)) return false;
+	if (runtime_isWeakRefUntraced(value)) return true;
+	NOT_WEAK_REFS.add(value);
+	return false;
+}
+
+/**
+ * {@link runtime_isWeakRef}, with no stack captured for the error `deref` throws for anything else, which is most of
+ * its cost: `Error.stackTraceLimit` is set to 0 for the check while it is a plain writable property, so setting it runs
+ * no code.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for a `WeakRef`.
+ * @private
+ */
+function runtime_isWeakRefUntraced(value) {
+	const limit = Reflect.getOwnPropertyDescriptor(Error, "stackTraceLimit");
+	if (limit === undefined || !("value" in limit) || !limit.writable) return runtime_isWeakRef(value);
+	Error.stackTraceLimit = 0;
+	try {
+		return runtime_isWeakRef(value);
+	} finally {
+		Error.stackTraceLimit = limit.value;
+	}
 }
 
 /**
@@ -4130,49 +4176,217 @@ function runtime_holdsCode(value, depth, budget) {
 }
 
 /**
- * Whether a value a module hands out holds code of the module's anywhere in it (#726): searched to its end, however
- * deep and wide, each object once, so data past {@link CODE_SEARCH} is still data and code past it is still found. A
- * value handed to the module from outside (see {@link runtime_isCallersValue}) is its giver's and is not looked into.
- * @param {object} maker - The module's record.
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True when it holds code of the module's.
+ * Deep-frozen plain data holding nothing that can be code (#726): objects and arrays with a plain prototype, frozen,
+ * whose every member is a primitive or such data again. Nothing of such data can change — not a member, not a
+ * prototype — so once a search has read it through, no later search reads it again, for any module. Data that is not
+ * frozen to its end is read on every search that reaches it.
+ * @type {WeakSet<object>}
  * @private
  */
-function runtime_holdsModuleCode(maker, value) {
-	const search = { remaining: Infinity, maker, seen: new Set([value]), pending: [value] };
-	try {
-		while (search.pending.length > 0)
-			if (runtime_objectHoldsCode(search.pending.pop(), 0, search, runtime_memberHoldsModuleCode)) return true;
-		return false;
-		/* v8 ignore start */
-	} catch {
-		// An object that refuses to be described — a module namespace whose module threw before its bindings were
-		// initialised — is taken to hold code. It can occur, but no suite here leaves such a namespace behind.
-		return true;
-	}
-	/* v8 ignore stop */
+const INERT_DATA = new WeakSet();
+
+/**
+ * A search of the objects a value reaches, one at a time, each once (see {@link runtime_holdsModuleCode}): the objects
+ * reached, the position each was reached from, the positions still to read, and, once a frozen object is read, what
+ * tells {@link INERT_DATA} apart. It has no bound: `remaining` is the unlimited budget {@link runtime_objectHoldsCode}
+ * counts down.
+ * @param {object} maker - The module's record.
+ * @param {WeakSet<object>|null} scope - What the module's own leaf handed the call being answered.
+ * @returns {object} The search.
+ * @private
+ */
+function runtime_newSearch(maker, scope) {
+	return {
+		maker,
+		scope,
+		nodes: [],
+		parents: [],
+		pending: [],
+		seen: new Set(),
+		current: -1,
+		holderFrozen: false,
+		frozen: null,
+		remaining: Infinity
+	};
 }
 
 /**
- * Whether a member reached by {@link runtime_holdsModuleCode} is code of the module's; an object not seen yet is
- * queued to be searched.
+ * Queue an object reached in a search to be read, once, from the object being read.
+ * @param {object} search - The search.
+ * @param {object} member - The object.
+ * @returns {void}
+ * @private
+ */
+function runtime_reach(search, member) {
+	if (search.holderFrozen) {
+		const holder = search.nodes[search.current];
+		if (Object.isFrozen(member)) search.frozen.edges.push(holder, member);
+		else search.frozen.impure.add(holder);
+	}
+	if (search.seen.has(member)) return;
+	search.seen.add(member);
+	search.nodes.push(member);
+	search.parents.push(search.current);
+	search.pending.push(search.nodes.length - 1);
+}
+
+/**
+ * Mark the object being read as holding something other than plain data, so it is not {@link INERT_DATA}.
+ * @param {object} search - The search.
+ * @returns {void}
+ * @private
+ */
+function runtime_taint(search) {
+	if (search.holderFrozen) search.frozen.impure.add(search.nodes[search.current]);
+}
+
+/**
+ * Record the frozen objects of a search that found nothing as {@link INERT_DATA}: each one holding only primitives and
+ * frozen plain objects of the search, none of them holding anything else, cycles included.
+ * @param {object} search - The search.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordInertData(search) {
+	const frozen = search.frozen;
+	if (frozen === null) return;
+	const holders = new Map();
+	for (let index = 0; index < frozen.edges.length; index += 2) {
+		const member = frozen.edges[index + 1];
+		const list = holders.get(member);
+		if (list) list.push(frozen.edges[index]);
+		else holders.set(member, [frozen.edges[index]]);
+	}
+	const pending = [...frozen.impure];
+	while (pending.length > 0) {
+		for (const holder of holders.get(pending.pop()) ?? []) {
+			if (frozen.impure.has(holder)) continue;
+			frozen.impure.add(holder);
+			pending.push(holder);
+		}
+	}
+	for (const node of frozen.nodes) if (!frozen.impure.has(node)) INERT_DATA.add(node);
+}
+
+/**
+ * Whether a value a module hands out holds code of the module's anywhere in it (#726): searched to its end, however
+ * deep and wide, each object once, and ended as soon as code is found. A value handed to the module from outside (see
+ * {@link runtime_isCallersValue}) is its giver's and is not looked into. The object holding the code found, and each
+ * object on the way to it, are recorded as holding the module's code (`maker.holdsCode`), so a later search reaching
+ * one of them — the read of a member through the stand-in — ends there: an object once found holding the module's code
+ * is handed out as the module's from then on, as its stand-in is. Data found holding no code is read again by the next
+ * search that reaches it, since the module can still change it, unless it is {@link INERT_DATA}.
+ * @param {object} maker - The module's record.
+ * @param {object} value - An object that is not a Proxy.
+ * @param {WeakSet<object>|null} [scope=null] - What the module's own leaf handed the call being answered.
+ * @returns {boolean} True when it holds code of the module's.
+ * @private
+ */
+function runtime_holdsModuleCode(maker, value, scope = null) {
+	if (INERT_DATA.has(value)) return false;
+	if (maker.holdsCode.has(value)) return true;
+	const search = runtime_newSearch(maker, scope);
+	runtime_reach(search, value);
+	try {
+		while (search.pending.length > 0) {
+			const position = search.pending.pop();
+			const object = search.nodes[position];
+			search.current = position;
+			search.holderFrozen = Object.isFrozen(object);
+			if (search.holderFrozen) {
+				search.frozen ??= { nodes: [], impure: new Set(), edges: [] };
+				search.frozen.nodes.push(object);
+			}
+			if (!runtime_searchObject(search, object)) continue;
+			for (let at = position; at !== -1; at = search.parents[at]) maker.holdsCode.add(search.nodes[at]);
+			return true;
+		}
+	} catch {
+		// An object that refuses to be described — a module namespace whose module threw before its bindings were
+		// initialised — is taken to hold code.
+		return true;
+	}
+	runtime_recordInertData(search);
+	return false;
+}
+
+/**
+ * Read one object of a {@link runtime_holdsModuleCode} search: whether it carries code itself, its members queued.
+ * Plain data — an object or array whose prototype is `Object.prototype`, `Array.prototype` or none — is read by its
+ * own members; anything else as {@link runtime_objectHoldsCode} reads it.
+ * @param {object} search - The search.
+ * @param {object} object - An object that is not a Proxy.
+ * @returns {boolean} True when it carries code of the module's.
+ * @private
+ */
+function runtime_searchObject(search, object) {
+	const prototype = Reflect.getPrototypeOf(object);
+	if (!runtime_isOrdinaryPrototype(prototype)) {
+		runtime_taint(search);
+		if (runtime_isSlothletValue(object) || INTRINSICS.has(object) || runtime_isSharedValue(object)) return false;
+		return runtime_objectHoldsCode(object, 0, search, runtime_memberHoldsModuleCode);
+	}
+	// A plain object holding the language's own (`Math`, `JSON`) or made by no module (a built-in's export).
+	if (INTRINSICS.has(object) || isSharedExport(object)) {
+		runtime_taint(search);
+		return !runtime_isSharedValue(object) && !INTRINSICS.has(object);
+	}
+	if (runtime_isOrdinarySlotObject(object)) {
+		runtime_taint(search);
+		return runtime_slotHoldsCode(object, 0, search, runtime_memberHoldsModuleCode);
+	}
+	const isArray = Array.isArray(object);
+	for (const key of Reflect.ownKeys(object)) {
+		// An array's `length` is a number.
+		if (isArray && key === "length") continue;
+		const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+		if (descriptor === undefined) continue;
+		if ("value" in descriptor) {
+			const member = descriptor.value;
+			if (
+				member !== null &&
+				(typeof member === "object" || typeof member === "function") &&
+				runtime_memberHoldsModuleCode(member, 0, search)
+			)
+				return true;
+			continue;
+		}
+		runtime_taint(search);
+		for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a member reached by {@link runtime_holdsModuleCode} is code of the module's, or an object already found
+ * holding it; an object besides is queued to be read (see {@link runtime_reach}).
  * @param {*} member - The member.
  * @param {number} _depth - Unused: the search has no depth bound.
- * @param {{maker: object, seen: Set<object>, pending: Array<object>}} search - The search.
+ * @param {object} search - The search.
  * @returns {boolean} True when it is code.
  * @private
  */
 function runtime_memberHoldsModuleCode(member, _depth, search) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return false;
-	if (runtime_isCallersValue(search.maker, member)) return false;
+	const isObject = typeof member === "object";
+	if (isObject && INERT_DATA.has(member)) {
+		if (search.holderFrozen) search.frozen.edges.push(search.nodes[search.current], member);
+		return false;
+	}
+	const maker = search.maker;
+	if (runtime_isCallersValue(maker, member, search.scope)) {
+		runtime_taint(search);
+		return false;
+	}
+	if (isObject && !util.types.isProxy(member)) {
+		if (maker.holdsCode.has(member) || maker.made.has(member)) return true;
+		runtime_reach(search, member);
+		return false;
+	}
+	runtime_taint(search);
 	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
 	if (util.types.isProxy(member)) return true;
-	if (typeof member === "function") return !runtime_isBuiltinFunction(member);
-	if (!search.seen.has(member)) {
-		search.seen.add(member);
-		search.pending.push(member);
-	}
-	return false;
+	return !runtime_isBuiltinFunction(member);
 }
 
 /**
@@ -4180,47 +4394,86 @@ function runtime_memberHoldsModuleCode(member, _depth, search) {
  * than one the module made: such a value is its giver's wherever the module hands it on (#726).
  * @param {object} maker - The module's record.
  * @param {object|Function} value - The value.
+ * @param {WeakSet<object>|null} [scope=null] - What the module's own leaf handed the call being answered (see
+ *   {@link CALL_SCOPES}).
  * @returns {boolean} True when it is.
  * @private
  */
-function runtime_isCallersValue(maker, value) {
-	return maker.handedIn.has(value) || INBOUND_VIEWS.has(value);
+function runtime_isCallersValue(maker, value, scope = null) {
+	return maker.handedIn.has(value) || INBOUND_VIEWS.has(value) || (scope !== null && scope.has(value));
 }
 
 /**
- * Record what a call's arguments reach as handed to the module (#726): every object and function in them, through
- * plain own data properties and the entries of a `Map` or `Set`, so that the caller's values a module hands back
- * inside its result are the caller's at any depth. Read from descriptors alone: a Proxy and a function are recorded
- * and not looked into, and the module's own values (handed back to it as themselves) are not recorded. Run only
- * when a result may hold code (see {@link runtime_handOut}).
+ * Record what a call's arguments reach as handed to the module (#726), as they are handed in, before any of the
+ * module's code runs with them: every function, Proxy and object of a class (anything but plain data, which is told
+ * by what it holds when it comes back) in them, through own data properties and the entries of a `Map` or `Set`, so
+ * that the caller's code a module hands back inside its result is the caller's at any depth, and what the module puts
+ * into the arguments while it runs stays the module's. Read from descriptors alone: a Proxy and a function are
+ * recorded and not looked into, and the module's own values (handed back to it as themselves) are not recorded.
+ *
+ * An object is read once per module: handed to it again, it is not read again (`maker.walked`). What the module wrote
+ * into it while it held it is then never taken for the caller's; what the caller added to it since is taken for the
+ * module's, and comes back as a stand-in rather than as itself.
  * @param {object} maker - The module's record.
- * @param {ArrayLike<*>} args - The call's arguments, as the module was handed them.
- * @param {*} target - A value to look for.
- * @returns {boolean} True when `target` is among what the arguments reach.
+ * @param {ArrayLike<*>} args - The call's arguments, as its caller passed them.
+ * @param {WeakSet<object>|null} [scope=null] - Where to record them instead, read afresh: what the module's own leaf
+ *   hands a call (see {@link CALL_SCOPES}).
+ * @returns {void}
  * @private
  */
-function runtime_recordHandedIn(maker, args, target) {
-	const seen = new Set();
-	const pending = Array.from(args);
-	let found = false;
-	while (pending.length > 0) {
-		let value = pending.pop();
-		if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
-		value = INBOUND_VIEWS.get(value)?.original ?? value;
-		if (seen.has(value)) continue;
-		seen.add(value);
-		if (runtime_isSlothletValue(value) || INTRINSICS.has(value) || STAND_IN_RECORDS.has(value) || maker.made.has(value)) continue;
-		maker.handedIn.add(value);
-		if (value === target) found = true;
-		if (typeof value === "function" || util.types.isProxy(value)) continue;
-		if (util.types.isMap(value)) for (const entry of Reflect.apply(SLOT_READERS.mapEntries, value, [])) pending.push(entry[0], entry[1]);
-		else if (util.types.isSet(value)) for (const entry of Reflect.apply(SLOT_READERS.setValues, value, [])) pending.push(entry);
-		for (const key of Reflect.ownKeys(value)) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (descriptor && "value" in descriptor) pending.push(descriptor.value);
-		}
+function runtime_recordArguments(maker, args, scope = null) {
+	const record = { into: scope ?? maker.handedIn, seen: scope === null ? maker.walked : new WeakSet(), pending: [] };
+	for (let index = 0; index < args.length; index++) {
+		const value = args[index];
+		if (value !== null && typeof value === "object") runtime_recordMember(maker, record, value, false);
 	}
-	return found;
+	try {
+		while (record.pending.length > 0) {
+			const object = record.pending.pop();
+			const prototype = Reflect.getPrototypeOf(object);
+			if (!runtime_isOrdinaryPrototype(prototype)) {
+				if (runtime_isSlothletValue(object)) continue;
+				if (!INTRINSICS.has(prototype)) record.into.add(object);
+			}
+			if (util.types.isMap(object))
+				for (const entry of Reflect.apply(SLOT_READERS.mapEntries, object, [])) {
+					runtime_recordMember(maker, record, entry[0]);
+					runtime_recordMember(maker, record, entry[1]);
+				}
+			else if (util.types.isSet(object))
+				for (const entry of Reflect.apply(SLOT_READERS.setValues, object, [])) runtime_recordMember(maker, record, entry);
+			for (const key of Reflect.ownKeys(object)) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+				if (descriptor !== undefined && "value" in descriptor) runtime_recordMember(maker, record, descriptor.value);
+			}
+		}
+	} catch {
+		// What refuses to be described is not looked into; what it holds is not the caller's.
+	}
+}
+
+/**
+ * One value reached by {@link runtime_recordArguments}: a function or Proxy recorded, an object queued to be read.
+ * @param {object} maker - The module's record.
+ * @param {{into: WeakSet<object>, seen: WeakSet<object>, pending: Array<object>}} record - The walk.
+ * @param {*} member - The value.
+ * @param {boolean} [nested=true] - Whether it is held by another argument; one that is not is recorded by
+ *   {@link runtime_handIn}.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordMember(maker, record, member, nested = true) {
+	if (member === null || (typeof member !== "object" && typeof member !== "function")) return;
+	if (typeof member === "object" && INERT_DATA.has(member)) return;
+	const original = INBOUND_VIEWS.get(member)?.original ?? member;
+	if (INTRINSICS.has(original) || maker.made.has(original)) return;
+	if (typeof original === "function" || util.types.isProxy(original)) {
+		if (nested && !runtime_isSlothletValue(original)) record.into.add(original);
+		return;
+	}
+	if (record.seen.has(original)) return;
+	record.seen.add(original);
+	record.pending.push(original);
 }
 
 /**
@@ -4232,13 +4485,14 @@ function runtime_recordHandedIn(maker, args, target) {
  * @param {object} maker - The module's record (see {@link runtime_makerOf}).
  * @param {object} owner - The wrapper a new stand-in runs as.
  * @param {*} value - The value.
- * @param {ArrayLike<*>|null} [args=null] - The arguments of the call that returned it: what they reach is the caller's,
- *   told apart before a value that may hold code is handed out as the module's (see {@link runtime_recordHandedIn}).
+ * @param {WeakSet<object>|null} [scope=null] - What the module's own leaf handed the call returning it, which comes
+ *   back from that call as itself (see {@link CALL_SCOPES}).
  * @returns {*} What is handed out.
  * @private
  */
-function runtime_handOut(maker, owner, value, args = null) {
+function runtime_handOut(maker, owner, value, scope = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	if (scope !== null && scope.has(value)) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
 	if (
@@ -4255,9 +4509,6 @@ function runtime_handOut(maker, owner, value, args = null) {
 	const made = maker.made.get(value);
 	if (made) return made;
 	try {
-		// A function or Proxy the caller handed in, reached through what it handed, is the caller's (#726).
-		if (args !== null && (typeof value === "function" || util.types.isProxy(value)) && runtime_recordHandedIn(maker, args, value))
-			return value;
 		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
@@ -4272,12 +4523,9 @@ function runtime_handOut(maker, owner, value, args = null) {
 		}
 		if (util.types.isGeneratorObject(value)) return runtime_generatorStandIn(maker, owner, value);
 		if (runtime_isPlainPromise(value)) return runtime_promiseStandIn(maker, owner, value);
-		// Data is handed out as itself at any depth (#726): the quick search settles most values, and one it cannot
-		// settle is searched to its end. Code found there may be the caller's own: what the call's arguments reach is
-		// recorded as the caller's and the value searched again.
-		if (!runtime_holdsCode(value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
-		if (!runtime_holdsModuleCode(maker, value)) return value;
-		if (args !== null && (runtime_recordHandedIn(maker, args, value) || !runtime_holdsModuleCode(maker, value))) return value;
+		// Data is handed out as itself at any depth (#726); what the call's arguments reached is the caller's (see
+		// runtime_recordArguments).
+		if (!runtime_holdsModuleCode(maker, value, scope)) return value;
 		return runtime_membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
@@ -4330,14 +4578,15 @@ function runtime_promiseStandIn(maker, owner, original) {
  * What a module's call hands its caller (#597): see {@link runtime_handOut}.
  * @param {object} owner - The wrapper whose call returned the value.
  * @param {*} value - What the call returned.
- * @param {ArrayLike<*>|null} [args=null] - The call's arguments, whose values are the caller's (#726).
+ * @param {ArrayLike<*>|null} [args=null] - The call's arguments, as the module was handed them (see {@link CALL_SCOPES}).
  * @returns {*} What the caller gets.
  * @private
  */
 function runtime_attributeResult(owner, value, args = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
-	return runtime_handOut(runtime_makerOf(owner), owner, value, args?.length > 0 ? args : null);
+	const scope = args !== null && typeof args === "object" ? (CALL_SCOPES.get(args) ?? null) : null;
+	return runtime_handOut(runtime_makerOf(owner), owner, value, scope);
 }
 
 setResultAttributor(runtime_attributeResult);
@@ -4352,21 +4601,25 @@ setInboundOriginal((value) => (typeof value === "object" && value !== null ? (IN
  * @param {object} maker - The module's record.
  * @param {*} value - The value.
  * @param {object} [owner] - The wrapper of the module's leaf it is handed to.
+ * @param {boolean} [fromOutside=true] - Whether code other than the module's own hands it: what the module hands its
+ *   own leaves stays its own (#726).
  * @returns {*} What the module gets.
  * @private
  */
-function runtime_handIn(maker, value, owner = maker.owner) {
+function runtime_handIn(maker, value, owner = maker.owner, fromOutside = true) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const record = STAND_IN_RECORDS.get(value) ?? INBOUND_VIEWS.get(value);
 	if (record) return record.maker === maker ? record.original : value;
 	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
 	if (maker.made.has(value)) return value;
-	maker.handedIn.add(value);
+	if (fromOutside) maker.handedIn.add(value);
 	return runtime_inboundView(maker, value, owner);
 }
 
 /**
- * Hand a list of arguments to a module (see {@link runtime_handIn}).
+ * Hand a list of arguments to a module (see {@link runtime_handIn}): what they reach is recorded as handed in before
+ * the module's code runs with them (see {@link runtime_recordArguments}), unless the module itself hands them, from
+ * one of its own leaves to another (#726).
  * @param {object} maker - The module's record.
  * @param {ArrayLike<*>} args - The arguments.
  * @param {object} [owner] - The wrapper of the module's leaf they are handed to.
@@ -4376,15 +4629,36 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 function runtime_handInAll(maker, args, owner = maker.owner) {
 	let result = args;
 	const count = args?.length ?? 0;
+	if (count === 0) return result;
+	const fromOutside = !runtime_isModuleRunning(maker, owner);
+	let scope = null;
+	if (fromOutside) runtime_recordArguments(maker, args);
+	else {
+		// The module handing values to its own leaf: they come back from this call as themselves, and stay its own.
+		scope = new WeakSet();
+		runtime_recordArguments(maker, args, scope);
+		result = Array.from(args);
+		CALL_SCOPES.set(result, scope);
+	}
 	for (let index = 0; index < count; index++) {
 		const value = args[index];
-		const handed = runtime_handIn(maker, value, owner);
+		if (scope !== null && value !== null && (typeof value === "object" || typeof value === "function")) scope.add(value);
+		const handed = runtime_handIn(maker, value, owner, fromOutside);
 		if (handed === value) continue;
 		if (result === args) result = Array.from(args);
 		result[index] = handed;
 	}
 	return result;
 }
+
+/**
+ * What a module's own leaf handed a call into the same module (#726), by the argument list the call runs with: the
+ * call hands these back as themselves, as a plain call would, without their becoming the caller's for the module, so
+ * the module's code among them stays the module's when it hands it out to anyone else.
+ * @type {WeakMap<ArrayLike<*>, WeakSet<object>>}
+ * @private
+ */
+const CALL_SCOPES = new WeakMap();
 
 /**
  * Whether a caller's plain array or object holds a stand-in of the module's own, within {@link CODE_SEARCH}.
@@ -4481,6 +4755,19 @@ function runtime_runningLeafOf(maker, fallback) {
 }
 
 /**
+ * Whether code of the module is what is running right now — one of its leaves, calling another (#726).
+ * @param {object} maker - The module's record.
+ * @param {object} wrapper - A wrapper of the instance it runs in.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isModuleRunning(maker, wrapper) {
+	const slothlet = wrapper?.slothlet;
+	const current = slothlet?.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
+	return current !== null && genuineWrappers.has(current) && runtime_makerOf(current) === maker;
+}
+
+/**
  * Functions standing in for an original's `toString`, so a stand-in's source reads as its original's.
  * @type {WeakMap<object, Function>}
  * @private
@@ -4513,7 +4800,13 @@ function runtime_membrane(maker, owner, original) {
 	// An object with internal slots carrying the module's code (see runtime_slotHoldsCode), or one of the language's own
 	// iterators: the engine's own methods it is read for work on its slots, so they run on the object itself, not on its
 	// stand-in.
-	const isSlot = !isProxy && !isFunction && (runtime_isSlotObject(original) || runtime_isNativeIterator(original));
+	const isSlot =
+		!isProxy &&
+		!isFunction &&
+		((runtime_isOrdinaryPrototype(Reflect.getPrototypeOf(original))
+			? runtime_isOrdinarySlotObject(original)
+			: runtime_isSlotObject(original)) ||
+			runtime_isNativeIterator(original));
 	// A compiled script of the module's: what its methods run is the module's code.
 	const isScript =
 		!isProxy &&
