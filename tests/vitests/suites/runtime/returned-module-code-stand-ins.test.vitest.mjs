@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:57:52-08:00 (1794164272)
+ *	@Last modified time: 2026-11-08T12:17:31-08:00 (1794169051)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -395,26 +395,36 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 	}
 
 	describe("code a module writes into the caller's arguments", () => {
-		it("hands back a function written into a nested argument as the module's", async () => {
+		// What the module writes into the arguments during a call is what the caller reads from its own objects, so that
+		// call's result hands it back as the caller holds it (PERMISSIONS.md, the limits).
+		it("hands back a function written into a nested argument during the call as the caller reads it", async () => {
 			const arg = { inner: { list: [] } };
 			const want = { inner: { list: [] } };
 			expect(plain.plantNested(want)).toBe(want.inner.w);
-			expectStandIn(await api.bag.plantNested(arg));
+			const out = await api.bag.plantNested(arg);
+			expect(types.isProxy(arg.inner.w)).toBe(false);
+			expect(out === arg.inner.w).toBe(true);
 		});
 
-		it("hands back a function written onto the argument itself as the module's", async () => {
+		it("hands back a function written onto the argument itself during the call as the caller reads it", async () => {
 			const want = {};
 			expect(plain.plantTop(want)).toBe(want.w);
-			expectStandIn(await api.bag.plantTop({}));
+			const arg = {};
+			const out = await api.bag.plantTop(arg);
+			expect(out === arg.w).toBe(true);
 		});
 
-		it("hands back a function pushed into the caller's nested array as the module's", async () => {
+		it("hands back the caller's nested array the module pushed a function into as itself", async () => {
 			const want = { inner: { list: [1] } };
 			const got = plain.plantList(want);
 			expect(got.got).toBe(want.inner.list);
-			const out = await api.bag.plantList({ inner: { list: [1] } });
+			expect(got.got[1]).toBe(want.inner.list[1]);
+			const arg = { inner: { list: [1] } };
+			const out = await api.bag.plantList(arg);
+			expect(types.isProxy(out)).toBe(false);
+			expect(out.got === arg.inner.list).toBe(true);
 			expect(out.got[0]).toBe(1);
-			expectStandIn(out.got[1]);
+			expect(types.isProxy(out.got[1])).toBe(false);
 		});
 
 		it("hands back a function written into an argument kept from an earlier call as the module's", async () => {
@@ -450,16 +460,19 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 		});
 	});
 
-	it("hands frozen data back as itself, and as the module's once the module puts code where it is not frozen", async () => {
+	// Data handed back as itself stays itself: a function the module puts into it afterwards runs as whoever calls it
+	// (PERMISSIONS.md, "Plain data passes as it is").
+	it("hands frozen data back as itself, and as itself again once the module puts code where it is not frozen", async () => {
 		const want = plain.frozenShell();
 		expect(Object.isFrozen(want) && !Object.isFrozen(want.inner)).toBe(true);
 		const first = await api.bag.frozenShell();
 		expect(types.isProxy(first)).toBe(false);
 		expect(await api.bag.frozenShell()).toBe(first);
 		const planted = await api.bag.plantInShell();
-		expect(types.isProxy(planted)).toBe(true);
+		expect(planted === first).toBe(true);
 		expect(planted.list).toEqual([1, 2]);
-		expectStandIn(planted.inner.w);
+		expect(typeof planted.inner.w).toBe("function");
+		expect(types.isProxy(planted.inner.w)).toBe(false);
 	});
 
 	describe("code a module hands to its own leaf", () => {
@@ -648,9 +661,9 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 			expect(plain.echo(want)).toBe(want);
 			expect(plain.echo(want).w).toBe(fn);
 			const arg = {};
-			// Returned on its own, the function is the module's.
-			expectStandIn(await api.bag.plantTop(arg));
-			// Written onto the caller's own object, the caller reads it as it is, without slothlet.
+			// Written onto the caller's own object, the caller reads it as it is, without slothlet, and the call's own
+			// result hands it back as that.
+			expect((await api.bag.plantTop(arg)) === arg.w).toBe(true);
 			expect(types.isProxy(arg.w)).toBe(false);
 			const back = await api.bag.echo(arg);
 			expect(back === arg).toBe(true);
