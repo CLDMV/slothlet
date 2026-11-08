@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T09:59:38-08:00 (1794160778)
+ *	@Last modified time: 2026-11-08T10:56:52-08:00 (1794164212)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1540,8 +1540,8 @@ export class LiveContextManager {
 	 * @param {*} value - Resolved return value of the call.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
-	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what the module's own leaf handed the call comes
-	 *   back from it as itself (#726).
+	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reached as the call started comes back
+	 *   from it as the caller's (#726).
 	 * @returns {*} The value as the caller gets it.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {
