@@ -1033,3 +1033,41 @@ describe.each(
 		});
 	}
 );
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null, writesLand: true },
+				{ name: "permissions on, no rules", permissions: {}, writesLand: false },
+				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, writesLand: false },
+				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, writesLand: true }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("a prototype the owner holds as itself, handed on > $mode / $runtime / $name", ({ mode, runtime, permissions, writesLand }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	it("reaches another module as reading it would, so a write the module may not make there is refused", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const outcome = await api.reader.writeHandedPrototypes(PROBE_KEY);
+		const landed = {
+			returned: await api.owner.takeFromPrototype(`${PROBE_KEY}Returned`),
+			boxed: await api.owner.takeFromPrototype(`${PROBE_KEY}Boxed`),
+			argument: await api.owner.takeFromPrototype(`${PROBE_KEY}Argument`)
+		};
+		if (writesLand) {
+			expect(outcome).toEqual({ returned: "written", boxed: "written", argument: "written" });
+			expect(landed).toEqual({ returned: true, boxed: true, argument: true });
+			return;
+		}
+		const refused = "threw LOOSE_SET_NOT_OWNED";
+		expect(outcome).toEqual({ returned: refused, boxed: refused, argument: refused });
+		expect(landed).toEqual({ returned: false, boxed: false, argument: false });
+	});
+});

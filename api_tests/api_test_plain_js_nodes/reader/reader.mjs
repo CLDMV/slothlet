@@ -277,3 +277,36 @@ export function readPrototypeAnswers() {
 export function heldPrototypeAnswers(instances) {
 	return prototypeAnswers(instances);
 }
+
+/**
+ * Write onto the owner's class prototype the owner handed this module: returned, returned inside an object, and as an
+ * argument (#667).
+ * @param {string} key - The member written.
+ * @returns {object} The outcome of each write.
+ */
+export function writeHandedPrototypes(key) {
+	return {
+		returned: attempt(() => {
+			self.owner.handPrototype()[`${key}Returned`] = 1;
+			return "written";
+		}),
+		boxed: attempt(() => {
+			self.owner.handPrototypeBoxed().prototype[`${key}Boxed`] = 1;
+			return "written";
+		}),
+		argument: self.owner.givePrototype(`${key}Argument`)
+	};
+}
+
+/**
+ * Write a member onto a value the owner handed this module as an argument.
+ * @param {object} given - The value.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeGiven(given, key) {
+	return attempt(() => {
+		given[key] = 1;
+		return "written";
+	});
+}

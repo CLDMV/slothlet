@@ -277,3 +277,39 @@ export function freezeOwn() {
 export function readOwn() {
 	return reads(self.owner);
 }
+
+/**
+ * This module's class prototype as it reads it through `self`, handed to whoever calls (#667).
+ * @returns {object} `Foo.prototype`, as this module holds it.
+ */
+export function handPrototype() {
+	return self.owner.Foo.prototype;
+}
+
+/**
+ * This module's class prototype as it reads it through `self`, handed out inside an object holding a method (#667).
+ * @returns {{prototype: object, describe: function(): string}} The prototype, and a method beside it.
+ */
+export function handPrototypeBoxed() {
+	return { prototype: self.owner.Foo.prototype, describe: () => "boxed" };
+}
+
+/**
+ * Hand this module's class prototype, as it reads it through `self`, to the reader as an argument (#667).
+ * @param {string} key - The member the reader writes onto it.
+ * @returns {string} The outcome of the reader's write.
+ */
+export function givePrototype(key) {
+	return self.reader.writeGiven(self.owner.Foo.prototype, key);
+}
+
+/**
+ * Whether this module's class prototype holds `key` as its own, and drop it.
+ * @param {string} key - The member looked for.
+ * @returns {boolean} Whether it held it.
+ */
+export function takeFromPrototype(key) {
+	const held = Object.hasOwn(Foo.prototype, key);
+	delete Foo.prototype[key];
+	return held;
+}
