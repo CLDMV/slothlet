@@ -1,0 +1,182 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_prototype_crossings/reader/reader.mjs
+ *	@Date: 2026-11-08T10:28:06-08:00 (1794162486)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-08T10:32:29-08:00 (1794162749)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview Writes onto another module's class prototype however that module hands it over.
+ * @module api_test_prototype_crossings/reader
+ */
+
+import { self } from "@cldmv/slothlet/runtime";
+
+/**
+ * Write `key` onto a value, answering the outcome.
+ * @param {function(): object} reach - Reaches the value.
+ * @param {string} key - The member written.
+ * @returns {string} `"written"`, or `"threw <code>"`.
+ */
+function write(reach, key) {
+	try {
+		reach()[key] = 1;
+		return "written";
+	} catch (error) {
+		return `threw ${error?.code ?? error?.name}`;
+	}
+}
+
+/**
+ * Write onto the prototype carried by an error the owner throws.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeThrown(source, key) {
+	try {
+		self.owner.throwWith(source);
+	} catch (error) {
+		return write(() => error.p, key);
+	}
+	return "no throw";
+}
+
+/**
+ * Write onto the prototype carried by an error the owner rejects with.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {Promise<string>} The outcome.
+ */
+export async function writeRejected(source, key) {
+	try {
+		await self.owner.rejectWith(source);
+	} catch (error) {
+		return write(() => error.p, key);
+	}
+	return "no rejection";
+}
+
+/**
+ * Write onto the prototype the owner emits to a listener of this module's.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeEmitted(source, key) {
+	let outcome = "not heard";
+	const listener = (prototype) => {
+		outcome = write(() => prototype, key);
+	};
+	self.owner.bus.on("carry", listener);
+	try {
+		self.owner.emitWith(source);
+	} finally {
+		self.owner.bus.off("carry", listener);
+	}
+	return outcome;
+}
+
+/**
+ * Write onto the prototype the owner calls a function of this module's with.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeCalledBack(source, key) {
+	return self.owner.callBack((prototype) => write(() => prototype, key), source);
+}
+
+/**
+ * Write onto the prototype a `WeakRef` of the owner's holds.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeDereferenced(source, key) {
+	return write(() => self.owner.weakRef(source).deref(), key);
+}
+
+/**
+ * Write onto the prototype a frozen object of the owner's holds.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeFrozen(source, key) {
+	return write(() => self.owner.frozenBox(source).p, key);
+}
+
+/**
+ * Write onto the prototype the owner returns.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeReturned(source, key) {
+	return write(() => self.owner.returnPrototype(source), key);
+}
+
+/**
+ * Write onto the prototype read from the class's `prototype` descriptor.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeDescribed(key) {
+	return write(() => Object.getOwnPropertyDescriptor(self.owner.Foo, "prototype").value, key);
+}
+
+/**
+ * Write onto the prototype handed in nested in plain data.
+ * @param {{inner: {p: object}}} box - The data.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeNested(box, key) {
+	return write(() => box.inner.p, key);
+}
+
+/**
+ * Write onto the prototype carried by the error an `owner.throwWith:error` hook of this module's is handed.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeHooked(source, key) {
+	let outcome = "not hooked";
+	// Each call registers its own hook, which writes once: hooks outlive a reload, and fire on every later failure.
+	let heard = false;
+	self.slothlet.hook.on(
+		"owner.throwWith:error",
+		({ error }) => {
+			if (heard) return;
+			heard = true;
+			outcome = write(() => error.p, key);
+		},
+		{ id: `crossing-${key}` }
+	);
+	try {
+		self.owner.throwWith(source);
+	} catch {
+		// The call's own failure; the hook reports what it saw.
+	}
+	return outcome;
+}
+
+/**
+ * Write onto the prototype read through `self` at `name`.
+ * @param {string} name - The export it is read through.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome.
+ */
+export function writeThrough(name, key) {
+	return write(() => self.owner[name].prototype, key);
+}
