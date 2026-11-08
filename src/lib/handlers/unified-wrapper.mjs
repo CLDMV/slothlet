@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T08:22:54-08:00 (1794154974)
+ *	@Last modified time: 2026-11-08T09:59:39-08:00 (1794160779)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -492,6 +492,52 @@ const ERROR_BRAND =
 const IS_PROXY = typeof util?.types?.isProxy === "function" ? util.types.isProxy : null;
 
 /**
+ * The language's own functions and objects the search of what a module hands out reads (#726), taken when this file
+ * loads, before any module runs: a module replacing a global (`globalThis.Error`, `globalThis.Reflect`) or one of its
+ * members with code of its own cannot have that code run in the middle of a search. `types` is `util.types` as it was
+ * then, its checks the engine's brand checks, which throw for nothing.
+ * @private
+ */
+const PRISTINE = Object.freeze({
+	Error,
+	Set,
+	Map,
+	WeakSet,
+	apply: Reflect.apply,
+	getPrototypeOf: Reflect.getPrototypeOf,
+	ownKeys: Reflect.ownKeys,
+	getOwnPropertyDescriptor: Reflect.getOwnPropertyDescriptor,
+	isArray: Array.isArray,
+	arrayFrom: Array.from,
+	isFrozen: Object.isFrozen,
+	objectPrototype: Object.prototype,
+	arrayPrototype: Array.prototype,
+	keyFor: Symbol.keyFor,
+	functionToString: Function.prototype.toString,
+	regExpExec: RegExp.prototype.exec,
+	structuredClone: typeof structuredClone === "function" ? structuredClone : null,
+	EventTarget: typeof EventTarget === "function" ? EventTarget : null,
+	FinalizationRegistry: typeof FinalizationRegistry === "function" ? FinalizationRegistry : null,
+	finalizationUnregister: typeof FinalizationRegistry === "function" ? FinalizationRegistry.prototype.unregister : null,
+	types: Object.freeze({ ...util?.types })
+});
+
+/**
+ * The source the engine reports for a function of its own, read with the `exec` taken at load (see {@link PRISTINE}).
+ * @type {RegExp}
+ * @private
+ */
+const BUILTIN_SOURCE = /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/;
+
+/**
+ * A token no registry ever holds: `unregister` with it answers whether an object is a `FinalizationRegistry` and
+ * removes nothing.
+ * @type {object}
+ * @private
+ */
+const UNREGISTERED_TOKEN = Object.freeze({});
+
+/**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class (see
  * {@link inheritsFrom}). Slothlet's own checks use it so no module's code runs from them.
  * @param {*} value - The value.
@@ -513,7 +559,24 @@ function runtime_inherits(value, ctor) {
 function runtime_isWeakRef(value) {
 	if (WEAKREF_DEREF === null || value === null || typeof value !== "object") return false;
 	try {
-		Reflect.apply(WEAKREF_DEREF, value, []);
+		PRISTINE.apply(WEAKREF_DEREF, value, []);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Whether `value` is a `FinalizationRegistry`, by the engine's own brand check: `unregister` throws for anything else,
+ * and for a registry, given a token it never holds, removes nothing (#726).
+ * @param {*} value - The value.
+ * @returns {boolean} True for a `FinalizationRegistry`.
+ * @private
+ */
+function runtime_isFinalizationRegistry(value) {
+	if (PRISTINE.finalizationUnregister === null || value === null || typeof value !== "object") return false;
+	try {
+		PRISTINE.apply(PRISTINE.finalizationUnregister, value, [UNREGISTERED_TOKEN]);
 		return true;
 	} catch {
 		return false;
@@ -3276,12 +3339,12 @@ function runtime_originalAccessor(descriptor) {
 
 /**
  * Each module's record of the code it made and the values handed to it (#597), by slothlet instance and then by
- * module: `{ owner, made, handedIn, exposed, holdsCode, walked }`. `owner` is the first wrapper of the module seen, `made` maps
+ * module: `{ owner, made, handedIn, exposed, holdsCode, walked, gave }`. `owner` is the first wrapper of the module seen, `made` maps
  * each value the module handed out to the stand-in it is handed out as, `handedIn` holds the values other code handed
  * the module, which are never the module's own, `exposed` the prototypes of the classes it exports, handed out as
  * they are (see runtime_exposePrototype), `holdsCode` the objects of the module's found holding its code, and each
- * object on the way to it (see runtime_holdsModuleCode), and `walked` the objects of arguments already read for what
- * they hand the module (see runtime_recordArguments).
+ * object on the way to it (see runtime_holdsModuleCode), `walked` the objects of arguments already read for what
+ * they hand the module (see runtime_recordArguments), and `gave` the objects of data the module handed out as they are.
  * @type {WeakMap<object, {byID: Map<string, object>, byWrapper: WeakMap<object, object>}>}
  * @private
  */
@@ -3525,8 +3588,8 @@ if (isNode) runtime_recordNodeStreamState();
  * @private
  */
 function runtime_isNodeStreamState(member) {
-	if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
-	return NODE_STREAM_STATE_PROTOTYPES.has(Reflect.getPrototypeOf(member));
+	if (member === null || typeof member !== "object" || PRISTINE.types.isProxy(member)) return false;
+	return NODE_STREAM_STATE_PROTOTYPES.has(PRISTINE.getPrototypeOf(member));
 }
 
 /**
@@ -3541,7 +3604,7 @@ function runtime_isNodeStreamState(member) {
  */
 function runtime_isSharedValue(value) {
 	if (!isSharedExport(value)) return false;
-	return runtime_holdsOnlySharedCode(value, { remaining: SHARED_SEARCH_PROPERTIES }, new Set());
+	return runtime_holdsOnlySharedCode(value, { remaining: SHARED_SEARCH_PROPERTIES }, new PRISTINE.Set());
 }
 
 /**
@@ -3571,18 +3634,18 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 			if (member === null || (typeof member !== "object" && typeof member !== "function") || seen.has(member)) continue;
 			seen.add(member);
 			if (INTRINSICS.has(member) || runtime_isSlothletValue(member)) continue;
-			if (util.types.isProxy(member)) return false;
+			if (PRISTINE.types.isProxy(member)) return false;
 			if (typeof member === "function" && !runtime_isBuiltinFunction(member) && !isSharedExport(member)) return false;
-			const keys = Reflect.ownKeys(member);
+			const keys = PRISTINE.ownKeys(member);
 			budget.remaining -= keys.length;
 			if (budget.remaining < 0) return false;
 			for (const key of keys) {
-				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
+				const descriptor = PRISTINE.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
 				if ("value" in descriptor) pending.push(descriptor.value);
 				else pending.push(descriptor.get, descriptor.set);
 			}
-			pending.push(Reflect.getPrototypeOf(member));
+			pending.push(PRISTINE.getPrototypeOf(member));
 		}
 		return true;
 	} catch {
@@ -3672,14 +3735,14 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
-	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+	return PRISTINE.apply(PRISTINE.regExpExec, BUILTIN_SOURCE, [PRISTINE.apply(PRISTINE.functionToString, fn, [])]) !== null;
 }
 
 /**
  * The record of the module a wrapper belongs to (see {@link MAKERS}): one per module of an instance, so the same
  * value a module hands out from any of its functions is the same stand-in.
  * @param {object} wrapper - A wrapper of the module.
- * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>, holdsCode: WeakSet<object>, walked: WeakSet<object>}} The module's record.
+ * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>, holdsCode: WeakSet<object>, walked: WeakSet<object>, gave: WeakSet<object>}} The module's record.
  * @private
  */
 function runtime_makerOf(wrapper) {
@@ -3697,7 +3760,8 @@ function runtime_makerOf(wrapper) {
 			handedIn: new WeakSet(),
 			exposed: new WeakSet(),
 			holdsCode: new WeakSet(),
-			walked: new WeakSet()
+			walked: new WeakSet(),
+			gave: new WeakSet()
 		};
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
@@ -3837,7 +3901,7 @@ function runtime_makerInstanceID(slothlet) {
  * @private
  */
 function runtime_isSlotObject(value) {
-	const types = util.types;
+	const types = PRISTINE.types;
 	return (
 		types.isMap(value) ||
 		types.isSet(value) ||
@@ -3855,7 +3919,8 @@ function runtime_isSlotObject(value) {
 		types.isKeyObject(value) ||
 		types.isCryptoKey(value) ||
 		runtime_isWeakRef(value) ||
-		(typeof EventTarget === "function" && runtime_inherits(value, EventTarget)) ||
+		(PRISTINE.FinalizationRegistry !== null && runtime_inherits(value, PRISTINE.FinalizationRegistry)) ||
+		(PRISTINE.EventTarget !== null && runtime_inherits(value, PRISTINE.EventTarget)) ||
 		Boolean(EventEmitter && runtime_inherits(value, EventEmitter))
 	);
 }
@@ -3930,7 +3995,7 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
  * @private
  */
 function runtime_isNativeIterator(value) {
-	return NATIVE_ITERATOR_PROTOTYPES.has(Reflect.getPrototypeOf(value));
+	return NATIVE_ITERATOR_PROTOTYPES.has(PRISTINE.getPrototypeOf(value));
 }
 
 /**
@@ -3975,7 +4040,7 @@ const SLOT_READERS = {
 function runtime_memberHoldsCode(member, depth, budget) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return false;
 	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
-	if (util.types.isProxy(member)) return true;
+	if (PRISTINE.types.isProxy(member)) return true;
 	if (typeof member === "function") return !runtime_isBuiltinFunction(member);
 	return runtime_holdsCode(member, depth - 1, budget);
 }
@@ -3985,8 +4050,8 @@ function runtime_memberHoldsCode(member, depth, budget) {
  * a module's anywhere in its prototype chain (a `Map` subclass, an `Error` subclass, a key given another prototype) —
  * every prototype below the language's own has to be one made by no module, holding none of a module's code — or a
  * function, accessor or object holding code among its own members, or among the entries of a `Map` or `Set`. What
- * cannot be read without running it — what a promise settles to, the target of a `WeakRef`, the values of a `WeakMap`,
- * what an iterator has left — is taken to hold code. An emitter's listener table, and the internals an event target keeps under symbols of its
+ * cannot be read without running it — what a promise settles to, the target of a `WeakRef`, the cleanup of a
+ * `FinalizationRegistry`, the values of a `WeakMap`, what an iterator has left — is taken to hold code. An emitter's listener table, and the internals an event target keeps under symbols of its
  * own, hold the listeners registered on it, which run as whoever registered them, and are not read.
  * @param {object} value - An object with internal slots, not a Proxy.
  * @param {number} depth - Levels still allowed, this one included, handed to `holds`.
@@ -3996,14 +4061,20 @@ function runtime_memberHoldsCode(member, depth, budget) {
  * @private
  */
 function runtime_slotHoldsCode(value, depth, budget, holds) {
-	for (let link = Reflect.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = Reflect.getPrototypeOf(link)) {
-		if (util.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
+	for (let link = PRISTINE.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = PRISTINE.getPrototypeOf(link)) {
+		if (PRISTINE.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
 	}
-	const types = util.types;
+	const types = PRISTINE.types;
 	if (types.isPromise(value) || types.isWeakMap(value) || types.isMapIterator(value) || types.isSetIterator(value)) return true;
 	if (runtime_isWeakRef(value)) return true;
+	if (
+		PRISTINE.FinalizationRegistry !== null &&
+		runtime_inherits(value, PRISTINE.FinalizationRegistry) &&
+		runtime_isFinalizationRegistry(value)
+	)
+		return true;
 	if (types.isMap(value) || types.isSet(value)) {
-		const entries = Reflect.apply(types.isMap(value) ? SLOT_READERS.mapEntries : SLOT_READERS.setValues, value, []);
+		const entries = PRISTINE.apply(types.isMap(value) ? SLOT_READERS.mapEntries : SLOT_READERS.setValues, value, []);
 		for (const entry of entries) {
 			budget.remaining -= 1;
 			if (budget.remaining < 0) return true;
@@ -4012,14 +4083,14 @@ function runtime_slotHoldsCode(value, depth, budget, holds) {
 		}
 	}
 	const isEmitter = Boolean(EventEmitter && runtime_inherits(value, EventEmitter));
-	const isTarget = typeof EventTarget === "function" && runtime_inherits(value, EventTarget);
-	const keys = Reflect.ownKeys(value);
+	const isTarget = PRISTINE.EventTarget !== null && runtime_inherits(value, PRISTINE.EventTarget);
+	const keys = PRISTINE.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return true;
 	for (const key of keys) {
 		if (isEmitter && key === "_events") continue;
-		if (isTarget && typeof key === "symbol" && Symbol.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
-		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (isTarget && typeof key === "symbol" && PRISTINE.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
+		const descriptor = PRISTINE.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
 			for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
@@ -4053,8 +4124,8 @@ const CODE_SEARCH = { depth: 4, properties: 512 };
  * @private
  */
 function runtime_objectHoldsCode(value, depth, budget, holds) {
-	if (util.types.isGeneratorObject(value)) return true;
-	const prototype = Reflect.getPrototypeOf(value);
+	if (PRISTINE.types.isGeneratorObject(value)) return true;
+	const prototype = PRISTINE.getPrototypeOf(value);
 	if (runtime_isOrdinaryPrototype(prototype) ? runtime_isOrdinarySlotObject(value) : runtime_isSlotObject(value))
 		return runtime_slotHoldsCode(value, depth, budget, holds);
 	// What one of the language's own iterators has left cannot be read without stepping it.
@@ -4063,20 +4134,32 @@ function runtime_objectHoldsCode(value, depth, budget, holds) {
 	// still read below.
 	if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
 		return true;
-	if (Array.isArray(value) && value.length > budget.remaining) return true;
-	const keys = Reflect.ownKeys(value);
+	if (PRISTINE.isArray(value) && value.length > budget.remaining) return true;
+	const keys = PRISTINE.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return true;
+	// Whether every member is a primitive (see runtime_isOpaqueObject), and how many characters of strings they hold.
+	let primitive = !PRISTINE.isArray(value);
+	let characters = 0;
 	for (const key of keys) {
-		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		const descriptor = PRISTINE.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
+			primitive = false;
 			for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
 			continue;
 		}
-		if (holds(descriptor.value, depth, budget)) return true;
+		const member = descriptor.value;
+		if (typeof member === "string") characters += member.length;
+		else if (typeof member === "symbol" || (member !== null && (typeof member === "object" || typeof member === "function")))
+			primitive = false;
+		if (holds(member, depth, budget)) return true;
 	}
-	return false;
+	return (
+		runtime_isOrdinaryPrototype(prototype) &&
+		!PRISTINE.isArray(value) &&
+		runtime_isOpaqueObject(value, primitive && characters <= CLONE_PROBE_CHARACTERS)
+	);
 }
 
 /**
@@ -4086,34 +4169,40 @@ function runtime_objectHoldsCode(value, depth, budget, holds) {
  * @private
  */
 function runtime_isOrdinaryPrototype(prototype) {
-	return prototype === Object.prototype || prototype === Array.prototype || prototype === null;
+	return prototype === PRISTINE.objectPrototype || prototype === PRISTINE.arrayPrototype || prototype === null;
 }
 
 /**
- * Objects with a plain prototype found not to be a `WeakRef` (see {@link runtime_isOrdinarySlotObject}). An object's
- * kind is fixed when it is made, so the answer never goes stale.
- * @type {WeakSet<object>}
+ * What {@link runtime_isOpaqueObject} found of objects with a plain prototype: those keeping state no member shows,
+ * those found to be ordinary objects, and those found not to be a `WeakRef`. An object's kind is fixed when it is made,
+ * so no answer goes stale.
+ * @type {{opaque: WeakSet<object>, ordinary: WeakSet<object>, notWeak: WeakSet<object>}}
  * @private
  */
-const NOT_WEAK_REFS = new WeakSet();
+const KNOWN_KINDS = Object.freeze({ opaque: new WeakSet(), ordinary: new WeakSet(), notWeak: new WeakSet() });
+
+/**
+ * How many characters of strings the members of an object may hold for a copy of it to tell what kind of object it is
+ * (see {@link runtime_isOpaqueObject}), so the copy costs little.
+ * @type {number}
+ * @private
+ */
+const CLONE_PROBE_CHARACTERS = 4096;
 
 /**
  * {@link runtime_isSlotObject} for an object whose prototype is plain data's (#726): an array has no slots of another
- * kind; anything else is told apart by the engine's brand checks, so a `WeakRef` given a plain prototype is still a
- * `WeakRef`, and its target, which no member shows, is not handed out as data. No brand check for a `WeakRef` throws
- * nothing, so `deref`'s runs once per object and its answer is kept (see {@link NOT_WEAK_REFS}). What else keeps state
- * no member shows holds none of a module's code: a key's and a crypto key's slots hold Node's key material (their
- * brand checks throw for anything else, so they are not asked), and an emitter or an event target given a plain
- * prototype keeps its listener table among its own members, which are searched, so a listener of the module's in it is
- * found.
+ * kind, and anything else is told apart by the engine's brand checks, which throw for nothing. A key's and a crypto
+ * key's slots hold Node's key material and none of a module's code, and an emitter or an event target given a plain
+ * prototype keeps its listener table among its own members, which are searched, so a listener of the module's in it
+ * is found. What keeps state no member shows that can hold code is told by {@link runtime_isOpaqueObject}.
  * @param {object} value - An object that is not a Proxy, with a plain prototype.
  * @returns {boolean} True for an object with internal slots.
  * @private
  */
 function runtime_isOrdinarySlotObject(value) {
-	if (Array.isArray(value)) return false;
-	const types = util.types;
-	if (
+	if (PRISTINE.isArray(value)) return false;
+	const types = PRISTINE.types;
+	return (
 		types.isMap(value) ||
 		types.isSet(value) ||
 		types.isWeakMap(value) ||
@@ -4127,30 +4216,78 @@ function runtime_isOrdinarySlotObject(value) {
 		types.isNativeError(value) ||
 		types.isMapIterator(value) ||
 		types.isSetIterator(value)
-	)
-		return true;
-	if (NOT_WEAK_REFS.has(value)) return false;
-	if (runtime_isWeakRefUntraced(value)) return true;
-	NOT_WEAK_REFS.add(value);
-	return false;
+	);
 }
 
 /**
- * {@link runtime_isWeakRef}, with no stack captured for the error `deref` throws for anything else, which is most of
- * its cost: `Error.stackTraceLimit` is set to 0 for the check while it is a plain writable property, so setting it runs
- * no code.
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True for a `WeakRef`.
+ * Whether an object with a plain prototype keeps state no member shows that can hold a module's code (#726): a
+ * generator, the target of a `WeakRef`, the cleanup of a `FinalizationRegistry`, what one of the language's iterators
+ * (an array's, a string's, an iterator helper …) has left. Told by the engine's own checks, none of which runs code of
+ * the object's: a generator by `util.types`, an object whose members are all primitives by `structuredClone`, which
+ * refuses each of the engine's other kinds of object before it reads a member, and copies a primitive without running
+ * anything, and any other object by the brand check of a `WeakRef`, whose target would be handed out raw. A
+ * `FinalizationRegistry` or one of the language's iterators holding an object or a long string among its own members
+ * cannot be told from plain data that way; a registry hands its receiver nothing to run (the engine runs its cleanup,
+ * outside every call). The checks throw for an ordinary object, so each runs once per object, with no stack captured,
+ * and its answer is kept (see {@link KNOWN_KINDS}).
+ * @param {object} value - An object that is not a Proxy or an array, with a plain prototype, of none of the kinds
+ *   {@link runtime_isOrdinarySlotObject} names.
+ * @param {boolean} primitive - Whether its own members are all data properties holding primitives other than symbols,
+ *   with at most {@link CLONE_PROBE_CHARACTERS} characters of strings.
+ * @returns {boolean} True when it keeps such state.
  * @private
  */
-function runtime_isWeakRefUntraced(value) {
-	const limit = Reflect.getOwnPropertyDescriptor(Error, "stackTraceLimit");
-	if (limit === undefined || !("value" in limit) || !limit.writable) return runtime_isWeakRef(value);
-	Error.stackTraceLimit = 0;
+function runtime_isOpaqueObject(value, primitive) {
+	const types = PRISTINE.types;
+	if (types.isGeneratorObject(value)) return true;
+	if (KNOWN_KINDS.opaque.has(value)) return true;
+	if (KNOWN_KINDS.ordinary.has(value) || types.isArgumentsObject(value) || types.isModuleNamespaceObject(value)) return false;
+	let opaque;
+	if (primitive && PRISTINE.structuredClone !== null) {
+		opaque = runtime_untraced(runtime_cloneRefuses, value);
+		if (!opaque) KNOWN_KINDS.ordinary.add(value);
+	} else {
+		if (KNOWN_KINDS.notWeak.has(value)) return false;
+		opaque = runtime_untraced(runtime_isWeakRef, value);
+		if (!opaque) KNOWN_KINDS.notWeak.add(value);
+	}
+	if (opaque) KNOWN_KINDS.opaque.add(value);
+	return opaque;
+}
+
+/**
+ * Whether `structuredClone` refuses an object whose members are all primitives: it is not an ordinary object.
+ * @param {object} value - The object.
+ * @returns {boolean} True when it is refused.
+ * @private
+ */
+function runtime_cloneRefuses(value) {
 	try {
-		return runtime_isWeakRef(value);
+		PRISTINE.structuredClone(value);
+		return false;
+	} catch {
+		return true;
+	}
+}
+
+/**
+ * Run a brand check with no stack captured for the error it throws for anything else, which is most of its cost:
+ * `Error.stackTraceLimit`, of the `Error` taken at load, is set to 0 for the check while it is a plain writable
+ * property, so setting it runs no code.
+ * @param {function(object): boolean} check - The check.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} What the check answers.
+ * @private
+ */
+function runtime_untraced(check, value) {
+	const ErrorClass = PRISTINE.Error;
+	const limit = PRISTINE.getOwnPropertyDescriptor(ErrorClass, "stackTraceLimit");
+	if (limit === undefined || !("value" in limit) || !limit.writable) return check(value);
+	ErrorClass.stackTraceLimit = 0;
+	try {
+		return check(value);
 	} finally {
-		Error.stackTraceLimit = limit.value;
+		ErrorClass.stackTraceLimit = limit.value;
 	}
 }
 
@@ -4202,7 +4339,7 @@ function runtime_newSearch(maker, scope) {
 		nodes: [],
 		parents: [],
 		pending: [],
-		seen: new Set(),
+		seen: new PRISTINE.Set(),
 		current: -1,
 		holderFrozen: false,
 		frozen: null,
@@ -4220,7 +4357,7 @@ function runtime_newSearch(maker, scope) {
 function runtime_reach(search, member) {
 	if (search.holderFrozen) {
 		const holder = search.nodes[search.current];
-		if (Object.isFrozen(member)) search.frozen.edges.push(holder, member);
+		if (PRISTINE.isFrozen(member)) search.frozen.edges.push(holder, member);
 		else search.frozen.impure.add(holder);
 	}
 	if (search.seen.has(member)) return;
@@ -4250,7 +4387,7 @@ function runtime_taint(search) {
 function runtime_recordInertData(search) {
 	const frozen = search.frozen;
 	if (frozen === null) return;
-	const holders = new Map();
+	const holders = new PRISTINE.Map();
 	for (let index = 0; index < frozen.edges.length; index += 2) {
 		const member = frozen.edges[index + 1];
 		const list = holders.get(member);
@@ -4275,7 +4412,9 @@ function runtime_recordInertData(search) {
  * object on the way to it, are recorded as holding the module's code (`maker.holdsCode`), so a later search reaching
  * one of them — the read of a member through the stand-in — ends there: an object once found holding the module's code
  * is handed out as the module's from then on, as its stand-in is. Data found holding no code is read again by the next
- * search that reaches it, since the module can still change it, unless it is {@link INERT_DATA}.
+ * search that reaches it, since the module can still change it, unless it is {@link INERT_DATA}. Each object of such
+ * data the caller did not hand in is recorded as the module's (`maker.gave`), so what the module puts into it later is
+ * never taken for the caller's when the caller hands it back (see runtime_recordArguments).
  * @param {object} maker - The module's record.
  * @param {object} value - An object that is not a Proxy.
  * @param {WeakSet<object>|null} [scope=null] - What the module's own leaf handed the call being answered.
@@ -4292,9 +4431,9 @@ function runtime_holdsModuleCode(maker, value, scope = null) {
 			const position = search.pending.pop();
 			const object = search.nodes[position];
 			search.current = position;
-			search.holderFrozen = Object.isFrozen(object);
+			search.holderFrozen = PRISTINE.isFrozen(object);
 			if (search.holderFrozen) {
-				search.frozen ??= { nodes: [], impure: new Set(), edges: [] };
+				search.frozen ??= { nodes: [], impure: new PRISTINE.Set(), edges: [] };
 				search.frozen.nodes.push(object);
 			}
 			if (!runtime_searchObject(search, object)) continue;
@@ -4307,6 +4446,7 @@ function runtime_holdsModuleCode(maker, value, scope = null) {
 		return true;
 	}
 	runtime_recordInertData(search);
+	for (const node of search.nodes) if (!maker.walked.has(node)) maker.gave.add(node);
 	return false;
 }
 
@@ -4320,7 +4460,7 @@ function runtime_holdsModuleCode(maker, value, scope = null) {
  * @private
  */
 function runtime_searchObject(search, object) {
-	const prototype = Reflect.getPrototypeOf(object);
+	const prototype = PRISTINE.getPrototypeOf(object);
 	if (!runtime_isOrdinaryPrototype(prototype)) {
 		runtime_taint(search);
 		if (runtime_isSlothletValue(object) || INTRINSICS.has(object) || runtime_isSharedValue(object)) return false;
@@ -4335,24 +4475,32 @@ function runtime_searchObject(search, object) {
 		runtime_taint(search);
 		return runtime_slotHoldsCode(object, 0, search, runtime_memberHoldsModuleCode);
 	}
-	const isArray = Array.isArray(object);
-	for (const key of Reflect.ownKeys(object)) {
+	const isArray = PRISTINE.isArray(object);
+	// Whether every member is a primitive (see runtime_isOpaqueObject), and how many characters of strings they hold.
+	let primitive = !isArray;
+	let characters = 0;
+	for (const key of PRISTINE.ownKeys(object)) {
 		// An array's `length` is a number.
 		if (isArray && key === "length") continue;
-		const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+		const descriptor = PRISTINE.getOwnPropertyDescriptor(object, key);
 		if (descriptor === undefined) continue;
 		if ("value" in descriptor) {
 			const member = descriptor.value;
-			if (
-				member !== null &&
-				(typeof member === "object" || typeof member === "function") &&
-				runtime_memberHoldsModuleCode(member, 0, search)
-			)
-				return true;
+			if (member !== null && (typeof member === "object" || typeof member === "function")) {
+				primitive = false;
+				if (runtime_memberHoldsModuleCode(member, 0, search)) return true;
+			} else if (typeof member === "string") characters += member.length;
+			else if (typeof member === "symbol") primitive = false;
 			continue;
 		}
+		primitive = false;
 		runtime_taint(search);
 		for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+	}
+	// A generator, a `WeakRef`, a `FinalizationRegistry` or one of the language's iterators given a plain prototype.
+	if (!isArray && runtime_isOpaqueObject(object, primitive && characters <= CLONE_PROBE_CHARACTERS)) {
+		runtime_taint(search);
+		return true;
 	}
 	return false;
 }
@@ -4378,14 +4526,14 @@ function runtime_memberHoldsModuleCode(member, _depth, search) {
 		runtime_taint(search);
 		return false;
 	}
-	if (isObject && !util.types.isProxy(member)) {
+	if (isObject && !PRISTINE.types.isProxy(member)) {
 		if (maker.holdsCode.has(member) || maker.made.has(member)) return true;
 		runtime_reach(search, member);
 		return false;
 	}
 	runtime_taint(search);
 	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
-	if (util.types.isProxy(member)) return true;
+	if (PRISTINE.types.isProxy(member)) return true;
 	return !runtime_isBuiltinFunction(member);
 }
 
@@ -4413,7 +4561,8 @@ function runtime_isCallersValue(maker, value, scope = null) {
  *
  * An object is read once per module: handed to it again, it is not read again (`maker.walked`). What the module wrote
  * into it while it held it is then never taken for the caller's; what the caller added to it since is taken for the
- * module's, and comes back as a stand-in rather than as itself.
+ * module's, and comes back as a stand-in rather than as itself. Data the module handed out itself (`maker.gave`) is the
+ * module's, and is not read: what the module put into it is the module's, whoever hands it back.
  * @param {object} maker - The module's record.
  * @param {ArrayLike<*>} args - The call's arguments, as its caller passed them.
  * @param {WeakSet<object>|null} [scope=null] - Where to record them instead, read afresh: what the module's own leaf
@@ -4422,7 +4571,7 @@ function runtime_isCallersValue(maker, value, scope = null) {
  * @private
  */
 function runtime_recordArguments(maker, args, scope = null) {
-	const record = { into: scope ?? maker.handedIn, seen: scope === null ? maker.walked : new WeakSet(), pending: [] };
+	const record = { into: scope ?? maker.handedIn, seen: scope === null ? maker.walked : new PRISTINE.WeakSet(), pending: [] };
 	for (let index = 0; index < args.length; index++) {
 		const value = args[index];
 		if (value !== null && typeof value === "object") runtime_recordMember(maker, record, value, false);
@@ -4430,20 +4579,20 @@ function runtime_recordArguments(maker, args, scope = null) {
 	try {
 		while (record.pending.length > 0) {
 			const object = record.pending.pop();
-			const prototype = Reflect.getPrototypeOf(object);
+			const prototype = PRISTINE.getPrototypeOf(object);
 			if (!runtime_isOrdinaryPrototype(prototype)) {
 				if (runtime_isSlothletValue(object)) continue;
 				if (!INTRINSICS.has(prototype)) record.into.add(object);
 			}
-			if (util.types.isMap(object))
-				for (const entry of Reflect.apply(SLOT_READERS.mapEntries, object, [])) {
+			if (PRISTINE.types.isMap(object))
+				for (const entry of PRISTINE.apply(SLOT_READERS.mapEntries, object, [])) {
 					runtime_recordMember(maker, record, entry[0]);
 					runtime_recordMember(maker, record, entry[1]);
 				}
-			else if (util.types.isSet(object))
-				for (const entry of Reflect.apply(SLOT_READERS.setValues, object, [])) runtime_recordMember(maker, record, entry);
-			for (const key of Reflect.ownKeys(object)) {
-				const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+			else if (PRISTINE.types.isSet(object))
+				for (const entry of PRISTINE.apply(SLOT_READERS.setValues, object, [])) runtime_recordMember(maker, record, entry);
+			for (const key of PRISTINE.ownKeys(object)) {
+				const descriptor = PRISTINE.getOwnPropertyDescriptor(object, key);
 				if (descriptor !== undefined && "value" in descriptor) runtime_recordMember(maker, record, descriptor.value);
 			}
 		}
@@ -4466,8 +4615,8 @@ function runtime_recordMember(maker, record, member, nested = true) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return;
 	if (typeof member === "object" && INERT_DATA.has(member)) return;
 	const original = INBOUND_VIEWS.get(member)?.original ?? member;
-	if (INTRINSICS.has(original) || maker.made.has(original)) return;
-	if (typeof original === "function" || util.types.isProxy(original)) {
+	if (INTRINSICS.has(original) || maker.made.has(original) || maker.gave.has(original)) return;
+	if (typeof original === "function" || PRISTINE.types.isProxy(original)) {
 		if (nested && !runtime_isSlothletValue(original)) record.into.add(original);
 		return;
 	}
@@ -4509,7 +4658,7 @@ function runtime_handOut(maker, owner, value, scope = null) {
 	const made = maker.made.get(value);
 	if (made) return made;
 	try {
-		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
+		if (PRISTINE.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
 			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
@@ -4517,11 +4666,11 @@ function runtime_handOut(maker, owner, value, scope = null) {
 			const leaf = implWrappers.get(value);
 			const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
 			if (leafMaker !== maker && leafMaker.made.has(value)) return leafMaker.made.get(value);
-			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))
+			if (PRISTINE.types.isGeneratorFunction(value) || PRISTINE.types.isAsyncFunction(value))
 				return runtime_kindStandIn(leafMaker, leaf ?? owner, value);
 			return runtime_membrane(leafMaker, leaf ?? owner, value);
 		}
-		if (util.types.isGeneratorObject(value)) return runtime_generatorStandIn(maker, owner, value);
+		if (PRISTINE.types.isGeneratorObject(value)) return runtime_generatorStandIn(maker, owner, value);
 		if (runtime_isPlainPromise(value)) return runtime_promiseStandIn(maker, owner, value);
 		// Data is handed out as itself at any depth (#726); what the call's arguments reached is the caller's (see
 		// runtime_recordArguments).
@@ -4544,9 +4693,9 @@ function runtime_handOut(maker, owner, value, scope = null) {
  * @private
  */
 function runtime_isPlainPromise(value) {
-	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
-	for (const key of Reflect.ownKeys(value))
-		if (typeof key !== "symbol" || Symbol.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
+	if (!PRISTINE.types.isPromise(value) || PRISTINE.getPrototypeOf(value) !== Promise.prototype) return false;
+	for (const key of PRISTINE.ownKeys(value))
+		if (typeof key !== "symbol" || PRISTINE.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
 	return true;
 }
 
@@ -4612,7 +4761,8 @@ function runtime_handIn(maker, value, owner = maker.owner, fromOutside = true) {
 	if (record) return record.maker === maker ? record.original : value;
 	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
 	if (maker.made.has(value)) return value;
-	if (fromOutside) maker.handedIn.add(value);
+	// Data the module handed out itself stays its own, whoever hands it back (#726).
+	if (fromOutside && !maker.gave.has(value)) maker.handedIn.add(value);
 	return runtime_inboundView(maker, value, owner);
 }
 
@@ -4635,9 +4785,9 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 	if (fromOutside) runtime_recordArguments(maker, args);
 	else {
 		// The module handing values to its own leaf: they come back from this call as themselves, and stay its own.
-		scope = new WeakSet();
+		scope = new PRISTINE.WeakSet();
 		runtime_recordArguments(maker, args, scope);
-		result = Array.from(args);
+		result = PRISTINE.arrayFrom(args);
 		CALL_SCOPES.set(result, scope);
 	}
 	for (let index = 0; index < count; index++) {
@@ -4645,7 +4795,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 		if (scope !== null && value !== null && (typeof value === "object" || typeof value === "function")) scope.add(value);
 		const handed = runtime_handIn(maker, value, owner, fromOutside);
 		if (handed === value) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = PRISTINE.arrayFrom(args);
 		result[index] = handed;
 	}
 	return result;
@@ -4800,13 +4950,14 @@ function runtime_membrane(maker, owner, original) {
 	// An object with internal slots carrying the module's code (see runtime_slotHoldsCode), or one of the language's own
 	// iterators: the engine's own methods it is read for work on its slots, so they run on the object itself, not on its
 	// stand-in.
+	const isIterator = !isProxy && !isFunction && runtime_isNativeIterator(original);
 	const isSlot =
-		!isProxy &&
-		!isFunction &&
-		((runtime_isOrdinaryPrototype(Reflect.getPrototypeOf(original))
-			? runtime_isOrdinarySlotObject(original)
-			: runtime_isSlotObject(original)) ||
-			runtime_isNativeIterator(original));
+		isIterator ||
+		(!isProxy &&
+			!isFunction &&
+			(runtime_isOrdinaryPrototype(Reflect.getPrototypeOf(original))
+				? runtime_isOrdinarySlotObject(original) || runtime_isOpaqueObject(original, false)
+				: runtime_isSlotObject(original)));
 	// A compiled script of the module's: what its methods run is the module's code.
 	const isScript =
 		!isProxy &&
@@ -4852,13 +5003,11 @@ function runtime_membrane(maker, owner, original) {
 					if (this !== standIn) return Reflect.apply(value, this, args);
 					if (isScript) return runtime_runAsMaker(owner, value, original, runtime_handInAll(maker, args));
 					const callsBack = SLOT_CALLBACK_METHODS.has(engine);
-					return out(
-						Reflect.apply(
-							value,
-							original,
-							args.map((arg) => (callsBack ? slotArgument(arg) : runtime_handIn(maker, arg)))
-						)
-					);
+					const handed = args.map((arg) => (callsBack ? slotArgument(arg) : runtime_handIn(maker, arg)));
+					// Stepping one of the language's iterators runs what it was made over — an iterator helper's mapper, the
+					// iterator `Iterator.from` wraps — which is the module's code, run as the module (#726).
+					if (isIterator) return out(runtime_runAsMaker(owner, value, original, handed, false));
+					return out(Reflect.apply(value, original, handed));
 				}
 			}[name];
 			slotMethods.set(value, method);

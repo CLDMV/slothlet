@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:15:18-08:00 (1794129318)
+ *	@Last modified time: 2026-11-08T09:59:38-08:00 (1794160778)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1422,8 +1422,8 @@ export class LiveContextManager {
 		const creator = asHost ? null : (currentWrapper ?? null);
 		const attributed =
 			attribute && currentWrapper && !asHost
-				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, args), targetInstanceID, creator)
-				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
+				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, args), targetInstanceID, creator, args)
+				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, args);
 
 		try {
 			let result;
@@ -1540,11 +1540,13 @@ export class LiveContextManager {
 	 * @param {*} value - Resolved return value of the call.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
+	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what the module's own leaf handed the call comes
+	 *   back from it as itself (#726).
 	 * @returns {*} The value as the caller gets it.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {
 		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
-		if (currentWrapper) return attributeResult(currentWrapper, value);
+		if (currentWrapper) return attributeResult(currentWrapper, value, args);
 		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), undefined);
 	}
 

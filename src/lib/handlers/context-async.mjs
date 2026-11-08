@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:15:18-08:00 (1794129318)
+ *	@Last modified time: 2026-11-08T09:59:38-08:00 (1794160778)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -199,10 +199,10 @@ export class AsyncContextManager {
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (inheritsFrom(result, Promise)) {
 						return nativeThen(result, (value) =>
-							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, args)
 						);
 					}
-					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, args);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -230,9 +230,11 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (inheritsFrom(result, Promise)) {
-					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
+					return nativeThen(result, (value) =>
+						this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, args)
+					);
 				}
-				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, args);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -258,14 +260,16 @@ export class AsyncContextManager {
 	 * @param {*} value - Resolved return value of the leaf.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
+	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what the module's own leaf handed the call comes
+	 *   back from it as itself (#726).
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {
 		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
-			if (currentWrapper) return attributeResult(currentWrapper, value);
+			if (currentWrapper) return attributeResult(currentWrapper, value, args);
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}
