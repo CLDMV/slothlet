@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:48:53-08:00 (1794041333)
+ *	@Last modified time: 2026-11-07T21:55:08-08:00 (1794117308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,8 @@ import {
 	oddShapeWrites,
 	chainReads,
 	emitterPrototypes,
-	relayInstanceOf
+	relayInstanceOf,
+	prototypeAnswers
 } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 import { Relay } from "../../api_test_plain_js_nodes_lib/relay-class.mjs";
 
@@ -257,4 +258,22 @@ export function relayClassTests() {
  */
 export function heldRelayClassTests(relay, node) {
 	return relayInstanceOf(relay, node, Relay);
+}
+
+/**
+ * What the owner's instances answer this module for their prototypes through `self` (#667).
+ * @returns {object} The answers, per instance and path.
+ */
+export function readPrototypeAnswers() {
+	const { inst, hiddenInst, subInst, bus, relay } = self.owner;
+	return prototypeAnswers({ inst, hiddenInst, subInst, bus, relay });
+}
+
+/**
+ * What the owner's instances answer this module for their prototypes on nodes the host handed it (#667).
+ * @param {object} instances - The instance nodes, by name.
+ * @returns {object} The answers, per instance and path.
+ */
+export function heldPrototypeAnswers(instances) {
+	return prototypeAnswers(instances);
 }

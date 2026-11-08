@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T08:24:03-08:00 (1794068643)
+ *	@Last modified time: 2026-11-07T21:58:40-08:00 (1794117520)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,10 @@ import {
 	oddShapeWrites,
 	chainReads,
 	emitterPrototypes,
-	relayInstanceOf
+	prototypeWrites,
+	relayInstanceOf,
+	prototypeAnswers,
+	IDENTITY_CASES
 } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
 import { Relay } from "../../../../api_tests/api_test_plain_js_nodes_lib/relay-class.mjs";
 
@@ -66,6 +69,30 @@ const PERMISSIONS = [
 ];
 
 const DENY_READER = { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
+
+/** Grants the reader writes into the owner's subtree, and refuses it nothing. */
+const ALLOW_READER_WRITES = { rules: [{ caller: "reader.**", target: "owner.**:write", effect: "allow" }] };
+
+/**
+ * The same answer for every instance {@link prototypeAnswers} asks, on every path.
+ * @param {string} answer - The answer.
+ * @param {object} [overrides] - Answers that differ, by instance name.
+ * @returns {object} The answers.
+ */
+const answering = (answer, overrides = {}) =>
+	Object.fromEntries(
+		[...IDENTITY_CASES, "subInstBase"].map((name) => {
+			const each = overrides[name] ?? answer;
+			return [name, { prototypeOf: each, reflect: each, protoAccessor: each }];
+		})
+	);
+
+/**
+ * The owner's instance nodes, by name, for handing to a module as an argument.
+ * @param {object} api - The api.
+ * @returns {object} The nodes.
+ */
+const heldInstances = (api) => Object.fromEntries(IDENTITY_CASES.map((name) => [name, api.owner[name]]));
 
 /** Refuses the reader the owner's classes, exported (`Foo`) and kept to itself (reached as `hiddenInst.constructor`), and nothing else. */
 const DENY_CLASSES = {
@@ -675,3 +702,189 @@ describe.each(
 		expect((await api.owner.prototypesHolding("hostWrite")).relay).toBe(false);
 	});
 });
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null, off: true },
+				{ name: "permissions on, no rules", permissions: {}, off: false },
+				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, off: false },
+				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, off: false }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("an instance's prototype on a node a module holds > $mode / $runtime / $name", ({ mode, runtime, permissions, off }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	it("is the object itself to the owner and to the host", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		for (const name of IDENTITY_CASES) await api.owner[name];
+		expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object"));
+		expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object"));
+	});
+
+	it("is a checked view to another module while the permission system is on, a write rule granting it the write included", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		for (const name of IDENTITY_CASES) await api.owner[name];
+		expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(off ? "object" : "view"));
+	});
+
+	it("refuses another module's write through it while the permission system is on, unless a rule grants the write", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		const outcome = await api.reader.writeHeldPrototypes(api.owner.inst, api.owner.hiddenInst, PROBE_KEY);
+		const landed = await api.owner.prototypesHolding(PROBE_KEY);
+		expect(landed.object).toBe(false);
+		if (off || permissions === ALLOW_READER_WRITES) {
+			expect(outcome).toEqual(prototypeWrites(await plainOwner(), PROBE_KEY));
+			expect(landed.foo).toBe(true);
+			return;
+		}
+		expect(outcome).toEqual({
+			instPrototype: "threw LOOSE_SET_NOT_OWNED",
+			instProtoAccessor: "threw LOOSE_SET_NOT_OWNED",
+			hiddenPrototype: "threw LOOSE_SET_NOT_OWNED",
+			hiddenProtoAccessor: "threw LOOSE_SET_NOT_OWNED",
+			reachedObjectPrototype: false
+		});
+		expect(landed.foo).toBe(false);
+	});
+});
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			["freeze", "seal", "preventExtensions"].flatMap((closing) =>
+				[
+					{ name: "permissions off", permissions: null, readerGets: "object", writesLand: true },
+					{ name: "permissions on, no rules", permissions: {}, readerGets: "view", writesLand: false },
+					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "view", writesLand: true }
+				].map((entry) => ({ mode, runtime, closing, ...entry }))
+			)
+		)
+	)
+)(
+	"a closed emitter's prototype for each reader > $mode / $runtime / $closing / $name",
+	({ mode, runtime, closing, permissions, readerGets, writesLand }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			for (const key of WRITE_KEYS) delete Relay.prototype[key];
+		});
+
+		const load = async () => {
+			api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+			for (const name of IDENTITY_CASES) await api.owner[name];
+			Object[closing](api.owner.bus);
+			Object[closing](api.owner.relay);
+		};
+
+		it("is the object itself to the owner through self, and to another module through self only while the permission system is off", async () => {
+			await load();
+			const emitters = (answer) => ({ bus: answer, relay: answer });
+			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("view", emitters("object")));
+			expect(await api.reader.readPrototypeAnswers()).toEqual(answering("view", emitters(readerGets)));
+		});
+
+		it("is one view to every holder of the node, the host and the owner among them, since a closed node reports one prototype", async () => {
+			await load();
+			const emitters = { bus: "view", relay: "view" };
+			expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
+			expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
+			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(
+				answering(permissions === null ? "object" : "view", emitters)
+			);
+		});
+
+		it("lands a write as plain JS does where the module's writes are allowed, and refuses it otherwise", async () => {
+			await load();
+			const plainModule = await plainOwner();
+			const plain = {
+				bus: emitterPrototypes(plainModule.bus, "plainEmitter"),
+				relay: emitterPrototypes(plainModule.relay, "plainEmitter")
+			};
+			for (const [key, emitter, run] of [
+				["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
+				["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],
+				["selfRelay", "relay", () => api.reader.readRelay("selfRelay")],
+				["heldRelay", "relay", () => api.reader.readHeldEmitter(api.owner.relay, "heldRelay")]
+			]) {
+				const outcome = await run();
+				const landed = await api.owner.prototypesHolding(key);
+				expect(landed.emitter, key).toBe(false);
+				if (writesLand) {
+					expect(outcome, key).toEqual(plain[emitter]);
+					expect(landed[emitter], key).toBe(true);
+					continue;
+				}
+				expect(outcome, key).toEqual({
+					...plain[emitter],
+					writePrototype: "threw LOOSE_SET_NOT_OWNED",
+					writeReflect: "threw LOOSE_SET_NOT_OWNED",
+					writeProtoAccessor: "threw LOOSE_SET_NOT_OWNED"
+				});
+				expect(landed[emitter], key).toBe(false);
+			}
+		});
+	}
+);
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) => ["freeze", "seal", "preventExtensions"].map((closing) => ({ mode, runtime, closing })))
+	)
+)(
+	"an emitter closed while permissions are off, with permissions turned on after > $mode / $runtime / $closing",
+	({ mode, runtime, closing }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			for (const key of [...WRITE_KEYS, "beforeSelf", "beforeHeld"]) delete Relay.prototype[key];
+		});
+
+		it("refuses a module not owning it the write it allowed before, through self and on the node handed to it", async () => {
+			api = await mount({ mode, runtime });
+			await api.owner.bus;
+			await api.owner.relay;
+			Object[closing](api.owner.bus);
+			Object[closing](api.owner.relay);
+			const plainModule = await plainOwner();
+			const plain = {
+				bus: emitterPrototypes(plainModule.bus, "plainEmitter"),
+				relay: emitterPrototypes(plainModule.relay, "plainEmitter")
+			};
+			// While the system is off, nothing is refused.
+			expect(await api.reader.readEmitter("beforeSelf")).toEqual(plain.bus);
+			expect(await api.reader.readHeldEmitter(api.owner.relay, "beforeHeld")).toEqual(plain.relay);
+			expect((await api.owner.prototypesHolding("beforeSelf")).bus).toBe(true);
+			expect((await api.owner.prototypesHolding("beforeHeld")).relay).toBe(true);
+			api.slothlet.permissions.control.enable();
+			for (const [key, emitter, run] of [
+				["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
+				["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],
+				["selfRelay", "relay", () => api.reader.readRelay("selfRelay")],
+				["heldRelay", "relay", () => api.reader.readHeldEmitter(api.owner.relay, "heldRelay")]
+			]) {
+				expect(await run(), key).toEqual({
+					...plain[emitter],
+					writePrototype: "threw LOOSE_SET_NOT_OWNED",
+					writeReflect: "threw LOOSE_SET_NOT_OWNED",
+					writeProtoAccessor: "threw LOOSE_SET_NOT_OWNED"
+				});
+				const landed = await api.owner.prototypesHolding(key);
+				expect(landed[emitter], key).toBe(false);
+				expect(landed.emitter, key).toBe(false);
+			}
+			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("view", { bus: "object", relay: "object" }));
+		});
+	}
+);

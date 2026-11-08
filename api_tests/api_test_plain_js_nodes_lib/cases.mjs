@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:48:53-08:00 (1794041333)
+ *	@Last modified time: 2026-11-07T21:55:08-08:00 (1794117308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -302,4 +302,41 @@ export function relayInstanceOf(relay, node, relayClass) {
 		byImport: attempt(() => relay instanceof relayClass),
 		identityByImport: attempt(() => Object.getPrototypeOf(relay) === relayClass.prototype)
 	};
+}
+
+/** The instances whose prototypes the identity cases ask for: of an exported class, of one kept to the module, of a subclass, and two emitters. */
+export const IDENTITY_CASES = ["inst", "hiddenInst", "subInst", "bus", "relay"];
+
+/**
+ * Ask each instance for its prototype by `Object.getPrototypeOf`, `Reflect.getPrototypeOf` and `__proto__`, and say what
+ * each answered (#667): the prototype itself, compared by identity where the code asking holds the real prototypes, and
+ * otherwise told apart from a checked view by whether it is a Proxy. A subclass instance's prototype one level up is
+ * asked for as well.
+ * @param {object} instances - The instances, by name in {@link IDENTITY_CASES}, however they were reached.
+ * @param {object|null} [prototypes] - The real prototypes by the same names, plus `subInstBase`, where the code asking holds them.
+ * @returns {object} `"object"`, `"view"`, `"other"` or the refusal, per instance and path.
+ */
+export function prototypeAnswers(instances, prototypes = null) {
+	const kind = (name, ask) =>
+		attempt(() => {
+			const prototype = ask();
+			if (prototypes) return prototype === prototypes[name] ? "object" : util.types.isProxy(prototype) ? "view" : "other";
+			return util.types.isProxy(prototype) ? "view" : "object";
+		});
+	const out = {};
+	for (const name of IDENTITY_CASES) {
+		const inst = instances[name];
+		out[name] = {
+			prototypeOf: kind(name, () => Object.getPrototypeOf(inst)),
+			reflect: kind(name, () => Reflect.getPrototypeOf(inst)),
+			protoAccessor: kind(name, () => inst.__proto__)
+		};
+	}
+	const { subInst } = instances;
+	out.subInstBase = {
+		prototypeOf: kind("subInstBase", () => Object.getPrototypeOf(Object.getPrototypeOf(subInst))),
+		reflect: kind("subInstBase", () => Reflect.getPrototypeOf(Reflect.getPrototypeOf(subInst))),
+		protoAccessor: kind("subInstBase", () => subInst.__proto__.__proto__)
+	};
+	return out;
 }
