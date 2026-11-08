@@ -454,10 +454,14 @@ function runtime_selfViewResult(result, reader, slothlet = null) {
  * @param {ArrayLike<*>} args - The arguments.
  * @param {object} reader - The reader.
  * @param {object} slothlet - The instance.
+ * @param {UnifiedWrapper|null} [target] - The node called, when it is one: a call into the reader's own module is
+ *   handed its arguments as they are.
  * @returns {ArrayLike<*>} The arguments.
  * @private
  */
-function runtime_handedCallbacks(args, reader, slothlet) {
+function runtime_handedCallbacks(args, reader, slothlet, target = null) {
+	// A call into the reader's own module crosses no boundary: its functions reach it as they are.
+	if (!reader?.____slothletInternal || (target !== null && runtime_makerOf(target) === runtime_makerOf(reader))) return args;
 	let result = args;
 	const count = args?.length ?? 0;
 	for (let index = 0; index < count; index++) {
@@ -1731,7 +1735,7 @@ export function runtime_selfView(node, reader) {
 			const ownThis = inner && runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
 			let result;
 			try {
-				result = Reflect.apply(node, ownThis, runtime_handedCallbacks(args, reader, slothlet));
+				result = Reflect.apply(node, ownThis, runtime_handedCallbacks(args, reader, slothlet, inner));
 			} catch (error) {
 				throw runtime_carryTo(error, reader, slothlet);
 			}
@@ -1739,7 +1743,7 @@ export function runtime_selfView(node, reader) {
 		},
 		construct(_, args, newTarget) {
 			try {
-				return Reflect.construct(node, runtime_handedCallbacks(args, reader, slothlet), newTarget === view ? held : newTarget);
+				return Reflect.construct(node, runtime_handedCallbacks(args, reader, slothlet, inner), newTarget === view ? held : newTarget);
 			} catch (error) {
 				throw runtime_carryTo(error, reader, slothlet);
 			}
