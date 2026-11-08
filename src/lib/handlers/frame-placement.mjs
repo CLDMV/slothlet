@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:31:26-08:00 (1794169886)
+ *	@Last modified time: 2026-11-08T13:37:07-08:00 (1794173827)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1641,7 +1641,7 @@ export function resolveSupplier(record) {
 	const leafDescription = describeCall(leaf);
 	// A leaf the host added as an object or a function has no file of its own (#717): it is its own entity, at its path,
 	// whatever file its function was written in. No frame is placed on it; inside its call, only code its caller handed
-	// in runs as the caller (see runtime_filelessFrameAnswer).
+	// in runs as the caller (see runtime_isFilelessLeafCode).
 	const fileless = runtime_isFileless(leafDescription.filePath);
 	if (!fileless) chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
@@ -1687,15 +1687,12 @@ export function resolveSupplier(record) {
 			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
 			if (frame.evaluated || isForeignScript(frame) || conflicts?.has(frame.key)) return fallback;
 			const placement = place(frame);
-			// Inside a leaf with no file, code that is no module's (the host's, a package's) is the leaf's, unless it is a
-			// dependency of a call up the chain (#717).
+			// Inside a leaf with no file, code that is no module's (the host's, any package's, one a call up the chain
+			// imports too) is the leaf's (#717).
 			if (fileless && !placement) {
-				const answer = runtime_filelessFrameAnswer(record, frame);
-				if (answer === leaf) {
-					leafSeen = true;
-					continue;
-				}
-				return answer ?? fallback;
+				if (!runtime_isFilelessLeafCode(record, frame)) return fallback;
+				leafSeen = true;
+				continue;
 			}
 			if (!placement || !placement.matches.length) {
 				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
@@ -1745,34 +1742,21 @@ function runtime_isFileless(filePath) {
 }
 
 /**
- * The answer for a frame no call can be placed on (the host's code, a package's), running inside a call of a leaf with
- * no file (#717). The leaf is its own entity, so such code runs as the leaf, unless it is code the caller handed in: a
- * package a call up the chain loaded is that call's dependency, and runs as the nearest such call. A package only
- * modules outside the chain loaded runs as the leaf too: a frame is never placed on a leaf other than the one entered.
- * Code that does not run its file's own source (compiled under a name no file holds, or one holding another source), and
- * a package whose loader is not known (see {@link runtime_isUnownedPackage}), are no one's.
+ * Whether a frame no call can be placed on (the host's code, a package's), running inside a call of a leaf with no file,
+ * is the leaf's own code (#717). The leaf is its own entity, so such code runs as the leaf: the host's helpers, and any
+ * package's code, including a package a call up the chain imports too, or one its caller passed a function of in. A
+ * frame is never placed on a leaf other than the one entered. Code that does not run its file's own source (compiled
+ * under a name no file holds, or one holding another source), and a package whose loader is not known (see
+ * {@link runtime_isUnownedPackage}), are no one's.
  * @param {{wrapper: object, parent: object|null}} record - The leaf's call.
  * @param {{path: string, line: string, hash: string|null, key: string|null}} frame - The frame.
- * @returns {object|{currentWrapper: object, record: object}|null} The leaf's wrapper for its own code, the call up the
- *   chain whose dependency it is, or null for code that is no one's.
+ * @returns {boolean} True when it is the leaf's code, false when it is no one's.
  * @private
  */
-function runtime_filelessFrameAnswer(record, frame) {
+function runtime_isFilelessLeafCode(record, frame) {
 	const leaf = record.wrapper;
-	const callers = [];
-	for (let current = record.parent, depth = 1; current && depth < MAX_CHAIN; current = current.parent, depth++)
-		if (current.wrapper && genuineWrappers.has(current.wrapper)) callers.push(current);
-	if (callers.length) {
-		const importers = new Set();
-		for (const slothlet of new Set([leaf.slothlet, ...callers.map((call) => call.wrapper.slothlet)]))
-			for (const importer of runtime_packageImportingLeaves(slothlet, frame.path)) importers.add(importer);
-		const nearest = callers.find((call) => importers.has(call.wrapper));
-		if (nearest) return { currentWrapper: nearest.wrapper, record: nearest };
-	}
-	if (runtime_isUnownedPackage(leaf, frame)) return null;
-	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame)
-		? leaf
-		: null;
+	if (runtime_isUnownedPackage(leaf, frame)) return false;
+	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame);
 }
 
 /**
@@ -1914,12 +1898,8 @@ function runtime_packageImportingLeaves(slothlet, path) {
  */
 function runtime_packageAnswer(record, frame) {
 	const leaf = record.wrapper;
-	// A leaf with no file is its own entity: only a dependency of a call up its chain runs as anyone else (#717).
-	if (runtime_isFileless(describeCall(leaf).filePath)) {
-		const answer = runtime_filelessFrameAnswer(record, frame);
-		if (answer === leaf) return null;
-		return answer ? runtime_supplierAnswer(record, answer) : UNACCOUNTED_SUPPLIER;
-	}
+	// A leaf with no file is its own entity: a package's code inside it is the leaf's, whoever else imports it (#717).
+	if (runtime_isFileless(describeCall(leaf).filePath)) return runtime_isFilelessLeafCode(record, frame) ? null : UNACCOUNTED_SUPPLIER;
 	const importers = runtime_packageImportingLeaves(leaf.slothlet, frame.path);
 	// No module loaded it. A package file with no loader recorded at all (vite loaded the modules, or it was loaded
 	// before slothlet) has no known owner and is refused, as a package can be anyone's code. Any other file is the host's
