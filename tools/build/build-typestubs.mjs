@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:28-07:00 (1791090928)
+ *	@Last modified time: 2026-11-07T21:25:24-08:00 (1794115524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@
  * `Cannot find module '@cldmv/slothlet-types'` — the signal that the optional types peer is missing.
  *
  * @example
- * // after build:types (so types/src + types/dist exist):
+ * // after types:build (so types/src + types/dist exist):
  * node tools/build/build-typestubs.mjs
  */
 
@@ -201,7 +201,7 @@ function reexportBody(subpath, withDefault) {
 
 function main() {
 	if (!fs.existsSync(srcTypesDir)) {
-		throw new Error(`missing ${path.relative(projectRoot, srcTypesDir)} — run "npm run build:types" first`);
+		throw new Error(`missing ${path.relative(projectRoot, srcTypesDir)} — run "npm run types:build" first`);
 	}
 	const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 	const exportsMap = pkg.exports || {};
@@ -262,7 +262,7 @@ function main() {
 					.filter((n) => n.endsWith(".d.mts"))
 					.map((n) => n.replace(/\.d\.mts$/, ""));
 			} catch {
-				warnings.push(`no dist dir for wildcard export ${key} (${dirRel}) — run "npm run build:types" first`);
+				warnings.push(`no dist dir for wildcard export ${key} (${dirRel}) — run "npm run types:build" first`);
 				continue;
 			}
 			for (const name of names) {
