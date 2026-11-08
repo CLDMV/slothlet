@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:56:52-08:00 (1794164212)
+ *	@Last modified time: 2026-11-08T12:15:35-08:00 (1794168935)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -260,8 +260,8 @@ export class AsyncContextManager {
 	 * @param {*} value - Resolved return value of the leaf.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
-	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reached as the call started comes back
-	 *   from it as the caller's (#726).
+	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reach comes back from it as the
+	 *   caller's (#726).
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {

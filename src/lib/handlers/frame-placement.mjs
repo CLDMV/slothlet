@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:56:52-08:00 (1794164212)
+ *	@Last modified time: 2026-11-08T12:40:48-08:00 (1794170448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1378,8 +1378,8 @@ export function setResultAttributor(attributor) {
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
- * @param {ArrayLike<*>|null} [args=null] - The call's arguments, as the module was handed them: what they reached as
- *   the call started comes back from it as the caller's (#726).
+ * @param {ArrayLike<*>|null} [args=null] - The call's arguments, as the module was handed them: what they reach comes
+ *   back from it as the caller's (#726).
  * @returns {*} What the caller gets.
  * @internal
  */

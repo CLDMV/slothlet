@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:56:53-08:00 (1794164213)
+ *	@Last modified time: 2026-11-08T12:15:41-08:00 (1794168941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3312,11 +3312,12 @@ function runtime_originalAccessor(descriptor) {
 
 /**
  * Each module's record of the code it made and the values handed to it (#597), by slothlet instance and then by
- * module: `{ owner, made, handedIn, exposed, holdsCode }`. `owner` is the first wrapper of the module seen, `made` maps
+ * module: `{ owner, made, handedIn, exposed, holdsCode, handedData }`. `owner` is the first wrapper of the module seen, `made` maps
  * each value the module handed out to the stand-in it is handed out as, `handedIn` holds the values other code handed
  * the module, which are never the module's own, `exposed` the prototypes of the classes it exports, handed out as
  * they are (see runtime_exposePrototype), and `holdsCode` the objects of the module's found holding its code, and each
- * object on the way to it (see runtime_holdsModuleCode).
+ * object on the way to it, and `handedData` the objects it handed out as themselves, judged data (see
+ * runtime_holdsModuleCode).
  * @type {WeakMap<object, {byID: Map<string, object>, byWrapper: WeakMap<object, object>}>}
  * @private
  */
@@ -3714,7 +3715,7 @@ function runtime_isBuiltinFunction(fn) {
  * The record of the module a wrapper belongs to (see {@link MAKERS}): one per module of an instance, so the same
  * value a module hands out from any of its functions is the same stand-in.
  * @param {object} wrapper - A wrapper of the module.
- * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>, holdsCode: WeakSet<object>}} The module's record.
+ * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>, holdsCode: WeakSet<object>, handedData: WeakSet<object>}} The module's record.
  * @private
  */
 function runtime_makerOf(wrapper) {
@@ -3731,7 +3732,8 @@ function runtime_makerOf(wrapper) {
 			made: new WeakMap(),
 			handedIn: new WeakSet(),
 			exposed: new WeakSet(),
-			holdsCode: new WeakSet()
+			holdsCode: new WeakSet(),
+			handedData: new WeakSet()
 		};
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
@@ -4235,7 +4237,7 @@ const INERT_DATA = new WeakSet();
  * tells {@link INERT_DATA} apart. It has no bound: `remaining` is the unlimited budget {@link runtime_objectHoldsCode}
  * counts down.
  * @param {object} maker - The module's record.
- * @param {WeakSet<object>|null} scope - What the arguments of the call being answered reached as it started.
+ * @param {{has: function(object): boolean}|null} scope - What the arguments of the call being answered reach (see {@link CALL_SCOPES}).
  * @returns {object} The search.
  * @private
  */
@@ -4248,6 +4250,7 @@ function runtime_newSearch(maker, scope) {
 		pending: [],
 		seen: new PRISTINE.Set(),
 		current: -1,
+		scoped: false,
 		holderFrozen: false,
 		frozen: null,
 		remaining: Infinity
@@ -4318,11 +4321,15 @@ function runtime_recordInertData(search) {
  * {@link runtime_isCallersValue}) is its giver's and is not looked into. The object holding the code found, and each
  * object on the way to it, are recorded as holding the module's code (`maker.holdsCode`), so a later search reaching
  * one of them — the read of a member through the stand-in — ends there: an object once found holding the module's code
- * is handed out as the module's from then on, as its stand-in is. Data found holding no code is read again by the next
- * search that reaches it, since the module can still change it, unless it is {@link INERT_DATA}.
+ * is handed out as the module's from then on, as its stand-in is. A value found holding no code is handed out as
+ * itself, and that verdict is kept (`maker.handedData`): the module handing the same object out again — a read of it
+ * through a stand-in among them — hands it out as itself without reading it, so a function the module puts into it
+ * afterwards runs as whoever calls it, as one the caller reads from it directly does. Only that verdict is kept, and
+ * only when the call's scope decided none of it: an object found holding code stays a stand-in. Data reached below
+ * another value is read again by each search that reaches it, unless it is {@link INERT_DATA}.
  * @param {object} maker - The module's record.
  * @param {object} value - An object that is not a Proxy.
- * @param {WeakSet<object>|null} [scope=null] - What the arguments of the call being answered reached as it started
+ * @param {{has: function(object): boolean}|null} [scope=null] - What the arguments of the call being answered reach
  *   (see {@link CALL_SCOPES}).
  * @returns {boolean} True when it holds code of the module's.
  * @private
@@ -4352,6 +4359,7 @@ function runtime_holdsModuleCode(maker, value, scope = null) {
 		return true;
 	}
 	runtime_recordInertData(search);
+	if (!search.scoped) search.maker.handedData.add(value);
 	return false;
 }
 
@@ -4424,19 +4432,39 @@ function runtime_memberHoldsModuleCode(member, _depth, search) {
 		return false;
 	}
 	const maker = search.maker;
-	if (runtime_isCallersValue(maker, member, search.scope)) {
+	if (runtime_isCallersValue(maker, member)) {
 		runtime_taint(search);
 		return false;
 	}
 	if (isObject && !PRISTINE.types.isProxy(member)) {
+		if (runtime_inCallScope(search, member)) {
+			runtime_taint(search);
+			return false;
+		}
 		if (maker.holdsCode.has(member) || maker.made.has(member)) return true;
 		runtime_reach(search, member);
 		return false;
 	}
 	runtime_taint(search);
 	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
-	if (PRISTINE.types.isProxy(member)) return true;
-	return !runtime_isBuiltinFunction(member);
+	if (!PRISTINE.types.isProxy(member) && runtime_isBuiltinFunction(member)) return false;
+	return !runtime_inCallScope(search, member);
+}
+
+/**
+ * Whether a value a search meets is among what the arguments of the call being answered reach (see
+ * {@link CALL_SCOPES}), asked only of what may be (see {@link runtime_mayBeReached}), so a search meeting nothing
+ * else reads no argument. A search answered by the scope is noted (`search.scoped`), so its verdict is not kept for
+ * later calls (`maker.handedData`, see {@link runtime_holdsModuleCode}).
+ * @param {object} search - The search.
+ * @param {object|Function} value - The value.
+ * @returns {boolean} True when the arguments reach it.
+ * @private
+ */
+function runtime_inCallScope(search, value) {
+	if (search.scope === null || !runtime_mayBeReached(value) || !search.scope.has(value)) return false;
+	search.scoped = true;
+	return true;
 }
 
 /**
@@ -4444,28 +4472,26 @@ function runtime_memberHoldsModuleCode(member, _depth, search) {
  * than one the module made: such a value is its giver's wherever the module hands it on (#726).
  * @param {object} maker - The module's record.
  * @param {object|Function} value - The value.
- * @param {WeakSet<object>|null} [scope=null] - What the arguments of the call being answered reached as it started (see
- *   {@link CALL_SCOPES}).
  * @returns {boolean} True when it is.
  * @private
  */
-function runtime_isCallersValue(maker, value, scope = null) {
-	return maker.handedIn.has(value) || INBOUND_VIEWS.has(value) || (scope !== null && scope.has(value));
+function runtime_isCallersValue(maker, value) {
+	return maker.handedIn.has(value) || INBOUND_VIEWS.has(value);
 }
 
 /**
- * What a call's arguments reach below themselves as the call starts, before any of the module's code runs with them
- * (#726): every function, Proxy and object of a class (anything but plain data, which is told by what it holds when it
+ * What a call's arguments reach below themselves (#726), read when the call's result first needs it (see
+ * {@link runtime_newCallScope}): every function, Proxy and object of a class (anything but plain data, which is told by what it holds when it
  * comes back) nested in them, through own data properties and the entries of a `Map` or `Set`. Read from descriptors
  * alone: a Proxy and a function are recorded and not looked into. A raw function of the module's own can only be among
  * them where the caller holds it as itself — written into an object the caller holds, or handed by the module to one
- * of its own leaves — so it is recorded as well. The arguments themselves are recorded as handed in by
- * {@link runtime_handIn}.
+ * of its own leaves — so it is recorded as well, a function the module wrote into the arguments during the call among
+ * them. The arguments themselves are recorded as handed in by {@link runtime_handIn}.
  *
  * What is recorded decides only this call's result (see {@link CALL_SCOPES}): the caller's own values reached through
- * the arguments come back from it as themselves, and what the module writes into the arguments while it runs is not
- * among them. Nothing of it is kept for any later call, so the module's own function, reached through an argument in
- * one call, is the module's again in the next. The arguments are read afresh on every call.
+ * the arguments, and what the caller can read from them itself, come back from it as themselves. Nothing of it is
+ * kept for any later call, so the module's own function, reached through an argument in one call, is the module's
+ * again in the next. The arguments are read afresh for every call whose result needs them.
  * @param {ArrayLike<*>} args - The call's arguments, as its caller passed them.
  * @returns {WeakSet<object>|null} What they reach, or null when they reach nothing to record.
  * @private
@@ -4547,14 +4573,13 @@ function runtime_recordMember(record, member, nested = true) {
  * @param {object} maker - The module's record (see {@link runtime_makerOf}).
  * @param {object} owner - The wrapper a new stand-in runs as.
  * @param {*} value - The value.
- * @param {WeakSet<object>|null} [scope=null] - What the arguments of the call returning it reached as it started, which
- *   comes back from that call as itself (see {@link CALL_SCOPES}).
+ * @param {{has: function(object): boolean}|null} [scope=null] - What the arguments of the call returning it reach,
+ *   which comes back from that call as itself (see {@link CALL_SCOPES}).
  * @returns {*} What is handed out.
  * @private
  */
 function runtime_handOut(maker, owner, value, scope = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	if (scope !== null && scope.has(value)) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
 	if (
@@ -4568,8 +4593,12 @@ function runtime_handOut(maker, owner, value, scope = null) {
 	// A class instance a method got as its receiver stands for its node (#625): it comes back as it is, so a view
 	// hands it to the reader as the node, whose own write rule holds.
 	if (SELF_INSTANCE_NODES.has(value)) return value;
+	if (scope !== null && runtime_mayBeReached(value) && scope.has(value)) return value;
 	const made = maker.made.get(value);
 	if (made) return made;
+	// Data once handed out as itself is handed out as itself again, unread (`maker.handedData`, see
+	// runtime_holdsModuleCode).
+	if (maker.handedData.has(value)) return value;
 	try {
 		if (PRISTINE.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
@@ -4677,9 +4706,9 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 }
 
 /**
- * Hand a list of arguments to a module (see {@link runtime_handIn}). What they reach below themselves is read before
- * the module's code runs with them (see {@link runtime_recordArguments}) and kept for this call alone, by the list the
- * call runs with (see {@link CALL_SCOPES}), which is then a copy of its own.
+ * Hand a list of arguments to a module (see {@link runtime_handIn}). When one of them is an object, the call gets a
+ * scope of its own, by the list it runs with (see {@link CALL_SCOPES}): what they reach below themselves is read only
+ * if the call's result needs it (see {@link runtime_newCallScope}), so a call returning data reads none of it.
  * @param {object} maker - The module's record.
  * @param {ArrayLike<*>} args - The arguments.
  * @param {object} [owner] - The wrapper of the module's leaf they are handed to.
@@ -4690,26 +4719,59 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 	let result = args;
 	const count = args?.length ?? 0;
 	if (count === 0) return result;
-	const scope = runtime_recordArguments(args);
-	if (scope !== null) {
-		result = PRISTINE.arrayFrom(args);
-		CALL_SCOPES.set(result, scope);
-	}
+	let reachesBelow = false;
 	for (let index = 0; index < count; index++) {
 		const value = args[index];
+		if (value !== null && typeof value === "object") reachesBelow = true;
 		const handed = runtime_handIn(maker, value, owner);
 		if (handed === value) continue;
 		if (result === args) result = PRISTINE.arrayFrom(args);
 		result[index] = handed;
 	}
+	if (reachesBelow) CALL_SCOPES.set(result, runtime_newCallScope(args));
 	return result;
 }
 
 /**
- * What the arguments of a call into a module reached below themselves as the call started (#726), by the argument
- * list the call runs with: the caller's own values among them come back from that call as themselves. It decides
- * that call's result only — no other call reads it — and goes with the list once the call is done.
- * @type {WeakMap<ArrayLike<*>, WeakSet<object>>}
+ * The scope of one call (see {@link CALL_SCOPES}): what its arguments reach, read by {@link runtime_recordArguments}
+ * the first time the call's result needs it — when a search of that result meets a function, a Proxy or an object of
+ * a class, which may be one of the caller's. A result holding none of them never reads the arguments, and the
+ * arguments are read once per call at most, as they are then: what the module wrote into them while it ran is read
+ * with them.
+ * @param {ArrayLike<*>} args - The call's arguments, as its caller passed them.
+ * @returns {{has: function(object): boolean}} The scope.
+ * @private
+ */
+function runtime_newCallScope(args) {
+	let reached;
+	return {
+		has(value) {
+			if (reached === undefined) reached = runtime_recordArguments(args);
+			return reached !== null && reached.has(value);
+		}
+	};
+}
+
+/**
+ * Whether a value can be among what a call's arguments reach (see {@link runtime_recordArguments}): a function, a
+ * Proxy, or an object whose prototype is neither plain data's nor the language's. Plain data and the language's own
+ * objects never are, so a search meeting only them reads no argument.
+ * @param {object|Function} value - The value.
+ * @returns {boolean} True when it can be.
+ * @private
+ */
+function runtime_mayBeReached(value) {
+	if (typeof value === "function" || PRISTINE.types.isProxy(value)) return true;
+	const prototype = PRISTINE.getPrototypeOf(value);
+	return !runtime_isOrdinaryPrototype(prototype) && !INTRINSICS.has(prototype);
+}
+
+/**
+ * What the arguments of a call into a module reach below themselves (#726), by the argument list the call runs with:
+ * the caller's own values among them come back from that call as themselves. Read only when that call's result holds
+ * something that may be code (see {@link runtime_newCallScope}), it decides that call's result only — no other call
+ * reads it — and goes with the list once the call is done.
+ * @type {WeakMap<ArrayLike<*>, {has: function(object): boolean}>}
  * @private
  */
 const CALL_SCOPES = new WeakMap();
