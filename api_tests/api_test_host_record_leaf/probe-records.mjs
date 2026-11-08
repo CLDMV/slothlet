@@ -44,6 +44,8 @@ const ROWS = [
 	"applyPackageCalls",
 	"applyOtherPackage",
 	"applyOtherPackageCalls",
+	"applyCallerPackage",
+	"applyCallerPackageCalls",
 	"callback",
 	"getter",
 	"toString",

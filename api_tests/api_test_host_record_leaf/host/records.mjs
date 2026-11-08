@@ -17,13 +17,15 @@
  * @fileoverview The host's record leaves of the #717 tests, the shape of rummage's `host.records.*`: an object a factory
  * returns, added with `api.slothlet.api.add(["host", "records"], makeRecords(() => api))`. Each leaf opens a store
  * partition its own way: directly, through a helper of this file, through a helper of another of the host's files,
- * through a package only the host imports, or by running what its caller handed it. `invoke` is a function of the host's
+ * through a package only the host imports, through a package the calling module imports too, or by running what its
+ * caller handed it. `invoke` is a function of the host's
  * it hands modules.
  * @module api_tests/api_test_host_record_leaf/host/records
  */
 
 import { callThrough } from "host-pkg";
 import { relay } from "c-pkg";
+import { invoke as sharedInvoke } from "ext-pkg";
 import { openPartition } from "./partition-helper.mjs";
 
 /**
@@ -76,6 +78,8 @@ export function makeRecords(getApi) {
 			if (via === "packageCalls") return callThrough(getApi().store.partition);
 			if (via === "otherPackage") return relay(() => getApi().store.partition());
 			if (via === "otherPackageCalls") return relay(getApi().store.partition);
+			if (via === "callerPackage") return sharedInvoke({ open: () => getApi().store.partition() }, "open");
+			if (via === "callerPackageCalls") return sharedInvoke(getApi().store, "partition");
 			return getApi().store.partition();
 		},
 		query(_) {

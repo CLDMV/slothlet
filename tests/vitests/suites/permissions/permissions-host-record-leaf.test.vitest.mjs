@@ -20,9 +20,10 @@
  * @description
  * docs/PERMISSIONS.md, "Code a caller hands to a leaf runs as the caller": a leaf added with
  * `api.slothlet.api.add(path, { fn() {…} })` is identified by its path, whatever file its function was written in. While
- * it runs, everything inside its call runs as that leaf (its body, the host's helpers in any of the host's files,
- * packages only the host imports) except the code the caller handed in: the caller's own files and dependencies, and
- * evaluated code. A host function the host gave the module, handed back in, is the host's code and runs as the leaf.
+ * it runs, everything inside its call runs as that leaf (its body, the host's helpers in any of the host's files, the
+ * code of any package, including one the caller imports too) except the code the caller handed in: the caller's own
+ * files, and evaluated code. A host function the host gave the module, or a package function the module passes in, runs
+ * as the leaf.
  *
  * Rules: `ext.b.** → host.records.**` and `host.records.** → store.**` are allowed (and the same for `records.host`),
  * nothing lets `ext.b` open a store partition. `ext.b.work` makes each call with a mutable and a frozen argument; the
@@ -41,6 +42,7 @@ import { makeRecords, invoke as hostInvoke } from "../../../../api_tests/api_tes
 import { openPartition } from "../../../../api_tests/api_test_host_record_leaf/host/partition-helper.mjs";
 import { callThrough } from "../../../../api_tests/api_test_host_record_leaf/node_modules/host-pkg/index.mjs";
 import { relay } from "../../../../api_tests/api_test_host_record_leaf/node_modules/c-pkg/index.mjs";
+import { invoke as sharedInvoke } from "../../../../api_tests/api_test_host_record_leaf/node_modules/ext-pkg/index.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_record_leaf");
 const PROBE = path.join(FIXTURE, "probe-records.mjs");
@@ -95,6 +97,8 @@ function inlineRecords(getApi) {
 			if (via === "packageCalls") return callThrough(getApi().store.partition);
 			if (via === "otherPackage") return relay(() => getApi().store.partition());
 			if (via === "otherPackageCalls") return relay(getApi().store.partition);
+			if (via === "callerPackage") return sharedInvoke({ open: () => getApi().store.partition() }, "open");
+			if (via === "callerPackageCalls") return sharedInvoke(getApi().store, "partition");
 			return getApi().store.partition();
 		},
 		query(_) {
@@ -125,6 +129,7 @@ function inlineRecords(getApi) {
 }
 
 const REFUSED = { ok: false, code: "PERMISSION_DENIED", caller: "ext.b.work" };
+const UNACCOUNTED = { ok: false, code: "PERMISSION_DENIED", caller: null };
 
 /**
  * The table's rows: what `ext.b.work` calls, and what it gets back when the record leaves are mounted at `mount`.
@@ -139,6 +144,8 @@ const rows = (mount) => [
 	["applyPackageCalls", "a package only the host imports, calling the api itself", { ok: true, value: `p:${mount}.apply` }],
 	["applyOtherPackage", "a package the host and another module (ext.c) import", { ok: true, value: `p:${mount}.apply` }],
 	["applyOtherPackageCalls", "a package the host and ext.c import, calling the api itself", { ok: true, value: `p:${mount}.apply` }],
+	["applyCallerPackage", "a package the host and ext.b both import, the leaf's own use", { ok: true, value: `p:${mount}.apply` }],
+	["applyCallerPackageCalls", "a package the host and ext.b both import, calling the api itself", { ok: true, value: `p:${mount}.apply` }],
 	["callback", "ext.b's callback", REFUSED],
 	["getter", "a getter ext.b wrote in the argument", REFUSED],
 	["toString", "a toString ext.b wrote in the argument", REFUSED],
@@ -147,7 +154,7 @@ const rows = (mount) => [
 	["newFunction", "a new Function ext.b made", REFUSED],
 	["eval", "eval code ext.b made", REFUSED],
 	["vm", "vm code ext.b made", REFUSED],
-	["package", "a package function ext.b itself imports", REFUSED],
+	["package", "a package function ext.b imports, passed in", { ok: true, value: `p:${mount}.run` }],
 	["hostFunction", "a host function the host gave ext.b, handed back (documented limit)", { ok: true, value: `p:${mount}.run` }]
 ];
 
@@ -168,7 +175,15 @@ function inlineInvoke(obj, name) {
  * @param {string} mount - The mount, dotted.
  * @returns {Array<[string, string, object]>} The rows.
  */
-const PACKAGE_ROWS = ["applyPackage", "applyPackageCalls", "applyOtherPackage", "applyOtherPackageCalls", "package"];
+const PACKAGE_ROWS = [
+	"applyPackage",
+	"applyPackageCalls",
+	"applyOtherPackage",
+	"applyOtherPackageCalls",
+	"applyCallerPackage",
+	"applyCallerPackageCalls",
+	"package"
+];
 const underRunner = (mount) => rows(mount).filter(([row]) => !PACKAGE_ROWS.includes(row));
 
 /**
@@ -217,20 +232,26 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 		// docs/PERMISSIONS.md, "Under vite's module runner": which module loaded a package is not recorded, so a package's
 		// code inside a leaf with no file is code no call accounts for. In a call handed data that can still be changed it
 		// runs as the call that made the leaf's, and is refused. With a frozen argument the code doing the access decides: the
-		// host's code is the leaf's, and a package calling an api node the leaf read is settled by that node, as the leaf.
+		// host's code is the leaf's, and a package calling an api node the leaf read is settled by that node, as the leaf; a
+		// package that reads the api node itself (`invoke(store, "partition")`) is refused as code no call accounts for.
 		it.each([
 			["applyPackage", "mutable", false],
 			["applyPackageCalls", "mutable", false],
 			["applyOtherPackage", "mutable", false],
 			["applyOtherPackageCalls", "mutable", false],
+			["applyCallerPackage", "mutable", false],
+			["applyCallerPackageCalls", "mutable", false],
 			["package", "mutable", false],
 			["package", "frozen", false],
+			["applyCallerPackageCalls", "frozen", null],
 			["applyPackage", "frozen", true],
 			["applyOtherPackage", "frozen", true],
 			["applyPackageCalls", "frozen", true],
-			["applyOtherPackageCalls", "frozen", true]
+			["applyOtherPackageCalls", "frozen", true],
+			["applyCallerPackage", "frozen", true]
 		])("places a package's code under vite's module runner: %s, %s", async (row, kind, allowed) => {
-			expect(await api.ext.b.work(mount, row, kind, { invoke })).toEqual(allowed ? { ok: true, value: `p:${mount}.apply` } : REFUSED);
+			const outcome = allowed ? { ok: true, value: `p:${mount}.apply` } : allowed === null ? UNACCOUNTED : REFUSED;
+			expect(await api.ext.b.work(mount, row, kind, { invoke })).toEqual(outcome);
 		});
 
 		describe.each(["mutable", "frozen"])("handed a %s argument", (kind) => {

@@ -59,6 +59,10 @@ function call(records, row, kind, tools) {
 			return records.apply(options({ via: "otherPackage" }));
 		case "applyOtherPackageCalls":
 			return records.apply(options({ via: "otherPackageCalls" }));
+		case "applyCallerPackage":
+			return records.apply(options({ via: "callerPackage" }));
+		case "applyCallerPackageCalls":
+			return records.apply(options({ via: "callerPackageCalls" }));
 		case "callback":
 			return records.run(() => self.store.partition(), options());
 		case "getter":
