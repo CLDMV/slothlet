@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:32:19-08:00 (1794169939)
+ *	@Last modified time: 2026-11-08T14:46:13-08:00 (1794177973)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,17 @@ const RULES = [
 	{ caller: "ext.b.**", target: "host.records.**", effect: "allow" },
 	{ caller: "host.records.**", target: "store.**", effect: "allow" },
 	{ caller: "ext.b.**", target: "records.host.**", effect: "allow" },
-	{ caller: "records.host.**", target: "store.**", effect: "allow" }
+	{ caller: "records.host.**", target: "store.**", effect: "allow" },
+	// The nodes ext.b makes itself (`made`, assigned, and `added`, its own `api.add`).
+	{ caller: "ext.b.**", target: "slothlet.api.**", effect: "allow" },
+	{ caller: "ext.b.**", target: "made:write", effect: "allow" },
+	{ caller: "ext.b.**", target: "made.**:write", effect: "allow" },
+	{ caller: "ext.b.**", target: "added:write", effect: "allow" },
+	{ caller: "ext.b.**", target: "added.**:write", effect: "allow" },
+	{ caller: "ext.b.**", target: "made.**", effect: "allow" },
+	{ caller: "made.**", target: "store.**", effect: "allow" },
+	{ caller: "ext.b.**", target: "added.**", effect: "allow" },
+	{ caller: "added.**", target: "store.**", effect: "allow" }
 ];
 
 const CONFIGS = [
@@ -155,7 +165,29 @@ const rows = (mount) => [
 	["eval", "eval code ext.b made", REFUSED],
 	["vm", "vm code ext.b made", REFUSED],
 	["package", "a package function ext.b imports, passed in", { ok: true, value: `p:${mount}.run` }],
-	["hostFunction", "a host function the host gave ext.b, handed back (documented limit)", { ok: true, value: `p:${mount}.run` }]
+	["hostFunction", "a host function the host gave ext.b, handed back (documented limit)", { ok: true, value: `p:${mount}.run` }],
+	["imports", "a file of ext.b's outside its api folder, reached through a package scope's imports, passed in", REFUSED],
+	["loaded", "a file of ext.b's a package's import() loaded, passed in", REFUSED],
+	["copyViaPkg", "an untagged copy of ext.b's file, calling the api through a package", REFUSED],
+	["written", "source ext.b had a package write beside itself and import (documented limit)", { ok: true, value: `p:${mount}.run` }]
+];
+
+/**
+ * The nodes ext.b makes itself — `made`, which it assigns (no file at all), and `added`, which its own `api.add` mounts
+ * as an object — are not leaves the host added: what runs inside them is decided as before #717 (inside a call handed
+ * data that can still be changed, as the caller).
+ * @type {Array<[string, string, object, object]>} `[row, what reaches store.partition(), mutable, frozen]`.
+ */
+// Code of ext.b's file no call accounts for answers as a leaf built from that file, whichever is found first.
+const AUTHORED = { ok: false, code: "PERMISSION_DENIED", caller: expect.stringMatching(/^ext\.b\./) };
+
+const MODULE_NODE_ROWS = [
+	["madeOwn", "made's own body", REFUSED, { ok: true, value: "p:null" }],
+	["madeInvoke", "a package function ext.b assigned as made.invoke", REFUSED, { ok: true, value: "p:null" }],
+	["madeRun", "a package function ext.b passes to made.run", REFUSED, REFUSED],
+	["addedOwn", "added's own body", REFUSED, AUTHORED],
+	["addedInvoke", "a package function ext.b added as added.invoke", REFUSED, AUTHORED],
+	["addedRun", "a package function ext.b passes to added.run", REFUSED, REFUSED]
 ];
 
 /**
@@ -171,11 +203,14 @@ function inlineInvoke(obj, name) {
 /**
  * The rows measured in this process. Under vitest's runner a package a module imports is loaded by the runner, not
  * through slothlet's loader, so which module loaded a package is not recorded and a package cannot be told to be the
- * host's: the rows that run a package's code are measured under Node's own loader only, below.
+ * host's: the rows that run a package's code are measured under Node's own loader only, below. So is the copy of
+ * ext.b's file a package loads, which the runner gives no active `self`.
  * @param {string} mount - The mount, dotted.
  * @returns {Array<[string, string, object]>} The rows.
  */
 const PACKAGE_ROWS = [
+	"written",
+	"copyViaPkg",
 	"applyPackage",
 	"applyPackageCalls",
 	"applyOtherPackage",
@@ -223,6 +258,7 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 				make(() => api),
 				{ moduleID: "host-records" }
 			);
+			await api.ext.b.prepare();
 		});
 
 		afterAll(async () => {
@@ -260,6 +296,18 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 			});
 		});
 
+		it.each(MODULE_NODE_ROWS)("decides a node ext.b made itself as before: %s, %s", async (row, _what, mutable, frozen) => {
+			expect(await api.ext.b.work(mount, row, "mutable")).toEqual(mutable);
+			expect(await api.ext.b.work(mount, row, "frozen")).toEqual(frozen);
+		});
+
+		// docs/PERMISSIONS.md, "In the live runtime": with no call awaiting the leaf, its code after an await runs as the leaf.
+		it.each(["mutable", "frozen"])("runs the leaf's own code after an await no call awaits (%s)", async (kind) => {
+			const leaf = `p:${mount}.later`;
+			const outcome = await api.ext.b.work(mount, "laterDetached", kind);
+			expect(await outcome.value.pending).toEqual({ inTimer: leaf, inReaction: leaf, afterAwait: leaf, timerAfterAwait: leaf });
+		});
+
 		// The async runtime carries the call across every await, timer and reaction. The live runtime carries it into a
 		// timer or a reaction registered in the leaf's synchronous part; once the leaf resumes after an await its frames
 		// place on no call, so the job is placed by the flow awaiting it: the caller.
@@ -290,6 +338,14 @@ describe("Permissions > a host record leaf is its own entity at its path, under 
 					expect(out[`${mode}/${runtime}/${mount}/${row}/${kind}`]).toEqual(outcome);
 				});
 
+				it("runs the leaf's own code after an await no call awaits", () => {
+					const leaf = `p:${mount}.later`;
+					expect(out[`${mode}/${runtime}/${mount}/laterDetached/${kind}`]).toEqual({
+						ok: true,
+						value: { inTimer: leaf, inReaction: leaf, afterAwait: leaf, timerAfterAwait: leaf }
+					});
+				});
+
 				it("runs the leaf's own code in its timers, its reactions and after an await", () => {
 					const leaf = `p:${mount}.later`;
 					const resumed = runtime === "async" ? leaf : "PERMISSION_DENIED:ext.b.work";
@@ -298,6 +354,18 @@ describe("Permissions > a host record leaf is its own entity at its path, under 
 						value: { inTimer: leaf, inReaction: leaf, afterAwait: resumed, timerAfterAwait: resumed }
 					});
 				});
+			});
+
+			// docs/PERMISSIONS.md, "A file the host loads through a package a module imports too": its code is taken for the
+			// module's.
+			it("takes a host file the host loaded through a package ext.b imports too for ext.b's", () => {
+				expect(out[`${mode}/${runtime}/${mount}/hostLoadedByPackage/mutable`]).toEqual(REFUSED);
+				expect(out[`${mode}/${runtime}/${mount}/hostLoadedByPackage/frozen`]).toEqual(UNACCOUNTED);
+			});
+
+			it.each(MODULE_NODE_ROWS)("decides a node ext.b made itself as before: %s, %s", (row, _what, mutable, frozen) => {
+				expect(out[`${mode}/${runtime}/${mount}/${row}/mutable`]).toEqual(mutable);
+				expect(out[`${mode}/${runtime}/${mount}/${row}/frozen`]).toEqual(frozen);
 			});
 		});
 	});

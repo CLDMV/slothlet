@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:29:59-08:00 (1794169799)
+ *	@Last modified time: 2026-11-08T14:42:08-08:00 (1794177728)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,62 @@
 
 import vm from "node:vm";
 import { invoke as packageInvoke } from "ext-pkg";
+import { load } from "load-pkg";
+import { run as runSource } from "write-pkg";
+import { open as openOutside } from "../../module-scope/index.mjs";
 import { self } from "@cldmv/slothlet/runtime";
+
+/**
+ * What {@link prepare} loaded: this module's code that slothlet did not load under the instance's tag.
+ * @type {{loaded?: object, written?: object, copy?: object}}
+ */
+const prepared = {};
+
+/**
+ * Open a partition through a package. A copy of this file that `load-pkg` loads (`./b.mjs?copy`) hands its own
+ * `viaPkg` to a host leaf (#717).
+ * @returns {string} The partition.
+ * @example
+ * viaPkg(); // "p:ext.b.work"
+ */
+export const viaPkg = () => packageInvoke(self.store, "partition");
+
+/**
+ * Load this module's code that slothlet does not load under the instance's tag, and make the nodes this module creates
+ * itself (#717): a file of its own loaded through `load-pkg`, source `write-pkg` writes beside itself and imports, an
+ * untagged copy of this file, a node it assigns (`made`) and a leaf it adds as an object (`added`).
+ * @returns {Promise<string>} `"prepared"`.
+ * @example
+ * await api.ext.b.prepare(); // "prepared"
+ */
+export async function prepare() {
+	prepared.loaded = await load(new URL("../../outside/loaded.mjs", import.meta.url));
+	prepared.written = await runSource("export function open(store) {\n\treturn store.partition();\n}\n");
+	prepared.copy = await load(new URL("./b.mjs?copy", import.meta.url));
+	self.made = {
+		open(_) {
+			return self.store.partition();
+		},
+		run(fn, _) {
+			return fn();
+		},
+		invoke: packageInvoke
+	};
+	await self.slothlet.api.add(
+		["added"],
+		{
+			open(_) {
+				return self.store.partition();
+			},
+			run(fn, _) {
+				return fn();
+			},
+			invoke: packageInvoke
+		},
+		{ moduleID: "ext-added" }
+	);
+	return "prepared";
+}
 
 /**
  * The argument a call is handed: `base` as it is, or frozen.
@@ -116,6 +171,31 @@ function call(records, row, kind, tools) {
 			return records.run(tools.invoke.bind(null, self.store, "partition"), options());
 		case "later":
 			return records.later(options());
+		case "laterDetached":
+			// Not awaited: once the leaf resumes after its await, no call awaits it.
+			return { pending: records.later(options()) };
+		case "hostLoadedByPackage":
+			return records.loaded.open(options());
+		case "imports":
+			return records.run(openOutside.bind(null, self.store), options());
+		case "loaded":
+			return records.run(prepared.loaded.open.bind(null, self.store), options());
+		case "written":
+			return records.run(prepared.written.open.bind(null, self.store), options());
+		case "copyViaPkg":
+			return records.run(prepared.copy.viaPkg, options());
+		case "madeOwn":
+			return self.made.open(options());
+		case "madeRun":
+			return self.made.run(packageInvoke.bind(null, self.store, "partition"), options());
+		case "madeInvoke":
+			return self.made.invoke(self.store, "partition", options());
+		case "addedInvoke":
+			return self.added.invoke(self.store, "partition", options());
+		case "addedOwn":
+			return self.added.open(options());
+		case "addedRun":
+			return self.added.run(packageInvoke.bind(null, self.store, "partition"), options());
 		default:
 			throw new Error(`unknown row ${row}`);
 	}

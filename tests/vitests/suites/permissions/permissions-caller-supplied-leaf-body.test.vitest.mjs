@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:32:13-08:00 (1794169933)
+ *	@Last modified time: 2026-11-08T14:45:57-08:00 (1794177957)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,13 +18,13 @@
  *
  * @description
  * docs/PERMISSIONS.md, "Code a caller hands to a leaf runs as the caller": a leaf the host added as an object is its own
- * entity at its path. While it runs, everything inside its call runs as the leaf (its body, the helpers of its file),
- * whatever its caller hands it, except the code the caller handed in (a callback, a getter, a `toString`, a Proxy trap)
- * and evaluated code, which run as the caller, with the leaf as their ceiling.
+ * entity at its path, not the file its functions were written in. While it runs, everything inside its call runs as the
+ * leaf (its body and the host's helpers), whatever its caller hands it, except the code the caller handed in (a callback,
+ * a getter, a `toString`, a Proxy trap) and evaluated code, which run as the caller, with the leaf as their ceiling.
  *
  * The host's leaves here are added as an object, the shape of rummage's `host.records.*` and `host.callback.*`: once
- * from a file of the host's (`host/access.mjs`, mounted at `host.access`) and once written in this file (`host.inline`).
- * Their bodies read `vault.get`, which only `host.**` may call, call a helper of their own file that does, ask
+ * mounted at `host.access` with functions written in a host file (`host/access.mjs`), and once mounted at `host.inline`
+ * with functions written in this file; either way each leaf is identified by its path. Their bodies read `vault.get`, which only `host.**` may call, call a helper of their own file that does, ask
  * `permissions.global.checkAccess`, and run what they were handed. `project.hand` hands them a value; `project.**` may
  * call `host.**` and `vault.open` but not `vault.get`.
  *

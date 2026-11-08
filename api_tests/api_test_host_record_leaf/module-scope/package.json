@@ -1,0 +1,8 @@
+{
+	"name": "module-scope",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#outside": "./outside/hash.mjs"
+	}
+}
