@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:14:58-07:00 (1793056498)
+ *	@Last modified time: 2026-11-08T10:55:31-08:00 (1794164131)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,6 +47,7 @@ import {
 	runtime_frameworkViewCaller
 } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
+import { runtime_codeWritersOnStack } from "#handlers/frame-placement";
 import { markSlothletProxy } from "#handlers/framework-internals";
 import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
@@ -913,27 +914,19 @@ export class ApiBuilder extends ComponentBase {
 		};
 
 		/**
-		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
-		 * property route is permission-gated, including primitives on objects.
-		 *
-		 * @param {unknown} value - Value to proxy.
-		 * @param {string} routePath - Dot path used for permission matching.
-		 * @param {WeakMap<object, Map<string, object>>} [seen=new WeakMap()] - Route-aware cycle guard.
-		 * @returns {unknown} Route-gated proxy or primitive.
-		 * @example
-		 * const gated = createInternalRouteProxy(namespace, "slothlet");
-		 */
-		/**
 		 * Refuse module code a change to the namespace at `routePath`, however the module came to hold it: through
 		 * `self` (a view of its own, which checks the same), or the namespace the host holds, handed to it as an argument,
 		 * inside plain data, or stored on an object the module holds as itself. The built-in write rules keep the
 		 * framework's namespace from module code with the permission system on or off, and a host rule lifts one for the
-		 * callers it names; only `mode: "disabled"` leaves it open. The host's own changes go through.
+		 * callers it names; only `mode: "disabled"` leaves it open. The host's own changes go through. While a module's
+		 * call runs, the module it runs as decides; while none does, whose code makes the change decides (a function a
+		 * module left on an object of the host's, or on `globalThis`, is that module's whoever calls it later).
 		 *
 		 * @param {string} changedPath - The path changed (`slothlet.planted`, or `slothlet` for the namespace itself).
 		 * @returns {void}
 		 * @throws {SlothletError} `PERMISSION_DENIED` when module code changes what a built-in write rule protects, and
-		 *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+		 *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, or the code making it is
+		 *   the instance's but no module's.
 		 * @example
 		 * assertNamespaceChange("slothlet.planted"); // throws inside a module call
 		 */
@@ -945,11 +938,29 @@ export class ApiBuilder extends ComponentBase {
 			if (identity?.unresolved) {
 				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
 			}
-			if (!identity?.currentWrapper) return;
-			// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
-			for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) apiManager.assertOwnedWrite(parts, writer);
+			if (identity?.currentWrapper) {
+				// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
+				for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) apiManager.assertOwnedWrite(parts, writer);
+				return;
+			}
+			// No call is running: whose code makes the change decides, so a function a module left where the host calls it
+			// later is still that module's.
+			const writers = runtime_codeWritersOnStack(slothlet);
+			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+			for (const writer of writers) apiManager.assertOwnedWrite(parts, writer);
 		};
 
+		/**
+		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
+		 * property route is permission-gated, including primitives on objects.
+		 *
+		 * @param {unknown} value - Value to proxy.
+		 * @param {string} routePath - Dot path used for permission matching.
+		 * @param {WeakMap<object, Map<string, object>>} [seen=new WeakMap()] - Route-aware cycle guard.
+		 * @returns {unknown} Route-gated proxy or primitive.
+		 * @example
+		 * const gated = createInternalRouteProxy(namespace, "slothlet");
+		 */
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
