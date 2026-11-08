@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:14:59-08:00 (1794024899)
+ *	@Last modified time: 2026-11-08T01:15:18-08:00 (1794129318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1357,14 +1357,15 @@ export function setApiValueCheck(check, harborsCode = null) {
 /**
  * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
  * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
- * @type {function(object, *): *}
+ * @type {function(object, *, ArrayLike<*>|null=): *}
  * @private
  */
 let resultAttributor = (_wrapper, value) => value;
 
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
- * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @param {function(object, *, ArrayLike<*>|null=): *} attributor - Takes the call's wrapper, its result and its
+ *   arguments; returns what the caller gets.
  * @returns {void}
  * @internal
  */
@@ -1377,11 +1378,13 @@ export function setResultAttributor(attributor) {
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
+ * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reach is the caller's, handed back as itself
+ *   inside the result (#726).
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper, value) {
-	return resultAttributor(wrapper, value);
+export function attributeResult(wrapper, value, args = null) {
+	return resultAttributor(wrapper, value, args);
 }
 
 /**

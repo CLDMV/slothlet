@@ -53,6 +53,18 @@ export function hold(value) {
 	return { held: value, also: [value] };
 }
 
+export function pick(value, key) {
+	return value[key];
+}
+
+export function fromMap(value) {
+	return { fn: value.map.get("k") };
+}
+
+export function fromSet(value) {
+	return { fn: [...value.set][0] };
+}
+
 /** Module-made data nested \`depth\` levels, arrays and objects alternating. */
 export function nest(depth) {
 	let value = { leaf: depth, text: "end" };
@@ -257,6 +269,33 @@ describe.each(MATRIX)("returned data, $label, $mode/$runtime (#726)", ({ config,
 		expect(out.list[0].deep[0].deeper.cb === callback).toBe(true);
 		const buried = await api.bag.bury(input, 7);
 		expectSameShape(buried, plain.bury(input, 7), objectsOf(input));
+	});
+
+	it("hands back the caller's nested function, Proxy and collection members as themselves", async () => {
+		const callback = () => "caller's";
+		const proxy = new Proxy({}, {});
+		const input = { deep: { cb: callback, proxy }, map: new Map([["k", callback]]), set: new Set([callback]) };
+		expect((await api.bag.pick(input.deep, "cb")) === callback).toBe(true);
+		expect((await api.bag.pick(input.deep, "proxy")) === proxy).toBe(true);
+		const copied = await api.bag.copy(input.deep);
+		expect(types.isProxy(copied)).toBe(false);
+		expect(copied.proxy === proxy).toBe(true);
+		const fromMap = await api.bag.fromMap(input);
+		expect(types.isProxy(fromMap)).toBe(false);
+		expect(fromMap.fn === plain.fromMap(input).fn).toBe(true);
+		const fromSet = await api.bag.fromSet(input);
+		expect(types.isProxy(fromSet)).toBe(false);
+		expect(fromSet.fn === callback).toBe(true);
+	});
+
+	it("hands the module's own stand-in back as the same stand-in inside its result", async () => {
+		const client = await api.bag.makeClient();
+		const held = await api.bag.hold(client);
+		expect(held.held === client).toBe(true);
+		expect(held.also[0] === client).toBe(true);
+		const copied = await api.bag.copy({ client, list: [1] });
+		expect(copied.client === client).toBe(true);
+		expect(copied.client()).toBe("bag.makeClient");
 	});
 
 	it("still hands out a closure the module made as a stand-in that runs as the module", async () => {

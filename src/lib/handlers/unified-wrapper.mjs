@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T18:51:06-08:00 (1794019866)
+ *	@Last modified time: 2026-11-08T01:15:20-08:00 (1794129320)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3980,12 +3980,13 @@ function runtime_memberHoldsCode(member, depth, budget) {
  * what an iterator has left — is taken to hold code. An emitter's listener table, and the internals an event target keeps under symbols of its
  * own, hold the listeners registered on it, which run as whoever registered them, and are not read.
  * @param {object} value - An object with internal slots, not a Proxy.
- * @param {number} depth - Levels still allowed, this one included.
+ * @param {number} depth - Levels still allowed, this one included, handed to `holds`.
  * @param {{remaining: number}} budget - Properties still allowed.
+ * @param {function(*, number, object): boolean} holds - Whether a member it holds carries code.
  * @returns {boolean} True when it carries a module's code.
  * @private
  */
-function runtime_slotHoldsCode(value, depth, budget) {
+function runtime_slotHoldsCode(value, depth, budget, holds) {
 	for (let link = Reflect.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = Reflect.getPrototypeOf(link)) {
 		if (util.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
 	}
@@ -3998,7 +3999,7 @@ function runtime_slotHoldsCode(value, depth, budget) {
 			budget.remaining -= 1;
 			if (budget.remaining < 0) return true;
 			const members = types.isMap(value) ? entry : [entry];
-			for (const member of members) if (runtime_memberHoldsCode(member, depth, budget)) return true;
+			for (const member of members) if (holds(member, depth, budget)) return true;
 		}
 	}
 	const isEmitter = Boolean(EventEmitter && runtime_inherits(value, EventEmitter));
@@ -4016,24 +4017,102 @@ function runtime_slotHoldsCode(value, depth, budget) {
 			continue;
 		}
 		if (isEmitter && runtime_isNodeStreamState(descriptor.value)) continue;
-		if (runtime_memberHoldsCode(descriptor.value, depth, budget)) return true;
+		if (holds(descriptor.value, depth, budget)) return true;
 	}
 	return false;
 }
 
 /**
  * How many levels of objects a returned value is looked into for code, and how many own properties of all of
- * them together, before it is taken to hold code (#597).
+ * them together, by the quick search (#597). Data reaching past either is searched to its end (see
+ * {@link runtime_holdsModuleCode}) before a value is handed out as code (#726).
  * @type {{depth: number, properties: number}}
  * @private
  */
 const CODE_SEARCH = { depth: 4, properties: 512 };
 
 /**
+ * Whether an object itself carries code — is a generator, an iterator of the language's, has a prototype of its own
+ * or an accessor of a module's, or one of its members does as `holds` judges it. Decided from descriptors, so nothing
+ * of the object runs.
+ * @param {object} value - An object that is not a Proxy.
+ * @param {number} depth - Levels still allowed, this one included, handed to `holds`.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @param {function(*, number, object): boolean} holds - Whether a member it holds carries code.
+ * @returns {boolean} True when it can hold code.
+ * @private
+ */
+function runtime_objectHoldsCode(value, depth, budget, holds) {
+	if (util.types.isGeneratorObject(value)) return true;
+	const prototype = Reflect.getPrototypeOf(value);
+	if (runtime_isOrdinaryPrototype(prototype) ? runtime_isOrdinarySlotObject(value) : runtime_isSlotObject(value))
+		return runtime_slotHoldsCode(value, depth, budget, holds);
+	// What one of the language's own iterators has left cannot be read without stepping it.
+	if (runtime_isNativeIterator(value)) return true;
+	// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
+	// still read below.
+	if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
+		return true;
+	if (Array.isArray(value) && value.length > budget.remaining) return true;
+	const keys = Reflect.ownKeys(value);
+	budget.remaining -= keys.length;
+	if (budget.remaining < 0) return true;
+	for (const key of keys) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (!descriptor) continue;
+		if (!("value" in descriptor)) {
+			for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+			continue;
+		}
+		if (holds(descriptor.value, depth, budget)) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a prototype is one plain data has: `Object.prototype`, `Array.prototype` or none.
+ * @param {object|null} prototype - The prototype.
+ * @returns {boolean} True for one of them.
+ * @private
+ */
+function runtime_isOrdinaryPrototype(prototype) {
+	return prototype === Object.prototype || prototype === Array.prototype || prototype === null;
+}
+
+/**
+ * {@link runtime_isSlotObject} for an object whose prototype is plain data's (#726), by the engine's brand checks that
+ * throw nothing: an array has no slots of another kind, and a key, a `WeakRef`, an emitter or an event target given a
+ * plain prototype is read as the plain object it then looks like — its own members are still searched — since telling
+ * one apart costs a thrown error for every object of plain data searched.
+ * @param {object} value - An object that is not a Proxy, with a plain prototype.
+ * @returns {boolean} True for an object with internal slots.
+ * @private
+ */
+function runtime_isOrdinarySlotObject(value) {
+	if (Array.isArray(value)) return false;
+	const types = util.types;
+	return (
+		types.isMap(value) ||
+		types.isSet(value) ||
+		types.isWeakMap(value) ||
+		types.isWeakSet(value) ||
+		types.isDate(value) ||
+		types.isRegExp(value) ||
+		types.isPromise(value) ||
+		types.isAnyArrayBuffer(value) ||
+		types.isArrayBufferView(value) ||
+		types.isBoxedPrimitive(value) ||
+		types.isNativeError(value) ||
+		types.isMapIterator(value) ||
+		types.isSetIterator(value)
+	);
+}
+
+/**
  * Whether an object can hold code of the module that made it — a function, an accessor, a Proxy, a generator, a
  * prototype of its own (a class instance, `Object.create(proto)`) — anywhere within {@link CODE_SEARCH}. Plain data
  * (primitives, the language's own objects, slothlet's own values, values made by no module) holds none. Decided from
- * descriptors, so nothing of the object runs.
+ * descriptors, so nothing of the object runs. Reaching past the bound answers true.
  * @param {object} value - An object that is not a Proxy.
  * @param {number} depth - Levels still allowed, this one included.
  * @param {{remaining: number}} budget - Properties still allowed.
@@ -4043,38 +4122,7 @@ const CODE_SEARCH = { depth: 4, properties: 512 };
 function runtime_holdsCode(value, depth, budget) {
 	if (depth <= 0) return true;
 	try {
-		if (util.types.isGeneratorObject(value)) return true;
-		if (runtime_isSlotObject(value)) return runtime_slotHoldsCode(value, depth, budget);
-		// What one of the language's own iterators has left cannot be read without stepping it.
-		if (runtime_isNativeIterator(value)) return true;
-		const prototype = Reflect.getPrototypeOf(value);
-		// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
-		// still read below.
-		if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
-			return true;
-		if (Array.isArray(value) && value.length > budget.remaining) return true;
-		const keys = Reflect.ownKeys(value);
-		budget.remaining -= keys.length;
-		if (budget.remaining < 0) return true;
-		for (const key of keys) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (!descriptor) continue;
-			if (!("value" in descriptor)) {
-				for (const half of [descriptor.get, descriptor.set])
-					if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
-				continue;
-			}
-			const member = descriptor.value;
-			if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-			if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) continue;
-			if (util.types.isProxy(member)) return true;
-			if (typeof member === "function") {
-				if (!runtime_isBuiltinFunction(member)) return true;
-				continue;
-			}
-			if (runtime_holdsCode(member, depth - 1, budget)) return true;
-		}
-		return false;
+		return runtime_objectHoldsCode(value, depth, budget, runtime_memberHoldsCode);
 	} catch {
 		// An exotic object that refuses to be described is taken to hold code.
 		return true;
@@ -4082,18 +4130,114 @@ function runtime_holdsCode(value, depth, budget) {
 }
 
 /**
+ * Whether a value a module hands out holds code of the module's anywhere in it (#726): searched to its end, however
+ * deep and wide, each object once, so data past {@link CODE_SEARCH} is still data and code past it is still found. A
+ * value handed to the module from outside (see {@link runtime_isCallersValue}) is its giver's and is not looked into.
+ * @param {object} maker - The module's record.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True when it holds code of the module's.
+ * @private
+ */
+function runtime_holdsModuleCode(maker, value) {
+	const search = { remaining: Infinity, maker, seen: new Set([value]), pending: [value] };
+	try {
+		while (search.pending.length > 0)
+			if (runtime_objectHoldsCode(search.pending.pop(), 0, search, runtime_memberHoldsModuleCode)) return true;
+		return false;
+		/* v8 ignore start */
+	} catch {
+		// An object that refuses to be described — a module namespace whose module threw before its bindings were
+		// initialised — is taken to hold code. It can occur, but no suite here leaves such a namespace behind.
+		return true;
+	}
+	/* v8 ignore stop */
+}
+
+/**
+ * Whether a member reached by {@link runtime_holdsModuleCode} is code of the module's; an object not seen yet is
+ * queued to be searched.
+ * @param {*} member - The member.
+ * @param {number} _depth - Unused: the search has no depth bound.
+ * @param {{maker: object, seen: Set<object>, pending: Array<object>}} search - The search.
+ * @returns {boolean} True when it is code.
+ * @private
+ */
+function runtime_memberHoldsModuleCode(member, _depth, search) {
+	if (member === null || (typeof member !== "object" && typeof member !== "function")) return false;
+	if (runtime_isCallersValue(search.maker, member)) return false;
+	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
+	if (util.types.isProxy(member)) return true;
+	if (typeof member === "function") return !runtime_isBuiltinFunction(member);
+	if (!search.seen.has(member)) {
+		search.seen.add(member);
+		search.pending.push(member);
+	}
+	return false;
+}
+
+/**
+ * Whether a value is one handed to a module from outside — by its caller, or written onto it by other code — rather
+ * than one the module made: such a value is its giver's wherever the module hands it on (#726).
+ * @param {object} maker - The module's record.
+ * @param {object|Function} value - The value.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isCallersValue(maker, value) {
+	return maker.handedIn.has(value) || INBOUND_VIEWS.has(value);
+}
+
+/**
+ * Record what a call's arguments reach as handed to the module (#726): every object and function in them, through
+ * plain own data properties and the entries of a `Map` or `Set`, so that the caller's values a module hands back
+ * inside its result are the caller's at any depth. Read from descriptors alone: a Proxy and a function are recorded
+ * and not looked into, and the module's own values (handed back to it as themselves) are not recorded. Run only
+ * when a result may hold code (see {@link runtime_handOut}).
+ * @param {object} maker - The module's record.
+ * @param {ArrayLike<*>} args - The call's arguments, as the module was handed them.
+ * @param {*} target - A value to look for.
+ * @returns {boolean} True when `target` is among what the arguments reach.
+ * @private
+ */
+function runtime_recordHandedIn(maker, args, target) {
+	const seen = new Set();
+	const pending = Array.from(args);
+	let found = false;
+	while (pending.length > 0) {
+		let value = pending.pop();
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+		value = INBOUND_VIEWS.get(value)?.original ?? value;
+		if (seen.has(value)) continue;
+		seen.add(value);
+		if (runtime_isSlothletValue(value) || INTRINSICS.has(value) || STAND_IN_RECORDS.has(value) || maker.made.has(value)) continue;
+		maker.handedIn.add(value);
+		if (value === target) found = true;
+		if (typeof value === "function" || util.types.isProxy(value)) continue;
+		if (util.types.isMap(value)) for (const entry of Reflect.apply(SLOT_READERS.mapEntries, value, [])) pending.push(entry[0], entry[1]);
+		else if (util.types.isSet(value)) for (const entry of Reflect.apply(SLOT_READERS.setValues, value, [])) pending.push(entry);
+		for (const key of Reflect.ownKeys(value)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			if (descriptor && "value" in descriptor) pending.push(descriptor.value);
+		}
+	}
+	return found;
+}
+
+/**
  * What a module's code hands out, as whoever receives it gets it (#597): code the module made — a function, a
  * Proxy, a generator, and any object holding code — comes as a stand-in that runs it as the module (see
  * {@link runtime_runAsMaker}); a value handed to the module from outside, plain data, the language's own objects and
  * slothlet's own values come as they are. The same value from the same module is the same stand-in every time.
- * Nothing of the value runs to decide.
+ * Data holding no code is handed out as itself however deep or wide it is (#726). Nothing of the value runs to decide.
  * @param {object} maker - The module's record (see {@link runtime_makerOf}).
  * @param {object} owner - The wrapper a new stand-in runs as.
  * @param {*} value - The value.
+ * @param {ArrayLike<*>|null} [args=null] - The arguments of the call that returned it: what they reach is the caller's,
+ *   told apart before a value that may hold code is handed out as the module's (see {@link runtime_recordHandedIn}).
  * @returns {*} What is handed out.
  * @private
  */
-function runtime_handOut(maker, owner, value) {
+function runtime_handOut(maker, owner, value, args = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
@@ -4111,6 +4255,9 @@ function runtime_handOut(maker, owner, value) {
 	const made = maker.made.get(value);
 	if (made) return made;
 	try {
+		// A function or Proxy the caller handed in, reached through what it handed, is the caller's (#726).
+		if (args !== null && (typeof value === "function" || util.types.isProxy(value)) && runtime_recordHandedIn(maker, args, value))
+			return value;
 		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
@@ -4125,7 +4272,12 @@ function runtime_handOut(maker, owner, value) {
 		}
 		if (util.types.isGeneratorObject(value)) return runtime_generatorStandIn(maker, owner, value);
 		if (runtime_isPlainPromise(value)) return runtime_promiseStandIn(maker, owner, value);
+		// Data is handed out as itself at any depth (#726): the quick search settles most values, and one it cannot
+		// settle is searched to its end. Code found there may be the caller's own: what the call's arguments reach is
+		// recorded as the caller's and the value searched again.
 		if (!runtime_holdsCode(value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+		if (!runtime_holdsModuleCode(maker, value)) return value;
+		if (args !== null && (runtime_recordHandedIn(maker, args, value) || !runtime_holdsModuleCode(maker, value))) return value;
 		return runtime_membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
@@ -4178,13 +4330,14 @@ function runtime_promiseStandIn(maker, owner, original) {
  * What a module's call hands its caller (#597): see {@link runtime_handOut}.
  * @param {object} owner - The wrapper whose call returned the value.
  * @param {*} value - What the call returned.
+ * @param {ArrayLike<*>|null} [args=null] - The call's arguments, whose values are the caller's (#726).
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value) {
+function runtime_attributeResult(owner, value, args = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
-	return runtime_handOut(runtime_makerOf(owner), owner, value);
+	return runtime_handOut(runtime_makerOf(owner), owner, value, args?.length > 0 ? args : null);
 }
 
 setResultAttributor(runtime_attributeResult);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T23:03:10-08:00 (1793775790)
+ *	@Last modified time: 2026-11-08T01:15:18-08:00 (1794129318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,7 +183,7 @@ export class AsyncContextManager {
 		}
 
 		// A leaf's own call hands back what its module made as that module's (#597).
-		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
+		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value, args) : (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
