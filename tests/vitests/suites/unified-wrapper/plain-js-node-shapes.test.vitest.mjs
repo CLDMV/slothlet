@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:58:40-08:00 (1794117520)
+ *	@Last modified time: 2026-11-08T01:03:27-08:00 (1794128607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -729,10 +729,11 @@ describe.each(
 		expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object"));
 	});
 
-	it("is a checked view to another module while the permission system is on, a write rule granting it the write included", async () => {
+	it("is the object itself to another module whose writes are allowed, and a checked view to one only allowed the read", async () => {
 		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 		for (const name of IDENTITY_CASES) await api.owner[name];
-		expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(off ? "object" : "view"));
+		const writes = off || permissions === ALLOW_READER_WRITES;
+		expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(writes ? "object" : "view"));
 	});
 
 	it("refuses another module's write through it while the permission system is on, unless a rule grants the write", async () => {
@@ -763,7 +764,7 @@ describe.each(
 				[
 					{ name: "permissions off", permissions: null, readerGets: "object", writesLand: true },
 					{ name: "permissions on, no rules", permissions: {}, readerGets: "view", writesLand: false },
-					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "view", writesLand: true }
+					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object", writesLand: true }
 				].map((entry) => ({ mode, runtime, closing, ...entry }))
 			)
 		)
@@ -786,11 +787,10 @@ describe.each(
 			Object[closing](api.owner.relay);
 		};
 
-		it("is the object itself to the owner through self, and to another module through self only while the permission system is off", async () => {
+		it("is the object itself through self to the owner and to a module whose writes are allowed, and a view to one only allowed the read", async () => {
 			await load();
-			const emitters = (answer) => ({ bus: answer, relay: answer });
-			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("view", emitters("object")));
-			expect(await api.reader.readPrototypeAnswers()).toEqual(answering("view", emitters(readerGets)));
+			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
+			expect(await api.reader.readPrototypeAnswers()).toEqual(answering(readerGets));
 		});
 
 		it("is one view to every holder of the node, the host and the owner among them, since a closed node reports one prototype", async () => {
@@ -798,9 +798,7 @@ describe.each(
 			const emitters = { bus: "view", relay: "view" };
 			expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
 			expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
-			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(
-				answering(permissions === null ? "object" : "view", emitters)
-			);
+			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(readerGets, emitters));
 		});
 
 		it("lands a write as plain JS does where the module's writes are allowed, and refuses it otherwise", async () => {
@@ -884,7 +882,154 @@ describe.each(
 				expect(landed[emitter], key).toBe(false);
 				expect(landed.emitter, key).toBe(false);
 			}
-			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("view", { bus: "object", relay: "object" }));
+			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
+		});
+	}
+);
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			[
+				{ name: "permissions off", permissions: null, readerGets: "object" },
+				{ name: "permissions on, no rules", permissions: {}, readerGets: "view" },
+				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, readerGets: "view" },
+				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object" }
+			].map((entry) => ({ mode, runtime, ...entry }))
+		)
+	)
+)("an open node's prototype read through self > $mode / $runtime / $name", ({ mode, runtime, permissions, readerGets }) => {
+	let api;
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+	});
+
+	it("is the object itself to the owner and to a module whose writes are allowed, and a checked view to one only allowed the read", async () => {
+		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+		for (const name of IDENTITY_CASES) await api.owner[name];
+		expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
+		expect(await api.reader.readPrototypeAnswers()).toEqual(answering(readerGets));
+	});
+});
+
+/** The owner's class instances the closed-instance cases close, as the host. */
+const CLOSED_INSTANCES = ["inst", "hiddenInst", "subInst"];
+
+describe.each(
+	MODES.flatMap((mode) =>
+		RUNTIMES.flatMap((runtime) =>
+			["freeze", "seal", "preventExtensions"].flatMap((closing) =>
+				[
+					{ name: "permissions off", permissions: null, readerGets: "object", writesLand: true },
+					{ name: "permissions on, no rules", permissions: {}, readerGets: "view", writesLand: false },
+					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object", writesLand: true },
+					{ name: "classes denied", permissions: DENY_CLASSES, readerGets: null, writesLand: false }
+				].map((entry) => ({ mode, runtime, closing, ...entry }))
+			)
+		)
+	)
+)(
+	"a closed node holding a class instance (#725) > $mode / $runtime / $closing / $name",
+	({ mode, runtime, closing, permissions, readerGets, writesLand }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			delete Object.prototype[PROBE_KEY];
+		});
+
+		/** Build the instance, and close the owner's class instances as the host. */
+		const load = async () => {
+			api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
+			for (const name of IDENTITY_CASES) await api.owner[name];
+			for (const name of CLOSED_INSTANCES) Object[closing](api.owner[name]);
+		};
+
+		/** The owner module imported as plain JS, its class instances closed as the host closed the nodes. */
+		const plainClosed = async () => {
+			const plain = await plainOwner();
+			for (const name of CLOSED_INSTANCES) Object[closing](plain[name]);
+			return plain;
+		};
+
+		it("reports the instance's prototype to the host, with its methods and instanceof as plain JS has them", async () => {
+			await load();
+			const plain = heldReads(await plainClosed());
+			const held = heldReads({ inst: api.owner.inst, Foo: api.owner.Foo, hiddenInst: api.owner.hiddenInst });
+			// A closed node reports one prototype to everyone holding it, a view standing as the node does, so the host
+			// compares it with the class's own prototype by what it reads rather than by identity.
+			expect({ ...held, instPrototype: true, hiddenPrototype: true }).toEqual(plain);
+			for (const name of CLOSED_INSTANCES) {
+				for (const prototype of [
+					Object.getPrototypeOf(api.owner[name]),
+					Reflect.getPrototypeOf(api.owner[name]),
+					api.owner[name].__proto__
+				]) {
+					expect(prototype, name).not.toBeNull();
+					expect(prototype.constructor.name, name).toBe(Object.getPrototypeOf((await plainOwner())[name]).constructor.name);
+				}
+			}
+		});
+
+		it("is the object itself to the owner through self, and to another module through self as its standing gives it", async () => {
+			await load();
+			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
+			const throughSelf = await api.reader.readPrototypeAnswers();
+			if (readerGets !== null) {
+				expect(throughSelf).toEqual(answering(readerGets));
+				return;
+			}
+			const refused = "threw PERMISSION_DENIED";
+			for (const name of ["inst", "hiddenInst"]) {
+				expect(throughSelf[name], name).toEqual({ prototypeOf: refused, reflect: refused, protoAccessor: refused });
+			}
+		});
+
+		it("answers a module the instance's prototype through self and on the node handed to it as plain JS does, behind its class's checks", async () => {
+			await load();
+			const plain = heldReads(await plainClosed());
+			const throughSelf = await api.reader.read();
+			const plainReads = reads(await plainClosed());
+			const held = await api.reader.readHeld(api.owner.inst, api.owner.Foo, api.owner.hiddenInst);
+			if (permissions !== DENY_CLASSES) {
+				expect(throughSelf).toEqual(plainReads);
+				// A closed node reports its shell's prototype to every holder: compared by what it reads.
+				expect({ ...held, instPrototype: true, hiddenPrototype: true }).toEqual(plain);
+				return;
+			}
+			expect(held).toEqual({
+				...plain,
+				instPrototype: "threw PERMISSION_DENIED",
+				instPrototypeMethod: "threw PERMISSION_DENIED",
+				instProtoAccessorMethod: "threw PERMISSION_DENIED",
+				hiddenPrototype: "threw PERMISSION_DENIED",
+				hiddenPrototypeMethod: "threw PERMISSION_DENIED",
+				hiddenProtoAccessorMethod: "threw PERMISSION_DENIED"
+			});
+		});
+
+		it("lands a write through the prototype as plain JS does where the module's writes are allowed, and refuses it otherwise", async () => {
+			await load();
+			const outcome = await api.reader.writeHeldPrototypes(api.owner.inst, api.owner.hiddenInst, PROBE_KEY);
+			const landed = await api.owner.prototypesHolding(PROBE_KEY);
+			expect(landed.object).toBe(false);
+			if (writesLand) {
+				expect(outcome).toEqual(prototypeWrites(await plainOwner(), PROBE_KEY));
+				expect(landed.foo).toBe(true);
+				return;
+			}
+			const refusal = permissions === DENY_CLASSES ? "threw PERMISSION_DENIED" : "threw LOOSE_SET_NOT_OWNED";
+			expect(outcome).toEqual({
+				instPrototype: refusal,
+				instProtoAccessor: refusal,
+				hiddenPrototype: refusal,
+				hiddenProtoAccessor: refusal,
+				reachedObjectPrototype: false
+			});
+			expect(landed.foo).toBe(false);
 		});
 	}
 );
