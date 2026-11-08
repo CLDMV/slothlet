@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:00:28-08:00 (1794160828)
+ *	@Last modified time: 2026-11-08T10:57:52-08:00 (1794164272)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,6 +144,11 @@ export async function roundTripAwaited() {
 	const p = new Priv();
 	const back = await self.bag.same(p);
 	return { same: back === p, read: back.read() };
+}
+
+/** Fresh settings data, made by the module and handed out as itself. */
+export function give() {
+	return { name: "cfg", options: { retries: 2 } };
 }
 
 export function plantBox(arg) {
@@ -377,6 +382,32 @@ describe.each(MATRIX)("returned data, $label, $mode/$runtime (#726)", ({ config,
 		expect(await api.bag.roundTripAwaited()).toEqual(want);
 	});
 
+	it("hands data it handed out back as itself, with a handler the caller added to it", async () => {
+		const handler = () => "caller's";
+		const wantCfg = plain.give();
+		wantCfg.onEvent = handler;
+		wantCfg.options.onRetry = handler;
+		expect(plain.echo(wantCfg)).toBe(wantCfg);
+		const cfg = await api.bag.give();
+		expect(types.isProxy(cfg)).toBe(false);
+		cfg.onEvent = handler;
+		cfg.options.onRetry = handler;
+		const back = await api.bag.echo(cfg);
+		expect(back === cfg).toBe(true);
+		expect(back.onEvent === handler).toBe(true);
+		// Nested in a new argument and handed back inside a new result, a second time too.
+		for (let round = 0; round < 2; round++) {
+			const held = await api.bag.hold(cfg);
+			expect(types.isProxy(held), `round ${round}`).toBe(false);
+			expect(held.held === cfg).toBe(true);
+			const copied = await api.bag.copy({ cfg });
+			expect(types.isProxy(copied), `round ${round}`).toBe(false);
+			expect(copied.cfg === cfg).toBe(true);
+			expect(copied.cfg.options.onRetry === handler).toBe(true);
+			expect((await api.bag.pick(cfg.options, "onRetry")) === handler).toBe(true);
+		}
+	});
+
 	it("hands the caller's class instance back as itself, with what the module wrote onto it", async () => {
 		class HostBox {}
 		const want = new HostBox();
@@ -386,5 +417,8 @@ describe.each(MATRIX)("returned data, $label, $mode/$runtime (#726)", ({ config,
 		expect(types.isProxy(out)).toBe(false);
 		expect(out.b === box).toBe(true);
 		expect(typeof box.w).toBe("function");
+		// Returned on its own from an argument holding it, it is the caller's instance too.
+		expect(plain.pick({ box: want }, "box")).toBe(want);
+		expect((await api.bag.pick({ box }, "box")) === box).toBe(true);
 	});
 });

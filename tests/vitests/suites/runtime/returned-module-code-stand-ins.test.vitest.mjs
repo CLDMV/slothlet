@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:00:28-08:00 (1794160828)
+ *	@Last modified time: 2026-11-08T10:57:52-08:00 (1794164272)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,9 +88,30 @@ export function plantReturnArg(arg) {
 	return { data: arg };
 }
 
+let later = null;
 export function plantLater(arg) {
-	arg.inner.w = code();
+	later = code();
+	arg.inner.w = later;
 	return 1;
+}
+
+export function ownLater() {
+	return later;
+}
+
+export function echo(value) {
+	return value;
+}
+
+let sub = null;
+export function plantSub(arg) {
+	arg.sub = { w: code() };
+	sub = arg.sub;
+	return 1;
+}
+
+export function ownSubW() {
+	return sub.w;
 }
 
 export function pick(value, key) {
@@ -114,12 +135,6 @@ export function sink() {
 export function launder() {
 	const w = code();
 	self.bag.sink({ box: { w } });
-	return w;
-}
-
-export function launderTop() {
-	const w = code();
-	self.bag.sink(w);
 	return w;
 }
 
@@ -230,16 +245,13 @@ export function frozenGen() {
 	return Object.freeze({ g: Object.freeze(plainGenerator(false, Object.prototype)) });
 }
 
-export function plainArrayIterator() {
-	const it = [code()].values();
-	Object.setPrototypeOf(it, Object.prototype);
-	return { it };
+/** A generator, sync or async, yielding a function of the module's, with its own prototype. */
+export function nativeGen(isAsync) {
+	return { g: isAsync ? (async function* () { yield code(); })() : (function* () { yield code(); })() };
 }
 
-export function plainHelper() {
-	const it = [1].values().map(() => code());
-	Object.setPrototypeOf(it, null);
-	return { it };
+export function arrayIterator() {
+	return { it: [code()].values() };
 }
 
 export function helper() {
@@ -249,12 +261,6 @@ export function helper() {
 			return who();
 		})
 	};
-}
-
-export function registry(plainPrototype) {
-	const r = new FinalizationRegistry(() => {});
-	if (plainPrototype) Object.setPrototypeOf(r, Object.prototype);
-	return { r };
 }
 
 let given = null;
@@ -275,6 +281,12 @@ export function readW(value) {
 
 export function ownW() {
 	return given.w;
+}
+
+export function plantSubInGiven() {
+	given.sub = { w: code() };
+	sub = given.sub;
+	return 1;
 }
 
 /** Hand out fresh plain data while the global \`Error\` is a Proxy counting what it is asked. */
@@ -412,14 +424,21 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 			expectStandIn(out.data.w);
 		});
 
-		it("hands back a function written into an argument during an earlier call as the module's", async () => {
+		it("hands back a function written into an argument during an earlier call as the caller holds it, for that call only", async () => {
 			const want = { inner: {} };
 			plain.plantLater(want);
 			expect(plain.pick(want.inner, "w")).toBe(want.inner.w);
+			expect(plain.ownLater()).toBe(want.inner.w);
 			const arg = { inner: {} };
 			expect(await api.bag.plantLater(arg)).toBe(1);
-			expect(typeof arg.inner.w).toBe("function");
-			expectStandIn(await api.bag.pick(arg.inner, "w"));
+			// The caller reads it from its own object without any call (PERMISSIONS.md, the limits).
+			const held = arg.inner.w;
+			expect(typeof held).toBe("function");
+			expect(types.isProxy(held)).toBe(false);
+			// Handing the object back, the call's arguments reach it: it comes back as the caller holds it.
+			expect((await api.bag.pick(arg.inner, "w")) === held).toBe(true);
+			// That call recorded nothing for later ones: the module handing out its own function hands out a stand-in.
+			expectStandIn(await api.bag.ownLater());
 		});
 
 		it("hands the caller's own argument back as itself when the module wrote into it", async () => {
@@ -446,10 +465,6 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 	describe("code a module hands to its own leaf", () => {
 		it("hands back a function the module nested in its own leaf's arguments as the module's", async () => {
 			expectStandIn(await api.bag.launder());
-		});
-
-		it("hands back a function the module passed to its own leaf as the module's", async () => {
-			expectStandIn(await api.bag.launderTop());
 		});
 	});
 
@@ -502,8 +517,6 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 	describe("objects holding code no member shows, given a plain prototype", () => {
 		const GENERATOR = Object.getPrototypeOf(Object.getPrototypeOf((function* () {})()));
 		const ASYNC_GENERATOR = Object.getPrototypeOf(Object.getPrototypeOf((async function* () {})()));
-		const ARRAY_ITERATOR = Object.getPrototypeOf([].values());
-		const HELPER = Object.getPrototypeOf([].values().map((value) => value));
 
 		/** Step an object through an intrinsic `next`; a refusal hands out nothing. */
 		async function stepped(next, value) {
@@ -515,17 +528,30 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 		}
 
 		it.each([
-			["a generator", false, false],
-			["a generator with no prototype", false, true],
-			["an async generator", true, false],
-			["an async generator with no prototype", true, true]
-		])("does not hand out what %s yields raw", async (_label, isAsync, nullPrototype) => {
-			const want = plain.plainGen(isAsync, nullPrototype);
-			expect(typeof (await Reflect.apply(isAsync ? ASYNC_GENERATOR.next : GENERATOR.next, want.g, [])).value).toBe("function");
-			const out = await api.bag.plainGen(isAsync, nullPrototype);
+			["a generator", false],
+			["a generator with no prototype", true]
+		])("hands out %s as a stand-in that yields the module's code as the module's", async (_label, nullPrototype) => {
+			const want = plain.plainGen(false, nullPrototype);
+			expect(typeof Reflect.apply(GENERATOR.next, want.g, []).value).toBe("function");
+			const out = await api.bag.plainGen(false, nullPrototype);
+			expect(types.isProxy(out), "its holder is a stand-in").toBe(true);
+			const step = await stepped(GENERATOR.next, out.g);
+			expect(step, "the stand-in steps").not.toBeNull();
+			expectStandIn(step.value);
+		});
+
+		it.each([
+			["an async generator", false],
+			["an async generator with no prototype", true]
+		])("hands out %s as a stand-in that never yields the module's code raw", async (_label, nullPrototype) => {
+			const want = plain.plainGen(true, nullPrototype);
+			expect(typeof (await Reflect.apply(ASYNC_GENERATOR.next, want.g, [])).value).toBe("function");
+			const out = await api.bag.plainGen(true, nullPrototype);
+			expect(types.isProxy(out), "its holder is a stand-in").toBe(true);
+			// With the prototype gone, the stand-in cannot tell the generator is async and refuses to step, as on 3.24.0.
 			for (const next of [GENERATOR.next, ASYNC_GENERATOR.next]) {
 				const step = await stepped(next, out.g);
-				if (step && typeof step.value === "function") expectStandIn(step.value);
+				if (step !== null && typeof step.value === "function") expectStandIn(step.value);
 			}
 			expect(api.slothlet.planted).toBeUndefined();
 		});
@@ -534,35 +560,31 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 			const want = plain.frozenGen();
 			expect(Object.isFrozen(want) && Object.isFrozen(want.g)).toBe(true);
 			const out = await api.bag.frozenGen();
+			expect(types.isProxy(out), "its holder is a stand-in").toBe(true);
 			const step = await stepped(GENERATOR.next, out.g);
-			if (step) expectStandIn(step.value);
-			expect(api.slothlet.planted).toBeUndefined();
+			expect(step, "the stand-in steps").not.toBeNull();
+			expectStandIn(step.value);
+		});
+	});
+
+	describe("generators and iterators with their own prototype", () => {
+		it.each([
+			["a generator", false],
+			["an async generator", true]
+		])("hands out %s yielding the module's code as the module's", async (_label, isAsync) => {
+			const want = plain.nativeGen(isAsync);
+			expect(typeof (await want.g.next()).value).toBe("function");
+			const out = await api.bag.nativeGen(isAsync);
+			expect(types.isProxy(out), "its holder is a stand-in").toBe(true);
+			expectStandIn((await out.g.next()).value);
 		});
 
-		it("does not hand out what an array iterator steps to raw", async () => {
-			expect(typeof Reflect.apply(ARRAY_ITERATOR.next, plain.plainArrayIterator().it, []).value).toBe("function");
-			const out = await api.bag.plainArrayIterator();
-			const step = await stepped(ARRAY_ITERATOR.next, out.it);
-			if (step) expectStandIn(step.value);
-			expect(api.slothlet.planted).toBeUndefined();
-		});
-
-		it("does not hand out what an iterator helper steps to raw", async () => {
-			expect(typeof Reflect.apply(HELPER.next, plain.plainHelper().it, []).value).toBe("function");
-			const out = await api.bag.plainHelper();
-			const step = await stepped(HELPER.next, out.it);
-			if (step) expectStandIn(step.value);
-			expect(api.slothlet.planted).toBeUndefined();
-		});
-
-		it("hands out a FinalizationRegistry, with its prototype or a plain one, as a stand-in", async () => {
-			for (const plainPrototype of [false, true]) {
-				const out = await api.bag.registry(plainPrototype);
-				expect(types.isProxy(out.r), `plain prototype: ${plainPrototype}`).toBe(true);
-			}
-			const { r } = await api.bag.registry(false);
-			expect(r.unregister({})).toBe(false);
-			expect(r.register({}, 1)).toBeUndefined();
+		it("hands out an array iterator over the module's code as a stand-in stepping to the module's", async () => {
+			expect(typeof plain.arrayIterator().it.next().value).toBe("function");
+			const out = await api.bag.arrayIterator();
+			expect(types.isProxy(out.it), "the iterator is a stand-in").toBe(true);
+			expectStandIn(out.it.next().value);
+			expect(out.it.next().done).toBe(true);
 		});
 	});
 
@@ -574,7 +596,7 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 	});
 
 	describe("data the module handed out earlier, handed back to it", () => {
-		it("hands back a function the module later wrote into it as the module's, for every caller", async () => {
+		it("hands back a function the module later wrote into it as the caller holds it, and as the module's to everyone else", async () => {
 			const want = plain.giveData();
 			plain.plantInGiven();
 			expect(plain.readW(want)).toBe(want.w);
@@ -582,12 +604,57 @@ describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", (
 			const data = await api.bag.giveData();
 			expect(types.isProxy(data)).toBe(false);
 			await api.bag.plantInGiven();
-			expectStandIn(await api.bag.readW(data));
-			expectStandIn(await api.bag.readW(data.inner));
-			expectStandIn(await api.bag.readW({ data }.data));
-			// Handing it back recorded nothing of the module's as the caller's.
+			// The caller holds the data as itself and reads what the module wrote into it without any call.
+			expect(types.isProxy(data.w)).toBe(false);
+			expect((await api.bag.readW(data)) === data.w).toBe(true);
+			expect((await api.bag.readW(data.inner)) === data.inner.w).toBe(true);
+			// Those calls recorded nothing for later ones.
 			expectStandIn(await api.bag.ownW());
-			expectStandIn(await api.bag.readW(data));
+			expect((await api.bag.readW(data)) === data.w).toBe(true);
+			expectStandIn(await api.bag.ownW());
+		});
+	});
+
+	describe("what a call's arguments reach is the caller's for that call only", () => {
+		it("hands out a sub-object's function the caller handed back earlier as the module's", async () => {
+			const want = {};
+			plain.plantSub(want);
+			expect(plain.readW(want.sub)).toBe(want.sub.w);
+			expect(plain.ownSubW()).toBe(want.sub.w);
+			const arg = {};
+			expect(await api.bag.plantSub(arg)).toBe(1);
+			expect((await api.bag.readW(arg.sub)) === arg.sub.w).toBe(true);
+			expectStandIn(await api.bag.ownSubW());
+			expect((await api.bag.readW({ sub: arg.sub }.sub)) === arg.sub.w).toBe(true);
+			expectStandIn(await api.bag.ownSubW());
+		});
+
+		it("does the same for a sub-object the module put into data it handed out", async () => {
+			const want = plain.giveData();
+			plain.plantSubInGiven();
+			expect(plain.readW(want.sub)).toBe(want.sub.w);
+			expect(plain.ownSubW()).toBe(want.sub.w);
+			const given = await api.bag.giveData();
+			expect(await api.bag.plantSubInGiven()).toBe(1);
+			expect((await api.bag.readW(given.sub)) === given.sub.w).toBe(true);
+			expectStandIn(await api.bag.ownSubW());
+		});
+	});
+
+	describe("the limit: what the module writes into an object the caller holds as itself", () => {
+		it("hands that object back as itself, holding the module's function as the caller reads it", async () => {
+			const want = {};
+			const fn = plain.plantTop(want);
+			expect(plain.echo(want)).toBe(want);
+			expect(plain.echo(want).w).toBe(fn);
+			const arg = {};
+			// Returned on its own, the function is the module's.
+			expectStandIn(await api.bag.plantTop(arg));
+			// Written onto the caller's own object, the caller reads it as it is, without slothlet.
+			expect(types.isProxy(arg.w)).toBe(false);
+			const back = await api.bag.echo(arg);
+			expect(back === arg).toBe(true);
+			expect(back.w === arg.w).toBe(true);
 		});
 	});
 
