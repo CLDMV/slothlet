@@ -1,0 +1,422 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/returned-module-code-stand-ins.test.vitest.mjs
+ *	@Date: 2026-11-08T08:00:50-08:00 (1794153650)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-08T08:24:12-08:00 (1794155052)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A module's own code comes back as a stand-in wherever it sits in what the module hands out (#726).
+ * @description
+ * Returned data holding no code comes back as itself, and so do the caller's own values the call's arguments reach.
+ * What the module itself made stays the module's: a function it writes into the caller's arguments during the call,
+ * code it hands to one of its own leaves, code a `WeakRef` with a plain prototype points at, and code past any depth or
+ * width, behind a `Map`, a `Set`, a symbol key, a non-enumerable key, an accessor, a frozen object, a cycle, a class
+ * instance or a Proxy. Each such function comes back as a stand-in that runs as the module, so with permissions off
+ * as well as on it cannot write the framework's own namespace (PERMISSIONS.md, "Code a module hands out").
+ *
+ * Expected values come from the fixture run as plain JavaScript (where a value sits, what is `===` what) and from
+ * PERMISSIONS.md (a module's code is handed out as a stand-in running as the module).
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import path from "node:path";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+import { EventEmitter } from "node:events";
+import { types } from "node:util";
+import slothlet from "@cldmv/slothlet";
+
+const ROOT = path.join(process.cwd(), "tmp", "returned-module-code-stand-ins");
+const API = path.join(ROOT, "api");
+const LIB = path.join(ROOT, "lib");
+const BAG = path.join(API, "bag.mjs");
+const THROWER = path.join(LIB, "thrower.mjs");
+
+/** The leaf file. Every function a test pulls out writes the framework namespace when it runs. */
+const BAG_SOURCE = `import { self } from "@cldmv/slothlet/runtime";
+import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
+
+const who = () => self.slothlet.metadata.self()?.apiPath ?? null;
+/** A fresh function of the module's: reports who it runs as, after trying to write the framework namespace. */
+const code = () => () => {
+	self.slothlet.planted = 1;
+	return who();
+};
+const keepAlive = [];
+
+export function plantNested(arg) {
+	const w = code();
+	arg.inner.w = w;
+	return w;
+}
+
+export function plantTop(arg) {
+	const w = code();
+	arg.w = w;
+	return w;
+}
+
+export function plantList(arg) {
+	arg.inner.list.push(code());
+	return { got: arg.inner.list };
+}
+
+let kept = null;
+export function keep(arg) {
+	kept = arg.inner;
+	return () => true;
+}
+
+export function plantKept() {
+	kept.w = code();
+	return { data: kept };
+}
+
+export function plantReturnArg(arg) {
+	arg.w = code();
+	return { data: arg };
+}
+
+export function plantLater(arg) {
+	arg.inner.w = code();
+	return 1;
+}
+
+export function pick(value, key) {
+	return value[key];
+}
+
+const shell = Object.freeze({ list: Object.freeze([1, 2]), inner: {} });
+export function frozenShell() {
+	return shell;
+}
+
+export function plantInShell() {
+	shell.inner.w = code();
+	return shell;
+}
+
+export function sink() {
+	return () => true;
+}
+
+export function launder() {
+	const w = code();
+	self.bag.sink({ box: { w } });
+	return w;
+}
+
+export function launderTop() {
+	const w = code();
+	self.bag.sink(w);
+	return w;
+}
+
+export function weakRef() {
+	const w = code();
+	keepAlive.push(w);
+	const ref = new WeakRef(w);
+	Object.setPrototypeOf(ref, Object.prototype);
+	return { ref };
+}
+
+export function plainEmitter() {
+	const emitter = new EventEmitter();
+	emitter.on("x", code());
+	Object.setPrototypeOf(emitter, Object.prototype);
+	return { emitter };
+}
+
+export function plainTarget() {
+	const target = new EventTarget();
+	target.addEventListener("x", code());
+	Object.setPrototypeOf(target, Object.prototype);
+	return { target };
+}
+
+export function plainKey() {
+	const key = crypto.createSecretKey(Buffer.from("secret"));
+	Object.setPrototypeOf(key, Object.prototype);
+	key.w = code();
+	return { key };
+}
+
+export async function plainCryptoKey() {
+	const key = await crypto.subtle.generateKey({ name: "HMAC", hash: "SHA-256" }, true, ["sign"]);
+	Object.setPrototypeOf(key, Object.prototype);
+	key.w = code();
+	return { key };
+}
+
+/** \`value\` placed \`depth\` levels down, objects and arrays alternating. */
+function bury(value, depth) {
+	let out = value;
+	for (let level = 0; level < depth; level++) out = level % 2 === 0 ? { inner: out } : [out];
+	return out;
+}
+
+/** A holder of one function of the module's, of the given kind. */
+function holderOf(kind, w) {
+	switch (kind) {
+		case "map":
+			return new Map([["k", w]]);
+		case "set":
+			return new Set([w]);
+		case "symbol":
+			return { [Symbol.for("slot726")]: w };
+		case "nonEnumerable":
+			return Object.defineProperty({}, "w", { value: w, enumerable: false });
+		case "accessor":
+			return {
+				get w() {
+					return w;
+				}
+			};
+		case "frozen":
+			return Object.freeze({ w });
+		case "cycle": {
+			const holder = { w };
+			holder.self = holder;
+			return holder;
+		}
+		case "instance":
+			return new (class Box {
+				constructor() {
+					this.w = w;
+				}
+				run() {
+					return this.w();
+				}
+			})();
+		case "proxyTarget":
+			return new Proxy({ w }, {});
+		default:
+			throw new Error(kind);
+	}
+}
+
+/** The caller's data beside 800 rows of module data, and a function of the module's \`depth\` levels down. */
+export function hidden(kind, depth, value) {
+	return { data: value, pad: Array.from({ length: 800 }, (_, index) => ({ index })), deep: bury(holderOf(kind, code()), depth) };
+}
+
+export function namespace() {
+	return { ns: globalThis.__ns726 };
+}
+`;
+
+/** A module that stashes its own namespace and throws before its binding is initialised. */
+const THROWER_SOURCE = `import * as me from "./thrower.mjs";
+globalThis.__ns726 = me;
+throw new Error("thrower");
+export let x = 1;
+`;
+
+/** The plain JavaScript reference: the same functions, imported and called directly. */
+let plain;
+
+beforeAll(async () => {
+	rmSync(ROOT, { recursive: true, force: true });
+	mkdirSync(API, { recursive: true });
+	mkdirSync(LIB, { recursive: true });
+	writeFileSync(BAG, BAG_SOURCE);
+	writeFileSync(THROWER, THROWER_SOURCE);
+	plain = await import(pathToFileURL(BAG).href);
+	// Loaded by Node's own loader, so its namespace is a real one whose binding stays uninitialised.
+	expect(() => createRequire(import.meta.url)(THROWER)).toThrow("thrower");
+});
+
+afterAll(() => {
+	rmSync(ROOT, { recursive: true, force: true });
+	delete globalThis.__ns726;
+});
+
+const PERMISSION_CONFIGS = [
+	["permissions off", {}],
+	["permissions on", { permissions: { mode: "on", defaultPolicy: "allow" } }]
+];
+
+const MATRIX = [];
+for (const [label, config] of PERMISSION_CONFIGS)
+	for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) MATRIX.push({ label, config, mode, runtime });
+
+/** Navigate `depth` levels down a value built by the fixture's `bury`. */
+function unbury(value, depth) {
+	let node = value;
+	for (let level = depth - 1; level >= 0; level--) node = level % 2 === 0 ? node.inner : node[0];
+	return node;
+}
+
+/** The function of a holder of the given kind, as `holderOf` placed it. */
+function functionOf(kind, holder) {
+	switch (kind) {
+		case "map":
+			return holder.get("k");
+		case "set":
+			return [...holder][0];
+		case "symbol":
+			return holder[Symbol.for("slot726")];
+		case "cycle":
+			return holder.self.self.w;
+		default:
+			return holder.w;
+	}
+}
+
+const KINDS = ["map", "set", "symbol", "nonEnumerable", "accessor", "frozen", "cycle", "instance", "proxyTarget"];
+
+describe.each(MATRIX)("module code handed out, $label, $mode/$runtime (#726)", ({ config, mode, runtime }) => {
+	let api;
+
+	beforeAll(async () => {
+		api = await slothlet({ base: API, mode, runtime, silent: true, ...config });
+	});
+
+	afterAll(async () => {
+		await api?.shutdown();
+	});
+
+	/** A function of the module's, as handed out: a stand-in that runs as the module and cannot write the namespace. */
+	function expectStandIn(fn) {
+		expect(typeof fn).toBe("function");
+		expect(types.isProxy(fn), "a stand-in").toBe(true);
+		expect(() => fn()).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
+		expect(api.slothlet.planted).toBeUndefined();
+	}
+
+	describe("code a module writes into the caller's arguments", () => {
+		it("hands back a function written into a nested argument as the module's", async () => {
+			const arg = { inner: { list: [] } };
+			const want = { inner: { list: [] } };
+			expect(plain.plantNested(want)).toBe(want.inner.w);
+			expectStandIn(await api.bag.plantNested(arg));
+		});
+
+		it("hands back a function written onto the argument itself as the module's", async () => {
+			const want = {};
+			expect(plain.plantTop(want)).toBe(want.w);
+			expectStandIn(await api.bag.plantTop({}));
+		});
+
+		it("hands back a function pushed into the caller's nested array as the module's", async () => {
+			const want = { inner: { list: [1] } };
+			const got = plain.plantList(want);
+			expect(got.got).toBe(want.inner.list);
+			const out = await api.bag.plantList({ inner: { list: [1] } });
+			expect(out.got[0]).toBe(1);
+			expectStandIn(out.got[1]);
+		});
+
+		it("hands back a function written into an argument kept from an earlier call as the module's", async () => {
+			const arg = { inner: { list: [] } };
+			expect(typeof (await api.bag.keep(arg))).toBe("function");
+			const out = await api.bag.plantKept();
+			expectStandIn(out.data.w);
+		});
+
+		it("hands back a function written into an argument during an earlier call as the module's", async () => {
+			const want = { inner: {} };
+			plain.plantLater(want);
+			expect(plain.pick(want.inner, "w")).toBe(want.inner.w);
+			const arg = { inner: {} };
+			expect(await api.bag.plantLater(arg)).toBe(1);
+			expect(typeof arg.inner.w).toBe("function");
+			expectStandIn(await api.bag.pick(arg.inner, "w"));
+		});
+
+		it("hands the caller's own argument back as itself when the module wrote into it", async () => {
+			const want = {};
+			expect(plain.plantReturnArg(want).data).toBe(want);
+			const arg = {};
+			const out = await api.bag.plantReturnArg(arg);
+			expect(out.data === arg).toBe(true);
+		});
+	});
+
+	it("hands frozen data back as itself, and as the module's once the module puts code where it is not frozen", async () => {
+		const want = plain.frozenShell();
+		expect(Object.isFrozen(want) && !Object.isFrozen(want.inner)).toBe(true);
+		const first = await api.bag.frozenShell();
+		expect(types.isProxy(first)).toBe(false);
+		expect(await api.bag.frozenShell()).toBe(first);
+		const planted = await api.bag.plantInShell();
+		expect(types.isProxy(planted)).toBe(true);
+		expect(planted.list).toEqual([1, 2]);
+		expectStandIn(planted.inner.w);
+	});
+
+	describe("code a module hands to its own leaf", () => {
+		it("hands back a function the module nested in its own leaf's arguments as the module's", async () => {
+			expectStandIn(await api.bag.launder());
+		});
+
+		it("hands back a function the module passed to its own leaf as the module's", async () => {
+			expectStandIn(await api.bag.launderTop());
+		});
+	});
+
+	describe("objects given a plain prototype", () => {
+		it("does not hand out a WeakRef's target raw", async () => {
+			const out = await api.bag.weakRef();
+			let target;
+			try {
+				target = WeakRef.prototype.deref.call(out.ref);
+			} catch {
+				target = "refused";
+			}
+			if (target !== "refused") expectStandIn(target);
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+
+		it("hands out an emitter's listener as the module's", async () => {
+			const out = await api.bag.plainEmitter();
+			const [listener] = EventEmitter.prototype.listeners.call(out.emitter, "x");
+			expectStandIn(listener);
+		});
+
+		it("hands out an event target holding the module's listener as a stand-in", async () => {
+			const out = await api.bag.plainTarget();
+			expect(types.isProxy(out.target)).toBe(true);
+		});
+
+		it("hands out a key's and a crypto key's own function as the module's", async () => {
+			expectStandIn((await api.bag.plainKey()).key.w);
+			expectStandIn((await api.bag.plainCryptoKey()).key.w);
+		});
+	});
+
+	describe.each(KINDS)("code in a %s past any bound", (kind) => {
+		it.each([8, 9, 10])("hands it out %i levels down beside 800 rows as the module's", async (depth) => {
+			const input = { list: [{ role: "user" }] };
+			const want = plain.hidden(kind, depth, input);
+			expect(typeof functionOf(kind, unbury(want.deep, depth))).toBe("function");
+			const out = await api.bag.hidden(kind, depth, input);
+			expect(types.isProxy(out)).toBe(true);
+			expect(out.data === input).toBe(true);
+			expect(out.pad).toHaveLength(800);
+			const holder = unbury(out.deep, depth);
+			expectStandIn(functionOf(kind, holder));
+			if (kind === "instance") expect(() => holder.run()).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
+			expect(api.slothlet.planted).toBeUndefined();
+		});
+	});
+
+	it("hands out a module namespace that cannot be described as a stand-in", async () => {
+		const out = await api.bag.namespace();
+		expect(types.isModuleNamespaceObject(globalThis.__ns726)).toBe(true);
+		expect(() => globalThis.__ns726.x).toThrow(ReferenceError);
+		expect(types.isProxy(out)).toBe(true);
+		expect(() => out.ns.x).toThrow(ReferenceError);
+	});
+});
