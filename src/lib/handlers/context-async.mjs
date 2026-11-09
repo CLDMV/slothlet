@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:15:35-08:00 (1794168935)
+ *	@Last modified time: 2026-11-08T19:19:05-08:00 (1794194345)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,15 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { attributeResult, carriesCallerCode, enterCall, isHandedOut, resolveSupplier, resolvesSupplier } from "#handlers/frame-placement";
+import {
+	attributeResult,
+	carriesCallerCode,
+	enterCall,
+	handsOutAsModule,
+	isHandedOut,
+	resolveSupplier,
+	resolvesSupplier
+} from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -183,7 +191,10 @@ export class AsyncContextManager {
 		}
 
 		// A leaf's own call hands back what its module made as that module's (#597).
-		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value, args) : (value) => value;
+		const attributed =
+			attribute && currentWrapper && !asHost && handsOutAsModule(currentWrapper)
+				? (value) => attributeResult(currentWrapper, value)
+				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
@@ -199,10 +210,10 @@ export class AsyncContextManager {
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (inheritsFrom(result, Promise)) {
 						return nativeThen(result, (value) =>
-							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, args)
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
 						);
 					}
-					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, args);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -230,11 +241,9 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (inheritsFrom(result, Promise)) {
-					return nativeThen(result, (value) =>
-						this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, args)
-					);
+					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
 				}
-				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, args);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -260,16 +269,16 @@ export class AsyncContextManager {
 	 * @param {*} value - Resolved return value of the leaf.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
-	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reach comes back from it as the
-	 *   caller's (#726).
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
 		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
-			if (currentWrapper) return attributeResult(currentWrapper, value, args);
+			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value);
+			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
+			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}

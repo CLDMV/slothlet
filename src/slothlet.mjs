@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T17:13:09-08:00 (1793927589)
+ *	@Last modified time: 2026-11-08T19:19:13-08:00 (1794194353)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2023,6 +2023,10 @@ export default slothlet;
  *   callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
  *   the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
  *   call runs it.
+ * @property {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+ *   (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
+ *   `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
+ *   it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.

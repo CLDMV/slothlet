@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:19-07:00 (1793485459)
+ *	@Last modified time: 2026-11-08T19:19:09-08:00 (1794194349)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1213,12 +1213,15 @@ export class Config extends ComponentBase {
 	 *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
 	 *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
 	 *   call runs it.
+	 * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+	 *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+	 *   wraps nothing and tells every definer from the stack.
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
 	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, rules: [...] }
+	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
 	 */
 	normalizePermissions(permissions) {
 		if (!permissions || typeof permissions !== "object") {
@@ -1390,6 +1393,23 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate attribution (#726) — whether a returned value that is itself code is wrapped to record its definer
+		// ("precise", the default) or every definer is told from the stack with nothing wrapped ("fast").
+		const attribution = permissions.attribution === undefined ? "precise" : permissions.attribution;
+		if (attribution !== "precise" && attribution !== "fast") {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.attribution",
+					value: permissions.attribution,
+					expected: '"precise" | "fast"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate references.capture — controls whether a function read out of the api keeps the identity of
 		// the module that read it, so it stays enforced as that module when invoked later from a boundary
 		// carrying no caller. Defaults to true. Set false to restore the older behaviour, where such a call
@@ -1542,6 +1562,7 @@ export class Config extends ComponentBase {
 			owner,
 			ceiling,
 			provenance,
+			attribution,
 			references: { capture },
 			private: { host: privateHost },
 			rules,

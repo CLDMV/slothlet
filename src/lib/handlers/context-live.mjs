@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:15:36-08:00 (1794168936)
+ *	@Last modified time: 2026-11-08T19:19:05-08:00 (1794194345)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,7 @@ import {
 	carriesCallerCode,
 	enterCall,
 	createFramePlacer,
+	handsOutAsModule,
 	describeCall,
 	isForeignScript,
 	isHandedOut,
@@ -1421,9 +1422,9 @@ export class LiveContextManager {
 		// methods in this instance's context, as the async manager does.
 		const creator = asHost ? null : (currentWrapper ?? null);
 		const attributed =
-			attribute && currentWrapper && !asHost
-				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, args), targetInstanceID, creator, args)
-				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, args);
+			attribute && currentWrapper && !asHost && handsOutAsModule(currentWrapper)
+				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value), targetInstanceID, creator)
+				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
 
 		try {
 			let result;
@@ -1540,13 +1541,13 @@ export class LiveContextManager {
 	 * @param {*} value - Resolved return value of the call.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
-	 * @param {ArrayLike<*>|null} [args=null] - The call's arguments: what they reach comes back from it as the
-	 *   caller's (#726).
 	 * @returns {*} The value as the caller gets it.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper, args = null) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
 		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
-		if (currentWrapper) return attributeResult(currentWrapper, value, args);
+		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value);
+		// Otherwise a module's instance comes back raw in the live runtime: its methods are told by their frames (#726).
+		if (currentWrapper) return value;
 		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), undefined);
 	}
 
