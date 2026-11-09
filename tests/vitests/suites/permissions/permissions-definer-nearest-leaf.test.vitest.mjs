@@ -98,6 +98,14 @@ describe.each(MATRIX)("Permissions > definer is the nearest leaf frame > $name (
 		expect(seen).toEqual(seen.map(() => seenAs("b.give.proxy")));
 	});
 
+	it("proxy: no trap the await runs reaches the secret, the vault not loaded first", async () => {
+		await build();
+		await api.a.use.give("proxy", "secret");
+		const refused = await api.b.give.drain();
+		expect(refused.length).toBeGreaterThan(0);
+		expect(refused).toEqual(refused.map(() => DENIED));
+	});
+
 	it("a leaf's own call into the helper is that leaf", async () => {
 		await build();
 		expect(await api.a.use.give("viaHelper", "whoami")).toEqual(seenAs("b.give.viaHelper"));
