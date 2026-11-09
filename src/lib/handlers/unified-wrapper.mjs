@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:08-08:00 (1794194348)
+ *	@Last modified time: 2026-11-08T20:10:49-08:00 (1794197449)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3082,7 +3082,7 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true)
 	// `self` is checked (a reader completed on behalf of is checked as that reader).
 	if (accessorReader === undefined) enforcePermission(wrapper, args, false, kept);
 	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, args);
-	return runtime_runAsMaker(wrapper, accessor, thisArg, args, attribute);
+	return runtime_runAsMaker(wrapper, accessor, thisArg, args, attribute, true);
 }
 
 /**
@@ -3746,12 +3746,13 @@ export function moduleMakerCount(slothlet) {
  * @param {*} [thisArg] - Its receiver.
  * @param {Array<*>} [args=[]] - Its arguments.
  * @param {boolean} [attribute=true] - Hand what it returns back as the module's too (see {@link runtime_attributeResult}).
+ * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
  * @returns {*} What it returned.
  * @private
  */
-function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true) {
+function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false) {
 	try {
-		return runtime_runAsMakerRaw(owner, fn, thisArg, args, attribute);
+		return runtime_runAsMakerRaw(owner, fn, thisArg, args, attribute, asNode);
 	} catch (error) {
 		// What the module's code threw is the module's: it is read as the module, wherever it is reported (#599).
 		runtime_rememberMadeFailure(owner, error);
@@ -3827,20 +3828,22 @@ function runtime_rememberMadeFailure(owner, error) {
  * @param {*} [thisArg] - Its receiver.
  * @param {Array<*>} [args=[]] - Its arguments.
  * @param {boolean} [attribute=true] - Hand what it returns back as the module's too.
+ * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
  * @returns {*} What it returned.
  * @private
  */
-function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = true) {
+function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false) {
 	const contextManager = owner.slothlet?.contextManager;
 	if (!contextManager?.runInContext || !owner.slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
 	// An instance that is gone (shut down) has no context to run its code in: the code runs outside every instance, as
 	// plain code no instance's api is reachable from — never as whoever happens to be reading.
 	const instanceID = runtime_makerInstanceID(owner.slothlet);
 	if (instanceID === null) return contextManager.runDetached(fn, thisArg, args);
-	// The code's own reads are its own: a reader snapshot being completed for is not passed on into it. The stand-in
-	// records its definer and grants nothing: the caller running it, read now, is its ceiling, so every access has to be
-	// allowed for both (#726).
-	const ceiling = outerCallerCeiling(contextManager, instanceID);
+	// The code's own reads are its own: a reader snapshot being completed for is not passed on into it. A stand-in of a
+	// value handed out records its definer and grants nothing: the caller running it, read now, is its ceiling, so every
+	// access has to be allowed for both (#726). A node's own code (an accessor or a Proxy export of an api object, `new`
+	// on an exported class) is checked as a call of its node, and runs as that call does, under no ceiling of its caller.
+	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID);
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
 	);
@@ -4182,8 +4185,8 @@ function runtime_handOut(maker, owner, value) {
 
 /**
  * Whether an object, not a Proxy and not a function, is itself code a module made (#726): an object with a prototype
- * some module wrote — a class instance, `Object.create(proto)`, a subclass of `Map` — or a compiled `vm.Script`, which
- * holds code no member shows. Plain objects and arrays, and the language's and Node's own objects, are data, whatever
+ * some module wrote — a class instance, `Object.create(proto)`, a subclass of `Map` — a class's own prototype, or a
+ * compiled `vm.Script`, which holds code no member shows. Plain objects and arrays, and the language's and Node's own objects, are data, whatever
  * they hold: nothing in them is read. Only the prototype chain is, which runs none of the object's code.
  * @param {object} value - The object.
  * @returns {boolean} True when it is code.
@@ -4194,6 +4197,15 @@ function runtime_isCodeObject(value) {
 		for (let link = Reflect.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = Reflect.getPrototypeOf(link)) {
 			if (util.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
 		}
+		// A class's own prototype (`C.prototype`, whose `constructor` is the class) holds the class's methods: it is the
+		// class's code, read from its descriptors only.
+		const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor");
+		if (
+			constructor &&
+			typeof constructor.value === "function" &&
+			Reflect.getOwnPropertyDescriptor(constructor.value, "prototype")?.value === value
+		)
+			return !runtime_isSharedValue(value);
 		return (
 			(VM_SCRIPT !== null && runtime_inherits(value, VM_SCRIPT)) || (VM_NATIVE_SCRIPT !== null && runtime_inherits(value, VM_NATIVE_SCRIPT))
 		);
@@ -4419,10 +4431,15 @@ const SOURCES = new WeakMap();
  * @param {object} maker - The module's record.
  * @param {object} owner - The wrapper it runs as.
  * @param {Function|object} original - The value.
+ * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
  * @returns {Function|object} The stand-in, the same one for the same value and module every time.
  * @private
  */
-function runtime_membrane(maker, owner, original) {
+function runtime_membrane(maker, owner, original, asNode = false) {
+	// A node's own value (a Proxy export) is checked as a call of its node, so it runs as one: under no ceiling of its
+	// caller's. A value handed out runs under whoever runs it (#726).
+	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) =>
+		runtime_runAsMaker(who, fn, thisArg, args, attribute, asNode);
 	const existing = maker.made.get(original);
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
@@ -4474,7 +4491,7 @@ function runtime_membrane(maker, owner, original) {
 			method = {
 				[name](...args) {
 					if (this !== standIn) return Reflect.apply(value, this, args);
-					if (isScript) return runtime_runAsMaker(owner, value, original, runtime_handInAll(maker, args));
+					if (isScript) return runAs(owner, value, original, runtime_handInAll(maker, args));
 					const callsBack = SLOT_CALLBACK_METHODS.has(engine);
 					return out(
 						Reflect.apply(
@@ -4499,7 +4516,7 @@ function runtime_membrane(maker, owner, original) {
 		if (running > 0) return attribute ? out(operation()) : operation();
 		running++;
 		try {
-			return runtime_runAsMaker(owner, operation, undefined, [], attribute);
+			return runAs(owner, operation, undefined, [], attribute);
 		} finally {
 			running--;
 		}
@@ -4578,7 +4595,7 @@ function runtime_membrane(maker, owner, original) {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
 				if (!runtime_isModuleProxy(holder)) return Reflect.get(holder, prop, receiver);
-				return runtime_runAsMaker(owner, () => Reflect.get(holder, prop, receiver));
+				return runAs(owner, () => Reflect.get(holder, prop, receiver));
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
@@ -4590,7 +4607,7 @@ function runtime_membrane(maker, owner, original) {
 						const value = Reflect.apply(descriptor.get, receiver, []);
 						return holderIsMade ? out(value) : value;
 					}
-					return runtime_runAsMaker(owner, descriptor.get, receiver, []);
+					return runAs(owner, descriptor.get, receiver, []);
 				}
 				const value = descriptor.value;
 				// A native binding's method needs the object itself as its receiver, whether or not its holder was handed in (#708).
@@ -4617,14 +4634,14 @@ function runtime_membrane(maker, owner, original) {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
 				if (!runtime_isModuleProxy(holder)) return Reflect.set(holder, prop, value, receiver);
-				return runtime_runAsMaker(owner, () => Reflect.set(holder, prop, value, receiver), undefined, [], false);
+				return runAs(owner, () => Reflect.set(holder, prop, value, receiver), undefined, [], false);
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
 				if ("value" in descriptor) break;
 				if (typeof descriptor.set !== "function") return false;
 				if (maker.handedIn.has(holder) || runtime_isBuiltinFunction(descriptor.set)) Reflect.apply(descriptor.set, receiver, [value]);
-				else runtime_runAsMaker(owner, descriptor.set, receiver, [value], false);
+				else runAs(owner, descriptor.set, receiver, [value], false);
 				return true;
 			}
 			holder = Reflect.getPrototypeOf(holder);
@@ -4632,7 +4649,7 @@ function runtime_membrane(maker, owner, original) {
 		return Reflect.set(original, prop, value, receiver);
 	};
 	const handler = {
-		apply: (_shadow, thisArg, args) => runtime_runAsMaker(owner, original, receiverOf(thisArg), runtime_handInAll(maker, args)),
+		apply: (_shadow, thisArg, args) => runAs(owner, original, receiverOf(thisArg), runtime_handInAll(maker, args)),
 		construct: (_shadow, args, newTarget) => {
 			const target = newTarget === standIn ? original : runtime_handIn(maker, newTarget);
 			// A subclass's prototype is the subclass's, never the module's.
@@ -4640,7 +4657,7 @@ function runtime_membrane(maker, owner, original) {
 				const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
 				if (prototype !== null && typeof prototype === "object" && !STAND_IN_RECORDS.has(prototype)) maker.handedIn.add(prototype);
 			}
-			return runtime_runAsMaker(
+			return runAs(
 				owner,
 				(...constructArgs) => Reflect.construct(original, constructArgs, target),
 				undefined,
@@ -4834,7 +4851,7 @@ function runtime_adoptedImpl(wrapper, impl) {
 	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return impl;
 	// A layer the build laid over the module's Proxy is laid over its stand-in instead, holding what it held.
 	if (isCompositionLayer(impl)) return layerOnto(impl, runtime_adoptedImpl(wrapper, layerUnderlying(impl)));
-	return runtime_membrane(runtime_makerOf(wrapper), wrapper, impl);
+	return runtime_membrane(runtime_makerOf(wrapper), wrapper, impl, true);
 }
 
 /**
@@ -4863,7 +4880,9 @@ function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
 		wrapper,
 		(...constructArgs) => Reflect.construct(constructor, constructArgs, target),
 		undefined,
-		runtime_handInAll(maker, args)
+		runtime_handInAll(maker, args),
+		true,
+		true
 	);
 }
 
