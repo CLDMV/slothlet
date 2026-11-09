@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:41:18-08:00 (1794184878)
+ *	@Last modified time: 2026-11-08T21:00:15-08:00 (1794200415)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -181,7 +181,7 @@ function runtime_isUnchangingDefinition(holder, prop, descriptor) {
  * A definition that changes nothing and closing a value already closed are no writes (#667).
  * @param {object} raw - The value viewed.
  * @param {object} shadow - The view's proxy target.
- * @param {function(PropertyKey|null): void} assertWrite - Refuses a write the reader may not make.
+ * @param {function((PropertyKey|null)): void} assertWrite - Refuses a write the reader may not make.
  * @param {function(PropertyKey): void} mirror - Brings a member's description on the shadow up to date.
  * @param {function(): void} mirrorClosed - Closes the shadow once the value is closed.
  * @returns {ProxyHandler<object>} The traps.
@@ -4613,7 +4613,10 @@ function runtime_membrane(maker, owner, original) {
 		!isFunction &&
 		((VM_SCRIPT !== null && runtime_inherits(original, VM_SCRIPT)) ||
 			(VM_NATIVE_SCRIPT !== null && runtime_inherits(original, VM_NATIVE_SCRIPT)));
-	/** @type {WeakMap<Function, Function>} The engine's methods as read from the stand-in, the same each read. */
+	/**
+	 * The engine's methods as read from the stand-in, the same each read.
+	 * @type {WeakMap<Function, Function>}
+	 */
 	const slotMethods = !isProxy && !isFunction ? new WeakMap() : null;
 	/**
 	 * An argument of an engine method that calls back with what the object holds (see SLOT_CALLBACK_METHODS), handed
@@ -12346,7 +12349,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// UnifiedWrapper (apiPath `arr.<i>`) — api.add, permission gating, context, hooks and
 			// reload work at arr[i] and deeper, exactly like object properties. Array methods/iterator
 			// run with `this` = this proxy, so they read indices back through getTrap → child wrappers.
-			/** @type {{value: unknown}|null} An array member's value, read once by the block below. */
+			/**
+			 * An array member's value, read once by the block below.
+			 * @type {{value: unknown}|null}
+			 */
 			let arrayElement = null;
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
