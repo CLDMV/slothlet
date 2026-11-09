@@ -57,7 +57,8 @@
  *   ({@link requireInInstance}, the same cache a `.cjs` leaf's own requires use). Its export names come
  *   from a static scan of the source (see `cjs-export-names.mjs`), as Node's own are.
  * - **CommonJS → ESM** — while {@link requireInInstance} runs its synchronous require, the scope is
- *   active: a relative `require()` from a file of that scope resolving to an ES module is marked, and
+ *   active: a `require()` from a file of that scope resolving to an ES module of the instance's graph (by a
+ *   relative path, or by `#imports` or a self-reference into its own package, #715) is marked, and
  *   the `load` hook answers it with a CommonJS stub that returns the ES module imported under the
  *   instance query — the same module record an ESM leaf of the instance imports.
  */
@@ -535,6 +536,23 @@ function mayNameOwnPackage(specifier, importer) {
 }
 
 /**
+ * Whether an import or require of `specifier` from `parent`, resolved at `child`, reaches a file of the importer's
+ * per-instance graph (#715): a relative or `file:` specifier by where the file is ({@link isInstanceScopedFile}); a bare
+ * one only when it can name the importer's own package (`#imports`, or the package's own name: {@link mayNameOwnPackage})
+ * and resolves into it ({@link isOwnPackageImport}). The one rule Node's ES module imports, CommonJS requires and the vite
+ * plugin share, so every spelling of a file reaches one copy per instance.
+ * @param {string} specifier - The specifier as written.
+ * @param {string} child - Resolved child (`file:` URL, path or vite id), without a query.
+ * @param {string} parent - The importer (`file:` URL, path or vite id).
+ * @returns {boolean} True when the child is the instance's copy.
+ * @private
+ */
+function belongsToInstance(specifier, child, parent) {
+	if (isFileSpecifier(specifier)) return isInstanceScopedFile(child, parent);
+	return mayNameOwnPackage(specifier, parent) && isOwnPackageImport(child, parent);
+}
+
+/**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
  * on vite ids (absolute paths with an optional query) alike.
@@ -554,9 +572,7 @@ export function propagateInstanceQuery(specifier, parent, child) {
 	const [childBase, childQuery = ""] = splitQuery(child);
 	const childParams = new URLSearchParams(childQuery);
 	if (childParams.has("slothlet_instance")) return child;
-	// A relative or `file:` import by where the file is; a bare one (`#imports`, a self-reference) only into the
-	// importer's own package (#715).
-	if (!(isFileSpecifier(specifier) ? isInstanceScopedFile(childBase, parent) : isOwnPackageImport(childBase, parent))) return child;
+	if (!belongsToInstance(specifier, childBase, parent)) return child;
 	const parentParams = new URLSearchParams(splitQuery(parent)[1] ?? "");
 	for (const key of INSTANCE_QUERY_KEYS) {
 		if (parentParams.has(key)) childParams.set(key, parentParams.get(key));
@@ -799,10 +815,12 @@ function hasCondition(conditions, name) {
 }
 
 /**
- * Mark a `require()` resolution made inside an active instance scope (#534): a relative require from
- * a file of the scope that resolves to a possible ES module gets the instance query plus
- * {@link REQUIRE_PARAM}, so the load hook can serve it the instance's copy. CommonJS targets are
- * already served by the scope's private cache and are left alone.
+ * Mark a `require()` resolution made inside an active instance scope (#534): a require from a file of
+ * the scope that resolves to a possible ES module of the instance's graph — by a relative path, or by
+ * `#imports` or the package's own name into its own package (#715) — gets the instance query plus
+ * {@link REQUIRE_PARAM}, so the load hook can serve it the instance's copy: the module an `import` of
+ * the file from the instance's ES module code gets. CommonJS targets are already served by the
+ * scope's private cache, which holds every file of the package by its path, and are left alone.
  * @param {string} specifier - The specifier as written.
  * @param {object} context - Node's resolve context.
  * @param {ResolveResult} result - The next hook's result.
@@ -813,9 +831,10 @@ function hasCondition(conditions, name) {
 function markScopedRequire(specifier, context, result, active) {
 	const url = result?.url;
 	if (typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:cjs|json|node)$/.test(url)) return result;
-	if (!isFileSpecifier(specifier) || !hasCondition(context?.conditions, "require")) return result;
+	if (!hasCondition(context?.conditions, "require")) return result;
 	const parent = context.parentURL;
-	if (typeof parent !== "string" || !isInstanceScopedFile(parent, active.anchor) || !isInstanceScopedFile(url, parent)) return result;
+	if (typeof parent !== "string" || !isInstanceScopedFile(parent, active.anchor) || !belongsToInstance(specifier, url, parent))
+		return result;
 	const query = new URLSearchParams({ slothlet_instance: active.instanceID });
 	query.set(REQUIRE_PARAM, "1");
 	return { ...result, url: `${url}?${query}` };
@@ -1133,11 +1152,12 @@ function applyToResult(specifier, context, result) {
 	}
 	const active = globalThis[STATE]?.active;
 	if (!active) return result;
-	// A require inside an instance's CommonJS scope (see requireInInstance): its relative files are the
-	// instance's copies, so the require is an edge of the instance's graph.
+	// A require inside an instance's CommonJS scope (see requireInInstance): its relative files, and those of its own
+	// package it names by `#imports` or by the package's name (#715), are the instance's copies, so the require is an
+	// edge of the instance's graph.
 	const url = result?.url;
 	if (typeof parentURL === "string" && parentURL.startsWith("file:") && typeof url === "string" && url.startsWith("file:")) {
-		if (isFileSpecifier(specifier) && isInstanceScopedFile(url, parentURL)) recordImport(active.instanceID, parentURL, url);
+		if (belongsToInstance(specifier, splitQuery(url)[0], parentURL)) recordImport(active.instanceID, parentURL, url);
 	}
 	return markScopedRequire(specifier, context, result, active);
 }
