@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:12:39-08:00 (1794183159)
+ *	@Last modified time: 2026-11-08T16:41:18-08:00 (1794184878)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5444,7 +5444,8 @@ const CARRIER_VIEWS = new WeakMap();
 
 /**
  * What a value reaches `reader` as when it crosses from one module to another through slothlet (#667): an argument, an
- * error a call threw or rejected with, a hook's payload, or an event's arguments. A prototype of a module's reaches it as reading it at its path would
+ * error a call threw or rejected with, a hook's payload, or an event's payload ({@link runtime_eventPayloadFor}). A
+ * prototype of a module's reaches it as reading it at its path would
  * ({@link runtime_prototypeHandedTo}), and a carrier holding one at any depth as a view handing each member on the same
  * way ({@link runtime_carrierView}). Anything else, and everything while the permission system is off, passes as it
  * is.
@@ -5467,6 +5468,24 @@ function runtime_carryTo(value, reader, slothlet) {
 		// A value that refuses to be described is handed on as it is.
 		return value;
 	}
+}
+
+/**
+ * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
+ * emitted it to the module that registered the listener, so it crosses between modules as an argument does
+ * ({@link runtime_carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
+ * emitted, as does everyone while the permission system is off.
+ * @param {*} payload - The payload.
+ * @param {object|null} listener - The wrapper of the module that registered the listener, or null for the host.
+ * @param {object|null} emitter - The wrapper of the module that emitted it, or null for the host.
+ * @param {object} slothlet - The instance.
+ * @returns {*} What the listener is handed.
+ * @public
+ */
+export function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
+	if (payload === null || typeof payload !== "object" || !listener?.____slothletInternal) return payload;
+	if (emitter?.____slothletInternal && runtime_makerOf(emitter) === runtime_makerOf(listener)) return payload;
+	return runtime_carryTo(payload, listener, slothlet);
 }
 
 /**
