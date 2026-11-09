@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T05:36:08-08:00 (1793712968)
+ *	@Last modified time: 2026-11-08T16:57:08-08:00 (1794185828)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -133,6 +133,23 @@ export function layerHeldKeys(layer) {
  * @private
  */
 const BOUND_ORIGINALS = new WeakMap();
+
+/** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
+const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+
+/**
+ * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
+ * through one, bound to the value it came from. Only the registries are read, so nothing of the value runs.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a layer or a layer's bound method.
+ * @internal
+ *
+ * @example
+ * isCompositionProxy(layerOver({})); // true
+ */
+export function isCompositionProxy(value) {
+	return weakMapHas(LAYERS, value) || weakMapHas(BOUND_ORIGINALS, value);
+}
 
 /**
  * The method a composition layer's bound form of it stands for: a method of the value under a layer is handed out

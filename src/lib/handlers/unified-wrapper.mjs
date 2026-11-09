@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:03-08:00 (1794183783)
+ *	@Last modified time: 2026-11-08T16:57:08-08:00 (1794185828)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,7 @@ import {
 	copyForComposition,
 	setApiNodeCheck,
 	isCompositionLayer,
+	isCompositionProxy,
 	layerForwards,
 	layerHeldKeys,
 	layerMethodOriginal,
@@ -1914,6 +1915,14 @@ const SELF_FRAMEWORK_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
 const SELF_ROOT_VIEWS = new WeakMap();
 
 /**
+ * slothlet's own Proxies that no other registry holds (a root view, a promoted call's guarded result), recorded only
+ * so {@link isSlothletWrapped} knows them; nothing else reads it, so recording one changes how no value is handled.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const OWN_VIEWS_UNLISTED = new WeakSet();
+
+/**
  * Who a change made through a root view at `parts` is made as: the module executing now, the host
  * (`null`) inside a `run()` / `scope()` it opened, or else the reader the view belongs to, when that reader
  * owns the path. Code the live runtime cannot attribute is refused, as it is through a node's view.
@@ -2026,6 +2035,7 @@ export function runtime_selfRootView(slothlet, reader) {
 		}
 	});
 	byReader.set(reader, view);
+	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
 
@@ -3594,12 +3604,16 @@ const weakMapHasAtLoad = Function.prototype.call.bind(WeakMap.prototype.has);
 const weakSetHasAtLoad = Function.prototype.call.bind(WeakSet.prototype.has);
 
 /**
- * Whether a value is a Proxy slothlet itself made: an api node, a per-reader view, a stand-in, an inbound view, a
- * class-instance wrapper, or another of slothlet's own Proxies. It reads only slothlet's identity registries, with
- * the `has` functions captured at load, so no trap of the value runs and nothing a module replaced later changes
- * the answer. Backs `api.slothlet.wrapped` (#671).
+ * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
+ * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
+ * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
+ * promoted result, a context view, the root api) and the stand-ins that are not Proxies (a module's async or
+ * generator function, generator object, or promise, handed out as a function, generator, or promise of the same
+ * kind). It reads only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
+ * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
+ * slothlet's. Backs `api.slothlet.wrapped` (#671).
  * @param {*} value - The value.
- * @returns {boolean} True only for a Proxy slothlet made.
+ * @returns {boolean} True only for one of slothlet's own wrappers.
  * @public
  * @example
  * isSlothletWrapped(api.math); // true
@@ -3613,7 +3627,13 @@ export function isSlothletWrapped(value) {
 		weakMapHasAtLoad(STAND_IN_RECORDS, value) ||
 		weakMapHasAtLoad(INBOUND_VIEWS, value) ||
 		weakSetHasAtLoad(genuineWrappers, value) ||
+		weakMapHasAtLoad(SELF_VIEW_NODES, value) ||
+		weakMapHasAtLoad(SELF_MEMBER_VIEWS, value) ||
+		weakMapHasAtLoad(FRAMEWORK_VIEW_TARGETS, value) ||
+		weakSetHasAtLoad(OWN_VIEWS_UNLISTED, value) ||
 		isSlothletProxy(value) ||
+		isFrameworkInternal(value) ||
+		isCompositionProxy(value) ||
 		runtime_isWrappedClassInstance(value)
 	);
 }
@@ -6289,7 +6309,7 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 	const refuse = () => {
 		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
 	};
-	return new Proxy(promise, {
+	const guarded = new Proxy(promise, {
 		get(target, prop, receiver) {
 			if (prop === Symbol.toPrimitive || prop === "valueOf" || prop === "toString" || prop === "toJSON") {
 				return refuse;
@@ -6302,6 +6322,8 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 			return value;
 		}
 	});
+	OWN_VIEWS_UNLISTED.add(guarded);
+	return guarded;
 }
 
 /**

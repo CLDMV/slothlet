@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:03-08:00 (1794183783)
+ *	@Last modified time: 2026-11-08T16:57:07-08:00 (1794185827)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -555,7 +555,7 @@ export class PermissionManager extends ComponentBase {
 		// rule of equal or higher specificity still overrides these.
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.metadata.self", effect: "allow" }, "__builtin__");
-		// `slothlet.wrapped` (#671) only answers whether a value is one of slothlet's own Proxies; it reveals nothing
+		// `slothlet.wrapped` (#671) only answers whether a value is one of slothlet's own wrappers; it reveals nothing
 		// about any module, so like the identity reads above it is allowed by default.
 		this.addRule({ caller: "**", target: "slothlet.wrapped", effect: "allow" }, "__builtin__");
 

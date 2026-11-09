@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:01-08:00 (1794183781)
+ *	@Last modified time: 2026-11-08T16:57:05-08:00 (1794185825)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2930,13 +2930,15 @@ export class ApiBuilder extends ComponentBase {
 			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
 			 */
 			/**
-			 * Whether a value is a Proxy slothlet itself made (an api node, a per-reader view, a class-instance
-			 * wrapper, a stand-in), answered from slothlet's own registries: no trap of the value runs, and
-			 * replacing `WeakMap` or `WeakSet` methods afterwards changes no answer. Code that copies values
-			 * between modules can let slothlet's own wrappers through and still refuse every other Proxy. Not
-			 * gated: it reveals nothing about any module.
+			 * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a
+			 * module's or the host's, whether a Proxy (an api node, a view, a version dispatcher, a class-instance
+			 * wrapper, a stand-in) or a stand-in that is not one (a module's async or generator function, generator,
+			 * or promise). A Proxy wrapped around one of slothlet's is not slothlet's. Answered from slothlet's own
+			 * registries: no trap of the value runs, and replacing `WeakMap` or `WeakSet` methods afterwards changes
+			 * no answer. Code that copies values between modules can let slothlet's own wrappers through and still
+			 * refuse every other Proxy. Allowed to modules by a built-in rule: it reveals nothing about any module.
 			 * @param {*} value - The value to ask about.
-			 * @returns {boolean} True only for a Proxy slothlet made.
+			 * @returns {boolean} True only for one of slothlet's own wrappers.
 			 * @example
 			 * api.slothlet.wrapped(api.math); // true
 			 * api.slothlet.wrapped(new Proxy({}, {})); // false
