@@ -6,8 +6,8 @@
  *	@Author: Shinrai
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:02:57-08:00 (1794182577)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-08T16:44:35-08:00 (1794185075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,6 +62,24 @@ const SHAPES = {
 		catch() {
 			attempt("catchMethod");
 			return this;
+		}
+	}),
+	/** Returns a thenable that resolves to another value carrying a `then` getter. */
+	nestedThen: () => ({
+		then(resolve) {
+			resolve({
+				get then() {
+					attempt("nestedThen");
+					return undefined;
+				}
+			});
+		}
+	}),
+	/** An async listener resolving to a value carrying a `then` getter. */
+	asyncResolvesThenGetter: async () => ({
+		get then() {
+			attempt("asyncResolvesThenGetter");
+			return undefined;
 		}
 	}),
 	/** An async listener: its body after an await runs as the subscriber. */

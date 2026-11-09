@@ -6,8 +6,8 @@
  *	@Author: Shinrai
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:04:52-08:00 (1794182692)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-08T16:47:46-08:00 (1794185266)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,8 @@ const BASE = path.resolve(__dirname, "../../../../api_tests/api_test_listener_re
 const REFUSED = "threw PERMISSION_DENIED";
 const PERMISSIONS = { defaultPolicy: "allow", rules: [{ caller: "sub.**", target: "vault.**", effect: "deny" }] };
 const SHAPES = ["thenGetter", "thenMethod", "catchMethod", "asyncBody"];
+// The value a listener's result settles to is the listener's too: the dispatcher never reads it.
+const SETTLED_TO = ["nestedThen", "asyncResolvesThenGetter"];
 
 describe.each(getMatrixConfigs())("Events > a listener's result is settled as the listener > $name", ({ config }) => {
 	let api;
@@ -76,6 +78,23 @@ describe.each(getMatrixConfigs())("Events > a listener's result is settled as th
 		const result = await api.slothlet.event.deliver(held[0].envelope, held[0].listeners[0]);
 		expect(result.delivered).toBe(true);
 		expect(await api.sub.drain()).toEqual(shape === "catchMethod" ? [] : [{ tag: shape, value: REFUSED }]);
+	});
+
+	it.each(SETTLED_TO)("%s: the value the result settles to is read only as plain JS reads it, as the subscriber", async (shape) => {
+		api = await compose();
+		await api.sub.listen("evt", shape);
+		await api.app.fire("evt");
+		await api.slothlet.event.emit("evt", { n: 1 });
+		// An async function resolving to an object reads its `then` once, inside the listener's own promise, as plain
+		// JS does; the dispatcher never reads it. A thenable's resolved value is never read at all.
+		const expected =
+			shape === "asyncResolvesThenGetter"
+				? [
+						{ tag: shape, value: REFUSED },
+						{ tag: shape, value: REFUSED }
+					]
+				: [];
+		expect(await api.sub.drain()).toEqual(expected);
 	});
 
 	it("emit still waits for a listener's thenable and async body before it resolves", async () => {
