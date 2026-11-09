@@ -16,7 +16,8 @@
 /**
  * @fileoverview Unit tests for the bare-specifier half of the per-instance helper rule (#715): a bare specifier that
  * resolves into the importing leaf's own package (`#imports`, a self-reference by name) carries the leaf's instance
- * query as a relative import of the same file does; one that resolves into another package, a builtin, or slothlet's own
+ * query as a relative import of the same file does, and a `require()` of it from an instance's CommonJS code is served
+ * the instance's copy as a relative require is; one that resolves into another package, a builtin, or slothlet's own
  * tree does not.
  */
 
@@ -24,7 +25,12 @@ import { describe, it, expect, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isOwnPackageImport, propagateInstanceQuery, slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import {
+	installInstanceImportHooks,
+	isOwnPackageImport,
+	propagateInstanceQuery,
+	slothletInstanceImports
+} from "@cldmv/slothlet/helpers/instance-imports";
 
 const OWN_SRC = new URL("../../../../src/", import.meta.url).pathname;
 const MARK = "?slothlet_instance=abc";
@@ -64,6 +70,49 @@ describe("Helpers > instance-imports > bare specifiers into the leaf's own packa
 			expect(propagateInstanceQuery("x", leaf, `file://${base}/node_modules/x/index.mjs`)).toBe(`file://${base}/node_modules/x/index.mjs`);
 			expect(propagateInstanceQuery("node:fs", leaf, "node:fs")).toBe("node:fs");
 			expect(propagateInstanceQuery(undefined, leaf, `file://${pkg}/lib/h.mjs`)).toBe(`file://${pkg}/lib/h.mjs`);
+		});
+
+		it("leaves a bare specifier that cannot name the leaf's own package as it is, wherever it resolves", () => {
+			expect(propagateInstanceQuery("other-pkg/h", leaf, `file://${pkg}/lib/h.mjs`)).toBe(`file://${pkg}/lib/h.mjs`);
+		});
+	});
+
+	describe("Node hooks: require() inside an instance's CommonJS scope", () => {
+		let hooks;
+		installInstanceImportHooks({ registerHooks: (h) => (hooks = h) }, {});
+		const parentURL = `file://${pkg}/api/a/a.cjs`;
+		const helper = `file://${pkg}/lib/h.mjs`;
+		const conditions = new Set(["require", "node"]);
+		const at = (url) => () => ({ url });
+		/**
+		 * Resolve a require with the scope of instance `abc`, anchored at the leaf, active.
+		 * @param {string} specifier - The specifier as written.
+		 * @param {string} url - What the next hook resolves it to.
+		 * @returns {string} The resolved URL.
+		 */
+		const resolveRequire = (specifier, url) => {
+			const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+			const outer = state.active;
+			state.active = { instanceID: "abc", anchor: `${pkg}/api/a/a.cjs` };
+			try {
+				return hooks.resolve(specifier, { parentURL, conditions }, at(url)).url;
+			} finally {
+				state.active = outer;
+			}
+		};
+
+		it("marks `#imports` and a self-reference that resolve to an ES module of the leaf's own package, as a relative require", () => {
+			const marked = `${helper}?slothlet_instance=abc&slothlet_require=1`;
+			expect(resolveRequire("../../lib/h.mjs", helper)).toBe(marked);
+			expect(resolveRequire("#h", helper)).toBe(marked);
+			expect(resolveRequire("own-pkg/h", helper)).toBe(marked);
+		});
+
+		it("leaves a bare require into another package, or one that cannot name the leaf's own package, unmarked", () => {
+			const other = `file://${base}/node_modules/x/index.mjs`;
+			expect(resolveRequire("x", other)).toBe(other);
+			expect(resolveRequire("#x", other)).toBe(other);
+			expect(resolveRequire("other-pkg/h", helper)).toBe(helper);
 		});
 	});
 
