@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:47-08:00 (1794194387)
+ *	@Last modified time: 2026-11-08T22:59:44-08:00 (1794207584)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,8 +24,10 @@
  *   stack, and where the stack cannot tell it the access is refused with `PERMISSION_DENIED`.
  * - A CommonJS file two instances load: precise tells the instances apart by its stand-ins; fast cannot, as the
  *   file's frames carry its path and not the instance, and refuses.
+ * - `"precise"` tells the definer from the stack wherever the stack can (a helper a leaf returns is its file's module's);
+ *   the stand-in's record is only the fallback.
  * - Either way, plain data comes back as itself at any depth, and with the permission system not on nothing is
- *   wrapped at all.
+ *   wrapped at all, nothing is checked, and code of a removed node or a shut-down instance runs as plain JavaScript.
  *
  * Fixture `api_test_definer_rule` (see permissions-definer-rule.test.vitest.mjs). Rules: `bag.** -> vault.**`,
  * `** -> bag.**`, `** -> shared.**`, `mixed.trusted -> vault.**`; default deny. Expected values come from the rule as
@@ -150,6 +152,35 @@ describe.each(MODES)("Permissions > attribution: precise > $name (#726)", ({ mod
 		expect(supplier.B).toBe(DENIED);
 	});
 
+	it("tells the definer from the stack where it can: a helper bag's leaf returns is the file's module's, not that leaf's", async () => {
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { defaultPolicy: "deny", rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }] }
+		});
+		const helper = await api.mixed.trustedHands();
+		expect(types.isProxy(helper)).toBe(true);
+		expect(await settle(() => helper())).toBe(DENIED);
+	});
+
+	it("falls back on the recorded definer only where the stack cannot tell: with provenance off, the stand-in's leaf", async () => {
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: {
+				defaultPolicy: "deny",
+				provenance: false,
+				rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }]
+			}
+		});
+		const helper = await api.mixed.trustedHands();
+		expect(await settle(() => helper())).toBe(42);
+	});
+
 	it("refuses a closure built by the Function constructor with provenance on: inside its call, evaluated code names no file", async () => {
 		await open({ mode, runtime });
 		const fn = await api.bag.evaled();
@@ -244,6 +275,27 @@ describe.each(MODES)("Permissions > attribution > permissions not on > $name (#7
 		const data = { list: [{ deep: [{ x: 1 }] }] };
 		expect((await api.bag.same({ data })).data).toBe(data);
 	});
+
+	it.each(CONFIGS)("%s: code of a removed node is not set aside, and runs as plain JavaScript", async (_label, permissions) => {
+		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions });
+		const fn = await api.bag.make();
+		const box = await api.bag.box();
+		await api.slothlet.api.remove("bag");
+		expect(await settle(() => fn())).toBe(42);
+		expect(await settle(() => box.run())).toBe(42);
+	});
+
+	it.each(CONFIGS)(
+		"%s: code of a shut-down instance runs as plain JavaScript, inside another instance's call",
+		async (_label, permissions) => {
+			const gone = await slothlet({ base: DIR, mode, runtime, silent: true, permissions });
+			api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions });
+			const fn = await gone.bag.make();
+			await gone.shutdown();
+			expect(await settle(() => api.bag.call(fn))).toBe(42);
+			expect(await settle(() => fn())).toBe(NO_SELF);
+		}
+	);
 });
 
 /**

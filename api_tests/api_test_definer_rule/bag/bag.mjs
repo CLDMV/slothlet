@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:17:26-08:00 (1794194246)
+ *	@Last modified time: 2026-11-08T22:58:00-08:00 (1794207480)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,35 @@ export const echo = (v) => String(v);
 export const call = (fn) => fn();
 /** Hands back what it is handed. */
 export const same = (v) => v;
+/** Hands back one member of what it is handed: a caller's function returned on its own. */
+export const pick = (holder, key) => holder[key];
+/** Awaits the thenable `lender` returns, whose `then` reads the vault as `lender`. */
+export const awaitLender = async () => await self.lender.thenable();
+/** A Proxy export: its traps are the node's own code, run as a call of `bag.proxied`. */
+export const proxied = new Proxy(
+	{},
+	{
+		get(_target, prop) {
+			return prop === "secret" ? self.vault.get() : undefined;
+		},
+		has(_target, prop) {
+			try {
+				return prop === "secret" && self.vault.get() === 42;
+			} catch {
+				return false;
+			}
+		},
+		ownKeys() {
+			try {
+				return [`k${self.vault.get()}`];
+			} catch (error) {
+				return [`k${error?.code ?? "failed"}`];
+			}
+		}
+	}
+);
+/** Hands back the Proxy export itself, as a value of the node's own. */
+export const getProxied = () => proxied;
 /** A class instance whose method reads the vault. */
 export const inst = () =>
 	new (class Client {
