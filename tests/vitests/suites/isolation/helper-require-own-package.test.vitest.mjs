@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/isolation/helper-require-own-package.test.vitest.mjs
+ *	@Date: 2026-11-09T00:27:49-08:00 (1794212869)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-09T00:40:34-08:00 (1794213634)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview One file is one module inside an instance when a CommonJS leaf requires it by a bare specifier too (#715).
  * @description
  * The fixture's apis sit in a package of their own (`pkg/package.json`, named, with an `imports` field and an `exports`

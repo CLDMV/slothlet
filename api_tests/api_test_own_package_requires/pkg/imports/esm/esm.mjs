@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /imports/esm/esm.mjs
+ *	@Date: 2026-11-09T00:26:30-08:00 (1794212790)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-09T00:36:28-08:00 (1794213388)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The ES module leaf of the `imports` api (#715): imports its package's helpers by the package's
  * `#imports`, so the fixture can tell whether the `.cjs` leaf of the same instance reached the same copies.
  * @module api_test_own_package_requires.pkg.imports.esm

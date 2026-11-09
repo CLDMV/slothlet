@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_own_package_requires/calls.mjs
+ *	@Date: 2026-11-09T00:26:30-08:00 (1794212790)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-09T00:36:28-08:00 (1794213388)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The host of the own-package require fixture (#715): two instances in each mode and runtime over each of
  * `pkg/imports` and `pkg/self`, whose `.cjs` leaf requires its package's helpers by `#imports`, by the package's own name
  * and by a relative path (each api puts a different bare spelling first), beside an ES module leaf that imports them by
