@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:13-08:00 (1794194353)
+ *	@Last modified time: 2026-11-09T00:51:11-08:00 (1794214271)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,8 @@ import {
 	runtime_selfFrameworkView,
 	runtime_selfView,
 	runtime_unwrapSelfView,
-	runtime_selfReadAsDefiner
+	runtime_selfReadAsDefiner,
+	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
@@ -338,3 +339,5 @@ export const context = new Proxy(
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
 for (const proxy of [self, context]) markSlothletProxy(proxy);
+// A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
+registerRuntimeSelf(liveRuntime, self);

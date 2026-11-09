@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:08-08:00 (1794207548)
+ *	@Last modified time: 2026-11-09T00:51:07-08:00 (1794214267)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1661,7 +1661,12 @@ export function resolveSupplier(record) {
 		if (!description.filePath) continue;
 		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length, record: current });
 	}
-	if (!fallback) return null;
+	// No call of a module's above it (only the host's): read as a call with no parent is, so another module's code
+	// running inside it is still told by its frames (#726).
+	if (!fallback) {
+		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
+		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record) : null;
+	}
 	// The leaf has no file of its own: none of the code running inside it can be told to be its own.
 	if (!chain.length || chain[0].currentWrapper !== leaf) return runtime_supplierAnswer(record, fallback);
 	const { place } = createFramePlacer(chain);
@@ -1689,7 +1694,8 @@ export function resolveSupplier(record) {
 		runtime_learnEntered(range);
 		const conflicts = runtime_conflictingScripts(range);
 		let leafSeen = false;
-		for (const frame of range) {
+		for (let index = 0; index < range.length; index++) {
+			const frame = range[index];
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 			if (frame.async || isRunnerFrame(frame)) break;
 			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
@@ -1699,7 +1705,7 @@ export function resolveSupplier(record) {
 				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
 				// already running inside it (a package the leaf called back into the leaf).
 				if (leafSeen) continue;
-				if (guards && placement && (authored = runtime_authorAnswer(record, frame))) return AUTHORED;
+				if (guards && placement && (authored = runtime_authorAnswer(record, frame, range.slice(index + 1)))) return AUTHORED;
 				return fallback;
 			}
 			const { matches } = placement;
@@ -1745,7 +1751,10 @@ export function resolveSupplier(record) {
  */
 function runtime_madeCodeDefiner(record) {
 	const recorded = record.wrapper;
-	for (const frame of runtime_captureFrames(24)) {
+	const frames = runtime_captureFrames(24);
+	let index = -1;
+	for (const frame of frames) {
+		index++;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 			if (frame.enter) return undefined;
 			continue;
@@ -1756,7 +1765,7 @@ function runtime_madeCodeDefiner(record) {
 		if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return undefined;
 		const leaves = runtime_leavesAt(recorded.slothlet, frame);
 		if (!leaves.length) return undefined;
-		const definers = runtime_narrowToLeaf(leaves, frame);
+		const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 		if (definers.includes(recorded)) return null;
 		return { wrapper: definers[0], ceiling: combineCeilings(record.ceiling ?? null, ...definers.slice(1)) };
 	}
@@ -2341,15 +2350,16 @@ const AUTHORED = Symbol("authored");
  * file, all of them. Null when no leaf was built from the file, or the frame does not run the file's own source.
  * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call the code runs inside.
  * @param {{path: string, line: string}} frame - The code's frame.
+ * @param {Iterable<object>} [outer] - The frames further out, innermost first.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The answer.
  * @private
  */
-function runtime_authorAnswer(record, frame) {
+function runtime_authorAnswer(record, frame, outer = []) {
 	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597). Under vite, the
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
-	// The leaf whose source range holds the frame, or the file's module for code outside every leaf's (#726).
-	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame);
+	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
+	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, outer);
 	if (!authors.length) return null;
 	return { wrapper: authors[0], ceiling: combineCeilings(record.wrapper, record.ceiling, ...authors.slice(1)) };
 }
@@ -2474,20 +2484,15 @@ function runtime_moduleRootPath(leaves) {
 }
 
 /**
- * The definer of code a frame runs in a file several leaves were built from (#726): the leaf whose source range holds
- * the frame (the innermost such range). Code outside every leaf's range is the module's: the file's own node, whose
- * path every leaf's starts with. A lazy tree builds that node with no file of its own, so it is found by its path, the
- * leaves' paths less their paths inside the file's exports. With no such node, every leaf comes back.
+ * The leaf whose source range holds a frame of its file: the innermost such range. Null when no leaf's does.
  * @param {Array<object>} leaves - The leaves of the frame's file.
+ * @param {{text: string, starts: number[]}} source - The file's source.
  * @param {{lineNumber?: number|null, columnNumber?: number|null}} frame - The frame.
- * @returns {Array<object>} The one leaf, or every leaf.
+ * @returns {object|null} The leaf.
  * @private
  */
-function runtime_narrowToLeaf(leaves, frame) {
-	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
-	const filePath = leaves.find((leaf) => leaf.____slothletInternal.filePath)?.____slothletInternal.filePath;
-	const source = filePath ? runtime_sourceOf(filePath) : null;
-	if (!source) return leaves;
+function runtime_leafHolding(leaves, source, frame) {
+	if (!frame?.lineNumber || !frame.columnNumber) return null;
 	const offset = (source.starts[frame.lineNumber - 1] ?? Infinity) + frame.columnNumber - 1;
 	let best = null;
 	let bestLength = Infinity;
@@ -2496,6 +2501,65 @@ function runtime_narrowToLeaf(leaves, frame) {
 		if (range && range[0] <= offset && offset < range[1] && range[1] - range[0] < bestLength) {
 			best = leaf;
 			bestLength = range[1] - range[0];
+		}
+	}
+	return best;
+}
+
+/**
+ * Whether a frame runs code of the same file, instance and mount as another: a frame further out that does is still
+ * that file's code calling it.
+ * @param {{path: string, line: string, async?: boolean, evaluated?: boolean}} frame - The frame further out.
+ * @param {{path: string, line: string}} inner - The frame it is compared with.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_sameFileFrame(frame, inner) {
+	return (
+		!frame.async &&
+		!frame.evaluated &&
+		frame.path === inner.path &&
+		runtime_frameInstanceTag(frame.line) === runtime_frameInstanceTag(inner.line) &&
+		runtime_frameModuleTag(frame.line) === runtime_frameModuleTag(inner.line)
+	);
+}
+
+/**
+ * The frames of a capture after the one at an index, read again from the capture as they are asked for.
+ * @param {Iterable<object>} frames - The capture.
+ * @param {number} index - The index of the frame they follow.
+ * @returns {Iterable<object>} The frames further out.
+ * @private
+ */
+function* runtime_framesAfter(frames, index) {
+	let i = 0;
+	for (const frame of frames) if (i++ > index) yield frame;
+}
+
+/**
+ * The definer of code a frame runs in a file several leaves were built from (#726): the nearest leaf on the stack.
+ * Walking out from the frame through the frames of the same file that called it, the first one inside a leaf's source
+ * range names that leaf (the innermost such range): a helper outside every export, called from a leaf's code, runs as
+ * that leaf. A frame of another file ends the walk. Only when no frame of the file is inside any leaf's range is the
+ * code the module's: the file's own node, whose path every leaf's starts with. A lazy tree builds that node with no file
+ * of its own, so it is found by its path, the leaves' paths less their paths inside the file's exports. With no such
+ * node, every leaf comes back.
+ * @param {Array<object>} leaves - The leaves of the frame's file.
+ * @param {{path: string, line: string, lineNumber?: number|null, columnNumber?: number|null}} frame - The frame.
+ * @param {Iterable<object>} [outer] - The frames further out, innermost first.
+ * @returns {Array<object>} The one leaf, or every leaf.
+ * @private
+ */
+function runtime_narrowToLeaf(leaves, frame, outer = []) {
+	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
+	const filePath = leaves.find((leaf) => leaf.____slothletInternal.filePath)?.____slothletInternal.filePath;
+	const source = filePath ? runtime_sourceOf(filePath) : null;
+	if (!source) return leaves;
+	let best = runtime_leafHolding(leaves, source, frame);
+	if (!best) {
+		for (const further of outer) {
+			if (!runtime_sameFileFrame(further, frame)) break;
+			if ((best = runtime_leafHolding(leaves, source, further))) break;
 		}
 	}
 	if (best) return [best];
@@ -2647,14 +2711,17 @@ function runtime_leavesAtLocation(path, line) {
  * @internal
  */
 export function frameDefiner() {
-	for (const frame of runtime_captureFrames(24)) {
+	const frames = runtime_captureFrames(24);
+	let index = -1;
+	for (const frame of frames) {
+		index++;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 		if (frame.async || isRunnerFrame(frame)) return null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
 		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
 		const leaves = runtime_leavesAtLocation(frame.path, frame.line);
 		if (leaves === null) return runtime_isInstanceFile(frame.path) ? { unplaced: true } : null;
-		const narrowed = runtime_narrowToLeaf(leaves, frame);
+		const narrowed = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 		return narrowed.length === 1 ? { wrapper: narrowed[0] } : { leaves: narrowed };
 	}
 	return null;
@@ -2829,7 +2896,9 @@ function runtime_foreignCodeRunning(record) {
 		// Whether a builtin ran between the innermost code of anyone's (slothlet's own included) and the frames read
 		// since, which are only Node's own: Node's code calling a builtin acts for no one more than the builtin does.
 		let builtinSince = false;
+		let index = -1;
 		for (const frame of frames) {
+			index++;
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 				if (frame.enter) return null;
 				builtinSince = false;
@@ -2855,7 +2924,7 @@ function runtime_foreignCodeRunning(record) {
 			// Code of no module's folder and no instance: a file some module loaded is that module's, the host's own runs as
 			// the leaf.
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame) : null;
-			return runtime_authorAnswer(record, frame) ?? UNACCOUNTED_SUPPLIER;
+			return runtime_authorAnswer(record, frame, runtime_framesAfter(frames, index)) ?? UNACCOUNTED_SUPPLIER;
 		}
 		// The whole stack read without code of anyone's or a call of slothlet's: when a builtin began it, the engine's and
 		// Node's own functions only.

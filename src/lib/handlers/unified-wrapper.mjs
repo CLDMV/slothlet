@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:09-08:00 (1794207549)
+ *	@Last modified time: 2026-11-09T00:51:08-08:00 (1794214268)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3762,6 +3762,26 @@ function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute
 }
 
 /**
+ * Each runtime's `self`, by the context manager it reads its context from (see {@link registerRuntimeSelf}).
+ * @type {Map<object, object>}
+ * @private
+ */
+const RUNTIME_SELVES = new Map();
+
+/**
+ * Record a runtime's `self` for the context manager it reads its context from: a read of `self` made while no call
+ * runs is read through the `self` of the runtime the definer's instance runs, whichever runtime's `self` it was made
+ * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} selfProxy - The runtime's `self`.
+ * @returns {void}
+ * @internal
+ */
+export function registerRuntimeSelf(contextManager, selfProxy) {
+	RUNTIME_SELVES.set(contextManager, selfProxy);
+}
+
+/**
  * A read of `self` made while no call runs — the host running code a module handed out, or code nested in data it
  * returned (#726) — by code whose frames place it in a module's file: read as that code's definer, the leaf whose
  * source range holds it (or the file's module, for code outside every export), so the definer's rules hold for it and
@@ -3793,11 +3813,64 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 	const contextManager = leaf.slothlet?.contextManager;
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
+	const read = RUNTIME_SELVES.get(contextManager) ?? selfProxy;
 	return {
 		value: runtime_readOnBehalf(undefined, () =>
-			contextManager.runInContext(instanceID, () => selfProxy[prop], undefined, [], leaf, true, false, null, null, false, true)
+			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
 		)
 	};
+}
+
+/**
+ * The definer of the code making a call while no call runs (#726): when the frames tell it is a module's code (a
+ * function the module handed out, run by the host), that code's definer, the nearest leaf frame of its file or the
+ * file's module. Null while a call runs, for the host's own code, with the permission system off or `provenance` off,
+ * and for code of another instance. With `unaccounted`, code the live runtime finds no call for is read the same way.
+ * @param {object} slothlet - The instance of the node called.
+ * @param {boolean} [unaccounted=false] - Read code no call accounts for by its frames too.
+ * @returns {object|null} The definer's wrapper.
+ * @private
+ */
+function runtime_hostRunDefiner(slothlet, unaccounted = false) {
+	const contextManager = slothlet?.contextManager;
+	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
+	if (slothlet.config?.permissions?.provenance === false) return null;
+	const identity = contextManager.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper || (identity?.unresolved && !(unaccounted && identity.unaccounted))) return null;
+	const leaf = frameDefiner()?.wrapper;
+	return leaf && leaf.slothlet === slothlet ? leaf : null;
+}
+
+/**
+ * A call made through a node a module read while no call runs (#726): when the code making it is a module's (see
+ * {@link runtime_hostRunDefiner}), the call is entered as that code's definer, as the `self` read that reached the node
+ * was, so the target's `metadata.caller()` names the identity its checks used. Anywhere else the call is made as it is.
+ * @param {object} target - The wrapper of the node called.
+ * @param {Function} call - Makes the call.
+ * @returns {Function} What makes the call.
+ * @private
+ */
+function runtime_callAsDefiner(target, call) {
+	return () => {
+		const slothlet = target.slothlet;
+		const leaf = runtime_hostRunDefiner(slothlet);
+		const instanceID = leaf ? runtime_makerInstanceID(slothlet) : null;
+		if (instanceID === null) return call();
+		return slothlet.contextManager.runInContext(instanceID, call, undefined, [], leaf, true, false, null, null, false, true);
+	};
+}
+
+/**
+ * Run a lazy node's load apart from every instance's flow (#726): what the load runs is the module's own code, as an
+ * eager tree's build runs it before any call, so it never runs inside the call that asked for the load.
+ * @param {object} slothlet - The instance.
+ * @param {function(): Promise<*>} load - The load.
+ * @returns {Promise<*>} What it resolves to.
+ * @private
+ */
+function runtime_loadApart(slothlet, load) {
+	const contextManager = slothlet?.contextManager;
+	return typeof contextManager?.runDetached === "function" ? contextManager.runDetached(load, undefined, []) : load();
 }
 
 /**
@@ -6129,11 +6202,12 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
-			const call = () =>
+			const call = runtime_callAsDefiner(inner, () =>
 				runtime_selfViewResult(
 					asKept(() => Reflect.apply(child, thisArg, args)),
 					capturedCaller
-				);
+				)
+			);
 			if (pending) {
 				// The live caller is read now: once the gate's await settles, the stack no longer holds it.
 				const entry = runtime_liveEntry(inner);
@@ -8680,7 +8754,10 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Create and store the materialization promise
-		this.____slothletInternal.materializationPromise = (async () => {
+		// The load runs apart from the flow of whichever call asked for it, as an eager tree's build runs before any call:
+		// the module's top level, and its exports' getters and Proxy traps as slothlet reads them, are the module's own code,
+		// never run inside that call (#726). Under the async runtime the caller's flow would otherwise carry into the load.
+		this.____slothletInternal.materializationPromise = runtime_loadApart(this.slothlet, async () => {
 			this.____slothletInternal.state.inFlight = true;
 			// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
 			const changeGeneration = this.____slothletInternal.changeGeneration;
@@ -8769,7 +8846,7 @@ export class UnifiedWrapper extends ComponentBase {
 				this.____slothletInternal.state.inFlight = false;
 				this.____slothletInternal.materializationPromise = null;
 			}
-		})();
+		});
 
 		// Return the promise so the caller can await it
 		return this.____slothletInternal.materializationPromise;
@@ -10696,7 +10773,10 @@ export class UnifiedWrapper extends ComponentBase {
 				const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
 				const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
 				const ___creationCeiling = ___creationCallerWrapper ? (__readGateCaller?.ceiling ?? null) : null;
-				const ___capturedCallerWrapper = ___liveCallerWrapper ?? ___creationCallerWrapper;
+				// Code a module handed out, run while no call runs or no call accounts for it, makes the call as its definer,
+				// told by its frames, as its `self` read was (#726). With `references.capture` off only the live caller counts.
+				const ___capturedCallerWrapper =
+					___liveCallerWrapper ?? ___creationCallerWrapper ?? (___capture ? runtime_hostRunDefiner(wrapper.slothlet, true) : null);
 				const ___capturedCeiling = ___liveCallerWrapper ? ___liveCeiling : ___creationCeiling;
 
 				wrapper.slothlet.debug("wrapper", {

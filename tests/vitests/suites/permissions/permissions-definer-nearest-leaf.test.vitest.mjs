@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-definer-nearest-leaf.test.vitest.mjs
+ *	@Date: 2026-11-09T00:18:27-08:00 (1794212307)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-09T00:51:50-08:00 (1794214310)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview #726 — the definer of a `self` call is the nearest leaf on the stack: walking out from the call, the
  * first frame of the same file that lies inside an export's source range names the leaf. Only when no frame of that file
  * is inside any leaf's range is the definer the file's module. A frame of another file ends the search.
