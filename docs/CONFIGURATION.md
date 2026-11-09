@@ -36,6 +36,9 @@ const api = await slothlet({
 	// Hooks
 	hook: false, // boolean | string | object
 
+	// Permissions (off without this block) — see PERMISSIONS.md
+	permissions: { defaultPolicy: "allow", attribution: "precise" }, // attribution: "precise" | "fast"
+
 	// Debug / diagnostics
 	debug: false,
 	silent: false,
@@ -309,6 +312,32 @@ const api = await slothlet({
 	scope: { merge: "deep" }
 });
 ```
+
+---
+
+## Permissions
+
+The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). One of them changes what a leaf's return looks like, so it is described here too.
+
+### `permissions.attribution`
+
+**Type**: `"precise" | "fast"`
+**Default**: `"precise"`
+
+A `self.*` call is allowed only when both the code making it (its definer: the leaf it is written in) and the caller running it are allowed. This option decides how slothlet knows the definer of code a module hands out:
+
+| Value       | A returned function, class, class instance, generator, promise or Proxy export     | Where the call stack cannot tell the definer                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"precise"` | a stand-in recording its definer: not `===` the original, about 1 µs more per call | still known for a function returned directly (browser modules sharing a folder, `eval`-built functions, a CommonJS file two instances load) |
+| `"fast"`    | the original itself: `===` holds and calls are plain calls                         | refused with `PERMISSION_DENIED`                                                                                                            |
+
+Plain data comes back as itself under both, unsearched, and with the permission system not on nothing is wrapped under either. Any other value is rejected with `INVALID_CONFIG`.
+
+```javascript
+const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", attribution: "fast", rules } });
+```
+
+See [Code a module hands out runs as its definer](./PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer) for the rule, the trade-off and its limits.
 
 ---
 
