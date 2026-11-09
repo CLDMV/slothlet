@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T20:10:49-08:00 (1794197449)
+ *	@Last modified time: 2026-11-08T22:59:09-08:00 (1794207549)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,6 +46,7 @@ import {
 	handedLeafFunctions,
 	handsOutAsModule,
 	registerLeafFile,
+	setModuleNodeResolver,
 	frameDefiner,
 	outerCallerCeiling,
 	setApiValueCheck,
@@ -3778,7 +3779,9 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
 	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
-	if (definer.leaves) {
+	// With the permission system off nothing is checked: any of them gives the code its context (#726).
+	if (definer.leaves && !definer.leaves[0].slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
+	else if (definer.leaves) {
 		const paths = definer.leaves.map((leaf) => String(leaf.____slothletInternal.apiPath ?? "").split("."));
 		const common = [];
 		for (let i = 0; paths.every((parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++) common.push(paths[0][i]);
@@ -4265,11 +4268,54 @@ function runtime_promiseStandIn(maker, owner, original) {
  */
 function runtime_attributeResult(owner, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext || !handsOutAsModule(owner)) return value;
+	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	if (!handsOutAsModule(owner)) {
+		// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
+		// as a call of the node, as under `"precise"` (#726).
+		if (!runtime_permissionsOn(owner) || !util.types.isProxy(value)) return value;
+		return runtime_makerOf(owner).made.get(value) ?? value;
+	}
 	return runtime_handOut(runtime_makerOf(owner), owner, value);
 }
 
+/**
+ * Whether the permission system of a wrapper's instance is on.
+ * @param {object|null|undefined} wrapper - A wrapper.
+ * @returns {boolean} True while it is.
+ * @private
+ */
+function runtime_permissionsOn(wrapper) {
+	return wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+}
+
 setResultAttributor(runtime_attributeResult);
+
+/**
+ * The node at an api path of an instance, walked from its root through the nodes' own members, so no trap of a node
+ * runs and nothing loads (#726): how the file's module node of a lazy tree, built with no file of its own, is found.
+ * @param {object} slothlet - The instance.
+ * @param {string} apiPath - The path.
+ * @returns {object|null} The node's wrapper, or null when no node is there.
+ * @private
+ */
+function runtime_nodeAtPath(slothlet, apiPath) {
+	let current = slothlet?.api;
+	try {
+		for (const segment of String(apiPath).split(".")) {
+			const holder = resolveWrapper(current) ?? current;
+			if (holder === null || (typeof holder !== "object" && typeof holder !== "function") || util.types.isProxy(holder)) return null;
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, segment);
+			if (!descriptor || !("value" in descriptor)) return null;
+			current = descriptor.value;
+		}
+	} catch {
+		// A tree that refuses to be read has no node to offer.
+		return null;
+	}
+	return resolveWrapper(current);
+}
+
+setModuleNodeResolver(runtime_nodeAtPath);
 setHandedOutCheck((value) => value !== null && (typeof value === "object" || typeof value === "function") && STAND_IN_RECORDS.has(value));
 setInboundOriginal((value) => (typeof value === "object" && value !== null ? (INBOUND_VIEWS.get(value)?.original ?? value) : value));
 
@@ -4839,8 +4885,8 @@ function runtime_generatorStandIn(maker, owner, original) {
 
 /**
  * A module's Proxy export as its node holds it (#597): its stand-in — under the layer the build laid over it, when it
- * has one — so every touch of it, slothlet's own checks included, runs its traps as the module. Any other value is
- * held as it is.
+ * has one — so every touch of it, slothlet's own checks included, runs its traps as a call of the node, under either
+ * `permissions.attribution` while the permission system is on (#726). Any other value is held as it is.
  * @param {object} wrapper - The node's wrapper.
  * @param {*} impl - The value.
  * @returns {*} What the node holds.
@@ -4848,7 +4894,9 @@ function runtime_generatorStandIn(maker, owner, original) {
  */
 function runtime_adoptedImpl(wrapper, impl) {
 	if (!runtime_isModuleProxy(impl)) return impl;
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return impl;
+	// A node's own Proxy export is a member of the node, not a value handed out: under either attribution its traps run
+	// as a call of the node, while the permission system is on (#726).
+	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !runtime_permissionsOn(wrapper)) return impl;
 	// A layer the build laid over the module's Proxy is laid over its stand-in instead, holding what it held.
 	if (isCompositionLayer(impl)) return layerOnto(impl, runtime_adoptedImpl(wrapper, layerUnderlying(impl)));
 	return runtime_membrane(runtime_makerOf(wrapper), wrapper, impl, true);

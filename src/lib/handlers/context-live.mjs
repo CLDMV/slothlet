@@ -32,6 +32,7 @@ import {
 	enterCall,
 	createFramePlacer,
 	handsOutAsModule,
+	attributesResults,
 	describeCall,
 	isForeignScript,
 	isHandedOut,
@@ -1438,7 +1439,7 @@ export class LiveContextManager {
 		// methods in this instance's context, as the async manager does.
 		const creator = asHost ? null : (currentWrapper ?? null);
 		const attributed =
-			attribute && currentWrapper && !asHost && handsOutAsModule(currentWrapper)
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value), targetInstanceID, creator)
 				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
 

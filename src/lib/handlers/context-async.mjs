@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:05-08:00 (1794194345)
+ *	@Last modified time: 2026-11-08T22:59:07-08:00 (1794207547)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,7 @@ import {
 	carriesCallerCode,
 	enterCall,
 	handsOutAsModule,
+	attributesResults,
 	isHandedOut,
 	resolveSupplier,
 	resolvesSupplier
@@ -192,7 +193,7 @@ export class AsyncContextManager {
 
 		// A leaf's own call hands back what its module made as that module's (#597).
 		const attributed =
-			attribute && currentWrapper && !asHost && handsOutAsModule(currentWrapper)
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) => attributeResult(currentWrapper, value)
 				: (value) => value;
 
