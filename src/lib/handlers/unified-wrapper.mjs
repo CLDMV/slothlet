@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:55:33-08:00 (1794164133)
+ *	@Last modified time: 2026-11-08T16:12:39-08:00 (1794183159)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -446,33 +446,6 @@ function runtime_selfViewResult(result, reader, slothlet = null) {
 		);
 	}
 	return runtime_selfView(result, reader);
-}
-
-/**
- * The arguments a reader passes a call of another module's through `self`, with each function among them handed on as
- * the reader's ({@link runtime_handedCallback}). The same list when nothing changed.
- * @param {ArrayLike<*>} args - The arguments.
- * @param {object} reader - The reader.
- * @param {object} slothlet - The instance.
- * @param {UnifiedWrapper|null} [target] - The node called, when it is one: a call into the reader's own module is
- *   handed its arguments as they are.
- * @returns {ArrayLike<*>} The arguments.
- * @private
- */
-function runtime_handedCallbacks(args, reader, slothlet, target = null) {
-	// A call into the reader's own module crosses no boundary: its functions reach it as they are.
-	if (!reader?.____slothletInternal || (target !== null && runtime_makerOf(target) === runtime_makerOf(reader))) return args;
-	let result = args;
-	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) {
-		const value = args[index];
-		if (typeof value !== "function") continue;
-		const handed = runtime_handedCallback(value, reader, slothlet);
-		if (handed === value) continue;
-		if (result === args) result = Array.from(args);
-		result[index] = handed;
-	}
-	return result;
 }
 
 /**
@@ -1531,7 +1504,13 @@ export function runtime_selfView(node, reader) {
 	// made) is decided now for the reader it reaches.
 	const memberRecord = SELF_MEMBER_VIEWS.get(node);
 	const handed = memberRecord === undefined ? node : memberRecord.reader === SEALED_SHELL_READER ? memberRecord.value : undefined;
-	const handedPrototype = handed === undefined ? undefined : PROTOTYPE_PATHS.get(handed);
+	// One handed out before anything read it is known by its class's names (see runtime_knownPrototype).
+	const handedPrototype =
+		handed === undefined
+			? undefined
+			: memberRecord === undefined
+				? PROTOTYPE_PATHS.get(handed)
+				: runtime_knownPrototype(memberRecord.slothlet, handed);
 	if (handedPrototype !== undefined) return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet));
 	// A member view handed to another reader is that reader's view of the same value at the same path.
 	if (memberRecord) {
@@ -1728,14 +1707,13 @@ export function runtime_selfView(node, reader) {
 		// argument reach it exactly as the caller passed them, so a method that keeps or returns them hands
 		// back what it was given, and nothing it is handed carries its module's standing. What it returns is
 		// viewed for the reader that called it. Construction never sees the view as the new target.
-		// While the permission system is on, a function among the arguments reaches the node as the reader's, with what
-		// it is called with handed to the reader as values crossing between modules are, and what the call throws or
-		// rejects with reaches the reader the same way (#667).
+		// While the permission system is on, what the call throws or rejects with reaches the reader as values crossing
+		// between modules do (#667).
 		apply(_, thisArg, args) {
 			const ownThis = inner && runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
 			let result;
 			try {
-				result = Reflect.apply(node, ownThis, runtime_handedCallbacks(args, reader, slothlet, inner));
+				result = Reflect.apply(node, ownThis, args);
 			} catch (error) {
 				throw runtime_carryTo(error, reader, slothlet);
 			}
@@ -1743,7 +1721,7 @@ export function runtime_selfView(node, reader) {
 		},
 		construct(_, args, newTarget) {
 			try {
-				return Reflect.construct(node, runtime_handedCallbacks(args, reader, slothlet, inner), newTarget === view ? held : newTarget);
+				return Reflect.construct(node, args, newTarget === view ? held : newTarget);
 			} catch (error) {
 				throw runtime_carryTo(error, reader, slothlet);
 			}
@@ -4354,6 +4332,8 @@ function runtime_handOut(maker, owner, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
+	// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
+	if (SELF_MEMBER_VIEWS.get(value)?.reader === SEALED_SHELL_READER) return value;
 	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
 	// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
 	const prototype = typeof value === "object" ? runtime_prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
@@ -4431,15 +4411,22 @@ function runtime_promiseStandIn(maker, owner, original) {
 }
 
 /**
- * What a module's call hands its caller (#597): see {@link runtime_handOut}.
+ * What a module's call hands its caller (#597): see {@link runtime_handOut}. A prototype of a module's class returned
+ * to the host is the object itself, as the host reading it gets it (#667): the call's caller receives the value, and
+ * here it is known.
  * @param {object} owner - The wrapper whose call returned the value.
  * @param {*} value - What the call returned.
+ * @param {boolean} [callerIsHost=false] - Whether the host made the call.
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value) {
+function runtime_attributeResult(owner, value, callerIsHost = false) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	if (callerIsHost && typeof value === "object") {
+		const behind = runtime_behindMemberView(value);
+		if (runtime_knownPrototype(owner.slothlet, behind) !== undefined) return behind;
+	}
 	return runtime_handOut(runtime_makerOf(owner), owner, value);
 }
 
@@ -5131,6 +5118,42 @@ function runtime_recordFunctionNode(wrapper) {
 	if (!byFunction) FUNCTION_NODES.set(wrapper.slothlet, (byFunction = new WeakMap()));
 	if (byFunction.get(impl)?.deref() === undefined) byFunction.set(impl, new WeakRef(proxy));
 	CLASS_INSTANCES.set(impl, new WeakRef(wrapper.slothlet));
+	// Every node fronting it, for a class exported under more than one name (#667).
+	let everyFunction = FUNCTION_NODE_SETS.get(wrapper.slothlet);
+	if (!everyFunction) FUNCTION_NODE_SETS.set(wrapper.slothlet, (everyFunction = new WeakMap()));
+	const live = (everyFunction.get(impl) ?? []).filter((ref) => ref.deref() !== undefined);
+	if (!live.some((ref) => ref.deref() === proxy)) live.push(new WeakRef(proxy));
+	everyFunction.set(impl, live);
+}
+
+/**
+ * Every node fronting each function of a module's, per instance (#667): a class exported under two names
+ * (`export { Foo, Foo as Alias }`) has a node at each. Held weakly, as {@link FUNCTION_NODES} is.
+ * @type {WeakMap<object, WeakMap<Function, Array<WeakRef<Function>>>>}
+ * @private
+ */
+const FUNCTION_NODE_SETS = new WeakMap();
+
+/**
+ * The site of the `prototype` of every node fronting the class whose own prototype `prototype` is (#667), found by
+ * descriptors alone as {@link runtime_prototypeClassNode} finds the first: one per name the class is exported as. Empty
+ * for any other prototype.
+ * @param {object} slothlet - The instance.
+ * @param {*} prototype - The prototype.
+ * @returns {Array<{parts: string[], key: string, prop: string|null}>} The sites.
+ * @private
+ */
+function runtime_classPrototypeSites(slothlet, prototype) {
+	if (runtime_prototypeClassNode(slothlet, prototype) === undefined) return [];
+	const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor").value;
+	const sites = [];
+	for (const ref of FUNCTION_NODE_SETS.get(slothlet)?.get(owner) ?? []) {
+		const node = ref.deref();
+		if (node === undefined) continue;
+		const site = runtime_prototypeSiteOf(resolveWrapper(node), "prototype");
+		if (!sites.some((known) => known.key === site.key)) sites.push(site);
+	}
+	return sites;
 }
 
 /**
@@ -5305,8 +5328,8 @@ function runtime_recordPrototypePath(slothlet, prototype, site) {
 
 /**
  * Where a prototype of a module's is known to be read (#667): every path recorded for it, and the `prototype` of the
- * class a node fronts that it is the prototype of, found by descriptors so none of the module's code runs to find it,
- * whether or not anything read it yet. `undefined` for any other value.
+ * class it is the prototype of at every name a node exports the class as, found by descriptors so none of the module's
+ * code runs to find it, whether or not anything read it yet. `undefined` for any other value.
  * @param {object|null} slothlet - The instance the value crossed in, when known.
  * @param {*} value - The value.
  * @returns {{slothlet: object, sites: Array<{parts: string[], key: string, prop: string|null}>}|undefined} The sites.
@@ -5317,13 +5340,10 @@ function runtime_knownPrototype(slothlet, value) {
 	const record = PROTOTYPE_PATHS.get(value);
 	const instance = record?.slothlet ?? slothlet ?? runtime_classInstanceOf(value);
 	if (!instance) return undefined;
-	const classNode = runtime_prototypeClassNode(instance, value);
-	if (record === undefined && classNode === undefined) return undefined;
+	const classSites = runtime_classPrototypeSites(instance, value);
+	if (record === undefined && classSites.length === 0) return undefined;
 	const sites = record === undefined ? [] : [...record.sites.values()];
-	if (classNode !== undefined) {
-		const site = runtime_prototypeSiteOf(resolveWrapper(classNode), "prototype");
-		if (!record?.sites.has(site.key)) sites.push(site);
-	}
+	for (const site of classSites) if (!record?.sites.has(site.key)) sites.push(site);
 	return { slothlet: instance, sites };
 }
 
@@ -5359,11 +5379,12 @@ function runtime_prototypeHandedTo(value, reader, slothlet = null) {
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
 	if (!known.slothlet.handlers?.permissionManager?.isEnabled()) return value;
-	for (const site of known.sites) {
-		if (runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value)) continue;
-		return runtime_selfMemberOf(value, reader, known.slothlet, site.parts, site.prop);
-	}
-	return value;
+	const [first] = known.sites;
+	if (known.sites.every((site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
+	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
+	// decided where it would be refused.
+	const refused = known.sites.find((site) => !runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value, false)) ?? first;
+	return runtime_selfMemberOf(value, reader, known.slothlet, refused.parts, refused.prop);
 }
 
 /**
@@ -5423,8 +5444,7 @@ const CARRIER_VIEWS = new WeakMap();
 
 /**
  * What a value reaches `reader` as when it crosses from one module to another through slothlet (#667): an argument, an
- * error a call threw or rejected with, a hook's payload, an event's arguments, or what a function the reader handed
- * another module is called with. A prototype of a module's reaches it as reading it at its path would
+ * error a call threw or rejected with, a hook's payload, or an event's arguments. A prototype of a module's reaches it as reading it at its path would
  * ({@link runtime_prototypeHandedTo}), and a carrier holding one at any depth as a view handing each member on the same
  * way ({@link runtime_carrierView}). Anything else, and everything while the permission system is off, passes as it
  * is.
@@ -5496,68 +5516,23 @@ function runtime_carrierView(value, reader, slothlet) {
 }
 
 /**
- * A function a module hands another module, as that other module gets it while the permission system is on (#667):
- * the function itself to every reflection, with what it is called or constructed with reaching its own module as values
- * crossing between modules do ({@link runtime_carryTo}). The other module's code calls it directly, so slothlet sees
- * those values only here. The same function each time, for the same function and module; the module it came from is
- * handed back the function itself.
- * @param {Function} fn - The function.
- * @param {object} reader - The module it belongs to, the one handing it on.
- * @param {object} slothlet - The instance.
- * @returns {Function} What the other module gets.
- * @private
- */
-function runtime_handedCallback(fn, reader, slothlet) {
-	if (reader === null || reader === HOST_READER || !reader?.____slothletInternal) return fn;
-	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return fn;
-	if (runtime_isSlothletValue(fn) || INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn) || isFrameworkInternal(fn)) return fn;
-	if (INBOUND_VIEWS.has(fn) || STAND_IN_RECORDS.has(fn) || util.types.isProxy(fn)) return fn;
-	let byReader = HANDED_CALLBACKS.get(fn);
-	const existing = byReader?.get(reader);
-	if (existing) return existing;
-	const carried = (args) => {
-		let result = args;
-		for (let index = 0; index < args.length; index++) {
-			const handed = runtime_carryTo(args[index], reader, slothlet);
-			if (handed === args[index]) continue;
-			if (result === args) result = Array.from(args);
-			result[index] = handed;
-		}
-		return result;
-	};
-	const callback = new Proxy(fn, {
-		apply: (target, thisArg, args) => Reflect.apply(target, thisArg, carried(args)),
-		construct: (target, args, newTarget) => Reflect.construct(target, carried(args), newTarget === callback ? target : newTarget)
-	});
-	if (!byReader) HANDED_CALLBACKS.set(fn, (byReader = new WeakMap()));
-	byReader.set(reader, callback);
-	INBOUND_VIEWS.set(callback, { maker: runtime_makerOf(reader), original: fn });
-	return callback;
-}
-
-/**
- * The functions {@link runtime_handedCallback} made, per function and module.
- * @type {WeakMap<Function, WeakMap<object, Function>>}
- * @private
- */
-const HANDED_CALLBACKS = new WeakMap();
-
-/**
  * Whether a reader is handed a prototype of the module's as the object itself rather than a checked view of it (#667),
  * through `self` or holding a node alike: the host, every reader while the permission system is off, and a module that
- * may write the prototype's path (it owns it, or a write rule grants it the write) when no write rule denies it there,
- * as long as the same holds at the path of each class a node fronts further up the prototype's chain. Any other reader
- * gets a view. What the object holds reaches such a reader unchecked; the framework's namespace stored there refuses
+ * may make every write at the prototype's path and beneath it (it owns the path, or write rules grant it the whole
+ * subtree, and no rule could refuse it one there), as long as the same holds at every name its class is exported as
+ * and at the path of each class a node fronts further up the prototype's chain. Any other reader gets a view. What the object holds reaches such a reader unchecked; the framework's namespace stored there refuses
  * module code's changes on its own.
  * @param {object} slothlet - The instance.
  * @param {object|null} reader - Who reads: a module's wrapper, the host (`null` or {@link HOST_READER}), or a reader
  *   standing for no module.
  * @param {string[]} parts - The path the prototype is read at.
  * @param {object} prototype - The prototype, as the module holds it.
+ * @param {boolean} [everyName=true] - Whether every other name its class is exported as counts too; false asks about
+ *   the path `parts` alone.
  * @returns {boolean} True when the reader is handed the object itself.
  * @private
  */
-function runtime_mayHoldPrototype(slothlet, reader, parts, prototype) {
+function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName = true) {
 	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return true;
 	if (reader === null || reader === HOST_READER) return true;
 	if (reader === UNATTRIBUTED_READER || reader === SEALED_SHELL_READER || !reader?.____slothletInternal) return false;
@@ -5574,11 +5549,16 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype) {
 		return apiManager.ownsPath(path, reader);
 	};
 	if (!owned(parts)) return false;
+	// The object is the same at every name its class is exported as, so it may be held only where every one of them
+	// would leave it the object (#667).
+	if (everyName) {
+		const readAt = parts.join(".");
+		for (const site of runtime_classPrototypeSites(slothlet, prototype)) if (site.key !== readAt && !owned(site.parts)) return false;
+	}
 	for (let link = Reflect.getPrototypeOf(prototype), depth = 0; link !== null && depth < 64; depth++) {
 		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
 		if (util.types.isProxy(link)) return false;
-		const classNode = runtime_prototypeClassNode(slothlet, link);
-		if (classNode !== undefined && !owned([...runtime_apiPathParts(classNode), "prototype"])) return false;
+		for (const site of runtime_classPrototypeSites(slothlet, link)) if (!owned(site.parts)) return false;
 		link = Reflect.getPrototypeOf(link);
 	}
 	return true;
