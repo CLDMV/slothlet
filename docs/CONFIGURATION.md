@@ -326,12 +326,12 @@ The `permissions` block turns the permission system on; every option it takes is
 
 A `self.*` call is allowed only when both the code making it (its definer: the leaf it is written in) and the caller running it are allowed. This option decides how slothlet knows the definer of code a module hands out:
 
-| Value       | A returned function, class, class instance, generator, promise or Proxy export     | Where the call stack cannot tell the definer                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"precise"` | a stand-in recording its definer: not `===` the original, about 1 µs more per call | still known for a function returned directly (browser modules sharing a folder, `eval`-built functions, a CommonJS file two instances load) |
-| `"fast"`    | the original itself: `===` holds and calls are plain calls                         | refused with `PERMISSION_DENIED`                                                                                                            |
+| Value       | A returned function, class, class instance, generator, promise or Proxy export            | Where the call stack cannot tell the definer                                                                                                                                                    |
+| ----------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"precise"` | a stand-in recording a fallback definer: not `===` the original, about 1 µs more per call | still known for a function returned directly (browser modules sharing a folder, a CommonJS file two instances load, `provenance: false`); `eval`-built code is refused while `provenance` is on |
+| `"fast"`    | the original itself: `===` holds and calls are plain calls                                | refused with `PERMISSION_DENIED`                                                                                                                                                                |
 
-Plain data comes back as itself under both, unsearched, and with the permission system not on nothing is wrapped under either. Any other value is rejected with `INVALID_CONFIG`.
+Wherever the stack names the definer, both use it. Plain data comes back as itself under both, unsearched, and with the permission system not on nothing is wrapped or checked under either. Any other value is rejected with `INVALID_CONFIG`.
 
 ```javascript
 const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", attribution: "fast", rules } });
