@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T17:07:44-07:00 (1793059664)
+ *	@Last modified time: 2026-11-08T22:59:08-08:00 (1794207548)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3123,7 +3123,9 @@ export class PermissionManager extends ComponentBase {
 	#getCompiledPattern(pattern) {
 		let matcher = this.#compiledCache.get(pattern);
 		if (!matcher) {
-			matcher = compilePattern(pattern);
+			// `**` matches any number of segments, none included: `x.**` names `x` itself, the module path code outside
+			// every export of `x`'s file runs as (#726).
+			matcher = compilePattern(pattern, { zeroSegments: true });
 			this.#compiledCache.set(pattern, matcher);
 		}
 		return matcher;

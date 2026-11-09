@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-08T22:59:10-08:00 (1794207550)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,11 +47,17 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * @param {object} [options={}] - Options
  * @param {Function} [options.onMaxDepth] - Called when brace expansion exceeds max depth.
  *   Should throw an error. If not provided, a SlothletError("BRACE_EXPANSION_MAX_DEPTH") is thrown.
+ * @param {boolean} [options.zeroSegments=false] - Let a `**` that is a whole segment match zero segments as well, with
+ *   the `.` beside it: `payments.**` matches `payments` itself, `**.charge` matches `charge`, and `a.**.b` matches
+ *   `a.b`. Permission rules compile with it (#726).
  * @returns {function} Matcher function that takes a path and returns boolean
  * @example
  * const matcher = compilePattern("payments.**");
  * matcher("payments.charge"); // true
  * matcher("admin.users");     // false
+ *
+ * @example
+ * compilePattern("payments.**", { zeroSegments: true })("payments"); // true
  */
 export function compilePattern(pattern, options = {}) {
 	// Handle whole-pattern negation (leading "!"), but NOT the scoped "!(...)" exclusion extglob,
@@ -96,10 +102,21 @@ export function compilePattern(pattern, options = {}) {
 	// Escape special regex characters except * and ?
 	let regexPattern = pattern
 		.replace(/[.+^$()|[\]\\]/g, "\\$&") // Escape . and other regex specials; {} already expanded
-		.replace(/\*\*/g, "__DOUBLESTAR__") // Placeholder for **
+		.replace(/\*\*/g, "__DOUBLESTAR__"); // Placeholder for **
+	// A `**` that is a whole segment may stand for no segment at all, taking the `.` beside it with it (#726).
+	if (options.zeroSegments) {
+		regexPattern = regexPattern
+			.replace(/^__DOUBLESTAR__\\\.(?=.)/, "__ZEROLEAD__")
+			.replace(/\\\.__DOUBLESTAR__$/, "__ZEROTAIL__")
+			.replace(/\\\.__DOUBLESTAR__\\\./g, "__ZEROMID__");
+	}
+	regexPattern = regexPattern
 		.replace(/\*/g, "[^.]*") // * matches any chars except .
 		.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .
-		.replace(/\?/g, "."); // ? matches single char
+		.replace(/\?/g, ".") // ? matches single char
+		.replace(/__ZEROLEAD__/g, "(?:.*\\.)?")
+		.replace(/__ZEROTAIL__/g, "(?:\\..*)?")
+		.replace(/__ZEROMID__/g, "\\.(?:.*\\.)?");
 
 	// Restore scoped-exclusion segment matchers (function replacement avoids `$` in the lookahead
 	// being read as a replacement token).
