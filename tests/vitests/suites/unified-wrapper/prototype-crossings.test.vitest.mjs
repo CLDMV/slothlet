@@ -19,12 +19,15 @@
  *
  * @description
  * The owner reads `Foo.prototype` through `self`, or holds it in its own binding, and hands it to the reader: thrown on
- * an error, rejected with, held by a `WeakRef`, held by a frozen object, returned, handed in nested in plain data or in
- * a frozen object, and carried by the error an `owner.throwWith:error` hook of the reader's is handed. The reader also
+ * an error, rejected with, emitted through slothlet's event system to a listener of the reader's (delivered at once,
+ * through a host strategy's `defaultDeliver`, or held and delivered later with `deliver`), held by a `WeakRef`, held by a
+ * frozen object, returned, handed in nested in plain data or in a frozen object, and carried by the error an
+ * `owner.throwWith:error` hook of the reader's is handed. The reader also
  * reads it from the class's `prototype` descriptor. A reader that may not write `owner.Foo.prototype` is refused its
  * write on every route, and one that may (permissions off, or a write rule granting it) writes it. A write grant hands
  * the object itself only when no rule refuses the reader anything beneath the path, at every name the class is exported
- * as; each write through the view is decided at the path read, whichever name was read first. The host is handed the
+ * as; each write through the view is decided at the path read, whichever name was read first. A listener the owner
+ * registered itself hears what the owner emits as it was emitted. The host is handed the
  * object itself as a module call's return value. A function the reader hands the owner is plain JS the owner calls
  * directly, so nothing here covers what the owner passes it. Checked in eager and lazy mode, async and live runtime,
  * and again after `reload()`.
@@ -51,6 +54,29 @@ const DENIED = "threw PERMISSION_DENIED";
 const ROUTES = {
 	thrown: (api, source, key) => api.reader.writeThrown(source, key),
 	rejected: (api, source, key) => api.reader.writeRejected(source, key),
+	emitted: (api, source, key) => api.reader.writeEmitted(source, key),
+	emittedThroughStrategy: async (api, source, key) => {
+		api.slothlet.event.strategy((_envelope, _listeners, defaultDeliver) => defaultDeliver());
+		try {
+			return await api.reader.writeEmitted(source, key);
+		} finally {
+			api.slothlet.event.strategy(null);
+		}
+	},
+	deliveredLater: async (api, source, key) => {
+		const held = [];
+		api.slothlet.event.strategy((envelope) => {
+			held.push(envelope);
+		});
+		try {
+			const id = await api.reader.listen(key);
+			await api.owner.emitWith(source);
+			for (const envelope of held) await api.slothlet.event.deliver(envelope, id);
+		} finally {
+			api.slothlet.event.strategy(null);
+		}
+		return api.reader.heardOutcome(key);
+	},
 	dereferenced: (api, source, key) => api.reader.writeDereferenced(source, key),
 	frozen: (api, source, key) => api.reader.writeFrozen(source, key),
 	returned: (api, source, key) => api.reader.writeReturned(source, key),
@@ -60,12 +86,16 @@ const ROUTES = {
 };
 
 /**
- * Build an instance with the owner and the reader mounted as modules of their own.
+ * Build an instance with the owner and the reader mounted as modules of their own, every event subscriber delivered
+ * the payload.
  * @param {object} options - Instance options.
  * @returns {Promise<object>} The api.
  */
 async function mount(options) {
-	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: { enabled: true }, ...options });
+	// Event payloads reach every subscriber, so what a listener is handed is decided by the write rules alone.
+	const events = { default: "allow" };
+	const permissions = options.permissions ? { ...options.permissions, events } : { enabled: false, events };
+	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: { enabled: true }, ...options, permissions });
 	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
 	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
 	await api.owner;
@@ -249,6 +279,33 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 				expect(await api.owner.writeOwn("Alias", "__owner_Alias")).toBe(DENIED);
 				expect(await api.owner.takeFromPrototype("__owner_Foo")).toBe(true);
 				expect(await api.owner.takeFromPrototype("__owner_Alias")).toBe(false);
+			});
+
+			it("hands a listener the owner registered itself what the owner emits, as it was emitted", async () => {
+				api = await mount({
+					mode,
+					runtime,
+					permissions: { rules: [{ caller: "owner.**", target: "owner.Alias.**:write", effect: "deny" }] }
+				});
+				for (const name of order) await api.owner.holdsItself(name);
+				for (const tag of ["first", "reloaded"]) {
+					if (tag === "reloaded") await api.slothlet.reload();
+					expect({ local: await api.owner.hearsOwnEmit("local"), self: await api.owner.hearsOwnEmit("self") }).toEqual({
+						local: true,
+						self: true
+					});
+				}
+			});
+
+			it("hands a reader's listener what the owner emits as reading it at every name would", async () => {
+				api = await mount({
+					mode,
+					runtime,
+					permissions: { rules: [ALLOW_READER_WRITES, { caller: "reader.**", target: "owner.Alias.**:write", effect: "deny" }] }
+				});
+				for (const name of order) await api.reader.holdsItself(name);
+				expect(await api.reader.writeEmitted("local", "__emitted_aliased")).toBe(DENIED);
+				expect(await api.owner.takeFromPrototype("__emitted_aliased")).toBe(false);
 			});
 
 			it("hands the object itself to a reader that may hold it at every name", async () => {

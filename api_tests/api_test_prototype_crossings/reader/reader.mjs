@@ -66,6 +66,56 @@ export async function writeRejected(source, key) {
 	return "no rejection";
 }
 
+/** The event the owner emits the prototype on. */
+const CARRY = "prototype-crossings:carry";
+
+/** Each listener's outcome, by the member it writes. */
+const heard = new Map();
+
+/** Each listener's unsubscribe, by the member it writes. */
+const listening = new Map();
+
+/**
+ * Listen once on {@link CARRY}, writing `key` onto the payload when it is delivered.
+ * @param {string} key - The member written.
+ * @returns {string} The listener's id.
+ */
+export function listen(key) {
+	heard.delete(key);
+	const listener = (prototype) => {
+		const outcome = write(() => prototype, key);
+		heard.set(key, outcome);
+	};
+	const { off, id } = self.slothlet.event.on(CARRY, listener, { once: true, key });
+	listening.set(key, off);
+	return id;
+}
+
+/**
+ * What the listener {@link listen} registered for `key` did, and drop the record.
+ * @param {string} key - The member written.
+ * @returns {string} The outcome, or `"not heard"`.
+ */
+export function heardOutcome(key) {
+	const outcome = heard.get(key) ?? "not heard";
+	heard.delete(key);
+	listening.get(key)?.();
+	listening.delete(key);
+	return outcome;
+}
+
+/**
+ * Write onto the prototype the owner emits through slothlet's event system to a listener of this module's.
+ * @param {"self"|"local"} source - Where the owner reads the prototype.
+ * @param {string} key - The member written.
+ * @returns {Promise<string>} The outcome.
+ */
+export async function writeEmitted(source, key) {
+	listen(key);
+	await self.owner.emitWith(source);
+	return heardOutcome(key);
+}
+
 /**
  * Write onto the prototype a `WeakRef` of the owner's holds.
  * @param {"self"|"local"} source - Where the owner reads the prototype.

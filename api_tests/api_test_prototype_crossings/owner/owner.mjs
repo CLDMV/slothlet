@@ -15,8 +15,8 @@
 
 /**
  * @fileoverview A module whose class prototype it hands to another module by every route a value crosses between
- * modules: a thrown error, a rejection, a `WeakRef`, a frozen object, an argument nested in plain data, a return
- * value, and a hook's error.
+ * modules: a thrown error, a rejection, an event payload, a `WeakRef`, a frozen object, an argument nested in plain data,
+ * a return value, and a hook's error.
  * @module api_test_prototype_crossings/owner
  */
 
@@ -63,6 +63,38 @@ export async function rejectWith(source) {
 	const error = new Error("carrying");
 	error.p = pick(source);
 	throw error;
+}
+
+/** The event the prototype is emitted on. */
+const CARRY = "prototype-crossings:carry";
+
+/**
+ * Emit the prototype through slothlet's event system, to every listener of {@link CARRY}.
+ * @param {"self"|"local"} source - Where the prototype is read.
+ * @returns {Promise<boolean>} True once the emit settled.
+ */
+export async function emitWith(source) {
+	await self.slothlet.event.emit(CARRY, pick(source));
+	return true;
+}
+
+/**
+ * Whether a listener of this module's own hears the prototype it emits as the object itself.
+ * @param {"self"|"local"} source - Where the prototype is read.
+ * @returns {Promise<boolean>} True when the listener heard the very value emitted, and it is no view.
+ */
+export async function hearsOwnEmit(source) {
+	const emitted = pick(source);
+	let heard;
+	const { off } = self.slothlet.event.on(CARRY, (payload) => {
+		heard = payload;
+	});
+	try {
+		await self.slothlet.event.emit(CARRY, emitted);
+	} finally {
+		off();
+	}
+	return heard === emitted;
 }
 
 /**
