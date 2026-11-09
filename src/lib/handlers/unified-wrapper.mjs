@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T00:51:08-08:00 (1794214268)
+ *	@Last modified time: 2026-11-09T02:13:27-08:00 (1794219207)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3808,9 +3808,18 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 		throw new SlothletError("PERMISSION_DENIED", { caller: common.join(".") || null, target }, null, { validationError: true });
 	}
 	const leaf = definer.wrapper;
+	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
 	// With `provenance` off no code is told by its frames: it runs under its caller, and the host's code has no `self`.
-	if (leaf.slothlet?.handlers?.permissionManager?.isEnabled?.() && leaf.slothlet.config?.permissions?.provenance === false) return null;
+	if (checks && leaf.slothlet.config?.permissions?.provenance === false) return null;
 	const contextManager = leaf.slothlet?.contextManager;
+	// Calls are in flight and the live runtime cannot tell which of them runs this code (two api paths of one module
+	// resuming in a file they share), or that it is none of them: the caller is unknown, so the read is refused. Its
+	// definer is not read as the caller, and nor is the host. Only code no call accounts for is read by its frames.
+	if (checks) {
+		const identity = contextManager?.getCallerIdentity?.(leaf.slothlet.instanceID);
+		if (identity?.unresolved && !identity.unaccounted)
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
+	}
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
 	const read = RUNTIME_SELVES.get(contextManager) ?? selfProxy;
@@ -10778,6 +10787,18 @@ export class UnifiedWrapper extends ComponentBase {
 				const ___capturedCallerWrapper =
 					___liveCallerWrapper ?? ___creationCallerWrapper ?? (___capture ? runtime_hostRunDefiner(wrapper.slothlet, true) : null);
 				const ___capturedCeiling = ___liveCallerWrapper ? ___liveCeiling : ___creationCeiling;
+				// A caller the live runtime cannot determine is refused now, as the node's own gate refuses it (#726): calls
+				// in flight it cannot tell apart, or code it cannot place. Only code no call accounts for, settled by the
+				// node's reader or the code's definer, goes on. Run after the load instead, the call would be gated on
+				// whoever the runtime finds then, the host once the other calls have settled.
+				if (
+					___liveIdentity?.unresolved &&
+					(!___liveIdentity.unaccounted || !___capturedCallerWrapper) &&
+					wrapper.slothlet.handlers?.permissionManager?.isEnabled?.()
+				) {
+					const ___deniedPath = [wrapper.____slothletInternal.apiPath, ...propChain.map(String)].filter(Boolean).join(".");
+					throw new wrapper.slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: ___deniedPath });
+				}
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
