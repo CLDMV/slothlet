@@ -52,18 +52,19 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 
-/** Promise and its methods as they were when slothlet loaded, so settling a listener's result runs nothing a module put on them later. */
+/** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
 const NativePromise = Promise;
-const promiseCatch = Promise.prototype.catch;
+const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
 
 /**
  * Run a listener and settle what it returns while still inside its call: a `then` it carries (a getter, a
- * thenable's method, a promise's own `then`) is read and called here, so it runs as the listener. The
- * dispatcher only ever holds the native promise made here, never the listener's value.
+ * thenable's method, a promise's own `then`) is read and called here, so it runs as the listener. The promise
+ * made here settles to `undefined` whatever the listener's result resolves to, so the dispatcher never holds,
+ * and never reads, any value of the listener's.
  * @param {Function} listener - The subscribed function.
  * @param {Array} args - `[payload, meta]`.
- * @returns {Promise<*>|undefined} A native promise for the listener's settled result, or `undefined` when it returned no thenable.
+ * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
  * @private
  */
 function runAndSettle(listener, args) {
@@ -71,7 +72,7 @@ function runAndSettle(listener, args) {
 	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
 	const then = result.then;
 	if (typeof then !== "function") return undefined;
-	return new NativePromise((resolve, reject) => reflectApply(then, result, [resolve, reject]));
+	return new NativePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
 }
 
 /**
@@ -382,13 +383,20 @@ export class EventManager extends ComponentBase {
 				// Run pinned to the subscriber's identity/context so self.* resolves as that module.
 				// rawErrors:true surfaces the listener's own error so we can isolate + warn on it.
 				const settled = this.#invoke(sub, callArgs, cm);
-				if (settled) promises.push(reflectApply(promiseCatch, settled, [(error) => this.#warnListener(event, error)]));
+				if (settled) promises.push(reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
 			} catch (error) {
 				this.#warnListener(event, error);
 			}
 		}
 
-		if (promises.length > 0) await Promise.all(promises);
+		if (promises.length > 0) {
+			// Wait for every listener without Promise.all, which reads the global Promise: each promise here is the
+			// dispatcher's own and never rejects.
+			let pending = promises.length;
+			await new NativePromise((resolve) => {
+				for (const settled of promises) reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);
+			});
+		}
 	}
 
 	/**
@@ -396,7 +404,7 @@ export class EventManager extends ComponentBase {
 	 * @param {object} sub - Subscription record.
 	 * @param {Array} callArgs - `[payload, meta]`.
 	 * @param {object} cm - Context manager.
-	 * @returns {Promise<*>|undefined} A native promise for the listener's settled result, or `undefined` when it returned no thenable.
+	 * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
 	 * @private
 	 */
 	#invoke(sub, callArgs, cm) {
