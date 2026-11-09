@@ -22,6 +22,8 @@
  *   grants the definer's rights to no one: whoever runs it is its ceiling.
  * - `"fast"`: nothing is wrapped, so a returned function is `===` itself every time; every definer comes from the
  *   stack, and where the stack cannot tell it the access is refused with `PERMISSION_DENIED`.
+ * - A CommonJS file two instances load: precise tells the instances apart by its stand-ins; fast cannot, as the
+ *   file's frames carry its path and not the instance, and refuses.
  * - Either way, plain data comes back as itself at any depth, and with the permission system not on nothing is
  *   wrapped at all.
  *
@@ -35,6 +37,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { types } from "node:util";
+import { spawnSync } from "node:child_process";
 import slothlet from "@cldmv/slothlet";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -240,5 +243,56 @@ describe.each(MODES)("Permissions > attribution > permissions not on > $name (#7
 		expect(await settle(() => box.run())).toBe(42);
 		const data = { list: [{ deep: [{ x: 1 }] }] };
 		expect((await api.bag.same({ data })).data).toBe(data);
+	});
+});
+
+/**
+ * Run the CommonJS fixture in a plain Node process: under vitest, a CommonJS leaf's own `import()` of slothlet's
+ * runtime is Node's copy, not the one vite's runner gives the rest of the test, so `self` in it would see no call.
+ * Two instances are built from the one folder, one whose rules let `bag` read the vault and one whose rules do not,
+ * and the host runs the closure each instance's `bag.make` returned.
+ * @param {string} attribution - The attribution value for both instances.
+ * @param {string} mode - Eager or lazy.
+ * @param {string} runtime - Async or live.
+ * @returns {Array<*>} What each closure returned, or the code of what it threw.
+ */
+function runCommonJSPair(attribution, mode, runtime) {
+	const script = `
+		import slothlet from "@cldmv/slothlet";
+		const settle = async (fn) => { try { return await fn(); } catch (e) { return e?.code ?? String(e?.message ?? e); } };
+		const base = ${JSON.stringify(path.resolve(HERE, "../../../../api_tests/api_test_definer_rule_cjs"))};
+		const pair = [];
+		for (const rules of [[{ caller: "bag.**", target: "vault.**", effect: "allow" }], []]) {
+			const instance = await slothlet({ base, mode: ${JSON.stringify(mode)}, runtime: ${JSON.stringify(runtime)}, silent: true,
+				permissions: { defaultPolicy: "deny", attribution: ${JSON.stringify(attribution)}, rules } });
+			await settle(() => instance.vault.get());
+			pair.push(instance);
+		}
+		const closures = await Promise.all(pair.map((instance) => instance.bag.make()));
+		const out = [];
+		for (const fn of closures) out.push(await settle(() => fn()));
+		for (const instance of pair) await instance.shutdown();
+		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
+		process.exit(0);
+	`;
+	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
+		cwd: path.resolve(HERE, "../../../.."),
+		encoding: "utf8",
+		timeout: 120000
+	});
+	const line = String(child.stdout)
+		.split("\n")
+		.find((text) => text.startsWith("RESULT "));
+	if (!line) throw new Error(`no result: ${child.stderr}`);
+	return JSON.parse(line.slice("RESULT ".length));
+}
+
+describe.each(MODES)("Permissions > attribution > a CommonJS file two instances load > $name (#726)", ({ mode, runtime }) => {
+	it("precise: each instance's closure runs under that instance's rules", () => {
+		expect(runCommonJSPair("precise", mode, runtime)).toEqual([42, DENIED]);
+	});
+
+	it("fast: the frames of a file two instances load name no instance, so both are refused", () => {
+		expect(runCommonJSPair("fast", mode, runtime)).toEqual([DENIED, DENIED]);
 	});
 });
