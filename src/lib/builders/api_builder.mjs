@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:14:58-07:00 (1793056498)
+ *	@Last modified time: 2026-11-08T16:23:01-08:00 (1794183781)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,8 @@ import {
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
-	runtime_frameworkViewCaller
+	runtime_frameworkViewCaller,
+	isSlothletWrapped
 } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { markSlothletProxy } from "#handlers/framework-internals";
@@ -2928,6 +2929,20 @@ export class ApiBuilder extends ComponentBase {
 			 * // Inside a module leaf, reports that module's own path:
 			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
 			 */
+			/**
+			 * Whether a value is a Proxy slothlet itself made (an api node, a per-reader view, a class-instance
+			 * wrapper, a stand-in), answered from slothlet's own registries: no trap of the value runs, and
+			 * replacing `WeakMap` or `WeakSet` methods afterwards changes no answer. Code that copies values
+			 * between modules can let slothlet's own wrappers through and still refuse every other Proxy. Not
+			 * gated: it reveals nothing about any module.
+			 * @param {*} value - The value to ask about.
+			 * @returns {boolean} True only for a Proxy slothlet made.
+			 * @example
+			 * api.slothlet.wrapped(api.math); // true
+			 * api.slothlet.wrapped(new Proxy({}, {})); // false
+			 */
+			wrapped: (value) => isSlothletWrapped(value),
+
 			caller: () => {
 				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
 				// `queueMicrotask`, so a DIFFERENT instance's active flow (a nested slothlet() boot, or a

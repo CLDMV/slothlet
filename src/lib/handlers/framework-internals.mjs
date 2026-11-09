@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:50-07:00 (1792336610)
+ *	@Last modified time: 2026-11-08T16:23:02-08:00 (1794183782)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -152,6 +152,9 @@ export function versionDispatcherRecord(obj) {
  */
 const SLOTHLET_PROXIES = new WeakSet();
 
+/** `WeakSet.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
+const weakSetHas = Function.prototype.call.bind(WeakSet.prototype.has);
+
 /**
  * Record a Proxy as one slothlet made on its own account (see {@link isSlothletProxy}). No-op for non-objects.
  *
@@ -176,5 +179,5 @@ export function markSlothletProxy(proxy) {
  * if (isSlothletProxy(value)) return value;
  */
 export function isSlothletProxy(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && SLOTHLET_PROXIES.has(value);
+	return value !== null && (typeof value === "object" || typeof value === "function") && weakSetHas(SLOTHLET_PROXIES, value);
 }

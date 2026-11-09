@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T18:51:06-08:00 (1794019866)
+ *	@Last modified time: 2026-11-08T16:23:03-08:00 (1794183783)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3587,6 +3587,35 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 		// A value that refuses to be described is taken to hold code.
 		return false;
 	}
+}
+
+/** `WeakMap` and `WeakSet` `has` as they were when slothlet loaded, so a module replacing them changes no answer of {@link isSlothletWrapped}. */
+const weakMapHasAtLoad = Function.prototype.call.bind(WeakMap.prototype.has);
+const weakSetHasAtLoad = Function.prototype.call.bind(WeakSet.prototype.has);
+
+/**
+ * Whether a value is a Proxy slothlet itself made: an api node, a per-reader view, a stand-in, an inbound view, a
+ * class-instance wrapper, or another of slothlet's own Proxies. It reads only slothlet's identity registries, with
+ * the `has` functions captured at load, so no trap of the value runs and nothing a module replaced later changes
+ * the answer. Backs `api.slothlet.wrapped` (#671).
+ * @param {*} value - The value.
+ * @returns {boolean} True only for a Proxy slothlet made.
+ * @public
+ * @example
+ * isSlothletWrapped(api.math); // true
+ * isSlothletWrapped(new Proxy({}, {})); // false
+ */
+export function isSlothletWrapped(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	return (
+		weakMapHasAtLoad(_proxyRegistry, value) ||
+		weakSetHasAtLoad(capturedViewSet, value) ||
+		weakMapHasAtLoad(STAND_IN_RECORDS, value) ||
+		weakMapHasAtLoad(INBOUND_VIEWS, value) ||
+		weakSetHasAtLoad(genuineWrappers, value) ||
+		isSlothletProxy(value) ||
+		runtime_isWrappedClassInstance(value)
+	);
 }
 
 /**
