@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:15:09-08:00 (1794024909)
+ *	@Last modified time: 2026-11-08T16:01:53-08:00 (1794182513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,9 +43,10 @@
  * copy; edits to helper code therefore need a full reload.
  *
  * What stays shared: bare specifiers (`node_modules` packages, `node:` builtins, subpath `#imports`,
- * `@cldmv/slothlet` and its runtime), any file inside a `node_modules` package other than the
- * importer's own, and slothlet's own source files — the live-binding runtime must remain one
- * module per process.
+ * `@cldmv/slothlet` and its runtime), any file in a package other than the importer's own however
+ * the import is spelled (a `node_modules` package, or a workspace package linked in from outside
+ * `node_modules`: one file, one URL, #715), and slothlet's own source files — the live-binding
+ * runtime must remain one module per process.
  *
  * Crossing module systems (#534). Node caches CommonJS by file path, so a query on a CommonJS URL is
  * ignored, and `require(esm)` loads an ES module under its plain file URL. Two more hooks close that:
@@ -367,11 +368,73 @@ function nodeModulesPackage(slashPath) {
 }
 
 /**
+ * The package each directory outside `node_modules` belongs to, as {@link packageRoot} found it: the directory of the
+ * nearest named `package.json` at or above it, or null when there is none. Cached for the life of the process.
+ * @type {Map<string, string|null>}
+ * @private
+ */
+const PACKAGE_ROOTS = new Map();
+
+/**
+ * Whether a directory holds a `package.json` with a `name`: a package's root. A `package.json` without one (a
+ * `{"type": "module"}` marker in a subfolder) only sets the module system of its folder and stays in the package above.
+ * @param {object} fs - The `node:fs` module.
+ * @param {string} dir - A forward-slash directory path, without a trailing slash ("" for the filesystem root).
+ * @returns {boolean} True when the directory is a package's root.
+ * @private
+ */
+function isPackageRoot(fs, dir) {
+	try {
+		const { name } = JSON.parse(fs.readFileSync(`${dir}/package.json`, "utf8"));
+		return typeof name === "string" && name !== "";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * The package a file belongs to (#715): its `node_modules` package directory, or, for a file outside every
+ * `node_modules`, the directory of the nearest named `package.json` at or above it (a workspace package linked into
+ * `node_modules` resolves to its real path outside it). Null when the file is in no package, or where no filesystem is
+ * available to look.
+ * @param {string} slashPath - The file's forward-slash path.
+ * @returns {string|null} The package's directory, or null.
+ * @private
+ */
+function packageRoot(slashPath) {
+	const installed = nodeModulesPackage(slashPath);
+	if (installed !== null) return installed;
+	const fs = globalThis.process?.getBuiltinModule?.("node:fs");
+	if (!fs) return null;
+	// A Windows drive is read as the drive itself (`C:/…`), not as `/C:/…`.
+	const filePath = slashPath.replace(/^\/([a-z]:\/)/i, "$1");
+	const walked = [];
+	let root = null;
+	for (let dir = filePath.slice(0, filePath.lastIndexOf("/")); ; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+		if (PACKAGE_ROOTS.has(dir)) {
+			root = PACKAGE_ROOTS.get(dir);
+			break;
+		}
+		walked.push(dir);
+		if (isPackageRoot(fs, dir)) {
+			root = dir;
+			break;
+		}
+		if (!dir.includes("/")) break;
+	}
+	for (const dir of walked) PACKAGE_ROOTS.set(dir, root);
+	return root;
+}
+
+/**
  * Whether a module resolved at `child` (imported from `parent`) belongs to the importing leaf's
- * per-instance graph. Slothlet's own files are always shared. A file inside a `node_modules`
- * package is per instance only when the importer lives in that same package — a slothlet plugin
- * installed as a dependency keeps its own helpers per instance, while a relative path that
- * reaches into some other package does not duplicate that package.
+ * per-instance graph. Slothlet's own files are always shared. A file in a package other than the
+ * importer's own stays shared, however the import is spelled (#715): reached by a relative path or a
+ * `file:` URL it is the same module as its package-name spelling, which is shared — one file, one URL
+ * within an instance. A package is a `node_modules` package directory or, outside `node_modules`, the
+ * nearest named `package.json` (a pnpm workspace package resolves to its real path there). A slothlet
+ * plugin installed as a dependency, or a module that is a package of its own, keeps its own helpers per
+ * instance.
  * @param {string} child - Resolved child (`file:` URL, path or vite id).
  * @param {string} parent - The importer (`file:` URL, path or vite id).
  * @returns {boolean} True when the child should carry the parent's instance query.
@@ -384,7 +447,15 @@ export function isInstanceScopedFile(child, parent) {
 	const childPath = toSlashPath(child);
 	if (OWN_PREFIXES.some((own) => childPath === own || (own.endsWith("/") && childPath.startsWith(own)))) return false;
 	const childPkg = nodeModulesPackage(childPath);
-	return childPkg === null || childPkg === nodeModulesPackage(toSlashPath(parent));
+	const parentPath = toSlashPath(parent);
+	// Neither under `node_modules` and in one directory: the same package, without reading the filesystem.
+	if (
+		childPkg === null &&
+		nodeModulesPackage(parentPath) === null &&
+		childPath.slice(0, childPath.lastIndexOf("/")) === parentPath.slice(0, parentPath.lastIndexOf("/"))
+	)
+		return true;
+	return packageRoot(childPath) === packageRoot(parentPath);
 }
 
 /**
@@ -1305,15 +1376,30 @@ export function slothletInstanceImports() {
 				visit(ast.body);
 				// A file no instance tags that the module imports by a bare specifier (a linked package, its package's own
 				// `#imports`) is recorded as the module's (#714). A specifier computed at run time is not seen here.
-				for (const specifier of bare) noteModuleImport(await this.resolve(specifier, id), id);
+				// The files no instance tags that the module imports, of those the plugin registers: each gets a record of its
+				// own naming this module as a loader (#715). The record a file's own registration imports is written once, when
+				// vite first loads it, so a module importing the file after that would go unrecorded.
+				const shared = new Set();
+				const noteShared = (resolved) => {
+					if (!resolved || resolved.external || typeof resolved.id !== "string" || resolved.id.includes(MARKER)) return;
+					noteModuleImport(resolved, id);
+					if (isRegisteredFile(resolved.id)) shared.add(resolved.id);
+				};
+				for (const specifier of bare) noteShared(await this.resolve(specifier, id));
 				const children = [];
 				for (const specifier of specifiers) {
 					const resolved = await this.resolve(specifier, id);
 					if (resolved && !resolved.external && resolved.id.includes(MARKER)) children.push(resolved.id);
+					else noteShared(resolved);
 				}
-				if (!children.length) return registration ? { code: `${code}${registration}`, map: null } : null;
-				const imports = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`;
-				return { code: `${code}${registration}\n;${imports}\n`, map: null };
+				const loadedBy = [...shared]
+					.map((child) => `\nimport ${JSON.stringify(LOADED_BY_SPECIFIER + new URLSearchParams({ id: child, by: id }).toString())};`)
+					.join("");
+				const imports = children.length
+					? `\n;globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`
+					: "";
+				const tail = `${registration}${loadedBy}${imports}`;
+				return tail ? { code: `${code}${tail}\n`, map: null } : null;
 			}
 		},
 		/**
@@ -1325,8 +1411,12 @@ export function slothletInstanceImports() {
 		 */
 		load(id) {
 			if (typeof id === "string" && id.startsWith(`\0${LOADED_BY_SPECIFIER}`)) {
-				const loaded = new URLSearchParams(id.slice(1 + LOADED_BY_SPECIFIER.length)).get("id") ?? "";
-				return { code: loadedBySource([...(moduleImporters.get(loaded) ?? [])]), map: null };
+				const params = new URLSearchParams(id.slice(1 + LOADED_BY_SPECIFIER.length));
+				const by = params.get("by");
+				// A module's own record of a file it imports (#715) names that module and the modules that loaded it; a file's
+				// own record, the importers resolved so far.
+				const importers = by === null ? (moduleImporters.get(params.get("id") ?? "") ?? []) : [by, ...(moduleImporters.get(by) ?? [])];
+				return { code: loadedBySource([...importers]), map: null };
 			}
 			if (typeof id !== "string" || !id.includes(MARKER)) return null;
 			const [base, query = ""] = splitQuery(id);

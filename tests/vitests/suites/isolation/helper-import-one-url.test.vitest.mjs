@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/isolation/helper-import-one-url.test.vitest.mjs
- *	@Date: 2026-11-08T16:00:00-08:00 (1794182400)
+ *	@Date: 2026-11-08T15:50:44-08:00 (1794181844)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:00:00-08:00 (1794182400)
+ *	@Last modified time: 2026-11-08T16:02:38-08:00 (1794182558)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
