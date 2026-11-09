@@ -138,6 +138,18 @@ describe.each(MATRIX)("Permissions > definer is the nearest leaf frame > $name (
 		}
 	);
 
+	it.each(["throw", "reject", "thenable"])(
+		"%s: a message getter written in a helper, read by an error hook, reaches nothing b may not",
+		async (how) => {
+			await build();
+			api.slothlet.hook.on("b.**:error", ({ error }) => void error?.message, { id: "nearest-error" });
+			expect(await api.a.use.fails("failWithGetter", "secret", how, false, "message")).toBe(true);
+			const refused = await api.b.give.drain();
+			expect(refused.length).toBeGreaterThan(0);
+			expect(refused).toEqual(refused.map(() => DENIED));
+		}
+	);
+
 	it.each(["proxy", "constructorGetter", "staticName"])(
 		"%s: code an error carries, written in a helper and run by slothlet, is the module b.give",
 		async (kind) => {
