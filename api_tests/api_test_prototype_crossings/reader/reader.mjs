@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:32:29-08:00 (1794162749)
+ *	@Last modified time: 2026-11-08T16:11:39-08:00 (1794183099)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,6 +18,7 @@
  * @module api_test_prototype_crossings/reader
  */
 
+import { types } from "node:util";
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
@@ -63,36 +64,6 @@ export async function writeRejected(source, key) {
 		return write(() => error.p, key);
 	}
 	return "no rejection";
-}
-
-/**
- * Write onto the prototype the owner emits to a listener of this module's.
- * @param {"self"|"local"} source - Where the owner reads the prototype.
- * @param {string} key - The member written.
- * @returns {string} The outcome.
- */
-export function writeEmitted(source, key) {
-	let outcome = "not heard";
-	const listener = (prototype) => {
-		outcome = write(() => prototype, key);
-	};
-	self.owner.bus.on("carry", listener);
-	try {
-		self.owner.emitWith(source);
-	} finally {
-		self.owner.bus.off("carry", listener);
-	}
-	return outcome;
-}
-
-/**
- * Write onto the prototype the owner calls a function of this module's with.
- * @param {"self"|"local"} source - Where the owner reads the prototype.
- * @param {string} key - The member written.
- * @returns {string} The outcome.
- */
-export function writeCalledBack(source, key) {
-	return self.owner.callBack((prototype) => write(() => prototype, key), source);
 }
 
 /**
@@ -179,4 +150,13 @@ export function writeHooked(source, key) {
  */
 export function writeThrough(name, key) {
 	return write(() => self.owner[name].prototype, key);
+}
+
+/**
+ * Whether reading the owner's prototype through `self` at `name` hands this module the object itself rather than a view.
+ * @param {string} name - The export it is read through.
+ * @returns {boolean} True for the object itself.
+ */
+export function holdsItself(name) {
+	return !types.isProxy(self.owner[name].prototype);
 }

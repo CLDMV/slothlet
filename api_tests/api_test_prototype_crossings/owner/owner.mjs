@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T10:32:29-08:00 (1794162749)
+ *	@Last modified time: 2026-11-08T16:11:39-08:00 (1794183099)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,12 +15,12 @@
 
 /**
  * @fileoverview A module whose class prototype it hands to another module by every route a value crosses between
- * modules: a thrown error, a rejection, an event, a callback, a `WeakRef`, a frozen object, an argument nested in plain
- * data, and a hook's error.
+ * modules: a thrown error, a rejection, a `WeakRef`, a frozen object, an argument nested in plain data, a return
+ * value, and a hook's error.
  * @module api_test_prototype_crossings/owner
  */
 
-import { EventEmitter } from "node:events";
+import { types } from "node:util";
 import { self } from "@cldmv/slothlet/runtime";
 
 /** A class whose prototype is handed on. */
@@ -33,9 +33,6 @@ export class Foo {
 
 /** The same class under a second name. */
 export { Foo as Alias };
-
-/** An emitter another module listens on. */
-export const bus = new EventEmitter();
 
 /**
  * The prototype, as this module reads it through `self` or holds it in its own binding.
@@ -66,25 +63,6 @@ export async function rejectWith(source) {
 	const error = new Error("carrying");
 	error.p = pick(source);
 	throw error;
-}
-
-/**
- * Emit the prototype on {@link bus}.
- * @param {"self"|"local"} source - Where the prototype is read.
- * @returns {boolean} Whether a listener heard it.
- */
-export function emitWith(source) {
-	return bus.emit("carry", pick(source));
-}
-
-/**
- * Call a function the caller handed in with the prototype.
- * @param {function(object): *} callback - The caller's function.
- * @param {"self"|"local"} source - Where the prototype is read.
- * @returns {*} What the callback returned.
- */
-export function callBack(callback, source) {
-	return callback(pick(source));
 }
 
 /**
@@ -132,6 +110,25 @@ export function giveFrozen(source, key) {
  */
 export function returnPrototype(source) {
 	return pick(source);
+}
+
+/**
+ * The prototype, returned once a promise settles.
+ * @param {"self"|"local"} source - Where the prototype is read.
+ * @returns {Promise<object>} `Foo.prototype`.
+ */
+export async function returnPrototypeLater(source) {
+	await null;
+	return pick(source);
+}
+
+/**
+ * Whether reading the prototype through `self` at `name` hands this module the object itself rather than a view.
+ * @param {string} name - The export it is read through.
+ * @returns {boolean} True for the object itself.
+ */
+export function holdsItself(name) {
+	return !types.isProxy(self.owner[name].prototype);
 }
 
 /**
