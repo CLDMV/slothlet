@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:38:14-07:00 (1792856294)
+ *	@Last modified time: 2026-11-08T16:41:16-08:00 (1794184876)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,6 +51,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
+import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
 
 /**
  * Envelope → its private delivery record `{ slothlet, meta, flow, subs }`. Module-level (not per
@@ -323,8 +324,9 @@ export class EventManager extends ComponentBase {
 		if (!set || set.size === 0) return;
 
 		const meta = { event, at: Date.now(), instanceID: this.instanceID };
+		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
-		await this.#dispatch(event, payload, meta, [...set]);
+		await this.#dispatch(event, payload, meta, [...set], emitter);
 	}
 
 	/**
@@ -334,10 +336,11 @@ export class EventManager extends ComponentBase {
 	 * @param {*} payload - Domain payload.
 	 * @param {object} meta - Trigger envelope `{ event, at, instanceID }` handed to every listener.
 	 * @param {Array<object>} subs - Subscription records to deliver to.
+	 * @param {object|null} [emitter=null] - The wrapper of the module that emitted, or null for the host.
 	 * @returns {Promise<void>} Resolves once every listener has settled.
 	 * @private
 	 */
-	async #dispatch(event, payload, meta, subs) {
+	async #dispatch(event, payload, meta, subs, emitter = null) {
 		const cm = this.slothlet.contextManager;
 		const promises = [];
 
@@ -353,7 +356,7 @@ export class EventManager extends ComponentBase {
 				this.#removeSub(event, sub);
 				continue;
 			}
-			const callArgs = level === "allow" ? [payload, meta] : [undefined, meta];
+			const callArgs = level === "allow" ? [this.#payloadFor(payload, sub, emitter), meta] : [undefined, meta];
 			if (sub.once) this.#removeSub(event, sub);
 
 			try {
@@ -369,6 +372,19 @@ export class EventManager extends ComponentBase {
 		}
 
 		if (promises.length > 0) await Promise.all(promises);
+	}
+
+	/**
+	 * The payload as a subscription's listener is handed it (#667): it crosses from the emitting module to the module
+	 * that registered the listener, as a value handed between modules does.
+	 * @param {*} payload - Domain payload.
+	 * @param {object} sub - Subscription record.
+	 * @param {object|null} emitter - The wrapper of the module that emitted, or null for the host.
+	 * @returns {*} What the listener is handed.
+	 * @private
+	 */
+	#payloadFor(payload, sub, emitter) {
+		return runtime_eventPayloadFor(payload, sub.ownerWrapper, emitter, this.slothlet);
 	}
 
 	/**
@@ -436,7 +452,7 @@ export class EventManager extends ComponentBase {
 		let delivery = null;
 		const defaultDeliver = () => {
 			// Idempotent: a second call returns the first delivery rather than delivering twice.
-			if (!delivery) delivery = this.#dispatch(event, payload, meta, subs);
+			if (!delivery) delivery = this.#dispatch(event, payload, meta, subs, emitterWrapper);
 			return delivery;
 		};
 
@@ -568,7 +584,10 @@ export class EventManager extends ComponentBase {
 			return { delivered: false, reason: DELIVERY_REASONS.DENIED };
 		}
 		if (sub.once) this.#removeSub(event, sub);
-		const callArgs = level === "allow" ? [envelope.payload, record.meta] : [undefined, record.meta];
+		const callArgs =
+			level === "allow"
+				? [this.#payloadFor(envelope.payload, sub, record.flow?.currentWrapper ?? null), record.meta]
+				: [undefined, record.meta];
 		await this.#invoke(sub, callArgs, cm);
 		return { delivered: true, level };
 	}

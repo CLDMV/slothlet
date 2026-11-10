@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:14:59-08:00 (1794024899)
+ *	@Last modified time: 2026-11-08T16:12:38-08:00 (1794183158)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1357,14 +1357,15 @@ export function setApiValueCheck(check, harborsCode = null) {
 /**
  * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
  * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
- * @type {function(object, *): *}
+ * @type {function(object, *, boolean): *}
  * @private
  */
 let resultAttributor = (_wrapper, value) => value;
 
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
- * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @param {function(object, *, boolean): *} attributor - Takes the call's wrapper, its result, and whether the host made
+ *   the call; returns what the caller gets.
  * @returns {void}
  * @internal
  */
@@ -1377,11 +1378,12 @@ export function setResultAttributor(attributor) {
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
+ * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper, value) {
-	return resultAttributor(wrapper, value);
+export function attributeResult(wrapper, value, callerIsHost = false) {
+	return resultAttributor(wrapper, value, callerIsHost);
 }
 
 /**
@@ -2390,6 +2392,31 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 		leaves.push(wrapper);
 	}
 	return leaves;
+}
+
+/**
+ * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
+ * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
+ * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
+ * as such; anything else (the host's own code, a package's) is the host's. Read from the stack, so a function a module
+ * left on an object of the host's, or on `globalThis`, is that module's whoever calls it later.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>|null} The leaves whose code it is, empty for the host's, or null for code no one accounts for.
+ * @internal
+ */
+export function runtime_codeWritersOnStack(slothlet) {
+	const family = slothlet.instanceID;
+	const sources = [{ family, slothlet, roots: [] }];
+	for (const frame of runtime_captureFrames(48)) {
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:")) continue;
+		if (frame.evaluated || isForeignScript(frame)) return stackHoldsInstanceCode(sources) ? null : [];
+		const leaves = runtime_leavesAt(slothlet, frame);
+		if (leaves.length) return leaves;
+		const tag = runtime_frameInstanceTag(frame.line);
+		if (tag && tag.startsWith(String(family).split("_reload_")[0])) return null;
+		return [];
+	}
+	return [];
 }
 
 /**
