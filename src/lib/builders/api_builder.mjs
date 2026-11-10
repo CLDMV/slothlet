@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:57:05-08:00 (1794185825)
+ *	@Last modified time: 2026-11-09T21:05:50-08:00 (1794287150)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2988,7 +2988,8 @@ export class ApiBuilder extends ComponentBase {
 			 * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a
 			 * module's or the host's, whether a Proxy (an api node, a view, a version dispatcher, a class-instance
 			 * wrapper, a stand-in) or a stand-in that is not one (a module's async or generator function, generator,
-			 * or promise). A Proxy wrapped around one of slothlet's is not slothlet's. Answered from slothlet's own
+			 * or promise, a frozen copy of a frozen value handed from one module to another, a callable node's own
+			 * `valueOf`). A Proxy wrapped around one of slothlet's is not slothlet's. Answered from slothlet's own
 			 * registries: no trap of the value runs, and replacing `WeakMap` or `WeakSet` methods afterwards changes
 			 * no answer. Code that copies values between modules can let slothlet's own wrappers through and still
 			 * refuse every other Proxy. Allowed to modules by a built-in rule: it reveals nothing about any module.
