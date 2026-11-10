@@ -443,8 +443,9 @@ const api = await slothlet({
 > reload — evaluates its own copy of the leaf. A module the leaf IMPORTS is resolved by the host,
 > which knows nothing about that query: a relative helper would be one module shared by every
 > instance and every reload, and module-level state in it would leak between instances.</p>
-> <p>This module closes that gap for everything reachable through relative or <code>file:</code> specifiers,
-> at any depth:</p>
+> <p>This module closes that gap for everything reachable through relative or <code>file:</code> specifiers, and
+> through bare ones (<code>#imports</code>, a self-reference) that resolve into the importer's own package
+> (#715), at any depth:</p>
 > <ul>
 > <li><strong>Native Node</strong> — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
 > hook (<code>module.registerHooks()</code>, Node &gt;= 22.15 — slothlet's engines floor) that copies the
@@ -460,10 +461,11 @@ const api = await slothlet({
 > reloaded leaves against the instance's existing helper copy — helper state survives it. A full
 > reload (<code>api.slothlet.reload()</code>) rotates the instance ID, which is what gives helpers a fresh
 > copy; edits to helper code therefore need a full reload.</p>
-> <p>What stays shared: bare specifiers (<code>node_modules</code> packages, <code>node:</code> builtins, subpath <code>#imports</code>,
-> <code>@cldmv/slothlet</code> and its runtime), any file inside a <code>node_modules</code> package other than the
-> importer's own, and slothlet's own source files — the live-binding runtime must remain one
-> module per process.</p>
+> <p>What stays shared: bare specifiers into another package (<code>node_modules</code> packages, <code>node:</code> builtins,
+> <code>@cldmv/slothlet</code> and its runtime), any file in a package other than the importer's own however
+> the import is spelled (a <code>node_modules</code> package, or a workspace package linked in from outside
+> <code>node_modules</code>: one file, one URL, #715), and slothlet's own source files — the live-binding
+> runtime must remain one module per process.</p>
 > <p>Crossing module systems (#534). Node caches CommonJS by file path, so a query on a CommonJS URL is
 > ignored, and <code>require(esm)</code> loads an ES module under its plain file URL. Two more hooks close that:</p>
 > <ul>
@@ -472,7 +474,8 @@ const api = await slothlet({
 > ({@link requireInInstance}, the same cache a <code>.cjs</code> leaf's own requires use). Its export names come
 > from a static scan of the source (see <code>cjs-export-names.mjs</code>), as Node's own are.</li>
 > <li><strong>CommonJS → ESM</strong> — while {@link requireInInstance} runs its synchronous require, the scope is
-> active: a relative <code>require()</code> from a file of that scope resolving to an ES module is marked, and
+> active: a <code>require()</code> from a file of that scope resolving to an ES module of the instance's graph (by a
+> relative path, or by <code>#imports</code> or a self-reference into its own package, #715) is marked, and
 > the <code>load</code> hook answers it with a CommonJS stub that returns the ES module imported under the
 > instance query — the same module record an ESM leaf of the instance imports.</li>
 > </ul></strong></p>
