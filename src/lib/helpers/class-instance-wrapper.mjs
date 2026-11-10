@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:09-08:00 (1794194349)
+ *	@Last modified time: 2026-11-08T16:23:04-08:00 (1794183784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,6 +62,9 @@ const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
  */
 const WRAPPED_INSTANCES = new WeakMap();
 
+/** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
+const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+
 /**
  * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
  * @package
@@ -71,7 +74,7 @@ const WRAPPED_INSTANCES = new WeakMap();
  * runtime_isWrappedClassInstance(runtime_wrapClassInstance(instance, cm, id, new WeakMap())); // true
  */
 export function runtime_isWrappedClassInstance(value) {
-	return value !== null && typeof value === "object" && WRAPPED_INSTANCES.has(value);
+	return value !== null && typeof value === "object" && weakMapHas(WRAPPED_INSTANCES, value);
 }
 
 /**

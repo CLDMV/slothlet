@@ -20,10 +20,9 @@
  * an `around` hook. Each answer is the one docs/PERMISSIONS.md and docs/HOOKS.md give, lazy equal to eager, in both
  * runtimes:
  *
- * - a module hands the host's record leaf (`host.records.apply`) a callback, so the leaf's call is one handed code; the
- *   host's code inside it, a frame no call of the chain can be placed on, is taken to be the caller's, with the leaf as
- *   its ceiling ("Code a caller hands to a leaf runs as the caller"). The rules let `host.records.**` open a store
- *   partition and do not let `ext.b.work`, so the partition is refused, as `ext.b.work`;
+ * - a module hands the host's record leaf (`host.records.apply`) a callback. The host leaf's own body runs as the leaf;
+ *   only the code the caller hands in runs as the caller ("Code a caller hands to a leaf runs as the caller"). The rules
+ *   let `host.records.**` open a store partition, so the leaf's own request for it is answered;
  * - the host's hook on a module leaf is a hook the host registered, so it is not pinned and runs during the call it
  *   intercepts ("Caller Identity in Callbacks"); its helper in another of the host's files is the host's own code
  *   running its own source, so `lockCaller` (a built-in allow) pins the argument;
@@ -68,8 +67,8 @@ describe("Permissions > the host's own leaves and hooks inside a module's call, 
 		expect(Object.keys(out)).toHaveLength(CONFIGS.length * 3);
 	});
 
-	it.each(CONFIGS)("runs the host's code inside a record leaf handed a callback as the caller, under the leaf — %s", (config) => {
-		expect(out[`${config}/records`]).toEqual({ ok: false, code: "PERMISSION_DENIED", caller: "ext.b.work" });
+	it.each(CONFIGS)("runs a host record leaf's own body as the leaf when it is handed a callback — %s", (config) => {
+		expect(out[`${config}/records`]).toEqual({ ok: true, value: "p:records" });
 	});
 
 	it.each(CONFIGS)("runs a module's helper outside its api folder as the module's call — %s", (config) => {
