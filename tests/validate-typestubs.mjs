@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T14:57:14-07:00 (1791842234)
+ *	@Last modified time: 2026-11-07T21:23:45-08:00 (1794115425)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -136,7 +136,7 @@ function main() {
 
 	// Ensure the satellite carve is fresh (build-subpackages reads types/dist + types/src).
 	if (!existsSync(join(projectRoot, "types", "stub")) || !existsSync(join(projectRoot, "types", "dist"))) {
-		throw new Error('missing built types — run "npm run build:dist && npm run build:types && npm run build:typestubs" first');
+		throw new Error('missing built types — run "npm run build:dist && npm run types:build && npm run build:typestubs" first');
 	}
 	console.log("• carving @cldmv/slothlet-types ...");
 	execFileSync("node", [join(projectRoot, "tools", "build", "build-subpackages.mjs")], { stdio: "inherit", cwd: projectRoot });
