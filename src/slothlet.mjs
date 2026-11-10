@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T17:13:09-08:00 (1793927589)
+ *	@Last modified time: 2026-11-08T16:23:07-08:00 (1794183787)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,7 @@ import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper, isCallableValue, releaseModuleMakers, releaseStandInChanges } from "#handlers/unified-wrapper";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { isFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
@@ -1113,33 +1113,35 @@ class Slothlet {
 			const isCallable = typeof this.api === "function" || (this.api && typeof this.api.default === "function");
 			const proxyTarget = isCallable ? function () {} : {};
 
-			this.boundApi = new Proxy(proxyTarget, {
-				get: (target, prop) => (this.api ? this.api[prop] : undefined),
-				set: (target, prop, value) => {
-					if (this.api) {
-						this.api[prop] = value;
-					}
-					return true;
-				},
-				has: (target, prop) => (this.api ? prop in this.api : false),
-				ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
-				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
-				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
-				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
-				getOwnPropertyDescriptor: (target, prop) => {
-					// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
-					if (isCallable && prop === "prototype") {
-						return Object.getOwnPropertyDescriptor(target, prop);
-					}
-					if (this.api && prop in this.api) {
-						const desc = Object.getOwnPropertyDescriptor(this.api, prop);
-						if (desc) {
-							return { ...desc, configurable: true };
+			this.boundApi = markSlothletProxy(
+				new Proxy(proxyTarget, {
+					get: (target, prop) => (this.api ? this.api[prop] : undefined),
+					set: (target, prop, value) => {
+						if (this.api) {
+							this.api[prop] = value;
 						}
+						return true;
+					},
+					has: (target, prop) => (this.api ? prop in this.api : false),
+					ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
+					deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
+					apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
+					construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
+					getOwnPropertyDescriptor: (target, prop) => {
+						// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
+						if (isCallable && prop === "prototype") {
+							return Object.getOwnPropertyDescriptor(target, prop);
+						}
+						if (this.api && prop in this.api) {
+							const desc = Object.getOwnPropertyDescriptor(this.api, prop);
+							if (desc) {
+								return { ...desc, configurable: true };
+							}
+						}
+						return undefined;
 					}
-					return undefined;
-				}
-			});
+				})
+			);
 			/* v8 ignore stop */
 		}
 
