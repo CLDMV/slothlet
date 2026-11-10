@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:44:33-08:00 (1794177873)
+ *	@Last modified time: 2026-11-08T16:12:38-08:00 (1794183158)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1357,14 +1357,15 @@ export function setApiValueCheck(check, harborsCode = null) {
 /**
  * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
  * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
- * @type {function(object, *): *}
+ * @type {function(object, *, boolean): *}
  * @private
  */
 let resultAttributor = (_wrapper, value) => value;
 
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
- * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @param {function(object, *, boolean): *} attributor - Takes the call's wrapper, its result, and whether the host made
+ *   the call; returns what the caller gets.
  * @returns {void}
  * @internal
  */
@@ -1377,11 +1378,12 @@ export function setResultAttributor(attributor) {
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
+ * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper, value) {
-	return resultAttributor(wrapper, value);
+export function attributeResult(wrapper, value, callerIsHost = false) {
+	return resultAttributor(wrapper, value, callerIsHost);
 }
 
 /**
@@ -1639,11 +1641,7 @@ export function resolveSupplier(record) {
 	// The call that made the leaf's: what an unattributable frame is taken to be.
 	let fallback = null;
 	const leafDescription = describeCall(leaf);
-	// A leaf the host added as an object or a function has no file of its own (#717): it is its own entity, at its path,
-	// whatever file its function was written in. No frame is placed on it; inside its call, only code its caller handed
-	// in runs as the caller (see runtime_isFilelessLeafCode).
-	const fileless = runtime_isHostObjectLeaf(leaf, leafDescription.filePath);
-	if (!fileless && leafDescription.filePath)
+	if (leafDescription.filePath)
 		chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
@@ -1657,9 +1655,8 @@ export function resolveSupplier(record) {
 		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length, record: current });
 	}
 	if (!fallback) return null;
-	// Any other leaf with no file of its own (a node a module made): none of the code running inside it can be told to be
-	// its own.
-	if (!fileless && (!chain.length || chain[0].currentWrapper !== leaf)) return runtime_supplierAnswer(record, fallback);
+	// The leaf has no file of its own: none of the code running inside it can be told to be its own.
+	if (!chain.length || chain[0].currentWrapper !== leaf) return runtime_supplierAnswer(record, fallback);
 	const { place } = createFramePlacer(chain);
 	// Under provenance, instance code no call of the chain accounts for is its author's (see runtime_authorAnswer).
 	const guards = runtime_guardsForeignCode(record);
@@ -1691,18 +1688,6 @@ export function resolveSupplier(record) {
 			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
 			if (frame.evaluated || isForeignScript(frame) || conflicts?.has(frame.key)) return fallback;
 			const placement = place(frame);
-			if (fileless) {
-				// Inside a leaf with no file, code that is no module's (the host's, any package's, one a call up the chain
-				// imports too) is the leaf's (#717). A file a module loaded is the caller's.
-				if (!placement) {
-					if (!runtime_isFilelessLeafCode(record, frame)) return fallback;
-					leafSeen = true;
-					continue;
-				}
-				// A module's code no call accounts for (an untagged copy of its file) is the caller's, even once the leaf's own
-				// code ran inside it: the leaf's frames never stand for another module's (#717).
-				if (!placement.matches.length) return fallback;
-			}
 			if (!placement || !placement.matches.length) {
 				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
 				// already running inside it (a package the leaf called back into the leaf).
@@ -1737,78 +1722,6 @@ export function resolveSupplier(record) {
 	}
 	if (answer === AUTHORED) return authored;
 	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
-}
-
-/**
- * Whether a leaf is one the host added as an object or a function (`api.slothlet.api.add(path, { fn() {…} })`), which
- * has no file of its own (#717): it was built under the `synthetic:` sentinel, and host code made the `api.add` that
- * mounted it. A leaf a module's own `api.add` mounted the same way, and a node a module assigned (no file at all), are
- * not.
- * @param {object} leaf - The leaf's wrapper.
- * @param {string|null|undefined} filePath - Its recorded file.
- * @returns {boolean} True when the host added it as an object.
- * @private
- */
-function runtime_isHostObjectLeaf(leaf, filePath) {
-	if (typeof filePath !== "string" || !filePath.startsWith("synthetic:")) return false;
-	const internal = leaf.____slothletInternal;
-	const { ownership, apiManager } = leaf.slothlet.handlers;
-	// A synthetic leaf always carries the moduleID of the add that built it, and its instance its handlers; the guard
-	// covers a partial wrapper handed in by a direct caller.
-	/* v8 ignore next */
-	if (!internal?.moduleID || !ownership || !apiManager) return false;
-	// The deepest of its module's mounts that holds it, and the mounter recorded for it: null for host code, the module's
-	// id for a module's own add.
-	const segments = internal.apiPath.split(".");
-	const holds = (endpoint) =>
-		endpoint
-			.split(".")
-			.filter(Boolean)
-			.every((part, index) => segments[index] === part);
-	const mount = ownership
-		.getModuleMounts(internal.moduleID)
-		.filter(holds)
-		.sort((a, b) => b.length - a.length)[0];
-	return mount !== undefined && apiManager.mountedBy.get(apiManager.mountKey(internal.moduleID, mount)) === null;
-}
-
-/**
- * Whether a frame no call can be placed on (the host's code, a package's), running inside a call of a leaf with no file,
- * is the leaf's own code (#717). The leaf is its own entity, so such code runs as the leaf: the host's helpers, and any
- * package's code, including a package a call up the chain imports too, or one its caller passed a function of in. A
- * frame is never placed on a leaf other than the one entered. A file no instance tags that a module's code loaded,
- * directly or through other such files (one reached through a package scope's `"imports"`, one a package's `import()`
- * loaded; see {@link runtime_packageImportingLeaves}), is that module's code, not the leaf's; a package's file is not
- * walked, so a package a module imports stays the leaf's code. Code that does not run its file's own
- * source (compiled under a name no file holds, or one holding another source), and a package whose loader is not known
- * (see {@link runtime_isUnownedPackage}), are no one's.
- * @param {{wrapper: object, parent: object|null}} record - The leaf's call.
- * @param {{path: string, line: string, hash: string|null, key: string|null}} frame - The frame.
- * @returns {boolean} True when it is the leaf's code, false when it is a module's or no one's.
- * @private
- */
-function runtime_isFilelessLeafCode(record, frame) {
-	const leaf = record.wrapper;
-	if (runtime_isUnownedPackage(leaf, frame, true)) return false;
-	if (!frame.path.includes("/node_modules/") && runtime_packageImportingLeaves(leaf.slothlet, frame.path).size) return false;
-	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame);
-}
-
-/**
- * Whether a package file no module is recorded to have loaded has no known owner, and so is refused as anyone's code
- * (#597, #714): one with no loader recorded at all, outside the package that created the instance. Inside a leaf with
- * no file it is the host's (#717) — slothlet's loader records every import a module makes — except inside a vitest
- * worker, whose module runner can load a module's packages itself, so that a module's own package cannot be told from
- * the host's there.
- * @param {object} leaf - The wrapper of the leaf whose call it runs in.
- * @param {{path: string}} frame - The package code's frame.
- * @param {boolean} fileless - Whether the leaf is one the host added as an object (see {@link runtime_isHostObjectLeaf}).
- * @returns {boolean} True when it has no known owner.
- * @private
- */
-function runtime_isUnownedPackage(leaf, frame, fileless) {
-	if (!frame.path.includes("/node_modules/") || isInstanceOwnerFile(leaf.slothlet, frame.path)) return false;
-	return fileless ? Boolean(RUNNER_MODULES) : !runtime_fileImporters(frame.path).length;
 }
 
 /**
@@ -1930,15 +1843,11 @@ function runtime_packageImportingLeaves(slothlet, path) {
  * have to be allowed). A file no module loaded is the host's, and runs as the leaf, as before.
  * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call.
  * @param {{path: string, line: string}} frame - The package code's frame.
- * @param {boolean} fileless - Whether the leaf is one the host added as an object (see {@link runtime_isHostObjectLeaf}).
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The answer.
  * @private
  */
-function runtime_packageAnswer(record, frame, fileless) {
+function runtime_packageAnswer(record, frame) {
 	const leaf = record.wrapper;
-	// A leaf with no file is its own entity: a package's code inside it is the leaf's, whoever else imports it, and a file
-	// a module loaded is that module's (#717).
-	if (fileless) return runtime_isFilelessLeafCode(record, frame) ? null : UNACCOUNTED_SUPPLIER;
 	const importers = runtime_packageImportingLeaves(leaf.slothlet, frame.path);
 	// No module loaded it. A package file with no loader recorded at all (vite loaded the modules, or it was loaded
 	// before slothlet) has no known owner and is refused, as a package can be anyone's code. Any other file is the host's
@@ -1946,7 +1855,12 @@ function runtime_packageAnswer(record, frame, fileless) {
 	// (`vm`, `Module#_compile`, a `data:` URL, a `vm.SourceTextModule` named after a file), is no one's.
 	// The package that created the instance is the host's own, wherever it is installed (#714).
 	if (!importers.size) {
-		if (runtime_isUnownedPackage(leaf, frame, false)) return UNACCOUNTED_SUPPLIER;
+		if (
+			frame.path.includes("/node_modules/") &&
+			!runtime_fileImporters(frame.path).length &&
+			!isInstanceOwnerFile(leaf.slothlet, frame.path)
+		)
+			return UNACCOUNTED_SUPPLIER;
 		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame)
 			? null
 			: UNACCOUNTED_SUPPLIER;
@@ -2481,6 +2395,31 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 }
 
 /**
+ * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
+ * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
+ * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
+ * as such; anything else (the host's own code, a package's) is the host's. Read from the stack, so a function a module
+ * left on an object of the host's, or on `globalThis`, is that module's whoever calls it later.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>|null} The leaves whose code it is, empty for the host's, or null for code no one accounts for.
+ * @internal
+ */
+export function runtime_codeWritersOnStack(slothlet) {
+	const family = slothlet.instanceID;
+	const sources = [{ family, slothlet, roots: [] }];
+	for (const frame of runtime_captureFrames(48)) {
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:")) continue;
+		if (frame.evaluated || isForeignScript(frame)) return stackHoldsInstanceCode(sources) ? null : [];
+		const leaves = runtime_leavesAt(slothlet, frame);
+		if (leaves.length) return leaves;
+		const tag = runtime_frameInstanceTag(frame.line);
+		if (tag && tag.startsWith(String(family).split("_reload_")[0])) return null;
+		return [];
+	}
+	return [];
+}
+
+/**
  * The placers of single calls, by wrapper and description, so a call read again reuses its own.
  * @type {WeakMap<object, {description: object, place: Function}>}
  * @private
@@ -2506,7 +2445,6 @@ function runtime_foreignCodeRunning(record) {
 	const leaf = record.wrapper;
 	const description = describeCall(leaf);
 	if (!description.filePath) return null;
-	const fileless = runtime_isHostObjectLeaf(leaf, description.filePath);
 	const entryOf = (wrapper, call) => ({
 		...describeCall(wrapper),
 		currentWrapper: wrapper,
@@ -2554,7 +2492,7 @@ function runtime_foreignCodeRunning(record) {
 			if (placement?.matches.length) return null;
 			// Code of no module's folder and no instance: a file some module loaded is that module's, the host's own runs as
 			// the leaf.
-			if (!placement) return isNode ? runtime_packageAnswer(record, frame, fileless) : null;
+			if (!placement) return isNode ? runtime_packageAnswer(record, frame) : null;
 			return runtime_authorAnswer(record, frame) ?? UNACCOUNTED_SUPPLIER;
 		}
 		// The whole stack read without code of anyone's or a call of slothlet's: when a builtin began it, the engine's and

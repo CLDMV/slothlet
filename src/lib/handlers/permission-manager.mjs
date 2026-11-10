@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T17:07:44-07:00 (1793059664)
+ *	@Last modified time: 2026-11-08T10:55:33-08:00 (1794164133)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
 
 import { path, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
@@ -253,6 +253,81 @@ function runtime_moduleIDList(moduleIDs) {
 }
 
 /**
+ * The matcher of one segment of a write pattern, kept per segment.
+ * @type {Map<string, function(string): boolean>}
+ * @private
+ */
+const SEGMENT_MATCHERS = new Map();
+
+/**
+ * Whether one segment of a write pattern matches a path segment.
+ * @param {string} segment - The pattern's segment (`*`, `?`, `!(a|b)` and literals).
+ * @param {string} name - The path's segment.
+ * @returns {boolean} Whether it matches.
+ * @private
+ */
+function runtime_segmentMatches(segment, name) {
+	let matcher = SEGMENT_MATCHERS.get(segment);
+	if (!matcher) SEGMENT_MATCHERS.set(segment, (matcher = compilePattern(segment)));
+	return matcher(name);
+}
+
+/**
+ * Whether a write pattern can match the path `target` or one beneath it (#667). It answers for what a pattern could
+ * reach, so it errs toward yes: a segment holding `**` stands for any number of segments, and a pattern negated whole
+ * (`!pattern`) reaches everything.
+ * @param {string} pattern - The write pattern, without `:write`.
+ * @param {string[]} target - The path's segments.
+ * @returns {boolean} Whether it can.
+ * @private
+ * @example
+ * runtime_patternReaches("owner.Foo.prototype.hi", ["owner", "Foo", "prototype"]); // true
+ */
+function runtime_patternReaches(pattern, target) {
+	if (pattern.startsWith("!") && !pattern.startsWith("!(")) return true;
+	for (const alternative of expandBraces(pattern)) {
+		const segments = alternative.split(".");
+		const seen = new Set();
+		const reaches = (i, j) => {
+			// The whole path matched: what is left of the pattern matches the path itself, or something beneath it.
+			if (j === target.length) return true;
+			if (i === segments.length) return false;
+			const key = i * (target.length + 1) + j;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			if (segments[i].includes("**")) return reaches(i + 1, j) || reaches(i, j + 1);
+			return runtime_segmentMatches(segments[i], target[j]) && reaches(i + 1, j + 1);
+		};
+		if (reaches(0, 0)) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a write pattern matches the path `target` and every path beneath it (#667): one of its alternatives ends in
+ * `.**` (or is `**`), and what comes before matches the path or a path above it. It answers yes only when sure.
+ * @param {string} pattern - The write pattern, without `:write`.
+ * @param {string[]} target - The path's segments.
+ * @param {function(string): function(string): boolean} compiled - The compiled matcher of a pattern.
+ * @returns {boolean} Whether it does.
+ * @private
+ * @example
+ * runtime_patternCovers("owner.**", ["owner", "Foo", "prototype"], compilePattern); // true
+ */
+function runtime_patternCovers(pattern, target, compiled) {
+	if (pattern.startsWith("!") && !pattern.startsWith("!(")) return false;
+	for (const alternative of expandBraces(pattern)) {
+		if (alternative === "**") return true;
+		if (!alternative.endsWith(".**")) continue;
+		const above = compiled(alternative.slice(0, -3));
+		// `above.**` matches `x.` and anything after it, so a path at or below `x` is matched once `above` matches `x`;
+		// the path itself needs `x` strictly above it.
+		for (let length = 1; length < target.length; length++) if (above(target.slice(0, length).join("."))) return true;
+	}
+	return false;
+}
+
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -430,6 +505,23 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#writeCache = new Map();
+
+	/**
+	 * Write-rule verdicts over a whole subtree ({@link writeSubtree}), keyed by caller path and the subtree's root.
+	 * Cleared on every rule change.
+	 * @type {Map<string, "deny"|"grant"|null>}
+	 * @private
+	 */
+	#subtreeCache = new Map();
+
+	/**
+	 * Ids of the built-in rules keeping module code off the framework's own keys on api nodes (`**.<key>:write`). They
+	 * match a key at any depth, so {@link writeSubtree} leaves them out: they guard what an api node carries, and a
+	 * value beneath a node's path is no node.
+	 * @type {Set<string>}
+	 * @private
+	 */
+	#nodeKeyRuleIds = new Set();
 
 	/**
 	 * Cache of compiled glob patterns → matcher functions.
@@ -618,8 +710,8 @@ export class PermissionManager extends ComponentBase {
 			this.addRule({ caller: "**", target: `${root}.**${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 		}
 		for (const key of [...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]) {
-			this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
-			this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+			this.#nodeKeyRuleIds.add(this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__"));
+			this.#nodeKeyRuleIds.add(this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__"));
 		}
 	}
 
@@ -2084,6 +2176,48 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * What the write rules say about every write `callerPath` could make at `targetPath` or anywhere beneath it (#667),
+	 * read from the rule set alone and kept until the rules change: `"deny"` when a rule could refuse one of them (a
+	 * deny whose pattern can reach the subtree, or one with a condition), `"grant"` when allows cover the whole subtree
+	 * and nothing could refuse, and null when the rules leave it to ownership. A value held as itself takes no check of
+	 * its own, so a reader is handed one only when nothing beneath its path would be refused for it. The built-in rules
+	 * on the framework's own keys of api nodes are left out: a value beneath a node is no node.
+	 *
+	 * @param {string} callerPath - Api path of the module writing.
+	 * @param {string} targetPath - Api path of the subtree's root.
+	 * @returns {"deny"|"grant"|null} The verdict; null while the system is off.
+	 * @example
+	 * pm.writeSubtree("reader.x", "owner.Foo.prototype"); // "grant" under { caller: "reader.**", target: "owner.**:write", effect: "allow" }
+	 */
+	writeSubtree(callerPath, targetPath) {
+		if (!this.#enabled) return null;
+		const cacheKey = `${callerPath}\u0000${targetPath}`;
+		if (this.#subtreeCache.has(cacheKey)) return this.#subtreeCache.get(cacheKey);
+		const target = targetPath.split(".").filter(Boolean);
+		let granted = false;
+		let verdict = null;
+		for (const entry of this.#writeRules.values()) {
+			if (this.#nodeKeyRuleIds.has(entry.id) || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			const conditional = entry.condition != null || entry.requires != null;
+			if (entry.effect === "deny") {
+				if (runtime_patternReaches(entry.writePathPattern, target)) {
+					verdict = "deny";
+					break;
+				}
+			} else if (
+				!conditional &&
+				!granted &&
+				runtime_patternCovers(entry.writePathPattern, target, (pattern) => this.#getCompiledPattern(pattern))
+			) {
+				granted = true;
+			}
+		}
+		if (verdict === null && granted) verdict = "grant";
+		this.#subtreeCache.set(cacheKey, verdict);
+		return verdict;
+	}
+
+	/**
 	 * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
 	 * `"grant"`), with no audit.
 	 *
@@ -3138,6 +3272,7 @@ export class PermissionManager extends ComponentBase {
 	#clearCache() {
 		this.#resolvedCache.clear();
 		this.#writeCache.clear();
+		this.#subtreeCache.clear();
 	}
 
 	/**

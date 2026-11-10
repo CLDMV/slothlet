@@ -37,7 +37,9 @@ Run tests through the npm scripts, never `npx vitest` directly — the runner ca
 | `npm run analyze`          | Code quality checks: translations, headers, debug conventions, throws |
 | `npm run test:node`        | Node.js integration tests                                             |
 | `npm run test:performance` | Performance benchmarks                                                |
-| `npm run test:types`       | TypeScript declaration validation                                     |
+| `npm run types:check`      | Build the declarations and compile consumer files against them (CI)   |
+| `npm run types:build`      | Emit the declarations into `types/`                                   |
+| `npm run test:types`       | Compile consumer files against the built declarations                 |
 | `npm run lint`             | ESLint across source and tests                                        |
 | `npm run format`           | Prettier write across the repo                                        |
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-07T21:25:24-08:00 (1794115524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -287,7 +287,7 @@ const RULES = {
 		stage(_core, { outDir }) {
 			// Carve from types/src, NOT types/dist: both trees mirror the identical file list and
 			// import specifiers (tsc compiles src/**/*.mjs and dist/**/*.mjs into the same output
-			// shape under types/), but build:minify strips ALL comments from dist/ before build:types
+			// shape under types/), but build:minify strips ALL comments from dist/ before types:build
 			// ever runs — so a types/dist declaration has none of the JSDoc-derived parameter/return
 			// types the source actually has, degrading almost every signature to `any` for real
 			// consumers of this package. types/src carries the real, JSDoc-rich declarations
@@ -296,7 +296,7 @@ const RULES = {
 			// delivered on that.
 			const srcDir = path.join(projectRoot, "types", "src");
 			if (!fs.existsSync(srcDir)) {
-				throw new Error(`missing ${rel(srcDir)} — run "npm run build:types" first`);
+				throw new Error(`missing ${rel(srcDir)} — run "npm run types:build" first`);
 			}
 			const copied = copyDeclarations(srcDir, outDir);
 			writeTypesRootIndex(outDir); // root aggregator so the package has a `.` entry
