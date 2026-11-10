@@ -1438,10 +1438,13 @@ export class LiveContextManager {
 		// A leaf's own call hands back what its module made as that module's (#597), and a class instance runs its
 		// methods in this instance's context, as the async manager does.
 		const creator = asHost ? null : (currentWrapper ?? null);
+		// Who receives what the call returns: the host when the call was entered with no module executing (#667).
+		const callerIsHost = Boolean(entryIdentity) && !entryIdentity.unresolved && !entryCaller;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value), targetInstanceID, creator)
-				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
+				? (value) =>
+						this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, callerIsHost), targetInstanceID, creator, callerIsHost)
+				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, callerIsHost);
 
 		try {
 			let result;
@@ -1558,11 +1561,12 @@ export class LiveContextManager {
 	 * @param {*} value - Resolved return value of the call.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
+	 * @param {boolean} [callerIsHost=false] - Whether the host made the call (see {@link attributeResult}).
 	 * @returns {*} The value as the caller gets it.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
 		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
-		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value);
+		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
 		// Otherwise a module's instance comes back raw in the live runtime: its methods are told by their frames (#726).
 		if (currentWrapper) return value;
 		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), undefined);

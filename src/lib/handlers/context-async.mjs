@@ -191,10 +191,12 @@ export class AsyncContextManager {
 			};
 		}
 
-		// A leaf's own call hands back what its module made as that module's (#597).
+		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host
+		// or a module (#667).
+		const callerIsHost = !executionStore.callerWrapper;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => attributeResult(currentWrapper, value)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost)
 				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
@@ -211,10 +213,10 @@ export class AsyncContextManager {
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (inheritsFrom(result, Promise)) {
 						return nativeThen(result, (value) =>
-							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, callerIsHost)
 						);
 					}
-					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, callerIsHost);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -242,9 +244,11 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (inheritsFrom(result, Promise)) {
-					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
+					return nativeThen(result, (value) =>
+						this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, callerIsHost)
+					);
 				}
-				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, callerIsHost);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -270,14 +274,15 @@ export class AsyncContextManager {
 	 * @param {*} value - Resolved return value of the leaf.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
+	 * @param {boolean} [callerIsHost=false] - Whether the host made the call (see {@link attributeResult}).
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
 		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
-			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value);
+			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
 			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
 			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();

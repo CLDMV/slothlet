@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T08:24:44-08:00 (1793809484)
+ *	@Last modified time: 2026-11-08T21:20:09-08:00 (1794201609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -138,10 +138,6 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			overLeaf: outcome(() => {
 				api.holder.deep.inner.leaf = 5;
 			}),
-			frozen: outcome(() => {
-				api.holder.deep.cfg.frozen.a = 2;
-				api.holder.deep.cfg.frozen.b = 3;
-			}),
 			removePlain: outcome(() => {
 				delete api.holder.deep.cfg.plain.p;
 			}),
@@ -152,7 +148,6 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			byWriter: await api.writer.ops.assign("byWriter", 9)
 		};
 		const inner = await api.holder.deep.inner;
-		const frozen = await api.holder.deep.cfg.frozen;
 		const plain = await api.holder.deep.cfg.plain;
 		const result = {
 			made,
@@ -160,8 +155,6 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			twice: inner.twice,
 			gone: "gone" in inner,
 			leaf: inner.leaf,
-			frozenA: frozen.a,
-			frozenB: frozen.b,
 			plainP: plain.p,
 			defined: inner.defined,
 			fixed: Object.getOwnPropertyDescriptor(inner, "fixed")?.configurable,
@@ -185,8 +178,6 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			twice: 3,
 			gone: false,
 			leaf: 5,
-			frozenA: 2,
-			frozenB: 3,
 			plainP: undefined,
 			defined: 6,
 			fixed: false,
@@ -194,6 +185,23 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			byOwner: 8,
 			byWriter: 9
 		});
+	});
+
+	it("keeps a frozen export frozen: eager mode throws at the write, lazy mode refuses it when the node loads", async () => {
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			await load(mode);
+			const made = outcome(() => {
+				api.holder.deep.cfg.frozen.a = 2;
+			});
+			const awaited = await settled(api.holder.deep.cfg.frozen);
+			const node = await api.holder.deep.cfg.frozen;
+			reports[mode] = { made, awaited, a: node.a, frozen: Object.isFrozen(node) };
+			await api.slothlet.shutdown();
+			api = null;
+		}
+		expect(reports.eager).toEqual({ made: "TypeError", awaited: "ok", a: 1, frozen: true });
+		expect(reports.lazy).toEqual({ made: "done", awaited: "LAZY_WRITE_REFUSED", a: 1, frozen: true });
 	});
 
 	it("lands a queued write before any await of the node resolves, however many are waiting", async () => {
@@ -334,7 +342,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			define: "TypeError",
 			prototype: "TypeError",
 			landed: [1, undefined, undefined, "frozen"],
-			others: ["closed", "sealed"]
+			others: ["closed", "frozen"]
 		});
 	});
 

@@ -1,0 +1,12 @@
+{
+	"name": "own-package-imports",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#h": "./lib/h.mjs"
+	},
+	"exports": {
+		"./h": "./lib/h.mjs"
+	}
+}
