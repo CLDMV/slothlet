@@ -1390,6 +1390,36 @@ export function attributeResult(wrapper, value, callerIsHost = false) {
 }
 
 /**
+ * Whether a value a module's call returned to the host is a prototype of a module's class, which the host gets as the
+ * object itself (#667). Set by the wrapper module.
+ * @type {function(object, *): boolean}
+ * @private
+ */
+let hostPrototypeCheck = () => false;
+
+/**
+ * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
+ * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
+ * @returns {void}
+ * @internal
+ */
+export function setHostPrototypeCheck(check) {
+	hostPrototypeCheck = check;
+}
+
+/**
+ * Whether a value a module's call returned is a prototype of a module's class (or a view of one), which the host gets
+ * as the object itself under either runtime and with the permission system on or off (#667, #726).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {boolean} True for such a prototype.
+ * @internal
+ */
+export function isHostPrototype(wrapper, value) {
+	return hostPrototypeCheck(wrapper, value);
+}
+
+/**
  * Whether a value is a stand-in slothlet hands a module's code out as (#597). Set by the wrapper module.
  * @type {function(*): boolean}
  * @private

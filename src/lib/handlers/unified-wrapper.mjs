@@ -47,6 +47,7 @@ import {
 	handsOutAsModule,
 	registerLeafFile,
 	setModuleNodeResolver,
+	setHostPrototypeCheck,
 	frameDefiner,
 	outerCallerCeiling,
 	setApiValueCheck,
@@ -4614,6 +4615,13 @@ function runtime_permissionsOn(wrapper) {
 }
 
 setResultAttributor(runtime_attributeResult);
+setHostPrototypeCheck(
+	(owner, value) =>
+		value !== null &&
+		typeof value === "object" &&
+		Boolean(owner?.slothlet) &&
+		runtime_knownPrototype(owner.slothlet, runtime_behindMemberView(value)) !== undefined
+);
 
 /**
  * The node at an api path of an instance, walked from its root through the nodes' own members, so no trap of a node

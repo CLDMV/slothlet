@@ -33,6 +33,7 @@ import {
 	handsOutAsModule,
 	attributesResults,
 	isHandedOut,
+	isHostPrototype,
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
@@ -283,6 +284,9 @@ export class AsyncContextManager {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
 			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
+			// A prototype of a module's class the host is handed is the object itself (#667), as the live runtime hands it.
+			if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
+				return attributeResult(currentWrapper, value, callerIsHost);
 			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
 			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();
