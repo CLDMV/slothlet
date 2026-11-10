@@ -53,6 +53,29 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
 
+/** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
+const NativePromise = Promise;
+const promiseThen = Promise.prototype.then;
+const reflectApply = Reflect.apply;
+
+/**
+ * Run a listener and settle what it returns while still inside its call: a `then` it carries (a getter, a
+ * thenable's method, a promise's own `then`) is read and called here, so it runs as the listener. The promise
+ * made here settles to `undefined` whatever the listener's result resolves to, so the dispatcher never holds,
+ * and never reads, any value of the listener's.
+ * @param {Function} listener - The subscribed function.
+ * @param {Array} args - `[payload, meta]`.
+ * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
+ * @private
+ */
+function runAndSettle(listener, args) {
+	const result = reflectApply(listener, undefined, args);
+	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
+	const then = result.then;
+	if (typeof then !== "function") return undefined;
+	return new NativePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
+}
+
 /**
  * Envelope → its private delivery record `{ slothlet, meta, flow, subs }`. Module-level (not per
  * EventManager) so an envelope kept by the host stays deliverable after a full reload, which replaces
@@ -362,16 +385,21 @@ export class EventManager extends ComponentBase {
 			try {
 				// Run pinned to the subscriber's identity/context so self.* resolves as that module.
 				// rawErrors:true surfaces the listener's own error so we can isolate + warn on it.
-				const result = this.#invoke(sub, callArgs, cm);
-				if (result && typeof result.then === "function") {
-					promises.push(result.catch((error) => this.#warnListener(event, error)));
-				}
+				const settled = this.#invoke(sub, callArgs, cm);
+				if (settled) promises.push(reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
 			} catch (error) {
 				this.#warnListener(event, error);
 			}
 		}
 
-		if (promises.length > 0) await Promise.all(promises);
+		if (promises.length > 0) {
+			// Wait for every listener without Promise.all, which reads the global Promise: each promise here is the
+			// dispatcher's own and never rejects.
+			let pending = promises.length;
+			await new NativePromise((resolve) => {
+				for (const settled of promises) reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);
+			});
+		}
 	}
 
 	/**
@@ -392,13 +420,15 @@ export class EventManager extends ComponentBase {
 	 * @param {object} sub - Subscription record.
 	 * @param {Array} callArgs - `[payload, meta]`.
 	 * @param {object} cm - Context manager.
-	 * @returns {*} The listener's return value.
+	 * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
 	 * @private
 	 */
 	#invoke(sub, callArgs, cm) {
+		const { listener } = sub;
+		const settle = (...args) => runAndSettle(listener, args);
 		return sub.ownerWrapper && cm?.runInContext
-			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
-			: sub.listener(...callArgs);
+			? cm.runInContext(this.instanceID, settle, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
+			: settle(...callArgs);
 	}
 
 	/**
