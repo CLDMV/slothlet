@@ -25,8 +25,9 @@
  *
  * - the context the owner package hands a module (`lockCaller`, `metadata`, `event`, a host leaf) is reached: the
  *   host's own file running its own source runs as the module's call ("Code passed by routes slothlet does not see");
- * - the host's code inside its record leaf, handed a callback, runs as the caller under the leaf ("Code a caller hands
- *   to a leaf runs as the caller"), so the store partition only `host.records.**` may open is refused, as `ext.b.work`;
+ * - the host record leaf's own body, handed a callback, runs as the leaf; only the code the caller hands in runs as the
+ *   caller ("Code a caller hands to a leaf runs as the caller"), so the store partition `host.records.**` may open is
+ *   answered;
  * - the host's unpinned `around` hook pins a module leaf's function argument through a helper of another of its files
  *   (docs/HOOKS.md, "Caller Identity in Callbacks");
  * - a module's helper outside its api folder, which vite evaluates after slothlet loads, has no record taken, so it is
@@ -91,8 +92,8 @@ describe("Permissions > a host like rummage's under vitest, with only server.dep
 		expect(out[`${config}/owner`]).toEqual(HOST_ANSWERS);
 	});
 
-	it.each(CONFIGS)("runs the host's code inside a record leaf handed a callback as the caller, under the leaf — %s", (config) => {
-		expect(out[`${config}/records`]).toEqual({ ok: false, code: "PERMISSION_DENIED", caller: "ext.b.work" });
+	it.each(CONFIGS)("runs a host record leaf's own body as the leaf when it is handed a callback — %s", (config) => {
+		expect(out[`${config}/records`]).toEqual({ ok: true, value: "p:records" });
 	});
 
 	it.each(CONFIGS)("refuses a module's helper outside its api folder that vite loads after slothlet (#682) — %s", (config) => {
