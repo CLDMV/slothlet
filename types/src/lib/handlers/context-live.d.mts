@@ -289,6 +289,19 @@ export class LiveContextManager {
      */
     public runInSnapshotFlow(instanceID: string, captured: object, fn: Function): Promise<any>;
     /**
+     * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+     * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+     * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {object} captured - Snapshot from {@link snapshotFlow}.
+     * @param {function(): *} fn - Synchronous function to run.
+     * @returns {*} What `fn` returned.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+     * @internal
+     */
+    runInSnapshotFlowSync(instanceID: string, captured: object, fn: () => any): any;
+    /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
      * @public

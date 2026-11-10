@@ -33,6 +33,40 @@ export function holdMember(target: object | Function, key: PropertyKey, value: u
  */
 export function layerHeldKeys(layer: object | Function): PropertyKey[];
 /**
+ * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
+ * through one, bound to the value it came from. Only the registries are read, so nothing of the value runs.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a layer or a layer's bound method.
+ * @internal
+ *
+ * @example
+ * isCompositionProxy(layerOver({})); // true
+ */
+export function isCompositionProxy(value: any): boolean;
+/**
+ * The method a composition layer's bound form of it stands for: a method of the value under a layer is handed out
+ * bound to that value, and is the value's own method all the same (#632).
+ * @param {*} value - A value a layer handed out.
+ * @returns {Function|undefined} The method behind it, or undefined for anything else.
+ * @package
+ *
+ * @example
+ * layerMethodOriginal(layer.get) === Map.prototype.get; // true for a layer over a Map
+ */
+export function layerMethodOriginal(value: any): Function | undefined;
+/**
+ * Whether a composition layer answers `key` from the value under it, reading or writing it on that value, which is
+ * the receiver its getters and setters run on: a key the layer neither holds itself nor hides (#632).
+ * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
+ * @param {PropertyKey} key - The key.
+ * @returns {boolean} True when the value under the layer answers it; false for a value that is not a layer.
+ * @package
+ *
+ * @example
+ * layerForwards(flatten.composeFunctionDefault(mod.default), "name"); // true
+ */
+export function layerForwards(layer: object | Function, key: PropertyKey): boolean;
+/**
  * The value under a composition layer: the module's own array or function, which takes an integrity
  * operation (seal, freeze) the layer itself refuses.
  * @param {object|Function} layer - A composition layer, or any other value.

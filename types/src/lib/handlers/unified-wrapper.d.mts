@@ -263,6 +263,67 @@ export function runtime_isCallerLocked(fn: any): boolean;
  */
 export function runtime_selfHookHandler(handler: Function, slothlet: object, reader: object): Function;
 /**
+ * Whether a value is a stand-in a lazy node handed out for a member it has not loaded (#653): a change made through
+ * one is made on the node it stands for once that node loads.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
+ * @internal
+ *
+ * @example
+ * if (isLazyStandIn(parent)) parent = walkAgain();
+ */
+export function isLazyStandIn(value: any): boolean;
+/**
+ * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
+ * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
+ * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
+ *   for the whole instance.
+ * @returns {Promise<void>}
+ * @internal
+ * @example
+ * await settleStandInChanges(slothlet);
+ */
+export function settleStandInChanges(slothlet: object, scope?: string | null): Promise<void>;
+/**
+ * Drop the changes queued through stand-ins of an instance, and the refusals of those already made, when the whole
+ * instance reloads or shuts down (#653): the nodes they were made on are gone, as eager mode's changes are.
+ * @param {object} slothlet - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseStandInChanges(slothlet);
+ */
+export function releaseStandInChanges(slothlet: object): void;
+/**
+ * How many refusals of queued changes an instance holds (see {@link runtime_takeRefusedChange}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * refusedChangeCount(slothlet); // 0
+ */
+export function refusedChangeCount(slothlet: object): number;
+/**
+ * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
+ * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
+ * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
+ * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, the root api) and the ones that
+ * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
+ * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`). It reads
+ * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
+ * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
+ * slothlet's. Backs `api.slothlet.wrapped` (#671).
+ * @param {*} value - The value.
+ * @returns {boolean} True only for one of slothlet's own wrappers.
+ * @public
+ * @example
+ * isSlothletWrapped(api.math); // true
+ * isSlothletWrapped(new Proxy({}, {})); // false
+ */
+export function isSlothletWrapped(value: any): boolean;
+/**
  * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
  * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
  * @param {object} slothlet - The instance.
@@ -282,6 +343,19 @@ export function releaseModuleMakers(slothlet: object, moduleID?: string): void;
  * moduleMakerCount(slothlet); // 3
  */
 export function moduleMakerCount(slothlet: object): number;
+/**
+ * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
+ * emitted it to the module that registered the listener, so it crosses between modules as an argument does
+ * ({@link runtime_carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
+ * emitted, as does everyone while the permission system is off.
+ * @param {*} payload - The payload.
+ * @param {object|null} listener - The wrapper of the module that registered the listener, or null for the host.
+ * @param {object|null} emitter - The wrapper of the module that emitted it, or null for the host.
+ * @param {object} slothlet - The instance.
+ * @returns {*} What the listener is handed.
+ * @public
+ */
+export function runtime_eventPayloadFor(payload: any, listener: object | null, emitter: object | null, slothlet: object): any;
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
@@ -463,6 +537,15 @@ export namespace TYPE_STATES {
  * @public
  */
 export class UnifiedWrapper extends ComponentBase {
+    /**
+     * Whether `value` is a UnifiedWrapper instance itself, by the class's own brand: no Proxy passes it and none of a
+     * Proxy's traps run to tell (#632), where `instanceof` would walk a node's prototype chain.
+     * @param {*} value - The value.
+     * @returns {boolean} True for a wrapper instance.
+     * @private
+     * @internal
+     */
+    private static ____isWrapperInstance;
     /**
      * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
      * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's

@@ -261,20 +261,22 @@ export function stackHoldsInstanceCode(sources: Array<{
 export function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: null): void;
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
- * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @param {function(object, *, boolean): *} attributor - Takes the call's wrapper, its result, and whether the host made
+ *   the call; returns what the caller gets.
  * @returns {void}
  * @internal
  */
-export function setResultAttributor(attributor: (arg0: object, arg1: any) => any): void;
+export function setResultAttributor(attributor: (arg0: object, arg1: any, arg2: boolean) => any): void;
 /**
  * What a module call's result is handed back as: code the module made — a function, a Proxy, a generator, an object
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
+ * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper: object, value: any): any;
+export function attributeResult(wrapper: object, value: any, callerIsHost?: boolean): any;
 /**
  * Register how a stand-in is recognised (see {@link isHandedOut}).
  * @param {function(*): boolean} check - True for a stand-in.
@@ -368,12 +370,76 @@ export function resolveSupplier(record: {
     unaccounted: true;
 } | null;
 /**
+ * Record which package created an instance (#714): the package of the innermost code on the stack that is neither
+ * slothlet's nor Node's, read when `slothlet()` is called. A host installed as a package (rummage, under
+ * `node_modules/@cldmv/rummage`) is loaded before slothlet, so slothlet's loader records no importer for its files; its
+ * own files are the host's, and run inside a module's call as that call, as the host's files anywhere else do. Code
+ * compiled under some location (`eval`, `vm`) names no package.
+ * @param {object} slothlet - The new instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * recordInstanceOwner(instance);
+ */
+export function recordInstanceOwner(slothlet: object): void;
+/**
+ * Whether a file belongs to the package that created an instance (see {@link recordInstanceOwner}): its own nearest
+ * package root is that package's, so a package installed inside the owner's folder is not the owner's.
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @returns {boolean} True when it does.
+ * @internal
+ * @example
+ * isInstanceOwnerFile(instance, "/app/node_modules/host/lib/context.mjs"); // true when host created the instance
+ */
+export function isInstanceOwnerFile(slothlet: object, path: string): boolean;
+/**
+ * Fix the registry of {@link VITE_HOST_REGISTRY} on a global object (#714): take over what registrations already
+ * pushed onto a plain array there, and put in its place, unchangeable, an array with a frozen `registered(key, hash)`
+ * reader. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{registered: (key: string, hash: string) => boolean}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteHostRegistry(globalThis).registered(frame.key, frame.hash);
+ */
+export function installViteHostRegistry(target: object): {
+    registered: (key: string, hash: string) => boolean;
+} | null;
+/**
+ * Fix the registry of {@link VITE_LOADED_REGISTRY} on a global object (#714): read what records were already pushed
+ * onto a plain array there, and put in its place, unchangeable, a frozen object whose `push` reads each record as it
+ * comes and whose `importersOf(path)` gives the ids of the modules recorded as loading a file, or null when no record
+ * of it was made. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{importersOf: (path: string) => Array<string>|null}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteLoadedRegistry(globalThis).importersOf("/app/exts/x/extension.mjs"); // [] when only the host loaded it
+ */
+export function installViteLoadedRegistry(target: object): {
+    importersOf: (path: string) => Array<string> | null;
+} | null;
+/**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
  * @param {object} wrapper - A genuine wrapper.
  * @returns {void}
  * @internal
  */
 export function registerLeafFile(wrapper: object): void;
+/**
+ * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
+ * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
+ * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
+ * as such; anything else (the host's own code, a package's) is the host's. Read from the stack, so a function a module
+ * left on an object of the host's, or on `globalThis`, is that module's whoever calls it later.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>|null} The leaves whose code it is, empty for the host's, or null for code no one accounts for.
+ * @internal
+ */
+export function runtime_codeWritersOnStack(slothlet: object): Array<object> | null;
 /**
  * Whether a call's identity is resolved from the stack (see {@link resolveSupplier}) rather than taken as its leaf's.
  * @param {{wrapper: object, flagged: boolean}|null|undefined} record - The call.

@@ -18,6 +18,59 @@
  */
 export function settleThenable(thenable: object, onFulfilled: (arg0: any) => any, onRejected: (arg0: any) => any): object;
 /**
+ * Extract the original error from a SlothletError wrapper if present.
+ * @param {*} error - What was thrown.
+ * @returns {*} The SlothletError's original error, otherwise the value itself.
+ * @public
+ */
+export function unwrapThrown(error: any): any;
+/**
+ * @typedef {object} FailureRecord
+ * @property {function(): *} originalError - The unwrapped error.
+ * @property {function(): *} stack - The unwrapped error's stack.
+ * @property {function(*): string} typeOf - The class name of the error given (the thrown or the unwrapped one).
+ * @private
+ */
+/**
+ * A record of a failure that reads it only as the code that made it, and only when something asks (#599).
+ *
+ * Unwrapping an error reads its `name`, formatting its stack reads `name` and `message`, and the error hooks'
+ * `errorType` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
+ * threw it, so each is read through `runAs` — as that module — and at most once. Nothing is read until it is needed,
+ * so a failure no hook looks at runs no more of the error's code than plain JavaScript would.
+ *
+ * @param {*} error - What was thrown or rejected with.
+ * @param {function(Function, *): *} runAs - Runs a reader on a value as the code the failure belongs to.
+ * @returns {FailureRecord} The record.
+ * @public
+ */
+export function failureRecord(error: any, runAs: (arg0: Function, arg1: any) => any): FailureRecord;
+/**
+ * Remember whose code a failure is (see {@link failureRecord}). The first record kept for an error stands: the
+ * innermost code it was thrown from.
+ * @param {*} error - What was thrown or rejected with.
+ * @param {FailureRecord} record - Its record.
+ * @returns {FailureRecord} The record that stands for it.
+ * @public
+ */
+export function rememberFailure(error: any, record: FailureRecord): FailureRecord;
+/**
+ * The record kept for a failure (see {@link rememberFailure}).
+ * @param {*} error - The error, as thrown or unwrapped.
+ * @returns {FailureRecord|undefined} Its record, or undefined when none was kept.
+ * @public
+ */
+export function rememberedFailure(error: any): FailureRecord | undefined;
+/**
+ * Give an error hook's `source` a `stack` read from a failure's record on first access (#599), so the stack is formatted
+ * only when a hook reads it, and then as the code the failure belongs to.
+ * @param {object} fields - The source's other fields.
+ * @param {FailureRecord} record - The failure's record.
+ * @returns {object} The source.
+ * @public
+ */
+export function failureSource(fields: object, record: FailureRecord): object;
+/**
  * Whether error hooks have already run for an error.
  * @param {*} error - The error.
  * @returns {boolean} True when it was reported.
@@ -380,6 +433,15 @@ export class HookManager extends ComponentBase {
      */
     public executeAlwaysHooks(path: string, args: any[], resultOrError: any, hasError: boolean | undefined, errors: Array<Error> | undefined, api: object, ctx: object): void;
     /**
+     * The record of a failure (#599): the one kept for it, or — for a failure no record was kept for, such as one a
+     * hook's own code threw — a new one that reads it outside every instance, so code the error carries runs as no
+     * module and never as whoever is calling.
+     * @param {*} error - What was thrown or rejected with.
+     * @returns {FailureRecord} Its record.
+     * @public
+     */
+    public failureOf(error: any): FailureRecord;
+    /**
      * Execute error hooks for an API path.
      *
      * @param {string} path - API path being called
@@ -423,6 +485,20 @@ export class HookManager extends ComponentBase {
     public shutdown(): Promise<void>;
     #private;
 }
+export type FailureRecord = {
+    /**
+     * - The unwrapped error.
+     */
+    originalError: () => any;
+    /**
+     * - The unwrapped error's stack.
+     */
+    stack: () => any;
+    /**
+     * - The class name of the error given (the thrown or the unwrapped one).
+     */
+    typeOf: (arg0: any) => string;
+};
 /**
  * Result returned by hook execution methods.
  */
