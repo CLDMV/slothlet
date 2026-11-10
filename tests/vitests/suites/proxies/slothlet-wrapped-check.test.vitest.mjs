@@ -154,20 +154,25 @@ describe.each(getMatrixConfigs())("Proxies > api.slothlet.wrapped > $name", ({ c
 			"self.bag.data": true,
 			"self.bag.data.list": true,
 			"self.bag.makeThing": true,
-			"self.bag.Thing.prototype": true,
-			"self.bag.Thing.prototype.value": true
+			// The module's own class prototype and method are the objects themselves (#713): none of slothlet's.
+			"self.bag.Thing.prototype": false,
+			"self.bag.Thing.prototype.value": false
 		});
 	});
 
 	it("answers true for the views one module gets of another's values, member views included", async () => {
 		api = await slothlet({ ...config, base: BASE });
+		// The class's node is loaded first, so a lazy tree hands its prototype over as an eager one does; a node not loaded
+		// yet answers true on its own (see "answers true for a node not loaded yet").
+		await api.bag.makeThing();
 		expect(await api.reader.checkViews()).toEqual({
 			"self.bag": true,
 			"self.bag.data": true,
 			"self.bag.data.list": true,
 			"self.bag.Thing": true,
-			"self.bag.Thing.prototype": true,
-			"self.bag.Thing.prototype.value": true,
+			// With permissions off every module gets another's class prototype and its method as the objects themselves (#713).
+			"self.bag.Thing.prototype": false,
+			"self.bag.Thing.prototype.value": false,
 			"self.bag.makeThing": true
 		});
 	});
