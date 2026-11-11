@@ -696,7 +696,10 @@ export class ApiManager extends ComponentBase {
 	 * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
 	 */
 	ownershipEnforced() {
-		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		// An instance that shut down with the system on keeps holding module writes to it: a module no longer mounted
+		// owns nothing, so what it kept a view of stays as it could not write it.
+		return permissionManager?.isEnabled?.() === true || permissionManager?.wasOnAtShutdown?.() === true;
 	}
 
 	/**

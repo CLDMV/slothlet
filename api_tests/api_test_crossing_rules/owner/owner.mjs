@@ -53,3 +53,6 @@ export function landed(prefix) {
 	}
 	return hit;
 }
+
+// What the test reads once the instance is gone: this module's own check, run as plain code.
+globalThis.__crossingRulesOwner = { landed };

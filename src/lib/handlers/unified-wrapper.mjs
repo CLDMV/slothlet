@@ -5952,10 +5952,10 @@ function runtime_classInstanceOf(prototype) {
  * @private
  */
 function runtime_prototypeHandedTo(value, reader, slothlet = null) {
-	if (slothlet && !slothlet.handlers?.permissionManager?.isEnabled()) return value;
+	if (slothlet && !runtime_guardOn(slothlet)) return value;
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
-	if (!known.slothlet.handlers?.permissionManager?.isEnabled()) return value;
+	if (!runtime_guardOn(known.slothlet)) return value;
 	const [first] = known.sites;
 	if (known.sites.every((site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
 	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
@@ -6151,6 +6151,20 @@ const CROSSING_PROMISES = new WeakSet();
  * @private
  */
 const CROSSED_PROMISES = new WeakMap();
+
+/**
+ * Whether the class prototype guard holds in an instance: while its permission system is on, and after it shut down
+ * with the system on. A module handed a view because it may not write another module's code keeps a view, and what it
+ * reads through it stays viewed: the instance ending grants it nothing.
+ * @param {object|null} slothlet - The instance.
+ * @returns {boolean} True when it holds.
+ * @private
+ */
+function runtime_guardOn(slothlet) {
+	const permissionManager = slothlet?.handlers?.permissionManager;
+	if (!permissionManager) return false;
+	return permissionManager.isEnabled?.() === true || permissionManager.wasOnAtShutdown?.() === true;
+}
 
 /**
  * Whether a value is a crossing view.
@@ -6516,7 +6530,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	}
 	if (reader === null || reader === undefined || reader === HOST_READER) return value;
 	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
-	if (!slothlet?.handlers?.permissionManager?.isEnabled?.()) return value;
+	if (!runtime_guardOn(slothlet)) return value;
 	const isModule = Boolean(reader.____slothletInternal);
 	// A class instance a node holds, handed back by one of its own methods, stands for its node (#625): the reader gets
 	// its view of the node, whose own write rule holds.
@@ -7113,7 +7127,7 @@ const CROSSING_HANDLER = {
  * @private
  */
 function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName = true) {
-	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return true;
+	if (!runtime_guardOn(slothlet)) return true;
 	if (reader === null || reader === HOST_READER) return true;
 	if (reader === UNATTRIBUTED_READER || reader === SEALED_SHELL_READER || !reader?.____slothletInternal) return false;
 	const permissionManager = slothlet.handlers.permissionManager;

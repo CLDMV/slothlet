@@ -115,4 +115,42 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		expect(await api.guest.reach("__open_")).toEqual({ returned: "written", callback: "written", stored: "written" });
 		expect(await api.keeper.landed("__open_")).toEqual(["returned", "callback", "stored"]);
 	});
+
+	it("keeps the owner's code from a view a module holds past the instance's shutdown", async () => {
+		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		expect(await api.reader.keep()).toBe(true);
+		await api.shutdown();
+		api = null;
+		// The module was handed a view because it may not write the owner's code; the instance ending grants it nothing.
+		// A write onto the class is refused as one made in no call of the instance, a method shadowed on the instance as
+		// one the module does not own. Data it was handed stays its to change.
+		expect(globalThis.__crossingRulesReader.writeThroughKept("__after_")).toEqual({
+			getPrototypeOf: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			proto: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			constructor: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			method: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			keptPrototype: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			shadowed: "LOOSE_SET_NOT_OWNED",
+			data: "written"
+		});
+		expect(globalThis.__crossingRulesOwner.landed("__after_")).toEqual([]);
+	});
+
+	it("leaves a module the value itself past shutdown where it held the value itself", async () => {
+		api = await mount({ mode, runtime });
+		expect(await api.reader.keep()).toBe(false);
+		await api.shutdown();
+		api = null;
+		// Plain JavaScript: with the permission system off the module holds the owner's object, before and after.
+		expect(globalThis.__crossingRulesReader.writeThroughKept("__off_")).toEqual({
+			getPrototypeOf: "written",
+			proto: "written",
+			constructor: "written",
+			method: "written",
+			keptPrototype: "written",
+			shadowed: "written",
+			data: "written"
+		});
+		expect(globalThis.__crossingRulesOwner.landed("__off_")).toEqual(["getPrototypeOf", "proto", "constructor", "keptPrototype", "hi"]);
+	});
 });

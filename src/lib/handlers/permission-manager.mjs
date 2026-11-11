@@ -396,6 +396,15 @@ export class PermissionManager extends ComponentBase {
 	#enabled = false;
 
 	/**
+	 * Whether the system was on when the instance shut down. What a module was handed as a view while it was on stays
+	 * a view, and what it could not write then it cannot write through a view it kept: the instance ending grants
+	 * nothing.
+	 * @type {boolean}
+	 * @private
+	 */
+	#endedOn = false;
+
+	/**
 	 * Whether the permission system is disabled outright (`mode: "disabled"`): not even the built-in rules that keep
 	 * module code off the framework's own namespace apply. Off (`mode: "off"`, the default) evaluates those alone.
 	 * @type {boolean}
@@ -2425,6 +2434,7 @@ export class PermissionManager extends ComponentBase {
 	enable() {
 		this.#assertNotSealed();
 		this.#enabled = true;
+		this.#endedOn = false;
 		this.#disabled = false;
 		this.#clearCache();
 	}
@@ -2502,6 +2512,7 @@ export class PermissionManager extends ComponentBase {
 	disable() {
 		this.#assertNotSealed();
 		this.#enabled = false;
+		this.#endedOn = false;
 		this.#disabled = false;
 		this.#clearCache();
 	}
@@ -2515,6 +2526,18 @@ export class PermissionManager extends ComponentBase {
 	 */
 	isEnabled() {
 		return this.#enabled;
+	}
+
+	/**
+	 * Whether the permission system was on when the instance shut down. Values handed to modules as views while it
+	 * was on are still held to what their holders could write then.
+	 *
+	 * @returns {boolean} True when it was.
+	 * @example
+	 * if (pm.isEnabled() || pm.wasOnAtShutdown()) { ... }
+	 */
+	wasOnAtShutdown() {
+		return this.#endedOn;
 	}
 
 	/**
@@ -2672,6 +2695,7 @@ export class PermissionManager extends ComponentBase {
 		this.#requiresRuleCount = 0;
 		this.#resolvedCache.clear();
 		this.#compiledCache.clear();
+		if (this.#enabled) this.#endedOn = true;
 		this.#enabled = false;
 		this.#disabled = false;
 		this.#defaultPolicy = "allow";
