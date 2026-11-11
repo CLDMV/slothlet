@@ -144,10 +144,12 @@ describe.each(MODES)("Permissions > attribution: precise > $name (#726)", ({ mod
 		expect(supplier.instance).toBe(DENIED);
 	});
 
-	it("with provenance off, code nested in returned data runs under its caller: the host's code has no self", async () => {
+	it("with provenance off, code nested in returned data is found when it is handed out and runs as its definer, under whoever runs it", async () => {
 		await open({ mode, runtime, provenance: false });
+		// No frames are read, so the data a module returns is searched for code instead: the host runs it as `bag`, which
+		// may read the vault, and a module that may not is still refused as its caller.
 		const box = await api.bag.box();
-		expect(await settle(() => box.run())).toBe(NO_SELF);
+		expect(await settle(() => box.run())).toBe(42);
 		const supplier = await api.supplier.run();
 		expect(supplier.B).toBe(DENIED);
 	});

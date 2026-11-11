@@ -512,11 +512,11 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
-	// With provenance off no frames are read, and what a holder holds is data, handed over unsearched (#726): the
-	// function runs with the permissions of the call that runs it, here `esm`, which may read the vault.
-	it.each(HOLDERS)("runs the module's code a %s holds under the call that runs it with provenance off", async (kind) => {
+	// With provenance off no frames are read, so what a module returns is searched for code when it is handed out and
+	// the code stands for the module that made it: turning the stack check off gives up nothing a return value carries.
+	it.each(HOLDERS)("runs the module's code a %s holds as that module with provenance off", async (kind) => {
 		await create({ provenance: false });
-		expect(await api.esm.viaHolding(kind)).toBe(42);
+		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {

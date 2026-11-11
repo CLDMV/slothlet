@@ -4618,7 +4618,13 @@ function runtime_handOut(maker, owner, value) {
 		// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
 		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 		// it runs (#726).
-		if (!runtime_isCodeObject(value)) return value;
+		if (owner.slothlet?.config?.permissions?.provenance !== false) {
+			if (!runtime_isCodeObject(value)) return value;
+			return runtime_membrane(maker, owner, value);
+		}
+		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
+		// value is searched instead, as far as CODE_SEARCH reaches, and one holding code is handed out as the module's.
+		if (!runtime_holdsCode(value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
 		return runtime_membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
