@@ -158,7 +158,9 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 		expect(await api.owner.ownHook()).toBe("true,true");
 	});
 
-	it("keeps a function of an object the owner hands over as data, and leaves its data the reader's to change", async () => {
+	it("keeps a function of an object the owner hands over as data, and leaves its data the reader's to change, where nothing showed the object to be a prototype", async () => {
+		// Only the data crosses here: the owner hands on nothing made from the object, so it is data like any other. Once
+		// something inheriting from it crosses, it is the owner's code whole (see crossing-rules).
 		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
 		expect(await api.reader.prototypeAsData("__data_")).toEqual({ replaced: "LOOSE_SET_NOT_OWNED", added: "written" });
 		expect(await api.owner.changed()).toEqual([]);

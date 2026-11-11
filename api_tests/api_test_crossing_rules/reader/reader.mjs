@@ -85,3 +85,43 @@ function writeThroughKept(prefix) {
 
 // What the test runs once the instance is gone: this module's own code, holding what it was handed.
 globalThis.__crossingRulesReader = { writeThroughKept };
+
+/**
+ * Reach the object the owner uses as a prototype both as data and as the prototype of what the owner makes, and try
+ * every change to it through the data.
+ * @param {string} prefix - The prefix of the members written.
+ * @param {"instanceFirst"|"dataFirst"} order - Which of the two this module is handed first.
+ * @returns {object} How each change ended, and whether the two are the same object.
+ */
+export function prototypeAsData(prefix, order) {
+	let instance;
+	let data;
+	if (order === "instanceFirst") {
+		instance = self.owner.made();
+		data = self.owner.sharedAsData();
+	} else {
+		data = self.owner.sharedAsData();
+		instance = self.owner.made();
+	}
+	const target = data.proto;
+	const attempt = (write) => {
+		try {
+			write();
+			return "written";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return {
+		replaced: attempt(() => (target.hi = () => "planted")),
+		addedFunction: attempt(() => (target[`${prefix}fn`] = () => "planted")),
+		addedData: attempt(() => (target[`${prefix}data`] = 1)),
+		changedData: attempt(() => (target.n = 2)),
+		defined: attempt(() => Object.defineProperty(target, `${prefix}defined`, { value: 1, configurable: true })),
+		deleted: attempt(() => {
+			if (!Reflect.deleteProperty(target, "n")) throw new Error("kept");
+		}),
+		same: Object.getPrototypeOf(instance) === target,
+		inherited: instance.hi()
+	};
+}

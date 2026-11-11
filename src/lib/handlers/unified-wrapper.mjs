@@ -6321,8 +6321,43 @@ function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
 		CROSSED_PROTOTYPE_PATHS.set(prototype, site);
 	}
+	MODULE_PROTOTYPES.add(prototype);
 	if (site.known && runtime_mayWritePath(slothlet, reader, site.parts)) return prototype;
+	// A view the reader's module already holds of it, handed over as data before anything showed it to be a prototype,
+	// is the object the module knows: it refuses the same writes ({@link runtime_crossAssertWrite}).
+	const views = CROSSING_VIEWS.get(prototype);
+	if (views !== undefined) {
+		const key = runtime_crossKey(reader);
+		const held = views.key === key ? views.view : views.others?.get(key);
+		if (held) return held;
+	}
 	return runtime_selfMemberOf(prototype, standing, slothlet, site.parts, null);
+}
+
+/**
+ * The objects slothlet has seen a module use as a prototype: each link some module wrote in the prototype chain of a
+ * value that crossed between modules. Such an object is that module's code wherever it is reached afterwards, handed
+ * on as data included: every change to it is held to the module's write rules.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const MODULE_PROTOTYPES = new WeakSet();
+
+/**
+ * Record the prototypes some module wrote in the chain of a value crossing between modules (see
+ * {@link MODULE_PROTOTYPES}). Only the chain is read, which runs none of the value's code; a Proxy in it, the
+ * language's own prototypes and those of Node's and slothlet's own values end the walk.
+ * @param {object|Function} value - The value crossing, not a Proxy.
+ * @returns {void}
+ * @private
+ */
+function runtime_notePrototypes(value) {
+	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
+		if (INTRINSICS.has(link) || MODULE_PROTOTYPES.has(link) || util.types.isProxy(link) || isSharedExport(link)) return;
+		if (runtime_isSlothletValue(link)) return;
+		MODULE_PROTOTYPES.add(link);
+		link = Reflect.getPrototypeOf(link);
+	}
 }
 
 /**
@@ -6579,7 +6614,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		// decides.
 		const plain = record ? record.original : runtime_unwrapClassInstance(value);
 		if (plain !== null && typeof plain === "object" && !util.types.isProxy(plain)) {
-			if (runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
+			if (MODULE_PROTOTYPES.has(plain) || runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
 		if (!runtime_needsCrossing(value)) return value;
@@ -6626,6 +6661,8 @@ function runtime_crossView(original, reader, slothlet, from) {
 		if (other) return other;
 	}
 	const isFunction = typeof original === "function";
+	// What the value inherits from that a module wrote is that module's code from here on, however it is reached.
+	if (!util.types.isProxy(original)) runtime_notePrototypes(original);
 	const shadow = isFunction
 		? runtime_isConstructor(original)
 			? function () {}.bind(null)
@@ -6879,6 +6916,8 @@ function runtime_crossIsOwnersCode(state, descriptor) {
  * function another module runs for the reader gets it nothing. Data stays the reader's to change. Code is:
  *
  * - everything about a function (a class's statics, its `prototype`, its own prototype);
+ * - everything about an object slothlet has seen a module use as a prototype ({@link MODULE_PROTOTYPES}), handed on
+ *   as data: a member replaced, added or removed;
  * - the prototype of any value (`Object.setPrototypeOf`);
  * - a member of the value's own holding a function or accessor the reader's module did not put there (replaced,
  *   redefined or deleted), except an assignment its own setter takes;
@@ -6895,9 +6934,10 @@ function runtime_crossIsOwnersCode(state, descriptor) {
 function runtime_crossAssertWrite(state, prop, change) {
 	const { original, slothlet } = state;
 	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
-	let held = typeof original === "function" || change === "prototype";
 	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
 	const subject = STAND_IN_RECORDS.get(original)?.original ?? runtime_unwrapClassInstance(original);
+	// A function, and an object some module uses as a prototype, are code whole: every member, new ones included.
+	let held = typeof original === "function" || change === "prototype" || MODULE_PROTOTYPES.has(subject);
 	if (!held && !util.types.isProxy(subject)) {
 		const own = Reflect.getOwnPropertyDescriptor(subject, prop);
 		if (own) {

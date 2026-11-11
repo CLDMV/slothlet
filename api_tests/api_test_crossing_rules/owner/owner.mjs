@@ -25,6 +25,20 @@ class Foo {
 	}
 }
 
+/** An object this module uses as the prototype of what it makes, and also hands on as data. */
+const shared = {
+	hi() {
+		return "hi";
+	},
+	n: 1
+};
+
+/** `shared`'s method as it was written. */
+const sharedHi = shared.hi;
+
+export const made = () => Object.create(shared);
+export const sharedAsData = () => ({ proto: shared });
+
 /** One object this module holds. */
 const held = { n: 1, inst: new Foo() };
 
@@ -35,10 +49,11 @@ export const getHeld = () => held;
 export const isHeld = (value) => value === held;
 
 /**
- * Which members whose name starts with `prefix` `Foo.prototype` holds, removing each, and whether its method is still
- * the one written (putting it back).
+ * Which members whose name starts with `prefix` `Foo.prototype` and `shared` hold, removing each, and which of their
+ * own members are no longer as written (putting each back).
  * @param {string} prefix - The prefix.
- * @returns {string[]} The rest of each key found, and `"hi"` when the method was replaced.
+ * @returns {string[]} The rest of each key found on the class (`"shared:"` before one found on `shared`), and the name
+ *   of each member changed.
  */
 export function landed(prefix) {
 	const hit = [];
@@ -50,6 +65,19 @@ export function landed(prefix) {
 	if (Foo.prototype.hi !== originalHi) {
 		hit.push("hi");
 		Foo.prototype.hi = originalHi;
+	}
+	for (const key of Reflect.ownKeys(shared))
+		if (typeof key === "string" && key.startsWith(prefix)) {
+			hit.push(`shared:${key.slice(prefix.length)}`);
+			delete shared[key];
+		}
+	if (shared.hi !== sharedHi) {
+		hit.push("shared.hi");
+		shared.hi = sharedHi;
+	}
+	if (shared.n !== 1) {
+		hit.push("shared.n");
+		shared.n = 1;
 	}
 	return hit;
 }

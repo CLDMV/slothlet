@@ -153,4 +153,39 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		});
 		expect(globalThis.__crossingRulesOwner.landed("__off_")).toEqual(["getPrototypeOf", "proto", "constructor", "keptPrototype", "hi"]);
 	});
+
+	it.each(["instanceFirst", "dataFirst"])(
+		"holds an object a module uses as a prototype to that module's write rules when it is handed on as data (%s)",
+		async (order) => {
+			api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+			const refused = "LOOSE_SET_NOT_OWNED";
+			expect(await api.reader.prototypeAsData("__data_", order)).toEqual({
+				replaced: refused,
+				addedFunction: refused,
+				addedData: refused,
+				changedData: refused,
+				defined: refused,
+				deleted: refused,
+				// Plain JavaScript: the prototype of what the owner makes is the object it handed on.
+				same: true,
+				inherited: "hi"
+			});
+			expect(await api.owner.landed("__data_")).toEqual([]);
+		}
+	);
+
+	it("leaves such an object the reader's to change with the permission system off", async () => {
+		api = await mount({ mode, runtime });
+		expect(await api.reader.prototypeAsData("__off_", "instanceFirst")).toEqual({
+			replaced: "written",
+			addedFunction: "written",
+			addedData: "written",
+			changedData: "written",
+			defined: "written",
+			deleted: "written",
+			same: true,
+			inherited: "planted"
+		});
+		expect(await api.owner.landed("__off_")).toEqual(["shared:fn", "shared:data", "shared:defined", "shared.hi", "shared.n"]);
+	});
 });
