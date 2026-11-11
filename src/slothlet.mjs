@@ -2030,11 +2030,16 @@ export default slothlet;
  * @property {boolean} [permissions.provenance=true] - A module's function reached by a route slothlet does not see — a
  *   callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
  *   the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
- *   call runs it.
+ *   call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
+ *   returned data keeps its definer.
  * @property {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
  *   (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
  *   `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
  *   it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
+ * @property {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+ *   another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
+ *   `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
+ *   a member is handed over as a view.
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
