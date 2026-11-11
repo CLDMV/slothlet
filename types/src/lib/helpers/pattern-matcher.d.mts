@@ -9,14 +9,21 @@
  * @param {object} [options={}] - Options
  * @param {Function} [options.onMaxDepth] - Called when brace expansion exceeds max depth.
  *   Should throw an error. If not provided, a SlothletError("BRACE_EXPANSION_MAX_DEPTH") is thrown.
+ * @param {boolean} [options.zeroSegments=false] - Let a `**` that is a whole segment match zero segments as well, with
+ *   the `.` beside it: `payments.**` matches `payments` itself, `**.charge` matches `charge`, and `a.**.b` matches
+ *   `a.b`. Permission rules compile with it (#726).
  * @returns {function} Matcher function that takes a path and returns boolean
  * @example
  * const matcher = compilePattern("payments.**");
  * matcher("payments.charge"); // true
  * matcher("admin.users");     // false
+ *
+ * @example
+ * compilePattern("payments.**", { zeroSegments: true })("payments"); // true
  */
 export function compilePattern(pattern: string, options?: {
     onMaxDepth?: Function | undefined;
+    zeroSegments?: boolean | undefined;
 }): Function;
 /**
  * Expand brace patterns {a,b,c} into multiple patterns.

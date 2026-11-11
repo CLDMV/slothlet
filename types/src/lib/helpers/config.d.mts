@@ -325,12 +325,15 @@ export class Config extends ComponentBase {
      *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
      *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
      *   call runs it.
+     * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+     *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+     *   wraps nothing and tells every definer from the stack.
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
      *
      * @example
      * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, rules: [...] }
+     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
      */
     normalizePermissions(permissions?: object | null): object | null;
     #private;

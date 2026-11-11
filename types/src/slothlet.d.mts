@@ -180,6 +180,13 @@ export type SlothletOptions = {
          */
         provenance?: boolean | undefined;
         /**
+         * - How the definer of code a module hands out is known
+         * (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
+         * `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
+         * it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
+         */
+        attribution?: "fast" | "precise" | undefined;
+        /**
          * - Options for api functions held as references (`{ capture?: boolean }`).
          */
         references?: object | undefined;

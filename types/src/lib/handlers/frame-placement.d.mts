@@ -273,10 +273,27 @@ export function setResultAttributor(attributor: (arg0: object, arg1: any, arg2: 
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
+ * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper: object, value: any, callerIsHost?: boolean): any;
+export function attributeResult(wrapper: object, value: any, callerIsHost?: boolean, caller?: object | null): any;
+/**
+ * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
+ * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
+ * @returns {void}
+ * @internal
+ */
+export function setHostPrototypeCheck(check: (arg0: object, arg1: any) => boolean): void;
+/**
+ * Whether a value a module's call returned is a prototype of a module's class (or a view of one), which the host gets
+ * as the object itself under either runtime and with the permission system on or off (#667, #726).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {boolean} True for such a prototype.
+ * @internal
+ */
+export function isHostPrototype(wrapper: object, value: any): boolean;
 /**
  * Register how a stand-in is recognised (see {@link isHandedOut}).
  * @param {function(*): boolean} check - True for a stand-in.
@@ -421,6 +438,63 @@ export function installViteHostRegistry(target: object): {
  */
 export function installViteLoadedRegistry(target: object): {
     importersOf: (path: string) => Array<string> | null;
+} | null;
+/**
+ * Register how the node at an api path is found: the file's module node of a lazy tree, built with no file of its own,
+ * is looked up by its path (#726).
+ * @param {function(object, string): (object|null)} resolver - Takes an instance and an api path; returns its node's
+ *   wrapper, or null.
+ * @returns {void}
+ * @internal
+ */
+export function setModuleNodeResolver(resolver: (arg0: object, arg1: string) => (object | null)): void;
+/**
+ * The ceiling code entered on its definer's behalf (a handed-out function, an instance method) runs under (#726): the
+ * caller running it, read now — its executing module and that module's own ceiling — or none for the host. Entering
+ * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
+ * @param {object} contextManager - The instance's context manager.
+ * @param {string} instanceID - The instance.
+ * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @internal
+ */
+export function outerCallerCeiling(contextManager: object, instanceID: string): object | ReadonlyArray<object> | null;
+/**
+ * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
+ * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
+ * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
+ * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
+ * `mode: "off"`, `enabled: false` or `mode: "disabled"`), nothing is wrapped and frames tell every definer.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while code is handed out as stand-ins.
+ * @internal
+ */
+export function handsOutAsModule(wrapper: object | null | undefined): boolean;
+/**
+ * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
+ * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * `"fast"` hands back only a node's own Proxy export as the node's member.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while results are attributed.
+ * @internal
+ */
+export function attributesResults(wrapper: object | null | undefined): boolean;
+/**
+ * The definer of the code doing an access while no call runs (the host running code a module handed out, #726): the
+ * innermost frame below slothlet's own, placed on the leaf whose source range holds it, or on the file's module for
+ * code outside every leaf's range. `null` when that frame is the host's (no running instance's file holds it);
+ * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
+ * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
+ * outside every export, in a tree where no node was built for the file itself).
+ * @returns {{wrapper: object}|{leaves: Array<object>}|{unplaced: true}|null} The definer.
+ * @internal
+ */
+export function frameDefiner(): {
+    wrapper: object;
+} | {
+    leaves: Array<object>;
+} | {
+    unplaced: true;
 } | null;
 /**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).

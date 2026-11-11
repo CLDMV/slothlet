@@ -633,7 +633,11 @@ const server = api.startServer(8080);
 
 Slothlet automatically preserves AsyncLocalStorage context across all class instance method calls. When your API functions return class instances, slothlet wraps them transparently so all method calls maintain full context access.
 
-**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Standard built-in types (Array, Date, Map, EventEmitter, etc.) are excluded from wrapping.
+**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Only an instance of a class a module wrote is wrapped: the language's and Node's own classes (`Array`, `Date`, `Map`, `EventEmitter`, `URL`, `Response`, `AbortController`, `Intl.NumberFormat`, …) keep their context on their own and are returned as they are.
+
+The wrapper stands for the instance. Members are read and written on the instance itself, so a getter or setter over a `#private` field works. The same instance comes back as the same wrapper every time (`(await api.make()) === (await api.make())` for a leaf returning one instance, and a method returning `this` returns the wrapper). Handed back to the module that created it, the wrapper is the instance again, so the module's own `===` and `#field in value` checks hold. On the wrapper itself `#field in value` is false, as for any Proxy.
+
+Code a module hands out that is not a class instance (a closure, a function inside returned data, a thenable, a generator) is not wrapped. Run by the host outside any call, it reads `self` and `context` as the instance it was made in gives them, told by the file its code is in; see [Code a module hands out runs as its definer](PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer). A helper in a file that is not an api file (one a leaf imports) is not told this way and has no `self` or `context` outside a call.
 
 ### Data Processor Example
 
