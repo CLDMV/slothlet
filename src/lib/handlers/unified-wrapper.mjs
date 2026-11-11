@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:13:27-08:00 (1794219207)
+ *	@Last modified time: 2026-11-10T19:32:55-08:00 (1794367975)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -440,19 +440,19 @@ function runtime_selfIsMethodNode(thisArg, method) {
  * @returns {*} The result, a view of it, or a promise of either.
  * @private
  */
-function runtime_selfViewResult(result, reader, slothlet = null) {
+function runtime_selfViewResult(result, reader, slothlet = null, from = null) {
 	// Only a plain native promise is followed: any other thenable is handed back exactly as it is.
 	if (runtime_inherits(result, Promise) && Object.getPrototypeOf(result) === Promise.prototype) {
-		if (slothlet === null) return result.then((value) => runtime_selfView(value, reader));
+		if (slothlet === null) return result.then((value) => runtime_selfView(value, reader, from));
 		// What it rejects with reaches the reader as values crossing between modules do (#667).
 		return result.then(
-			(value) => runtime_selfView(value, reader),
+			(value) => runtime_selfView(value, reader, from),
 			(error) => {
-				throw runtime_carryTo(error, reader, slothlet);
+				throw runtime_crossTo(error, reader, slothlet, from);
 			}
 		);
 	}
-	return runtime_selfView(result, reader);
+	return runtime_selfView(result, reader, from);
 }
 
 /**
@@ -1504,7 +1504,7 @@ function runtime_selfHasInstance(prototype, instance) {
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node, reader) {
+export function runtime_selfView(node, reader, from = null) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
 	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
@@ -1537,7 +1537,8 @@ export function runtime_selfView(node, reader) {
 	// A version dispatcher is no node of its own: it routes every access to the versioned node it resolves to.
 	const dispatch = versionDispatcherRecord(node);
 	const inner = dispatch ? null : (resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null);
-	if (inner === null && dispatch === null) return node;
+	// Any other value another module hands on reaches the reader through the class prototype guard.
+	if (inner === null && dispatch === null) return runtime_crossTo(node, reader, null, from);
 	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
 	if (reader === undefined) reader = runtime_selfReader(slothlet);
 	let byReader = SELF_VIEWS.get(node);
@@ -1722,16 +1723,24 @@ export function runtime_selfView(node, reader) {
 			try {
 				result = Reflect.apply(node, ownThis, args);
 			} catch (error) {
-				throw runtime_carryTo(error, reader, slothlet);
+				throw runtime_crossTo(error, reader, slothlet, inner);
 			}
-			return runtime_selfViewResult(result, reader, slothlet);
+			return runtime_selfViewResult(result, reader, slothlet, inner);
 		},
 		construct(_, args, newTarget) {
-			try {
-				return Reflect.construct(node, args, newTarget === view ? held : newTarget);
-			} catch (error) {
-				throw runtime_carryTo(error, reader, slothlet);
+			// A class the reader constructs for is its own: what it makes the instance's prototype comes back as it is.
+			if (newTarget !== view && genuineWrappers.has(reader)) {
+				runtime_recordOrigin(newTarget, reader);
+				const prototype = typeof newTarget === "function" ? Reflect.getOwnPropertyDescriptor(newTarget, "prototype")?.value : null;
+				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, reader);
 			}
+			let made;
+			try {
+				made = Reflect.construct(node, args, newTarget === view ? held : newTarget);
+			} catch (error) {
+				throw runtime_crossTo(error, reader, slothlet, inner);
+			}
+			return runtime_crossTo(made, reader, slothlet, inner);
 		},
 		set(_, prop, value) {
 			refuseWithoutStanding(prop);
@@ -2381,7 +2390,7 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		if (handedArgs) handed.args = handedArgs;
 		if ("result" in payload) handed.result = viewValue(payload.result);
 		// What the call threw, when that is a node: the handler's own view of it, as a result is.
-		if ("error" in payload) handed.error = toView(runtime_carryTo(payload.error, reader, slothlet));
+		if ("error" in payload) handed.error = toView(runtime_crossTo(payload.error, reader, slothlet));
 		// A change the handler makes to the args array in place reaches the call, as it would unviewed: before
 		// `next()` forwards them, and once the handler returns.
 		const writeBack = () => {
@@ -3849,9 +3858,11 @@ const weakSetHasAtLoad = Function.prototype.call.bind(WeakSet.prototype.has);
  * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
  * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
  * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
- * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, the root api) and the ones that
+ * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, a crossing view of the class
+ * prototype guard, the root api) and the ones that
  * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
- * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`). It reads
+ * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`; the promise
+ * the guard hands a reader in place of another module's). It reads
  * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
  * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
  * slothlet's. Backs `api.slothlet.wrapped` (#671).
@@ -3875,6 +3886,8 @@ export function isSlothletWrapped(value) {
 		weakMapHasAtLoad(FRAMEWORK_VIEW_TARGETS, value) ||
 		weakSetHasAtLoad(OWN_VIEWS_UNLISTED, value) ||
 		weakSetHasAtLoad(NODE_VALUE_OFS, value) ||
+		weakMapHasAtLoad(CROSSINGS, value) ||
+		weakSetHasAtLoad(CROSSING_PROMISES, value) ||
 		isSlothletProxy(value) ||
 		isFrameworkInternal(value) ||
 		isCompositionProxy(value) ||
@@ -4637,10 +4650,11 @@ function runtime_promiseStandIn(maker, owner, original) {
  * @param {object} owner - The wrapper whose call returned the value.
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call.
+ * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value, callerIsHost = false) {
+function runtime_attributeResult(owner, value, callerIsHost = false, caller = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
 	if (callerIsHost && typeof value === "object") {
@@ -4653,7 +4667,11 @@ function runtime_attributeResult(owner, value, callerIsHost = false) {
 		if (!runtime_permissionsOn(owner) || !util.types.isProxy(value)) return value;
 		return runtime_makerOf(owner).made.get(value) ?? value;
 	}
-	return runtime_handOut(runtime_makerOf(owner), owner, value);
+	const handed = runtime_handOut(runtime_makerOf(owner), owner, value);
+	// Data a module's call hands another module (a stand-in of its code run by that module, say) reaches it through the
+	// class prototype guard.
+	if (handed !== value || callerIsHost || !caller?.____slothletInternal) return handed;
+	return runtime_crossTo(value, caller, owner.slothlet, owner);
 }
 
 /**
@@ -4701,8 +4719,16 @@ function runtime_nodeAtPath(slothlet, apiPath) {
 }
 
 setModuleNodeResolver(runtime_nodeAtPath);
-setHandedOutCheck((value) => value !== null && (typeof value === "object" || typeof value === "function") && STAND_IN_RECORDS.has(value));
-setInboundOriginal((value) => (typeof value === "object" && value !== null ? (INBOUND_VIEWS.get(value)?.original ?? value) : value));
+setHandedOutCheck(
+	(value) =>
+		value !== null && (typeof value === "object" || typeof value === "function") && (STAND_IN_RECORDS.has(value) || CROSSINGS.has(value))
+);
+// A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
+setInboundOriginal((value) => {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	const behind = runtime_uncross(value);
+	return typeof behind === "object" && behind !== null ? (INBOUND_VIEWS.get(behind)?.original ?? behind) : behind;
+});
 
 /**
  * What a module is handed (#597): a stand-in of its own value comes back as the value itself, as in plain
@@ -4717,6 +4743,8 @@ setInboundOriginal((value) => (typeof value === "object" && value !== null ? (IN
  */
 function runtime_handIn(maker, value, owner = maker.owner) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	// A crossing view handed in is the value it stands over, decided below for this module.
+	value = runtime_uncross(value);
 	const record = STAND_IN_RECORDS.get(value) ?? INBOUND_VIEWS.get(value);
 	if (record) return record.maker === maker ? record.original : value;
 	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
@@ -4982,7 +5010,10 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 	const prototypeOut = (prototype) => {
 		if (prototype === null || typeof prototype !== "object" || util.types.isProxy(prototype)) return out(prototype);
 		const owned = classOf(prototype);
-		return owned && !maker.made.has(owned) ? prototype : out(prototype);
+		// While the permission system is on, it is checked for whoever writes through it (the class prototype guard).
+		if (!owned || maker.made.has(owned)) return out(prototype);
+		// One handed to the module (a subclass's, constructed for) is not the module's.
+		return maker.handedIn.has(prototype) ? prototype : runtime_crossTo(prototype, SEALED_SHELL_READER, owner.slothlet, owner);
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -5051,7 +5082,8 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
-				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value)) return value;
+				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
+					return runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
 				if (value === Function.prototype.toString && isFunction) {
 					let source = SOURCES.get(original);
 					if (!source) {
@@ -5358,6 +5390,39 @@ function runtime_markWritten(wrapper, value) {
 	const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
 	if (writer && genuineWrappers.has(writer) && runtime_makerOf(writer) === maker) return;
 	maker.handedIn.add(value);
+}
+
+/**
+ * The arguments a call from one module into another is handed while the permission system is on (the class prototype
+ * guard, see {@link runtime_crossTo}): each object of the caller's reaches the callee as a crossing view, so what the
+ * callee stores into it (one of its class's instances, say) reaches the caller as values the callee hands on do. A call
+ * from the host, or from a module into itself, is handed its arguments as they are.
+ * @param {object} wrapper - The wrapper being called.
+ * @param {ArrayLike<*>} args - The call's arguments.
+ * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
+ * @private
+ */
+function runtime_crossArguments(wrapper, args) {
+	if (!args?.length || !wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+	const caller = wrapper.slothlet.contextManager?.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
+	if (!caller?.____slothletInternal || !genuineWrappers.has(caller)) return args;
+	if (runtime_sameModule(caller, wrapper)) return args;
+	let result = args;
+	for (let index = 0; index < args.length; index++) {
+		const value = args[index];
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+		runtime_recordOrigin(value, caller);
+		if (typeof value === "function") {
+			const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
+			if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, caller);
+			continue;
+		}
+		const crossed = runtime_crossTo(value, wrapper, wrapper.slothlet, caller);
+		if (crossed === value) continue;
+		if (result === args) result = Array.from(args);
+		result[index] = crossed;
+	}
+	return result;
 }
 
 /**
@@ -5767,7 +5832,7 @@ function runtime_carryTo(value, reader, slothlet) {
 export function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
 	if (payload === null || typeof payload !== "object" || !listener?.____slothletInternal) return payload;
 	if (emitter?.____slothletInternal && runtime_makerOf(emitter) === runtime_makerOf(listener)) return payload;
-	return runtime_carryTo(payload, listener, slothlet);
+	return runtime_crossTo(payload, listener, slothlet, emitter?.____slothletInternal ? emitter : null);
 }
 
 /**
@@ -5816,6 +5881,546 @@ function runtime_carrierView(value, reader, slothlet) {
 	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
+
+/**
+ * Each crossing view (see {@link runtime_crossView}), with the value it stands over, who it was handed to, and the
+ * module the value came from.
+ * @type {WeakMap<object, {original: object, reader: object, from: object|null, slothlet: object}>}
+ * @private
+ */
+const CROSSINGS = new WeakMap();
+
+/**
+ * The crossing views made of each value: its first reader's, and any other reader's by reader.
+ * @type {WeakMap<object, {reader: object, view: object, others: WeakMap<object, object>|null}>}
+ * @private
+ */
+const CROSSING_VIEWS = new WeakMap();
+
+/**
+ * The promises the class prototype guard hands a reader in place of a plain promise another module handed on, settling
+ * as it does with what it settles to crossed (see {@link runtime_crossTo}).
+ * @type {WeakSet<Promise>}
+ * @private
+ */
+const CROSSING_PROMISES = new WeakSet();
+
+/**
+ * Whether a value is a crossing view.
+ * @param {*} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_isCrossing(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && CROSSINGS.has(value);
+}
+
+/**
+ * The value a crossing view stands over, or the value itself.
+ * @param {*} value - The value.
+ * @returns {*} What it stands over.
+ * @private
+ */
+function runtime_uncross(value) {
+	return runtime_isCrossing(value) ? CROSSINGS.get(value).original : value;
+}
+
+/**
+ * The module a value was seen held as itself by, when it crossed to another module through slothlet (an argument, a
+ * class a construction was made for): the guard hands it back to that module as itself.
+ * @type {WeakMap<object, {slothlet: object, module: string|object}>}
+ * @private
+ */
+const CROSSING_ORIGINS = new WeakMap();
+
+/**
+ * Who a wrapper's module is, for the guard: its module id, or the wrapper itself when it has none.
+ * @param {object|null} wrapper - A wrapper.
+ * @returns {string|object|null} The key.
+ * @private
+ */
+function runtime_moduleKey(wrapper) {
+	if (!wrapper?.____slothletInternal) return null;
+	return wrapper.____slothletInternal.moduleID ?? wrapper;
+}
+
+/**
+ * Record that `wrapper`'s module held a value as itself when it handed it on (see {@link CROSSING_ORIGINS}). A value it
+ * held through a crossing view, or one already recorded, is left as it is.
+ * @param {*} value - The value.
+ * @param {object} wrapper - The module's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordOrigin(value, wrapper) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || CROSSINGS.has(value)) return;
+	if (CROSSING_ORIGINS.has(value)) return;
+	const module = runtime_moduleKey(wrapper);
+	if (module !== null) CROSSING_ORIGINS.set(value, { slothlet: wrapper.slothlet, module });
+}
+
+/**
+ * Whether two wrappers are of the same module, told without making any record of either.
+ * @param {object|null} a - A wrapper.
+ * @param {object|null} b - Another.
+ * @returns {boolean} True when they are.
+ * @private
+ */
+function runtime_sameModule(a, b) {
+	if (a === b) return true;
+	const left = runtime_moduleKey(a);
+	return left !== null && left === runtime_moduleKey(b) && a.slothlet === b.slothlet;
+}
+
+/**
+ * Whether `reader`'s module is the one a value was recorded as held as itself by.
+ * @param {*} value - The value.
+ * @param {object} reader - Who reads it.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isOwnOrigin(value, reader) {
+	const origin = CROSSING_ORIGINS.get(value);
+	return origin !== undefined && origin.slothlet === reader?.slothlet && origin.module === runtime_moduleKey(reader);
+}
+
+/**
+ * Whether an object is the own prototype of a class some module or the host wrote (`C.prototype`), told by
+ * descriptors alone: its `constructor` is a function whose `prototype` is the object. The language's and packages'
+ * own prototypes are not.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such a prototype.
+ * @private
+ */
+function runtime_isWrittenClassPrototype(value) {
+	if (INTRINSICS.has(value) || runtime_isSharedValue(value) || runtime_isSlothletValue(value)) return false;
+	const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
+	return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
+}
+
+/**
+ * A prototype some module wrote, reached by a reader through a value another module handed it (an instance, the class,
+ * the prototype held in data), as the reader gets it while the permission system is on. One whose class a node exports
+ * is handed on as reading it at that path would ({@link runtime_prototypeHandedTo}). Any other is the code of the
+ * module that handed it on and is held to that module's path: a checked view refusing a write the reader could not make
+ * there. Handed on by no known module, it is held to the root, which only the host owns.
+ * @param {object} prototype - The prototype.
+ * @param {object} reader - Who reads it.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} from - The wrapper of the module it came from.
+ * @returns {object} What the reader gets.
+ * @private
+ */
+function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
+	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
+	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet);
+	const parts = from?.____slothletInternal
+		? String(from.____slothletInternal.apiPath ?? "")
+				.split(".")
+				.filter(Boolean)
+		: [];
+	return runtime_selfMemberOf(prototype, reader, slothlet, parts, null);
+}
+
+/**
+ * Whether a value another module hands on is seen by its reader through a crossing view while the permission system is
+ * on: any object or function that holds, or can later be given, a reference to another object. Primitives, the
+ * language's own objects and functions, packages' and slothlet's own values, slothlet's views and stand-ins, and
+ * objects whose internal data holds no references (dates, regular expressions, buffers, typed arrays, boxed
+ * primitives) pass as they are.
+ * @param {object|Function} value - The value.
+ * @returns {boolean} True when it is viewed.
+ * @private
+ */
+function runtime_needsCrossing(value) {
+	if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
+	if (INTRINSICS.has(value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
+	if (SELF_MEMBER_VIEWS.has(value) || SELF_VIEW_NODES.has(value) || GUARD_VIEWS.has(value) || INBOUND_VIEWS.has(value)) return false;
+	if (resolveWrapper(value) !== null || capturedViewChildren.has(value) || isFrameworkInternal(value)) return false;
+	if (typeof value === "function") return !util.types.isProxy(value) ? !runtime_isBuiltinFunction(value) : true;
+	if (util.types.isProxy(value)) return true;
+	if (util.types.isDate(value) || util.types.isRegExp(value) || util.types.isAnyArrayBuffer(value)) return false;
+	if (util.types.isArrayBufferView(value) || util.types.isBoxedPrimitive(value)) return false;
+	return true;
+}
+
+/**
+ * Whether `reader` may make every write at the path of the module a value comes from and beneath it, as the owner may:
+ * it owns the path, or write rules grant it the whole subtree. Such a reader gets the value itself; a prototype on it of
+ * a class exported elsewhere is still decided at that class's path ({@link runtime_writtenPrototypeFor}).
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @returns {boolean} True when it may.
+ * @private
+ */
+function runtime_mayWriteFrom(slothlet, reader, from) {
+	if (!from?.____slothletInternal || !reader?.____slothletInternal) return false;
+	const parts = String(from.____slothletInternal.apiPath ?? "")
+		.split(".")
+		.filter(Boolean);
+	if (parts.length === 0) return false;
+	const verdict = slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), parts.join("."));
+	if (verdict === "deny") return false;
+	if (verdict === "grant" && !slothlet.handlers.apiManager.isRemovedCaller(reader)) return true;
+	return slothlet.handlers.apiManager.ownsPath(parts, reader);
+}
+
+/**
+ * What a value reaches `reader` as when another module hands it on while the permission system is on (the class
+ * prototype guard): the reader may change data it is handed, but never the code of a module it may not write, however
+ * it gets to it. A prototype a module wrote is checked ({@link runtime_writtenPrototypeFor}); any other object is a
+ * crossing view ({@link runtime_crossView}) through which every value read later — an instance, the class, a member
+ * the owner stored after handing the object on — reaches the reader the same way. The host, the module the value came
+ * from, and every reader while the system is off get the value itself; a crossing view handed on again is decided anew
+ * for whoever it reaches.
+ * @param {*} value - The value.
+ * @param {object|null|undefined} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}),
+ *   or {@link SEALED_SHELL_READER} for a holder not known yet.
+ * @param {object|null} slothlet - The instance it crosses in, when known.
+ * @param {object|null} [from] - The wrapper of the module it comes from, when known.
+ * @returns {*} What the reader gets.
+ * @private
+ */
+function runtime_crossTo(value, reader, slothlet, from = null) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	const crossing = CROSSINGS.get(value);
+	if (crossing) {
+		value = crossing.original;
+		from = crossing.from ?? from;
+		slothlet ??= crossing.slothlet;
+	}
+	if (reader === null || reader === undefined || reader === HOST_READER) return value;
+	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
+	if (!slothlet?.handlers?.permissionManager?.isEnabled?.()) return value;
+	if (from !== null && runtime_sameModule(from, reader)) return value;
+	// A value the reader's own module held as itself when it handed it on comes back to it as itself.
+	if (runtime_isOwnOrigin(value, reader)) return value;
+	try {
+		// The async runtime's context wrapper of a class instance (#328) stands for the instance: what it is decides.
+		const plain = runtime_unwrapClassInstance(value);
+		if (typeof plain === "object" && !util.types.isProxy(plain)) {
+			if (runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
+				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
+		}
+		if (!runtime_needsCrossing(value)) return value;
+		// A module that may write everything at the path the value comes from gets the value itself, as the owner does.
+		// Handed back to the module it came from, it is that module's own value again.
+		if (runtime_mayWriteFrom(slothlet, reader, from)) {
+			runtime_recordOrigin(value, from);
+			return value;
+		}
+		if (runtime_isPlainPromise(value)) {
+			const crossed = Reflect.apply(SLOT_READERS.then, value, [
+				(settled) => runtime_crossTo(settled, reader, slothlet, from),
+				(reason) => {
+					throw runtime_crossTo(reason, reader, slothlet, from);
+				}
+			]);
+			CROSSING_PROMISES.add(crossed);
+			return crossed;
+		}
+		return runtime_crossView(value, reader, slothlet, from);
+	} catch {
+		// A value that refuses to be described is handed on as it is.
+		return value;
+	}
+}
+
+/**
+ * A crossing view (see {@link runtime_crossTo}): the value to every reflection, read and written through, with every
+ * value read from it — a member, a prototype, a call's result or error, a member of a `Map` or `Set`, a `WeakRef`'s
+ * target — reaching the reader as values another module hands on do, and every value the reader puts into it reaching
+ * the module the value came from the same way. The view is lazy: nothing is searched when it is made, so a member the
+ * owner stores later is seen as well. It stands over a shadow kept in step with the value for what the language fixes.
+ * @param {object|Function} original - The value.
+ * @param {object} reader - Who it reaches.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} from - The wrapper of the module it comes from.
+ * @returns {object|Function} The view, the same one for the same value and reader every time.
+ * @private
+ */
+function runtime_crossView(original, reader, slothlet, from) {
+	// The views of a value: its first reader's held inline, any other reader's in a map made only then.
+	const views = CROSSING_VIEWS.get(original);
+	if (views !== undefined) {
+		if (views.reader === reader) return views.view;
+		const other = views.others?.get(reader);
+		if (other) return other;
+	}
+	const isFunction = typeof original === "function";
+	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Array.isArray(original) ? [] : {};
+	const state = { original, reader, slothlet, from, view: null, slot: null, engineMethods: null };
+	const view = new Proxy(shadow, CROSSING_HANDLER);
+	state.view = view;
+	CROSSING_STATES.set(shadow, state);
+	CROSSINGS.set(view, state);
+	if (views === undefined) CROSSING_VIEWS.set(original, { reader, view, others: null });
+	else (views.others ??= new WeakMap()).set(reader, view);
+	return view;
+}
+
+/**
+ * The state of each crossing view, by its shadow (see {@link runtime_crossView}).
+ * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, slot: boolean|null, engineMethods: WeakMap<Function, Function>|null}>}
+ * @private
+ */
+const CROSSING_STATES = new WeakMap();
+
+/**
+ * A value read through a crossing view, as its reader gets it.
+ * @param {object} state - The view's state.
+ * @param {*} member - The value.
+ * @returns {*} What the reader gets.
+ * @private
+ */
+function runtime_crossOut(state, member) {
+	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
+	return runtime_crossTo(member, state.reader, state.slothlet, state.from);
+}
+
+/**
+ * A value the reader puts into the value behind a crossing view, as the module the value came from gets it (the host,
+ * when none is known).
+ * @param {object} state - The view's state.
+ * @param {*} member - The value.
+ * @returns {*} What is stored.
+ * @private
+ */
+function runtime_crossIn(state, member) {
+	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
+	if (member === state.view) return state.original;
+	return runtime_crossTo(member, state.from ?? HOST_READER, state.slothlet, state.reader);
+}
+
+/**
+ * A descriptor of the value behind a crossing view, as the view reports it.
+ * @param {object} state - The view's state.
+ * @param {PropertyDescriptor|undefined} descriptor - The descriptor.
+ * @returns {PropertyDescriptor|undefined} The reported descriptor.
+ * @private
+ */
+function runtime_crossDescribe(state, descriptor) {
+	if (!descriptor) return descriptor;
+	const result = { ...descriptor };
+	if ("value" in descriptor) result.value = runtime_crossOut(state, descriptor.value);
+	else {
+		if ("get" in descriptor) result.get = runtime_crossOut(state, descriptor.get);
+		if ("set" in descriptor) result.set = runtime_crossOut(state, descriptor.set);
+	}
+	return result;
+}
+
+/**
+ * Keep a crossing view's shadow in step with a member the language fixes.
+ * @param {object} shadow - The shadow.
+ * @param {string|symbol} prop - The member.
+ * @param {PropertyDescriptor|undefined} descriptor - Its reported descriptor.
+ * @returns {void}
+ * @private
+ */
+function runtime_crossSync(shadow, prop, descriptor) {
+	if (!descriptor || descriptor.configurable || !Reflect.isExtensible(shadow)) return;
+	Reflect.defineProperty(shadow, prop, descriptor);
+}
+
+/**
+ * The prototype a crossing view reports: a prototype some module wrote is code, never data, whether or not a class
+ * owns it, and reaches the reader checked ({@link runtime_writtenPrototypeFor}).
+ * @param {object} state - The view's state.
+ * @param {object|null} raw - The prototype of the value behind the view.
+ * @returns {object|null} What the reader gets.
+ * @private
+ */
+function runtime_crossPrototype(state, raw) {
+	if (raw === null || (typeof raw !== "object" && typeof raw !== "function")) return raw;
+	const prototype = runtime_unwrapClassInstance(raw);
+	if (
+		typeof prototype === "object" &&
+		!util.types.isProxy(prototype) &&
+		!INTRINSICS.has(prototype) &&
+		!runtime_isSharedValue(prototype) &&
+		!runtime_isSlothletValue(prototype)
+	)
+		return runtime_writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from);
+	return runtime_crossOut(state, prototype);
+}
+
+/**
+ * Make a closed value's crossing view report what the language fixes: its shadow holds every member, as the reader gets
+ * it, and its prototype, and is closed too.
+ * @param {object} shadow - The shadow.
+ * @param {object} state - The view's state.
+ * @returns {void}
+ * @private
+ */
+function runtime_crossSettle(shadow, state) {
+	if (!Reflect.isExtensible(shadow)) return;
+	const keys = Reflect.ownKeys(state.original);
+	for (const key of keys) {
+		const descriptor = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, key));
+		if (descriptor) Reflect.defineProperty(shadow, key, descriptor);
+	}
+	for (const key of Reflect.ownKeys(shadow)) if (!keys.includes(key)) Reflect.deleteProperty(shadow, key);
+	Reflect.setPrototypeOf(shadow, runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original)));
+	Reflect.preventExtensions(shadow);
+}
+
+/**
+ * An engine method read through a crossing view of an object with internal slots (a `Map`, a `Set`, a `WeakRef`, an
+ * iterator): it runs on the object itself, its results and the values it calls back with handed on to the reader, and
+ * what the reader passes it handed to the module the object came from. Null for any other value.
+ * @param {object} state - The view's state.
+ * @param {*} fn - The value read.
+ * @returns {Function|null} The method, the same each read.
+ * @private
+ */
+function runtime_crossEngineMethod(state, fn) {
+	if (typeof fn !== "function" || util.types.isProxy(fn) || !(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn))) return null;
+	const { original } = state;
+	state.slot ??=
+		typeof original !== "function" &&
+		!util.types.isProxy(original) &&
+		(runtime_hasInternalSlots(original) ||
+			runtime_isNativeIterator(original) ||
+			util.types.isMapIterator(original) ||
+			util.types.isSetIterator(original) ||
+			util.types.isGeneratorObject(original));
+	if (!state.slot) return null;
+	state.engineMethods ??= new WeakMap();
+	let method = state.engineMethods.get(fn);
+	if (!method) {
+		const name = fn.name;
+		method = {
+			[name](...args) {
+				const receiver = this === state.view ? original : this;
+				const handed = args.map((arg) =>
+					typeof arg === "function"
+						? (...values) =>
+								Reflect.apply(
+									arg,
+									undefined,
+									values.map((item) => (item === original ? state.view : runtime_crossOut(state, item)))
+								)
+						: runtime_crossIn(state, arg)
+				);
+				return runtime_crossOut(state, Reflect.apply(fn, receiver, handed));
+			}
+		}[name];
+		state.engineMethods.set(fn, method);
+	}
+	return method;
+}
+
+/**
+ * The traps of every crossing view (see {@link runtime_crossView}), each finding its view's state by the shadow.
+ * @type {ProxyHandler<object>}
+ * @private
+ */
+const CROSSING_HANDLER = {
+	get(shadow, prop, receiver) {
+		const state = CROSSING_STATES.get(shadow);
+		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+		if (held && !held.configurable && "value" in held && !held.writable) return held.value;
+		const value = Reflect.get(state.original, prop, receiver === state.view ? state.original : receiver);
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
+		if (own && !own.configurable) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, own));
+		return runtime_crossEngineMethod(state, value) ?? runtime_crossOut(state, value);
+	},
+	set(shadow, prop, value, receiver) {
+		const state = CROSSING_STATES.get(shadow);
+		const into = receiver === state.view ? state.original : runtime_crossIn(state, receiver);
+		const done = Reflect.set(state.original, prop, runtime_crossIn(state, value), into);
+		const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
+		if (own && !own.configurable) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, own));
+		return done;
+	},
+	has(shadow, prop) {
+		return Reflect.has(CROSSING_STATES.get(shadow).original, prop);
+	},
+	deleteProperty(shadow, prop) {
+		return Reflect.deleteProperty(CROSSING_STATES.get(shadow).original, prop);
+	},
+	ownKeys(shadow) {
+		const state = CROSSING_STATES.get(shadow);
+		if (!Reflect.isExtensible(state.original)) runtime_crossSettle(shadow, state);
+		if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
+		const keys = Reflect.ownKeys(state.original);
+		for (const key of Reflect.ownKeys(shadow))
+			if (!keys.includes(key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) keys.push(key);
+		return keys;
+	},
+	getOwnPropertyDescriptor(shadow, prop) {
+		const state = CROSSING_STATES.get(shadow);
+		if (!Reflect.isExtensible(state.original)) {
+			runtime_crossSettle(shadow, state);
+			return Reflect.getOwnPropertyDescriptor(shadow, prop);
+		}
+		const result = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop));
+		runtime_crossSync(shadow, prop, result);
+		return result;
+	},
+	defineProperty(shadow, prop, descriptor) {
+		const state = CROSSING_STATES.get(shadow);
+		const into = { ...descriptor };
+		if ("value" in descriptor) into.value = runtime_crossIn(state, descriptor.value);
+		if ("get" in descriptor) into.get = runtime_crossIn(state, descriptor.get);
+		if ("set" in descriptor) into.set = runtime_crossIn(state, descriptor.set);
+		const done = Reflect.defineProperty(state.original, prop, into);
+		if (done) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop)));
+		return done;
+	},
+	getPrototypeOf(shadow) {
+		if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
+		const state = CROSSING_STATES.get(shadow);
+		return runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original));
+	},
+	setPrototypeOf(shadow, prototype) {
+		if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === prototype;
+		const state = CROSSING_STATES.get(shadow);
+		return Reflect.setPrototypeOf(state.original, runtime_crossIn(state, prototype));
+	},
+	isExtensible(shadow) {
+		const state = CROSSING_STATES.get(shadow);
+		if (!Reflect.isExtensible(state.original)) runtime_crossSettle(shadow, state);
+		return Reflect.isExtensible(shadow);
+	},
+	preventExtensions(shadow) {
+		const state = CROSSING_STATES.get(shadow);
+		const done = Reflect.preventExtensions(state.original);
+		if (done) runtime_crossSettle(shadow, state);
+		return done;
+	},
+	apply(shadow, thisArg, args) {
+		const state = CROSSING_STATES.get(shadow);
+		let result;
+		try {
+			result = Reflect.apply(
+				state.original,
+				runtime_crossIn(state, thisArg),
+				Array.from(args, (arg) => runtime_crossIn(state, arg))
+			);
+		} catch (error) {
+			throw runtime_crossOut(state, error);
+		}
+		return runtime_crossOut(state, result);
+	},
+	construct(shadow, args, newTarget) {
+		const state = CROSSING_STATES.get(shadow);
+		let result;
+		try {
+			result = Reflect.construct(
+				state.original,
+				Array.from(args, (arg) => runtime_crossIn(state, arg)),
+				newTarget === state.view ? state.original : runtime_crossIn(state, newTarget)
+			);
+		} catch (error) {
+			throw runtime_crossOut(state, error);
+		}
+		return runtime_crossOut(state, result);
+	}
+};
 
 /**
  * Whether a reader is handed a prototype of the module's as the object itself rather than a checked view of it (#667),
@@ -7376,17 +7981,20 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
 			// handed out fixed is called with no view of `self` over it.
-			if (!gated) return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller);
+			if (!gated) return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stand-in a held view read was made for its reader, and checks the reader against the node it resolves
 			// to when called; a check here could only be made against the stand-in's base.
-			if (gated === "held" && STAND_INS.has(child)) return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller);
+			if (gated === "held" && STAND_INS.has(child))
+				return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
 			const call = runtime_callAsDefiner(inner, () =>
 				runtime_selfViewResult(
 					asKept(() => Reflect.apply(child, thisArg, args)),
-					capturedCaller
+					capturedCaller,
+					null,
+					inner
 				)
 			);
 			if (pending) {
@@ -13330,6 +13938,9 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			// A function or Proxy this module handed out comes back to it as itself (#597).
 			if (!___gatePassed) args = runtime_ownArguments(wrapper, args);
+			// What another module passes in reaches this one through the class prototype guard, so what this module stores
+			// into it reaches the caller the same way.
+			if (!___gatePassed) args = runtime_crossArguments(wrapper, args);
 
 			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 			// `this` — but a native method whose behavior depends on internal slots tied to exact

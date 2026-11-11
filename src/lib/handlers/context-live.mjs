@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:07-08:00 (1794207547)
+ *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1443,7 +1443,12 @@ export class LiveContextManager {
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) =>
-						this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, callerIsHost), targetInstanceID, creator, callerIsHost)
+						this.#wrapClassInstanceResult(
+							attributeResult(currentWrapper, value, callerIsHost, entryCaller),
+							targetInstanceID,
+							creator,
+							callerIsHost
+						)
 				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, callerIsHost);
 
 		try {

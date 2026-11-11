@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T00:51:07-08:00 (1794214267)
+ *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1382,11 +1382,12 @@ export function setResultAttributor(attributor) {
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
+ * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper, value, callerIsHost = false) {
-	return resultAttributor(wrapper, value, callerIsHost);
+export function attributeResult(wrapper, value, callerIsHost = false, caller = null) {
+	return resultAttributor(wrapper, value, callerIsHost, caller);
 }
 
 /**
@@ -1545,11 +1546,16 @@ function runtime_isPlainData(value, depth, budget) {
  * @returns {boolean} True for an object or function that is neither slothlet's own nor plain data.
  * @private
  */
-const carriesCode = (value, budget) =>
-	value !== null &&
-	(typeof value === "object" || typeof value === "function") &&
-	!genuineWrappers.has(value) &&
-	!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget);
+const carriesCode = (raw, budget) => {
+	// A module's view of a caller's value (an inbound or crossing view) stands for what the caller handed.
+	const value = raw !== null && (typeof raw === "object" || typeof raw === "function") ? inboundOriginal(raw) : raw;
+	return (
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		!genuineWrappers.has(value) &&
+		!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget)
+	);
+};
 
 /**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
