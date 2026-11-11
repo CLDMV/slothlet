@@ -6441,7 +6441,7 @@ const CROSSINGS = new WeakMap();
  * The crossing views made of each value: its first module's held inline, any other module's by module (see
  * {@link runtime_crossKey}). Every leaf of one module gets the same view, so a value one module hands another is the
  * same value in every function of the module it reaches, as it is in plain JavaScript.
- * @type {WeakMap<object, {key: object, view: object, others: Map<object, object>|null}>}
+ * @type {WeakMap<object, {key: object, view: object, reader: object, others: Map<object, object>|null}>}
  * @private
  */
 const CROSSING_VIEWS = new WeakMap();
@@ -6931,6 +6931,8 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	const views = CROSSING_VIEWS.get(value);
 	if (views !== undefined) {
 		const key = runtime_crossKey(reader);
+		// The function the first view was made for is the common reader: it was refused the value itself already.
+		if (views.key === key && views.reader === reader) return views.view;
 		const held = views.key === key ? views.view : views.others?.get(key);
 		if (held) {
 			if (!isModule) return held;
@@ -7020,7 +7022,7 @@ function runtime_crossView(original, reader, slothlet, from) {
 	state.view = view;
 	CROSSING_STATES.set(shadow, state);
 	CROSSINGS.set(view, state);
-	if (views === undefined) CROSSING_VIEWS.set(original, { key, view, others: null });
+	if (views === undefined) CROSSING_VIEWS.set(original, { key, view, reader, others: null });
 	else (views.others ??= new Map()).set(key, view);
 	return view;
 }
