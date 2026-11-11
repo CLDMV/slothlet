@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:13:31-08:00 (1794219211)
+ *	@Last modified time: 2026-11-10T21:28:42-08:00 (1794374922)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,6 +49,10 @@ import {
 	runtime_selfView,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
+	runtime_contextRead,
+	runtime_contextWritten,
+	runtime_contextReadAsDefiner,
+	registerRuntimeContext,
 	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
@@ -321,13 +325,15 @@ export const context = new Proxy(
 		get(_, prop) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				return undefined;
+				// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
+				return runtime_contextReadAsDefiner(context, prop);
 			}
 			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
 			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
 			// resolver lets the view identify the WRITER from the store active at write time rather
 			// than a stale wrap-time snapshot.
-			return readProtectedContextValue(ctx, prop, resolveActiveContext);
+			// What a module stored there reaches another module as values one module hands another do.
+			return runtime_contextRead(ctx, readProtectedContextValue(ctx, prop, resolveActiveContext));
 		},
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();
@@ -337,6 +343,7 @@ export const context = new Proxy(
 			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 			// current caller doesn't own before mutating the context.
 			enforceContextKeyWrite(ctx, prop);
+			runtime_contextWritten(ctx, value);
 			ctx.context[prop] = value;
 			return true;
 		},
@@ -353,7 +360,9 @@ export const context = new Proxy(
 		getOwnPropertyDescriptor(_, prop) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) return undefined;
-			return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			if (!descriptor || !("value" in descriptor)) return descriptor;
+			return { ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
 		}
 	}
 );
@@ -362,3 +371,4 @@ export const context = new Proxy(
 for (const proxy of [self, context]) markSlothletProxy(proxy);
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
 registerRuntimeSelf(liveRuntime, self);
+registerRuntimeContext(liveRuntime, context);

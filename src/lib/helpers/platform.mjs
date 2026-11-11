@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T09:59:41-08:00 (1794160781)
+ *	@Last modified time: 2026-11-10T21:28:40-08:00 (1794374920)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -112,6 +112,37 @@ if (isNode) {
 } else {
 	// What every generator object and every async generator object inherits from.
 	const GENERATOR_PROTOTYPES = [Object.getPrototypeOf(function* () {}).prototype, Object.getPrototypeOf(async function* () {}).prototype];
+	// What every generator function and every async generator function inherits from.
+	const GENERATOR_FUNCTION_PROTOTYPES = [Object.getPrototypeOf(function* () {}), Object.getPrototypeOf(async function* () {})];
+	// What every `Map` iterator and every `Set` iterator inherits from.
+	const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]());
+	const SET_ITERATOR = Object.getPrototypeOf(new Set()[Symbol.iterator]());
+	/**
+	 * A brand check made by calling one of a kind's own methods on the value: the method reads only the internal data of
+	 * an object of its kind and throws a `TypeError` for anything else.
+	 * @param {Function} method - The method, taken now so replacing it later changes no answer.
+	 * @param {Array<*>} [args] - What to call it with.
+	 * @returns {function(*): boolean} The check.
+	 */
+	const brand =
+		(method, args = []) =>
+		(value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			try {
+				Reflect.apply(method, value, args);
+				return true;
+			} catch {
+				return false;
+			}
+		};
+	/** The getter of an accessor a kind's prototype holds. */
+	const getterOf = (prototype, name) => Object.getOwnPropertyDescriptor(prototype, name).get;
+	const IS_REGEXP = brand(getterOf(RegExp.prototype, "source"));
+	const IS_ARRAY_BUFFER = brand(getterOf(ArrayBuffer.prototype, "byteLength"));
+	const IS_SHARED_ARRAY_BUFFER =
+		typeof SharedArrayBuffer === "function" ? brand(getterOf(SharedArrayBuffer.prototype, "byteLength")) : () => false;
+	const IS_DATA_VIEW = brand(getterOf(DataView.prototype, "byteLength"));
+	const BOXED_BRANDS = [Number, String, Boolean, Symbol, BigInt].map((kind) => brand(kind.prototype.valueOf));
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
@@ -143,7 +174,34 @@ if (isNode) {
 			isGeneratorObject: (value) =>
 				value !== null &&
 				typeof value === "object" &&
-				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value))
+				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value)),
+			// Prototype check: the browser stand-in for Node's brand check of a generator function, an async one included.
+			isGeneratorFunction: (fn) =>
+				typeof fn === "function" && GENERATOR_FUNCTION_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, fn)),
+			// The rest are the engine's own brand checks, made by calling a method of the kind that reads nothing but the
+			// object's internal data and throws for any other object: none of a value's own code runs, and a Proxy never
+			// passes, as with Node's checks.
+			isMap: brand(Map.prototype.has, [undefined]),
+			isSet: brand(Set.prototype.has, [undefined]),
+			isWeakMap: brand(WeakMap.prototype.has, [undefined]),
+			isWeakSet: brand(WeakSet.prototype.has, [undefined]),
+			isDate: brand(Date.prototype.getTime),
+			isRegExp: (value) => value !== RegExp.prototype && IS_REGEXP(value),
+			isArrayBuffer: IS_ARRAY_BUFFER,
+			isSharedArrayBuffer: IS_SHARED_ARRAY_BUFFER,
+			isAnyArrayBuffer: (value) => IS_ARRAY_BUFFER(value) || IS_SHARED_ARRAY_BUFFER(value),
+			isArrayBufferView: (value) => ArrayBuffer.isView(value),
+			isDataView: IS_DATA_VIEW,
+			isTypedArray: (value) => ArrayBuffer.isView(value) && !IS_DATA_VIEW(value),
+			isBoxedPrimitive: (value) => value !== null && typeof value === "object" && BOXED_BRANDS.some((is) => is(value)),
+			// `Error.isError` where the engine has it; the prototype chain otherwise, which an object merely inheriting
+			// from `Error.prototype` passes too.
+			isNativeError: typeof Error.isError === "function" ? (value) => Error.isError(value) : (value) => inheritsFrom(value, Error),
+			isMapIterator: (value) => value !== null && typeof value === "object" && Object.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
+			isSetIterator: (value) => value !== null && typeof value === "object" && Object.prototype.isPrototypeOf.call(SET_ITERATOR, value),
+			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
+			isKeyObject: () => false,
+			isCryptoKey: (value) => typeof globalThis.CryptoKey === "function" && inheritsFrom(value, globalThis.CryptoKey)
 		}
 	};
 }

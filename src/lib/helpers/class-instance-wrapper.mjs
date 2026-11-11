@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:04-08:00 (1794183784)
+ *	@Last modified time: 2026-11-10T21:28:37-08:00 (1794374917)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
 
 // Node-only EventEmitter resolved in the platform module so node:events stays out of the
 // browser static graph (#123).
-import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
+import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { outerCallerCeiling } from "#handlers/frame-placement";
 
@@ -61,6 +61,53 @@ const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
  * @private
  */
 const WRAPPED_INSTANCES = new WeakMap();
+
+/**
+ * Each wrapped instance's Proxies, by who created the instance (the creating module's wrapper, or the context manager
+ * when none is known): the same instance comes back as the same Proxy every time, so `a === b` holds for one instance
+ * returned twice and for a method returning `this`.
+ * @type {WeakMap<object, WeakMap<object, {proxy: object, instanceID: string}>>}
+ */
+const WRAPPERS_BY_INSTANCE = new WeakMap();
+
+/**
+ * The wrapper of the module that created the instance behind each Proxy {@link runtime_wrapClassInstance} produced.
+ * @type {WeakMap<object, object|null>}
+ */
+const WRAPPED_CREATORS = new WeakMap();
+
+/**
+ * Whether an object is an instance of a class some module wrote, as the engine's wrappers tell it. Until one is set,
+ * every class instance is taken for a module's.
+ * @type {function(object): boolean}
+ */
+let isModuleInstance = () => true;
+
+/**
+ * Set how an instance of a module's own class is told from one of the language's or Node's own (a `URL`, a
+ * `Response`, an `Intl.NumberFormat`), which needs no context and whose methods work only on the object itself.
+ * @package
+ * @param {function(object): boolean} check - Answers true for an instance of a class a module wrote.
+ * @returns {void}
+ * @example
+ * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
+ */
+export function setModuleInstanceCheck(check) {
+	isModuleInstance = check;
+}
+
+/**
+ * The wrapper of the module that created the instance behind a Proxy {@link runtime_wrapClassInstance} produced.
+ * @package
+ * @param {*} value - Any value.
+ * @returns {object|null} The creating module's wrapper, or null for any other value or when none is known.
+ * @example
+ * runtime_classInstanceCreator(wrappedInstance); // the wrapper of the leaf that returned it
+ */
+export function runtime_classInstanceCreator(value) {
+	if (value === null || typeof value !== "object") return null;
+	return WRAPPED_CREATORS.get(value) ?? null;
+}
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
 const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
@@ -149,13 +196,16 @@ export function runtime_isClassInstance(val) {
 		return false;
 	}
 
+	// The language's own check, never a `Symbol.hasInstance` a module gave one of these classes.
 	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
-		if (typeof cls === "function" && val instanceof cls) {
+		if (typeof cls === "function" && inheritsFrom(val, cls)) {
 			return false;
 		}
 	}
 
-	return true;
+	// An instance of a class no module wrote keeps its context on its own, and its methods and getters work only on the
+	// object itself: it is handed out as it is.
+	return isModuleInstance(val);
 }
 
 /**
@@ -194,6 +244,14 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 		return instanceCache.get(instance);
 	}
 
+	// The same instance from the same creator is the same Proxy, whichever call returned it.
+	const creatorKey = capturedWrapper ?? contextManager;
+	const known = WRAPPERS_BY_INSTANCE.get(instance)?.get(creatorKey);
+	if (known && known.instanceID === instanceID) {
+		instanceCache.set(instance, known.proxy);
+		return known.proxy;
+	}
+
 	// DEBUG logging
 	// if (process.env.DEBUG_CLASS_WRAP === "1") {
 	// 	console.log("[CLASS_WRAP] Wrapping class instance:", instance.constructor?.name || "Unknown");
@@ -204,7 +262,7 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 	const methodCache = new Map();
 
 	const wrappedInstance = new Proxy(instance, {
-		get(target, prop, receiver) {
+		get(target, prop) {
 			// Sentinel probe: identify Proxies we created so re-wrap stays idempotent (#124).
 			if (prop === SLOTHLET_CLASS_WRAPPED) {
 				return true;
@@ -215,7 +273,9 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 				return methodCache.get(prop);
 			}
 
-			const value = Reflect.get(target, prop, receiver);
+			// Read on the instance itself: a getter over a private field or an internal slot works only on the object, and
+			// the Proxy stands for it.
+			const value = Reflect.get(target, prop, target);
 
 			// If it's a method (function), wrap it to preserve context
 			// Exclude constructor, Object.prototype methods, and double-underscore methods
@@ -255,17 +315,22 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 			return value;
 		},
 
-		set(target, prop, value, receiver) {
+		set(target, prop, value) {
 			// Clear method cache for this property if it's being overwritten
 			if (methodCache.has(prop)) {
 				methodCache.delete(prop);
 			}
-			return Reflect.set(target, prop, value, receiver);
+			// Written on the instance itself, as it is read: a setter over a private field works only on the object.
+			return Reflect.set(target, prop, value, target);
 		}
 	});
 
 	instanceCache.set(instance, wrappedInstance);
 	WRAPPED_INSTANCES.set(wrappedInstance, instance);
+	WRAPPED_CREATORS.set(wrappedInstance, capturedWrapper ?? null);
+	let byCreator = WRAPPERS_BY_INSTANCE.get(instance);
+	if (!byCreator) WRAPPERS_BY_INSTANCE.set(instance, (byCreator = new WeakMap()));
+	byCreator.set(creatorKey, { proxy: wrappedInstance, instanceID });
 	return wrappedInstance;
 }
 

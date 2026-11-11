@@ -25,7 +25,7 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
-import { markSlothletProxy } from "#handlers/framework-internals";
+import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -117,6 +117,9 @@ export function settleThenable(thenable, onFulfilled, onRejected) {
 	const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
 	// Handled up front: it can reject before anything that is handed it attaches a handler.
 	adopted.then(undefined, () => {});
+	// slothlet's own promise: handed back to a `then` that reads what its callbacks return, it is the promise itself,
+	// never a second promise made for whoever wrote that `then`, whose rejection nothing would handle.
+	markFrameworkInternal(adopted);
 	const react = (reaction, input) => {
 		if (settled) return adopted;
 		settled = true;
