@@ -120,14 +120,14 @@ const CLONE_SITES = runtime_cloneSites();
 
 /**
  * Tells the value behind one of slothlet's views, set by the handlers that make them.
- * @type {(value: object|Function) => (object|Function|undefined)}
+ * @type {function(*): *}
  * @private
  */
 let viewed = () => undefined;
 
 /**
  * Set how the value behind one of slothlet's views is told.
- * @param {(value: object|Function) => (object|Function|undefined)} behind - Answers the value a view stands over, or
+ * @param {function(*): *} behind - Answers the value a view stands over, or
  *   `undefined` for a value that is no view of slothlet's.
  * @returns {void}
  * @internal

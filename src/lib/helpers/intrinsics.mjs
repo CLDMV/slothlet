@@ -31,7 +31,7 @@ const { apply } = NativeReflect;
  * A frozen object with no prototype holding what a built-in holds as its own data members under string keys: its
  * functions, and a namespace's constants (`Math.PI`).
  * @param {object|Function} source - The built-in.
- * @returns {Readonly<Record<string, unknown>>} Its members, by name.
+ * @returns {object} Its members, by name.
  * @private
  */
 function staticsOf(source) {
@@ -45,40 +45,40 @@ function staticsOf(source) {
 
 /**
  * The functions of `Reflect`, as they were when slothlet loaded.
- * @type {typeof globalThis.Reflect}
+ * @type {object}
  * @internal
  * @example
  * import { Reflect } from "@cldmv/slothlet/helpers/intrinsics";
  * Reflect.getOwnPropertyDescriptor(value, "constructor");
  */
-export const Reflect = /** @type {typeof globalThis.Reflect} */ (staticsOf(NativeReflect));
+export const Reflect = staticsOf(NativeReflect);
 
 /**
  * The static functions of `Object`, as they were when slothlet loaded.
- * @type {ObjectConstructor}
+ * @type {object}
  * @internal
  * @example
  * import { Objects } from "@cldmv/slothlet/helpers/intrinsics";
  * Objects.keys(value);
  */
-export const Objects = /** @type {ObjectConstructor} */ (/** @type {unknown} */ (staticsOf(NativeObject)));
+export const Objects = staticsOf(NativeObject);
 
 /**
  * The static functions of `Array`, as they were when slothlet loaded. `Arrays.from` and `Arrays.of` make plain arrays.
- * @type {ArrayConstructor}
+ * @type {object}
  * @internal
  * @example
  * import { Arrays } from "@cldmv/slothlet/helpers/intrinsics";
  * Arrays.isArray(value);
  */
-export const Arrays = /** @type {ArrayConstructor} */ (/** @type {unknown} */ (staticsOf(Array)));
+export const Arrays = staticsOf(Array);
 
-const NativeJSON = /** @type {JSON} */ (staticsOf(JSON));
-const NativeMath = /** @type {Math} */ (staticsOf(Math));
+const NativeJSON = staticsOf(JSON);
+const NativeMath = staticsOf(Math);
 
 /**
  * `Function.prototype.toString` itself, as it was when slothlet loaded.
- * @type {() => string}
+ * @type {Function}
  * @internal
  * @example
  * value === functionToString; // whether a member read is the language's own `toString`
@@ -99,7 +99,7 @@ export function functionSource(fn) {
 
 /**
  * The `Proxy` constructor, as it was when slothlet loaded.
- * @type {ProxyConstructor}
+ * @type {Function}
  * @internal
  * @example
  * import { NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
