@@ -2802,7 +2802,8 @@ function runtime_instanceRuns(slothlet) {
  * The leaves whose file a location is, across the instances, narrowed by the instance and mount tags the location
  * carries. While an instance's permission system is on, a shut-down instance and a removed node are skipped: what they
  * made has no standing. With it off they are not: nothing is checked (#726). Null when
- * none match, or when leaves of more than one instance do (a file two instances load without a tag telling them apart).
+ * none match, or when leaves of more than one running instance do (a file two instances load without a tag telling them
+ * apart). The copy an instance that has shut down left behind is read only when no running instance holds the file.
  * @param {string} path - Comparable path.
  * @param {string} line - Raw text holding the location's tags.
  * @returns {Array<object>|null} Leaves of one instance.
@@ -2813,6 +2814,9 @@ function runtime_leavesAtLocation(path, line) {
 	const mount = runtime_frameModuleTag(line);
 	let found = null;
 	let instance = null;
+	// What an instance that has shut down left behind: read only when no running instance holds the file.
+	let gone = null;
+	let goneInstance = null;
 	for (const [id, reference] of LIVE_INSTANCES) {
 		if (tag && id !== tag) continue;
 		const slothlet = reference.deref();
@@ -2822,14 +2826,23 @@ function runtime_leavesAtLocation(path, line) {
 		}
 		// What a shut-down instance made has no standing while its permission system was on; with it off the code is
 		// still told apart, and runs as plain JavaScript, with no context to read `self` from (#726).
-		if (!runtime_instanceRuns(slothlet) && runtime_checksPermissions(slothlet)) continue;
+		const runs = runtime_instanceRuns(slothlet);
+		if (!runs && runtime_checksPermissions(slothlet)) continue;
 		const leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
 		if (!leaves.length) continue;
+		if (!runs) {
+			// A file no tag tells apart (a CommonJS file) that a running instance loads is that instance's: the copy an
+			// instance that has shut down left behind does not stand beside it.
+			if (goneInstance && goneInstance !== slothlet) gone = null;
+			else gone = leaves;
+			goneInstance ??= slothlet;
+			continue;
+		}
 		if (instance && instance !== slothlet) return null;
 		instance = slothlet;
 		found = leaves;
 	}
-	return found;
+	return found ?? gone;
 }
 
 /**

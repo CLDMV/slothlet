@@ -336,6 +336,48 @@ Constructing a class or function a module exports (`new self.supplier.ctor.Named
 
 Code a module handed out that the host runs outside any call reads `self` as its definer: `api.bag.make()()` works, checked against `bag.make`'s rules, and the node it calls sees that definer as its caller in `self.slothlet.metadata.caller()`, the identity the check used. Code whose definer the stack cannot tell is refused with `PERMISSION_DENIED` rather than read as anyone (see the limits below). A script of the host's own still has no `self` (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`, see [`self` requires an executing module](#self-requires-an-executing-module)).
 
+#### File-level code has its own permission path
+
+Code written outside every export of a file is not any of the file's leaves. When it runs with no export's frame of its file below it on the stack, it runs as **the file's module path**: the path of the node the file was built into. Two ordinary ways for that to happen are a timer, listener or queue the file starts when it loads, and a helper declared at file level that a leaf returns and the host (or another module) runs later.
+
+A rule has to name that path itself to reach this code. `m` matches it, and so does `m.**`, because `**` matches zero segments. A rule on the leaves (`m.*`, `m.{a,b}`, one rule per leaf) does not: the module path is not folded into its leaves, and an allow rule for one leaf never reaches file-level code. The reverse holds too: a rule on exactly `m` does not reach `m`'s leaves. A deny list that is meant to cover everything a module does should use `m.**`.
+
+```javascript
+// api/sync.mjs
+import { self } from "@cldmv/slothlet/runtime";
+
+const flush = () => self.vault.get(); // file-level code
+setInterval(flush, 1000); // runs as "sync"
+
+export const now = () => flush(); // a leaf's frame is below it: runs as "sync.now"
+export const helper = () => flush; // the host running what this returns runs it as "sync"
+```
+
+```javascript
+{ caller: "sync", target: "vault.**", effect: "deny" } // stops the timer and the returned helper, not sync.now()
+{ caller: "sync.*", target: "vault.**", effect: "deny" } // stops sync.now(), not the timer or the returned helper
+{ caller: "sync.**", target: "vault.**", effect: "deny" } // stops all three
+```
+
+Which path that is follows from how the file becomes part of the api (see [API-RULES.md](API-RULES.md)); it is the same in eager and lazy mode, in both runtimes and under both values of `permissions.attribution`:
+
+| File                                                | How it is loaded                                | Its leaves             | File-level code runs as |
+| --------------------------------------------------- | ----------------------------------------------- | ---------------------- | ----------------------- |
+| `m.mjs` at the root of the base folder              | several named exports                           | `m.a`, `m.b`           | `m`                     |
+| `m/m.mjs`                                           | a file named after its folder                   | `m.a`, `m.b`           | `m`                     |
+| `m/a.mjs`                                           | a file in a folder, alone or beside others      | `m.a.x`, `m.a.y`       | `m.a`                   |
+| `m/main.mjs`                                        | a file with a generic name                      | `m.main.x`, `m.main.y` | `m.main`                |
+| `m/m/a.mjs`                                         | a folder named after its parent folder          | `m.a.x`, `m.a.y`       | `m.a`                   |
+| `m.mjs` with `export default { … }`                 | a default export object                         | `m.a`, `m.b`           | `m`                     |
+| `m/f.mjs` with a default function and named exports | a callable node with members                    | `m.f`, `m.f.a`         | `m.f`                   |
+| `m.mjs` whose one export is `m`                     | a single named export                           | `m.m`                  | `m`                     |
+| `m.cjs`                                             | a CommonJS file                                 | `m.a`, `m.b`           | `m`                     |
+| `addapi.mjs` of a folder added at `m`               | `api.slothlet.api.add("m", folder)`             | `m.a`, `m.b`           | `m`                     |
+| `m/m.mjs` of a folder added at `m`                  | the sub-folder named after the mount is hoisted | `m.a`, `m.b`           | `m`                     |
+| `tool.mjs` of a folder added at `ext.m`             | a nested mount path                             | `ext.m.tool.a`         | `ext.m.tool`            |
+
+The `caller` a `PERMISSION_DENIED` error names is that path.
+
 #### `permissions.attribution`: how the definer is known
 
 The definer comes from one of two places, chosen with `permissions.attribution`:
