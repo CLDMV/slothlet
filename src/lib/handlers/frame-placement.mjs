@@ -1637,6 +1637,27 @@ export function handedLeafFunctions(thisArg, args) {
 const MAX_CHAIN = 64;
 
 /**
+ * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
+ * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
+ * running inside the call may be code those calls handed in, and slothlet cannot tell it from code the leaf obtained
+ * itself, so it runs under all of them: returning a closure to a module lends that module nothing it can pass on.
+ * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
+ * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
+ *   by a module.
+ * @internal
+ * @example
+ * combineCeilings(leaf, supplierChainCeiling(record));
+ */
+export function supplierChainCeiling(record) {
+	const parts = [];
+	for (let current = record, depth = 0; current?.flagged && current.parent && depth < MAX_CHAIN; current = current.parent, depth++) {
+		if (current.parent.wrapper && genuineWrappers.has(current.parent.wrapper)) parts.push(current.parent.wrapper);
+		if (current.parent.ceiling) parts.push(current.parent.ceiling);
+	}
+	return parts.length ? combineCeilings(...parts) : null;
+}
+
+/**
  * Who supplied the code that is running inside a call that was handed code (#597).
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
@@ -1772,6 +1793,11 @@ export function resolveSupplier(record) {
 			// the file's own source (#597).
 			if (placement.unverified && !runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return fallback;
 			if (matches.length === 1 && matches[0].currentWrapper === leaf) {
+				// Code of the leaf's file written inside another export (a closure a sibling leaf made), with no frame of the
+				// leaf's own code between: it may be what the caller handed in, so it runs as its definer under the leaf and
+				// the calls that handed code down (#726).
+				if (guards && placement.byFile && !leafSeen && (authored = runtime_siblingAuthor(record, frame, range.slice(index + 1))))
+					return AUTHORED;
 				leafSeen = true;
 				continue;
 			}
@@ -1925,6 +1951,36 @@ function runtime_madeCodeDefiner(record) {
 		return { wrapper: definers[0], ceiling: combineCeilings(record.ceiling ?? null, ...definers.slice(1)) };
 	}
 	return undefined;
+}
+
+/**
+ * The answer for code of a leaf's own file running inside its call that another export of the file wrote (#726): a
+ * closure a sibling leaf returned, handed back in by the caller. Its definer is that sibling, under the leaf and the
+ * calls that handed code down. Null when the code is the leaf's own: written inside its export, or outside every
+ * export with the leaf's code (or none of the file's leaves) calling it.
+ * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The leaf's call.
+ * @param {object} frame - The frame.
+ * @param {Array<object>} outer - The frames further out, innermost first.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The answer.
+ * @private
+ */
+function runtime_siblingAuthor(record, frame, outer) {
+	const leaf = record.wrapper;
+	const leaves = runtime_leavesAt(leaf.slothlet, frame);
+	if (leaves.length < 2 || !leaves.includes(leaf)) return null;
+	const source = runtime_sourceOf(leaf.____slothletInternal.filePath);
+	if (!source) return null;
+	// The nearest frame of the file inside an export names the code's leaf; the leaf's own module node holds none.
+	let holder = runtime_leafHolding(leaves, source, frame);
+	for (const further of holder ? [] : outer) {
+		if (!runtime_sameFileFrame(further, frame)) break;
+		if ((holder = runtime_leafHolding(leaves, source, further))) break;
+	}
+	if (!holder || holder === leaf) return null;
+	// A leaf nested in the entered one (a member of a callable node) is the entered leaf's own code.
+	const own = String(leaf.____slothletInternal.apiPath ?? "");
+	if (String(holder.____slothletInternal.apiPath ?? "").startsWith(own + ".")) return null;
+	return { wrapper: holder, ceiling: combineCeilings(leaf, record.ceiling, supplierChainCeiling(record)) };
 }
 
 /**
@@ -2142,7 +2198,7 @@ function runtime_packageAnswer(record, frame, fileless) {
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
 	const [first, ...rest] = importers;
-	return { wrapper: first, ceiling: combineCeilings(leaf, record.ceiling, ...rest) };
+	return { wrapper: first, ceiling: combineCeilings(leaf, record.ceiling, supplierChainCeiling(record), ...rest) };
 }
 
 /**
@@ -2592,7 +2648,11 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
 	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, outer);
 	if (!authors.length) return null;
-	return { wrapper: authors[0], ceiling: combineCeilings(record.wrapper, record.ceiling, ...authors.slice(1)) };
+	// Inside a call that was handed code, the calls that handed it down are held to as well (see supplierChainCeiling).
+	return {
+		wrapper: authors[0],
+		ceiling: combineCeilings(record.wrapper, record.ceiling, supplierChainCeiling(record), ...authors.slice(1))
+	};
 }
 
 /**
@@ -2967,7 +3027,9 @@ export function outerCallerCeiling(contextManager, instanceID, slothlet = null) 
 		const callers = runtime_outerCallers(runtime_captureFrames(32), -1, slothlet);
 		return callers.length ? combineCeilings(...callers) : null;
 	}
-	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null);
+	// Run inside a call that was handed code, it may be code the caller handed in: the calls that handed code down are
+	// its ceiling too (see supplierChainCeiling).
+	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null, supplierChainCeiling(identity.record));
 }
 
 /**

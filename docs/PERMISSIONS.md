@@ -253,7 +253,7 @@ Once the host freezes, seals or prevents extensions on an emitter or a node hold
 
 Slothlet's own checks of a value never use `instanceof`, so a `Symbol.hasInstance` a module gives a global class (`Error`, `WeakRef`, `Promise`) is never run by them. An emitter whose module also exports its class by name is checked the same way: its methods and getters are reached only by a module that may call it. A Proxy an object node holds is a node of its own, and a read through it runs the module's traps, so it is checked as a call of that node, whether the module's own Proxy or the stand-in slothlet hands it out as. A node's `util.inspect` hook never hands a module the function behind the node: read and called by module code, it gives the function's form as `util.inspect` prints it (`[Function: fn]`, `[class Sub extends Base]`) and the node's members, as `console.log` prints them; the host still gets the value itself. Its data members and its `name` and `length` read as before, and `instanceof` against the node still works.
 
-By default the ceiling is the leaf the code is running inside: code handed on from one leaf to the next is held to its supplier and the leaf it currently runs inside. With `permissions.ceiling: "chain"` the ceiling accumulates instead — every leaf the code was handed through, and any ceiling those carried — and all of it is enforced. Code a module runs on its own behalf is never held to a ceiling either way.
+By default the ceiling is the leaf the code is running inside: code handed on from one leaf to the next is held to its supplier and the leaf it currently runs inside. With `permissions.ceiling: "chain"` the ceiling accumulates instead — every leaf the code was handed through, and any ceiling those carried — and all of it is enforced. Code a module runs on its own behalf is never held to a ceiling either way. That choice is about the supplier's own code. Code a third module defined, relayed through such calls, is held to every call that handed it down under either setting (see [Code a module hands out runs as its definer](#code-a-module-hands-out-runs-as-its-definer)).
 
 ```javascript
 // A hands B code; inside B, that code takes a lockCaller pin, and the pinned code later hands C code that
@@ -300,6 +300,18 @@ Defining a function, storing it, returning it or passing it checks nothing. Wher
 
 - **Code a module hands in** to another module's call — a callback, a getter, an object with code passed as an argument or as `this` — runs as its definer, with the leaf it runs inside as its ceiling (above).
 - **Code a module hands out** — a closure it returns, what a factory makes, a class and its instances, an iterator or generator, a Proxy, a getter or a function inside returned data — runs as its definer under whoever runs it. Returning a closure lends nothing: a module that may not reach the vault cannot reach it by running a closure of a module that may.
+- **Code handed on runs under every call that handed it down.** A module that may not reach the vault does not reach it by passing such a closure to a leaf that may, either: inside a call that was handed anything able to carry code (a function, an object with methods, a Proxy), another module's code runs under the leaf it runs inside **and** under the call that made that call, and under the call that made that one when it was handed code too, up the chain. This holds whoever defined the code, so handing a closure back to a leaf of the module that made it changes nothing. slothlet cannot tell which function a caller handed in from one the leaf obtained itself, so inside such a call both are held to the caller; a leaf that is handed only data, or that the host calls, runs other modules' code under itself alone.
+
+  ```javascript
+  // ext is denied the vault; bag, runner and relay are allowed it
+  const made = await self.bag.make(); // () => self.vault.get()
+  await self.runner.call(made); // refused: definer bag.make, leaf runner.call, handed in by ext
+  await self.relay.pass(made); // refused: relay hands it to runner, and ext handed it to relay
+  await self.bag.call(made); // refused: bag's own leaf running bag's closure for ext
+  await self.runner.own(); // allowed: runner asks bag for the closure itself and was handed nothing
+  ```
+
+  To lend on purpose, a module pins the function with `self.slothlet.lockCaller(fn)`, which runs as the module that pinned it whoever calls it, or exposes a leaf: calling `self.bag.read()` is a call of `bag`'s, checked as one.
 
 With `bag` allowed `vault.**`, every module allowed `bag.**` and `shared.**`, and nothing else allowed the vault:
 

@@ -19,6 +19,8 @@
  * @module api_test_load_identity.runner
  */
 
+import { self } from "@cldmv/slothlet/runtime";
+
 /**
  * Run what it is handed.
  * @param {Function} fn - The function.
@@ -33,3 +35,16 @@ export const call = (fn) => fn();
  * @returns {Array<*>} The results.
  */
 export const map = (list, fn) => list.map(fn);
+
+/**
+ * Run a closure it asked `bag` for itself, handed nothing by its caller.
+ * @returns {Promise<*>} What the closure returned.
+ */
+export const own = async () => (await self.bag.make())();
+
+/**
+ * Run a closure it asked `bag` for itself, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the closure returned.
+ */
+export const ownWith = async (callback) => (typeof callback === "function" ? (await self.bag.make())() : undefined);

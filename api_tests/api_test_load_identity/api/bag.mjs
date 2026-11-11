@@ -38,3 +38,15 @@ export const box = () => ({ run: () => self.vault.get() });
  * @returns {*} What it returned.
  */
 export const call = (fn) => fn();
+
+/**
+ * A closure pinned to this module on purpose: whoever runs it, it reads the vault as `bag`.
+ * @returns {Function} The pinned closure.
+ */
+export const lend = () => self.slothlet.lockCaller(() => self.vault.get());
+
+/**
+ * Read the vault for whoever may call this leaf.
+ * @returns {*} The secret.
+ */
+export const read = () => self.vault.get();
