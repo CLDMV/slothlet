@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:28:35-08:00 (1794374915)
+ *	@Last modified time: 2026-11-11T10:14:18-08:00 (1794420858)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6409,6 +6409,26 @@ function runtime_mayWriteFrom(slothlet, reader, from) {
 }
 
 /**
+ * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
+ * the path the value comes from ({@link runtime_mayWriteFrom}), as the owner may. `"written"`: the module the value
+ * comes from may make every write at the reader's path, so it has nothing to keep from the reader, and what the reader
+ * hands back stays the value. Neither holds across a write rule that refuses the other side: a module refused a write
+ * to the other is handed views of the other's values and has its own handed on as views, since what the other stores
+ * into a value it holds as itself comes back.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
+ * @private
+ */
+function runtime_handedAsItself(slothlet, reader, from) {
+	if (!from?.____slothletInternal) return null;
+	if (runtime_mayWriteFrom(slothlet, reader, from)) return runtime_writeDeniedWithin(slothlet, from, reader) ? null : "writer";
+	if (runtime_mayWriteFrom(slothlet, from, reader)) return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
+	return null;
+}
+
+/**
  * Whether a write rule refuses `reader` a write somewhere in the subtree of a module of its own module id: modules
  * loaded from one folder share an id and own each other's paths, but a deny rule between them still holds, so what one
  * hands the other is viewed like another module's.
@@ -6516,13 +6536,26 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	if (isModule && from !== null && runtime_asOneModule(slothlet, from, reader)) return value;
 	// A value the reader's own module held as itself when it handed it on comes back to it as itself.
 	if (runtime_isOwnOrigin(value, reader)) return value;
-	// A view already made of it for the reader's module is what the module holds.
+	// A view already made of it for the reader's module is what the module holds, except in a function of the module
+	// that may write everything at the path the value comes from: the view was made for another of the module's
+	// functions, and this one gets the value itself, as it would have had it read the value first.
 	const views = CROSSING_VIEWS.get(value);
 	if (views !== undefined) {
 		const key = runtime_crossKey(reader);
-		if (views.key === key) return views.view;
-		const other = views.others?.get(key);
-		if (other) return other;
+		const held = views.key === key ? views.view : views.others?.get(key);
+		if (held) {
+			if (!isModule) return held;
+			// The function the view was made for, and each one decided since, was refused the value itself already.
+			const state = CROSSINGS.get(held);
+			if (state.reader === reader || state.decided?.has(reader)) return held;
+			const itself = runtime_handedAsItself(slothlet, reader, from);
+			if (itself !== null) {
+				if (itself === "writer") runtime_recordOrigin(value, from);
+				return value;
+			}
+			(state.decided ??= new WeakSet()).add(reader);
+			return held;
+		}
 	}
 	try {
 		// A prototype handed out for a holder not known yet is decided for this one.
@@ -6536,15 +6569,14 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
 		if (!runtime_needsCrossing(value)) return value;
-		// A module that may write everything at the path the value comes from gets the value itself, as the owner does.
-		// Handed back to the module it came from, it is that module's own value again.
-		if (isModule && runtime_mayWriteFrom(slothlet, reader, from)) {
-			runtime_recordOrigin(value, from);
+		// A module that may write everything at the path the value comes from gets the value itself, as the owner does,
+		// and so does a module handed a value by one that may write everything at its own path. Handed back to the
+		// module it came from, the first is that module's own value again.
+		const itself = isModule ? runtime_handedAsItself(slothlet, reader, from) : null;
+		if (itself !== null) {
+			if (itself === "writer") runtime_recordOrigin(value, from);
 			return value;
 		}
-		// And what a module that may write everything at the reader's path hands the reader is handed as it is: a module
-		// that can change the reader's code has nothing to keep from it, and what the reader hands back stays the value.
-		if (isModule && from?.____slothletInternal && runtime_mayWriteFrom(slothlet, from, reader)) return value;
 		if (!record && runtime_isPlainPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
 		if (record && typeof value === "object" && util.types.isPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
 		return runtime_crossView(value, reader, slothlet, from);
@@ -6590,7 +6622,7 @@ function runtime_crossView(original, reader, slothlet, from) {
 	// `util.inspect` reads a Proxy's target, never its traps: the hook has to be the shadow's own, or inherited by it.
 	if (CROSSING_INSPECT !== null && (isFunction || Array.isArray(original)))
 		Reflect.defineProperty(shadow, INSPECT_CUSTOM, { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false });
-	const state = { original, reader, slothlet, from, view: null, onOriginal: null, methods: null, pinned: false };
+	const state = { original, reader, slothlet, from, view: null, onOriginal: null, methods: null, pinned: false, decided: null };
 	const view = new Proxy(shadow, CROSSING_HANDLER);
 	state.view = view;
 	CROSSING_STATES.set(shadow, state);
@@ -6603,8 +6635,9 @@ function runtime_crossView(original, reader, slothlet, from) {
 /**
  * The state of each crossing view, by its shadow (see {@link runtime_crossView}). `onOriginal` is whether the
  * language's and Node's own methods run on the value itself ({@link runtime_crossRunsOnOriginal}), told when first
- * asked; `methods` holds those methods as the view hands them out; `pinned` is whether the shadow holds anything.
- * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, onOriginal: boolean|null, methods: WeakMap<Function, Function>|null, pinned: boolean}>}
+ * asked; `methods` holds those methods as the view hands them out; `pinned` is whether the shadow holds anything;
+ * `decided` holds the other functions of the reader's module found not to be handed the value itself.
+ * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, onOriginal: boolean|null, methods: WeakMap<Function, Function>|null, pinned: boolean, decided: WeakSet<object>|null}>}
  * @private
  */
 const CROSSING_STATES = new WeakMap();
