@@ -3187,7 +3187,7 @@ export function frameDefiner() {
 
 /**
  * The running instance whose helper file a frame runs in: a file loaded under the instance's import tag, or one of its
- * CommonJS files, that no leaf was built from.
+ * CommonJS files, that no leaf was built from. Null for a CommonJS file more than one running instance loads.
  * @param {{path: string, line: string, evaluated?: boolean}} frame - The frame.
  * @param {object|null} [only=null] - Answer for this instance alone.
  * @returns {{slothlet: object, path: string}|null} The instance and the helper's file, or null.
@@ -3196,14 +3196,17 @@ export function frameDefiner() {
 function runtime_helperOwner(frame, only = null) {
 	if (frame.evaluated || frame.path.startsWith("node:")) return null;
 	const tag = runtime_frameInstanceTag(frame.line);
+	let found = null;
 	for (const [id, reference] of LIVE_INSTANCES) {
 		const slothlet = reference.deref();
 		if (!slothlet || (only && slothlet !== only) || !runtime_instanceRuns(slothlet)) continue;
 		if (tag ? id !== tag : !runtime_commonJSLocations(id).has(frame.path)) continue;
 		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
-		return { slothlet, path: frame.path };
+		// A CommonJS helper two running instances load carries no tag to tell them apart (#735): it is no one's here.
+		if (found) return null;
+		found = { slothlet, path: frame.path };
 	}
-	return null;
+	return found;
 }
 
 /**
