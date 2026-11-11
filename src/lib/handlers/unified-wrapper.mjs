@@ -6745,7 +6745,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 			if (itself === "writer") runtime_recordOrigin(value, from);
 			return value;
 		}
-		if (!record && runtime_isPlainPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
+		// A promise the other module holds is viewed like any other object, not followed: no reaction is added to it
+		// until the reader adds one through the view (`then`, `catch`, `await`), so whether its rejection counts as
+		// handled is what the owner and the reader made it, as in plain JavaScript.
 		if (record && typeof value === "object" && util.types.isPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
 		return runtime_crossView(value, reader, slothlet, from);
 	} catch (error) {
