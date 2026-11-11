@@ -2423,7 +2423,18 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		const handed = { ...payload };
 		if ("api" in payload) handed.api = payload.api === slothlet.boundApi ? runtime_selfRootView(slothlet, reader) : toView(payload.api);
 		const callArgs = Array.isArray(payload.args) ? payload.args : null;
-		const handedArgs = callArgs ? callArgs.map((value) => toView(value)) : null;
+		// An argument comes from whoever handed it to the call: another module's reaches this one as a view, its own as
+		// itself, and what the host built as it is.
+		const caller = runtime_permissionsOn(reader) ? runtime_callingModule(slothlet) : null;
+		const argView = (value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+			if (!runtime_permissionsOn(reader)) return toView(value);
+			const view = toView(value, CROSSINGS.has(value) ? null : runtime_argumentSource(value, caller, called));
+			const own = runtime_ownInstances(reader, runtime_ownArguments(reader, [view]))[0];
+			if (own !== view) originals.set(own, originals.has(view) ? originals.get(view) : value);
+			return own;
+		};
+		const handedArgs = callArgs ? callArgs.map(argView) : null;
 		let snapshot = handedArgs ? [...handedArgs] : null;
 		if (handedArgs) handed.args = handedArgs;
 		if ("result" in payload) handed.result = viewValue(payload.result);
@@ -4721,7 +4732,11 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	// guard.
 	if (toModule) return runtime_crossTo(handed, caller, owner.slothlet, owner);
 	// The host holds it as it is; where it came from is kept for when the host hands it on.
-	if (runtime_permissionsOn(owner) && !HOST_HANDED.has(handed) && !runtime_isShared(handed)) HOST_HANDED.set(handed, owner);
+	if (runtime_permissionsOn(owner) && !HOST_HANDED.has(handed) && !runtime_isShared(handed)) {
+		HOST_HANDED.set(handed, owner);
+		// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
+		if (handed !== value && !HOST_HANDED.has(value) && !runtime_isShared(value)) HOST_HANDED.set(value, owner);
+	}
 	return handed;
 }
 
@@ -5479,9 +5494,32 @@ function runtime_markWritten(wrapper, value) {
 function runtime_crossArguments(wrapper, args) {
 	const slothlet = wrapper?.slothlet;
 	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+	return runtime_crossArgumentsFrom(wrapper, args, runtime_callingModule(slothlet));
+}
+
+/**
+ * The module whose call is executing now, or null for the host.
+ * @param {object} slothlet - The instance.
+ * @returns {object|null} The module's wrapper.
+ * @private
+ */
+function runtime_callingModule(slothlet) {
 	const current = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
-	// The module making the call, or none for the host.
-	const caller = current?.____slothletInternal && genuineWrappers.has(current) ? current : null;
+	return current?.____slothletInternal && genuineWrappers.has(current) ? current : null;
+}
+
+/**
+ * {@link runtime_crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
+ * itself hands a module's code for someone else (an event's payload to a listener).
+ * @param {object} wrapper - The wrapper of the module handed the values.
+ * @param {ArrayLike<*>} args - The values.
+ * @param {object|null} caller - The wrapper of the module handing them over, or null for the host.
+ * @returns {ArrayLike<*>} The values, the same list when nothing changed.
+ * @private
+ */
+function runtime_crossArgumentsFrom(wrapper, args, caller) {
+	const slothlet = wrapper?.slothlet;
+	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
 	if (caller !== null && runtime_asOneModule(slothlet, caller, wrapper)) return args;
 	let result = args;
 	for (let index = 0; index < args.length; index++) {
@@ -6061,15 +6099,53 @@ function runtime_carryTo(value, reader, slothlet) {
  */
 export function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
 	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
-	if (emitter?.____slothletInternal) {
-		if (runtime_makerOf(emitter) === runtime_makerOf(listener)) return payload;
-		return runtime_crossTo(payload, listener, slothlet, emitter);
-	}
-	// What the host emits is the host's own, handed on as it is, a prototype of a module's as reading it would (#667);
-	// what a module's call returned to the host still comes from that module.
-	const from = HOST_HANDED.get(payload) ?? null;
-	if (from === null && !CROSSINGS.has(payload)) return runtime_carryTo(payload, listener, slothlet);
-	return runtime_crossTo(payload, listener, slothlet, from);
+	const caller = emitter?.____slothletInternal ? emitter : null;
+	if (caller !== null && runtime_makerOf(caller) === runtime_makerOf(listener)) return payload;
+	// It is handed over as a call's argument is: what a module's call returned to the host and the host emits as it is
+	// still comes from that module, and the listener's own module's value comes back to it as itself.
+	const handed = runtime_handedAsArgument(listener, payload, caller);
+	// What the host emits of its own is handed on as it is, a prototype of a module's as reading it would (#667).
+	if (handed === payload && caller === null) return runtime_carryTo(payload, listener, slothlet);
+	return handed;
+}
+
+/**
+ * One value as a module gets it handed as a call's argument by `caller` (see {@link runtime_crossArgumentsFrom},
+ * {@link runtime_ownArguments}, {@link runtime_ownInstances}): another module's as a view while the permission system
+ * is on, its own as itself.
+ * @param {object} wrapper - The wrapper of the module handed the value.
+ * @param {*} value - The value.
+ * @param {object|null} caller - The wrapper of the module handing it over, or null for the host.
+ * @returns {*} What the module gets.
+ * @private
+ */
+function runtime_handedAsArgument(wrapper, value, caller) {
+	return runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, runtime_crossArgumentsFrom(wrapper, [value], caller)))[0];
+}
+
+/**
+ * The module a value in a hooked call's arguments comes from, as far as slothlet saw: the module whose call returned
+ * it to the host, the module whose stand-in or wrapped instance it is, a module seen holding it as itself, the module
+ * called when it made the value, and otherwise the module making the call. Null for a value the host built itself.
+ * @param {*} value - The value, as the function called holds it.
+ * @param {object|null} caller - The wrapper of the module making the call, or null for the host.
+ * @param {object|null} called - The wrapper of the node called.
+ * @returns {object|null} The wrapper of the module it comes from.
+ * @private
+ */
+function runtime_argumentSource(value, caller, called) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	const behind = typeof value === "object" ? runtime_unwrapClassInstance(value) : value;
+	const relayed = HOST_HANDED.get(value) ?? HOST_HANDED.get(behind);
+	if (relayed) return relayed;
+	const standIn = STAND_IN_RECORDS.get(value);
+	if (standIn) return standIn.owner;
+	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
+	if (creator) return creator;
+	const origin = CROSSING_ORIGINS.get(value);
+	if (origin) return origin.wrapper;
+	if (called?.____slothletInternal && called.slothlet && runtime_makerOf(called).made.has(value)) return called;
+	return caller;
 }
 
 /**

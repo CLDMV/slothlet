@@ -125,3 +125,45 @@ export function prototypeAsData(prefix, order) {
 		inherited: instance.hi()
 	};
 }
+
+/** What this module's listener heard and its hook was handed. */
+let heard;
+let hooked;
+
+/**
+ * Listen for the relayed event and hook the host's call.
+ * @returns {void}
+ */
+export function listen() {
+	self.slothlet.event.on("crossing-rules:relay", (payload) => {
+		heard = payload;
+	});
+	self.slothlet.hook.on("host.take:before", ({ args }) => {
+		hooked = args[0];
+	});
+	self.slothlet.hook.on("owner.use:before", ({ args }) => {
+		hooked = args[0];
+	});
+}
+
+/**
+ * What this module's listener and hook were handed, and how a write onto the class of the instance in each ends.
+ * @param {string} prefix - The prefix of the members written.
+ * @returns {object} Whether each was a view, and each write's outcome.
+ */
+export function received(prefix) {
+	const plant = (holder, key) => {
+		try {
+			Object.getPrototypeOf(holder.inst ?? holder)[key] = () => "planted";
+			return "written";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return {
+		heardWrapped: self.slothlet.wrapped(heard),
+		heardWrite: plant(heard, `${prefix}heard`),
+		hookedWrapped: self.slothlet.wrapped(hooked),
+		hookedWrite: plant(hooked, `${prefix}hooked`)
+	};
+}

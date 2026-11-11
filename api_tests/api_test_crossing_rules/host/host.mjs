@@ -25,3 +25,12 @@
 export function ping() {
 	return "pong";
 }
+
+/**
+ * Take a value and say what it is: a call the host makes, for modules to hook.
+ * @param {*} value - The value.
+ * @returns {string} Its type.
+ */
+export function take(value) {
+	return typeof value;
+}

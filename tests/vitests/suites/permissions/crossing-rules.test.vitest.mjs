@@ -188,4 +188,70 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		});
 		expect(await api.owner.landed("__off_")).toEqual(["shared:fn", "shared:data", "shared:defined", "shared.hi", "shared.n"]);
 	});
+
+	/**
+	 * Have the owner and the reader listen and hook, then relay a value through the host: emitted as an event, and
+	 * passed to a call both modules hook.
+	 * @param {object} options - Instance options.
+	 * @param {(data: object) => object} pick - What the host relays of the data the owner returned.
+	 * @returns {Promise<void>}
+	 */
+	const relay = async (options, pick, make = "makeData") => {
+		api = await mount({ mode, runtime, hook: { enabled: true }, ...options });
+		await api.owner.listen();
+		await api.reader.listen();
+		const relayed = pick(await api.owner[make]());
+		await api.slothlet.event.emit("crossing-rules:relay", relayed);
+		expect(await api.host.take(relayed)).toBe("object");
+	};
+
+	it("hands another module's listener and hook a view of what a module returned and the host relays as it is", async () => {
+		await relay({ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } }, (data) => data);
+		expect(await api.reader.received("__relay_")).toEqual({
+			heardWrapped: true,
+			heardWrite: "LOOSE_SET_NOT_OWNED",
+			hookedWrapped: true,
+			hookedWrite: "LOOSE_SET_NOT_OWNED"
+		});
+		expect(await api.owner.landed("__relay_")).toEqual([]);
+		// Plain JavaScript: the module that made the value gets its own object back.
+		expect(await api.owner.received()).toEqual({ heardItself: true, heardInstance: true, hookedItself: true, hookedInstance: true });
+	});
+
+	it("hands another module's listener and hook a view of an instance a module returned and the host relays", async () => {
+		await relay(
+			{ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } },
+			(instance) => instance,
+			"makeInstance"
+		);
+		expect(await api.reader.received("__instance_")).toEqual({
+			heardWrapped: true,
+			heardWrite: "LOOSE_SET_NOT_OWNED",
+			hookedWrapped: true,
+			hookedWrite: "LOOSE_SET_NOT_OWNED"
+		});
+		expect(await api.owner.landed("__instance_")).toEqual([]);
+		expect(await api.owner.received()).toEqual({ heardItself: true, heardInstance: true, hookedItself: true, hookedInstance: true });
+	});
+
+	it("hands another module's hook a view of what a module passes its own function", async () => {
+		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { defaultPolicy: "allow", attribution } });
+		await api.reader.listen();
+		expect(await api.owner.useOwn()).toBe("object");
+		const { hookedWrapped, hookedWrite } = await api.reader.received("__own_");
+		expect({ hookedWrapped, hookedWrite }).toEqual({ hookedWrapped: true, hookedWrite: "LOOSE_SET_NOT_OWNED" });
+		expect(await api.owner.landed("__own_")).toEqual([]);
+	});
+
+	it("hands a listener and a hook what the host built itself as it is", async () => {
+		await relay({ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } }, (data) => ({ inst: data.inst }));
+		// The host holds the owner's real objects, and what it builds from them is its own to hand on.
+		expect(await api.reader.received("__built_")).toEqual({
+			heardWrapped: false,
+			heardWrite: "written",
+			hookedWrapped: false,
+			hookedWrite: "written"
+		});
+		expect(await api.owner.landed("__built_")).toEqual(["heard", "hooked"]);
+	});
 });

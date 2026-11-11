@@ -18,6 +18,8 @@
  * @module api_test_crossing_rules/owner
  */
 
+import { self } from "@cldmv/slothlet/runtime";
+
 /** A class no node exports. */
 class Foo {
 	hi() {
@@ -84,3 +86,40 @@ export function landed(prefix) {
 
 // What the test reads once the instance is gone: this module's own check, run as plain code.
 globalThis.__crossingRulesOwner = { landed };
+
+/** The data this module last returned, what it heard emitted, and what its hook was handed. */
+let last;
+let heard;
+let hooked;
+
+export const makeData = () => (last = { inst: new Foo() });
+export const makeInstance = () => (last = new Foo());
+export const use = (value) => typeof value;
+export const useOwn = () => self.owner.use((last = { inst: new Foo() }));
+
+/**
+ * Listen for the relayed event and hook the host's call.
+ * @returns {void}
+ */
+export function listen() {
+	self.slothlet.event.on("crossing-rules:relay", (payload) => {
+		heard = payload;
+	});
+	self.slothlet.hook.on("host.take:before", ({ args }) => {
+		hooked = args[0];
+	});
+}
+
+/**
+ * What this module's listener and hook were handed, against the data it returned.
+ * @returns {{heardItself: boolean, heardInstance: boolean, hookedItself: boolean, hookedInstance: boolean}} Whether each
+ *   was the object it returned, holding an instance of its class.
+ */
+export function received() {
+	return {
+		heardItself: heard === last,
+		heardInstance: (heard?.inst ?? heard) instanceof Foo,
+		hookedItself: hooked === last,
+		hookedInstance: (hooked?.inst ?? hooked) instanceof Foo
+	};
+}
