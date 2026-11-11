@@ -378,6 +378,24 @@ Which path that is follows from how the file becomes part of the api (see [API-R
 
 The `caller` a `PERMISSION_DENIED` error names is that path.
 
+**What a file starts while it loads carries its module.** slothlet runs each file's top level under the file's module, in eager and lazy mode alike. A timer, a job queue, an event listener, an `AsyncResource` or an `AsyncLocalStorage.snapshot()` made there keeps that identity, so whatever it runs later has the module as its **caller**, never the host. The code doing the access is still read as its definer, and both have to be allowed:
+
+```javascript
+// api/sup.mjs  (denied the vault)
+const queue = [];
+setInterval(() => queue.shift()?.(), 2); // an ordinary job queue, started at load
+
+export async function probe() {
+	const made = await self.bag.make(); // bag is allowed the vault
+	queue.push(made); // runs later with definer bag.make and caller sup: refused
+	queue.push(() => self.vault.get()); // definer sup.probe, caller sup: refused
+}
+```
+
+The async runtime carries the module in the store the file loads in. The live runtime pins what the file registers through the schedulers, emitters and promises it patches (see [Runtime choice](#runtime-choice--the-permission-boundary)); `AsyncResource` and `AsyncLocalStorage.snapshot()` belong to Node's async context, which the live runtime does not use, so there the code they run is held to the call that runs them. A helper file is loaded once per instance, by whichever file imports it first, and what it starts at its top level carries that file's module. While the module cannot be found (the file is still loading, its node was removed, the instance has shut down) such code has no `self` and is refused.
+
+Where neither a call nor a load says who the caller is (a module that left the async store on purpose, a scheduler slothlet does not patch), the leaves whose code is further out on the synchronous stack are the callers, and all of them have to be allowed. A callback handed straight to such a scheduler has no frame of the module under it when it runs; that is the limit of what frames can tell.
+
 #### `permissions.attribution`: how the definer is known
 
 The definer comes from one of two places, chosen with `permissions.attribution`:

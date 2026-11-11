@@ -41,6 +41,7 @@ import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#h
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
+import { createModuleLoad } from "#handlers/frame-placement";
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
@@ -361,6 +362,24 @@ export class Loader extends ComponentBase {
 	 * @public
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
+		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
+		const contextManager = this.slothlet.contextManager;
+		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
+		return contextManager.runModuleLoad(createModuleLoad(this.slothlet, filePath, moduleID), () =>
+			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust)
+		);
+	}
+
+	/**
+	 * Load a single module's file (see {@link Loader#loadModule}).
+	 * @param {string} filePath - Path to module file
+	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
+	 * @param {string} [moduleID] - Module ID for additional cache busting
+	 * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting
+	 * @returns {Promise<Object>} Loaded module
+	 * @private
+	 */
+	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.

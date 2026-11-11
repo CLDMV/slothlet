@@ -1668,6 +1668,9 @@ const MAX_CHAIN = 64;
  * @internal
  */
 export function resolveSupplier(record) {
+	// Code a file started while it loaded: its module is the caller, and the code doing the access is told by its frames.
+	if (record?.topLevel)
+		return genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record) ? runtime_topLevelRunning(record) : null;
 	// Code a module handed out, run through the stand-in recording its definer: the stack names the definer wherever it
 	// can, and the record stands only where it cannot (#726).
 	if (record?.made && genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record)) {
@@ -1791,6 +1794,102 @@ export function resolveSupplier(record) {
 	}
 	if (answer === AUTHORED) return authored;
 	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
+}
+
+/**
+ * The leaves whose code is on the synchronous stack further out than a frame (#726): each frame of a file an
+ * instance's leaves were built from, read as its definer (the nearest leaf frame of its file, or the file's module).
+ * They are the callers of the code at that frame when no call slothlet entered says who is: all of them have to be
+ * allowed. The walk ends where the synchronous stack does (the microtask runner, a timer, an awaiting flow) or at a
+ * call slothlet entered. Frames that name no leaf's file (the host's, a package's, Node's, evaluated code) add none.
+ * @param {Iterable<object>} frames - The capture, innermost first.
+ * @param {number} index - The index of the frame the callers are further out than.
+ * @param {object|null} [slothlet=null] - Read only this instance's leaves; every running instance's when null.
+ * @returns {Array<object>} The callers' wrappers, none when there are none.
+ * @private
+ */
+function runtime_outerCallers(frames, index, slothlet = null) {
+	const callers = new Set();
+	let position = -1;
+	for (const frame of frames) {
+		position++;
+		if (position <= index) continue;
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			if (frame.enter) break;
+			continue;
+		}
+		if (frame.async || isRunnerFrame(frame)) break;
+		if (frame.evaluated || frame.path.startsWith("node:") || isForeignScript(frame)) continue;
+		const leaves = slothlet ? runtime_leavesAt(slothlet, frame) : runtime_leavesAtLocation(frame.path, frame.line);
+		if (!leaves?.length) continue;
+		for (const caller of runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, position))) callers.add(caller);
+	}
+	return [...callers];
+}
+
+/**
+ * Who is doing an access made from something a file started while it loaded (a timer, a listener, a queue): the file's
+ * module is the caller, and the code nearest the access that is not slothlet's or Node's own decides whose code it is.
+ * Code outside every export of the module's file, a helper file it imports, the host's and a package's run as the
+ * module. Code written inside an export (of this file or another module's) runs as that leaf, its definer, under the
+ * module: both have to be allowed, so a closure another module made, or one of the file's own leaves, gains nothing
+ * from being run by the module's timer, and lends the module nothing. Code that cannot be placed is refused.
+ * @param {{wrapper: object, ceiling?: object|null, file?: string, moduleID?: string|null}} record - The load's record.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The definer and its
+ *   ceiling, unaccounted code, or null when the module's own code is running.
+ * @private
+ */
+function runtime_topLevelRunning(record) {
+	const module = record.wrapper;
+	const slothlet = module.slothlet;
+	const description = describeCall(module);
+	// A lazy tree's module node has no file of its own: the load knows the file.
+	const filePath = description.filePath ?? record.file ?? null;
+	const entry = {
+		...description,
+		filePath,
+		comparablePath: toComparablePath(filePath),
+		realComparablePath: runtime_realComparablePath(filePath),
+		locations: runtime_importedLocations(module, filePath),
+		moduleID: description.moduleID ?? record.moduleID ?? null,
+		currentWrapper: module,
+		family: slothlet.instanceID,
+		distance: 0,
+		record
+	};
+	const { place } = createFramePlacer([entry]);
+	const decide = (frames) => {
+		let index = -1;
+		for (const frame of frames) {
+			index++;
+			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+				if (frame.enter) return null;
+				continue;
+			}
+			if (frame.async || isRunnerFrame(frame)) return null;
+			if (frame.evaluated || isForeignScript(frame)) return UNACCOUNTED_SUPPLIER;
+			// Node's own code acts for whoever called it: the next frame out decides.
+			if (frame.path.startsWith("node:")) {
+				if (runtime_isNodeScript(frame)) continue;
+				return UNACCOUNTED_SUPPLIER;
+			}
+			const leaves = runtime_leavesAt(slothlet, frame);
+			if (leaves.length) {
+				if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return UNACCOUNTED_SUPPLIER;
+				const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
+				// Every leaf whose code is further out on the stack is a caller too: the code ran through them.
+				const callers = runtime_outerCallers(frames, index, slothlet).filter((caller) => caller !== module && caller !== definers[0]);
+				if (definers.length === 1 && definers[0] === module && !callers.length) return null;
+				return { wrapper: definers[0], ceiling: combineCeilings(module, record.ceiling ?? null, ...definers.slice(1), ...callers) };
+			}
+			const placement = filePath ? place(frame) : null;
+			if (placement?.matches.length) return null;
+			if (!placement) return isNode ? runtime_packageAnswer(record, frame, false) : null;
+			return UNACCOUNTED_SUPPLIER;
+		}
+		return frames.truncated ? undefined : null;
+	};
+	return decide(runtime_captureFrames(48)) ?? null;
 }
 
 /**
@@ -2695,6 +2794,19 @@ function runtime_narrowToLeaf(leaves, frame, outer = []) {
 		}
 	}
 	if (best) return [best];
+	return runtime_fileModuleOf(leaves);
+}
+
+/**
+ * The module of a file several leaves were built from (#726): the file's own node, whose path every leaf's starts with.
+ * A lazy tree builds that node with no file of its own, so it is found by its path, the leaves' paths less their paths
+ * inside the file's exports. With no such node, every leaf comes back.
+ * @param {Array<object>} leaves - The leaves of one file.
+ * @returns {Array<object>} The module's node alone, or every leaf.
+ * @private
+ */
+function runtime_fileModuleOf(leaves) {
+	if (leaves.length < 2) return leaves;
 	// Code outside every leaf's range is the module's: the file's module node, whose path every leaf's starts with.
 	const paths = leaves.map((leaf) => String(leaf.____slothletInternal.apiPath ?? ""));
 	const module = leaves.find((leaf, i) => paths.every((other) => other === paths[i] || other.startsWith(paths[i] + ".")));
@@ -2705,6 +2817,111 @@ function runtime_narrowToLeaf(leaves, frame, outer = []) {
 	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
 	const standing = node && genuineWrappers.has(node) && node.slothlet === leaves[0].slothlet;
 	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
+}
+
+/**
+ * What a file's top level runs as (#726): made when slothlet loads the file, and read whenever something the file
+ * started while it loaded (a timer, a listener, a queue, an async resource) runs later. The identity is the file's
+ * module, the node code outside every export of the file runs as, found when it is asked for: the node does not exist
+ * yet while the file loads, and a reload or a removal changes it afterwards. While it cannot be found (the file is
+ * still loading, its node is gone, its instance has shut down) there is no identity, and the code is refused as code
+ * no one accounts for.
+ * @param {object} slothlet - The instance loading the file.
+ * @param {string} filePath - The file.
+ * @param {string|null|undefined} moduleID - The mount the file is loaded for.
+ * @returns {{slothlet: object, filePath: string, moduleID: string|null, instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} The load.
+ * @internal
+ * @example
+ * const loading = createModuleLoad(slothlet, "/app/api/sync.mjs", null);
+ * loading.wrapper(); // null while the file loads, then the node at `sync`
+ */
+export function createModuleLoad(slothlet, filePath, moduleID) {
+	let record = null;
+	const loading = {
+		slothlet,
+		filePath,
+		moduleID: moduleID ?? null,
+		// The context the instance runs in now: a reload moves it to a new ID.
+		instanceID() {
+			const instances = slothlet?.contextManager?.instances;
+			if (!instances?.has) return null;
+			for (let id = slothlet.instanceID; id;) {
+				if (instances.has(id)) return id;
+				const reloaded = id.lastIndexOf("_reload_");
+				id = reloaded > 0 ? id.slice(0, reloaded) : null;
+			}
+			return null;
+		},
+		wrapper() {
+			if (typeof filePath !== "string" || !runtime_instanceRuns(slothlet)) return null;
+			const leaves = runtime_leavesAtFile(slothlet, toComparablePath(filePath), null, moduleID || null);
+			if (!leaves.length) return null;
+			const narrowed = runtime_fileModuleOf(leaves);
+			return narrowed.length === 1 ? narrowed[0] : null;
+		},
+		// The call record the load's code runs under: kept while the module stays the same node.
+		record() {
+			const wrapper = loading.wrapper();
+			if (!wrapper) return null;
+			if (record?.wrapper !== wrapper)
+				record = { wrapper, parent: null, flagged: false, ceiling: null, topLevel: true, file: filePath, moduleID: moduleID ?? null };
+			return record;
+		}
+	};
+	return loading;
+}
+
+/**
+ * The load a stack's innermost code belongs to, among files being loaded (#726): the code registering something
+ * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
+ * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
+ * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
+ * instance is pending, or one alone imports the file. `false` when the code is a loading instance's and which load
+ * cannot be told; null when it is not a loading file's code.
+ * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
+ * @returns {object|false|null} The load, false, or null.
+ * @internal
+ * @example
+ * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
+ */
+export function loadOnStack(loads) {
+	for (const frame of runtime_captureFrames(32)) {
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			// A call slothlet entered is running: its code is the call's, not a load's.
+			if (frame.enter) return null;
+			continue;
+		}
+		if (frame.path.startsWith("node:")) continue;
+		if (frame.evaluated) return null;
+		const tag = runtime_frameInstanceTag(frame.line);
+		const mount = runtime_frameModuleTag(frame.line);
+		const sameInstance = [];
+		for (const loading of loads) {
+			const family = loading.slothlet?.instanceID;
+			if (tag && family !== tag) continue;
+			if (toComparablePath(loading.filePath) === frame.path || runtime_realComparablePath(loading.filePath) === frame.path) {
+				if (!mount || !loading.moduleID || loading.moduleID === mount) return loading;
+				continue;
+			}
+			if (tag) sameInstance.push(loading);
+		}
+		if (!sameInstance.length) return null;
+		if (sameInstance.length === 1) return sameInstance[0];
+		// A helper several loads may be evaluating: the load whose file imports it, when one alone does.
+		const graph = runtime_importGraph(tag);
+		const seen = new Set([frame.path]);
+		const queue = [frame.path];
+		while (queue.length && seen.size <= PACKAGE_WALK) {
+			for (const importer of graph.get(queue.pop()) ?? []) {
+				if (seen.has(importer)) continue;
+				seen.add(importer);
+				queue.push(importer);
+			}
+		}
+		const importing = sameInstance.filter((loading) => seen.has(toComparablePath(loading.filePath)));
+		return importing.length === 1 ? importing[0] : false;
+	}
+	return null;
 }
 
 /**
@@ -2735,12 +2952,21 @@ function runtime_checksPermissions(slothlet) {
  * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
  * @param {object} contextManager - The instance's context manager.
  * @param {string} instanceID - The instance.
+ * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
  * @internal
  */
-export function outerCallerCeiling(contextManager, instanceID) {
+export function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
 	const identity = contextManager?.getCallerIdentity?.(instanceID);
-	if (!identity?.currentWrapper) return null;
+	if (!identity?.currentWrapper) {
+		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
+		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a
+		// flow slothlet pinned to the host.
+		if (identity?.unresolved || !slothlet || !runtime_guardsForeignCode({ wrapper: { slothlet } })) return null;
+		if (typeof contextManager.isAmbient === "function" && !contextManager.isAmbient(instanceID)) return null;
+		const callers = runtime_outerCallers(runtime_captureFrames(32), -1, slothlet);
+		return callers.length ? combineCeilings(...callers) : null;
+	}
 	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null);
 }
 
@@ -2852,7 +3078,9 @@ function runtime_leavesAtLocation(path, line) {
  * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
  * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
  * outside every export, in a tree where no node was built for the file itself).
- * @returns {{wrapper: object}|{leaves: Array<object>}|{unplaced: true}|null} The definer.
+ * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
+ * runtime_outerCallers), which have to be allowed as well.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|null} The definer.
  * @internal
  */
 export function frameDefiner() {
@@ -2867,7 +3095,10 @@ export function frameDefiner() {
 		const leaves = runtime_leavesAtLocation(frame.path, frame.line);
 		if (leaves === null) return runtime_isInstanceFile(frame.path) ? { unplaced: true } : null;
 		const narrowed = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
-		return narrowed.length === 1 ? { wrapper: narrowed[0] } : { leaves: narrowed };
+		// The leaves whose code is further out on the stack ran this code: with no call to say who the caller is,
+		// they are its callers, so a module running another's code from a timer of its own does not count as the host.
+		const callers = runtime_anyInstanceChecks() ? runtime_outerCallers(frames, index).filter((caller) => !narrowed.includes(caller)) : [];
+		return narrowed.length === 1 ? { wrapper: narrowed[0], callers } : { leaves: narrowed, callers };
 	}
 	return null;
 }

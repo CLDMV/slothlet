@@ -123,7 +123,8 @@ export const self = new NativeProxy(
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) {
 				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
-				const read = runtime_selfReadAsDefiner(self, prop);
+				// Code a file started while it loaded has a store of its own: without a module to run as, it has no `self`.
+				const read = ctx?.moduleLoad ? null : runtime_selfReadAsDefiner(self, prop);
 				if (read) return read.value;
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}

@@ -39,6 +39,7 @@ import {
 	isRunnerFrame,
 	parseStackFrame,
 	resolveSupplier,
+	loadOnStack,
 	resolvesSupplier,
 	runtime_captureFrames,
 	runtime_namesEntry,
@@ -1023,8 +1024,15 @@ export class LiveContextManager {
 		const pinMany = (listeners) => {
 			// The store of the instance actually executing (#592), and who on it registered the callbacks.
 			const store = this.tryGetContext();
+			const registration = store ? this.#registrationIdentity(store) : null;
+			// Registered by a file's own top level while slothlet loads it (#726): pinned to the load, so what the file
+			// starts runs as the file's module, as the async runtime's store for the load has it.
+			if (!registration?.wrapper && this.#loads.size) {
+				const loading = loadOnStack(this.#loads);
+				if (loading !== null) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+			}
 			if (!store) return listeners;
-			const { wrapper, ceiling, inFlight, ambiguous } = this.#registrationIdentity(store);
+			const { wrapper, ceiling, inFlight, ambiguous } = registration;
 			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
 			// alone. Unattributable module code: not handed the host's standing either.
 			if (ambiguous || (!wrapper && !inFlight)) return listeners;
@@ -1072,6 +1080,24 @@ export class LiveContextManager {
 					false,
 					false
 				);
+			};
+		/**
+		 * The pinned replacement for a callback a file registered while it loaded: run as the file's module, found when
+		 * the callback runs. With no module to run as (the file's node is gone, or which load registered it could not be
+		 * told) it runs as no one, and is refused.
+		 * @param {Function} listener - The callback.
+		 * @param {object|false} loading - The load (see createModuleLoad), or false when it could not be told.
+		 * @returns {Function} The pinned callback.
+		 */
+		const pinLoad = (listener, loading) =>
+			function slothlet_pinnedLoadListener(...args) {
+				const manager = liveContextManagerRef;
+				const instanceID = loading ? loading.instanceID() : null;
+				// The instance is gone: unpinned, as any callback that outlives its instance.
+				if (loading && (instanceID === null || !manager.instances.has(instanceID))) return listener.apply(this, args);
+				const record = loading ? loading.record() : null;
+				if (!record) return manager.#runAsNoOne(instanceID, listener, this, args);
+				return manager.runInContext(instanceID, listener, this, args, record.wrapper, true, false, null, null, false, false, false, record);
 			};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
@@ -1139,6 +1165,77 @@ export class LiveContextManager {
 			this.#activeID = previousInstanceID;
 		}
 		return result;
+	}
+
+	/**
+	 * The loads of module files in progress (see {@link LiveContextManager#runModuleLoad}).
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#loads = new Set();
+
+	/**
+	 * Run the load of a module file, remembered as in progress until it settles (#726): what the file's top level
+	 * registers meanwhile (a timer, a listener, a reaction) is pinned to the load, and runs later as the file's module.
+	 * The async manager carries the same identity in a store.
+	 *
+	 * @param {object} loading - The load (see createModuleLoad).
+	 * @param {function(): *} fn - What loads the file.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runModuleLoad(loading, fn) {
+		this.#loads.add(loading);
+		let result;
+		try {
+			result = fn();
+		} catch (error) {
+			this.#loads.delete(loading);
+			throw error;
+		}
+		if (!util.types.isPromise(result)) {
+			this.#loads.delete(loading);
+			return result;
+		}
+		const done = () => this.#loads.delete(loading);
+		nativeThen(result, done, done);
+		return result;
+	}
+
+	/**
+	 * Whether nothing slothlet entered is executing on an instance's store: no call, no pin to the host, no code run as
+	 * no module. Code running then was started by nothing slothlet entered, so only its frames can say whose it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {boolean} True when nothing is entered.
+	 * @internal
+	 */
+	isAmbient(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		if (!store) return true;
+		if (store.__authoritativeWrapper) return false;
+		return this.#enteredFor(store).every((entry) => entry === null);
+	}
+
+	/**
+	 * Run a callback as no module and not as the host, for as long as its synchronous body runs: a permission check made
+	 * from it fails closed.
+	 * @param {string|null} instanceID - The instance, or null to hold every instance's store.
+	 * @param {Function} fn - The callback.
+	 * @param {*} thisArg - `this` for it.
+	 * @param {Array} args - Its arguments.
+	 * @returns {*} What it returned.
+	 * @private
+	 */
+	#runAsNoOne(instanceID, fn, thisArg, args) {
+		const stores = instanceID !== null && this.instances.has(instanceID) ? [this.instances.get(instanceID)] : [...this.instances.values()];
+		for (const store of stores) this.#enteredFor(store).push(UNATTRIBUTED_ENTRY);
+		this.#syncDepth++;
+		try {
+			return fn.apply(thisArg, args);
+		} finally {
+			this.#syncDepth--;
+			for (const store of stores) this.#enteredFor(store).pop();
+		}
 	}
 
 	/**
@@ -1318,6 +1415,8 @@ export class LiveContextManager {
 	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
 	 *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
+	 * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
+	 *   file registered while it loaded (#726).
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -1333,7 +1432,8 @@ export class LiveContextManager {
 		resolved = null,
 		attribute = false,
 		madeCode = false,
-		follow = true
+		follow = true,
+		load = null
 	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
@@ -1383,6 +1483,14 @@ export class LiveContextManager {
 					made: madeCode
 				}
 			: null;
+		// A callback a file registered while it loaded (#726): the load's own record, so its code is read as the file's
+		// module with the code doing the access told by its frames.
+		if (record && load?.topLevel && load.wrapper === currentWrapper) {
+			record.topLevel = true;
+			record.file = load.file;
+			record.moduleID = load.moduleID;
+			record.parent = null;
+		}
 
 		this.#activeID = targetInstanceID;
 		if (asHost) {

@@ -4184,9 +4184,11 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
 	const read = RUNTIME_SELVES.get(contextManager) ?? selfProxy;
+	// The leaves whose code is further out on the stack ran this code: they have to be allowed as well.
+	const ceiling = checks && definer.callers?.length ? combineCeilings(...definer.callers) : null;
 	return {
 		value: runtime_readOnBehalf(undefined, () =>
-			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
+			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, ceiling, null, false, true)
 		)
 	};
 }
@@ -4289,7 +4291,7 @@ function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attrib
 	// value handed out records its definer and grants nothing: the caller running it, read now, is its ceiling, so every
 	// access has to be allowed for both (#726). A node's own code (an accessor or a Proxy export of an api object, `new`
 	// on an exported class) is checked as a call of its node, and runs as that call does, under no ceiling of its caller.
-	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID);
+	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.slothlet);
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
 	);

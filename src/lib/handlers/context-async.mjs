@@ -399,6 +399,48 @@ export class AsyncContextManager {
 	}
 
 	/**
+	 * Run the load of a module file inside a store that names the file's module (#726), so what the file starts while
+	 * it loads (a timer, a listener, an async resource, an `AsyncLocalStorage.snapshot()`) carries the module as its
+	 * caller when it runs later, instead of running in no store, where it would count as the host's. The module's node
+	 * does not exist while the file loads and can change with a reload, so the store's identity is read from the load
+	 * whenever it is asked for. While there is none the store has no `self`, and its code is refused as code no one
+	 * accounts for.
+	 *
+	 * @param {{instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} loading - The load (see createModuleLoad).
+	 * @param {function(): *} fn - What loads the file.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runModuleLoad(loading, fn) {
+		const base = this.instances.get(loading.instanceID());
+		if (!base || !this.als) return fn();
+		const current = () => this.instances.get(loading.instanceID()) ?? null;
+		const store = { ...base, callerWrapper: null, callerCeiling: null, currentCeiling: null };
+		const live = (name, read) => Objects.defineProperty(store, name, { get: read, enumerable: true, configurable: true });
+		live("instanceID", () => current()?.instanceID ?? base.instanceID);
+		live("currentWrapper", () => loading.wrapper());
+		live("record", () => loading.record());
+		// The instance's api and context as they are when read: neither is built yet while the first files load.
+		live("self", () => (loading.wrapper() ? current()?.self : undefined));
+		live("context", () => current()?.context ?? base.context);
+		// Not spread onto the stores of the calls made from it: only this store is the load's.
+		Objects.defineProperty(store, "moduleLoad", { value: loading, enumerable: false });
+		return this.als.run(store, fn);
+	}
+
+	/**
+	 * Whether no flow of an instance is active: no store at all, or another instance's. Code running then was started
+	 * by nothing slothlet entered, so only its frames can say whose it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {boolean} True when no store of the instance is active.
+	 * @internal
+	 */
+	isAmbient(instanceID) {
+		const store = this.als?.getStore();
+		return !store || (store.instanceID !== instanceID && store.parentInstanceID !== instanceID);
+	}
+
+	/**
 	 * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
 	 * instance that has shut down made reaches no instance's api and no module's identity.
 	 * @param {Function} fn - What to run.
@@ -477,12 +519,16 @@ export class AsyncContextManager {
 		const identity = this.#identityOf(store);
 		// Code no call accounts for (#597): no caller, unresolved, as the live manager answers it.
 		if (identity.unaccounted) return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
+		// Code a file started while it loaded whose module cannot be found: no caller, and not the host.
+		if (identity.unresolved) return { currentWrapper: null, callerWrapper: null, unresolved: true };
+		const record = this.#recordOf(store);
 		return {
 			currentWrapper: identity.currentWrapper,
 			callerWrapper: store.callerWrapper,
 			ceiling: identity.ceiling,
 			callerCeiling: store.callerCeiling ?? undefined,
-			made: this.#recordOf(store)?.made === true
+			made: record?.made === true,
+			record: record ?? undefined
 		};
 	}
 
@@ -507,7 +553,11 @@ export class AsyncContextManager {
 	 */
 	#identityOf(store) {
 		const record = this.#recordOf(store);
-		if (!record) return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		if (!record) {
+			// The store of a file's load (#726) while the file's module cannot be found: its code is no one's.
+			if (store.moduleLoad && !store.currentWrapper) return { currentWrapper: null, unresolved: true };
+			return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		}
 		const supplier = resolveSupplier(record);
 		// Code no call accounts for: no caller, and unresolved, so only a node a module kept can settle it, as that
 		// module (#597, #661), as the live manager answers it.
