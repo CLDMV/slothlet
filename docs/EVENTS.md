@@ -35,7 +35,7 @@ await self.slothlet.event.emit("orders.created", { id: 42 });
 off(); // stop receiving
 ```
 
-`emit` is fire-and-forget with per-listener error isolation: one throwing listener never stops the others or the emitter. It returns a promise that resolves once every listener (including async ones) has settled, so a caller may `await` it when ordering matters.
+`emit` is fire-and-forget with per-listener error isolation: one throwing listener never stops the others or the emitter. It returns a promise that resolves once every listener (including async ones) has settled, so a caller may `await` it when ordering matters. A listener's returned promise or thenable is settled inside the listener's own call, so its `then` runs as the listener, and a thenable that never settles keeps `emit` waiting.
 
 ## API
 

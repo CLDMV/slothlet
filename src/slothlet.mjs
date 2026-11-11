@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T10:15:46-07:00 (1793466946)
+ *	@Last modified time: 2026-11-08T16:23:07-08:00 (1794183787)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,8 +92,8 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue, releaseModuleMakers } from "#handlers/unified-wrapper";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { resolveWrapper, isCallableValue, releaseModuleMakers, releaseStandInChanges } from "#handlers/unified-wrapper";
+import { isFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
@@ -113,7 +113,7 @@ import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/h
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
-import { forgetInstanceScripts } from "#handlers/frame-placement";
+import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -1113,33 +1113,35 @@ class Slothlet {
 			const isCallable = typeof this.api === "function" || (this.api && typeof this.api.default === "function");
 			const proxyTarget = isCallable ? function () {} : {};
 
-			this.boundApi = new Proxy(proxyTarget, {
-				get: (target, prop) => (this.api ? this.api[prop] : undefined),
-				set: (target, prop, value) => {
-					if (this.api) {
-						this.api[prop] = value;
-					}
-					return true;
-				},
-				has: (target, prop) => (this.api ? prop in this.api : false),
-				ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
-				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
-				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
-				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
-				getOwnPropertyDescriptor: (target, prop) => {
-					// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
-					if (isCallable && prop === "prototype") {
-						return Object.getOwnPropertyDescriptor(target, prop);
-					}
-					if (this.api && prop in this.api) {
-						const desc = Object.getOwnPropertyDescriptor(this.api, prop);
-						if (desc) {
-							return { ...desc, configurable: true };
+			this.boundApi = markSlothletProxy(
+				new Proxy(proxyTarget, {
+					get: (target, prop) => (this.api ? this.api[prop] : undefined),
+					set: (target, prop, value) => {
+						if (this.api) {
+							this.api[prop] = value;
 						}
+						return true;
+					},
+					has: (target, prop) => (this.api ? prop in this.api : false),
+					ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
+					deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
+					apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
+					construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
+					getOwnPropertyDescriptor: (target, prop) => {
+						// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
+						if (isCallable && prop === "prototype") {
+							return Object.getOwnPropertyDescriptor(target, prop);
+						}
+						if (this.api && prop in this.api) {
+							const desc = Object.getOwnPropertyDescriptor(this.api, prop);
+							if (desc) {
+								return { ...desc, configurable: true };
+							}
+						}
+						return undefined;
 					}
-					return undefined;
-				}
-			});
+				})
+			);
 			/* v8 ignore stop */
 		}
 
@@ -1216,6 +1218,10 @@ class Slothlet {
 				validationError: true
 			});
 		}
+
+		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
+		// eager mode's changes go with those nodes too (#653).
+		releaseStandInChanges(this);
 
 		// 1. Save operation history from api-manager for replay
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
@@ -1925,6 +1931,8 @@ class Slothlet {
  */
 export async function slothlet(config) {
 	const instance = new Slothlet();
+	// The package whose code is creating the instance is the host's own (#714).
+	recordInstanceOwner(instance);
 	// Retain the config as passed, before anything reads it, so restart() can rebuild from it (#504).
 	instance._retainOriginalConfig(config);
 	const api = await instance.load(config);
@@ -2017,6 +2025,10 @@ export default slothlet;
  *   callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
  *   the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
  *   call runs it.
+ * @property {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+ *   (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
+ *   `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
+ *   it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.

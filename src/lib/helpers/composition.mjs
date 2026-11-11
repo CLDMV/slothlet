@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:35:46-07:00 (1791887746)
+ *	@Last modified time: 2026-11-08T16:57:08-08:00 (1794185828)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,6 +128,60 @@ export function layerHeldKeys(layer) {
 }
 
 /**
+ * The method each bound form a layer hands out (see `read` in layerOver) stands for.
+ * @type {WeakMap<Function, Function>}
+ * @private
+ */
+const BOUND_ORIGINALS = new WeakMap();
+
+/** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
+const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+
+/**
+ * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
+ * through one, bound to the value it came from. Only the registries are read, so nothing of the value runs.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a layer or a layer's bound method.
+ * @internal
+ *
+ * @example
+ * isCompositionProxy(layerOver({})); // true
+ */
+export function isCompositionProxy(value) {
+	return weakMapHas(LAYERS, value) || weakMapHas(BOUND_ORIGINALS, value);
+}
+
+/**
+ * The method a composition layer's bound form of it stands for: a method of the value under a layer is handed out
+ * bound to that value, and is the value's own method all the same (#632).
+ * @param {*} value - A value a layer handed out.
+ * @returns {Function|undefined} The method behind it, or undefined for anything else.
+ * @package
+ *
+ * @example
+ * layerMethodOriginal(layer.get) === Map.prototype.get; // true for a layer over a Map
+ */
+export function layerMethodOriginal(value) {
+	return typeof value === "function" ? BOUND_ORIGINALS.get(value) : undefined;
+}
+
+/**
+ * Whether a composition layer answers `key` from the value under it, reading or writing it on that value, which is
+ * the receiver its getters and setters run on: a key the layer neither holds itself nor hides (#632).
+ * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
+ * @param {PropertyKey} key - The key.
+ * @returns {boolean} True when the value under the layer answers it; false for a value that is not a layer.
+ * @package
+ *
+ * @example
+ * layerForwards(flatten.composeFunctionDefault(mod.default), "name"); // true
+ */
+export function layerForwards(layer, key) {
+	const record = LAYERS.get(layer);
+	return record !== undefined && !record.added.has(key) && !record.removed.has(key);
+}
+
+/**
  * The value under a composition layer: the module's own array or function, which takes an integrity
  * operation (seal, freeze) the layer itself refuses.
  * @param {object|Function} layer - A composition layer, or any other value.
@@ -240,6 +294,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		if (cached?.original === value) return cached.fn;
 		const fn = new Proxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
 		bound.set(key, { original: value, fn });
+		BOUND_ORIGINALS.set(fn, value);
 		return fn;
 	};
 	// The layer's own target is a fresh shell, not the value: the invariants a Proxy must keep are checked

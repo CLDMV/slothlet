@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:03:57-07:00 (1793462637)
+ *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,13 +20,23 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
+import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { attributeResult, carriesCallerCode, enterCall, isHandedOut, resolveSupplier, resolvesSupplier } from "#handlers/frame-placement";
+import {
+	attributeResult,
+	carriesCallerCode,
+	enterCall,
+	handsOutAsModule,
+	attributesResults,
+	isHandedOut,
+	isHostPrototype,
+	resolveSupplier,
+	resolvesSupplier
+} from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -182,8 +192,13 @@ export class AsyncContextManager {
 			};
 		}
 
-		// A leaf's own call hands back what its module made as that module's (#597).
-		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
+		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host
+		// or a module (#667).
+		const callerIsHost = !executionStore.callerWrapper;
+		const attributed =
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null)
+				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
@@ -197,17 +212,17 @@ export class AsyncContextManager {
 					// instance never gets context-preserving method wrapping (#328). No rejection
 					// handler: async rejections already propagate untouched here, matching the leaf
 					// error contract pinned by sync-leaf-error-propagation (#252).
-					if (result instanceof Promise) {
+					if (inheritsFrom(result, Promise)) {
 						return nativeThen(result, (value) =>
-							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, callerIsHost)
 						);
 					}
-					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, callerIsHost);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 					// their original error type/code/status.
-					if (rawErrors || error instanceof SlothletError) throw error;
+					if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
@@ -229,15 +244,17 @@ export class AsyncContextManager {
 				// instance never gets context-preserving method wrapping (#328). No rejection
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
-				if (result instanceof Promise) {
-					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
+				if (inheritsFrom(result, Promise)) {
+					return nativeThen(result, (value) =>
+						this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper, callerIsHost)
+					);
 				}
-				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper, callerIsHost);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 				// their original error type/code/status.
-				if (rawErrors || error instanceof SlothletError) throw error;
+				if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
@@ -258,14 +275,20 @@ export class AsyncContextManager {
 	 * @param {*} value - Resolved return value of the leaf.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
+	 * @param {boolean} [callerIsHost=false] - Whether the host made the call (see {@link attributeResult}).
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
 		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
-			if (currentWrapper) return attributeResult(currentWrapper, value);
+			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
+			// A prototype of a module's class the host is handed is the object itself (#667), as the live runtime hands it.
+			if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
+				return attributeResult(currentWrapper, value, callerIsHost);
+			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
+			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}
@@ -536,6 +559,28 @@ export class AsyncContextManager {
 		this.instances.set(childStore.instanceID, childStore);
 		try {
 			return await this.als.run(childStore, fn);
+		} finally {
+			this.instances.delete(childStore.instanceID);
+		}
+	}
+
+	/**
+	 * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+	 * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+	 * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {function(): *} fn - Synchronous function to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @internal
+	 */
+	runInSnapshotFlowSync(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		this.instances.set(childStore.instanceID, childStore);
+		try {
+			return this.als.run(childStore, fn);
 		} finally {
 			this.instances.delete(childStore.instanceID);
 		}

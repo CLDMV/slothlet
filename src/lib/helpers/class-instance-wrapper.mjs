@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:59:40-07:00 (1792310380)
+ *	@Last modified time: 2026-11-08T16:23:04-08:00 (1794183784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@
 // browser static graph (#123).
 import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { outerCallerCeiling } from "#handlers/frame-placement";
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -61,6 +62,9 @@ const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
  */
 const WRAPPED_INSTANCES = new WeakMap();
 
+/** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
+const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+
 /**
  * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
  * @package
@@ -70,7 +74,7 @@ const WRAPPED_INSTANCES = new WeakMap();
  * runtime_isWrappedClassInstance(runtime_wrapClassInstance(instance, cm, id, new WeakMap())); // true
  */
 export function runtime_isWrappedClassInstance(value) {
-	return value !== null && typeof value === "object" && WRAPPED_INSTANCES.has(value);
+	return value !== null && typeof value === "object" && weakMapHas(WRAPPED_INSTANCES, value);
 }
 
 /**
@@ -226,7 +230,9 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 					// be spuriously denied by) the permission layer.
 					// rawErrors: a class method's throw is application data, same as a plain leaf's —
 					// it must reach the caller unchanged, never re-typed as CONTEXT_EXECUTION_FAILED (#252).
-					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true);
+					// The method runs as its creator (its definer) under the caller running it as its ceiling: no grant (#726).
+					const ceiling = capturedWrapper ? outerCallerCeiling(contextManager, instanceID) : null;
+					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true, false, ceiling);
 
 					// Recursively wrap returned class instances, carrying the same creating-module identity.
 					if (result != null && runtime_isClassInstance(result)) {

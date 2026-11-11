@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:14:58-07:00 (1793056498)
+ *	@Last modified time: 2026-11-09T21:05:50-08:00 (1794287150)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,9 +44,11 @@ import {
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
-	runtime_frameworkViewCaller
+	runtime_frameworkViewCaller,
+	isSlothletWrapped
 } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
+import { runtime_codeWritersOnStack } from "#handlers/frame-placement";
 import { markSlothletProxy } from "#handlers/framework-internals";
 import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
@@ -913,6 +915,43 @@ export class ApiBuilder extends ComponentBase {
 		};
 
 		/**
+		 * Refuse module code a change to the namespace at `routePath`, however the module came to hold it: through
+		 * `self` (a view of its own, which checks the same), or the namespace the host holds, handed to it as an argument,
+		 * inside plain data, or stored on an object the module holds as itself. The built-in write rules keep the
+		 * framework's namespace from module code with the permission system on or off, and a host rule lifts one for the
+		 * callers it names; only `mode: "disabled"` leaves it open. The host's own changes go through. While a module's
+		 * call runs, the module it runs as decides; while none does, whose code makes the change decides (a function a
+		 * module left on an object of the host's, or on `globalThis`, is that module's whoever calls it later).
+		 *
+		 * @param {string} changedPath - The path changed (`slothlet.planted`, or `slothlet` for the namespace itself).
+		 * @returns {void}
+		 * @throws {SlothletError} `PERMISSION_DENIED` when module code changes what a built-in write rule protects, and
+		 *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, or the code making it is
+		 *   the instance's but no module's.
+		 * @example
+		 * assertNamespaceChange("slothlet.planted"); // throws inside a module call
+		 */
+		const assertNamespaceChange = (changedPath) => {
+			const apiManager = slothlet.handlers.apiManager;
+			if (!apiManager.frameworkProtected()) return;
+			const parts = changedPath.split(".");
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			if (identity?.unresolved) {
+				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+			}
+			if (identity?.currentWrapper) {
+				// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
+				for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) apiManager.assertOwnedWrite(parts, writer);
+				return;
+			}
+			// No call is running: whose code makes the change decides, so a function a module left where the host calls it
+			// later is still that module's.
+			const writers = runtime_codeWritersOnStack(slothlet);
+			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+			for (const writer of writers) apiManager.assertOwnedWrite(parts, writer);
+		};
+
+		/**
 		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
 		 * property route is permission-gated, including primitives on objects.
 		 *
@@ -1066,34 +1105,51 @@ export class ApiBuilder extends ComponentBase {
 					};
 				},
 
+				// A change under a symbol meets the rules of the member it is made on; one under a string, those of its path.
 				set(target, prop, newValue, receiver) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.set(target, prop, newValue, receiver);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.set(target, prop, newValue, receiver);
 				},
 
 				defineProperty(target, prop, descriptor) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.defineProperty(target, prop, descriptor);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.defineProperty(target, prop, descriptor);
 				},
 
 				deleteProperty(target, prop) {
 					if (typeof prop !== "string") {
+						assertNamespaceChange(routePath);
 						return Reflect.deleteProperty(target, prop);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+					assertNamespaceChange(childRoutePath);
 					return Reflect.deleteProperty(target, prop);
+				},
+
+				setPrototypeOf(target, prototype) {
+					assertNamespaceChange(routePath);
+					return Reflect.setPrototypeOf(target, prototype);
+				},
+
+				preventExtensions(target) {
+					assertNamespaceChange(routePath);
+					return Reflect.preventExtensions(target);
 				},
 
 				ownKeys(target) {
@@ -2928,6 +2984,23 @@ export class ApiBuilder extends ComponentBase {
 			 * // Inside a module leaf, reports that module's own path:
 			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
 			 */
+			/**
+			 * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a
+			 * module's or the host's, whether a Proxy (an api node, a view, a version dispatcher, a class-instance
+			 * wrapper, a stand-in) or a stand-in that is not one (a module's async or generator function, generator,
+			 * or promise, a frozen copy of a frozen value handed from one module to another, a callable node's own
+			 * `valueOf`). A Proxy wrapped around one of slothlet's is not slothlet's. Answered from slothlet's own
+			 * registries: no trap of the value runs, and replacing `WeakMap` or `WeakSet` methods afterwards changes
+			 * no answer. Code that copies values between modules can let slothlet's own wrappers through and still
+			 * refuse every other Proxy. Allowed to modules by a built-in rule: it reveals nothing about any module.
+			 * @param {*} value - The value to ask about.
+			 * @returns {boolean} True only for one of slothlet's own wrappers.
+			 * @example
+			 * api.slothlet.wrapped(api.math); // true
+			 * api.slothlet.wrapped(new Proxy({}, {})); // false
+			 */
+			wrapped: (value) => isSlothletWrapped(value),
+
 			caller: () => {
 				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
 				// `queueMicrotask`, so a DIFFERENT instance's active flow (a nested slothlet() boot, or a

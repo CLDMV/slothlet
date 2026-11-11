@@ -11,10 +11,13 @@
 export function isFileSpecifier(specifier: string): boolean;
 /**
  * Whether a module resolved at `child` (imported from `parent`) belongs to the importing leaf's
- * per-instance graph. Slothlet's own files are always shared. A file inside a `node_modules`
- * package is per instance only when the importer lives in that same package — a slothlet plugin
- * installed as a dependency keeps its own helpers per instance, while a relative path that
- * reaches into some other package does not duplicate that package.
+ * per-instance graph. Slothlet's own files are always shared. A file in a package other than the
+ * importer's own stays shared, however the import is spelled (#715): reached by a relative path or a
+ * `file:` URL it is the same module as its package-name spelling, which is shared — one file, one URL
+ * within an instance. A package is a `node_modules` package directory or, outside `node_modules`, the
+ * nearest named `package.json` (a pnpm workspace package resolves to its real path there). A slothlet
+ * plugin installed as a dependency, or a module that is a package of its own, keeps its own helpers per
+ * instance.
  * @param {string} child - Resolved child (`file:` URL, path or vite id).
  * @param {string} parent - The importer (`file:` URL, path or vite id).
  * @returns {boolean} True when the child should carry the parent's instance query.
@@ -24,6 +27,20 @@ export function isFileSpecifier(specifier: string): boolean;
  * isInstanceScopedFile("/app/node_modules/x/index.js", "/app/api/tally.mjs"); // false
  */
 export function isInstanceScopedFile(child: string, parent: string): boolean;
+/**
+ * Whether a file a bare specifier resolved to (`#imports`, or a package's reference to itself by name) is in the
+ * importing module's own package, and so belongs to its per-instance graph as a relative import of the file does
+ * (#715): one file is one URL inside an instance, however the import is spelled. A bare specifier that resolves into
+ * another package stays shared, and slothlet's own source or build tree always does.
+ * @param {string} child - Resolved child (`file:` URL, path or vite id).
+ * @param {string} parent - The importer (`file:` URL, path or vite id).
+ * @returns {boolean} True when the child should carry the parent's instance query.
+ * @internal
+ * @example
+ * isOwnPackageImport("/app/lib/state.mjs", "/app/api/tally.mjs"); // true when `/app/package.json` is the package of both
+ * isOwnPackageImport("/app/node_modules/x/index.js", "/app/api/tally.mjs"); // false
+ */
+export function isOwnPackageImport(child: string, parent: string): boolean;
 /**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
@@ -226,7 +243,13 @@ export function isCommonJSFile(filePath: string): boolean;
  * Node load hook generates: the file runs through the instance's private CommonJS cache in the
  * test's own process, so its own `require()`s — CommonJS or ES module — are per instance too, and
  * the copy is shared with the instance's `.cjs` leaves.
- * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `load`).
+ *
+ * Every JavaScript or TypeScript ES module it transforms that is not under `node_modules` and not slothlet's own, an
+ * instance file among them, gets one statement appended that records the script vite compiled it into (#714). Each such
+ * file that is not an instance file also imports a virtual module that records which modules loaded it, as the plugin
+ * resolved their imports: an instance file, or another file a module loaded. With permissions on, code running inside
+ * a module's call is then attributed as it is under Node's own loader (docs/PERMISSIONS.md).
+ * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `transform`, `load`).
  * @public
  * @example
  * // vitest.config.mjs
@@ -250,6 +273,28 @@ export const INSTANCE_QUERY_KEYS: ReadonlyArray<string>;
  * @internal
  */
 export const SCRIPTS_PER_KEY: number;
+/**
+ * The global key a host file's registration puts what it captures under (#714): an array of the `Error`s each of the
+ * host's own files vite transformed created as its last statement, read by slothlet's frame placement.
+ * @type {string}
+ * @internal
+ */
+export const VITE_HOST_SCRIPTS: string;
+/**
+ * The global key the records of who loaded each of the host's own vite-transformed files go under (#714): the `Error`
+ * each record's virtual module creates, frozen, its message the JSON of the importers, read by slothlet's frame placement.
+ * @type {string}
+ * @internal
+ */
+export const VITE_LOADED_BY: string;
+/**
+ * The specifier of the virtual module that records who loaded a file (#714), before its `id` parameter: imported by the
+ * statement the vite plugin appends to each of the host's own files, resolved by the plugin to the id with a leading
+ * `\0`, which no file on disk can have.
+ * @type {string}
+ * @internal
+ */
+export const LOADED_BY_SPECIFIER: string;
 /**
  * Process-wide instance-import state.
  */

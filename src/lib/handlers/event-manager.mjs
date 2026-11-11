@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T08:38:14-07:00 (1792856294)
+ *	@Last modified time: 2026-11-08T16:41:16-08:00 (1794184876)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,6 +51,30 @@
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
+import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
+
+/** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
+const NativePromise = Promise;
+const promiseThen = Promise.prototype.then;
+const reflectApply = Reflect.apply;
+
+/**
+ * Run a listener and settle what it returns while still inside its call: a `then` it carries (a getter, a
+ * thenable's method, a promise's own `then`) is read and called here, so it runs as the listener. The promise
+ * made here settles to `undefined` whatever the listener's result resolves to, so the dispatcher never holds,
+ * and never reads, any value of the listener's.
+ * @param {Function} listener - The subscribed function.
+ * @param {Array} args - `[payload, meta]`.
+ * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
+ * @private
+ */
+function runAndSettle(listener, args) {
+	const result = reflectApply(listener, undefined, args);
+	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
+	const then = result.then;
+	if (typeof then !== "function") return undefined;
+	return new NativePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
+}
 
 /**
  * Envelope → its private delivery record `{ slothlet, meta, flow, subs }`. Module-level (not per
@@ -323,8 +347,9 @@ export class EventManager extends ComponentBase {
 		if (!set || set.size === 0) return;
 
 		const meta = { event, at: Date.now(), instanceID: this.instanceID };
+		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
-		await this.#dispatch(event, payload, meta, [...set]);
+		await this.#dispatch(event, payload, meta, [...set], emitter);
 	}
 
 	/**
@@ -334,10 +359,11 @@ export class EventManager extends ComponentBase {
 	 * @param {*} payload - Domain payload.
 	 * @param {object} meta - Trigger envelope `{ event, at, instanceID }` handed to every listener.
 	 * @param {Array<object>} subs - Subscription records to deliver to.
+	 * @param {object|null} [emitter=null] - The wrapper of the module that emitted, or null for the host.
 	 * @returns {Promise<void>} Resolves once every listener has settled.
 	 * @private
 	 */
-	async #dispatch(event, payload, meta, subs) {
+	async #dispatch(event, payload, meta, subs, emitter = null) {
 		const cm = this.slothlet.contextManager;
 		const promises = [];
 
@@ -353,22 +379,40 @@ export class EventManager extends ComponentBase {
 				this.#removeSub(event, sub);
 				continue;
 			}
-			const callArgs = level === "allow" ? [payload, meta] : [undefined, meta];
+			const callArgs = level === "allow" ? [this.#payloadFor(payload, sub, emitter), meta] : [undefined, meta];
 			if (sub.once) this.#removeSub(event, sub);
 
 			try {
 				// Run pinned to the subscriber's identity/context so self.* resolves as that module.
 				// rawErrors:true surfaces the listener's own error so we can isolate + warn on it.
-				const result = this.#invoke(sub, callArgs, cm);
-				if (result && typeof result.then === "function") {
-					promises.push(result.catch((error) => this.#warnListener(event, error)));
-				}
+				const settled = this.#invoke(sub, callArgs, cm);
+				if (settled) promises.push(reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
 			} catch (error) {
 				this.#warnListener(event, error);
 			}
 		}
 
-		if (promises.length > 0) await Promise.all(promises);
+		if (promises.length > 0) {
+			// Wait for every listener without Promise.all, which reads the global Promise: each promise here is the
+			// dispatcher's own and never rejects.
+			let pending = promises.length;
+			await new NativePromise((resolve) => {
+				for (const settled of promises) reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);
+			});
+		}
+	}
+
+	/**
+	 * The payload as a subscription's listener is handed it (#667): it crosses from the emitting module to the module
+	 * that registered the listener, as a value handed between modules does.
+	 * @param {*} payload - Domain payload.
+	 * @param {object} sub - Subscription record.
+	 * @param {object|null} emitter - The wrapper of the module that emitted, or null for the host.
+	 * @returns {*} What the listener is handed.
+	 * @private
+	 */
+	#payloadFor(payload, sub, emitter) {
+		return runtime_eventPayloadFor(payload, sub.ownerWrapper, emitter, this.slothlet);
 	}
 
 	/**
@@ -376,13 +420,15 @@ export class EventManager extends ComponentBase {
 	 * @param {object} sub - Subscription record.
 	 * @param {Array} callArgs - `[payload, meta]`.
 	 * @param {object} cm - Context manager.
-	 * @returns {*} The listener's return value.
+	 * @returns {Promise<void>|undefined} A native promise that settles when the listener's result does, or `undefined` when it returned no thenable.
 	 * @private
 	 */
 	#invoke(sub, callArgs, cm) {
+		const { listener } = sub;
+		const settle = (...args) => runAndSettle(listener, args);
 		return sub.ownerWrapper && cm?.runInContext
-			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
-			: sub.listener(...callArgs);
+			? cm.runInContext(this.instanceID, settle, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
+			: settle(...callArgs);
 	}
 
 	/**
@@ -436,7 +482,7 @@ export class EventManager extends ComponentBase {
 		let delivery = null;
 		const defaultDeliver = () => {
 			// Idempotent: a second call returns the first delivery rather than delivering twice.
-			if (!delivery) delivery = this.#dispatch(event, payload, meta, subs);
+			if (!delivery) delivery = this.#dispatch(event, payload, meta, subs, emitterWrapper);
 			return delivery;
 		};
 
@@ -568,7 +614,10 @@ export class EventManager extends ComponentBase {
 			return { delivered: false, reason: DELIVERY_REASONS.DENIED };
 		}
 		if (sub.once) this.#removeSub(event, sub);
-		const callArgs = level === "allow" ? [envelope.payload, record.meta] : [undefined, record.meta];
+		const callArgs =
+			level === "allow"
+				? [this.#payloadFor(envelope.payload, sub, record.flow?.currentWrapper ?? null), record.meta]
+				: [undefined, record.meta];
 		await this.#invoke(sub, callArgs, cm);
 		return { delivered: true, level };
 	}

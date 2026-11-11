@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T19:05:58-07:00 (1791425158)
+ *	@Last modified time: 2026-11-06T18:01:17-08:00 (1794016877)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -510,6 +510,16 @@ function parseBareNewErrors(content, filePath) {
 		// `new Error(` in it is still reported, and a stack capture anywhere else in src still
 		// fails this check, so adding one stays a deliberate, reviewed edit here.
 		if (filePath.includes("context-live.mjs") && /^\(\s*\)\s*\.\s*stack\b/.test(afterNew)) continue;
+
+		// instance-imports.mjs builds the statement `slothletInstanceImports()` appends to a file, and the code of the virtual
+		// module that records who loaded it, as strings: their `new Error(` is text emitted into that code, whose stack
+		// slothlet reads, not an error slothlet throws (#714). Scoped to that file AND to the `const SCRIPT_REGISTRATION = `
+		// template and the virtual module's `return \`const record = ` template: any other `new Error(` in it is reported.
+		if (
+			filePath.includes("instance-imports.mjs") &&
+			/^\s*(?:const SCRIPT_REGISTRATION = `|return `const record = Object\.freeze\(new Error\()/.test(currentLine)
+		)
+			continue;
 
 		// Skip new Error() that is passed as a direct argument to SlothletError/SlothletWarning.
 		// This is the legitimate pattern for wrapping an external string payload (e.g. IPC message)

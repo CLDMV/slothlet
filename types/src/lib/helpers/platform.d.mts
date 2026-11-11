@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:56-07:00 (1791424196)
+ *	@Last modified time: 2026-11-03T03:44:57-08:00 (1793706297)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -133,4 +133,16 @@ export function loadJson(ref: string): object | null | Promise<object | null>;
  * scheduleMacrotask(() => patchAfterAssignment());
  */
 export function scheduleMacrotask(fn: Function): void;
+/**
+ * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
+ * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run
+ * with the value slothlet is checking.
+ * @param {*} value - The value.
+ * @param {Function|null|undefined} ctor - The class; anything not a function answers false.
+ * @returns {boolean} Whether `ctor.prototype` is on the value's prototype chain.
+ * @public
+ * @example
+ * inheritsFrom(Promise.resolve(), Promise); // true
+ */
+export function inheritsFrom(value: any, ctor: Function | null | undefined): boolean;
 //# sourceMappingURL=platform.d.mts.map

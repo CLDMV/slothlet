@@ -454,6 +454,21 @@ export class PermissionManager extends ComponentBase {
      */
     decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | null;
     /**
+     * What the write rules say about every write `callerPath` could make at `targetPath` or anywhere beneath it (#667),
+     * read from the rule set alone and kept until the rules change: `"deny"` when a rule could refuse one of them (a
+     * deny whose pattern can reach the subtree, or one with a condition), `"grant"` when allows cover the whole subtree
+     * and nothing could refuse, and null when the rules leave it to ownership. A value held as itself takes no check of
+     * its own, so a reader is handed one only when nothing beneath its path would be refused for it. The built-in rules
+     * on the framework's own keys of api nodes are left out: a value beneath a node is no node.
+     *
+     * @param {string} callerPath - Api path of the module writing.
+     * @param {string} targetPath - Api path of the subtree's root.
+     * @returns {"deny"|"grant"|null} The verdict; null while the system is off.
+     * @example
+     * pm.writeSubtree("reader.x", "owner.Foo.prototype"); // "grant" under { caller: "reader.**", target: "owner.**:write", effect: "allow" }
+     */
+    writeSubtree(callerPath: string, targetPath: string): "deny" | "grant" | null;
+    /**
      * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
      * `"grant"`), with no audit.
      *

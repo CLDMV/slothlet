@@ -242,6 +242,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-owner"></a>[permissions.owner] | <code>boolean</code> | <code>false</code> | Owner grant (#509): a caller leaf may access any target leaf currently owned by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories — wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace gets nothing; an explicit deny rule still wins. See <a href="docs/PERMISSIONS.md#owner-grant">PERMISSIONS.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-ceiling"></a>[permissions.ceiling] | <code>"leaf" \| "chain"</code> | <code>"leaf"</code> | Code a caller hands to a leaf runs as that caller, under the leaf it is running inside as its ceiling (#597); `"chain"` keeps every leaf the code was handed through as its ceiling instead. See <a href="docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller">PERMISSIONS.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-provenance"></a>[permissions.provenance] | <code>boolean</code> | <code>true</code> | A module's function reached by a route slothlet does not see — a callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever call runs it. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-attribution"></a>[permissions.attribution] | <code>"precise" \| "fast"</code> | <code>"precise"</code> | How the definer of code a module hands out is known (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it; `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where it cannot. See <a href="docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer">PERMISSIONS.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-references"></a>[permissions.references] | <code>object</code> |  | Options for api functions held as references (`{ capture?: boolean }`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-private"></a>[permissions.private] | <code>object</code> |  | Module-privacy host policy (`{ host?: "deny"\|"allow" }`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_permissions-rules"></a>[permissions.rules] | <code>Array.<object></code> |  | Initial `{ caller, target, effect, condition?, requires? }` rules. |
@@ -443,8 +444,9 @@ const api = await slothlet({
 > reload — evaluates its own copy of the leaf. A module the leaf IMPORTS is resolved by the host,
 > which knows nothing about that query: a relative helper would be one module shared by every
 > instance and every reload, and module-level state in it would leak between instances.</p>
-> <p>This module closes that gap for everything reachable through relative or <code>file:</code> specifiers,
-> at any depth:</p>
+> <p>This module closes that gap for everything reachable through relative or <code>file:</code> specifiers, and
+> through bare ones (<code>#imports</code>, a self-reference) that resolve into the importer's own package
+> (#715), at any depth:</p>
 > <ul>
 > <li><strong>Native Node</strong> — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
 > hook (<code>module.registerHooks()</code>, Node &gt;= 22.15 — slothlet's engines floor) that copies the
@@ -460,10 +462,11 @@ const api = await slothlet({
 > reloaded leaves against the instance's existing helper copy — helper state survives it. A full
 > reload (<code>api.slothlet.reload()</code>) rotates the instance ID, which is what gives helpers a fresh
 > copy; edits to helper code therefore need a full reload.</p>
-> <p>What stays shared: bare specifiers (<code>node_modules</code> packages, <code>node:</code> builtins, subpath <code>#imports</code>,
-> <code>@cldmv/slothlet</code> and its runtime), any file inside a <code>node_modules</code> package other than the
-> importer's own, and slothlet's own source files — the live-binding runtime must remain one
-> module per process.</p>
+> <p>What stays shared: bare specifiers into another package (<code>node_modules</code> packages, <code>node:</code> builtins,
+> <code>@cldmv/slothlet</code> and its runtime), any file in a package other than the importer's own however
+> the import is spelled (a <code>node_modules</code> package, or a workspace package linked in from outside
+> <code>node_modules</code>: one file, one URL, #715), and slothlet's own source files — the live-binding
+> runtime must remain one module per process.</p>
 > <p>Crossing module systems (#534). Node caches CommonJS by file path, so a query on a CommonJS URL is
 > ignored, and <code>require(esm)</code> loads an ES module under its plain file URL. Two more hooks close that:</p>
 > <ul>
@@ -472,7 +475,8 @@ const api = await slothlet({
 > ({@link requireInInstance}, the same cache a <code>.cjs</code> leaf's own requires use). Its export names come
 > from a static scan of the source (see <code>cjs-export-names.mjs</code>), as Node's own are.</li>
 > <li><strong>CommonJS → ESM</strong> — while {@link requireInInstance} runs its synchronous require, the scope is
-> active: a relative <code>require()</code> from a file of that scope resolving to an ES module is marked, and
+> active: a <code>require()</code> from a file of that scope resolving to an ES module of the instance's graph (by a
+> relative path, or by <code>#imports</code> or a self-reference into its own package, #715) is marked, and
 > the <code>load</code> hook answers it with a CommonJS stub that returns the ES module imported under the
 > instance query — the same module record an ESM leaf of the instance imports.</li>
 > </ul></strong></p>
