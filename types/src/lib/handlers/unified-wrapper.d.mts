@@ -379,10 +379,13 @@ export function registerRuntimeSelf(contextManager: object, selfProxy: object): 
  * `PERMISSION_DENIED`, naming the identity it was read as. Code of the host's own gets `null`: `self` is not for it.
  * @param {object} selfProxy - The runtime's `self`.
  * @param {string|symbol} prop - The member.
+ * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
+ *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
+ *   read as its definer.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol): {
+export function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null): {
     value: any;
 } | null;
 /**

@@ -110,7 +110,7 @@ export function tsFunction(data: string): string {
 
 ### Timers and queues a file starts while it loads
 
-A file's top level runs under the file's own module: the async runtime loads each file inside a store that names it, and the live runtime pins what the file registers while it loads. So a timer, a job queue or a listener started at the top of a file has `self` and `context` when it runs later, and the permission system sees the file's module as the caller of whatever it runs (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). `self` is not usable at the top level itself while the file is still loading: the api is not built yet.
+A file's top level runs under the file's own module: the async runtime loads each file inside a store that names it, and the live runtime pins what the file registers while it loads. So a timer, a job queue or a listener started at the top of a file has `self` and `context` when it runs later, and the permission system sees the file's module as the caller of whatever it runs (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). `self` is not usable at the top level itself while the file is still loading: the api is not built yet. A file that builds another slothlet instance while it loads can use that instance as usual: the inner instance's code, run from something the loading file started, reads its own `self` and `context`.
 
 ### Writable `self.X = …`
 

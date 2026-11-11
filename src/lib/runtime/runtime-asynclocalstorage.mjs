@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:28:42-08:00 (1794374922)
+ *	@Last modified time: 2026-11-11T14:25:47-08:00 (1794435947)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,9 @@ export const self = new NativeProxy(
 			if (!ctx || !ctx.self) {
 				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
 				// Code a file started while it loaded has a store of its own: without a module to run as, it has no `self`.
-				const read = ctx?.moduleLoad ? null : runtime_selfReadAsDefiner(self, prop);
+				// Another instance's code running in that flow (a function an instance built by the loading file handed
+				// out) is not the load's: it is read as its definer, as with no store.
+				const read = runtime_selfReadAsDefiner(self, prop, ctx?.moduleLoad ? ctx.instanceID : null);
 				if (read) return read.value;
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}

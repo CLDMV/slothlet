@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T10:14:18-08:00 (1794420858)
+ *	@Last modified time: 2026-11-11T14:25:44-08:00 (1794435944)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4345,12 +4345,19 @@ export function registerRuntimeSelf(contextManager, selfProxy) {
  * `PERMISSION_DENIED`, naming the identity it was read as. Code of the host's own gets `null`: `self` is not for it.
  * @param {object} selfProxy - The runtime's `self`.
  * @param {string|symbol} prop - The member.
+ * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
+ *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
+ *   read as its definer.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy, prop) {
+export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null) {
 	const definer = frameDefiner();
 	if (definer === null) return null;
+	if (loadingInstanceID !== null) {
+		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
+		if (!owner || owner.instanceID === loadingInstanceID) return null;
+	}
 	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
 	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
