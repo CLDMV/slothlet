@@ -244,21 +244,40 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
 	});
 
+	// The hook fires inside the producer's own call (`viaSelf` calls `viaDirect` through `self`), where a pinned handler
+	// and an unpinned one are different callers. The handler records what it may reach: the rules deny `id.consumer` to
+	// the consumer and `id.producer` to the producer.
+	it.skipIf(!config.hook?.enabled)(
+		"a pinned hook that fires inside another module's call runs as the module that registered it",
+		async () => {
+			await makeApi();
+			await api.consumer.probe.registerAccessHook("producer.relay.viaDirect");
+			await api.producer.relay.viaSelf();
+			// The consumer alone: denied its own id, allowed the producer's.
+			expect(await api.consumer.probe.getHookProbedAccess()).toEqual([false, true]);
+		}
+	);
+
 	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
 		await makeApi();
 		// Pin enforcement is on by default and would ignore lockCaller:false; disable it (host-only)
 		// so the per-registration opt-out is honored (#118).
 		api.slothlet.hook.pin.disable();
-		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
-		await api.producer.relay.viaDirect(() => 0);
-		// Opted out: the handler is not pinned. It is still the consumer's code, and the host's call runs it outside any
-		// module call, where code a module wrote reads `self` as its definer (#726): the consumer, the same answer a pin
-		// gives. This fixture can therefore no longer tell the opt-out from the pin; it shows the unpinned hook fires and
-		// reads `self` as the module that wrote it.
-		const probed = await api.consumer.probe.getHookProbedIdentity();
-		// Non-null proves the hook actually fired (registerIdentityHook resets it to null).
-		expect(probed).not.toBeNull();
-		expect(probed).toBe("consumer");
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+		await api.producer.relay.viaSelf();
+		// Opted out: the handler is not pinned, so it runs inside the producer's call. It is still the consumer's code
+		// (its definer), so both the consumer and the producer's call have to allow what it does: neither id is reached.
+		expect(await api.consumer.probe.getHookProbedAccess()).toEqual([false, false]);
+	});
+
+	it.skipIf(!config.hook?.enabled)("an unpinned hook runs as the call it fires in when provenance is off", async () => {
+		// With provenance off no frames are read, so nothing tells the handler's code from the call running it.
+		await makeApi({ provenance: false });
+		api.slothlet.hook.pin.disable();
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+		await api.producer.relay.viaSelf();
+		// The producer alone: allowed the consumer's id, denied its own.
+		expect(await api.consumer.probe.getHookProbedAccess()).toEqual([true, false]);
 	});
 
 	it.skipIf(!config.hook?.enabled)("an already-locked hook handler is respected, not double-wrapped", async () => {
