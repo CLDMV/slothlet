@@ -79,6 +79,7 @@ import {
 } from "#handlers/hook-manager";
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
+import { setCloneViewReader } from "@cldmv/slothlet/helpers/clone-context";
 import { Reflect, Objects, Arrays, Math, functionSource, functionToString, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -6273,6 +6274,16 @@ function runtime_isCrossing(value) {
 function runtime_uncross(value) {
 	return runtime_isCrossing(value) ? CROSSINGS.get(value).original : value;
 }
+
+// The platform's cloning functions copy the data behind a crossing view (see helpers/clone-context): the value a
+// stand-in or the async runtime's context wrapper stands for, where the view is of one.
+setCloneViewReader((value) => {
+	const crossing = CROSSINGS.get(value);
+	if (crossing === undefined) return undefined;
+	const behind = crossing.original;
+	if (typeof behind !== "object") return behind;
+	return STAND_IN_RECORDS.get(behind)?.original ?? runtime_unwrapClassInstance(behind);
+});
 
 /**
  * The module a value was seen held as itself by, when it crossed to another module through slothlet (an argument, a

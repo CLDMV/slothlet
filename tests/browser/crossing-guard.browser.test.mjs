@@ -61,6 +61,7 @@ describe("browser crossing guard", () => {
 					inData: () => ({ inst: new Foo() }),
 					onDate: () => Object.assign(new Date(0), { inst: new Foo() }),
 					inMap: () => new Map([["k", new Foo()]]),
+					plain: () => ({ a: { b: 1 }, list: [1, 2, 3], map: new Map([["k", { z: 1 }]]) }),
 					each: (callback) => callback(new Foo()),
 					landed: (key) => {
 						const hit = Object.hasOwn(Foo.prototype, key);
@@ -75,6 +76,19 @@ describe("browser crossing guard", () => {
 			"reader",
 			{
 				exports: {
+					copies: async () => {
+						const data = self.owner.plain();
+						const copy = structuredClone(data);
+						const posted = await new Promise((resolve) => {
+							const { port1, port2 } = new MessageChannel();
+							port2.onmessage = (event) => {
+								port1.close();
+								resolve(event.data);
+							};
+							port1.postMessage({ theirs: data.list });
+						});
+						return JSON.stringify([self.slothlet.wrapped(data), copy.a, copy.list, [...copy.map], copy !== data, posted]);
+					},
 					plant: (route, key) => {
 						const value = routes[route]();
 						try {
@@ -121,6 +135,18 @@ describe("browser crossing guard", () => {
 		expect(await off.reader.plant("inData", "__browser_off")).toBe("hi,written");
 		expect(await off.owner.landed("__browser_off")).toBe(true);
 		await off.shutdown();
+	});
+
+	it("lets the platform's cloning functions copy another module's data, as plain JavaScript does", async () => {
+		const expected = (wrapped) => JSON.stringify([wrapped, { b: 1 }, [1, 2, 3], [["k", { z: 1 }]], true, { theirs: [1, 2, 3] }]);
+		const on = await boot({ defaultPolicy: "allow" });
+		expect(await on.reader.copies()).toBe(expected(true));
+		await on.shutdown();
+		const off = await boot();
+		expect(await off.reader.copies()).toBe(expected(false));
+		await off.shutdown();
+		// With the last instance gone the platform's own function is back.
+		expect(globalThis.structuredClone[Symbol.for("slothlet.clone.original")]).toBeUndefined();
 	});
 
 	it("answers the engine's brand checks without node:util", async () => {

@@ -110,6 +110,7 @@ import {
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
+import { enableClonePatching, disableClonePatching } from "@cldmv/slothlet/helpers/clone-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
@@ -1015,6 +1016,10 @@ class Slothlet {
 			promisePatchHolders.add(this.instanceID);
 		}
 
+		// The platform's cloning functions (`structuredClone`, `v8.serialize`, `postMessage`) refuse a Proxy, and what one
+		// module hands another is a view while the permission system is on: the patch lets them copy the data behind it.
+		enableClonePatching();
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
 
@@ -1761,6 +1766,7 @@ class Slothlet {
 			disableEventTargetPatching();
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
+			disableClonePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off

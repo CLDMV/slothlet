@@ -108,6 +108,7 @@ describe.each(matrix)("crossing guard, plain-JS answers > $mode / $runtime / $na
 		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 		const shows = await api.reader.shows();
 		expect(shows.dataWrapped).toBe(viewed);
-		expect(shows.cloned).toBe(viewed ? "DataCloneError" : JSON.stringify({ a: { b: 1 }, list: [1, 2, 3] }));
+		// A view or the object itself, `structuredClone` copies the data.
+		expect(shows.cloned).toBe(JSON.stringify({ a: { b: 1 }, list: [1, 2, 3] }));
 	});
 });
