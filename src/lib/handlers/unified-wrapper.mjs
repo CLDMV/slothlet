@@ -306,11 +306,12 @@ export function runtime_unwrapSelfView(value) {
  * readers that are no module ({@link HOST_READER}, {@link UNATTRIBUTED_READER}).
  *
  * @param {object} slothlet - Instance the node belongs to.
+ * @param {object|null} [access=null] - The access the read is part of, when who is making it was resolved already.
  * @returns {object} The reader.
  * @private
  */
-function runtime_selfReader(slothlet) {
-	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+function runtime_selfReader(slothlet, access = null) {
+	const identity = runtime_accessIdentity(access, slothlet.contextManager, slothlet.instanceID);
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	return identity?.unresolved ? UNATTRIBUTED_READER : HOST_READER;
 }
@@ -1525,6 +1526,9 @@ function runtime_selfHasInstance(prototype, instance) {
  *
  * @param {*} node - Value read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object|null} [from=null] - The module handing the value on, when one is.
+ * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
+ *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -1532,7 +1536,7 @@ function runtime_selfHasInstance(prototype, instance) {
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node, reader, from = null) {
+export function runtime_selfView(node, reader, from = null, access = null) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
 	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
@@ -1546,7 +1550,8 @@ export function runtime_selfView(node, reader, from = null) {
 			: memberRecord === undefined
 				? PROTOTYPE_PATHS.get(handed)
 				: runtime_knownPrototype(memberRecord.slothlet, handed);
-	if (handedPrototype !== undefined) return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet));
+	if (handedPrototype !== undefined)
+		return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet, access));
 	// A member view handed to another reader is that reader's view of the same value at the same path.
 	if (memberRecord) {
 		if (reader === undefined || reader === memberRecord.reader) return node;
@@ -1567,7 +1572,7 @@ export function runtime_selfView(node, reader, from = null) {
 	const inner = dispatch ? null : (resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null);
 	// Any other value another module hands on reaches the reader through the class prototype guard.
 	if (inner === null && dispatch === null) {
-		if (reader === undefined && from?.slothlet) reader = runtime_selfReader(from.slothlet);
+		if (reader === undefined && from?.slothlet) reader = runtime_selfReader(from.slothlet, access);
 		if (from === null) {
 			// Handed on by no known module (the host's own value in a hook's arguments, say), it is handed on as it is,
 			// unless a module's call returned it to the host.
@@ -1577,7 +1582,7 @@ export function runtime_selfView(node, reader, from = null) {
 		return runtime_crossTo(node, reader, null, from);
 	}
 	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
-	if (reader === undefined) reader = runtime_selfReader(slothlet);
+	if (reader === undefined) reader = runtime_selfReader(slothlet, access);
 	let byReader = SELF_VIEWS.get(node);
 	if (!byReader) {
 		byReader = new WeakMap();
@@ -1704,31 +1709,35 @@ export function runtime_selfView(node, reader, from = null) {
 		if (inner && prototype === runtime_unclassedInstancePrototype(inner)) return viewMember(null, prototype);
 		return prototype;
 	};
+	// What a read of a member hands out, the read and the description that follows it made as one access.
+	const readMember = (prop, access) => {
+		const value = runtime_readWithAccess(access, node, node, prop, node);
+		// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
+		if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
+			const impl = inner?.____slothletInternal.impl;
+			if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isClassInstance(impl) && runtime_readsEngineProto(impl))
+				return shownPrototype(value);
+		}
+		if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
+			hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
+			return hasInstance;
+		}
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		if (isFixed(runtime_describeWithAccess(access, node, node, prop))) return value;
+		return viewMember(prop, value);
+	};
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
 	const view = new NativeProxy(capturedViewShadows.get(node) ?? node, {
 		get(_, prop) {
-			const value = Reflect.get(node, prop);
-			// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
-			if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
-				const impl = inner?.____slothletInternal.impl;
-				if (
-					impl !== null &&
-					typeof impl === "object" &&
-					!util.types.isProxy(impl) &&
-					isClassInstance(impl) &&
-					runtime_readsEngineProto(impl)
-				)
-					return shownPrototype(value);
+			// The read, and the description of the member that follows it, are one access by the same code.
+			const access = capturedViewShadows.has(node) ? runtime_beginAccess() : null;
+			try {
+				return readMember(prop, access);
+			} finally {
+				runtime_endAccess(access);
 			}
-			if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
-				hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
-				return hasInstance;
-			}
-			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-			if (isFixed(Reflect.getOwnPropertyDescriptor(node, prop))) return value;
-			return viewMember(prop, value);
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, prop);
@@ -3013,6 +3022,188 @@ function runtime_accessAsKept(wrapper, reader, access) {
 }
 
 /**
+ * The node or view the next trap is entered on with an access handed to it (see {@link runtime_readWithAccess}).
+ * @type {object|null}
+ * @private
+ */
+let handedAccessKey = null;
+
+/**
+ * The access handed to that trap.
+ * @type {{filled: boolean, done: boolean, manager: object|null, store: object|null|undefined, identity: object|undefined}|null}
+ * @private
+ */
+let handedAccess = null;
+
+/**
+ * One access a module's code makes through a view (a member read, a description of a member): who is making it is
+ * resolved at most once, by the first check of the access that asks, and every later check of the same access takes
+ * that answer instead of reading the stack again.
+ *
+ * One access runs several of slothlet's traps, one inside another: the view of `self`, the view that keeps its reader,
+ * the node. The code making the access is the same for all of them, as only slothlet's own code runs between the
+ * outermost trap and each check. The answer never leaves the access: it travels only in the traps' own variables and
+ * through a hand-over the next trap takes as it starts ({@link runtime_takeAccess}), so code that runs inside the
+ * access (a getter, a module's Proxy, a listener) and makes an access of its own starts a new one, and the answer is
+ * dropped when the trap that began the access returns ({@link runtime_endAccess}), so nothing kept from it answers
+ * for a later access.
+ * @returns {{filled: boolean, done: boolean, manager: object|null, store: object|null|undefined, identity: object|undefined}} The access.
+ * @private
+ *
+ * @example
+ * const access = runtime_beginAccess();
+ * try {
+ * 	return runtime_readWithAccess(access, inner, child, prop, child);
+ * } finally {
+ * 	runtime_endAccess(access);
+ * }
+ */
+function runtime_beginAccess() {
+	return { filled: false, done: false, manager: null, store: undefined, identity: undefined };
+}
+
+/**
+ * End an access its trap began: its answer is no longer taken by anything that still holds it.
+ * @param {object|null} access - The access.
+ * @returns {void}
+ * @private
+ */
+function runtime_endAccess(access) {
+	if (access !== null) access.done = true;
+}
+
+/**
+ * Take the access handed to a trap, as the trap starts and before any other code runs. Whatever was handed is
+ * dropped, whether or not it was meant for this trap, so it reaches no trap entered later.
+ * @param {object} key - The node's wrapper, or the view, the trap belongs to.
+ * @returns {object|null} The access, or null when none was handed to this trap.
+ * @private
+ */
+function runtime_takeAccess(key) {
+	if (handedAccessKey === null) return null;
+	const access = handedAccessKey === key ? handedAccess : null;
+	handedAccessKey = null;
+	handedAccess = null;
+	return access;
+}
+
+/**
+ * Who is making an access, as `contextManager.getCallerIdentity(instanceID)` answers it: resolved once per access.
+ * An answer resolved on another store (a node of another instance reached inside the same access) is not taken.
+ * @param {object|null} access - The access, or null to resolve it now.
+ * @param {object|null|undefined} contextManager - The instance's context manager.
+ * @param {string} [instanceID] - The instance the identity is read for, as `getCallerIdentity` takes it.
+ * @returns {object|undefined} The identity.
+ * @private
+ */
+function runtime_accessIdentity(access, contextManager, instanceID) {
+	if (access === null || access.done || !contextManager?.tryGetContext || !contextManager.getCallerIdentity)
+		return contextManager?.getCallerIdentity?.(instanceID);
+	const store = contextManager.tryGetContext(instanceID);
+	if (access.filled) {
+		return access.manager === contextManager && access.store === store ? access.identity : contextManager.getCallerIdentity(instanceID);
+	}
+	const identity = contextManager.getCallerIdentity(instanceID);
+	access.manager = contextManager;
+	access.store = store;
+	access.identity = identity;
+	access.filled = true;
+	return identity;
+}
+
+/**
+ * The identity of an access with the store it was read on, in the form a permission check takes as resolved already
+ * (see {@link resolveEnforcedCaller}), or null when the access gives none for this node.
+ * @param {object|null} access - The access.
+ * @param {object} wrapper - The node being checked.
+ * @returns {{store: object|null|undefined, identity: object|undefined}|null} The resolved identity.
+ * @private
+ */
+function runtime_accessEntry(access, wrapper) {
+	if (access === null || access.done) return null;
+	const contextManager = wrapper.slothlet.contextManager;
+	if (!contextManager?.tryGetContext || !contextManager.getCallerIdentity) return null;
+	const instanceID = wrapper.slothlet.instanceID;
+	const identity = runtime_accessIdentity(access, contextManager, instanceID);
+	if (access.manager !== contextManager || access.identity !== identity) return null;
+	const store = contextManager.tryGetContext(instanceID);
+	return access.store === store ? { store, identity } : null;
+}
+
+/**
+ * An access whose identity its caller resolved already, on the store it read it from.
+ * @param {object} contextManager - The context manager that resolved it.
+ * @param {object|null|undefined} store - The store it was resolved on.
+ * @param {object|undefined} identity - The identity.
+ * @returns {object} The access.
+ * @internal
+ *
+ * @example
+ * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
+ */
+export function runtime_resolvedAccess(contextManager, store, identity) {
+	return { filled: true, done: false, manager: contextManager, store, identity };
+}
+
+/**
+ * Read a member of a node for an access, handing the access to the node's own trap. Only the node's current proxy is
+ * handed it: its traps take what is handed as they start. Anything else is read as it is.
+ * @param {object|null} access - The access.
+ * @param {object} key - The wrapper of the node, or the view, whose trap takes it.
+ * @param {object} target - The node or view read.
+ * @param {string|symbol} prop - The member.
+ * @param {*} receiver - The receiver.
+ * @returns {*} The member.
+ * @private
+ */
+function runtime_readWithAccess(access, key, target, prop, receiver) {
+	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.get(target, prop, receiver);
+	handedAccessKey = key;
+	handedAccess = access;
+	try {
+		return Reflect.get(target, prop, receiver);
+	} finally {
+		handedAccessKey = null;
+		handedAccess = null;
+	}
+}
+
+/**
+ * Describe a member of a node for an access, handing the access to the node's own trap (see
+ * {@link runtime_readWithAccess}).
+ * @param {object|null} access - The access.
+ * @param {object} key - The wrapper of the node, or the view, whose trap takes it.
+ * @param {object} target - The node or view described.
+ * @param {string|symbol} prop - The member.
+ * @returns {PropertyDescriptor|undefined} The descriptor.
+ * @private
+ */
+function runtime_describeWithAccess(access, key, target, prop) {
+	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+	handedAccessKey = key;
+	handedAccess = access;
+	try {
+		return Reflect.getOwnPropertyDescriptor(target, prop);
+	} finally {
+		handedAccessKey = null;
+		handedAccess = null;
+	}
+}
+
+/**
+ * Whether the first code a read or a description of `target` runs is a trap that takes a handed access: a view that
+ * keeps its reader (keyed by itself), or the current proxy of the node `key` is the wrapper of.
+ * @param {object} key - The view, or the node's wrapper.
+ * @param {object} target - What is read.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_takesAccess(key, target) {
+	if (key === target) return capturedViewShadows.has(target);
+	return key.____slothletInternal?.proxy === target;
+}
+
+/**
  * Resolve the enforcing caller identity for a permission-gated call/read, failing closed on an
  * absent or forged caller inside an active context.
  *
@@ -3121,14 +3312,14 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
  */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null) {
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null, access = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -3172,7 +3363,7 @@ function runtime_isTerminalData(value) {
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null) {
 	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -3184,7 +3375,13 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
 		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
-	const decision = resolveEnforcedCaller(wrapper, callerOverride, kept);
+	// The live caller of an access that resolved it already is taken as resolved; an explicit caller is never replaced.
+	const decision = resolveEnforcedCaller(
+		wrapper,
+		callerOverride,
+		kept,
+		callerOverride === undefined ? runtime_accessEntry(access, wrapper) : null
+	);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -4200,14 +4397,21 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
  * and for code of another instance. With `unaccounted`, code the live runtime finds no call for is read the same way.
  * @param {object} slothlet - The instance of the node called.
  * @param {boolean} [unaccounted=false] - Read code no call accounts for by its frames too.
+ * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity this read
+ *   resolved and the store it resolved it on, as {@link runtime_liveEntry} gives them, so a call made right after
+ *   takes it instead of reading it again.
  * @returns {object|null} The definer's wrapper.
  * @private
  */
-function runtime_hostRunDefiner(slothlet, unaccounted = false) {
+function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null) {
 	const contextManager = slothlet?.contextManager;
 	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
 	if (slothlet.config?.permissions?.provenance === false) return null;
 	const identity = contextManager.getCallerIdentity?.(slothlet.instanceID);
+	if (resolved && identity) {
+		resolved.store = contextManager.tryGetContext?.(slothlet.instanceID) ?? null;
+		resolved.identity = identity;
+	}
 	if (identity?.currentWrapper || (identity?.unresolved && !(unaccounted && identity.unaccounted))) return null;
 	const leaf = frameDefiner()?.wrapper;
 	return leaf && leaf.slothlet === slothlet ? leaf : null;
@@ -4225,9 +4429,13 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false) {
 function runtime_callAsDefiner(target, call) {
 	return () => {
 		const slothlet = target.slothlet;
-		const leaf = runtime_hostRunDefiner(slothlet);
+		// A caller identity already handed to the call (one resolved before an await) stands.
+		const resolved = handedEntry !== null && handedEntry.wrapper === target ? null : {};
+		const leaf = runtime_hostRunDefiner(slothlet, false, resolved);
 		const instanceID = leaf ? runtime_makerInstanceID(slothlet) : null;
-		if (instanceID === null) return call();
+		// The call is made as it is, by the code whose identity was just read: the target's gate takes that identity
+		// as it starts, with nothing but slothlet's own code run in between, instead of reading the stack again.
+		if (instanceID === null) return resolved?.identity ? runtime_applyWithEntry(target, resolved, call) : call();
 		return slothlet.contextManager.runInContext(instanceID, call, undefined, [], leaf, true, false, null, null, false, true);
 	};
 }
@@ -7870,7 +8078,7 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
  * @returns {boolean} True when the key must be withheld.
  * @private
  */
-function runtime_isReadRedacted(wrapper, prop, kept = null) {
+function runtime_isReadRedacted(wrapper, prop, kept = null, access = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	const impl = wrapper.____slothletInternal?.impl;
@@ -7883,7 +8091,7 @@ function runtime_isReadRedacted(wrapper, prop, kept = null) {
 		Objects.getOwnPropertyDescriptor(wrapper, prop);
 	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept).allowed;
+	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
 }
 
 /**
@@ -7946,17 +8154,18 @@ let describingAsHeld = null;
  * @param {object} wrapper - The node's wrapper.
  * @param {object} node - The node.
  * @param {string|symbol} prop - The member.
+ * @param {object|null} [access=null] - The access the description is part of (see {@link runtime_beginAccess}).
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @private
  *
  * @example
  * runtime_describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
  */
-function runtime_describeAsHeld(wrapper, node, prop) {
+function runtime_describeAsHeld(wrapper, node, prop, access = null) {
 	const previous = describingAsHeld;
 	describingAsHeld = { wrapper, prop };
 	try {
-		return Reflect.getOwnPropertyDescriptor(node, prop);
+		return runtime_describeWithAccess(access, wrapper, node, prop);
 	} finally {
 		describingAsHeld = previous;
 	}
@@ -8757,7 +8966,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
 	// holds, never an answer that depends on the reader or on when it read (rules change); each read through the view
 	// is gated as it is made.
-	const rawDescriptor = (key) => runtime_describeAsHeld(inner, child, key);
+	const rawDescriptor = (key, access = null) => runtime_describeAsHeld(inner, child, key, access);
 	// Whether the reader may read a member now.
 	const readable = (key) => {
 		try {
@@ -8772,11 +8981,11 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there. A
 	// member read for the reader is read as the reader may read it (the read gate, as for a plain read); one mirrored
 	// after the reader's own write is mirrored as the write left it.
-	const mirror = (prop, asRead = true) => {
+	const mirror = (prop, asRead = true, access = null) => {
 		// A closed shadow's inspect hook is its own, whatever the child holds at that key: the engine checks the view
 		// against the shadow, and the child's hook would describe the child unchecked.
 		if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.getOwnPropertyDescriptor(shadow, prop);
-		const descriptor = asRead ? asKept(() => Reflect.getOwnPropertyDescriptor(child, prop)) : rawDescriptor(prop);
+		const descriptor = asRead ? asKept(() => runtime_describeWithAccess(access, inner, child, prop)) : rawDescriptor(prop, access);
 		if (asRead && isMemberRead(prop, descriptor)) handOut(prop, descriptor.value);
 		if (!descriptor) {
 			const stale = prop === util.inspect.custom ? undefined : Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -8838,6 +9047,23 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		}
 	};
 
+	// The view's description of a member, made as part of one access.
+	const describeMember = (prop, access) => {
+		mirrorClosed();
+		try {
+			return mirror(prop, true, access);
+		} catch (error) {
+			if (error?.code !== "PERMISSION_DENIED") throw error;
+			// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
+			// describe every member it holds: one it may still change is described with its value withheld, as the
+			// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
+			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
+			if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
+			throw error;
+		}
+	};
+
 	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
@@ -8874,36 +9100,38 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
 		},
 		get(_, prop, receiver) {
-			mirrorClosed();
-			if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.get(shadow, prop);
-			const descriptor = rawDescriptor(prop);
-			if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
-				// Read through the child, so its own read rules run, then gated against the reader; what is handed out
-				// is what the shadow holds, as the engine requires.
-				handOut(
+			// The access a view of `self` over this one is making, taken as the trap starts; a read made on this view
+			// itself is an access of its own. Its checks of the node ask who is reading once (see runtime_beginAccess).
+			const handed = runtime_takeAccess(view);
+			const access = handed ?? runtime_beginAccess();
+			try {
+				mirrorClosed();
+				if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.get(shadow, prop);
+				const descriptor = rawDescriptor(prop, access);
+				if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
+					// Read through the child, so its own read rules run, then gated against the reader; what is handed out
+					// is what the shadow holds, as the engine requires.
+					handOut(
+						prop,
+						asKept(() => runtime_readWithAccess(access, inner, child, prop, child))
+					);
+					return mirror(prop, true, access).value;
+				}
+				return handOut(
 					prop,
-					asKept(() => Reflect.get(child, prop, child))
+					readKept(() => runtime_readWithAccess(access, inner, child, prop, receiver === view ? child : receiver))
 				);
-				return mirror(prop).value;
+			} finally {
+				if (handed === null) runtime_endAccess(access);
 			}
-			return handOut(
-				prop,
-				readKept(() => Reflect.get(child, prop, receiver === view ? child : receiver))
-			);
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			mirrorClosed();
+			const handed = runtime_takeAccess(view);
+			const access = handed ?? runtime_beginAccess();
 			try {
-				return mirror(prop);
-			} catch (error) {
-				if (error?.code !== "PERMISSION_DENIED") throw error;
-				// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
-				// describe every member it holds: one it may still change is described with its value withheld, as the
-				// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
-				const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
-				if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
-				if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
-				throw error;
+				return describeMember(prop, access);
+			} finally {
+				if (handed === null) runtime_endAccess(access);
 			}
 		},
 		has(_, prop) {
@@ -9064,11 +9292,13 @@ function runtime_registerInspectHook(hook) {
  * the bound `api` object has no executing module, so nothing is attached and host access is unchanged.
  *
  * @param {object} wrapper - Parent wrapper whose property was read.
+ * @param {string|symbol} prop - The member read.
  * @param {*} value - Value the `get` trap resolved.
+ * @param {object|null} [access=null] - The access the read is part of (see {@link runtime_beginAccess}).
  * @returns {*} The value, or a per-reader view of it.
  * @private
  */
-function runtime_bindCapturedIdentity(wrapper, prop, value) {
+function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
 	if (typeof prop !== "string" && typeof prop !== "symbol") return value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
@@ -9098,7 +9328,7 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
 		return value;
 
-	const capturedIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	const capturedIdentity = runtime_accessIdentity(access, wrapper.slothlet.contextManager);
 	const capturedCaller = capturedIdentity?.currentWrapper;
 	if (!capturedCaller) return value;
 	// A reader that is code supplied to another call keeps that call as its ceiling, so the reference cannot
@@ -10184,6 +10414,10 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 		// common, non-stale path must not allocate. No trap takes more than four arguments.
 		wrapped[trap] = function slothlet_restartForwardingTrap(a, b, c, d) {
 			if (runtime_isRestartStale(wrapper)) {
+				// An access or a caller identity handed to this node is not handed on to the node it forwards to.
+				handedAccessKey = null;
+				handedAccess = null;
+				handedEntry = null;
 				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
 			}
 			return original.call(handler, a, b, c, d);
@@ -10217,6 +10451,10 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 	for (const [trap, forward] of Objects.entries(RESTART_FORWARD_TRAPS)) {
 		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
+			// An access or a caller identity handed to the replaced proxy is not handed on to the node it forwards to.
+			handedAccessKey = null;
+			handedAccess = null;
+			handedEntry = null;
 			return forward(resolveLive(), a, b, c, d);
 		};
 	}
@@ -13915,25 +14153,25 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Resolves properties from wrapper properties (children), impl values, or target properties.
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
-		const getTrap = (target, prop, ____receiver) => {
+		const getTrap = (target, prop, ____receiver, access = null) => {
 			// A node a module kept, reading through this one, says who it reads for: taken first, before any code this
 			// read runs (a getter, a Proxy's trap) could take it, and handed to this read's own gate (#661) and to a getter
 			// of the node's this read runs (see runtime_runAccessor).
 			const kept = runtime_takeCapturedAccess(wrapper);
-			if (!kept) return getTrapFor(null, target, prop, ____receiver);
+			if (!kept) return getTrapFor(null, target, prop, ____receiver, access);
 			const previous = keptAccessorRead;
 			keptAccessorRead = kept;
 			try {
-				return getTrapFor(kept, target, prop, ____receiver);
+				return getTrapFor(kept, target, prop, ____receiver, access);
 			} finally {
 				keptAccessorRead = previous;
 			}
 		};
-		const getTrapFor = (kept, target, prop, ____receiver) => {
+		const getTrapFor = (kept, target, prop, ____receiver, access = null) => {
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
-			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept);
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept, access);
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
@@ -14782,6 +15020,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args, ___gatePassed = false, ___gateEntry = null) => {
+			// An identity handed over for this call (see runtime_applyWithEntry) is taken once, as the trap starts, before
+			// any code this call runs. One handed for another node's call is dropped: it reaches no call made later.
+			let ___handed = null;
+			if (handedEntry !== null) {
+				if (handedEntry.wrapper === wrapper) ___handed = handedEntry.entry;
+				handedEntry = null;
+			}
 			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
 			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
@@ -14849,12 +15094,6 @@ export class UnifiedWrapper extends ComponentBase {
 			// trap with three arguments).
 			// The identity the gate resolved is what the call is entered with (see enforcePermission), carried
 			// across a deferred gate too.
-			// An identity handed over for this call (see runtime_applyWithEntry) is taken once, as the trap starts.
-			let ___handed = null;
-			if (handedEntry && handedEntry.wrapper === wrapper) {
-				___handed = handedEntry.entry;
-				handedEntry = null;
-			}
 			const ___entry = ___gatePassed ? ___gateEntry : {};
 			if (!___gatePassed) {
 				const ___principalGate = enforcePermission(wrapper, args, true, kept, ___entry, ___handed, thisArg);
@@ -15394,7 +15633,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @description
 		 * Provides descriptors for target (wrapper), impl properties, filtering internals.
 		 */
-		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
+		const getOwnPropertyDescriptorTrap = (target, prop, redact = true, access = null) => {
 			// The engine's check of a definition a view just made reads the node's fixed members ungated (#625).
 			const engineCheck = runtime_takeInvariantRead(wrapper, prop);
 			// A node a module kept, describing a member through this one, says who it reads for: taken first, before
@@ -15453,7 +15692,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (sealed && "value" in sealed && sealed.writable && prop !== "length") {
 					// A value the caller may not read is withheld, as the invariants allow for a writable member: the key
 					// must still be described, and sealing or freezing the node needs only its attributes.
-					if (redact && runtime_isReadRedacted(wrapper, prop, kept)) return { ...sealed, value: undefined };
+					if (redact && runtime_isReadRedacted(wrapper, prop, kept, access)) return { ...sealed, value: undefined };
 					return { ...sealed, value: readNode() };
 				}
 				if (sealed && prop === "length" && Arrays.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
@@ -15471,7 +15710,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (Arrays.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
 				// An element a caller may not read is not described to it, as ownKeys leaves it out (#609); one
 				// fixed on the shell must still be described, with its value withheld.
-				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept);
+				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept, access);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 				// An object element is described by its api node, not the module's object: reading the node is the read
 				// the permission rules see, where the raw object would hand every leaf under it to any caller.
@@ -15506,7 +15745,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
 			const ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
-			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept)) {
+			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept, access)) {
 				return undefined;
 			}
 
@@ -16401,12 +16640,14 @@ export class UnifiedWrapper extends ComponentBase {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => {
-				const value = getTrap(target, prop, receiver);
+				// The access a view is making into this node, taken as the trap starts (see runtime_beginAccess).
+				const access = runtime_takeAccess(wrapper);
+				const value = getTrap(target, prop, receiver, access);
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
-				return runtime_bindCapturedIdentity(wrapper, prop, value);
+				return runtime_bindCapturedIdentity(wrapper, prop, value, access);
 			},
 			apply: applyTrap,
 			construct: constructTrap,
@@ -16415,11 +16656,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// get trap binds it, so its description and a read of it give the same value (#667). A member fixed read-only on
 			// a frozen shell is described as the shell holds it (proxy invariant), as it is read.
 			getOwnPropertyDescriptor: (target, prop) => {
-				const descriptor = getOwnPropertyDescriptorTrap(target, prop);
+				const access = runtime_takeAccess(wrapper);
+				const descriptor = getOwnPropertyDescriptorTrap(target, prop, true, access);
 				if (!descriptor || !("value" in descriptor)) return descriptor;
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return descriptor;
-				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value);
+				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value, access);
 				return bound === descriptor.value ? descriptor : { ...descriptor, value: bound };
 			},
 			ownKeys: ownKeysTrap,

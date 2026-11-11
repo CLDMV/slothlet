@@ -532,52 +532,72 @@ export function runtime_captureFrames(limit) {
 function runtime_structuredFrames(_error, callSites) {
 	// Converted as the resolver walks them, innermost first: it usually stops within the first few.
 	return {
-		[Symbol.iterator]: function* frames() {
-			// Whether a frame with no location (a builtin's) was passed over since the last one yielded.
-			let gap = false;
-			for (const site of callSites) {
-				// An eval'd frame names the file it was evaluated from in its origin, as the formatted text does.
-				const sourceURL = site.getScriptNameOrSourceURL?.() ?? null;
-				const fileName = site.getFileName?.() ?? null;
-				const location = sourceURL ?? fileName;
-				const evaluated = Boolean(site.isEval?.());
-				const origin = evaluated ? String(site.getEvalOrigin?.() ?? "") : "";
-				if (!location && !origin) {
-					gap = true;
-					continue;
-				}
-				const typeName = site.isToplevel?.() ? null : site.getTypeName?.();
-				const name = site.getFunctionName?.() ?? site.getMethodName?.() ?? "";
-				const head = `at ${site.isAsync?.() ? "async " : ""}${typeName && name ? `${typeName}.` : ""}${name}`;
-				const described = runtime_comparableLocation(location ?? origin);
-				yield {
-					head,
-					path: described.path,
-					location: location ?? origin,
-					line: `${head} (${location ?? ""}) ${origin}`,
-					async: Boolean(site.isAsync?.()),
-					// Evaluated code, or code naming a source it was not loaded from (a `//# sourceURL`): its location
-					// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
-					evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
-					// The script the frame runs in — the SHA-256 of the source it was compiled from, on every Node slothlet
-					// supports (22.15+): code compiled under another module's location runs in a script of its own, with its
-					// own hash (#597).
-					hash: evaluated ? null : (site.getScriptHash?.() ?? null),
-					key: described.key,
-					enter: runtime_entryKind(name),
-					gap,
-					// Where in its file the frame runs: the leaf whose source range holds it is its definer (#726).
-					lineNumber: site.getLineNumber?.() ?? null,
-					columnNumber: site.getColumnNumber?.() ?? null
-				};
-				gap = false;
-			}
-		},
+		[Symbol.iterator]: () => runtime_siteFrames(callSites, false),
+		// The same frames, in the same order, with slothlet's own described only by where they are and what they enter:
+		// for a reader that passes over slothlet's own frames by those two alone.
+		lean: () => runtime_siteFrames(callSites, true),
 		structured: true,
 		truncated: callSites.length >= PristineError.stackTraceLimit,
 		// Whether the outermost frame is a builtin's, which has no location: what began the job is the engine's own.
 		trailingGap: callSites.length > 0 && runtime_isBuiltinSite(callSites[callSites.length - 1])
 	};
+}
+
+/**
+ * V8 call sites as frames, innermost first, each converted as it is reached.
+ * @param {Array<object>} callSites - V8 call sites, innermost first.
+ * @param {boolean} lean - Describe a frame located in slothlet's own folder by its `path` and `enter` alone.
+ * @returns {Generator<object>} The frames.
+ * @private
+ */
+function* runtime_siteFrames(callSites, lean) {
+	// Whether a frame with no location (a builtin's) was passed over since the last one yielded.
+	let gap = false;
+	for (const site of callSites) {
+		// An eval'd frame names the file it was evaluated from in its origin, as the formatted text does.
+		const sourceURL = site.getScriptNameOrSourceURL?.() ?? null;
+		const fileName = site.getFileName?.() ?? null;
+		const location = sourceURL ?? fileName;
+		if (lean && location) {
+			const described = runtime_comparableLocation(location);
+			if (described.path.startsWith(FRAMEWORK_PREFIX)) {
+				yield { path: described.path, enter: runtime_entryKind(site.getFunctionName?.() ?? site.getMethodName?.() ?? "") };
+				gap = false;
+				continue;
+			}
+		}
+		const evaluated = Boolean(site.isEval?.());
+		const origin = evaluated ? String(site.getEvalOrigin?.() ?? "") : "";
+		if (!location && !origin) {
+			gap = true;
+			continue;
+		}
+		const typeName = site.isToplevel?.() ? null : site.getTypeName?.();
+		const name = site.getFunctionName?.() ?? site.getMethodName?.() ?? "";
+		const head = `at ${site.isAsync?.() ? "async " : ""}${typeName && name ? `${typeName}.` : ""}${name}`;
+		const described = runtime_comparableLocation(location ?? origin);
+		yield {
+			head,
+			path: described.path,
+			location: location ?? origin,
+			line: `${head} (${location ?? ""}) ${origin}`,
+			async: Boolean(site.isAsync?.()),
+			// Evaluated code, or code naming a source it was not loaded from (a `//# sourceURL`): its location
+			// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
+			evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
+			// The script the frame runs in — the SHA-256 of the source it was compiled from, on every Node slothlet
+			// supports (22.15+): code compiled under another module's location runs in a script of its own, with its
+			// own hash (#597).
+			hash: evaluated ? null : (site.getScriptHash?.() ?? null),
+			key: described.key,
+			enter: runtime_entryKind(name),
+			gap,
+			// Where in its file the frame runs: the leaf whose source range holds it is its definer (#726).
+			lineNumber: site.getLineNumber?.() ?? null,
+			columnNumber: site.getColumnNumber?.() ?? null
+		};
+		gap = false;
+	}
 }
 
 /**
@@ -1036,6 +1056,13 @@ export function parseStackFrame(line) {
  * @private
  */
 export const FRAMEWORK_DIR = toComparablePath(new URL("../../", import.meta.url).href);
+
+/**
+ * What the path of every frame of slothlet's own code starts with.
+ * @type {string}
+ * @private
+ */
+const FRAMEWORK_PREFIX = FRAMEWORK_DIR + "/";
 
 /**
  * Descriptions of a call's wrapper, by wrapper: what a frame is compared against. Kept with the
@@ -3416,6 +3443,14 @@ export function runtime_codeWritersOnStack(slothlet) {
 }
 
 /**
+ * The frames {@link runtime_foreignCodeRunning} reads first: enough to pass slothlet's own frames above an access made
+ * through a view of `self` (up to 25 of them, for a data read in the live runtime) and reach the code making it.
+ * @type {number}
+ * @private
+ */
+const NEAR_FRAMES = 28;
+
+/**
  * The placers of single calls, by wrapper and description, so a call read again reuses its own.
  * @type {WeakMap<object, {description: object, place: Function}>}
  * @private
@@ -3460,12 +3495,15 @@ function runtime_foreignCodeRunning(record) {
 		cached = { description, place };
 		if (!ceilings.length) SINGLE_PLACERS.set(leaf, cached);
 	}
-	const decide = (frames) => {
+	// `whole` says the capture reaches as far as the answer may need: a short first capture settles only what its own
+	// frames decide, and leaves anything that reads the frames further out to the full one.
+	const decide = (frames, whole) => {
 		// Whether a builtin ran between the innermost code of anyone's (slothlet's own included) and the frames read
 		// since, which are only Node's own: Node's code calling a builtin acts for no one more than the builtin does.
 		let builtinSince = false;
 		let index = -1;
-		for (const frame of frames) {
+		// Slothlet's own frames are passed over by their path and what they enter alone, so they are read no further.
+		for (const frame of frames.lean?.() ?? frames) {
 			index++;
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 				if (frame.enter) return null;
@@ -3489,6 +3527,7 @@ function runtime_foreignCodeRunning(record) {
 			}
 			const placement = cached.place(frame);
 			if (placement?.matches.length) return null;
+			if (!whole) return undefined;
 			// Code of no module's folder and no instance: a file some module loaded is that module's, the host's own runs as
 			// the leaf.
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame, fileless) : null;
@@ -3499,7 +3538,14 @@ function runtime_foreignCodeRunning(record) {
 		if (frames.truncated) return undefined;
 		return frames.trailingGap || builtinSince ? UNACCOUNTED_SUPPLIER : null;
 	};
-	return decide(runtime_captureFrames(48)) ?? null;
+	// The frame that decides is nearly always the code making the access, a few frames below slothlet's own: a short
+	// capture finds it at a fraction of the cost of a full one, which is read only when the short one settles nothing.
+	// Both are read at this same point, so the short one's frames are the full one's first frames, and what they decide
+	// is what the full capture would decide.
+	const near = runtime_captureFrames(NEAR_FRAMES);
+	const settled = decide(near, !near.truncated);
+	if (settled !== undefined || !near.truncated) return settled ?? null;
+	return decide(runtime_captureFrames(48), true) ?? null;
 }
 
 /**

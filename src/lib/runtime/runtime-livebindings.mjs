@@ -47,6 +47,7 @@ import {
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
+	runtime_resolvedAccess,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
 	runtime_contextRead,
@@ -82,15 +83,21 @@ const resolveActiveContext = () => liveRuntime.getContext();
  * calls could not be told apart. Refusing there is the conservative answer: an unattributable access
  * would otherwise be handed the host's exemption.
  *
+ * @param {{store?: object, identity?: object}|null} [resolved=null] - Receives the caller identity this read
+ *   resolved and the store it resolved it on, so the read it decides takes it instead of resolving it again.
  * @returns {object|null} The active store, or `null` when no module is executing.
  * @private
  */
-function runtime_resolveExecutingContext() {
+function runtime_resolveExecutingContext(resolved = null) {
 	const ctx = liveRuntime.getContext();
 	if (!ctx || !ctx.self) return null;
 	// `getCallerIdentity` reports no caller when the ambient field is stale, so its answer replaces the
 	// raw field rather than falling back to it — a fallback would reinstate exactly what it rejected.
 	const identity = liveRuntime.getCallerIdentity?.();
+	if (resolved && identity) {
+		resolved.store = ctx;
+		resolved.identity = identity;
+	}
 	// The else arm reads the raw field for a context manager without `getCallerIdentity`. The live
 	// manager always provides it; the fallback covers a partial or older manager being injected.
 	/* v8 ignore next */
@@ -143,12 +150,17 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  *
  * @param {string|symbol} prop - Member read.
  * @param {*} value - Its value.
+ * @param {{store?: object, identity?: object}|null} [resolved=null] - Who is making this read, when the read
+ *   resolved it already (see runtime_resolveExecutingContext).
  * @returns {*} The value, or a view of the node.
  * @private
  */
-function runtime_selfMember(prop, value) {
+function runtime_selfMember(prop, value, resolved = null) {
 	if (typeof prop !== "string") return value;
-	return FRAMEWORK_SELF_ROOTS.has(prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
+	if (FRAMEWORK_SELF_ROOTS.has(prop)) return runtime_selfFrameworkView(value);
+	// The reader of the view is the code whose identity this same read just resolved.
+	const access = resolved?.identity ? runtime_resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
+	return runtime_selfView(value, undefined, null, access);
 }
 
 /**
@@ -171,7 +183,8 @@ export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = runtime_resolveExecutingContext();
+			const resolved = {};
+			const ctx = runtime_resolveExecutingContext(resolved);
 			if (!ctx || !ctx.self) {
 				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
 				const read = runtime_selfReadAsDefiner(self, prop);
@@ -181,7 +194,7 @@ export const self = new NativeProxy(
 				runtime_refuseUnknownCaller(prop);
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			return runtime_selfMember(prop, ctx.self[prop]);
+			return runtime_selfMember(prop, ctx.self[prop], resolved);
 		},
 		// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
 		// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to
