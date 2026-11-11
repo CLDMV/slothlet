@@ -65,7 +65,11 @@ async function readInstances(things) {
 		depositReturnsItself: account.deposit(1) === account,
 		sameTwice: held === (await things.same()),
 		handedBack: await things.isHeld(held),
-		privateInOwner: await things.isAccount(held)
+		privateInOwner: await things.isAccount(held),
+		// Returning a value reads none of its accessors: only the caller's own reads run them.
+		dataTag: (await things.accessorOnData()).tag,
+		instanceTag: (await things.accessorOnClass()).tag,
+		constructorReads: await things.reads()
 	};
 }
 

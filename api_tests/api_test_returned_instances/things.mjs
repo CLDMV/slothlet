@@ -46,3 +46,28 @@ export const account = () => new Account();
 export const same = () => held;
 export const isHeld = (value) => value === held;
 export const isAccount = (value) => Account.is(value);
+
+/** How many times a `constructor` accessor of a value this module returned has run. */
+let constructorReads = 0;
+
+/** A class whose `constructor` is an accessor. */
+class Described {
+	tag = "described";
+}
+Object.defineProperty(Described.prototype, "constructor", {
+	get() {
+		constructorReads++;
+		return Described;
+	},
+	configurable: true
+});
+
+export const accessorOnData = () => ({
+	get constructor() {
+		constructorReads++;
+		return Object;
+	},
+	tag: "data"
+});
+export const accessorOnClass = () => new Described();
+export const reads = () => constructorReads;

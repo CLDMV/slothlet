@@ -112,6 +112,9 @@ export function runtime_classInstanceCreator(value) {
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
 const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
 
+// The language's own reflection, taken at load.
+const { getPrototypeOf, getOwnPropertyDescriptor } = Reflect;
+
 /**
  * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
  * @package
@@ -186,15 +189,22 @@ export function runtime_shouldWrapMethod(value, prop) {
  * const isInstance = runtime_isClassInstance(new MyClass());
  */
 export function runtime_isClassInstance(val) {
-	if (
-		val == null ||
-		typeof val !== "object" ||
-		!val.constructor ||
-		typeof val.constructor !== "function" ||
-		EXCLUDED_CONSTRUCTORS.has(val.constructor)
-	) {
+	if (val == null || typeof val !== "object") return false;
+	// The constructor is the one a plain read would find, taken from the descriptors of the value and its prototype
+	// chain: none of the value's code runs, so a `constructor` accessor is never called and counts as no constructor.
+	let constructor;
+	try {
+		for (let link = val; link !== null; link = getPrototypeOf(link)) {
+			const descriptor = getOwnPropertyDescriptor(link, "constructor");
+			if (descriptor === undefined) continue;
+			constructor = descriptor.value;
+			break;
+		}
+	} catch {
+		// A value that refuses to be described is no class instance.
 		return false;
 	}
+	if (typeof constructor !== "function" || EXCLUDED_CONSTRUCTORS.has(constructor)) return false;
 
 	// The language's own check, never a `Symbol.hasInstance` a module gave one of these classes.
 	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
