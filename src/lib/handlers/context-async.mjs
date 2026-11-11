@@ -425,7 +425,13 @@ export class AsyncContextManager {
 		live("context", () => current()?.context ?? base.context);
 		// Not spread onto the stores of the calls made from it: only this store is the load's.
 		Objects.defineProperty(store, "moduleLoad", { value: loading, enumerable: false });
-		return this.als.run(store, fn);
+		const outside = this.als.getStore();
+		const result = this.als.run(store, fn);
+		// A lazy load runs detached, with no store ({@link runDetached}). Where `AsyncLocalStorage` rests on async hooks
+		// (Node 22), `exit()` switches the storage off and a `run()` inside it switches it back on, so what follows
+		// the load would see the store of the call that triggered it. The flow is left as it was found: detached.
+		if (outside === undefined && this.als.getStore() !== undefined) this.als.disable();
+		return result;
 	}
 
 	/**
