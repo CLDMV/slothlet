@@ -328,6 +328,9 @@ export class Config extends ComponentBase {
      * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
      *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
      *   wraps nothing and tells every definer from the stack.
+     * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+     *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
+     *   a whole number lists arrays of up to that many kilobytes.
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
      *

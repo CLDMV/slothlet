@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/clone-context.mjs
+ *	@Date: 2026-11-11T10:54:24-08:00 (1794423264)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-11T13:14:05-08:00 (1794431645)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Lets the platform's cloning functions take the views slothlet hands a module of another module's data.
  * @module @cldmv/slothlet/helpers/clone-context
  * @internal

@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_crossing_rules/taker/taker.mjs
+ *	@Date: 2026-11-11T11:09:11-08:00 (1794424151)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-11T13:12:38-08:00 (1794431558)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Takes a promise another module holds in data and does with it what ordinary code does: nothing, a
  * `catch`, a `then`, an `await`.
  * @module api_test_crossing_rules/taker

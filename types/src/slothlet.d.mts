@@ -176,7 +176,8 @@ export type SlothletOptions = {
          * - A module's function reached by a route slothlet does not see — a
          * callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
          * the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
-         * call runs it.
+         * call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
+         * returned data keeps its definer.
          */
         provenance?: boolean | undefined;
         /**
@@ -186,6 +187,13 @@ export type SlothletOptions = {
          * it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
          */
         attribution?: "fast" | "precise" | undefined;
+        /**
+         * - Whether a typed array or `Buffer` one module hands
+         * another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
+         * `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
+         * a member is handed over as a view.
+         */
+        typedArrayMembers?: number | boolean | undefined;
         /**
          * - Options for api functions held as references (`{ capture?: boolean }`).
          */

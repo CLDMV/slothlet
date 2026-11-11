@@ -344,6 +344,22 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
  */
 export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
 /**
+ * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
+ * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
+ * running inside the call may be code those calls handed in, and slothlet cannot tell it from code the leaf obtained
+ * itself, so it runs under all of them: returning a closure to a module lends that module nothing it can pass on.
+ * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
+ * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
+ *   by a module.
+ * @internal
+ * @example
+ * combineCeilings(leaf, supplierChainCeiling(record));
+ */
+export function supplierChainCeiling(record: {
+    parent?: object | null;
+    flagged?: boolean;
+} | null | undefined): object | ReadonlyArray<object> | null;
+/**
  * Who supplied the code that is running inside a call that was handed code (#597).
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
@@ -449,15 +465,58 @@ export function installViteLoadedRegistry(target: object): {
  */
 export function setModuleNodeResolver(resolver: (arg0: object, arg1: string) => (object | null)): void;
 /**
+ * What a file's top level runs as (#726): made when slothlet loads the file, and read whenever something the file
+ * started while it loaded (a timer, a listener, a queue, an async resource) runs later. The identity is the file's
+ * module, the node code outside every export of the file runs as, found when it is asked for: the node does not exist
+ * yet while the file loads, and a reload or a removal changes it afterwards. While it cannot be found (the file is
+ * still loading, its node is gone, its instance has shut down) there is no identity, and the code is refused as code
+ * no one accounts for.
+ * @param {object} slothlet - The instance loading the file.
+ * @param {string} filePath - The file.
+ * @param {string|null|undefined} moduleID - The mount the file is loaded for.
+ * @returns {{slothlet: object, filePath: string, moduleID: string|null, instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} The load.
+ * @internal
+ * @example
+ * const loading = createModuleLoad(slothlet, "/app/api/sync.mjs", null);
+ * loading.wrapper(); // null while the file loads, then the node at `sync`
+ */
+export function createModuleLoad(slothlet: object, filePath: string, moduleID: string | null | undefined): {
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+    instanceID: () => (string | null);
+    wrapper: () => (object | null);
+    record: () => (object | null);
+};
+/**
+ * The load a stack's innermost code belongs to, among files being loaded (#726): the code registering something
+ * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
+ * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
+ * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
+ * instance is pending, or one alone imports the file. `false` when the code is a loading instance's and which load
+ * cannot be told; null when it is not a loading file's code.
+ * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
+ * @returns {object|false|null} The load, false, or null.
+ * @internal
+ * @example
+ * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
+ */
+export function loadOnStack(loads: Iterable<{
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+}>): object | false | null;
+/**
  * The ceiling code entered on its definer's behalf (a handed-out function, an instance method) runs under (#726): the
  * caller running it, read now — its executing module and that module's own ceiling — or none for the host. Entering
  * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
  * @param {object} contextManager - The instance's context manager.
  * @param {string} instanceID - The instance.
+ * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
  * @internal
  */
-export function outerCallerCeiling(contextManager: object, instanceID: string): object | ReadonlyArray<object> | null;
+export function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null): object | ReadonlyArray<object> | null;
 /**
  * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
  * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
@@ -486,13 +545,17 @@ export function attributesResults(wrapper: object | null | undefined): boolean;
  * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
  * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
  * outside every export, in a tree where no node was built for the file itself).
- * @returns {{wrapper: object}|{leaves: Array<object>}|{unplaced: true}|null} The definer.
+ * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
+ * runtime_outerCallers), which have to be allowed as well.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|null} The definer.
  * @internal
  */
 export function frameDefiner(): {
     wrapper: object;
+    callers: Array<object>;
 } | {
     leaves: Array<object>;
+    callers: Array<object>;
 } | {
     unplaced: true;
 } | null;

@@ -108,6 +108,32 @@ export class AsyncContextManager {
      */
     runUnattributed(instanceID: string, fn: () => any): any;
     /**
+     * Run the load of a module file inside a store that names the file's module (#726), so what the file starts while
+     * it loads (a timer, a listener, an async resource, an `AsyncLocalStorage.snapshot()`) carries the module as its
+     * caller when it runs later, instead of running in no store, where it would count as the host's. The module's node
+     * does not exist while the file loads and can change with a reload, so the store's identity is read from the load
+     * whenever it is asked for. While there is none the store has no `self`, and its code is refused as code no one
+     * accounts for.
+     *
+     * @param {{instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} loading - The load (see createModuleLoad).
+     * @param {function(): *} fn - What loads the file.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runModuleLoad(loading: {
+        instanceID: () => (string | null);
+        wrapper: () => (object | null);
+        record: () => (object | null);
+    }, fn: () => any): any;
+    /**
+     * Whether no flow of an instance is active: no store at all, or another instance's. Code running then was started
+     * by nothing slothlet entered, so only its frames can say whose it is.
+     * @param {string} instanceID - The instance.
+     * @returns {boolean} True when no store of the instance is active.
+     * @internal
+     */
+    isAmbient(instanceID: string): boolean;
+    /**
      * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
      * instance that has shut down made reaches no instance's api and no module's identity.
      * @param {Function} fn - What to run.

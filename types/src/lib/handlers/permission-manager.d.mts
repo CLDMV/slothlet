@@ -643,6 +643,15 @@ export class PermissionManager extends ComponentBase {
      */
     isEnabled(): boolean;
     /**
+     * Whether the permission system was on when the instance shut down. Values handed to modules as views while it
+     * was on are still held to what their holders could write then.
+     *
+     * @returns {boolean} True when it was.
+     * @example
+     * if (pm.isEnabled() || pm.wasOnAtShutdown()) { ... }
+     */
+    wasOnAtShutdown(): boolean;
+    /**
      * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
      * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
      * cover), or `"disabled"` (nothing applies).

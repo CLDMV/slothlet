@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/crossing-typed-arrays.test.vitest.mjs
+ *	@Date: 2026-11-11T10:52:29-08:00 (1794423149)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-11T13:14:42-08:00 (1794431682)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview `permissions.typedArrayMembers`: whether a typed array or `Buffer` one module hands another is checked
  * for members of its own under string keys.
  *

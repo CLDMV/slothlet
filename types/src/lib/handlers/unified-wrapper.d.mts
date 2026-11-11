@@ -83,6 +83,9 @@ export function runtime_selfModuleCeilings(slothlet: object, writer?: object | n
  *
  * @param {*} node - Value read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object|null} [from=null] - The module handing the value on, when one is.
+ * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
+ *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -90,7 +93,7 @@ export function runtime_selfModuleCeilings(slothlet: object, writer?: object | n
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node: any, reader?: object, from?: null): any;
+export function runtime_selfView(node: any, reader?: object, from?: object | null, access?: object | null): any;
 /**
  * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
@@ -305,6 +308,18 @@ export function releaseStandInChanges(slothlet: object): void;
  * refusedChangeCount(slothlet); // 0
  */
 export function refusedChangeCount(slothlet: object): number;
+/**
+ * An access whose identity its caller resolved already, on the store it read it from.
+ * @param {object} contextManager - The context manager that resolved it.
+ * @param {object|null|undefined} store - The store it was resolved on.
+ * @param {object|undefined} identity - The identity.
+ * @returns {object} The access.
+ * @internal
+ *
+ * @example
+ * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
+ */
+export function runtime_resolvedAccess(contextManager: object, store: object | null | undefined, identity: object | undefined): object;
 /**
  * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
  * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
