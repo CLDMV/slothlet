@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:04:30-07:00 (1793426670)
+ *	@Last modified time: 2026-11-10T21:30:05-08:00 (1794375005)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -366,10 +366,11 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 
 	/**
 	 * Create an instance over the fixture, tracked for shutdown.
+	 * @param {object} [permissions] - A `permissions` block, or none for the permission system off.
 	 * @returns {Promise<object>} The api.
 	 */
-	async function create() {
-		const api = await slothlet({ base: API, ...config, silent: true });
+	async function create(permissions) {
+		const api = await slothlet({ base: API, ...config, silent: true, ...(permissions ? { permissions } : {}) });
 		instances.push(api);
 		return api;
 	}
@@ -392,27 +393,31 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		expect(new EventEmitter()).toBeInstanceOf(refs.EventEmitter);
 	});
 
-	it("hands out a package's exports as the module's, working as they would", async () => {
-		const api = await create();
-		const refs = await api.esm.refs();
-		const { fakeEsm, fakeCjs } = await hostPackages();
-		for (const key of ["Thing", "tools", "make", "fakeCjs"]) expect(types.isProxy(refs[key])).toBe(true);
-		expect(refs.Thing).not.toBe(fakeEsm.Thing);
-		expect(refs.fakeCjs).not.toBe(fakeCjs);
-		// Its instances are instances of the class as the module hands it out, not of the host's own import of it.
-		expect(refs.make()).toBeInstanceOf(refs.Thing);
-		expect(refs.tools.make()).toBeInstanceOf(refs.Thing);
-		expect(new refs.Thing()).toBeInstanceOf(refs.Thing);
-		expect(refs.make()).not.toBeInstanceOf(fakeEsm.Thing);
-		expect(refs.fakeCjs.fn()).toBe("fn");
+	it("hands the host a package's exports a module returns in data as the exports themselves, working as they would", async () => {
+		// Plain data comes back to the host as it is, unsearched (#726): what it holds is the package's own export, as
+		// `return { Thing, tools, make, fakeCjs }` gives in plain JavaScript, with the permission system off or on.
+		for (const permissions of [undefined, { defaultPolicy: "allow" }]) {
+			const api = await create(permissions);
+			const refs = await api.esm.refs();
+			const { fakeEsm, fakeCjs } = await hostPackages();
+			for (const key of ["Thing", "tools", "make", "fakeCjs"]) expect(types.isProxy(refs[key])).toBe(false);
+			expect(refs.Thing).toBe(fakeEsm.Thing);
+			expect(refs.fakeCjs).toBe(fakeCjs);
+			expect(refs.make()).toBeInstanceOf(refs.Thing);
+			expect(refs.tools.make()).toBeInstanceOf(refs.Thing);
+			expect(new refs.Thing()).toBeInstanceOf(refs.Thing);
+			expect(refs.make()).toBeInstanceOf(fakeEsm.Thing);
+			expect(refs.fakeCjs.fn()).toBe("fn");
+		}
 	});
 
-	it("hands out a CommonJS package's exports as the module's from a CommonJS module, working as they would", async () => {
+	it("hands the host a CommonJS package's exports a CommonJS module returns in data as the exports themselves", async () => {
 		const api = await create();
 		const refs = await api.cjs.refs();
 		const { fakeCjs } = await hostPackages();
-		expect(refs.fakeCjs).not.toBe(fakeCjs);
-		expect(refs.fn).not.toBe(fakeCjs.fn);
+		// Plain data, handed to the host as it is (#726).
+		expect(refs.fakeCjs).toBe(fakeCjs);
+		expect(refs.fn).toBe(fakeCjs.fn);
 		expect(refs.fn()).toBe("fn");
 		expect(refs.inner()).toBe("inner");
 		expect(refs.fakeCjs.nested.inner()).toBe("inner");
@@ -426,11 +431,14 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 	});
 
 	it("keeps a built-in's class a module put its own code on as that module's", async () => {
-		const api = await create();
+		// A stand-in is made only while the permission system is on; with it off the class comes back as itself (#726).
+		const api = await create({ defaultPolicy: "allow" });
+		const off = await create();
 		try {
 			const handed = await api.esm.plantOnBuiltin();
 			expect(handed).not.toBe(EventEmitter);
 			expect(types.isProxy(handed)).toBe(true);
+			expect(await off.esm.plantOnBuiltin()).toBe(EventEmitter);
 		} finally {
 			delete EventEmitter.slothletTestPlanted;
 		}
@@ -438,10 +446,12 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 	});
 
 	it("keeps a built-in's class a module put its own code on deep below it as that module's", async () => {
-		const api = await create();
+		const api = await create({ defaultPolicy: "allow" });
+		const off = await create();
 		try {
 			const handed = await api.esm.plantDeepOnBuiltin();
 			expect(types.isProxy(handed)).toBe(true);
+			expect(await off.esm.plantDeepOnBuiltin()).toBe(EventEmitter);
 		} finally {
 			delete EventEmitter.prototype.slothletTestDeep;
 		}
@@ -449,7 +459,8 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 	});
 
 	it("records none of a module's code through the instance-import state", async () => {
-		const api = await create();
+		// The function is the module's code: a stand-in while the permission system is on.
+		const api = await create({ defaultPolicy: "allow" });
 		const forged = await api.esm.forge();
 		expect(types.isProxy(forged)).toBe(true);
 		expect(forged()).toBe("forged");
@@ -501,10 +512,11 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) �
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
-	// The stand-in alone, without the stack check: the live runtime's own `then` is the engine's.
-	it.each(HOLDERS)("runs the module's code a %s holds as that module with provenance off", async (kind) => {
+	// With provenance off no frames are read, and what a holder holds is data, handed over unsearched (#726): the
+	// function runs with the permissions of the call that runs it, here `esm`, which may read the vault.
+	it.each(HOLDERS)("runs the module's code a %s holds under the call that runs it with provenance off", async (kind) => {
 		await create({ provenance: false });
-		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
+		expect(await api.esm.viaHolding(kind)).toBe(42);
 	});
 
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
@@ -710,21 +722,26 @@ describe("what a module of a shut-down instance made, run under Node's own loade
 		expect(result.stderr).toBe("");
 		const out = JSON.parse(result.stdout);
 		expect(Object.keys(out)).toHaveLength(8);
-		for (const [key, value] of Object.entries(out)) expect([key, value]).toEqual([key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+		// Refused in every row. A CommonJS file two instances load is one file under one path, so in eager mode its frames
+		// name no single instance and its definer cannot be told (#735): that is a refusal of the access. Every other row
+		// has no context to read `self` from.
+		const untellable = new Set(["cjs/eager/async", "cjs/eager/live"]);
+		for (const [key, value] of Object.entries(out))
+			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
 	});
 });
 
 describe.each(CONFIGS)("what a module of a shut-down instance made (#597) — $mode / $runtime", (config) => {
-	it("runs as plain code that reaches no instance, even called inside another instance's call", async () => {
+	it("reads the instance of the call it runs inside, having none of its own left", async () => {
 		const gone = await slothlet({ base: API, ...config, silent: true });
 		const live = await slothlet({ base: API, ...config, silent: true });
 		try {
 			const read = await gone.esm.reader();
 			expect(await read()).toBe(42);
 			await gone.slothlet.shutdown();
-			const result = await live.esm.call(read);
-			expect(result).not.toBe(42);
-			expect(typeof result).toBe("string");
+			// The permission system is off, so nothing is checked: run inside another instance's call, the closure reads
+			// that call's `self` (#726).
+			expect(await live.esm.call(read)).toBe(42);
 		} finally {
 			await live.slothlet.shutdown();
 		}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T21:08:53-08:00 (1794287333)
+ *	@Last modified time: 2026-11-10T21:30:03-08:00 (1794375003)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,17 +76,19 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			expect(await api.owner.giveNested()).toEqual({ proxy: true, frozen: false, box: true, inner: true });
 		});
 
-		it("answers true for the frozen copy of frozen plain data carrying a prototype, which is no Proxy", async () => {
+		it("answers true for the view of frozen plain data carrying a prototype", async () => {
 			api = await mount({ mode, runtime, permissions: {} });
-			expect(await api.owner.giveFrozen()).toEqual({ proxy: false, frozen: true, box: true, inner: true });
+			expect(await api.owner.giveFrozen()).toEqual({ proxy: true, frozen: true, box: true, inner: true });
 		});
 
-		it("answers false for data handed as it is: carrying nothing of a module's, or with permissions off", async () => {
+		it("answers true for the view of any data another module hands over, and false with permissions off", async () => {
 			api = await mount({ mode, runtime, permissions: {} });
-			const plain = { proxy: false, frozen: false, box: false, inner: false };
-			expect(await api.owner.givePlain()).toEqual(plain);
+			// Nothing is searched when data crosses, so data carrying nothing of a module's is viewed like any other.
+			expect(await api.owner.givePlain()).toEqual({ proxy: true, frozen: false, box: true, inner: true });
 			await api.shutdown();
+			const plain = { proxy: false, frozen: false, box: false, inner: false };
 			api = await mount({ mode, runtime });
+			expect(await api.owner.givePlain()).toEqual(plain);
 			expect(await api.owner.giveNested()).toEqual(plain);
 			expect(await api.owner.giveFrozen()).toEqual({ ...plain, frozen: true });
 		});

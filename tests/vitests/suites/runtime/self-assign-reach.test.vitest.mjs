@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:16-07:00 (1793056576)
+ *	@Last modified time: 2026-11-10T21:30:07-08:00 (1794375007)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -258,10 +258,13 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(api.victim.v.Account.prototype.bonus).toBeUndefined();
 		});
 
-		it("leaves the prototype of an instance another module returned to the module it was handed to (#597)", async () => {
+		it("keeps the prototype of an instance another module returned to the module whose class it is", async () => {
 			const api = await load();
-			expect(await api.guest.x.changeReturnedInstancePrototype()).toBe("done");
-			expect(api.victim.v.Account.prototype.shared).toBe(1);
+			// The instance is what the victim handed over; its class is not. While the permission system is on the prototype
+			// reaches the guest as reading `victim.v.Account.prototype` would, where the guest may not write; with it off
+			// nothing is checked and the write lands, as in plain JavaScript.
+			expect(await api.guest.x.changeReturnedInstancePrototype()).toBe(off ? "done" : "LOOSE_SET_NOT_OWNED");
+			expect(api.victim.v.Account.prototype.shared).toBe(off ? 1 : undefined);
 			delete api.victim.v.Account.prototype.shared;
 		});
 

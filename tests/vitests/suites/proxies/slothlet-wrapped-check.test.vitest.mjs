@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:58:25-08:00 (1794185905)
+ *	@Last modified time: 2026-11-10T21:30:03-08:00 (1794375003)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,7 +78,8 @@ describe.each(getMatrixConfigs())("Proxies > api.slothlet.wrapped > $name", ({ c
 	});
 
 	it("answers true for every value slothlet hands the host in place of a module's", async () => {
-		api = await slothlet({ ...config, base: BASE });
+		// A class instance and a closure a module returns are stood in for only while the permission system is on.
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
 		// The root api, a node, its member nodes, a class instance and a closure it returns, and the framework's namespace.
 		expect(api.slothlet.wrapped(api)).toBe(true);
 		expect(api.slothlet.wrapped(api.bag)).toBe(true);
@@ -105,8 +106,19 @@ describe.each(getMatrixConfigs())("Proxies > api.slothlet.wrapped > $name", ({ c
 		expect(api.slothlet.wrapped(layered.greet)).toBe(true);
 	});
 
-	it("answers true for the stand-ins that are not Proxies", async () => {
+	it("answers false for what a module returns while the permission system is off, the async runtime's context wrapper aside", async () => {
 		api = await slothlet({ ...config, base: BASE });
+		// Nothing a module returns is stood in for (#726): a closure is the closure. An instance of the module's own class
+		// comes back in the async runtime's context wrapper (#328), and as itself in the live runtime.
+		expect(api.slothlet.wrapped(await api.bag.makeFn())).toBe(false);
+		expect(api.slothlet.wrapped(await api.bag.makeThing())).toBe(config.runtime === "async");
+		for (const value of [await api.bag.makeAsyncFn(), await api.bag.makeGenFn(), await api.bag.makeGenObject()])
+			expect(api.slothlet.wrapped(value)).toBe(false);
+	});
+
+	it("answers true for the stand-ins that are not Proxies", async () => {
+		// Stand-ins are made only while the permission system is on.
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
 		const asyncFn = await api.bag.makeAsyncFn();
 		const genFn = await api.bag.makeGenFn();
 		const genObject = await api.bag.makeGenObject();
@@ -120,7 +132,9 @@ describe.each(getMatrixConfigs())("Proxies > api.slothlet.wrapped > $name", ({ c
 		expect(api.slothlet.wrapped(asyncFn)).toBe(true);
 		expect(api.slothlet.wrapped(genFn)).toBe(true);
 		expect(api.slothlet.wrapped(genObject)).toBe(true);
-		expect(api.slothlet.wrapped(promise)).toBe(true);
+		// The promise came back inside plain data, which is handed to the host as it is, unsearched: it is the module's
+		// own promise, not a stand-in (#726).
+		expect(api.slothlet.wrapped(promise)).toBe(false);
 		await promise;
 	});
 

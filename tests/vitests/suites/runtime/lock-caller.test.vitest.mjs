@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:58-07:00 (1793485498)
+ *	@Last modified time: 2026-11-10T21:30:03-08:00 (1794375003)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -251,14 +251,14 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		api.slothlet.hook.pin.disable();
 		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
 		await api.producer.relay.viaDirect(() => 0);
-		// Opted out: the handler is not pinned, so it never resolves to the consumer.
-		// (Async runtime: no context → the probe stashes RUNTIME_NO_ACTIVE_CONTEXT_SELF;
-		// live runtime: the probe resolves to the ambient identity instead.)
+		// Opted out: the handler is not pinned. It is still the consumer's code, and the host's call runs it outside any
+		// module call, where code a module wrote reads `self` as its definer (#726): the consumer, the same answer a pin
+		// gives. This fixture can therefore no longer tell the opt-out from the pin; it shows the unpinned hook fires and
+		// reads `self` as the module that wrote it.
 		const probed = await api.consumer.probe.getHookProbedIdentity();
-		// Non-null proves the hook actually fired (registerIdentityHook resets it to null);
-		// not "consumer" proves the opt-out took effect.
+		// Non-null proves the hook actually fired (registerIdentityHook resets it to null).
 		expect(probed).not.toBeNull();
-		expect(probed).not.toBe("consumer");
+		expect(probed).toBe("consumer");
 	});
 
 	it.skipIf(!config.hook?.enabled)("an already-locked hook handler is respected, not double-wrapped", async () => {

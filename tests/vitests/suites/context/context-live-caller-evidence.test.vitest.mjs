@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:34-07:00 (1793485474)
+ *	@Last modified time: 2026-11-10T21:29:10-08:00 (1794374950)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -565,8 +565,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 
 	it.each([
 		["a registry running the handlers other modules gave it", "registry", ["PERMISSION_DENIED"]],
-		// Returned code runs as the module that made it (#597).
-		["a module running a function another module's call returned", "user", "reached"]
+		// Returned code runs as the module that made it under whoever runs it (#726): `maker` may reach `c`, `user`, who
+		// runs it, may not.
+		["a module running a function another module's call returned", "user", "PERMISSION_DENIED"]
 	])("%s after an await runs them as itself", async (_label, module, expected) => {
 		api = await slothlet({
 			base: API,
@@ -757,8 +758,10 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			const outcome = await new Promise((resolve) => api.dupB.work.later(resolve));
 			release();
 			expect(await held).toBe("held");
-			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's.
-			expect(outcome).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's. Its
+			// frames name a file two mounts were built from, so its definer cannot be told either, which is a refusal of the
+			// access (#726), not a missing context.
+			expect(outcome).toBe("PERMISSION_DENIED");
 		} finally {
 			await api.shutdown();
 		}

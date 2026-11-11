@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:04:32-07:00 (1793462672)
+ *	@Last modified time: 2026-11-10T21:29:45-08:00 (1794374985)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -191,12 +191,20 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 		});
 	});
 
-	describe("code the callee hands out runs as the callee, whoever runs it", () => {
-		it.each(["direct", "getterExport", "client", "object", "instanceMethod", "instanceGetter", "generator"])(
-			"%s: run by the supplier, as the callee's own call through self",
+	describe("code the callee hands out runs as the callee, under whoever runs it", () => {
+		// A call through `self` runs the callee's leaf, where the callee is the caller.
+		it.each(["direct", "getterExport"])("%s: run by the supplier, as the callee's own call through self", async (name) => {
+			await build();
+			expect(await api.supplier.probe.calleeMade(name)).toBe("s3cret");
+		});
+
+		// Code the callee returned, run by the supplier: the definer (the callee) may read the vault, the caller (the
+		// supplier) may not, and a `self` call needs both (#726).
+		it.each(["client", "object", "instanceMethod", "instanceGetter", "generator"])(
+			"%s: run by the supplier, which may not reach what the callee may",
 			async (name) => {
 				await build();
-				expect(await api.supplier.probe.calleeMade(name)).toBe("s3cret");
+				expect(await withSuppressedSlothletErrorOutput(async () => api.supplier.probe.calleeMade(name))).toBe(DENIED);
 			}
 		);
 
