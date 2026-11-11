@@ -20,6 +20,7 @@
  */
 
 import { self, context } from "@cldmv/slothlet/runtime";
+import { viaHelperSelf, viaHelperContext } from "../api_test_returned_instances_lib/util.mjs";
 
 /** A service whose methods read the runtime. */
 class Service {
@@ -43,3 +44,10 @@ export function* generator() {
 }
 export const boxedService = () => ({ service: new Service() });
 export const service = () => new Service();
+
+/** A closure that reaches `self` through a helper file that is no api file. */
+export const helperClosure = () => () => viaHelperSelf();
+/** Functions in data that reach `self` and `context` through the helper file. */
+export const helperBox = () => ({ ping: () => viaHelperSelf(), user: () => viaHelperContext() });
+/** The helper file's own function, handed out as it is. */
+export const helperItself = () => viaHelperSelf;

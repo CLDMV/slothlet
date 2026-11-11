@@ -3148,21 +3148,122 @@ function runtime_leavesAtLocation(path, line) {
 export function frameDefiner() {
 	const frames = runtime_captureFrames(24);
 	let index = -1;
+	// The helper file of an instance the innermost code runs in, while the walk looks for the leaf that called it.
+	let helper = null;
 	for (const frame of frames) {
 		index++;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
-		if (frame.async || isRunnerFrame(frame)) return null;
+		// A helper's code with no leaf's code calling it (the helper's function handed out as it is): the module of the
+		// one file that imports it stands for it.
+		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
 		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
 		const leaves = runtime_leavesAtLocation(frame.path, frame.line);
-		if (leaves === null) return runtime_isInstanceFile(frame.path) ? { unplaced: true } : null;
+		if (leaves === null) {
+			if (runtime_isInstanceFile(frame.path)) return { unplaced: true };
+			// A helper file of an instance that is no api file (one a leaf imports): its code runs for the leaf whose code
+			// called it, so the walk goes on outward to the first frame of a leaf's file.
+			const owner = runtime_helperOwner(frame, helper?.slothlet ?? null);
+			if (owner) {
+				helper ??= owner;
+				continue;
+			}
+			// The host's code, or a package's, called it: no leaf did.
+			return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
+		}
+		if (helper) {
+			// The leaf's file has to import the helper, or the helper is some other module's and cannot be placed.
+			const imports = runtime_importsHelper(helper, leaves);
+			if (!imports) return runtime_checksPermissions(helper.slothlet) ? { unplaced: true } : { wrapper: leaves[0], callers: [] };
+		}
 		const narrowed = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 		// The leaves whose code is further out on the stack ran this code: with no call to say who the caller is,
 		// they are its callers, so a module running another's code from a timer of its own does not count as the host.
 		const callers = runtime_anyInstanceChecks() ? runtime_outerCallers(frames, index).filter((caller) => !narrowed.includes(caller)) : [];
 		return narrowed.length === 1 ? { wrapper: narrowed[0], callers } : { leaves: narrowed, callers };
 	}
+	return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
+}
+
+/**
+ * The running instance whose helper file a frame runs in: a file loaded under the instance's import tag, or one of its
+ * CommonJS files, that no leaf was built from.
+ * @param {{path: string, line: string, evaluated?: boolean}} frame - The frame.
+ * @param {object|null} [only=null] - Answer for this instance alone.
+ * @returns {{slothlet: object, path: string}|null} The instance and the helper's file, or null.
+ * @private
+ */
+function runtime_helperOwner(frame, only = null) {
+	if (frame.evaluated || frame.path.startsWith("node:")) return null;
+	const tag = runtime_frameInstanceTag(frame.line);
+	for (const [id, reference] of LIVE_INSTANCES) {
+		const slothlet = reference.deref();
+		if (!slothlet || (only && slothlet !== only) || !runtime_instanceRuns(slothlet)) continue;
+		if (tag ? id !== tag : !runtime_commonJSLocations(id).has(frame.path)) continue;
+		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
+		return { slothlet, path: frame.path };
+	}
 	return null;
+}
+
+/**
+ * The files of an instance that import a helper file, directly or through other helpers, as the instance's resolve
+ * hook recorded them.
+ * @param {{slothlet: object, path: string}} helper - The helper.
+ * @returns {Set<string>} The importing files, in comparable form, the helper's own included.
+ * @private
+ */
+function runtime_helperImporters(helper) {
+	const graph = runtime_importGraph(helper.slothlet.instanceID);
+	const seen = new Set([helper.path]);
+	const queue = [helper.path];
+	while (queue.length && seen.size <= PACKAGE_WALK) {
+		for (const importer of graph.get(queue.pop()) ?? []) {
+			if (seen.has(importer)) continue;
+			seen.add(importer);
+			queue.push(importer);
+		}
+	}
+	return seen;
+}
+
+/**
+ * Whether the file some leaves were built from imports a helper file, directly or through other helpers. A helper
+ * whose imports were not recorded (a loader slothlet's hook does not see) is taken as imported by the leaf whose code
+ * called it.
+ * @param {{slothlet: object, path: string}} helper - The helper.
+ * @param {Array<object>} leaves - The leaves of the calling file.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_importsHelper(helper, leaves) {
+	if (leaves[0]?.slothlet !== helper.slothlet) return false;
+	const importers = runtime_helperImporters(helper);
+	if (importers.size === 1) return true;
+	return leaves.some((leaf) => {
+		const filePath = leaf.____slothletInternal.filePath;
+		return Boolean(filePath) && (importers.has(toComparablePath(filePath)) || importers.has(runtime_realComparablePath(filePath)));
+	});
+}
+
+/**
+ * The definer of a helper file's code that no leaf's code called: the module of the one api file that imports the
+ * helper. Undefined when no api file is recorded as importing it; unplaced when several are.
+ * @param {{slothlet: object, path: string}} helper - The helper.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|undefined} The definer.
+ * @private
+ */
+function runtime_leafOfHelper(helper) {
+	const modules = new Set();
+	for (const file of runtime_helperImporters(helper)) {
+		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, null);
+		if (!leaves.length) continue;
+		for (const module of runtime_fileModuleOf(leaves)) modules.add(module);
+	}
+	if (!modules.size) return undefined;
+	const found = [...modules];
+	if (found.length === 1) return { wrapper: found[0], callers: [] };
+	return runtime_checksPermissions(helper.slothlet) ? { unplaced: true } : { wrapper: found[0], callers: [] };
 }
 
 /**

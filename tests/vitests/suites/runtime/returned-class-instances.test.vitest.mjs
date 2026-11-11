@@ -123,4 +123,16 @@ describe.each(matrix)("returned instances and handed-out code > $mode / $runtime
 			instanceInData: "U"
 		});
 	});
+
+	it("gives a helper file a leaf imports its self and context when the host runs code that calls it", async () => {
+		await build();
+		const box = await api.maker.helperBox();
+		// Plain JavaScript: a function a module returned runs the helper its module imported, whoever calls it.
+		expect({
+			closure: await (await api.maker.helperClosure())(),
+			functionInData: await box.ping(),
+			contextInData: box.user(),
+			helperItself: await (await api.maker.helperItself())()
+		}).toEqual({ closure: "pong", functionInData: "pong", contextInData: "U", helperItself: "pong" });
+	});
 });
