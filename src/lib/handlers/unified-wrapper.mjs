@@ -4792,6 +4792,7 @@ setHostPrototypeCheck(
 /**
  * The node at an api path of an instance, walked from its root through the nodes' own members, so no trap of a node
  * runs and nothing loads (#726): how the file's module node of a lazy tree, built with no file of its own, is found.
+ * The api root alone is read through a Proxy, which it is when a root file's default function makes the api callable.
  * @param {object} slothlet - The instance.
  * @param {string} apiPath - The path.
  * @returns {object|null} The node's wrapper, or null when no node is there.
@@ -4799,10 +4800,18 @@ setHostPrototypeCheck(
  */
 function runtime_nodeAtPath(slothlet, apiPath) {
 	let current = slothlet?.api;
+	// Whether the walk read through the root as a Proxy: the api is one when a root file's default function makes it
+	// callable. The root is the instance's own, so it alone is read through a Proxy, and the node found that way has
+	// to record the path asked for.
+	let throughRoot = false;
 	try {
 		for (const segment of String(apiPath).split(".")) {
 			const holder = resolveWrapper(current) ?? current;
-			if (holder === null || (typeof holder !== "object" && typeof holder !== "function") || util.types.isProxy(holder)) return null;
+			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) return null;
+			if (util.types.isProxy(holder)) {
+				if (current !== slothlet.api) return null;
+				throughRoot = true;
+			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, segment);
 			if (!descriptor || !("value" in descriptor)) return null;
 			current = descriptor.value;
@@ -4811,7 +4820,9 @@ function runtime_nodeAtPath(slothlet, apiPath) {
 		// A tree that refuses to be read has no node to offer.
 		return null;
 	}
-	return resolveWrapper(current);
+	const node = resolveWrapper(current);
+	if (throughRoot && node !== null && String(node.____slothletInternal.apiPath ?? "") !== String(apiPath)) return null;
+	return node;
 }
 
 setModuleNodeResolver(runtime_nodeAtPath);

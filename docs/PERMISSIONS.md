@@ -388,7 +388,7 @@ Which path that is follows from how the file becomes part of the api (see [API-R
 | `m/m.mjs` of a folder added at `m`                  | the sub-folder named after the mount is hoisted | `m.a`, `m.b`           | `m`                     |
 | `tool.mjs` of a folder added at `ext.m`             | a nested mount path                             | `ext.m.tool.a`         | `ext.m.tool`            |
 
-The `caller` a `PERMISSION_DENIED` error names is that path.
+The `caller` a `PERMISSION_DENIED` error names is that path. The table holds as well when a root file's default function makes `api` itself callable.
 
 **What a file starts while it loads carries its module.** slothlet runs each file's top level under the file's module, in eager and lazy mode alike. A timer, a job queue, an event listener, an `AsyncResource` or an `AsyncLocalStorage.snapshot()` made there keeps that identity, so whatever it runs later has the module as its **caller**, never the host. The code doing the access is still read as its definer, and both have to be allowed:
 
