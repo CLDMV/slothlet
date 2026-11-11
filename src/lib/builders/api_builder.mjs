@@ -822,7 +822,9 @@ export class ApiBuilder extends ComponentBase {
 				try {
 					mirror(key);
 				} catch (error) {
-					if (!(error instanceof slothlet.SlothletError)) throw error;
+					// Only a refusal of slothlet's own is passed over.
+					const refusal = slothlet.SlothletError;
+					if (!(error instanceof refusal)) throw error;
 				}
 			}
 			const captured = new Proxy(shell, {
