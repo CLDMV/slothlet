@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:12:37-08:00 (1794183157)
+ *	@Last modified time: 2026-11-08T22:59:07-08:00 (1794207547)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,17 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { attributeResult, carriesCallerCode, enterCall, isHandedOut, resolveSupplier, resolvesSupplier } from "#handlers/frame-placement";
+import {
+	attributeResult,
+	carriesCallerCode,
+	enterCall,
+	handsOutAsModule,
+	attributesResults,
+	isHandedOut,
+	isHostPrototype,
+	resolveSupplier,
+	resolvesSupplier
+} from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -186,7 +196,9 @@ export class AsyncContextManager {
 		// or a module (#667).
 		const callerIsHost = !executionStore.callerWrapper;
 		const attributed =
-			attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value, callerIsHost) : (value) => value;
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost)
+				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
@@ -271,7 +283,12 @@ export class AsyncContextManager {
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
-			if (currentWrapper) return attributeResult(currentWrapper, value, callerIsHost);
+			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
+			// A prototype of a module's class the host is handed is the object itself (#667), as the live runtime hands it.
+			if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
+				return attributeResult(currentWrapper, value, callerIsHost);
+			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
+			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}

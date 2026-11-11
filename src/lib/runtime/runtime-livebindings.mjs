@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
+ *	@Last modified time: 2026-11-09T02:13:31-08:00 (1794219211)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,9 @@ import {
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
-	runtime_unwrapSelfView
+	runtime_unwrapSelfView,
+	runtime_selfReadAsDefiner,
+	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
@@ -102,6 +104,26 @@ function runtime_resolveExecutingContext() {
 }
 
 /**
+ * Refuse a read of `self` whose caller the live runtime cannot determine (#726): calls are in flight and it cannot tell
+ * which of them runs the code (two api paths of one module resuming in a file they share), or that it is none of them,
+ * and the code's frames named no definer to read it as. That is module code no one can be named for, so the read is
+ * `PERMISSION_DENIED`, as every other access under that caller is. Code no call accounts for is left to the caller of
+ * this function, which reports no module running.
+ * @param {string|symbol} prop - The member read.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the caller cannot be determined and permissions are on.
+ * @private
+ */
+function runtime_refuseUnknownCaller(prop) {
+	const store = liveRuntime.getContext();
+	if (!store?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
+	const identity = liveRuntime.getCallerIdentity?.();
+	if (!identity?.unresolved || identity.unaccounted) return;
+	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
+	throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
+}
+
+/**
  * Members of `self` that are the framework's own namespace and functions rather than nodes of the api.
  * @type {Set<string>}
  * @private
@@ -145,7 +167,13 @@ export const self = new Proxy(
 	{
 		get(_, prop) {
 			const ctx = runtime_resolveExecutingContext();
+			if (!ctx || !ctx.self) {
+				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
+				const read = runtime_selfReadAsDefiner(self, prop);
+				if (read) return read.value;
+			}
 			if (!ctx) {
+				runtime_refuseUnknownCaller(prop);
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			return runtime_selfMember(prop, ctx.self[prop]);
@@ -332,3 +360,5 @@ export const context = new Proxy(
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
 for (const proxy of [self, context]) markSlothletProxy(proxy);
+// A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
+registerRuntimeSelf(liveRuntime, self);

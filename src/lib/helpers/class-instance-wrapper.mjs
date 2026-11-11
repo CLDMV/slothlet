@@ -28,6 +28,7 @@
 // browser static graph (#123).
 import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { outerCallerCeiling } from "#handlers/frame-placement";
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -229,7 +230,9 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 					// be spuriously denied by) the permission layer.
 					// rawErrors: a class method's throw is application data, same as a plain leaf's —
 					// it must reach the caller unchanged, never re-typed as CONTEXT_EXECUTION_FAILED (#252).
-					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true);
+					// The method runs as its creator (its definer) under the caller running it as its ceiling: no grant (#726).
+					const ceiling = capturedWrapper ? outerCallerCeiling(contextManager, instanceID) : null;
+					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true, false, ceiling);
 
 					// Recursively wrap returned class instances, carrying the same creating-module identity.
 					if (result != null && runtime_isClassInstance(result)) {

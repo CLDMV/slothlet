@@ -59,6 +59,29 @@ export function syncThen(target = "secret") {
 }
 
 /**
+ * Call the vault through the file-level helper, inside this leaf's own call.
+ * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf.
+ * @returns {Promise<{ok: boolean, value?: *, code?: string}>} The outcome.
+ * @public
+ * @example
+ * await api.b.give.viaHelper("whoami"); // { ok: true, value: "b.give.viaHelper" }
+ */
+export function viaHelper(target = "secret") {
+	return attempt(target);
+}
+
+/**
+ * Hand out the file-level helper itself, for another module to run.
+ * @returns {function("secret"|"whoami"): Promise<object>} The helper.
+ * @public
+ * @example
+ * const helper = await api.b.give.helper();
+ */
+export function helper() {
+	return attempt;
+}
+
+/**
  * `then` calls the vault later, from a timer it schedules.
  * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf.
  * @returns {{then: function}} A thenable resolving to the outcome.

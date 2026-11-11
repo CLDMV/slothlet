@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:12:38-08:00 (1794183158)
+ *	@Last modified time: 2026-11-09T00:51:07-08:00 (1794214267)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -564,7 +564,10 @@ function runtime_structuredFrames(_error, callSites) {
 					hash: evaluated ? null : (site.getScriptHash?.() ?? null),
 					key: described.key,
 					enter: runtime_entryKind(name),
-					gap
+					gap,
+					// Where in its file the frame runs: the leaf whose source range holds it is its definer (#726).
+					lineNumber: site.getLineNumber?.() ?? null,
+					columnNumber: site.getColumnNumber?.() ?? null
 				};
 				gap = false;
 			}
@@ -1387,6 +1390,36 @@ export function attributeResult(wrapper, value, callerIsHost = false) {
 }
 
 /**
+ * Whether a value a module's call returned to the host is a prototype of a module's class, which the host gets as the
+ * object itself (#667). Set by the wrapper module.
+ * @type {function(object, *): boolean}
+ * @private
+ */
+let hostPrototypeCheck = () => false;
+
+/**
+ * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
+ * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
+ * @returns {void}
+ * @internal
+ */
+export function setHostPrototypeCheck(check) {
+	hostPrototypeCheck = check;
+}
+
+/**
+ * Whether a value a module's call returned is a prototype of a module's class (or a view of one), which the host gets
+ * as the object itself under either runtime and with the permission system on or off (#667, #726).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {boolean} True for such a prototype.
+ * @internal
+ */
+export function isHostPrototype(wrapper, value) {
+	return hostPrototypeCheck(wrapper, value);
+}
+
+/**
  * Whether a value is a stand-in slothlet hands a module's code out as (#597). Set by the wrapper module.
  * @type {function(*): boolean}
  * @private
@@ -1628,6 +1661,12 @@ const MAX_CHAIN = 64;
  * @internal
  */
 export function resolveSupplier(record) {
+	// Code a module handed out, run through the stand-in recording its definer: the stack names the definer wherever it
+	// can, and the record stands only where it cannot (#726).
+	if (record?.made && genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record)) {
+		const told = runtime_madeCodeDefiner(record);
+		if (told !== undefined) return told;
+	}
 	if (!record?.flagged)
 		return runtime_guardsForeignCode(record) && genuineWrappers.has(record.wrapper) ? runtime_foreignCodeRunning(record) : null;
 	const leaf = record.wrapper;
@@ -1658,7 +1697,12 @@ export function resolveSupplier(record) {
 		if (!description.filePath) continue;
 		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length, record: current });
 	}
-	if (!fallback) return null;
+	// No call of a module's above it (only the host's): read as a call with no parent is, so another module's code
+	// running inside it is still told by its frames (#726).
+	if (!fallback) {
+		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
+		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record) : null;
+	}
 	// Any other leaf with no file of its own (a node a module made): none of the code running inside it can be told to be
 	// its own.
 	if (!fileless && (!chain.length || chain[0].currentWrapper !== leaf)) return runtime_supplierAnswer(record, fallback);
@@ -1687,7 +1731,8 @@ export function resolveSupplier(record) {
 		runtime_learnEntered(range);
 		const conflicts = runtime_conflictingScripts(range);
 		let leafSeen = false;
-		for (const frame of range) {
+		for (let index = 0; index < range.length; index++) {
+			const frame = range[index];
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 			if (frame.async || isRunnerFrame(frame)) break;
 			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
@@ -1709,7 +1754,7 @@ export function resolveSupplier(record) {
 				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
 				// already running inside it (a package the leaf called back into the leaf).
 				if (leafSeen) continue;
-				if (guards && placement && (authored = runtime_authorAnswer(record, frame))) return AUTHORED;
+				if (guards && placement && (authored = runtime_authorAnswer(record, frame, range.slice(index + 1)))) return AUTHORED;
 				return fallback;
 			}
 			const { matches } = placement;
@@ -1739,6 +1784,41 @@ export function resolveSupplier(record) {
 	}
 	if (answer === AUTHORED) return authored;
 	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
+}
+
+/**
+ * The definer of code a stand-in runs (#726), read from the stack: the innermost frame below slothlet's own, placed on
+ * the leaf of its instance whose source range holds it, or on the file's module for code outside every export. That is
+ * the definer wherever the frame names a file of the stand-in's instance; it runs under the stand-in's ceiling (whoever
+ * runs it), never under the leaf the stand-in recorded, which is no caller of it. Where the frame names no such file
+ * (evaluated code, a package's or the host's own, a frame past the stand-in's entry), the stack cannot tell, and the
+ * stand-in's record is read as before.
+ * @param {{wrapper: object, ceiling?: object|null}} record - The stand-in's call.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>|null}|null|undefined} The definer the stack names,
+ *   null when it is the recorded one, or undefined when the stack cannot tell.
+ * @private
+ */
+function runtime_madeCodeDefiner(record) {
+	const recorded = record.wrapper;
+	const frames = runtime_captureFrames(24);
+	let index = -1;
+	for (const frame of frames) {
+		index++;
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			if (frame.enter) return undefined;
+			continue;
+		}
+		if (frame.async || isRunnerFrame(frame) || frame.evaluated || isForeignScript(frame)) return undefined;
+		// Node's own code reads values for whoever called it: the next frame out decides.
+		if (frame.path.startsWith("node:") && runtime_isNodeScript(frame)) continue;
+		if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return undefined;
+		const leaves = runtime_leavesAt(recorded.slothlet, frame);
+		if (!leaves.length) return undefined;
+		const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
+		if (definers.includes(recorded)) return null;
+		return { wrapper: definers[0], ceiling: combineCeilings(record.ceiling ?? null, ...definers.slice(1)) };
+	}
+	return undefined;
 }
 
 /**
@@ -2390,16 +2470,415 @@ const AUTHORED = Symbol("authored");
  * file, all of them. Null when no leaf was built from the file, or the frame does not run the file's own source.
  * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call the code runs inside.
  * @param {{path: string, line: string}} frame - The code's frame.
+ * @param {Iterable<object>} [outer] - The frames further out, innermost first.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The answer.
  * @private
  */
-function runtime_authorAnswer(record, frame) {
+function runtime_authorAnswer(record, frame, outer = []) {
 	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597). Under vite, the
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
-	const authors = runtime_leavesAt(record.wrapper.slothlet, frame);
+	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
+	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, outer);
 	if (!authors.length) return null;
 	return { wrapper: authors[0], ceiling: combineCeilings(record.wrapper, record.ceiling, ...authors.slice(1)) };
+}
+
+/**
+ * Each file's text and line starts, read once (see {@link runtime_sourceOf}).
+ * @type {Map<string, {text: string, starts: number[]}|null>}
+ * @private
+ */
+const FILE_SOURCES = new Map();
+
+/**
+ * Each leaf's source range in its file, as `[start, end)` offsets, or null (see {@link runtime_leafRange}).
+ * @type {WeakMap<object, number[]|null>}
+ * @private
+ */
+const LEAF_RANGES = new WeakMap();
+
+/**
+ * A file's text with its line starts, read once: from disk, or under vite's module runner the code the runner was given
+ * for it, which is what its frames and its functions' text are positions in.
+ * @param {string} filePath - The file.
+ * @returns {{text: string, starts: number[]}|null} The source, or null when it cannot be read.
+ * @private
+ */
+function runtime_sourceOf(filePath) {
+	if (FILE_SOURCES.has(filePath)) return FILE_SOURCES.get(filePath);
+	let source;
+	try {
+		// Under vite's module runner the file runs as the code vite transformed it into: its frames and its functions'
+		// text are that code's, so the code is what ranges are read from (the runner's wrapper only prefixes line 1).
+		let runnerCode = null;
+		if (RUNNER_MODULES) {
+			const comparable = toComparablePath(filePath);
+			for (const node of mapValues(RUNNER_MODULES.idToModuleMap)) {
+				if (typeof node?.file === "string" && typeof node?.meta?.code === "string" && toComparablePath(node.file) === comparable) {
+					runnerCode = node.meta.code;
+					break;
+				}
+			}
+		}
+		const text = runnerCode ?? String(nodeFs(FS_READ_FILE, filePath.startsWith("file:") ? new URL(filePath) : filePath, "utf8"));
+		const starts = [0];
+		for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+		source = { text, starts };
+	} catch {
+		// A file that cannot be read gives no ranges: its code is the file's module.
+		source = null;
+	}
+	FILE_SOURCES.set(filePath, source);
+	return source;
+}
+
+/**
+ * The source range of a leaf's function in its file: where the function's own text sits in it (#726). Null for a leaf
+ * that is not a function, whose text is not found (a bound or native function), or whose text the file holds twice.
+ * @param {object} leaf - A leaf wrapper.
+ * @returns {number[]|null} `[start, end)`.
+ * @private
+ */
+function runtime_leafRange(leaf) {
+	if (LEAF_RANGES.has(leaf)) return LEAF_RANGES.get(leaf);
+	let range = null;
+	const impl = leaf.____slothletInternal?.impl;
+	const filePath = leaf.____slothletInternal?.filePath;
+	if (typeof impl === "function" && filePath && NODE_FS) {
+		try {
+			const text = Reflect.apply(Function.prototype.toString, impl, []);
+			const source = runtime_sourceOf(filePath);
+			const start = source ? source.text.indexOf(text) : -1;
+			// Text found twice in the file cannot say which copy is the leaf's: the module stands for it instead.
+			const twice = start >= 0 && source.text.indexOf(text, start + 1) !== -1;
+			if (start >= 0 && !twice && !text.endsWith("{ [native code] }")) range = [start, start + text.length];
+		} catch {
+			range = null;
+		}
+	}
+	LEAF_RANGES.set(leaf, range);
+	return range;
+}
+
+/**
+ * How the node at an api path of an instance is found (see {@link setModuleNodeResolver}). Until the wrapper module
+ * registers it, no node is found.
+ * @type {function(object, string): (object|null)}
+ * @private
+ */
+let moduleNodeResolver = () => null;
+
+/**
+ * Register how the node at an api path is found: the file's module node of a lazy tree, built with no file of its own,
+ * is looked up by its path (#726).
+ * @param {function(object, string): (object|null)} resolver - Takes an instance and an api path; returns its node's
+ *   wrapper, or null.
+ * @returns {void}
+ * @internal
+ */
+export function setModuleNodeResolver(resolver) {
+	moduleNodeResolver = resolver;
+}
+
+/**
+ * The api path of the module a file's leaves were built from: each leaf's path less its path inside the file's
+ * exports, when they all agree (#726). Null when they do not, or when it is the root.
+ * @param {Array<object>} leaves - The leaves of one file.
+ * @returns {string|null} The module path.
+ * @private
+ */
+function runtime_moduleRootPath(leaves) {
+	let root = null;
+	for (const leaf of leaves) {
+		const internal = leaf.____slothletInternal;
+		const exportPath = internal.exportPath;
+		if (!Array.isArray(exportPath) || !exportPath.length) continue;
+		const segments = String(internal.apiPath ?? "").split(".");
+		if (segments.length <= exportPath.length) return null;
+		const path = segments.slice(0, segments.length - exportPath.length).join(".");
+		if (root !== null && root !== path) return null;
+		root = path;
+	}
+	return root;
+}
+
+/**
+ * The leaf whose source range holds a frame of its file: the innermost such range. Null when no leaf's does.
+ * @param {Array<object>} leaves - The leaves of the frame's file.
+ * @param {{text: string, starts: number[]}} source - The file's source.
+ * @param {{lineNumber?: number|null, columnNumber?: number|null}} frame - The frame.
+ * @returns {object|null} The leaf.
+ * @private
+ */
+function runtime_leafHolding(leaves, source, frame) {
+	if (!frame?.lineNumber || !frame.columnNumber) return null;
+	const offset = (source.starts[frame.lineNumber - 1] ?? Infinity) + frame.columnNumber - 1;
+	let best = null;
+	let bestLength = Infinity;
+	for (const leaf of leaves) {
+		const range = runtime_leafRange(leaf);
+		if (range && range[0] <= offset && offset < range[1] && range[1] - range[0] < bestLength) {
+			best = leaf;
+			bestLength = range[1] - range[0];
+		}
+	}
+	return best;
+}
+
+/**
+ * Whether a frame runs code of the same file, instance and mount as another: a frame further out that does is still
+ * that file's code calling it.
+ * @param {{path: string, line: string, async?: boolean, evaluated?: boolean}} frame - The frame further out.
+ * @param {{path: string, line: string}} inner - The frame it is compared with.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_sameFileFrame(frame, inner) {
+	return (
+		!frame.async &&
+		!frame.evaluated &&
+		frame.path === inner.path &&
+		runtime_frameInstanceTag(frame.line) === runtime_frameInstanceTag(inner.line) &&
+		runtime_frameModuleTag(frame.line) === runtime_frameModuleTag(inner.line)
+	);
+}
+
+/**
+ * The frames of a capture after the one at an index, read again from the capture as they are asked for.
+ * @param {Iterable<object>} frames - The capture.
+ * @param {number} index - The index of the frame they follow.
+ * @returns {Iterable<object>} The frames further out.
+ * @private
+ */
+function* runtime_framesAfter(frames, index) {
+	let i = 0;
+	for (const frame of frames) if (i++ > index) yield frame;
+}
+
+/**
+ * The definer of code a frame runs in a file several leaves were built from (#726): the nearest leaf on the stack.
+ * Walking out from the frame through the frames of the same file that called it, the first one inside a leaf's source
+ * range names that leaf (the innermost such range): a helper outside every export, called from a leaf's code, runs as
+ * that leaf. A frame of another file ends the walk. Only when no frame of the file is inside any leaf's range is the
+ * code the module's: the file's own node, whose path every leaf's starts with. A lazy tree builds that node with no file
+ * of its own, so it is found by its path, the leaves' paths less their paths inside the file's exports. With no such
+ * node, every leaf comes back.
+ * @param {Array<object>} leaves - The leaves of the frame's file.
+ * @param {{path: string, line: string, lineNumber?: number|null, columnNumber?: number|null}} frame - The frame.
+ * @param {Iterable<object>} [outer] - The frames further out, innermost first.
+ * @returns {Array<object>} The one leaf, or every leaf.
+ * @private
+ */
+function runtime_narrowToLeaf(leaves, frame, outer = []) {
+	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
+	const filePath = leaves.find((leaf) => leaf.____slothletInternal.filePath)?.____slothletInternal.filePath;
+	const source = filePath ? runtime_sourceOf(filePath) : null;
+	if (!source) return leaves;
+	let best = runtime_leafHolding(leaves, source, frame);
+	if (!best) {
+		for (const further of outer) {
+			if (!runtime_sameFileFrame(further, frame)) break;
+			if ((best = runtime_leafHolding(leaves, source, further))) break;
+		}
+	}
+	if (best) return [best];
+	// Code outside every leaf's range is the module's: the file's module node, whose path every leaf's starts with.
+	const paths = leaves.map((leaf) => String(leaf.____slothletInternal.apiPath ?? ""));
+	const module = leaves.find((leaf, i) => paths.every((other) => other === paths[i] || other.startsWith(paths[i] + ".")));
+	if (module) return [module];
+	// A lazy tree's module node was built with no file: found by its path, the same node an eager tree builds for the file.
+	const modulePath = runtime_moduleRootPath(leaves);
+	if (modulePath === null || !paths.every((path) => path.startsWith(modulePath + "."))) return leaves;
+	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
+	const standing = node && genuineWrappers.has(node) && node.slothlet === leaves[0].slothlet;
+	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
+}
+
+/**
+ * Whether a node is gone from its tree: removed, or invalidated by a removal or a reload (#625).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isGone(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	return Boolean(internal.invalid || internal.removed === true || internal.filePath === null);
+}
+
+/**
+ * Whether an instance's permission system is on: only then does what a removed node or a shut-down instance made lose
+ * its standing. With it off nothing is checked, and code runs as plain JavaScript (#726).
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {boolean} True while it is on.
+ * @private
+ */
+function runtime_checksPermissions(slothlet) {
+	return slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+}
+
+/**
+ * The ceiling code entered on its definer's behalf (a handed-out function, an instance method) runs under (#726): the
+ * caller running it, read now — its executing module and that module's own ceiling — or none for the host. Entering
+ * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
+ * @param {object} contextManager - The instance's context manager.
+ * @param {string} instanceID - The instance.
+ * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @internal
+ */
+export function outerCallerCeiling(contextManager, instanceID) {
+	const identity = contextManager?.getCallerIdentity?.(instanceID);
+	if (!identity?.currentWrapper) return null;
+	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null);
+}
+
+/**
+ * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
+ * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
+ * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
+ * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
+ * `mode: "off"`, `enabled: false` or `mode: "disabled"`), nothing is wrapped and frames tell every definer.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while code is handed out as stand-ins.
+ * @internal
+ */
+export function handsOutAsModule(wrapper) {
+	const slothlet = wrapper?.slothlet;
+	return slothlet?.config?.permissions?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+}
+
+/**
+ * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
+ * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * `"fast"` hands back only a node's own Proxy export as the node's member.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while results are attributed.
+ * @internal
+ */
+export function attributesResults(wrapper) {
+	return wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+}
+
+/**
+ * The live instances by ID, filled as leaves register their files: where code running while no call does is looked
+ * for (see {@link frameDefiner}).
+ * @type {Map<string, WeakRef<object>>}
+ * @private
+ */
+const LIVE_INSTANCES = new Map();
+
+/**
+ * Whether an instance still has a context its code can run in: it is not shut down. While a reload has moved it to an
+ * ID whose context is not set up yet, the one it is reloading from counts.
+ * @param {object} slothlet - The instance.
+ * @returns {boolean} True while it runs.
+ * @private
+ */
+function runtime_instanceRuns(slothlet) {
+	const instances = slothlet?.contextManager?.instances;
+	if (!instances?.has) return false;
+	for (let id = slothlet.instanceID; id;) {
+		if (instances.has(id)) return true;
+		const reloaded = id.lastIndexOf("_reload_");
+		id = reloaded > 0 ? id.slice(0, reloaded) : null;
+	}
+	return false;
+}
+
+/**
+ * The leaves whose file a location is, across the instances, narrowed by the instance and mount tags the location
+ * carries. While an instance's permission system is on, a shut-down instance and a removed node are skipped: what they
+ * made has no standing. With it off they are not: nothing is checked (#726). Null when
+ * none match, or when leaves of more than one instance do (a file two instances load without a tag telling them apart).
+ * @param {string} path - Comparable path.
+ * @param {string} line - Raw text holding the location's tags.
+ * @returns {Array<object>|null} Leaves of one instance.
+ * @private
+ */
+function runtime_leavesAtLocation(path, line) {
+	const tag = runtime_frameInstanceTag(line);
+	const mount = runtime_frameModuleTag(line);
+	let found = null;
+	let instance = null;
+	for (const [id, reference] of LIVE_INSTANCES) {
+		if (tag && id !== tag) continue;
+		const slothlet = reference.deref();
+		if (!slothlet) {
+			LIVE_INSTANCES.delete(id);
+			continue;
+		}
+		// What a shut-down instance made has no standing while its permission system was on; with it off the code is
+		// still told apart, and runs as plain JavaScript, with no context to read `self` from (#726).
+		if (!runtime_instanceRuns(slothlet) && runtime_checksPermissions(slothlet)) continue;
+		const leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
+		if (!leaves.length) continue;
+		if (instance && instance !== slothlet) return null;
+		instance = slothlet;
+		found = leaves;
+	}
+	return found;
+}
+
+/**
+ * The definer of the code doing an access while no call runs (the host running code a module handed out, #726): the
+ * innermost frame below slothlet's own, placed on the leaf whose source range holds it, or on the file's module for
+ * code outside every leaf's range. `null` when that frame is the host's (no running instance's file holds it);
+ * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
+ * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
+ * outside every export, in a tree where no node was built for the file itself).
+ * @returns {{wrapper: object}|{leaves: Array<object>}|{unplaced: true}|null} The definer.
+ * @internal
+ */
+export function frameDefiner() {
+	const frames = runtime_captureFrames(24);
+	let index = -1;
+	for (const frame of frames) {
+		index++;
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		if (frame.async || isRunnerFrame(frame)) return null;
+		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
+		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
+		const leaves = runtime_leavesAtLocation(frame.path, frame.line);
+		if (leaves === null) return runtime_isInstanceFile(frame.path) ? { unplaced: true } : null;
+		const narrowed = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
+		return narrowed.length === 1 ? { wrapper: narrowed[0] } : { leaves: narrowed };
+	}
+	return null;
+}
+
+/**
+ * Whether a file is one some running instance whose permission system is on built a leaf from.
+ * @param {string} path - Comparable path.
+ * @returns {boolean} True when one did.
+ * @private
+ */
+function runtime_isInstanceFile(path) {
+	for (const reference of LIVE_INSTANCES.values()) {
+		const slothlet = reference.deref();
+		if (
+			slothlet &&
+			runtime_checksPermissions(slothlet) &&
+			runtime_instanceRuns(slothlet) &&
+			runtime_leavesAtFile(slothlet, path, null, null).length
+		)
+			return true;
+	}
+	return false;
+}
+
+/**
+ * Whether some running instance's permission system is on: only such an instance refuses code whose definer cannot be
+ * told (#726).
+ * @returns {boolean} True when one is.
+ * @private
+ */
+function runtime_anyInstanceChecks() {
+	for (const reference of LIVE_INSTANCES.values()) {
+		const slothlet = reference.deref();
+		if (slothlet && runtime_checksPermissions(slothlet) && runtime_instanceRuns(slothlet)) return true;
+	}
+	return false;
 }
 
 /**
@@ -2432,6 +2911,8 @@ export function registerLeafFile(wrapper) {
 	const filePath = wrapper?.____slothletInternal?.filePath;
 	const slothlet = wrapper?.slothlet;
 	if (!filePath || !slothlet || typeof WeakRef !== "function") return;
+	if (slothlet.instanceID && !LIVE_INSTANCES.get(slothlet.instanceID)?.deref())
+		LIVE_INSTANCES.set(slothlet.instanceID, new WeakRef(slothlet));
 	let files = LEAF_FILES.get(slothlet);
 	if (!files) LEAF_FILES.set(slothlet, (files = new Map()));
 	const reference = new WeakRef(wrapper);
@@ -2445,7 +2926,8 @@ export function registerLeafFile(wrapper) {
 
 /**
  * The live leaves of an instance a frame's code was written in: built from the frame's file, of the instance and mount
- * its import tags name when it carries them. Leaves no longer in the tree are dropped as they are met.
+ * its import tags name when it carries them. Leaves no longer in the tree are passed over while the permission system
+ * is on (see {@link runtime_leavesAtFile}).
  * @param {object} slothlet - The instance.
  * @param {{path: string, line: string}} frame - The frame.
  * @returns {Array<object>} The leaves.
@@ -2456,8 +2938,8 @@ function runtime_leavesAt(slothlet, frame) {
 }
 
 /**
- * The live leaves of an instance built from a file, of the instance and mount given when they are (see
- * {@link runtime_leavesAt}).
+ * The leaves of an instance built from a file, of the instance and mount given when they are (see
+ * {@link runtime_leavesAt}): with its permission system on, only those still in the tree.
  * @param {object} slothlet - The instance.
  * @param {string} path - The file, in comparable form.
  * @param {string|null} instance - The instance tag the code carries, or null.
@@ -2469,12 +2951,16 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 	const held = LEAF_FILES.get(slothlet)?.get(path);
 	if (!held) return [];
 	const leaves = [];
+	// A removed node keeps its place while the permission system is off: nothing is checked, and what it made runs as plain
+	// JavaScript, `self` included (#726).
+	const keepGone = !runtime_checksPermissions(slothlet);
 	for (const reference of held) {
 		const wrapper = reference.deref();
-		if (!wrapper || wrapper.____slothletInternal.invalid || wrapper.____slothletInternal.filePath === null) {
+		if (!wrapper) {
 			held.delete(reference);
 			continue;
 		}
+		if (runtime_isGone(wrapper) && !keepGone) continue;
 		if (instance && wrapper.slothlet.instanceID !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
 		leaves.push(wrapper);
@@ -2556,7 +3042,9 @@ function runtime_foreignCodeRunning(record) {
 		// Whether a builtin ran between the innermost code of anyone's (slothlet's own included) and the frames read
 		// since, which are only Node's own: Node's code calling a builtin acts for no one more than the builtin does.
 		let builtinSince = false;
+		let index = -1;
 		for (const frame of frames) {
+			index++;
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 				if (frame.enter) return null;
 				builtinSince = false;
@@ -2582,7 +3070,7 @@ function runtime_foreignCodeRunning(record) {
 			// Code of no module's folder and no instance: a file some module loaded is that module's, the host's own runs as
 			// the leaf.
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame, fileless) : null;
-			return runtime_authorAnswer(record, frame) ?? UNACCOUNTED_SUPPLIER;
+			return runtime_authorAnswer(record, frame, runtime_framesAfter(frames, index)) ?? UNACCOUNTED_SUPPLIER;
 		}
 		// The whole stack read without code of anyone's or a call of slothlet's: when a builtin began it, the engine's and
 		// Node's own functions only.

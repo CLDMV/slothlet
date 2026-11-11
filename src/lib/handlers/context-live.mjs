@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:12:37-08:00 (1794183157)
+ *	@Last modified time: 2026-11-08T22:59:07-08:00 (1794207547)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,8 @@ import {
 	carriesCallerCode,
 	enterCall,
 	createFramePlacer,
+	handsOutAsModule,
+	attributesResults,
 	describeCall,
 	isForeignScript,
 	isHandedOut,
@@ -608,14 +610,9 @@ export class LiveContextManager {
 		// then defers the actual invocation to a later turn — by which point the caller's frame has
 		// been released and the stack can no longer name it. Honouring the earlier capture keeps the
 		// answer from degrading just because enforcement runs late. Its ceiling travels with it (#597).
-		if (store.__authoritativeWrapper) {
-			return {
-				currentWrapper: store.__authoritativeWrapper,
-				callerWrapper: store.callerWrapper,
-				ceiling: store.__authoritativeCeiling ?? undefined,
-				callerCeiling: store.callerCeiling ?? undefined
-			};
-		}
+		// Code another module made, run by slothlet itself inside that window (a thenable's `then` it settles, #726), is
+		// that module's: the capture speaks only for the code its frames do not name.
+		if (store.__authoritativeWrapper) return this.#authoritativeIdentity(store, store.callerWrapper, store.callerCeiling);
 		// Innermost synchronous entry that names a module. An entry without a wrapper (a context-only
 		// `runInContext`) does not change who is calling, so it is looked through. A host pin does:
 		// the callback runs as the host, even when a module invoked it synchronously (#477).
@@ -664,6 +661,24 @@ export class LiveContextManager {
 		// who is calling cannot be told. A stack holding none of it is the host's.
 		if (this.#unattributedOnStack(suspended)) return UNATTRIBUTED_IDENTITY;
 		return this.#baselineIdentity(store);
+	}
+
+	/**
+	 * The identity an authoritative capture gives (see {@link LiveContextManager#identityFor}): the captured caller, read
+	 * as the call it stands for, so code of another module running inside it — a thenable's `then` slothlet settles while
+	 * the capture is published — is told by its frames and runs as its definer under the captured caller (#726).
+	 * @param {object} store - Instance context store.
+	 * @param {object|null} callerWrapper - Who called it.
+	 * @param {object|null|undefined} callerCeiling - Its caller's ceiling.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, unresolved?: boolean}} The identity.
+	 * @private
+	 */
+	#authoritativeIdentity(store, callerWrapper, callerCeiling) {
+		const record = { wrapper: store.__authoritativeWrapper, parent: null, flagged: false, ceiling: store.__authoritativeCeiling ?? null };
+		const identity = this.#recordIdentity(record, callerWrapper, callerCeiling);
+		// The capture is no call record of its own: it is reported as before.
+		delete identity.record;
+		return identity;
 	}
 
 	/**
@@ -778,8 +793,11 @@ export class LiveContextManager {
 		const suspended = this.#suspendedFor(store);
 		const entered = this.#enteredFor(store);
 		const inFlight = suspended.size > 0 || entered.length > 0;
-		if (store.__authoritativeWrapper)
-			return { wrapper: store.__authoritativeWrapper, ceiling: store.__authoritativeCeiling ?? null, inFlight };
+		if (store.__authoritativeWrapper) {
+			const identity = this.#authoritativeIdentity(store, null, null);
+			if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
+			return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight };
+		}
 		for (let index = entered.length - 1; index >= 0; index--) {
 			if (entered[index] === HOST_ENTRY) return { wrapper: null, inFlight };
 			if (entered[index] === UNATTRIBUTED_ENTRY) return { wrapper: null, inFlight, ambiguous: true };
@@ -1423,7 +1441,7 @@ export class LiveContextManager {
 		// Who receives what the call returns: the host when the call was entered with no module executing (#667).
 		const callerIsHost = Boolean(entryIdentity) && !entryIdentity.unresolved && !entryCaller;
 		const attributed =
-			attribute && currentWrapper && !asHost
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) =>
 						this.#wrapClassInstanceResult(attributeResult(currentWrapper, value, callerIsHost), targetInstanceID, creator, callerIsHost)
 				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, callerIsHost);
@@ -1548,7 +1566,9 @@ export class LiveContextManager {
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
 		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
-		if (currentWrapper) return attributeResult(currentWrapper, value, callerIsHost);
+		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
+		// Otherwise a module's instance comes back raw in the live runtime: its methods are told by their frames (#726).
+		if (currentWrapper) return value;
 		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), undefined);
 	}
 

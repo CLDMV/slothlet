@@ -3260,7 +3260,9 @@ export class PermissionManager extends ComponentBase {
 	#getCompiledPattern(pattern) {
 		let matcher = this.#compiledCache.get(pattern);
 		if (!matcher) {
-			matcher = compilePattern(pattern);
+			// `**` matches any number of segments, none included: `x.**` names `x` itself, the module path code outside
+			// every export of `x`'s file runs as (#726).
+			matcher = compilePattern(pattern, { zeroSegments: true });
 			this.#compiledCache.set(pattern, matcher);
 		}
 		return matcher;

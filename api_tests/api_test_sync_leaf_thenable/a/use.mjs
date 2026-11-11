@@ -48,6 +48,19 @@ export async function direct(target = "secret") {
 }
 
 /**
+ * Run a function another module handed out, inside this module's own call.
+ * @param {Function} fn - The function.
+ * @param {...*} args - Its arguments.
+ * @returns {Promise<*>} What it returned.
+ * @public
+ * @example
+ * await api.a.use.run(await api.b.give.helper(), "whoami");
+ */
+export async function run(fn, ...args) {
+	return await fn(...args);
+}
+
+/**
  * The reverse case (#597): hand `b` a thenable of this module's own, which `b` awaits. Its code is this
  * module's and keeps this module's rights.
  * @param {"secret"|"whoami"} [target="secret"] - Which vault leaf.

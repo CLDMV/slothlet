@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
+ *	@Last modified time: 2026-11-09T00:51:11-08:00 (1794214271)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,9 @@ import {
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
-	runtime_unwrapSelfView
+	runtime_unwrapSelfView,
+	runtime_selfReadAsDefiner,
+	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
@@ -115,6 +117,9 @@ export const self = new Proxy(
 		get(_, prop) {
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) {
+				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
+				const read = runtime_selfReadAsDefiner(self, prop);
+				if (read) return read.value;
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			return runtime_selfMember(prop, ctx.self[prop]);
@@ -359,3 +364,5 @@ export const instanceID = new Proxy(
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
 for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
+// A read of `self` made while no call runs, through any runtime's `self`, reads through this one for an async instance (#726).
+registerRuntimeSelf(asyncRuntime, self);

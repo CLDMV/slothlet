@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:44:57-08:00 (1793706297)
+ *	@Last modified time: 2026-11-08T09:59:41-08:00 (1794160781)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -267,6 +267,14 @@ function scheduleMacrotask(fn) {
 const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
 
 /**
+ * The language's own `Reflect.apply`, taken when this file loads, before any module runs: a module replacing
+ * `globalThis.Reflect` cannot run code from {@link inheritsFrom}.
+ * @type {Function}
+ * @private
+ */
+const REFLECT_APPLY = Reflect.apply;
+
+/**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
  * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run
  * with the value slothlet is checking.
@@ -279,7 +287,7 @@ const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
  */
 function inheritsFrom(value, ctor) {
 	if (typeof ctor !== "function" || value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	return Reflect.apply(INTRINSIC_HAS_INSTANCE, ctor, [value]);
+	return REFLECT_APPLY(INTRINSIC_HAS_INSTANCE, ctor, [value]);
 }
 
 export {
