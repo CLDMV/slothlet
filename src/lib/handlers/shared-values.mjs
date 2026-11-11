@@ -29,6 +29,8 @@
  * @type {function(*): boolean}
  * @private
  */
+import { Reflect } from "@cldmv/slothlet/helpers/intrinsics";
+
 const IS_PROXY = globalThis.process?.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
 
 /**

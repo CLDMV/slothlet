@@ -36,6 +36,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -221,7 +222,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * // ["base_abc123", "plugins_xyz789", ...]
 	 */
 	getAllModuleIDs() {
-		return Array.from(this.caches.keys());
+		return Arrays.from(this.caches.keys());
 	}
 
 	/**
@@ -281,7 +282,7 @@ export class ApiCacheManager extends ComponentBase {
 		visited.add(api);
 		let count = 0;
 
-		for (const [key, value] of Object.entries(api)) {
+		for (const [key, value] of Objects.entries(api)) {
 			// Skip the framework's reserved names; a module's `_`/`__`-prefixed export is a member and counts.
 			if (isFrameworkReservedKey(key)) {
 				continue;

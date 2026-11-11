@@ -31,6 +31,7 @@ import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
+import { Reflect, Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -900,7 +901,7 @@ export class RoutineManager extends ComponentBase {
 			revert(path);
 		}
 
-		for (const [key, value] of Object.entries(api)) {
+		for (const [key, value] of Objects.entries(api)) {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {
 				continue;
@@ -910,7 +911,7 @@ export class RoutineManager extends ComponentBase {
 			if (typeof value === "function" || (value && typeof value === "object")) {
 				revert(childPath);
 
-				if (typeof value === "object" && !Array.isArray(value)) {
+				if (typeof value === "object" && !Arrays.isArray(value)) {
 					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
 				}
 			}
@@ -1078,10 +1079,10 @@ export class RoutineManager extends ComponentBase {
 		// default "[object Object],[object Object]" join.
 		const failureEntries = failures.map(({ apiPath, moduleID }) => {
 			const entry = { apiPath, moduleID };
-			Object.defineProperty(entry, "toString", { value: () => `${apiPath} (${moduleID})`, enumerable: false });
+			Objects.defineProperty(entry, "toString", { value: () => `${apiPath} (${moduleID})`, enumerable: false });
 			return entry;
 		});
-		Object.defineProperty(failureEntries, "toString", {
+		Objects.defineProperty(failureEntries, "toString", {
 			value: () => failureEntries.map(String).join(", "),
 			enumerable: false
 		});
@@ -1241,12 +1242,12 @@ export class RoutineManager extends ComponentBase {
 							return; // Materialization failed — do not descend into a broken subtree.
 						}
 					}
-					for (const key of Object.keys(wrapper)) {
+					for (const key of Objects.keys(wrapper)) {
 						if (!isFrameworkReservedKey(key)) await visit(wrapper[key], depth + 1);
 					}
 					return;
 				}
-				for (const key of Object.keys(obj)) {
+				for (const key of Objects.keys(obj)) {
 					await visit(obj[key], depth + 1);
 				}
 			} catch {
@@ -1259,7 +1260,7 @@ export class RoutineManager extends ComponentBase {
 		// "slothlet"), so the skip below must not apply when `root` is a mount root passed in from
 		// `#materializeFor`'s per-mount loop.
 		const isApiRoot = root === this.slothlet.api;
-		for (const key of Object.keys(root)) {
+		for (const key of Objects.keys(root)) {
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
 			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			// Unreachable: the root here (the composed api, or a mount-root wrapper from #materializeFor's
@@ -1343,7 +1344,7 @@ export class RoutineManager extends ComponentBase {
 		// matches.
 		let keys;
 		try {
-			keys = Object.keys(node);
+			keys = Objects.keys(node);
 		} catch {
 			// Unreachable: `node` was already force-materialized above, so it's a concrete object or
 			// wrapper proxy — `Object.keys` on one never throws (only an exotic hand-built proxy with a
@@ -1698,14 +1699,14 @@ export class RoutineManager extends ComponentBase {
 		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
 		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
 		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
-		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Object.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false, configurable: true });
 		// #400: per-contributor selector + enumerator on the stacked callable.
 		// `.for(key)` returns a callable that runs ONLY the contributor whose moduleID is `key` at this
 		// exact path (see runPathFor). `.contributors` lists the moduleIDs present here (see
 		// contributorsAt). Non-enumerable so they don't leak into spreads/enumeration of the callable,
 		// but remain directly reachable as `api.<path>.<name>.for(key)` / `.contributors`.
-		Object.defineProperty(stacked, "for", {
+		Objects.defineProperty(stacked, "for", {
 			value: (key) =>
 				async function slothletRoutineFor(...args) {
 					return manager.runPathFor(apiPath, key, args, routine);
@@ -1713,7 +1714,7 @@ export class RoutineManager extends ComponentBase {
 			enumerable: false,
 			configurable: true
 		});
-		Object.defineProperty(stacked, "contributors", {
+		Objects.defineProperty(stacked, "contributors", {
 			get: () => manager.contributorsAt(apiPath, routine),
 			enumerable: false,
 			configurable: true
@@ -1746,9 +1747,9 @@ export class RoutineManager extends ComponentBase {
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
 		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
 		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
-		Object.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Object.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false, configurable: true });
-		Object.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false, configurable: true });
 		return cascade;
 	}
 

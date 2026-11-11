@@ -26,6 +26,7 @@ import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -33,7 +34,7 @@ import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-in
  * independently hand-typed `["before", "primary", "after"]` (or bare `"primary"`) literal.
  * @type {ReadonlyArray<"before"|"primary"|"after">}
  */
-const HOOK_SUBSETS = Object.freeze(["before", "primary", "after"]);
+const HOOK_SUBSETS = Objects.freeze(["before", "primary", "after"]);
 
 /** The subset a hook runs under when it doesn't specify one explicitly. */
 const DEFAULT_HOOK_SUBSET = "primary";
@@ -288,7 +289,7 @@ export function rememberedFailure(error) {
 export function failureSource(fields, record) {
 	let read = false;
 	let stack;
-	return Object.defineProperty(fields, "stack", {
+	return Objects.defineProperty(fields, "stack", {
 		get() {
 			if (!read) {
 				stack = record.stack();
@@ -568,7 +569,7 @@ export class HookManager extends ComponentBase {
 		if (!this.#validSubsets.has(subset)) {
 			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
 				subset,
-				validSubsets: Array.from(this.#validSubsets)
+				validSubsets: Arrays.from(this.#validSubsets)
 			});
 		}
 
@@ -633,7 +634,7 @@ export class HookManager extends ComponentBase {
 			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
 			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
 			// failure on a member id the caller never chose.
-			const tags = selected == null ? [] : Array.isArray(selected) ? [...new Set(selected)] : [selected];
+			const tags = selected == null ? [] : Arrays.isArray(selected) ? [...new Set(selected)] : [selected];
 			if (tags.length === 0) {
 				// Nothing selected — the same default-version fallback a call takes. A listed path
 				// always yields a default (unregister deletes exhausted registry entries, so list()
@@ -650,7 +651,7 @@ export class HookManager extends ComponentBase {
 				// Own-property check, not a plain index: `versions` is an object literal, so a tag like
 				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
 				// register a hook against a physical path that was never mounted.
-				if (typeof tag !== "string" || !Object.hasOwn(registered.versions, tag)) {
+				if (typeof tag !== "string" || !Objects.hasOwn(registered.versions, tag)) {
 					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
 				}
 			}
@@ -861,7 +862,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Filter by type and/or pattern
-		const types = filter.type ? [filter.type] : Array.from(this.#validTypes);
+		const types = filter.type ? [filter.type] : Arrays.from(this.#validTypes);
 
 		for (const type of types) {
 			const typeIndex = this.#hooks[type];
@@ -937,7 +938,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// If no filter provided, disable globally
-		if (Object.keys(filter).length === 0) {
+		if (Objects.keys(filter).length === 0) {
 			this.enabled = false;
 		}
 		return this.#setEnabledState(filter, false);
@@ -1071,7 +1072,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Filter by type and/or pattern
-		const types = filter.type ? [filter.type] : Array.from(this.#validTypes);
+		const types = filter.type ? [filter.type] : Arrays.from(this.#validTypes);
 
 		// Compile pattern matcher if pattern filter provided
 		let patternMatcher = null;
@@ -1283,12 +1284,12 @@ export class HookManager extends ComponentBase {
 				}
 
 				// Check for short-circuit (hook returns value directly)
-				if (result !== undefined && !Array.isArray(result)) {
+				if (result !== undefined && !Arrays.isArray(result)) {
 					return { args, shortCircuit: true, value: result };
 				}
 
 				// Hook can modify args by returning array
-				if (Array.isArray(result)) {
+				if (Arrays.isArray(result)) {
 					args = result;
 				}
 			} catch (error) {
@@ -1425,12 +1426,12 @@ export class HookManager extends ComponentBase {
 				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Check for short-circuit (hook returns value directly)
-				if (result !== undefined && !Array.isArray(result)) {
+				if (result !== undefined && !Arrays.isArray(result)) {
 					return { args, shortCircuit: true, value: result };
 				}
 
 				// Hook can modify args by returning array
-				if (Array.isArray(result)) {
+				if (Arrays.isArray(result)) {
 					args = result;
 				}
 			} catch (error) {
@@ -1583,7 +1584,7 @@ export class HookManager extends ComponentBase {
 		}
 		const bound = new Map();
 		return markSlothletProxy(
-			new Proxy(thenable, {
+			new NativeProxy(thenable, {
 				get(target, key) {
 					const value = Reflect.get(target, key, target);
 					if (typeof value !== "function" || fixed(key)) return value;
@@ -1678,7 +1679,7 @@ export class HookManager extends ComponentBase {
 			if (state.called) {
 				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
 			}
-			if (nextArgs !== undefined && !Array.isArray(nextArgs)) {
+			if (nextArgs !== undefined && !Arrays.isArray(nextArgs)) {
 				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs }, null, {
 					validationError: true
 				});
@@ -1903,7 +1904,7 @@ export class HookManager extends ComponentBase {
 		// Neither end names a hook type.
 		throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 			typePattern,
-			expected: `no hook type found — end with one of: ${Array.from(this.#validTypes).join(", ")} (e.g. 'math.*:before')`
+			expected: `no hook type found — end with one of: ${Arrays.from(this.#validTypes).join(", ")} (e.g. 'math.*:before')`
 		});
 	}
 
@@ -2065,7 +2066,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Filter by type and/or pattern
-		const types = filter.type ? [filter.type] : Array.from(this.#validTypes);
+		const types = filter.type ? [filter.type] : Arrays.from(this.#validTypes);
 
 		for (const type of types) {
 			const typeIndex = this.#hooks[type];
@@ -2187,7 +2188,7 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	importHooks(registrations) {
-		if (!Array.isArray(registrations)) return;
+		if (!Arrays.isArray(registrations)) return;
 		for (const reg of registrations) {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {

@@ -123,3 +123,21 @@ export function received() {
 		hookedInstance: (hooked?.inst ?? hooked) instanceof Foo
 	};
 }
+
+export const fresh = () => ({ inst: new Foo() });
+export const freshMaker = () => () => new Foo();
+
+export const bytesWithMember = (size) => Object.assign(new Uint8Array(size), { inst: new Foo() });
+export const bufferWithMember = (size) => Object.assign(Buffer.alloc(size), { inst: new Foo() });
+export const bytes = (size) => new Uint8Array(size).fill(7);
+
+export const cloneable = () => ({
+	a: { b: 1 },
+	list: [1, 2, 3],
+	when: new Date(0),
+	map: new Map([["k", { z: 1 }]]),
+	set: new Set([{ s: 1 }]),
+	bytes: new Uint8Array([1, 2]),
+	inst: new Foo()
+});
+export const withFunction = () => ({ run: () => 1 });

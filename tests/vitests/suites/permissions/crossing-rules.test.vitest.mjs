@@ -254,4 +254,15 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		});
 		expect(await api.owner.landed("__built_")).toEqual(["heard", "hooked"]);
 	});
+
+	it("decides the same with the language's own functions replaced after slothlet loaded", async () => {
+		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		// A module can replace a built-in for everyone, as in plain JavaScript; what slothlet decides does not follow it.
+		expect(await api.reader.steered("__steered_")).toEqual({
+			reached: "both",
+			data: "LOOSE_SET_NOT_OWNED",
+			made: "LOOSE_SET_NOT_OWNED"
+		});
+		expect(await api.owner.landed("__steered_")).toEqual([]);
+	});
 });

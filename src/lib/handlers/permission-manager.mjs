@@ -36,6 +36,7 @@ import {
 } from "@cldmv/slothlet/helpers/reserved-keys";
 import { runtime_selfModuleCeilings, runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -97,7 +98,7 @@ const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
  * @type {ReadonlyArray<string>}
  * @private
  */
-const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "requires"]);
+const RULE_FIELDS = Objects.freeze(["caller", "target", "effect", "condition", "requires"]);
 
 /**
  * The pin a module's function condition carries (#625): `{ moduleID, live }`, the registering module's base id, and
@@ -107,9 +108,9 @@ const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "r
 const CONDITION_PIN = Symbol("slothlet.permissions.conditionPin");
 
 /** The data fields of an event rule (#407), read once when it is registered (#625). */
-const EVENT_RULE_FIELDS = Object.freeze(["caller", "event", "effect", "condition"]);
+const EVENT_RULE_FIELDS = Objects.freeze(["caller", "event", "effect", "condition"]);
 
-const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
+const RULE_LAYER_RANK = Objects.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
 
 /**
  * Enforcement options for the call-gate query {@link PermissionManager#checkCall} (#508): the supplied
@@ -118,7 +119,7 @@ const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, module: 1, mana
  * @type {Readonly<{ moduleCaller: true, via: "checkCall", principalGrace: true }>}
  * @private
  */
-const CHECK_CALL_OPTIONS = Object.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
+const CHECK_CALL_OPTIONS = Objects.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
 
 /**
  * Resolve a rule's precedence layer from an explicit layer or the owning module id.
@@ -165,7 +166,7 @@ function runtime_isPrivateName(targetPath) {
  * @type {ReadonlySet<string>}
  * @internal
  */
-const FRAMEWORK_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes the built-in write rules keep from module code.
@@ -234,8 +235,8 @@ function runtime_isThenable(value) {
  */
 function runtime_isViewablePrincipalValue(value) {
 	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value)) return true;
-	const proto = Object.getPrototypeOf(value);
+	if (Arrays.isArray(value)) return true;
+	const proto = Objects.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
 
@@ -249,7 +250,7 @@ function runtime_isViewablePrincipalValue(value) {
  */
 function runtime_moduleIDList(moduleIDs) {
 	if (moduleIDs === null || moduleIDs === undefined) return [];
-	return Array.isArray(moduleIDs) ? moduleIDs.filter((id) => id !== null && id !== undefined) : [moduleIDs];
+	return Arrays.isArray(moduleIDs) ? moduleIDs.filter((id) => id !== null && id !== undefined) : [moduleIDs];
 }
 
 /**
@@ -595,7 +596,7 @@ export class PermissionManager extends ComponentBase {
 			this.#owner = permConfig.owner === true;
 
 			// Register config-level rules (earliest in stacking order)
-			if (Array.isArray(permConfig.rules)) {
+			if (Arrays.isArray(permConfig.rules)) {
 				for (const rule of permConfig.rules) {
 					this.addRule(rule, null);
 				}
@@ -605,7 +606,7 @@ export class PermissionManager extends ComponentBase {
 			// Config normalization guarantees `events` is present with a valid `default` and array `rules`.
 			if (permConfig.events) {
 				if (permConfig.events.default) this.#eventDefault = permConfig.events.default;
-				if (Array.isArray(permConfig.events.rules)) {
+				if (Arrays.isArray(permConfig.events.rules)) {
 					for (const rule of permConfig.events.rules) {
 						this.addEventRule(rule, null);
 					}
@@ -767,7 +768,7 @@ export class PermissionManager extends ComponentBase {
 			condition: rule.condition ?? null,
 			// #459: principals the rule's condition needs. A frozen copy so a later mutation of the caller's
 			// array cannot change which facts an already-registered rule depends on.
-			requires: rule.requires == null ? null : Object.freeze([...rule.requires]),
+			requires: rule.requires == null ? null : Objects.freeze([...rule.requires]),
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
 			writePathPattern,
@@ -1359,7 +1360,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#currentPrincipals(requires, runtimeContext, target) {
 		const ctx = runtimeContext ?? {};
-		const principals = Object.create(null);
+		const principals = Objects.create(null);
 		for (const name of requires) {
 			const record = this.#principals.get(name);
 			let reason = null;
@@ -1383,7 +1384,7 @@ export class PermissionManager extends ComponentBase {
 			}
 			principals[name] = hit.view;
 		}
-		return Object.freeze(principals);
+		return Objects.freeze(principals);
 	}
 
 	/**
@@ -1522,7 +1523,7 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("PRINCIPAL_READ_ONLY", { name: record.name }, null, { validationError: true });
 		};
 		const view = markSlothletProxy(
-			new Proxy(value, {
+			new NativeProxy(value, {
 				get: (target, prop, receiver) => {
 					const inner = Reflect.get(target, prop, receiver);
 					// Proxy invariant: a non-configurable, non-writable data property must read back as its exact
@@ -1619,11 +1620,11 @@ export class PermissionManager extends ComponentBase {
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = null) {
 		const normalizedOptions = options == null ? {} : options;
-		if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+		if (typeof normalizedOptions !== "object" || Arrays.isArray(normalizedOptions)) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options",
 				expected: "object with optional boolean useCache",
-				received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+				received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
 				validationError: true
 			});
 		}
@@ -1675,7 +1676,7 @@ export class PermissionManager extends ComponentBase {
 
 		const ctx = runtimeContext ?? {};
 
-		if (Array.isArray(condition)) {
+		if (Arrays.isArray(condition)) {
 			return condition.some((entry) => this.#singleConditionMatches(entry, ctx, callMeta));
 		}
 
@@ -1825,8 +1826,8 @@ export class PermissionManager extends ComponentBase {
 	pinConditions(condition, writer) {
 		if (!writer) return condition;
 		if (typeof condition === "function") return this.#pinCondition(condition, writer);
-		if (Array.isArray(condition) && condition.some((entry) => typeof entry === "function")) {
-			return Object.freeze(condition.map((entry) => (typeof entry === "function" ? this.#pinCondition(entry, writer) : entry)));
+		if (Arrays.isArray(condition) && condition.some((entry) => typeof entry === "function")) {
+			return Objects.freeze(condition.map((entry) => (typeof entry === "function" ? this.#pinCondition(entry, writer) : entry)));
 		}
 		return condition;
 	}
@@ -1849,7 +1850,7 @@ export class PermissionManager extends ComponentBase {
 			if (!pin.live) return false;
 			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [ctx, callMeta], writer, true);
 		};
-		Object.defineProperty(pinned, CONDITION_PIN, { value: pin });
+		Objects.defineProperty(pinned, CONDITION_PIN, { value: pin });
 		return pinned;
 	}
 
@@ -1862,7 +1863,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#trackConditionPins(condition) {
-		for (const entry of Array.isArray(condition) ? condition : [condition]) {
+		for (const entry of Arrays.isArray(condition) ? condition : [condition]) {
 			const pin = typeof entry === "function" ? entry[CONDITION_PIN] : undefined;
 			if (!pin) continue;
 			if (!this.#conditionPins.has(pin.moduleID)) this.#conditionPins.set(pin.moduleID, new Set());
@@ -1982,9 +1983,9 @@ export class PermissionManager extends ComponentBase {
 				});
 			}
 			if (key === "condition") copy[key] = this.#snapshotCondition(descriptor.value, new Map());
-			else copy[key] = key === "requires" && Array.isArray(descriptor.value) ? Object.freeze([...descriptor.value]) : descriptor.value;
+			else copy[key] = key === "requires" && Arrays.isArray(descriptor.value) ? Objects.freeze([...descriptor.value]) : descriptor.value;
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
@@ -2010,10 +2011,10 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 		if (seen.has(value)) return seen.get(value);
-		const isArray = Array.isArray(value);
+		const isArray = Arrays.isArray(value);
 		const proto = Reflect.getPrototypeOf(value);
 		if (!isArray && proto !== Object.prototype && proto !== null) return value;
-		const copy = isArray ? [] : Object.create(proto);
+		const copy = isArray ? [] : Objects.create(proto);
 		seen.set(value, copy);
 		for (const key of Reflect.ownKeys(value)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
@@ -2027,7 +2028,7 @@ export class PermissionManager extends ComponentBase {
 			}
 			copy[key] = this.#snapshotCondition(descriptor.value, seen, `${at}.${String(key)}`);
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
@@ -2292,7 +2293,7 @@ export class PermissionManager extends ComponentBase {
 		}
 		// `null`/`undefined` both mean "no arguments", as on every other optional bag in the api.
 		const callArgs = args == null ? [] : args;
-		if (!Array.isArray(callArgs)) {
+		if (!Arrays.isArray(callArgs)) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "args",
 				expected: "an array",
@@ -2485,7 +2486,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.applyDefaultRoutineRules(config.routines);
 	 */
 	applyDefaultRoutineRules(routines) {
-		if (!Array.isArray(routines)) return;
+		if (!Arrays.isArray(routines)) return;
 		for (const fallback of DEFAULT_ROUTINES) {
 			if (!routines.some((routine) => routine?.name === fallback.name && routine?.mode === fallback.mode)) continue;
 			this.addRule({ caller: "**", target: fallback.name, effect: "deny" }, "__builtin__");
@@ -2672,7 +2673,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.importRules(snapshot);
 	 */
 	importRules(registrations) {
-		if (!Array.isArray(registrations)) return;
+		if (!Arrays.isArray(registrations)) return;
 		for (const reg of registrations) {
 			this.addRule(reg.rule, reg.ownerModuleID);
 		}
@@ -2743,13 +2744,13 @@ export class PermissionManager extends ComponentBase {
 		}
 		if (rule.requires !== undefined && rule.requires !== null) {
 			const valid =
-				Array.isArray(rule.requires) &&
+				Arrays.isArray(rule.requires) &&
 				rule.requires.length > 0 &&
 				rule.requires.every((name) => typeof name === "string" && name.length > 0);
 			if (!valid) {
 				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 					reason: translate("PERM_RULE_REQUIRES_INVALID"),
-					received: Array.isArray(rule.requires) ? "array" : typeof rule.requires
+					received: Arrays.isArray(rule.requires) ? "array" : typeof rule.requires
 				});
 			}
 		}
@@ -2768,18 +2769,18 @@ export class PermissionManager extends ComponentBase {
 	#assertValidConditionPayload(condition, errorCode) {
 		const getValueType = (value) => {
 			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
+			if (Arrays.isArray(value)) return "array";
 			return typeof value;
 		};
 
 		const isPlainObject = (value) => {
 			if (value === null || typeof value !== "object") return false;
-			const proto = Object.getPrototypeOf(value);
+			const proto = Objects.getPrototypeOf(value);
 			return proto === Object.prototype || proto === null;
 		};
 
 		const isValidConditionEntry = (value) => typeof value === "function" || isPlainObject(value);
-		const entries = Array.isArray(condition) ? condition : [condition];
+		const entries = Arrays.isArray(condition) ? condition : [condition];
 		const invalidEntry = entries.length === 0 ? condition : entries.find((entry) => !isValidConditionEntry(entry));
 		if (entries.length > 0 && invalidEntry === undefined) return;
 
@@ -2810,9 +2811,9 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#deepObjectMatches(pattern, ctx) {
 		if (ctx == null || typeof ctx !== "object") return false;
-		for (const [key, val] of Object.entries(pattern)) {
+		for (const [key, val] of Objects.entries(pattern)) {
 			// Only recurse into plain objects; treat class instances / Date / etc. as leaves
-			const proto = val !== null && typeof val === "object" ? Object.getPrototypeOf(val) : null;
+			const proto = val !== null && typeof val === "object" ? Objects.getPrototypeOf(val) : null;
 			const isPlainNested = proto === Object.prototype || proto === null;
 			if (val !== null && typeof val === "object" && isPlainNested) {
 				// Recurse into nested plain object

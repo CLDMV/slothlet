@@ -29,6 +29,7 @@
 import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { outerCallerCeiling } from "#handlers/frame-placement";
+import { Reflect, Objects, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -134,7 +135,7 @@ export function runtime_isWrappedClassInstance(value) {
  * @constant
  * @private
  */
-const TypedArray = Object.getPrototypeOf(Uint8Array);
+const TypedArray = Objects.getPrototypeOf(Uint8Array);
 
 /**
  * Excluded instanceof classes that should NOT be wrapped
@@ -271,7 +272,7 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 	// Cache for wrapped methods to avoid creating new function instances on repeated access
 	const methodCache = new Map();
 
-	const wrappedInstance = new Proxy(instance, {
+	const wrappedInstance = new NativeProxy(instance, {
 		get(target, prop) {
 			// Sentinel probe: identify Proxies we created so re-wrap stays idempotent (#124).
 			if (prop === SLOTHLET_CLASS_WRAPPED) {

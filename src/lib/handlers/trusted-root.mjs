@@ -38,6 +38,7 @@
 
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, Objects, Arrays, Math, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
@@ -97,7 +98,7 @@ const CEILING_TRIE = { next: new WeakMap(), chain: null };
  * @type {ReadonlyArray<object>}
  * @private
  */
-const NO_CEILING = Object.freeze([]);
+const NO_CEILING = Objects.freeze([]);
 
 /**
  * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
@@ -152,7 +153,7 @@ export function combineCeilings(...parts) {
 		node = child;
 	}
 	if (!node.chain) {
-		node.chain = Object.freeze(members);
+		node.chain = Objects.freeze(members);
 		CEILING_CHAINS.add(node.chain);
 	}
 	return node.chain;
@@ -309,8 +310,8 @@ const PROTECTED_VIEW_CACHE = Symbol("slothlet.protectedViewCache");
  */
 function isWrappableContextValue(value) {
 	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value)) return true;
-	const proto = Object.getPrototypeOf(value);
+	if (Arrays.isArray(value)) return true;
+	const proto = Objects.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
 
@@ -359,7 +360,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	const cached = cache.get(value);
 	if (cached) return cached;
 	const view = markSlothletProxy(
-		new Proxy(value, {
+		new NativeProxy(value, {
 			get(target, prop, receiver) {
 				// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
 				return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
@@ -427,7 +428,7 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
 			instanceID,
-			availableInstances: Array.from(instances.keys()).join(", ") || "none"
+			availableInstances: Arrays.from(instances.keys()).join(", ") || "none"
 		});
 	}
 	const childStore = {
@@ -446,7 +447,7 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		__contextOwners: captured.contextOwners
 	};
 	if (captured.trusted) {
-		Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
 	}
 	return childStore;
 }

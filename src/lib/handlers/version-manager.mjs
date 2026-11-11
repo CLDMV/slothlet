@@ -28,6 +28,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { markFrameworkInternal, registerVersionDispatcher } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
+import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -203,7 +204,7 @@ export class VersionManager extends ComponentBase {
 			// Segment array keeping versionTag atomic even when it contains dots (e.g. "2.3.0").
 			// Used by #walkApiPath to avoid re-splitting the concatenated versionedPath string,
 			// which would fragment "2.3.0" into ["2","3","0"] and walk the wrong tree nodes.
-			versionedParts: Object.freeze([versionTag, ...logicalPath.split(".")]),
+			versionedParts: Objects.freeze([versionTag, ...logicalPath.split(".")]),
 			// isDefault and versionMeta are always explicitly passed via registerVersion's callers.
 			/* v8 ignore next */
 			isDefault: isDefault ?? false,
@@ -470,7 +471,7 @@ export class VersionManager extends ComponentBase {
 		}
 
 		// Step 2: highest-version algorithm
-		const tags = Array.from(entry.versions.keys());
+		const tags = Arrays.from(entry.versions.keys());
 		if (tags.length === 1) return tags[0];
 
 		// Sort descending by normalised tuple; preserve original tag
@@ -687,7 +688,7 @@ export class VersionManager extends ComponentBase {
 		// preventing a re-split that would fragment dotted version tags (e.g. "2.3.0").
 		// All current callers pass pre-split arrays; the string-split path is a defensive fallback.
 		/* v8 ignore next */
-		const segments = Array.isArray(apiPath) ? apiPath : apiPath.split(".");
+		const segments = Arrays.isArray(apiPath) ? apiPath : apiPath.split(".");
 		for (const segment of segments) {
 			// node can only be null/undefined if the API tree is partially torn down — defensive guard.
 			/* v8 ignore next */
@@ -800,7 +801,7 @@ export class VersionManager extends ComponentBase {
 			// registered yet, or the registry is populated but the mounted wrapper is not
 			// reachable in the live API tree).
 			const entry = manager.#registry.get(logicalPath);
-			const versions = entry ? Array.from(entry.versions.keys()) : [];
+			const versions = entry ? Arrays.from(entry.versions.keys()) : [];
 			return { __versionDispatcher: logicalPath, versions };
 		};
 
@@ -883,7 +884,7 @@ export class VersionManager extends ComponentBase {
 						// Fallback when no mounted versioned wrapper can be resolved for this dispatcher,
 						// including direct dispatcher use before any versions are registered.
 						const entry = manager.#registry.get(logicalPath);
-						const versions = entry ? Array.from(entry.versions.keys()) : [];
+						const versions = entry ? Arrays.from(entry.versions.keys()) : [];
 						return { __versionDispatcher: logicalPath, versions };
 					};
 				}
@@ -997,7 +998,7 @@ export class VersionManager extends ComponentBase {
 						}
 					}
 				}
-				return Array.from(keySet);
+				return Arrays.from(keySet);
 			},
 
 			/**
@@ -1102,7 +1103,7 @@ export class VersionManager extends ComponentBase {
 					// value), t would be left with an orphaned non-configurable property.
 					// The §10.5.8 get-trap invariant would be violated: GOPD reports the t
 					// descriptor; get returns the differing vw value — V8 throws TypeError.
-					const shadow = Object.create(Reflect.getPrototypeOf(t));
+					const shadow = Objects.create(Reflect.getPrototypeOf(t));
 					const currentDescriptor = Reflect.getOwnPropertyDescriptor(t, prop);
 					if (currentDescriptor) {
 						Reflect.defineProperty(shadow, prop, currentDescriptor);
@@ -1209,7 +1210,7 @@ export class VersionManager extends ComponentBase {
 		};
 
 		let dispatcherProxy;
-		dispatcherProxy = new Proxy(target, handlers);
+		dispatcherProxy = new NativeProxy(target, handlers);
 		// The mounted value is the proxy; brand it too so a merge/detection recognizes the dispatcher
 		// by identity (#283) rather than by reading its marker through the gated getTrap.
 		markFrameworkInternal(dispatcherProxy);

@@ -37,6 +37,7 @@ import {
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
+import { Reflect, Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -144,7 +145,7 @@ export class AsyncContextManager {
 			if (!baseStore) {
 				throw new SlothletError("CONTEXT_NOT_FOUND", {
 					instanceID,
-					availableInstances: Array.from(this.instances.keys())
+					availableInstances: Arrays.from(this.instances.keys())
 				});
 			}
 		}
@@ -163,7 +164,7 @@ export class AsyncContextManager {
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
-			Object.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
+			Objects.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
 		} else if (currentWrapper) {
 			const parent = executionStore.record;
 			// The caller is the call executing in this flow — or, when that call was handed code and the code is
@@ -354,7 +355,7 @@ export class AsyncContextManager {
 		const base =
 			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
 		if (!base) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Array.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Arrays.from(this.instances.keys()) });
 		}
 		const ceiling = identity.ceiling ?? null;
 		const parent =
@@ -596,7 +597,7 @@ export class AsyncContextManager {
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -619,11 +620,11 @@ export class AsyncContextManager {
 		return {
 			type: "async",
 			activeStore: this.als.getStore()?.instanceID || null,
-			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
+			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,
-				contextKeys: Object.keys(store.context),
-				selfKeys: Object.keys(store.self)
+				contextKeys: Objects.keys(store.context),
+				selfKeys: Objects.keys(store.self)
 			}))
 		};
 	}

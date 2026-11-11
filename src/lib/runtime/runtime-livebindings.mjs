@@ -57,6 +57,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -166,7 +167,7 @@ function runtime_selfMember(prop, value) {
  *   return self.otherFunction();
  * }
  */
-export const self = new Proxy(
+export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -319,7 +320,7 @@ export const self = new Proxy(
  *   };
  * }
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {

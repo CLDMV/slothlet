@@ -79,6 +79,7 @@ import {
 } from "#handlers/hook-manager";
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
+import { Reflect, Objects, Arrays, Math, functionSource, functionToString, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).
@@ -165,7 +166,7 @@ function runtime_takeInvariantRead(wrapper, prop) {
 }
 
 /** The fields a property descriptor can give. @type {ReadonlyArray<string>} @private */
-const DESCRIPTOR_FIELDS = Object.freeze(["value", "writable", "get", "set", "enumerable", "configurable"]);
+const DESCRIPTOR_FIELDS = Objects.freeze(["value", "writable", "get", "set", "enumerable", "configurable"]);
 
 /**
  * Whether defining `descriptor` on `holder`'s `prop` would change nothing (#667): the member is fixed (non-configurable)
@@ -181,7 +182,7 @@ function runtime_isUnchangingDefinition(holder, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
 	if (!current || current.configurable) return false;
 	for (const field of DESCRIPTOR_FIELDS) {
-		if (field in descriptor && !(field in current && Object.is(descriptor[field], current[field]))) return false;
+		if (field in descriptor && !(field in current && Objects.is(descriptor[field], current[field]))) return false;
 	}
 	return true;
 }
@@ -262,7 +263,7 @@ const SELF_INSTANCE_NODES = new WeakMap();
  * @type {object}
  * @private
  */
-const HOST_READER = Object.freeze({ reader: "host" });
+const HOST_READER = Objects.freeze({ reader: "host" });
 
 /**
  * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
@@ -270,7 +271,7 @@ const HOST_READER = Object.freeze({ reader: "host" });
  * @type {object}
  * @private
  */
-const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
+const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
 
 /**
  * Reader of the view a closed emitter's shell holds as its prototype (#667). The shell reports one prototype to whoever
@@ -279,7 +280,7 @@ const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
  * @type {Readonly<{reader: string}>}
  * @private
  */
-const SEALED_SHELL_READER = Object.freeze({ reader: "sealed shell" });
+const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
 
 /**
  * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
@@ -447,7 +448,7 @@ function runtime_selfIsMethodNode(thisArg, method) {
  */
 function runtime_selfViewResult(result, reader, slothlet = null, from = null) {
 	// Only a plain native promise is followed: any other thenable is handed back exactly as it is.
-	if (runtime_inherits(result, Promise) && Object.getPrototypeOf(result) === Promise.prototype) {
+	if (runtime_inherits(result, Promise) && Objects.getPrototypeOf(result) === Promise.prototype) {
 		if (slothlet === null) return result.then((value) => runtime_selfView(value, reader, from));
 		// What it rejects with reaches the reader as values crossing between modules do (#667).
 		return result.then(
@@ -549,7 +550,7 @@ function runtime_gatherIntrinsics() {
 			}
 		};
 		next(Reflect.getPrototypeOf(current));
-		for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
+		for (const descriptor of Objects.values(Objects.getOwnPropertyDescriptors(current))) {
 			next(descriptor.value);
 			next(descriptor.get);
 			next(descriptor.set);
@@ -945,7 +946,7 @@ const NODE_VALUE_OF_BY_NODE = new WeakMap();
 const NODE_VALUE_OFS = new WeakSet();
 
 /** The engine's prototypes every api node's value inherits from. @type {ReadonlyArray<object>} @private */
-const INHERITED_HOLDERS = Object.freeze([Object.prototype, Function.prototype]);
+const INHERITED_HOLDERS = Objects.freeze([Object.prototype, Function.prototype]);
 
 /**
  * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
@@ -956,7 +957,7 @@ const INHERITED_HOLDERS = Object.freeze([Object.prototype, Function.prototype]);
  */
 function runtime_isNativeFunction(fn) {
 	try {
-		const source = Function.prototype.toString.call(fn);
+		const source = functionSource(fn);
 		return /\{\s*\[native code\]\s*\}$/.test(source) && !String(fn.name).startsWith("bound ");
 	} catch {
 		return false;
@@ -1130,7 +1131,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
-			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			const descriptors = Objects.getOwnPropertyDescriptors(raw);
 			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
 			Reflect.setPrototypeOf(shadow, viewedProto());
 			Reflect.preventExtensions(shadow);
@@ -1148,9 +1149,9 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		// An iterator over what it holds yields it viewed.
 		if (holdsValues && typeof returned.next === "function") {
 			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
-			const iterator = Object.create(typeof Iterator === "function" ? Iterator.prototype : Object.prototype);
+			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Object.prototype);
 			const tag = Object.prototype.toString.call(returned).slice(8, -1);
-			Object.defineProperties(iterator, {
+			Objects.defineProperties(iterator, {
 				next: {
 					value: (...args) => {
 						const step = returned.next(...args);
@@ -1191,7 +1192,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			// A comparison runs on a copy holding what the set holds viewed: the set-like it is handed is the caller's,
 			// and is shown nothing else, and what it makes is the caller's own.
 			// The set-like is handed on as the caller gave it: a view of another object stays that view.
-			if (compares) return Reflect.apply(fn, new Set(Array.from(raw, (entry) => held(entry))), args);
+			if (compares) return Reflect.apply(fn, new Set(Arrays.from(raw, (entry) => held(entry))), args);
 			// A key is looked up as the object holds it, so a view of one is unwrapped; what follows a callback (its
 			// `this`) is handed on as the caller gave it.
 			let afterCallback = false;
@@ -1209,7 +1210,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		methods.set(prop, { fn, call });
 		return call;
 	};
-	view = new Proxy(shadow, {
+	view = new NativeProxy(shadow, {
 		get(_, prop) {
 			mirrorClosed();
 			const fixed = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1312,7 +1313,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// A shadow of the same kind, so the view calls, constructs, and answers `Array.isArray` as the value does,
 	// and carries no fixed member the value lacks.
 	let shadow;
-	if (Array.isArray(raw)) shadow = [];
+	if (Arrays.isArray(raw)) shadow = [];
 	else if (typeof raw !== "function") shadow = {};
 	else if (!runtime_isConstructor(raw)) shadow = () => {};
 	else if (hasOwn(raw, "prototype")) shadow = function () {};
@@ -1346,7 +1347,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
-			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			const descriptors = Objects.getOwnPropertyDescriptors(raw);
 			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
 			Reflect.setPrototypeOf(shadow, prototypeOf(false));
 			Reflect.preventExtensions(shadow);
@@ -1374,7 +1375,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		if (check) return runtime_selfView(classNode, reader).prototype;
 		return runtime_selfMemberOf(proto, reader, slothlet, [...runtime_apiPathParts(classNode), "prototype"], "prototype");
 	};
-	const view = new Proxy(shadow, {
+	const view = new NativeProxy(shadow, {
 		get(_, prop, receiver) {
 			mirrorClosed();
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1705,7 +1706,7 @@ export function runtime_selfView(node, reader, from = null) {
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
-	const view = new Proxy(capturedViewShadows.get(node) ?? node, {
+	const view = new NativeProxy(capturedViewShadows.get(node) ?? node, {
 		get(_, prop) {
 			const value = Reflect.get(node, prop);
 			// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
@@ -2072,7 +2073,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		}
 		return writer;
 	};
-	const view = new Proxy(member, {
+	const view = new NativeProxy(member, {
 		get(target, prop) {
 			return asReader(() => {
 				// An accessor a module placed on the namespace runs with the view as `this`, never the member behind it,
@@ -2284,7 +2285,7 @@ export function runtime_selfRootView(slothlet, reader) {
 		// A reserved name is refused whoever changes it, as an assignment to it is.
 		if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	};
-	const view = new Proxy(root, {
+	const view = new NativeProxy(root, {
 		get(target, prop) {
 			return member(prop, Reflect.get(target, prop));
 		},
@@ -2350,7 +2351,12 @@ export function runtime_markCallerLocked(fn) {
 	CALLER_LOCKED.add(fn);
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
 	if (hasOwn(fn, "_slothletOriginal")) {
-		Object.defineProperty(fn, "_slothletOriginal", { value: fn._slothletOriginal, writable: false, enumerable: true, configurable: false });
+		Objects.defineProperty(fn, "_slothletOriginal", {
+			value: fn._slothletOriginal,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		});
 	}
 	return fn;
 }
@@ -2422,7 +2428,7 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		const fromViews = (list) => (list.some((value) => originals.has(value)) ? list.map(fromView) : list);
 		const handed = { ...payload };
 		if ("api" in payload) handed.api = payload.api === slothlet.boundApi ? runtime_selfRootView(slothlet, reader) : toView(payload.api);
-		const callArgs = Array.isArray(payload.args) ? payload.args : null;
+		const callArgs = Arrays.isArray(payload.args) ? payload.args : null;
 		// An argument comes from whoever handed it to the call: another module's reaches this one as a view, its own as
 		// itself, and what the host built as it is.
 		const caller = runtime_permissionsOn(reader) ? runtime_callingModule(slothlet) : null;
@@ -2453,10 +2459,10 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 			const next = payload.next;
 			handed.next = (nextArgs) => {
 				if (nextArgs === undefined) writeBack();
-				return viewValue(next(Array.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
+				return viewValue(next(Arrays.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
 			};
 		}
-		const settle = (out) => (Array.isArray(out) ? fromViews(out) : fromView(out));
+		const settle = (out) => (Arrays.isArray(out) ? fromViews(out) : fromView(out));
 		const out = Reflect.apply(handler, this, [handed, ...rest]);
 		writeBack();
 		if (runtime_inherits(out, Promise) && !originals.has(out)) {
@@ -2709,9 +2715,9 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 	}
 	if (replayed) {
 		if (op === "set") node[prop] = payload;
-		else if (op === "defineProperty") Object.defineProperty(node, prop, payload);
+		else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
 		else if (op === "deleteProperty") delete node[prop];
-		else Object.setPrototypeOf(node, payload);
+		else Objects.setPrototypeOf(node, payload);
 		return true;
 	}
 	if (op === "set") return Reflect.set(node, prop, payload);
@@ -2731,9 +2737,9 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
  * @private
  */
 function runtime_lockAsStandIn(node, target) {
-	if (Object.isFrozen(target)) Object.freeze(node);
-	else if (Object.isSealed(target)) Object.seal(node);
-	else Object.preventExtensions(node);
+	if (Objects.isFrozen(target)) Objects.freeze(node);
+	else if (Objects.isSealed(target)) Objects.seal(node);
+	else Objects.preventExtensions(node);
 }
 
 /**
@@ -2926,7 +2932,7 @@ function runtime_retireChanges(wrapper, seen = new Set()) {
 	seen.add(wrapper);
 	wrapper.____slothletInternal.changeGeneration++;
 	runtime_dropRefusedChanges(wrapper);
-	for (const key of Object.keys(wrapper)) {
+	for (const key of Objects.keys(wrapper)) {
 		const child = resolveWrapper(wrapper[key]);
 		if (child) runtime_retireChanges(child, seen);
 	}
@@ -3266,7 +3272,7 @@ const ADOPTED_ACCESSORS = new WeakMap();
  * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
 function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
-	Object.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
+	Objects.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
 }
 
 /**
@@ -3617,8 +3623,8 @@ const INBOUND_VIEWS = new WeakMap();
  * @private
  */
 const GENERATOR_PROTOTYPES = {
-	generator: Object.getPrototypeOf(function* () {}).prototype,
-	asyncGenerator: Object.getPrototypeOf(async function* () {}).prototype
+	generator: Objects.getPrototypeOf(function* () {}).prototype,
+	asyncGenerator: Objects.getPrototypeOf(async function* () {}).prototype
 };
 
 /**
@@ -3641,7 +3647,7 @@ const INTRINSICS = (() => {
 	}
 	/** Add every prototype above a sample, up to `Object.prototype`. */
 	const addChain = (sample) => {
-		for (let link = Object.getPrototypeOf(sample); link !== null; link = Object.getPrototypeOf(link)) add(link);
+		for (let link = Objects.getPrototypeOf(sample); link !== null; link = Objects.getPrototypeOf(link)) add(link);
 	};
 	const samples = [function* () {}, async function* () {}, async function () {}];
 	for (const sample of samples) {
@@ -3758,7 +3764,7 @@ function runtime_recordNodeObjectPrototypes() {
 		}
 	const isData = new Set([...data, ...held]);
 	for (const sample of [...samples, ...data, ...held])
-		for (let link = Object.getPrototypeOf(sample); link !== null && !INTRINSICS.has(link); link = Object.getPrototypeOf(link)) {
+		for (let link = Objects.getPrototypeOf(sample); link !== null && !INTRINSICS.has(link); link = Objects.getPrototypeOf(link)) {
 			recordSharedExports(link);
 			if (isData.has(sample)) NODE_DATA_PROTOTYPES.add(link);
 		}
@@ -3816,7 +3822,7 @@ function runtime_recordNodeStreamState() {
 			if (key === "_events") continue;
 			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
 			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
-			const prototype = Object.getPrototypeOf(member);
+			const prototype = Objects.getPrototypeOf(member);
 			if (prototype !== null && !INTRINSICS.has(prototype)) NODE_STREAM_STATE_PROTOTYPES.add(prototype);
 		}
 	socket.destroy();
@@ -4026,7 +4032,7 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
-	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
 }
 
 /**
@@ -4425,7 +4431,7 @@ const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script
  * @private
  */
 const VM_NATIVE_SCRIPT = (() => {
-	const parent = VM_SCRIPT === null ? null : Object.getPrototypeOf(VM_SCRIPT);
+	const parent = VM_SCRIPT === null ? null : Objects.getPrototypeOf(VM_SCRIPT);
 	return typeof parent === "function" && parent !== Function.prototype ? parent : null;
 })();
 
@@ -4538,7 +4544,7 @@ function runtime_holdsCode(value, depth, budget) {
 		// still read below.
 		if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
 			return true;
-		if (Array.isArray(value) && value.length > budget.remaining) return true;
+		if (Arrays.isArray(value) && value.length > budget.remaining) return true;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return true;
@@ -4866,7 +4872,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 		const value = args[index];
 		const handed = runtime_handIn(maker, value, owner);
 		if (handed === value) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = Arrays.from(args);
 		result[index] = handed;
 	}
 	return result;
@@ -4885,7 +4891,7 @@ function runtime_holdsOwnStandIn(maker, value, depth, budget) {
 	if (depth <= 0 || util.types.isProxy(value)) return false;
 	const prototype = Reflect.getPrototypeOf(value);
 	if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
-	if (Array.isArray(value) && value.length > budget.remaining) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
@@ -4928,7 +4934,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 	}
 	const fixed = (target, prop) => Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false;
 	const inward = (target, prop, member) => (fixed(target, prop) ? member : runtime_handIn(maker, member));
-	const view = new Proxy(value, {
+	const view = new NativeProxy(value, {
 		get: (target, prop, receiver) => inward(target, prop, Reflect.get(target, prop, receiver === view ? target : receiver)),
 		set: (target, prop, next, receiver) =>
 			Reflect.set(target, prop, runtime_handOut(maker, runtime_runningLeafOf(maker, owner), next), receiver === view ? target : receiver),
@@ -5066,7 +5072,7 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 		}
 		return method;
 	};
-	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Array.isArray(original) ? [] : {};
+	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Arrays.isArray(original) ? [] : {};
 	let standIn = null;
 	// Operations on a module's Proxy already running as the module: one reached again while entering the module (its
 	// node reading the Proxy's `default`) runs as it is, already the module's.
@@ -5179,10 +5185,10 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
 					return runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
-				if (value === Function.prototype.toString && isFunction) {
+				if (value === functionToString && isFunction) {
 					let source = SOURCES.get(original);
 					if (!source) {
-						source = { toString: () => Function.prototype.toString.call(original) }.toString;
+						source = { toString: () => functionSource(original) }.toString;
 						SOURCES.set(original, source);
 					}
 					return source;
@@ -5299,7 +5305,7 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 			return done;
 		}
 	};
-	standIn = new Proxy(shadow, handler);
+	standIn = new NativeProxy(shadow, handler);
 	maker.made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
@@ -5393,9 +5399,9 @@ function runtime_generatorStandIn(maker, owner, original) {
 				return yield* driver;
 			})();
 	Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
-	if (Object.isFrozen(original)) Object.freeze(standIn);
-	else if (Object.isSealed(original)) Object.seal(standIn);
-	else if (!Object.isExtensible(original)) Object.preventExtensions(standIn);
+	if (Objects.isFrozen(original)) Objects.freeze(standIn);
+	else if (Objects.isSealed(original)) Objects.seal(standIn);
+	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
 	maker.made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	return standIn;
@@ -5547,7 +5553,7 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 		}
 		const crossed = runtime_crossTo(value, wrapper, slothlet, from);
 		if (crossed === value) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = Arrays.from(args);
 		result[index] = crossed;
 	}
 	return result;
@@ -5570,7 +5576,7 @@ function runtime_ownInstances(wrapper, args) {
 		if (value === null || typeof value !== "object" || !runtime_isWrappedClassInstance(value)) continue;
 		const creator = runtime_classInstanceCreator(value);
 		if (creator === null || !runtime_sameModule(creator, wrapper)) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = Arrays.from(args);
 		result[index] = runtime_unwrapClassInstance(value);
 	}
 	return result;
@@ -5788,7 +5794,7 @@ function runtime_classPrototypeSites(slothlet, prototype) {
  * @private
  */
 function runtime_functionNodePrototype(wrapper, fn) {
-	const prototype = Object.getPrototypeOf(fn);
+	const prototype = Objects.getPrototypeOf(fn);
 	if (prototype === null || prototype === Function.prototype) return prototype;
 	if (typeof prototype !== "function") {
 		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
@@ -6026,7 +6032,7 @@ const CLASS_INSTANCES = new WeakMap();
  */
 function runtime_isCarrier(value) {
 	if (util.types.isProxy(value)) return false;
-	if (Array.isArray(value)) return true;
+	if (Arrays.isArray(value)) return true;
 	const prototype = Reflect.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null || runtime_isErrorValue(value);
 }
@@ -6043,7 +6049,7 @@ function runtime_isCarrier(value) {
  */
 function runtime_carriesPrototype(slothlet, value, depth, budget) {
 	if (depth <= 0) return false;
-	if (Array.isArray(value) && value.length > budget.remaining) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
@@ -6171,17 +6177,17 @@ function runtime_carrierView(value, reader, slothlet) {
 	if (existing) return existing;
 	const carry = (member) => runtime_carryTo(member, reader, slothlet);
 	let view;
-	if (Object.isFrozen(value)) {
-		view = Array.isArray(value) ? [] : Object.create(Reflect.getPrototypeOf(value));
+	if (Objects.isFrozen(value)) {
+		view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
 		for (const key of Reflect.ownKeys(value)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			Reflect.defineProperty(view, key, "value" in descriptor ? { ...descriptor, value: carry(descriptor.value) } : descriptor);
 		}
-		Object.freeze(view);
+		Objects.freeze(view);
 	} else {
 		// A member held read-only and non-configurable must be reported as it is (proxy invariant).
 		const fixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-		view = new Proxy(value, {
+		view = new NativeProxy(value, {
 			get: (target, prop, receiver) => {
 				const member = Reflect.get(target, prop, receiver === view ? target : receiver);
 				return fixed(Reflect.getOwnPropertyDescriptor(target, prop)) ? member : carry(member);
@@ -6473,7 +6479,7 @@ function runtime_isPristineData(value) {
 	const prototype = Reflect.getPrototypeOf(value);
 	if (prototype !== null && !INTRINSICS.has(prototype) && !runtime_isSharedValue(prototype)) return false;
 	const types = util.types;
-	if (types.isArrayBufferView(value) && !types.isDataView(value)) return Object.getOwnPropertySymbols(value).length === 0;
+	if (types.isArrayBufferView(value) && !types.isDataView(value)) return Objects.getOwnPropertySymbols(value).length === 0;
 	const keys = Reflect.ownKeys(value);
 	if (keys.length === 0) return true;
 	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
@@ -6749,14 +6755,14 @@ function runtime_crossView(original, reader, slothlet, from) {
 		? runtime_isConstructor(original)
 			? function () {}.bind(null)
 			: () => {}
-		: Array.isArray(original)
+		: Arrays.isArray(original)
 			? []
-			: Object.create(CROSSING_SHADOW_PROTOTYPE);
+			: Objects.create(CROSSING_SHADOW_PROTOTYPE);
 	// `util.inspect` reads a Proxy's target, never its traps: the hook has to be the shadow's own, or inherited by it.
-	if (CROSSING_INSPECT !== null && (isFunction || Array.isArray(original)))
+	if (CROSSING_INSPECT !== null && (isFunction || Arrays.isArray(original)))
 		Reflect.defineProperty(shadow, INSPECT_CUSTOM, { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false });
 	const state = { original, reader, slothlet, from, view: null, onOriginal: null, methods: null, pinned: false, decided: null };
-	const view = new Proxy(shadow, CROSSING_HANDLER);
+	const view = new NativeProxy(shadow, CROSSING_HANDLER);
 	state.view = view;
 	CROSSING_STATES.set(shadow, state);
 	CROSSINGS.set(view, state);
@@ -7075,7 +7081,7 @@ const CROSSING_INSPECT = isNode
  * @type {object}
  * @private
  */
-const CROSSING_SHADOW_PROTOTYPE = Object.create(
+const CROSSING_SHADOW_PROTOTYPE = Objects.create(
 	null,
 	CROSSING_INSPECT === null ? {} : { [INSPECT_CUSTOM]: { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false } }
 );
@@ -7198,7 +7204,7 @@ const CROSSING_HANDLER = {
 			result = Reflect.apply(
 				state.original,
 				runtime_crossIn(state, thisArg),
-				Array.from(args, (arg) => runtime_crossIn(state, arg))
+				Arrays.from(args, (arg) => runtime_crossIn(state, arg))
 			);
 		} catch (error) {
 			throw runtime_crossOut(state, error);
@@ -7221,7 +7227,7 @@ const CROSSING_HANDLER = {
 		try {
 			result = Reflect.construct(
 				state.original,
-				Array.from(args, (arg) => runtime_crossIn(state, arg)),
+				Arrays.from(args, (arg) => runtime_crossIn(state, arg)),
 				target
 			);
 		} catch (error) {
@@ -7534,7 +7540,7 @@ function runtime_withheldPrototype(wrapper, nearest) {
 		enforcePermission(wrapper, [], false);
 		return false;
 	};
-	const standIn = new Proxy(Object.freeze(Object.create(nearest)), {
+	const standIn = new NativeProxy(Objects.freeze(Objects.create(nearest)), {
 		set: (target, prop, value, receiver) => (receiver === standIn ? refuse() : Reflect.set(target, prop, value, receiver)),
 		defineProperty: refuse,
 		deleteProperty: refuse,
@@ -7724,7 +7730,7 @@ function runtime_hasOwnMember(wrapper, prop) {
 	// A member a callable's composition layer holds is the module's (a named export that won the slot of
 	// the function's own `name` or `length`), not the function's built-in (#585 review).
 	if (typeof impl === "function" && isCompositionLayer(impl) && layerHeldKeys(impl).includes(prop)) return true;
-	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
+	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
 	return impl !== null && typeof impl === "object" && hasOwn(impl, prop);
 }
 
@@ -7787,7 +7793,7 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 	if (hasOwn(wrapper, prop)) return true;
 	const impl = wrapper.____slothletInternal.impl;
 	// An array's members include those a prototype the module gave it supplies (see runtime_isArrayMember).
-	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop);
+	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop);
 	// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
 	return (
 		impl !== null && (typeof impl === "object" || typeof impl === "function") && Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
@@ -7827,8 +7833,8 @@ function runtime_isReadRedacted(wrapper, prop, kept = null) {
 	// and is gated at its parent instead — so the arm exists for a shape this path is not handed.
 	/* v8 ignore next 2 */
 	const desc =
-		(impl && (typeof impl === "object" || typeof impl === "function") ? Object.getOwnPropertyDescriptor(impl, prop) : undefined) ??
-		Object.getOwnPropertyDescriptor(wrapper, prop);
+		(impl && (typeof impl === "object" || typeof impl === "function") ? Objects.getOwnPropertyDescriptor(impl, prop) : undefined) ??
+		Objects.getOwnPropertyDescriptor(wrapper, prop);
 	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
 	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept).allowed;
@@ -7850,7 +7856,7 @@ function runtime_isReadRedacted(wrapper, prop, kept = null) {
  */
 function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 	const impl = wrapper.____slothletInternal.impl;
-	const isMember = Array.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
+	const isMember = Arrays.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
 	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
 	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
 	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
@@ -7990,17 +7996,17 @@ const SERIALIZERS = new WeakMap();
  * @private
  */
 function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
-	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return data;
+	if (!data || typeof data !== "object" || Arrays.isArray(data) || seen.has(data)) return data;
 	seen.add(data);
 	let copy = null;
 	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
-	const own = () => (copy ??= Object.assign(Object.create(Object.getPrototypeOf(data)), data));
-	for (const key of Object.keys(data)) {
+	const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
+	for (const key of Objects.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
 			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-		} else if (Array.isArray(value)) {
+		} else if (Arrays.isArray(value)) {
 			own()[key] = node[key];
 		} else {
 			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
@@ -8214,7 +8220,7 @@ function runtime_deferForPrincipals(
  * @type {Readonly<{ principalGrace: true }>}
  * @private
  */
-const PRINCIPAL_GRACE = Object.freeze({ principalGrace: true });
+const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
 
 /**
  * Run a call whose permission gate was deferred for a principal resolve (#459), returning its result
@@ -8290,7 +8296,7 @@ function runtime_registerLeafFunction(wrapper, impl) {
 		return;
 	}
 	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
-	const fallback = Object.getOwnPropertyDescriptor(impl, "default")?.value;
+	const fallback = Objects.getOwnPropertyDescriptor(impl, "default")?.value;
 	if (typeof fallback === "function") implWrappers.set(fallback, wrapper);
 }
 
@@ -8478,11 +8484,11 @@ function runtime_namedFunction(fn) {
 	const name = typeof fn.name === "string" ? fn.name : "";
 	// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
 	// a method) shows none.
-	if (/^class\b/.test(Function.prototype.toString.call(fn))) return { [name]: class {} }[name];
+	if (/^class\b/.test(functionSource(fn))) return { [name]: class {} }[name];
 	if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
 	if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
 	if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
-	if (!Object.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
+	if (!Objects.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
 	return { [name]: function () {} }[name];
 }
 
@@ -8500,7 +8506,7 @@ function runtime_namedFunction(fn) {
  */
 function runtime_isConstructor(fn) {
 	try {
-		Reflect.construct(new Proxy(fn, { construct: () => ({}) }), []);
+		Reflect.construct(new NativeProxy(fn, { construct: () => ({}) }), []);
 		return true;
 	} catch {
 		return false;
@@ -8595,7 +8601,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// shadow of the same kind keeps the view callable, constructible, and an array where the child is; a function's
 	// shadow owns no `prototype`, so the view reports the child's own, or none where the child has none.
 	let shadow;
-	if (Array.isArray(child)) shadow = [];
+	if (Arrays.isArray(child)) shadow = [];
 	else if (typeof child !== "function") shadow = {};
 	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
 	else shadow = () => {};
@@ -8607,12 +8613,12 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const impl = inner.____slothletInternal.impl;
 		// An instance of a class keeps its class's prototype, so it shows as one; any other object shows as plain.
 		const proto = impl !== null && typeof impl === "object" ? Reflect.getPrototypeOf(impl) : null;
-		const out = Array.isArray(child)
+		const out = Arrays.isArray(child)
 			? []
 			: typeof child === "function"
 				? runtime_namedFunction(typeof impl === "function" ? impl : child)
 				: proto !== null && proto !== Object.prototype
-					? Object.create(proto)
+					? Objects.create(proto)
 					: {};
 		// A function's stand-in shows the methods its `prototype` holds, read through the view.
 		if (typeof out === "function" && out.prototype) {
@@ -8633,7 +8639,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// `name`, `length` and `prototype`, which the stand-in has of its own.
 			if (typeof key === "symbol") continue;
 			if (typeof child === "function" && FUNCTION_OWN_KEYS.has(key)) continue;
-			if (key === util.inspect.custom || (Array.isArray(child) && key === "length")) continue;
+			if (key === util.inspect.custom || (Arrays.isArray(child) && key === "length")) continue;
 			try {
 				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
 				if (!descriptor) continue;
@@ -8701,7 +8707,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
 	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller, gated, ceiling));
 	// An array's `length` is its shape, not a member it holds: mirrored as it is, never refused.
-	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Array.isArray(child));
+	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Arrays.isArray(child));
 	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
 	// holds, never an answer that depends on the reader or on when it read (rules change); each read through the view
 	// is gated as it is made.
@@ -8786,7 +8792,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		}
 	};
 
-	view = new Proxy(shadow, {
+	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
 			// handed out fixed is called with no view of `self` over it.
@@ -9077,7 +9083,7 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 	const refuse = () => {
 		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
 	};
-	const guarded = new Proxy(promise, {
+	const guarded = new NativeProxy(promise, {
 		get(target, prop, receiver) {
 			if (prop === Symbol.toPrimitive || prop === "valueOf" || prop === "toString" || prop === "toJSON") {
 				return refuse;
@@ -9147,7 +9153,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
+		if (!sources.some((entryRecord) => Objects.is(entryRecord.error, error))) sources.push({ error, source });
 	};
 	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
 	let unobserved = null;
@@ -9189,7 +9195,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const settleError = (error) => {
 		// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
 		// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
-		const recordedSource = sources.find((record) => Object.is(record.error, error))?.source;
+		const recordedSource = sources.find((record) => Objects.is(record.error, error))?.source;
 		const unrecorded = recordedSource === undefined && unobserved ? runtime_readTargetFailure(wrapper, error) : null;
 		const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
 		// A failure an inner hooked call already reported is not reported again (same rule as the
@@ -9384,7 +9390,7 @@ function getSafeFunctionName(apiPath, fallback) {
  */
 function createNamedProxyTarget(nameHint, fallback) {
 	const safeName = getSafeFunctionName(nameHint, fallback);
-	return Object.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
+	return Objects.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
 }
 
 /**
@@ -9414,7 +9420,7 @@ function runtime_nodeHarborsCode(value) {
 	const wrapper = _proxyRegistry.get(capturedViewNodes.get(value) ?? value);
 	if (!wrapper) return false;
 	const holdsSymbolFunction = (holder) => {
-		for (const key of Object.getOwnPropertySymbols(holder)) {
+		for (const key of Objects.getOwnPropertySymbols(holder)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
 			if (descriptor && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
 		}
@@ -9671,7 +9677,7 @@ function runtime_isPosition(key) {
  * runtime_isPastFixedLength(Object.defineProperty([1], "length", { writable: false }), "1"); // true
  */
 function runtime_isPastFixedLength(target, prop) {
-	if (!Array.isArray(target) || !runtime_isPosition(prop)) return false;
+	if (!Arrays.isArray(target) || !runtime_isPosition(prop)) return false;
 	return Reflect.getOwnPropertyDescriptor(target, "length")?.writable === false && Number(prop) >= target.length;
 }
 
@@ -9693,7 +9699,7 @@ function runtime_isPastFixedLength(target, prop) {
 function runtime_adoptArrayIntegrity(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	const { impl, proxy } = internal;
-	if (!Array.isArray(impl)) return;
+	if (!Arrays.isArray(impl)) return;
 	// A composed node's array sits under its layer, which refuses integrity operations itself.
 	const array = layerUnderlying(impl);
 	// Freezing the node reads its own descriptors, which must not start another sync meanwhile.
@@ -9707,8 +9713,8 @@ function runtime_adoptArrayIntegrity(wrapper) {
 			// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
 			if (!Reflect.isExtensible(array)) {
 				Reflect.preventExtensions(proxy);
-				if (Object.isFrozen(array)) Object.freeze(proxy);
-				else if (Object.isSealed(array)) Object.seal(proxy);
+				if (Objects.isFrozen(array)) Objects.freeze(proxy);
+				else if (Objects.isSealed(array)) Objects.seal(proxy);
 			}
 			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false)
 				Reflect.defineProperty(proxy, "length", { writable: false });
@@ -9736,7 +9742,7 @@ function runtime_adoptObjectIntegrity(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (!hasOwn(internal, "sourceValue")) return;
 	const source = internal.sourceValue;
-	if (source === null || typeof source !== "object" || Array.isArray(source) || util.types.isProxy(source)) return;
+	if (source === null || typeof source !== "object" || Arrays.isArray(source) || util.types.isProxy(source)) return;
 	if (Reflect.isExtensible(source)) return;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
 	const { proxy } = internal;
@@ -9744,9 +9750,9 @@ function runtime_adoptObjectIntegrity(wrapper) {
 	internal.integritySyncing = true;
 	try {
 		runtime_frameworkWrite(wrapper, () => {
-			if (Object.isFrozen(source)) Object.freeze(proxy);
-			else if (Object.isSealed(source)) Object.seal(proxy);
-			else Object.preventExtensions(proxy);
+			if (Objects.isFrozen(source)) Objects.freeze(proxy);
+			else if (Objects.isSealed(source)) Objects.seal(proxy);
+			else Objects.preventExtensions(proxy);
 		});
 	} finally {
 		internal.integritySyncing = syncing;
@@ -9771,7 +9777,7 @@ function runtime_adoptObjectIntegrity(wrapper) {
 function runtime_canDefine(object, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (current === undefined) return Reflect.isExtensible(object);
-	if (Array.isArray(object) && prop === "length" && "value" in descriptor) {
+	if (Arrays.isArray(object) && prop === "length" && "value" in descriptor) {
 		// Only the indices the array holds are checked: a sparse array can have any length up to 2^32 - 1.
 		for (const key of Reflect.ownKeys(object)) {
 			if (
@@ -9796,7 +9802,7 @@ function runtime_canDefine(object, prop, descriptor) {
 		return (!("get" in descriptor) || descriptor.get === current.get) && (!("set" in descriptor) || descriptor.set === current.set);
 	}
 	if (current.writable) return true;
-	return descriptor.writable !== true && (!("value" in descriptor) || Object.is(descriptor.value, current.value));
+	return descriptor.writable !== true && (!("value" in descriptor) || Objects.is(descriptor.value, current.value));
 }
 
 /**
@@ -9924,8 +9930,8 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 	// An element the array holds no descriptor for at its index (a proxy's get trap supplied it) keeps the index it was
 	// read at once nothing else holds it. Recorded now, from what the array holds, not rediscovered by proxy detection.
 	const parentArray = parent.____slothletInternal.impl;
-	const isVirtual = byIndex && Array.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
-	Object.defineProperty(internal, "apiPath", {
+	const isVirtual = byIndex && Arrays.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
+	Objects.defineProperty(internal, "apiPath", {
 		configurable: true,
 		enumerable: true,
 		get() {
@@ -9935,7 +9941,7 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 			// The array is read through its own descriptors, so resolving a path never runs the array's code:
 			// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
 			// keeps the index it was read at.
-			if (Array.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
+			if (Arrays.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
 				const current = runtime_elementDescriptor(array, index);
 				if (current && !("value" in current)) return `${base}.${index}`;
 				const found = runtime_indexOfElement(array, internal.sourceValue);
@@ -9959,9 +9965,9 @@ function runtime_followPosition(internal, parent, key, byIndex) {
  */
 function runtime_shellValue(wrapper, prop) {
 	const { impl, proxy } = wrapper.____slothletInternal;
-	const held = () => (hasOwn(wrapper, prop) ? Object.getOwnPropertyDescriptor(wrapper, prop) : undefined);
+	const held = () => (hasOwn(wrapper, prop) ? Objects.getOwnPropertyDescriptor(wrapper, prop) : undefined);
 	let raw;
-	if (Array.isArray(impl)) raw = Reflect.get(impl, prop, impl);
+	if (Arrays.isArray(impl)) raw = Reflect.get(impl, prop, impl);
 	else if (held() && "value" in held()) {
 		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
 		// yet and is kept as the node it is.
@@ -9972,7 +9978,7 @@ function runtime_shellValue(wrapper, prop) {
 	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
-	if (Array.isArray(impl) && !held()) Reflect.get(proxy, prop);
+	if (Arrays.isArray(impl) && !held()) Reflect.get(proxy, prop);
 	const cached = held();
 	return cached && "value" in cached && resolveWrapper(cached.value) !== null ? cached.value : raw;
 }
@@ -10006,7 +10012,7 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 	// A non-extensible node takes no new key, as on the object itself.
 	if (!current) return false;
 	const impl = wrapper.____slothletInternal.impl;
-	const holder = Array.isArray(impl) ? runtime_arrayKeyHolder(impl, prop) : null;
+	const holder = Arrays.isArray(impl) ? runtime_arrayKeyHolder(impl, prop) : null;
 	const mirrors = holder !== null && hasOwn(holder, prop);
 	let attributes = descriptor;
 	let mirrored = descriptor;
@@ -10045,7 +10051,7 @@ function runtime_syncArrayIntegrity(wrapper, target) {
 	const internal = wrapper.____slothletInternal;
 	const impl = internal.impl;
 	// Sealing or freezing the node reads its members' descriptors, which would start another sync meanwhile.
-	if (internal.integritySyncing || !Array.isArray(impl) || !Array.isArray(target)) return;
+	if (internal.integritySyncing || !Arrays.isArray(impl) || !Arrays.isArray(target)) return;
 	const array = layerUnderlying(impl);
 	const extensible = Reflect.isExtensible(array);
 	const lengthFixed = Reflect.getOwnPropertyDescriptor(array, "length").writable === false;
@@ -10054,7 +10060,7 @@ function runtime_syncArrayIntegrity(wrapper, target) {
 	if (
 		!extensible &&
 		!Reflect.isExtensible(target) &&
-		Object.isFrozen(array) === Object.isFrozen(target) &&
+		Objects.isFrozen(array) === Objects.isFrozen(target) &&
 		lengthFixed === shellLengthFixed
 	)
 		return;
@@ -10126,7 +10132,7 @@ const RESTART_FORWARD_TRAPS = {
  */
 function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 	const wrapped = {};
-	for (const [trap, original] of Object.entries(handler)) {
+	for (const [trap, original] of Objects.entries(handler)) {
 		const forward = RESTART_FORWARD_TRAPS[trap];
 		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
 		// common, non-stale path must not allocate. No trap takes more than four arguments.
@@ -10163,7 +10169,7 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
  * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
  */
 function runtime_forwardHandlerTo(trapHandler, resolveLive) {
-	for (const [trap, forward] of Object.entries(RESTART_FORWARD_TRAPS)) {
+	for (const [trap, forward] of Objects.entries(RESTART_FORWARD_TRAPS)) {
 		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
 			return forward(resolveLive(), a, b, c, d);
 		};
@@ -10185,7 +10191,7 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (const key of Object.keys(node)) {
+	for (const key of Objects.keys(node)) {
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
@@ -10210,7 +10216,7 @@ function runtime_inspectMembers(wrapper) {
  */
 function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
 	const internal = wrapper.____slothletInternal;
-	const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+	const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
 	// A lazy node not loaded yet shows itself. impl is always null (not undefined) at this point; the || undefined
 	// branch is never evaluated.
@@ -10223,7 +10229,7 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
 	const label = runtime_codeLabel(internal.impl);
 	const members = runtime_inspectMembers(wrapper);
-	if (Object.keys(members).length === 0) return label;
+	if (Objects.keys(members).length === 0) return label;
 	const [, options, inspect] = args;
 	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(members, options)}`;
 }
@@ -10265,7 +10271,7 @@ function runtime_codeLabel(fn) {
 	const isProxy = util.types.isProxy(fn);
 	const name = isProxy ? "" : runtime_dataName(fn);
 	const named = name === "" ? " (anonymous)" : null;
-	if (!isProxy && /^class[\s{]/.test(Reflect.apply(FUNCTION_TO_STRING, fn, []))) {
+	if (!isProxy && /^class[\s{]/.test(functionSource(fn))) {
 		// As util.inspect gives it: the class it extends, by that class's own name.
 		const parent = Reflect.getPrototypeOf(fn);
 		const parentName = typeof parent === "function" && !util.types.isProxy(parent) ? runtime_dataName(parent) : "";
@@ -10294,13 +10300,6 @@ function runtime_dataName(fn) {
 }
 
 /**
- * The language's own `Function.prototype.toString`, taken before any module runs.
- * @type {Function}
- * @private
- */
-const FUNCTION_TO_STRING = Function.prototype.toString;
-
-/**
  * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
  * (or its impl), unless the target already has one.
  *
@@ -10319,14 +10318,14 @@ const FUNCTION_TO_STRING = Function.prototype.toString;
  * runtime_defineProxyInspect(wrapper, createNamedProxyTarget(apiPath, "callableProxy"));
  */
 function runtime_defineProxyInspect(wrapper, target) {
-	if (Array.isArray(target)) {
-		Object.defineProperty(target, util.inspect.custom, {
+	if (Arrays.isArray(target)) {
+		Objects.defineProperty(target, util.inspect.custom, {
 			// Shown through the node, so each element is read as the caller reading it may: the caller's `inspect`
 			// is not trusted with the backing array, which a callback that returns its argument would take.
 			value: runtime_registerInspectHook(() => {
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = [];
-				for (const key of Object.keys(node)) shown[key] = node[key];
+				for (const key of Objects.keys(node)) shown[key] = node[key];
 				shown.length = node.length;
 				return shown;
 			}),
@@ -10337,7 +10336,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 		return;
 	}
 	if (!(util.inspect.custom in target)) {
-		Object.defineProperty(target, util.inspect.custom, {
+		Objects.defineProperty(target, util.inspect.custom, {
 			value: runtime_registerInspectHook(function (...args) {
 				return runtime_inspectShown(wrapper, args);
 			}),
@@ -10486,7 +10485,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// where the real impl hasn't arrived yet and may turn out to be callable.
 		const isCallableLocked = isCallableValue || isCallableExplicit;
 
-		const internal = Object.create(null);
+		const internal = Objects.create(null);
 		internal.id = Math.random().toString(36).substr(2, 9); // Unique ID for debugging
 		internal.mode = mode;
 		internal.apiPath = apiPath;
@@ -10548,7 +10547,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Add wrapper self-reference as getter AFTER ____slothletInternal is set (avoid circular reference in traversal)
 		const wrapper = this;
-		Object.defineProperty(internal, "wrapper", {
+		Objects.defineProperty(internal, "wrapper", {
 			// internal.wrapper is an old back-reference path no longer accessed by any internal code.
 			/* v8 ignore start */
 			get() {
@@ -10624,7 +10623,7 @@ export class UnifiedWrapper extends ComponentBase {
 				apiPath,
 				// wrapper is a frozen minimal object to avoid leaking the raw UnifiedWrapper
 				// (and therefore .slothlet) into any payload a subscriber might retain.
-				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
 				// The real wrapper instance, INTERNAL-only, for RoutineManager#onImplCreated's
 				// invalidation-capture (resolveWrapper(__wrapperRef)). Never present on a public event.
 				__wrapperRef: this,
@@ -10653,7 +10652,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		if (initialImpl !== null && !deferChildAdopt) {
-			const implKeys = Object.keys(initialImpl || {});
+			const implKeys = Objects.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS",
@@ -10664,7 +10663,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			this.___adoptImplChildren();
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				const childKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+				const childKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
@@ -10719,7 +10718,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
 		const w = _proxyRegistry.get(this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
-		const childKeys = Object.keys(w).filter((k) => !isFrameworkReservedKey(k));
+		const childKeys = Objects.keys(w).filter((k) => !isFrameworkReservedKey(k));
 		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
 			const inspectObj = {};
 			for (const key of childKeys) {
@@ -10791,7 +10790,7 @@ export class UnifiedWrapper extends ComponentBase {
 		if (value && typeof value === "object" && isThenableModuleValue(value)) return value;
 		// An array is the module's own array, as an import of it is: adoption takes nothing off it, and
 		// writes through the api reach it (#602).
-		if (Array.isArray(value)) return value;
+		if (Arrays.isArray(value)) return value;
 		// Everything else follows the one composition rule: a plain object is copied, a user Proxy gets
 		// a layer, an array is copied, and a class instance (never adopted) is used as-is.
 		return copyForComposition(value);
@@ -10816,16 +10815,16 @@ export class UnifiedWrapper extends ComponentBase {
 	 * UnifiedWrapper._copyMember(fileWrapper, folderWrapper, "total");
 	 */
 	static _copyMember(source, target, key) {
-		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set))) {
 			runtime_defineAdoptedAccessor(target, key, runtime_originalAccessor(descriptor));
 			return;
 		}
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			Object.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
+			Objects.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
 			return;
 		}
-		Object.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -10845,7 +10844,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Object.defineProperty(impl, "total", UnifiedWrapper._memberDescriptor(fileWrapper, "total"));
 	 */
 	static _memberDescriptor(source, key) {
-		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (descriptor.get || descriptor.set)) {
 			return { ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
 		}
@@ -10895,13 +10894,13 @@ export class UnifiedWrapper extends ComponentBase {
 		// Members adoption moved from the layer onto the wrapper are held on the copy again.
 		// An array with nothing beside it is returned itself, the module's own array the wrapper fronts: a
 		// reload that hands it to a reused wrapper keeps writes through a held reference reaching it (#602).
-		const extractFullImpl_hasMembers = Object.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key));
-		if (Array.isArray(impl) && !isCompositionLayer(impl) && !extractFullImpl_hasMembers) return impl;
-		if (isCompositionLayer(impl) || Array.isArray(impl)) {
+		const extractFullImpl_hasMembers = Objects.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key));
+		if (Arrays.isArray(impl) && !isCompositionLayer(impl) && !extractFullImpl_hasMembers) return impl;
+		if (isCompositionLayer(impl) || Arrays.isArray(impl)) {
 			const extractFullImpl_layer = copyForComposition(impl, {
-				addsMembers: Array.isArray(impl) && extractFullImpl_hasMembers
+				addsMembers: Arrays.isArray(impl) && extractFullImpl_hasMembers
 			});
-			for (const key of Object.keys(wrapper)) {
+			for (const key of Objects.keys(wrapper)) {
 				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
 				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
 				holdMember(
@@ -10917,7 +10916,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const extractFullImpl_result = {};
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
-		for (const key of Object.keys(impl)) {
+		for (const key of Objects.keys(impl)) {
 			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
 			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
 			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
@@ -10945,7 +10944,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Add adopted children from wrapper's own enumerable keys.
 		// Skip all framework-reserved keys — user module properties with any prefix are fine.
-		for (const key of Object.keys(wrapper)) {
+		for (const key of Objects.keys(wrapper)) {
 			// Wrapper own keys are user-facing API names; INTERNAL_KEYS never appear as own enumerable keys.
 			/* v8 ignore next */
 			if (UnifiedWrapper.INTERNAL_KEYS.has(key)) continue;
@@ -11019,7 +11018,7 @@ export class UnifiedWrapper extends ComponentBase {
 				this.____slothletInternal.lazyProxyHandler = null;
 				this.____slothletInternal.lazyProxyTraps = null;
 			} else if (
-				Array.isArray(settledImpl) ||
+				Arrays.isArray(settledImpl) ||
 				(settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")
 			) {
 				// null is not settled on: a node being cleared (remove, reload) passes through it.
@@ -11127,7 +11126,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const target = createNamedProxyTarget(internal.apiPath, "callableProxy");
 		runtime_defineProxyInspect(wrapper, target);
-		const newProxy = new Proxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
+		const newProxy = new NativeProxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
 		internal.proxy = newProxy;
 		internal.proxyHandler = null;
 		internal.proxyTraps = null;
@@ -11168,15 +11167,15 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// The value gets a shell of its own, as createProxy() builds it: an array shell for an array (#603,
 		// #609), an empty object otherwise.
-		const target = Array.isArray(internal.impl) ? [] : Object.create(null);
+		const target = Arrays.isArray(internal.impl) ? [] : Objects.create(null);
 		runtime_defineProxyInspect(wrapper, target);
 		const traps = runtime_withRestartForwarding(handler, wrapper);
-		const newProxy = new Proxy(target, traps);
+		const newProxy = new NativeProxy(target, traps);
 		internal.proxy = newProxy;
-		if (Array.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
+		if (Arrays.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
 		_proxyRegistry.set(newProxy, wrapper);
 		// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
-		if (!Array.isArray(target)) {
+		if (!Arrays.isArray(target)) {
 			internal.proxyHandler = handler;
 			internal.proxyTraps = traps;
 		}
@@ -11213,7 +11212,7 @@ export class UnifiedWrapper extends ComponentBase {
 			node = holder?.[segment];
 		}
 		if (node !== oldProxy) return;
-		Object.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
+		Objects.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
 	}
 
 	/**
@@ -11242,7 +11241,7 @@ export class UnifiedWrapper extends ComponentBase {
 				apiPath: this.____slothletInternal.apiPath,
 				// newImpl is always a valid object when ___setImpl is called; {} fallback is unreachable.
 				/* v8 ignore next */
-				newImplKeys: Object.keys(newImpl || {})
+				newImplKeys: Objects.keys(newImpl || {})
 			});
 		}
 		/* v8 ignore stop */
@@ -11274,7 +11273,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// (wrapped callable, no raw impl) once the reassignment is placed. No raw `impl` here.
 			this.slothlet.handlers.lifecycle.emitInternal("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
-				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
 				__wrapperRef: this,
 				source: "hot-reload",
 				moduleID: extractedModuleId,
@@ -11314,7 +11313,7 @@ export class UnifiedWrapper extends ComponentBase {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
 			hadImpl: this.____slothletInternal.impl !== null,
-			hadChildren: Object.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
+			hadChildren: Objects.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
 		});
 
 		// Invalidate and clear all child wrappers
@@ -11329,7 +11328,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (childRaw) {
 				childRaw.___invalidate();
 			}
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			// Child properties are always set configurable:true; non-configurable branch is unreachable.
 			/* v8 ignore next */
 			if (descriptor?.configurable) {
@@ -11472,7 +11471,7 @@ export class UnifiedWrapper extends ComponentBase {
 							resultType: typeof result,
 							// result is always a resolved module object here; {} fallback is unreachable.
 							/* v8 ignore next */
-							resultKeys: Object.keys(result || {})
+							resultKeys: Objects.keys(result || {})
 						});
 					}
 				}
@@ -11540,8 +11539,8 @@ export class UnifiedWrapper extends ComponentBase {
 			UnifiedWrapper._invalidateTree(direct, seen);
 			return;
 		}
-		for (const key of Object.keys(impl)) {
-			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
+		for (const key of Objects.keys(impl)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(impl, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
 		}
@@ -11561,8 +11560,8 @@ export class UnifiedWrapper extends ComponentBase {
 	static _invalidateTree(wrapper, seen) {
 		if (seen.has(wrapper)) return;
 		seen.add(wrapper);
-		for (const key of Object.keys(wrapper)) {
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+		for (const key of Objects.keys(wrapper)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
 		}
@@ -11661,8 +11660,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * if (internal.lazyCount === "parked") wrapper.___parkChildren();
 	 */
 	___parkChildren(seen = new Set([this])) {
-		for (const key of Object.keys(this)) {
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+		for (const key of Objects.keys(this)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (!child || seen.has(child)) continue;
 			seen.add(child);
@@ -11698,7 +11697,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (isFrameworkReservedKey(key)) {
 				continue;
 			}
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			// ___adoptImplChildren always sets child properties with configurable:true; non-configurable branch is unreachable.
 			/* v8 ignore next */
 			if (descriptor?.configurable) {
@@ -11732,7 +11731,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___adoptImplChildren();
 	 */
 	___adoptImplChildren(forceReuseChildren = false) {
-		const preExistingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const preExistingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_ADOPT_START",
 			apiPath: this.____slothletInternal.apiPath,
@@ -11787,7 +11786,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// child wrappers would rebuild them as array-likes ({0,1,length:0}, Array.isArray false) and
 		// drop primitive members. Leave the array impl intact; createProxy gives it an array target
 		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
-		if (Array.isArray(this.____slothletInternal.impl)) return;
+		if (Arrays.isArray(this.____slothletInternal.impl)) return;
 
 		// An EventEmitter-derived impl (a real net.Socket, or any user class extending it) is
 		// likewise never a namespace to eagerly decompose (#340) — regardless of deferChildAdopt,
@@ -11844,7 +11843,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// CRITICAL: Check stored collision mode to determine how to handle existing properties
 		// - For "replace" mode: Clear existing properties before adopting new ones
 		// - For "merge" or "merge-replace": Keep existing properties and merge
-		const existingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const existingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		const storedCollisionMode = this.____slothletInternal.state.collisionMode; // Set during collision in api-assignment.mjs
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
@@ -11881,7 +11880,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (resolveWrapper(child) !== null) {
 					savedChildren.set(key, child);
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(this, key);
+				const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 				if (descriptor?.configurable) {
 					delete this[key];
 				}
@@ -11919,7 +11918,7 @@ export class UnifiedWrapper extends ComponentBase {
 				break;
 			}
 			/* v8 ignore stop */
-			const descriptor = Object.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
 			// `Object.keys(impl)` only returns own enumerable properties that always have a descriptor; `!descriptor` is unreachable.
 			/* v8 ignore start */
 			if (!descriptor) {
@@ -12075,11 +12074,11 @@ export class UnifiedWrapper extends ComponentBase {
 					if (
 						rawImpl &&
 						typeof rawImpl === "object" &&
-						!Array.isArray(rawImpl) &&
+						!Arrays.isArray(rawImpl) &&
 						typeof rawImpl !== "function" &&
-						Object.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
+						Objects.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
 					) {
-						const wrapperOwnKeys = Object.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
+						const wrapperOwnKeys = Objects.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
 						// A depleted impl always means the wrapper has its own keys (those being the "depletees"); `length===0` is unreachable.
 						/* v8 ignore next */
 						if (wrapperOwnKeys.length > 0) {
@@ -12171,7 +12170,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Store wrapper as property on wrapper itself (where proxy handlers can see it)
 				// Only define if property doesn't exist or is different wrapper
 				const existing = this[key];
-				const existingDescriptor = Object.getOwnPropertyDescriptor(this, key);
+				const existingDescriptor = Objects.getOwnPropertyDescriptor(this, key);
 
 				// Skip if property exists with same wrapper, or if it's non-configurable (like 'slothlet' from ComponentBase)
 				// existingDescriptor is always null/undefined when existing !== wrapped; the && branch never evaluates.
@@ -12199,7 +12198,7 @@ export class UnifiedWrapper extends ComponentBase {
 							propKey: key
 						});
 					}
-					Object.defineProperty(this, key, {
+					Objects.defineProperty(this, key, {
 						value: wrapped,
 						writable: false,
 						enumerable: true,
@@ -12246,7 +12245,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// accessor. Keeping the original static-value shape for the non-deferred case avoids
 				// that regression while still covering whatever deferred/`_applyNewImpl`-reload
 				// interaction this branch exists for.
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					get: () => {
 						const currentImpl = this.____slothletInternal.impl;
 						return currentImpl ? currentImpl[key] : undefined;
@@ -12263,7 +12262,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
 				// builtin live (mutating the same Map is visible from every reference to it); nothing
 				// further is needed the way the primitive branch above needs a live accessor.
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					value: value,
 					writable: false,
 					enumerable: true,
@@ -12276,7 +12275,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// wrapped is falsy but not null - shouldn't happen, but define value anyway
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					value: value,
 					writable: false,
 					enumerable: true,
@@ -12293,7 +12292,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
-			const currentKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+			const currentKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of currentKeys) {
 				if (!observedKeys.has(key)) {
 					const existing = this[key];
@@ -12303,7 +12302,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (existingRaw) {
 						existingRaw.___invalidate();
 					}
-					const descriptor = Object.getOwnPropertyDescriptor(this, key);
+					const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 					// Unreachable in practice: properties that reach this point are
 					// synthesised through the Proxy get-trap from the wrapper's impl,
 					// so they have no own property descriptor on the target object (or
@@ -12323,11 +12322,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
-			const existingKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+			const existingKeys = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of existingKeys) {
 				if (!(key in this)) {
 					const child = existingWrapper[key];
-					Object.defineProperty(this, key, {
+					Objects.defineProperty(this, key, {
 						value: child,
 						writable: false,
 						enumerable: true,
@@ -12453,7 +12452,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// write through the api reaches it, as a write to the array itself would (#602).
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(childImpl, EventEmitter));
-		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Array.isArray(childImpl)) {
+		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Arrays.isArray(childImpl)) {
 			childImpl = copyForComposition(childImpl);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
 			if (childImpl !== value) this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
@@ -12484,7 +12483,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
-					keys: Object.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
+					keys: Objects.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
 					propKey: keyStr,
 					found: !!this.____slothletInternal.impl.__childFilePaths[key]
 				});
@@ -12580,7 +12579,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// An array element's path is where the element sits now, and so is the path of everything below it
 		// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
 		// Only a canonical index below 2^32 - 1 is a position; "4294967295" and above are ordinary properties of the array.
-		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
+		const parentIsArray = Arrays.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
 		const position =
 			parentIsArray || this.____slothletInternal.followsPosition ? { parent: this, key, byIndex: parentIsArray, sourceValue: value } : null;
 		let nestedWrapper;
@@ -12774,7 +12773,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const waitingHandler = {
 			set(target, prop, value) {
 				// A stand-in frozen (below) takes no write, as a frozen object takes none: the node will be frozen too.
-				if (Object.isFrozen(target)) return false;
+				if (Objects.isFrozen(target)) return false;
 				// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen({ value })) {
 					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
@@ -13012,7 +13011,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged for everything except the shape that was losing data.
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
-								Object.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+								Objects.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
 							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 							// function behind it: that function carries no gate, so calling it would skip the node's call check
 							// (#632). The host, which no rule gates, still gets the function itself.
@@ -13022,7 +13021,7 @@ export class UnifiedWrapper extends ComponentBase {
 							if (
 								callableCarriesWrapperMembers ||
 								callableReadByModule ||
-								(finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
+								(finalImpl !== null && typeof finalImpl === "object" && !Arrays.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
 							) {
 								const resolvedProxy = current.____slothletInternal.proxy;
 								// A module's captured floor has to survive the resolution: the snapshot taken when the
@@ -13206,7 +13205,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (prop === "name") return waitingTarget.name || "waitingProxyTarget";
 				if (prop === "toString") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return Function.prototype.toString.bind(waitingTarget);
+					return functionToString.bind(waitingTarget);
 				}
 				if (prop === "valueOf") {
 					// For waiting proxies, we can't access impl yet, so use target
@@ -13785,7 +13784,7 @@ export class UnifiedWrapper extends ComponentBase {
 			getPrototypeOf: () => null
 		};
 		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
-		const waitingProxy = new Proxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
+		const waitingProxy = new NativeProxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
 
 		// Register waiting proxy in the global registry so resolveWrapper() can find the
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
@@ -13841,7 +13840,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Create a named function as proxy target for callable wrappers
 			// This ensures typeof proxy === "function" and enables function calls
 			proxyTarget = createNamedProxyTarget(wrapper.____slothletInternal.apiPath, "callableProxy");
-		} else if (Array.isArray(wrapper.____slothletInternal.impl)) {
+		} else if (Arrays.isArray(wrapper.____slothletInternal.impl)) {
 			// Array impl - an empty array shell the wrapper owns is the proxy target, so Array.isArray sees an
 			// array while every read, write and definition goes to the module's current array (getTrap
 			// delegates reads to the live impl; getPrototypeOf returns Array.prototype). The module's array is
@@ -13854,7 +13853,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// members stay on the wrapper, its live store, and sealing or freezing the node fixes them on the
 			// shell as it reports them, its permission check kept on every read (#609). The wrapper itself as the
 			// target would be frozen with the node, pinning its own state along with the members.
-			proxyTarget = Object.create(null);
+			proxyTarget = Objects.create(null);
 		}
 
 		runtime_defineProxyInspect(wrapper, proxyTarget);
@@ -13893,7 +13892,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
-				const desc = Object.getOwnPropertyDescriptor(target, prop);
+				const desc = Objects.getOwnPropertyDescriptor(target, prop);
 				// The function stub target is a bound function with no non-configurable own property (see
 				// createNamedProxyTarget); a target the wrapper does not create could still have one, and
 				// its member by that name wins only while the invariant allows (a writable one, #571).
@@ -13906,7 +13905,7 @@ export class UnifiedWrapper extends ComponentBase {
 					desc &&
 					"value" in desc &&
 					!desc.configurable &&
-					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Array.isArray(wrapper.____slothletInternal.impl)))
+					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Arrays.isArray(wrapper.____slothletInternal.impl)))
 				) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
@@ -13925,7 +13924,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// In practice all wrapper own-properties are configurable; the body is never entered.
 			/* v8 ignore start */
 			if (target === wrapper && typeof prop === "string") {
-				const desc = Object.getOwnPropertyDescriptor(target, prop);
+				const desc = Objects.getOwnPropertyDescriptor(target, prop);
 				if (desc && !desc.configurable) {
 					return target[prop];
 				}
@@ -14074,7 +14073,7 @@ export class UnifiedWrapper extends ComponentBase {
 			let arrayElement = null;
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
-				if (Array.isArray(arrImpl)) {
+				if (Arrays.isArray(arrImpl)) {
 					// A key the module put on the array itself (`list.toJSON = …`, `list.meta = {…}`) is a member
 					// like an element, not an intrinsic: reading it raw would skip the gates, hooks and context
 					// an object's member gets (#603 review). `length` stays the array's own.
@@ -14094,7 +14093,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// proxy array answers through its own get trap even for a key it does not hold (#603 review).
 					const element = Reflect.get(arrImpl, prop, arrImpl);
 					if (hasOwn(wrapper, prop)) {
-						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
+						const cached = Objects.getOwnPropertyDescriptor(wrapper, prop).value;
 						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
 						if (cached !== element && cachedSource !== element) delete wrapper[prop];
 					}
@@ -14196,7 +14195,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// A `constructor` its prototype answers through an accessor of the module's is read as any accessor member
 				// is, run as the module (#597): the class it answers is handed out as above, as the plain instance answers it.
 				const constructorAccessor =
-					constructorImpl !== null && typeof constructorImpl === "object" && !Array.isArray(constructorImpl)
+					constructorImpl !== null && typeof constructorImpl === "object" && !Arrays.isArray(constructorImpl)
 						? runtime_implAccessor(wrapper, prop)
 						: null;
 				if (constructorAccessor?.descriptor) {
@@ -14305,7 +14304,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl === null || typeof impl !== "object") {
 					// For non-callable wrappers, return a descriptive string
 					if (typeof target === "function") {
-						return Function.prototype.toString.bind(target);
+						return functionToString.bind(target);
 					}
 					return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 				}
@@ -14403,7 +14402,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if ((wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) && hasOwn(wrapper, prop)) {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
-					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
+					const cachedDesc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 					// Read as the module's own read of it (#597): a getter on the impl is the module's code.
 					const current = runtime_readImplMember(wrapper, prop);
 					const stale =
@@ -14421,7 +14420,7 @@ export class UnifiedWrapper extends ComponentBase {
 						apiPath: wrapper.apiPath,
 						prop: String(prop),
 						collisionMode: wrapper.____slothletInternal.state.collisionMode,
-						wrapperKeys: Object.keys(wrapper)
+						wrapperKeys: Objects.keys(wrapper)
 							.filter((k) => !isFrameworkReservedKey(k))
 							.join(", ")
 					});
@@ -14508,7 +14507,7 @@ export class UnifiedWrapper extends ComponentBase {
 						});
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_FOUND",
-							wrapperKeys: Object.keys(wrapper)
+							wrapperKeys: Objects.keys(wrapper)
 								.filter((k) => !isFrameworkReservedKey(k))
 								.join(", ")
 						});
@@ -14706,10 +14705,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// cycle-guard set through here.
 			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
 			// plain JavaScript, so a member it reads stays live (#590).
-			if (wrapped && typeof Object.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
+			if (wrapped && typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
-				Object.defineProperty(wrapper, prop, {
+				Objects.defineProperty(wrapper, prop, {
 					value: wrapped,
 					writable: false,
 					enumerable: true,
@@ -15311,7 +15310,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// An array-backed wrapper holds the elements it cached, but the array decides which indices
 			// exist: an element removed since (through the api or the module's own reference) is gone (#602).
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
+			if (Arrays.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
 				// A non-extensible target pins the answer to its own keys (proxy invariant), which is the
 				// array it was built over once a reload has replaced the impl.
 				if (!Reflect.isExtensible(target)) return Reflect.has(target, prop);
@@ -15388,11 +15387,11 @@ export class UnifiedWrapper extends ComponentBase {
 						...hookDescriptor,
 						value: function (...args) {
 							// Shown as to a module, whoever calls the copy later: it never hands out the module's code (#632).
-							const shown = Array.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
+							const shown = Arrays.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
 							if (shown === null || typeof shown !== "object") return shown;
-							const completed = Array.isArray(shown) ? [] : {};
-							for (const key of Object.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
-							if (Array.isArray(shown)) completed.length = shown.length;
+							const completed = Arrays.isArray(shown) ? [] : {};
+							for (const key of Objects.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
+							if (Arrays.isArray(shown)) completed.length = shown.length;
 							return completed;
 						}
 					};
@@ -15411,7 +15410,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (redact && runtime_isReadRedacted(wrapper, prop, kept)) return { ...sealed, value: undefined };
 					return { ...sealed, value: readNode() };
 				}
-				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
+				if (sealed && prop === "length" && Arrays.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
 					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
 				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed, asHeld, kept);
@@ -15423,7 +15422,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// fixed keys keep their invariant-required form, carrying the current value where writable.
 			const arrayImpl = wrapper.____slothletInternal.impl;
 			// Every member is described this way, a named or symbol-keyed one as much as an element (#603 review).
-			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
+			if (Arrays.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
 				// An element a caller may not read is not described to it, as ownKeys leaves it out (#609); one
 				// fixed on the shell must still be described, with its value withheld.
 				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept);
@@ -15460,7 +15459,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
-			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
+			const ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
 			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept)) {
 				return undefined;
 			}
@@ -15487,7 +15486,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
-				const desc = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const desc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
 				// Return descriptor if it exists
 				/* v8 ignore next */
@@ -15506,7 +15505,7 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 			) {
-				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Object.getOwnPropertyDescriptor(impl, prop) : null));
+				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Objects.getOwnPropertyDescriptor(impl, prop) : null));
 				// A member holding the module's code is described only to a caller that may call the node, as reading it
 				// is checked (#632).
 				if (implDescriptor !== null && redact && !asHeld && runtime_isCodeMemberWithheld(wrapper, implDescriptor, kept)) return undefined;
@@ -15550,7 +15549,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// wrappers it cached. The target's fixed keys are still reported, as the invariants require,
 			// and so is a non-index member held on the wrapper (a mount under the array).
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl)) {
+			if (Arrays.isArray(arrayImpl)) {
 				// A non-extensible target must be listed exactly (proxy invariant).
 				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
@@ -15558,12 +15557,12 @@ export class UnifiedWrapper extends ComponentBase {
 					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
 				}
 				for (const key of Reflect.ownKeys(wrapper)) {
-					if (!runtime_isArrayIndex(key) && Object.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
+					if (!runtime_isArrayIndex(key) && Objects.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
 				}
 				for (const key of keys) {
 					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
 				}
-				return Array.from(keys);
+				return Arrays.from(keys);
 			}
 
 			// A function target's own `length` / `name` come first, as on any function.
@@ -15574,7 +15573,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Add all target keys (wrapper or function), checking configurability
 			for (const key of Reflect.ownKeys(target)) {
-				const descriptor = Object.getOwnPropertyDescriptor(target, key);
+				const descriptor = Objects.getOwnPropertyDescriptor(target, key);
 				// Include non-configurable properties (required by proxy invariants)
 				// OR enumerable properties (child wrappers)
 				if (!descriptor.configurable || descriptor.enumerable) {
@@ -15586,7 +15585,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// children are defined on wrapper, not target. Include wrapper's enumerable keys.
 			if (target !== wrapper) {
 				for (const key of Reflect.ownKeys(wrapper)) {
-					const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+					const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 					// Wrapper-owned sibling props are always enumerable in tests; non-enumerable path never taken.
 					/* v8 ignore next */
 					if (descriptor && descriptor.enumerable) {
@@ -15619,13 +15618,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// filtered — they are framework internals, never gated user data.
 			if (redact) {
 				for (const key of keys) {
-					const targetDesc = Object.getOwnPropertyDescriptor(target, key);
+					const targetDesc = Objects.getOwnPropertyDescriptor(target, key);
 					if (targetDesc && !targetDesc.configurable) continue;
 					if (runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
 				}
 			}
 
-			return Array.from(keys);
+			return Arrays.from(keys);
 		};
 
 		/**
@@ -15664,7 +15663,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (!Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
 			// A member fixed read-only on a frozen shell takes no write, as on a frozen object: refused before the node's
 			// own state changes, so a read of it still answers what the shell holds (#667).
-			if (!Array.isArray(target) && runtime_isFixedReadOnly(target, prop)) return false;
+			if (!Arrays.isArray(target) && runtime_isFixedReadOnly(target, prop)) return false;
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
@@ -15680,7 +15679,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// do through it) lands on the array, exactly as it would on the array (#602). That is the
 			// current impl, which an eager reload replaces under a held reference, not the proxy target.
 			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
-			if (Array.isArray(wrapper.____slothletInternal.impl)) {
+			if (Arrays.isArray(wrapper.____slothletInternal.impl)) {
 				const arrayImpl = wrapper.____slothletInternal.impl;
 				// A non-extensible array takes no new index, as on the array itself; reflection answers from
 				// the target then (see ownKeysTrap), so a write may not grow what it cannot report.
@@ -15705,13 +15704,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// `length` takes the shell's configurable elements past it away, as it did the array's. A length
 				// write the array refuses can still have removed the elements above a fixed one, so the shell
 				// follows what the array holds either way (#603 review).
-				if (prop === "length" && Array.isArray(target) && !Reflect.isExtensible(target)) Reflect.set(target, "length", arrayImpl.length);
+				if (prop === "length" && Arrays.isArray(target) && !Reflect.isExtensible(target)) Reflect.set(target, "length", arrayImpl.length);
 				if (!written) return false;
 				if (hasOwn(wrapper, prop)) delete wrapper[prop];
 				// An element moved by an array method keeps its node at the index it lands on: the node holds what was
 				// written through it, which a fresh node over the module's element would not (#603 review).
 				if (isOwnElement && runtime_isPosition(prop)) {
-					Object.defineProperty(wrapper, prop, {
+					Objects.defineProperty(wrapper, prop, {
 						value: moved.____slothletInternal.proxy,
 						writable: false,
 						enumerable: true,
@@ -15728,12 +15727,12 @@ export class UnifiedWrapper extends ComponentBase {
 			const uw_arrayImpl = wrapper.____slothletInternal.impl;
 			// An element or `length` is the array's own: written to it (through its layer, which passes it on),
 			// as a write to the array would be, so its length and elements follow (#585 review).
-			if (Array.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
+			if (Arrays.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
 				return Reflect.set(uw_arrayImpl, prop, value);
 			}
 			if (
 				!internalKeys.has(prop) &&
-				Array.isArray(uw_arrayImpl) &&
+				Arrays.isArray(uw_arrayImpl) &&
 				isCompositionLayer(uw_arrayImpl) &&
 				!(typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop))
 			) {
@@ -15745,7 +15744,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// accessor with no setter refuses the write (#585 review). The node's accessors are the module's
 				// (adopted, or merged in from an addapi file or a collision) or a live forward to the impl, and
 				// every one of them sets through its own setter.
-				const ownAccessor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const ownAccessor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				if (ownAccessor && !("value" in ownAccessor)) {
 					if (!ownAccessor.set) return false;
 					ownAccessor.set.call(wrapper.____slothletInternal.proxy ?? wrapper, value);
@@ -15794,9 +15793,9 @@ export class UnifiedWrapper extends ComponentBase {
 						// A setter the impl holds runs as the module the node belongs to, never as the writer (#597).
 						const setSucceeded = runtime_writeImplMember(wrapper, prop, value);
 						if (!setSucceeded) return false;
-						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+						const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
-							Object.defineProperty(wrapper, prop, {
+							Objects.defineProperty(wrapper, prop, {
 								get: () => {
 									const currentImpl = wrapper.____slothletInternal.impl;
 									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
@@ -15875,7 +15874,7 @@ export class UnifiedWrapper extends ComponentBase {
 						stored = wrapped;
 					}
 				}
-				Object.defineProperty(wrapper, prop, {
+				Objects.defineProperty(wrapper, prop, {
 					value: stored,
 					writable: false,
 					enumerable: true,
@@ -15921,9 +15920,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 */
 		const definePropertyTrap = (target, prop, descriptor) => {
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (!Array.isArray(arrayImpl) || arrayImpl === target) {
+			if (!Arrays.isArray(arrayImpl) || arrayImpl === target) {
 				if (!Reflect.defineProperty(target, prop, descriptor)) return false;
-				if (Array.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
+				if (Arrays.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
 				return true;
 			}
 			// A key of the module's own array is defined on that array; a composed node's other members (a sibling file,
@@ -15995,10 +15994,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// does any key a non-extensible target holds once a reload has put another array in its place: the
 			// proxy may not report deleting what that target keeps.
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl) && runtime_isFixedOnTarget(target, prop)) return false;
+			if (Arrays.isArray(arrayImpl) && runtime_isFixedOnTarget(target, prop)) return false;
 			// A sealed array member holds its members on its shell (see preventExtensions): a configurable one is
 			// deleted from both the shell and the module's array, as deleting it from the array itself would.
-			if (Array.isArray(arrayImpl) && Array.isArray(target) && !Reflect.isExtensible(target) && hasOwn(target, prop)) {
+			if (Arrays.isArray(arrayImpl) && Arrays.isArray(target) && !Reflect.isExtensible(target) && hasOwn(target, prop)) {
 				if (!Reflect.getOwnPropertyDescriptor(target, prop).configurable) return false;
 				const holder = runtime_arrayKeyHolder(arrayImpl, prop);
 				if (hasOwn(holder, prop) && !Reflect.deleteProperty(holder, prop)) return false;
@@ -16006,7 +16005,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (hasOwn(wrapper, prop)) {
 					// A named member's held node is retired, as it is on the ordinary path below; a position's is only
 					// a cache of an element that may have moved (#602).
-					if (!runtime_isPosition(prop)) resolveWrapper(Object.getOwnPropertyDescriptor(wrapper, prop).value)?.___invalidate();
+					if (!runtime_isPosition(prop)) resolveWrapper(Objects.getOwnPropertyDescriptor(wrapper, prop).value)?.___invalidate();
 					delete wrapper[prop];
 				}
 				return true;
@@ -16035,7 +16034,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
 			// A composed array node's own elements are the module's array's: deleting them from its layer only hides them.
-			const deleteFrom = Array.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
+			const deleteFrom = Arrays.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
 			if (deleteFrom && typeof deleteFrom === "object" && prop in deleteFrom && !Reflect.deleteProperty(deleteFrom, prop)) {
 				return false;
 			}
@@ -16048,10 +16047,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// An array's element wrapper is only a cache of the element (#602): an array method deleting
 				// an index (`pop`, `shift`, `splice`) may have moved that element to another index, so the
 				// cache is dropped without invalidating the element's wrapper.
-				if (childWrapperRaw && !(Array.isArray(wrapper.____slothletInternal.impl) && runtime_isPosition(prop))) {
+				if (childWrapperRaw && !(Arrays.isArray(wrapper.____slothletInternal.impl) && runtime_isPosition(prop))) {
 					childWrapperRaw.___invalidate();
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const descriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// Wrapper-owned props are always configurable; non-configurable descriptor branch is never reached.
 				/* v8 ignore next */
 				if (descriptor?.configurable) {
@@ -16069,7 +16068,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Remove from proxy target. An array-backed wrapper's target is the array it was built over; the
 			// current array (deleted from above) is the one that counts, and a replaced one is left alone.
-			if (!Array.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
+			if (!Arrays.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
 
 			return true;
 		};
@@ -16213,9 +16212,9 @@ export class UnifiedWrapper extends ComponentBase {
 		const heldPrototype = () => {
 			const internal = wrapper.____slothletInternal;
 			const impl = internal.impl;
-			if (Array.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(impl);
 			const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter));
-			return isLiveIdentity && impl && typeof impl === "object" ? Object.getPrototypeOf(impl) : null;
+			return isLiveIdentity && impl && typeof impl === "object" ? Objects.getPrototypeOf(impl) : null;
 		};
 		/**
 		 * The prototype the node reports to whoever asks now (#667), by `Object.getPrototypeOf` and, for an object node,
@@ -16228,7 +16227,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const reportedPrototype = (target, takeKept) => {
 			const impl = wrapper.____slothletInternal.impl;
 			// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
-			if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
+			if (Arrays.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
 			if (!Reflect.isExtensible(target)) {
 				// A sealed node reports its shell's prototype to every reader, as the invariants require: the module's own
 				// when the node is one of its emitters, as the view its shell holds, so reaching it is checked as a call of the
@@ -16269,7 +16268,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return runtime_emitterPrototypeForReader(wrapper, prototype, runtime_selfModuleReader(wrapper.slothlet) ?? kept?.reader ?? null);
 			}
 			while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
-				prototype = Object.getPrototypeOf(prototype);
+				prototype = Objects.getPrototypeOf(prototype);
 			return runtime_withheldPrototype(wrapper, prototype);
 		};
 		const sealShell = (target) => {
@@ -16288,7 +16287,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// shell's own `length` is a plain value the proxy invariants pin once it is sealed, so it takes
 				// the array's length now; it is the one member every reader sees as a value (#609).
 				const array = wrapper.____slothletInternal.impl;
-				if (Array.isArray(target) && Array.isArray(array)) {
+				if (Arrays.isArray(target) && Arrays.isArray(array)) {
 					// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
 					if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
 					// A shell whose `length` is already read-only (an export with a fixed length) holds the array's.
@@ -16319,7 +16318,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// there to fix in its place, so an object node frozen with it read the hook as `undefined` (#667).
 					if (
 						key === util.inspect.custom &&
-						(Array.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
+						(Arrays.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
 					)
 						continue;
 					const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
@@ -16327,7 +16326,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// A data member is held as data, so the sealed node reports and freezes as an object of its own would;
 					// a writable one is not pinned, and reads keep going through the node. An accessor the module's
 					// array holds stays an accessor that reads and writes through the node.
-					const isArrayAccessor = Array.isArray(target) && !("value" in descriptor);
+					const isArrayAccessor = Arrays.isArray(target) && !("value" in descriptor);
 					Reflect.defineProperty(
 						target,
 						key,
@@ -16342,7 +16341,7 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 							: {
 									value: runtime_shellValue(wrapper, key),
-									writable: Array.isArray(target) ? descriptor.writable !== false : true,
+									writable: Arrays.isArray(target) ? descriptor.writable !== false : true,
 									enumerable: descriptor.enumerable,
 									configurable: true
 								}
@@ -16405,7 +16404,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// An accessor defined at runtime runs as the node's module, as an exported one does (#597).
 				descriptor = runtime_adoptDefinedAccessor(wrapper, descriptor);
 				// An array member defines on its current array (#602), unless the position lies past a read-only length.
-				if (Array.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
+				if (Arrays.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
@@ -16487,7 +16486,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// A prototype set on a node is set on its module's value: a module may do it only to a node it owns (#625).
 				runtime_assertOwnedWrite(wrapper, null);
 				const impl = wrapper.____slothletInternal.impl;
-				if (!Array.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
+				if (!Arrays.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
 			},
@@ -16495,8 +16494,8 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
-		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
-		if (Array.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
+		wrapper.____slothletInternal.proxy = new NativeProxy(proxyTarget, proxyTraps);
+		if (Arrays.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
 		else runtime_adoptObjectIntegrity(wrapper);
 		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
 		// replacement from the same handler and re-points these traps at it (#533).
@@ -16529,7 +16528,7 @@ export class UnifiedWrapper extends ComponentBase {
 // method declared in the class body would have produced. A plain assignment
 // would instead create an enumerable property, diverging from class-method
 // semantics.
-Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
+Objects.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
 	value: UnifiedWrapper.prototype.____inspectCustom,
 	writable: true,
 	enumerable: false,
@@ -16548,8 +16547,8 @@ Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
  * isClassInstance({ a: 1 }); // false
  */
 export function isClassInstance(value) {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
+	if (!value || typeof value !== "object" || Arrays.isArray(value)) return false;
+	const proto = Objects.getPrototypeOf(value);
 	return proto !== null && proto !== Object.prototype;
 }
 

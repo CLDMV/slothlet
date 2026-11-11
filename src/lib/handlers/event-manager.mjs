@@ -52,6 +52,7 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
+import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
 
 /** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
 const NativePromise = Promise;
@@ -92,7 +93,7 @@ const ENVELOPES = new WeakMap();
  * @type {Readonly<{ LISTENER_GONE: "listener-gone", DENIED: "denied" }>}
  * @internal
  */
-export const DELIVERY_REASONS = Object.freeze({ LISTENER_GONE: "listener-gone", DENIED: "denied" });
+export const DELIVERY_REASONS = Objects.freeze({ LISTENER_GONE: "listener-gone", DENIED: "denied" });
 
 /**
  * The owner segment of a listener id: the registering module's base moduleID, or `""` for a host
@@ -112,7 +113,7 @@ function ownerIdOf(wrapper) {
  * @type {Readonly<Record<string, number>>}
  * @private
  */
-const EVENT_LEVEL_RANK = Object.freeze({ deny: 0, notify: 1, allow: 2 });
+const EVENT_LEVEL_RANK = Objects.freeze({ deny: 0, notify: 1, allow: 2 });
 
 /**
  * Instance-wide event manager (#407).
@@ -464,17 +465,17 @@ export class EventManager extends ComponentBase {
 			levels[sub.id] = level;
 			recipients.set(sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
 		}
-		Object.freeze(listeners);
+		Objects.freeze(listeners);
 
-		const envelope = Object.freeze({
+		const envelope = Objects.freeze({
 			event,
 			payload,
 			at: meta.at,
 			instanceID: this.instanceID,
 			emitter: emitterWrapper
-				? Object.freeze({ moduleID: ownerIdOf(emitterWrapper), apiPath: emitterWrapper.____slothletInternal.apiPath })
+				? Objects.freeze({ moduleID: ownerIdOf(emitterWrapper), apiPath: emitterWrapper.____slothletInternal.apiPath })
 				: null,
-			levels: Object.freeze(levels),
+			levels: Objects.freeze(levels),
 			listeners
 		});
 		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow, recipients });

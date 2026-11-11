@@ -59,6 +59,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -115,7 +116,7 @@ function runtime_selfMember(prop, value) {
  *   return self.otherFunction();
  * }
  */
-export const self = new Proxy(
+export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -262,7 +263,7 @@ export const self = new Proxy(
  *   };
  * }
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -348,7 +349,7 @@ export const context = new Proxy(
  *   return { instanceID };
  * }
  */
-export const instanceID = new Proxy(
+export const instanceID = new NativeProxy(
 	{},
 	{
 		get(_, prop) {

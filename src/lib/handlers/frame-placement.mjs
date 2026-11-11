@@ -40,6 +40,7 @@ import {
 	VITE_LOADED_BY
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
+import { Reflect, Objects, Arrays, JSON, functionSource } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -68,7 +69,7 @@ const FS_STAT = NODE_FS?.statSync;
 const FS_EXISTS = NODE_FS?.existsSync;
 const FS_REALPATH = NODE_FS?.realpathSync;
 const CRYPTO_CREATE_HASH = NODE_CRYPTO?.createHash;
-const HASH_PROTOTYPE = NODE_CRYPTO ? Object.getPrototypeOf(Reflect.apply(CRYPTO_CREATE_HASH, NODE_CRYPTO, ["sha256"])) : null;
+const HASH_PROTOTYPE = NODE_CRYPTO ? Objects.getPrototypeOf(Reflect.apply(CRYPTO_CREATE_HASH, NODE_CRYPTO, ["sha256"])) : null;
 const HASH_UPDATE = HASH_PROTOTYPE?.update;
 const HASH_DIGEST = HASH_PROTOTYPE?.digest;
 const CapturedTextDecoder = TextDecoder;
@@ -839,7 +840,7 @@ function runtime_isLearnable(fn) {
 	let learnable = LEARNABLE.get(fn);
 	if (learnable === undefined) {
 		try {
-			learnable = !util.types.isProxy(fn) && !/\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+			learnable = !util.types.isProxy(fn) && !/\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
 		} catch {
 			learnable = false;
 		}
@@ -890,7 +891,7 @@ export function enterCall(wrapper, fn, thisArg, args) {
 function runtime_ownDefault(impl) {
 	if (!impl || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
 	try {
-		const descriptor = Object.getOwnPropertyDescriptor(impl, "default");
+		const descriptor = Objects.getOwnPropertyDescriptor(impl, "default");
 		return descriptor && "value" in descriptor ? descriptor.value : undefined;
 	} catch {
 		// A module namespace whose `default` binding is not initialised yet has none to compare against.
@@ -1519,17 +1520,17 @@ function runtime_isPlainData(value, depth, budget) {
 	if (isApiValue(value)) return !apiValueHarborsCode(value);
 	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
 	try {
-		if (!Object.isFrozen(value)) return false;
-		const prototype = Object.getPrototypeOf(value);
+		if (!Objects.isFrozen(value)) return false;
+		const prototype = Objects.getPrototypeOf(value);
 		if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
 		// A frozen array's `length` is an own data property: reading it runs nothing.
-		if (prototype === Array.prototype && Array.isArray(value) && value.length > budget.remaining) return false;
+		if (prototype === Array.prototype && Arrays.isArray(value) && value.length > budget.remaining) return false;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return false;
 		for (const key of keys) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (!descriptor || !Object.hasOwn(descriptor, "value") || !runtime_isPlainData(descriptor.value, depth - 1, budget)) return false;
+			if (!descriptor || !Objects.hasOwn(descriptor, "value") || !runtime_isPlainData(descriptor.value, depth - 1, budget)) return false;
 		}
 		return true;
 	} catch {
@@ -1607,15 +1608,15 @@ export function handedLeafFunctions(thisArg, args) {
 		if (depth <= 0 || budget.remaining <= 0 || genuineWrappers.has(value) || isApiValue(value) || !isNode || util.types.isProxy(value))
 			return;
 		try {
-			const prototype = Object.getPrototypeOf(value);
+			const prototype = Objects.getPrototypeOf(value);
 			if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return;
-			if (prototype === Array.prototype && Array.isArray(value) && value.length > budget.remaining) return;
+			if (prototype === Array.prototype && Arrays.isArray(value) && value.length > budget.remaining) return;
 			const keys = Reflect.ownKeys(value);
 			budget.remaining -= keys.length;
 			if (budget.remaining < 0) return;
 			for (const key of keys) {
 				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-				if (descriptor && Object.hasOwn(descriptor, "value")) visit(descriptor.value, depth - 1);
+				if (descriptor && Objects.hasOwn(descriptor, "value")) visit(descriptor.value, depth - 1);
 			}
 		} catch {
 			// An exotic object that refuses to be read holds nothing that can be found without running its code.
@@ -2167,7 +2168,7 @@ const VITE_RUNNERS = new Set(["vitest", "vite"]);
  * @type {Function|undefined}
  * @private
  */
-const PRISTINE_STACK_GET = Object.getOwnPropertyDescriptor(new PristineError(), "stack")?.get;
+const PRISTINE_STACK_GET = Objects.getOwnPropertyDescriptor(new PristineError(), "stack")?.get;
 
 /**
  * The frames slothlet itself read off a registration's error, so a stack anyone else produced is not taken for one.
@@ -2189,7 +2190,7 @@ const READ_REGISTRATIONS = new WeakSet();
 function runtime_registeredScript(entry) {
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
-	if (Object.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
+	if (Objects.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
 	const previousPrepare = PristineError.prepareStackTrace;
 	PristineError.prepareStackTrace = (error, sites) => {
 		const frames = runtime_structuredFrames(error, sites);
@@ -2245,20 +2246,20 @@ const VITE_HOST_REGISTRY = isNode ? installViteHostRegistry(globalThis) : null;
  */
 export function installViteHostRegistry(target) {
 	const key = Symbol.for(VITE_HOST_SCRIPTS);
-	const current = Object.getOwnPropertyDescriptor(target, key);
+	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
 	if (current && !current.configurable) return typeof current.value?.registered === "function" ? current.value : null;
 	const queue = [];
 	// What registrations pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
-	if (Array.isArray(current?.value) && !util.types.isProxy(current.value)) {
-		for (let i = 0; i < current.value.length; i++) queue[queue.length] = Object.getOwnPropertyDescriptor(current.value, i)?.value;
+	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
+		for (let i = 0; i < current.value.length; i++) queue[queue.length] = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
 	}
 	/** @type {Map<string, Set<string>>} */
 	const scripts = new Map();
 	const registered = (scriptKey, hash) => {
 		const pending = queue.length;
 		for (let i = 0; i < pending; i++) {
-			const script = runtime_registeredScript(Object.getOwnPropertyDescriptor(queue, i)?.value);
+			const script = runtime_registeredScript(Objects.getOwnPropertyDescriptor(queue, i)?.value);
 			if (!script) continue;
 			let hashes = scripts.get(script.key);
 			if (!hashes) scripts.set(script.key, (hashes = new Set()));
@@ -2268,8 +2269,13 @@ export function installViteHostRegistry(target) {
 		queue.splice(0, pending);
 		return scripts.get(scriptKey)?.has(hash) === true;
 	};
-	Object.defineProperty(queue, "registered", { value: Object.freeze(registered), enumerable: false, writable: false, configurable: false });
-	Object.defineProperty(target, key, { value: queue, enumerable: false, writable: false, configurable: false });
+	Objects.defineProperty(queue, "registered", {
+		value: Objects.freeze(registered),
+		enumerable: false,
+		writable: false,
+		configurable: false
+	});
+	Objects.defineProperty(target, key, { value: queue, enumerable: false, writable: false, configurable: false });
 	return queue;
 }
 
@@ -2313,9 +2319,9 @@ function runtime_runsRunnerTransform(frame) {
 function runtime_loadedRecord(entry) {
 	const script = runtime_registeredScript(entry);
 	const prefix = `\0${LOADED_BY_SPECIFIER}`;
-	if (typeof script?.location !== "string" || !script.location.startsWith(prefix) || !Object.isFrozen(entry)) return null;
+	if (typeof script?.location !== "string" || !script.location.startsWith(prefix) || !Objects.isFrozen(entry)) return null;
 	const loaded = queryParam(script.location.slice(prefix.length), "id");
-	const message = Object.getOwnPropertyDescriptor(entry, "message");
+	const message = Objects.getOwnPropertyDescriptor(entry, "message");
 	if (!loaded || typeof message?.value !== "string") return null;
 	let importers;
 	try {
@@ -2323,7 +2329,7 @@ function runtime_loadedRecord(entry) {
 	} catch {
 		return null;
 	}
-	if (!Array.isArray(importers)) return null;
+	if (!Arrays.isArray(importers)) return null;
 	return { path: toComparablePath(loaded), importers: importers.filter((id) => typeof id === "string") };
 }
 
@@ -2341,7 +2347,7 @@ function runtime_loadedRecord(entry) {
  */
 export function installViteLoadedRegistry(target) {
 	const key = Symbol.for(VITE_LOADED_BY);
-	const current = Object.getOwnPropertyDescriptor(target, key);
+	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
 	if (current && !current.configurable) return typeof current.value?.importersOf === "function" ? current.value : null;
 	/** @type {Map<string, Set<string>>} */
@@ -2354,20 +2360,20 @@ export function installViteLoadedRegistry(target) {
 		for (let i = 0; i < record.importers.length; i++) importers.add(record.importers[i]);
 	};
 	// What records were pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
-	if (Array.isArray(current?.value) && !util.types.isProxy(current.value)) {
-		for (let i = 0; i < current.value.length; i++) take(Object.getOwnPropertyDescriptor(current.value, i)?.value);
+	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
+		for (let i = 0; i < current.value.length; i++) take(Objects.getOwnPropertyDescriptor(current.value, i)?.value);
 	}
-	const registry = Object.freeze({
-		push: Object.freeze((...entries) => {
+	const registry = Objects.freeze({
+		push: Objects.freeze((...entries) => {
 			for (let i = 0; i < entries.length; i++) take(entries[i]);
 			return 0;
 		}),
-		importersOf: Object.freeze((path) => {
+		importersOf: Objects.freeze((path) => {
 			const found = records.get(path);
 			return found ? setMembers(found) : null;
 		})
 	});
-	Object.defineProperty(target, key, { value: registry, enumerable: false, writable: false, configurable: false });
+	Objects.defineProperty(target, key, { value: registry, enumerable: false, writable: false, configurable: false });
 	return registry;
 }
 
@@ -2398,7 +2404,7 @@ const RUNNER_MODULES = isNode ? (globalThis.__vitest_worker__?.evaluatedModules 
  * @type {ReadonlyArray<string>}
  * @private
  */
-const RUNNER_PARAMETERS = Object.freeze(
+const RUNNER_PARAMETERS = Objects.freeze(
 	[
 		"__vite_ssr_exports__,__vite_ssr_import_meta__,__vite_ssr_import__,__vite_ssr_dynamic_import__,__vite_ssr_exportAll__,__vite_ssr_exportName__"
 	].flatMap((ssr) => [ssr, `${ssr},__filename,__dirname,module,exports,require`])
@@ -2553,7 +2559,7 @@ function runtime_leafRange(leaf) {
 	const filePath = leaf.____slothletInternal?.filePath;
 	if (typeof impl === "function" && filePath && NODE_FS) {
 		try {
-			const text = Reflect.apply(Function.prototype.toString, impl, []);
+			const text = functionSource(impl);
 			const source = runtime_sourceOf(filePath);
 			const start = source ? source.text.indexOf(text) : -1;
 			// Text found twice in the file cannot say which copy is the leaf's: the module stands for it instead.
@@ -2599,7 +2605,7 @@ function runtime_moduleRootPath(leaves) {
 	for (const leaf of leaves) {
 		const internal = leaf.____slothletInternal;
 		const exportPath = internal.exportPath;
-		if (!Array.isArray(exportPath) || !exportPath.length) continue;
+		if (!Arrays.isArray(exportPath) || !exportPath.length) continue;
 		const segments = String(internal.apiPath ?? "").split(".");
 		if (segments.length <= exportPath.length) return null;
 		const path = segments.slice(0, segments.length - exportPath.length).join(".");
@@ -3134,7 +3140,7 @@ function runtime_unaccountedInside(record) {
  * @type {Readonly<{unaccounted: true}>}
  * @private
  */
-const UNACCOUNTED_SUPPLIER = Object.freeze({ unaccounted: true });
+const UNACCOUNTED_SUPPLIER = Objects.freeze({ unaccounted: true });
 
 /**
  * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under the leaf — or, with
@@ -3188,7 +3194,7 @@ const NODE_SOURCE_HASHES = new Map();
 
 if (isNode) {
 	try {
-		for (const [id, source] of Object.entries(globalThis.process.binding("natives"))) {
+		for (const [id, source] of Objects.entries(globalThis.process.binding("natives"))) {
 			if (typeof source === "string") NODE_SOURCES.set(id, source);
 		}
 	} catch {

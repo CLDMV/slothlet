@@ -44,6 +44,7 @@
  *
  * @type {WeakMap<object, symbol>}
  */
+
 const instanceTokens = new WeakMap();
 
 /**

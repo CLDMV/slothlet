@@ -43,6 +43,7 @@
  * @type {WeakSet<object>}
  * @private
  */
+
 const FRAMEWORK_INTERNAL = new WeakSet();
 
 /** `WeakSet.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */

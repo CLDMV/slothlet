@@ -45,6 +45,7 @@ import {
 	stackHoldsInstanceCode,
 	toComparablePath
 } from "#handlers/frame-placement";
+import { Reflect, Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };
@@ -86,7 +87,7 @@ const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
  * @type {Readonly<{currentWrapper: null, callerWrapper: null, unresolved: true}>}
  * @private
  */
-const UNATTRIBUTED_IDENTITY = Object.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
+const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
 
 /**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
@@ -201,17 +202,17 @@ function runtime_unfollowInstance(family) {
  * @private
  */
 function runtime_inertConstructor(fn, realmFunctionPrototype) {
-	const prototype = Object.getOwnPropertyDescriptor(fn, "prototype");
+	const prototype = Objects.getOwnPropertyDescriptor(fn, "prototype");
 	if (!prototype || !("value" in prototype)) return false;
 	let nameSeen = false;
-	for (let link = fn; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = fn; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		const name = nameSeen ? undefined : Object.getOwnPropertyDescriptor(link, "name");
+		const name = nameSeen ? undefined : Objects.getOwnPropertyDescriptor(link, "name");
 		if (name) {
 			if (!("value" in name) || (typeof name.value === "string" && /[{<]/.test(name.value))) return false;
 			nameSeen = true;
 		}
-		const hasInstance = Object.getOwnPropertyDescriptor(link, Symbol.hasInstance);
+		const hasInstance = Objects.getOwnPropertyDescriptor(link, Symbol.hasInstance);
 		if (hasInstance) return link === realmFunctionPrototype && "value" in hasInstance;
 	}
 	return true;
@@ -228,23 +229,23 @@ function runtime_inertConstructor(fn, realmFunctionPrototype) {
  */
 function runtime_inspectablePromise(promise) {
 	for (const key of Reflect.ownKeys(promise)) {
-		const own = Object.getOwnPropertyDescriptor(promise, key);
+		const own = Objects.getOwnPropertyDescriptor(promise, key);
 		if (!("value" in own)) return false;
 		if ((typeof own.value === "object" && own.value !== null) || typeof own.value === "function") return false;
 	}
 	const chain = [];
-	for (let link = promise; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = promise; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
 		chain.push(link);
 	}
 	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
-	const realmObject = Object.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
+	const realmObject = Objects.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
 	if (!realmObject || typeof realmObject.value !== "function" || util.types.isProxy(realmObject.value)) return false;
-	const realmFunctionPrototype = Object.getPrototypeOf(realmObject.value);
+	const realmFunctionPrototype = Objects.getPrototypeOf(realmObject.value);
 	for (const link of chain) {
-		const tag = Object.getOwnPropertyDescriptor(link, Symbol.toStringTag);
+		const tag = Objects.getOwnPropertyDescriptor(link, Symbol.toStringTag);
 		if (tag && (!("value" in tag) || (typeof tag.value === "string" && /[{<]/.test(tag.value)))) return false;
-		const constructor = Object.getOwnPropertyDescriptor(link, "constructor");
+		const constructor = Objects.getOwnPropertyDescriptor(link, "constructor");
 		if (!constructor) continue;
 		if (!("value" in constructor)) return false;
 		if (typeof constructor.value === "function" && !runtime_inertConstructor(constructor.value, realmFunctionPrototype)) return false;
@@ -295,7 +296,7 @@ function runtime_followSettled(promise, onSettled, family = null) {
 	let follows = FOLLOWED.get(promise);
 	if (!follows) {
 		const ref = typeof WeakRef === "function" ? new WeakRef(promise) : null;
-		follows = Object.assign([], { ref, families: new Set() });
+		follows = Objects.assign([], { ref, families: new Set() });
 		FOLLOWED.set(promise, follows);
 		followedCount++;
 		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref, follows }, follows);
@@ -342,7 +343,7 @@ function runtime_forgetRef(families, ref) {
  * @type {Readonly<object>}
  * @private
  */
-const NO_CALL = Object.freeze({
+const NO_CALL = Objects.freeze({
 	filePath: null,
 	comparablePath: "",
 	realComparablePath: null,
@@ -1345,7 +1346,7 @@ export class LiveContextManager {
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
 				instanceID: targetInstanceID,
-				availableInstances: Array.from(this.instances.keys())
+				availableInstances: Arrays.from(this.instances.keys())
 			});
 		}
 
@@ -1671,7 +1672,7 @@ export class LiveContextManager {
 		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
 		const store = this.instances.get(targetID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Array.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Arrays.from(this.instances.keys()) });
 		}
 		return this.runInFlow(
 			{
@@ -1705,7 +1706,7 @@ export class LiveContextManager {
 				"CONTEXT_NOT_FOUND",
 				{
 					instanceID: activeID,
-					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
+					availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none"
 				},
 				null,
 				{ validationError: true }
@@ -1830,7 +1831,7 @@ export class LiveContextManager {
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -1866,11 +1867,11 @@ export class LiveContextManager {
 		return {
 			type: "live",
 			currentInstanceID: this.currentInstanceID,
-			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
+			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,
-				contextKeys: Object.keys(store.context),
-				selfKeys: Object.keys(store.self)
+				contextKeys: Objects.keys(store.context),
+				selfKeys: Objects.keys(store.self)
 			}))
 		};
 	}
