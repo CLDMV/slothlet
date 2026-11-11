@@ -6478,19 +6478,37 @@ function runtime_isOpaqueData(value) {
 }
 
 /**
+ * The engine's own `byteLength` and `length` of a typed array, taken when slothlet loaded.
+ * @type {Function}
+ * @private
+ */
+const TYPED_ARRAY_BYTE_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "byteLength").get;
+const TYPED_ARRAY_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "length").get;
+
+/**
  * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,
  * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
- * what its kind gives it. A typed array's members under string keys are not read: listing them lists every index, which
- * costs milliseconds on a buffer of any size, so only its prototype and its symbol keys are checked.
+ * what its kind gives it. A typed array's members under string keys are read only where `permissions.typedArrayMembers`
+ * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
+ * prototype and its symbol keys are checked.
  * @param {object} value - Such an object.
+ * @param {object|null} slothlet - The instance it crosses in.
  * @returns {boolean} True when nothing but its own data can be reached through it.
  * @private
  */
-function runtime_isPristineData(value) {
+function runtime_isPristineData(value, slothlet) {
 	const prototype = Reflect.getPrototypeOf(value);
 	if (prototype !== null && !INTRINSICS.has(prototype) && !runtime_isSharedValue(prototype)) return false;
 	const types = util.types;
-	if (types.isArrayBufferView(value) && !types.isDataView(value)) return Objects.getOwnPropertySymbols(value).length === 0;
+	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
+		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
+		const listed = slothlet?.config?.permissions?.typedArrayMembers;
+		if (listed !== true && typeof listed !== "number") return true;
+		// Past the cap the array is not listed, as with the option off.
+		if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
+		// Its own keys are its indices, then any member stored under another name.
+		return Reflect.ownKeys(value).length === Reflect.apply(TYPED_ARRAY_LENGTH, value, []);
+	}
 	const keys = Reflect.ownKeys(value);
 	if (keys.length === 0) return true;
 	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
@@ -6509,10 +6527,12 @@ function runtime_isPristineData(value) {
  * primitives, see {@link runtime_isPristineData}) pass as they are. A stand-in of another module's code is viewed like
  * the code it stands for.
  * @param {object|Function} value - The value.
+ * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.typedArrayMembers` decides whether a
+ *   typed array's own keys are listed.
  * @returns {boolean} True when it is viewed.
  * @private
  */
-function runtime_needsCrossing(value) {
+function runtime_needsCrossing(value, slothlet = null) {
 	if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
 	if (STAND_IN_RECORDS.has(value)) return true;
 	if (INTRINSICS.has(value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
@@ -6520,7 +6540,7 @@ function runtime_needsCrossing(value) {
 	if (resolveWrapper(value) !== null || capturedViewChildren.has(value) || isFrameworkInternal(value)) return false;
 	if (typeof value === "function") return util.types.isProxy(value) || !runtime_isBuiltinFunction(value);
 	if (util.types.isProxy(value)) return true;
-	if (runtime_isOpaqueData(value)) return !runtime_isPristineData(value);
+	if (runtime_isOpaqueData(value)) return !runtime_isPristineData(value, slothlet);
 	return true;
 }
 
@@ -6716,7 +6736,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 			if (MODULE_PROTOTYPES.has(plain) || runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
-		if (!runtime_needsCrossing(value)) return value;
+		if (!runtime_needsCrossing(value, slothlet)) return value;
 		// A module that may write everything at the path the value comes from gets the value itself, as the owner does,
 		// and so does a module handed a value by one that may write everything at its own path. Handed back to the
 		// module it came from, the first is that module's own value again.

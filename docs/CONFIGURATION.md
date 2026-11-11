@@ -317,7 +317,26 @@ const api = await slothlet({
 
 ## Permissions
 
-The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). One of them changes what a leaf's return looks like, so it is described here too.
+The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). Two of them change what a module is handed, so they are described here too.
+
+### `permissions.typedArrayMembers`
+
+**Type**: `boolean | number`
+**Default**: `false`
+
+While the permission system is on, what one module hands another reaches it as a view, except values that hold nothing but their own bytes: a typed array or `Buffer` is handed over as itself, because native code needs the array. A member a module stored on the array under a string key (`bytes.item = instance`) can only be found by listing the array's keys, which lists every index (about 14 ms for 64 KB, 400 ms for 1 MB, on each crossing), so by default it is not looked for and rides along.
+
+| Value            | A typed array or `Buffer` one module hands another                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `false`          | handed over as itself, its keys never listed                                                                     |
+| `true`           | its keys are listed; one holding a member of its own is handed over as a view                                    |
+| a whole number N | listed when it is N kilobytes or smaller (`byteLength <= N * 1024`); a larger one is handed over as with `false` |
+
+Anything else is rejected with `INVALID_CONFIG`.
+
+```javascript
+const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", typedArrayMembers: 64, rules } });
+```
 
 ### `permissions.attribution`
 

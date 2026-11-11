@@ -1216,6 +1216,9 @@ export class Config extends ComponentBase {
 	 * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
 	 *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
 	 *   wraps nothing and tells every definer from the stack.
+	 * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+	 *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
+	 *   a whole number lists arrays of up to that many kilobytes.
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
 	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
@@ -1410,6 +1413,24 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate typedArrayMembers — whether a typed array or `Buffer` one module hands another is checked for members
+		// of its own under string keys (`bytes.item = …`), which means listing its keys, every index among them. `false`
+		// (the default) never lists; `true` always does; a whole number lists arrays of up to that many kilobytes.
+		const typedArrayMembers = permissions.typedArrayMembers === undefined ? false : permissions.typedArrayMembers;
+		if (typeof typedArrayMembers !== "boolean" && !(Number.isSafeInteger(typedArrayMembers) && typedArrayMembers >= 0)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.typedArrayMembers",
+					value: permissions.typedArrayMembers,
+					expected: "boolean | whole number of kilobytes",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate references.capture — controls whether a function read out of the api keeps the identity of
 		// the module that read it, so it stays enforced as that module when invoked later from a boundary
 		// carrying no caller. Defaults to true. Set false to restore the older behaviour, where such a call
@@ -1563,6 +1584,7 @@ export class Config extends ComponentBase {
 			ceiling,
 			provenance,
 			attribution,
+			typedArrayMembers,
 			references: { capture },
 			private: { host: privateHost },
 			rules,
