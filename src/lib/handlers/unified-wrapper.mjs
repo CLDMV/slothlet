@@ -19,8 +19,6 @@
  * @internal
  */
 
-// Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
-const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // `util.types.isProxy` (proxy detection) and `util.inspect.custom` are the only members used
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
@@ -100,6 +98,9 @@ import {
 	Promises,
 	Symbols
 } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
+const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).

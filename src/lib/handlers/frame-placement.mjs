@@ -3033,7 +3033,8 @@ function runtime_declaredAt(text, at, own, names) {
 	const before = text.slice(Math.max(0, at - 160), at).replace(/[\s(]+$/, "");
 	for (const name of names) {
 		if (name === "default" && /(?:export\s+default|module\.exports\s*=)$/.test(before)) return true;
-		const escaped = name.replace(/\$/g, "\\$");
+		// The name is matched as text: every character a pattern reads otherwise is escaped.
+		const escaped = name.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 		if (new RegExp(`(?:^|[^\\w$])${escaped}\\s*[=:]$`).test(before)) return true;
 		if (new RegExp(`^(?:async\\s+)?function\\s*\\*?\\s*${escaped}(?![\\w$])`).test(own)) return true;
 		if (new RegExp(`^class\\s+${escaped}(?![\\w$])`).test(own)) return true;
