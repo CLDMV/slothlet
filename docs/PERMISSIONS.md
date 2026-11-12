@@ -448,7 +448,21 @@ export async function probe() {
 }
 ```
 
-The async runtime carries the module in the store the file loads in. The live runtime pins what the file registers through the schedulers, emitters and promises it patches (see [Runtime choice](#runtime-choice--the-permission-boundary)), and what an `AsyncLocalStorage.snapshot()`, an `AsyncLocalStorage.bind()` or an `AsyncResource` the file made runs later: each is pinned to the load (or the call) that made it, so the code it runs carries that module in the live runtime as it does in the async one, with the call that runs it as a caller too. A helper file is loaded once per instance, by whichever file imports it first, and what it starts at its top level carries that file's module. While the module cannot be found (the file is still loading, its node was removed, the instance has shut down) such code has no `self` and is refused.
+The async runtime carries the module in the store the file loads in. The live runtime pins what the file registers through the schedulers, emitters and promises it patches (see [Runtime choice](#runtime-choice--the-permission-boundary)), and what an `AsyncLocalStorage.snapshot()`, an `AsyncLocalStorage.bind()` or an `AsyncResource` the file made runs later: each is pinned to the load (or the call) that made it, so the code it runs carries that module in the live runtime as it does in the async one, with the call that runs it as a caller too. While the module cannot be found (the file is still loading, its node was removed, the instance has shut down) such code has no `self` and is refused.
+
+**What a helper file starts while it loads** is held to every api file that imports the helper. A helper file is loaded once per instance, inside the load of whichever api file imports it first, so its timer or queue would otherwise carry that one file's module and nothing of the others'. When the helper's own flow runs code (the helper's own code with no code of an importing file calling it, or a job put on its queue), the module path of **every** api file importing the helper, directly or through other helper files, has to be allowed, in both runtimes; the code doing the access is still read as its definer. With one importing api file that is that file's module, as for the file's own timers.
+
+```javascript
+// lib/queue.mjs (imported by api/alpha.mjs and api/beta.mjs)
+const jobs = [];
+setInterval(() => jobs.shift()?.(), 2); // started once, inside whichever of the two loads first
+export const push = (job) => jobs.push(job);
+
+// api/alpha.mjs
+export const later = () => push(() => self.vault.get()); // definer alpha.later, callers alpha and beta
+```
+
+A helper's code called by the file-level code of an api file (its own timer calling a function of the helper) runs as that file's module alone.
 
 Where neither a call nor a load says who the caller is (a module that left the async store on purpose, a scheduler slothlet does not patch), the leaves whose code is further out on the synchronous stack are the callers, and all of them have to be allowed. A callback handed straight to such a scheduler has no frame of the module under it when it runs; that is the limit of what frames can tell.
 

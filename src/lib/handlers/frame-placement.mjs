@@ -1939,23 +1939,34 @@ function runtime_topLevelRunning(record) {
 		record
 	};
 	const { place } = createFramePlacer([entry]);
+	// A helper file's own code running in the flow with no code of a leaf's file calling it (what the helper started when
+	// it loaded): the module's, and, where other api files import the helper too, theirs as well. The helper is loaded
+	// once, inside whichever load imported it first, so the flow carries that load's module alone; every module importing
+	// the helper has to be allowed.
+	const helperFlow = (helper) => {
+		const others = runtime_helperModules(helper).filter((other) => other !== module);
+		return others.length ? { wrapper: module, ceiling: combineCeilings(record.ceiling ?? null, ...others) } : null;
+	};
 	const decide = (frames) => {
 		let index = -1;
 		// Whether the entry slothlet made for this flow itself was passed with no code of anyone's before it: the flow
 		// was re-entered (the live runtime's pin) by code further out, which is then what is asked about.
 		let passedOwnEntry = false;
 		let passedCode = false;
+		// The helper file the module imports that the innermost code runs in, while the walk looks for the code that
+		// called it.
+		let helper = null;
 		for (const frame of frames) {
 			index++;
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 				if (frame.enter) {
-					if (passedOwnEntry || passedCode) return null;
+					if (passedOwnEntry || passedCode) return helper ? helperFlow(helper) : null;
 					passedOwnEntry = true;
 				}
 				continue;
 			}
 			passedCode = true;
-			if (frame.async || isRunnerFrame(frame)) return null;
+			if (frame.async || isRunnerFrame(frame)) return helper ? helperFlow(helper) : null;
 			if (frame.evaluated || isForeignScript(frame)) return UNACCOUNTED_SUPPLIER;
 			// Node's own code acts for whoever called it: the next frame out decides.
 			if (frame.path.startsWith("node:")) {
@@ -1965,20 +1976,75 @@ function runtime_topLevelRunning(record) {
 			const leaves = runtime_leavesAt(slothlet, frame);
 			if (leaves.length) {
 				if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return UNACCOUNTED_SUPPLIER;
+				// The helper's code was called by this file's: it runs for it only when the file imports the helper.
+				if (helper && !runtime_importsHelper(helper, leaves)) return UNACCOUNTED_SUPPLIER;
 				const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
-				// Every leaf whose code is further out on the stack is a caller too: the code ran through them.
-				const callers = runtime_outerCallers(frames, index, slothlet, true).filter((caller) => caller !== module && caller !== definers[0]);
+				// Every leaf whose code is further out on the stack is a caller too: the code ran through them. So is every
+				// module importing a helper whose own flow the code runs in.
+				const callers = [
+					...runtime_outerCallers(frames, index, slothlet, true),
+					...runtime_outerHelperModules(frames, index, slothlet)
+				].filter((caller) => caller !== module && caller !== definers[0]);
 				if (definers.length === 1 && definers[0] === module && !callers.length) return null;
 				return { wrapper: definers[0], ceiling: combineCeilings(module, record.ceiling ?? null, ...definers.slice(1), ...callers) };
 			}
+			if (helper) {
+				// Further out than the helper's code is the helper's own again, or code of no leaf's file (the host's, a
+				// package's): no leaf's code called the helper.
+				if (runtime_helperOwner(frame, slothlet)) continue;
+				return helperFlow(helper);
+			}
 			const placement = filePath ? place(frame) : null;
-			if (placement?.matches.length) return null;
+			if (placement?.matches.length) {
+				// A file the module imports that no leaf was built from: a helper, whose code runs for whoever called it.
+				helper = runtime_helperOwner(frame, slothlet);
+				if (helper) continue;
+				return null;
+			}
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame, false) : null;
 			return UNACCOUNTED_SUPPLIER;
 		}
-		return frames.truncated ? undefined : null;
+		if (frames.truncated) return undefined;
+		return helper ? helperFlow(helper) : null;
 	};
 	return decide(runtime_captureFrames(48)) ?? null;
+}
+
+/**
+ * The modules importing the helper files whose own code is on the synchronous stack further out than a frame (#726):
+ * code run from what a helper file started when it loaded (its queue, its timer) runs in a flow every module importing
+ * the helper shares, so all of them are its callers. The walk ends where the synchronous stack does, or at a call
+ * slothlet entered.
+ * @param {Iterable<object>} frames - The capture, innermost first.
+ * @param {number} index - The index of the frame the helpers are further out than.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>} The modules' wrappers, none when no helper's code is further out.
+ * @private
+ */
+function runtime_outerHelperModules(frames, index, slothlet) {
+	const modules = new Set();
+	const seen = new Set();
+	let position = -1;
+	let passedOwnEntry = false;
+	let passedCode = false;
+	for (const frame of frames) {
+		position++;
+		if (position <= index) continue;
+		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			if (frame.enter) {
+				if (passedOwnEntry || passedCode) break;
+				passedOwnEntry = true;
+			}
+			continue;
+		}
+		passedCode = true;
+		if (frame.async || isRunnerFrame(frame)) break;
+		if (frame.evaluated || frame.path.startsWith("node:") || isForeignScript(frame) || seen.has(frame.path)) continue;
+		seen.add(frame.path);
+		const helper = runtime_helperOwner(frame, slothlet);
+		if (helper) for (const module of runtime_helperModules(helper)) modules.add(module);
+	}
+	return [...modules];
 }
 
 /**
@@ -3191,8 +3257,8 @@ export function createModuleLoad(slothlet, filePath, moduleID) {
  * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
  * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
  * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
- * instance is pending, or one alone imports the file. `false` when the code is a loading instance's and which load
- * cannot be told; null when it is not a loading file's code.
+ * instance is pending, and otherwise the first pending load whose file imports it. `false` when the code is a loading
+ * instance's and no pending load imports its file; null when it is not a loading file's code.
  * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
  * @returns {object|false|null} The load, false, or null.
  * @internal
@@ -3234,7 +3300,9 @@ export function loadOnStack(loads) {
 			}
 		}
 		const importing = sameInstance.filter((loading) => seen.has(toComparablePath(loading.filePath)));
-		return importing.length === 1 ? importing[0] : false;
+		// Several pending loads import it: the first stands for the flow, and every module importing the helper is held
+		// to when the flow's code makes an access (see runtime_topLevelRunning).
+		return importing.length ? importing[0] : false;
 	}
 	return null;
 }
