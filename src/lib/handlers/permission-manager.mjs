@@ -657,9 +657,6 @@ export class PermissionManager extends ComponentBase {
 		// rule of equal or higher specificity still overrides these.
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.metadata.self", effect: "allow" }, "__builtin__");
-		// `slothlet.wrapped` (#671) only answers whether a value is one of slothlet's own wrappers; it reveals nothing
-		// about any module, so like the identity reads above it is allowed by default.
-		this.addRule({ caller: "**", target: "slothlet.wrapped", effect: "allow" }, "__builtin__");
 
 		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
 		// `requires` rule sees, so the principal management surface is host-only by default. The host

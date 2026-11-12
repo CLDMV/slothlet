@@ -87,7 +87,9 @@ describe("browser crossing guard", () => {
 							};
 							port1.postMessage({ theirs: data.list });
 						});
-						return JSON.stringify([self.slothlet.wrapped(data), copy.a, copy.list, [...copy.map], copy !== data, posted]);
+						// A view answers the engine's brand check as the Proxy it is; the Map itself answers as a Map.
+						const viewed = Object.prototype.toString.call(data.map) !== "[object Map]";
+						return JSON.stringify([viewed, copy.a, copy.list, [...copy.map], copy !== data, posted]);
 					},
 					plant: (route, key) => {
 						const value = routes[route]();
@@ -138,7 +140,7 @@ describe("browser crossing guard", () => {
 	});
 
 	it("lets the platform's cloning functions copy another module's data, as plain JavaScript does", async () => {
-		const expected = (wrapped) => JSON.stringify([wrapped, { b: 1 }, [1, 2, 3], [["k", { z: 1 }]], true, { theirs: [1, 2, 3] }]);
+		const expected = (viewed) => JSON.stringify([viewed, { b: 1 }, [1, 2, 3], [["k", { z: 1 }]], true, { theirs: [1, 2, 3] }]);
 		const on = await boot({ defaultPolicy: "allow" });
 		expect(await on.reader.copies()).toBe(expected(true));
 		await on.shutdown();

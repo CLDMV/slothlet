@@ -495,7 +495,7 @@ export function shows() {
 	} catch (error) {
 		cloned = error.name;
 	}
-	return { dataWrapped: self.slothlet.wrapped(data), instanceWrapped: self.slothlet.wrapped(self.owner.make()), cloned };
+	return { dataWrapped: types.isProxy(data), instanceWrapped: types.isProxy(self.owner.make()), cloned };
 }
 
 /** Routes that reach the owner's code by a detour: each makes its writes itself and answers how they ended. */

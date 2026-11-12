@@ -30,7 +30,6 @@ import {
 	copyForComposition,
 	setApiNodeCheck,
 	isCompositionLayer,
-	isCompositionProxy,
 	layerForwards,
 	layerHeldKeys,
 	layerMethodOriginal,
@@ -2205,15 +2204,6 @@ const SELF_FRAMEWORK_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
 const SELF_ROOT_VIEWS = new WeakMap();
 
 /**
- * slothlet's own wrappers that no other registry holds (a root view, a promoted call's guarded result, a carrier's view
- * or frozen copy), recorded only so {@link isSlothletWrapped} knows them; nothing else reads it, so recording one
- * changes how no value is handled.
- * @type {WeakSet<object>}
- * @private
- */
-const OWN_VIEWS_UNLISTED = new WeakSet();
-
-/**
  * Who a change made through a root view at `parts` is made as: the module executing now, the host
  * (`null`) inside a `run()` / `scope()` it opened, or else the reader the view belongs to, when that reader
  * owns the path. Code the live runtime cannot attribute is refused, as it is through a node's view.
@@ -2332,7 +2322,6 @@ export function runtime_selfRootView(slothlet, reader) {
 		}
 	});
 	byReader.set(reader, view);
-	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
 
@@ -4101,51 +4090,6 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 		// A value that refuses to be described is taken to hold code.
 		return false;
 	}
-}
-
-/** `WeakMap` and `WeakSet` `has` as they were when slothlet loaded, so a module replacing them changes no answer of {@link isSlothletWrapped}. */
-const weakMapHasAtLoad = Function.prototype.call.bind(WeakMap.prototype.has);
-const weakSetHasAtLoad = Function.prototype.call.bind(WeakSet.prototype.has);
-
-/**
- * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
- * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
- * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
- * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, a crossing view of the class
- * prototype guard, the root api) and the ones that
- * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
- * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`; the promise
- * the guard hands a reader in place of another module's). It reads
- * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
- * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
- * slothlet's. Backs `api.slothlet.wrapped` (#671).
- * @param {*} value - The value.
- * @returns {boolean} True only for one of slothlet's own wrappers.
- * @public
- * @example
- * isSlothletWrapped(api.math); // true
- * isSlothletWrapped(new Proxy({}, {})); // false
- */
-export function isSlothletWrapped(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	return (
-		weakMapHasAtLoad(_proxyRegistry, value) ||
-		weakSetHasAtLoad(capturedViewSet, value) ||
-		weakMapHasAtLoad(STAND_IN_RECORDS, value) ||
-		weakMapHasAtLoad(INBOUND_VIEWS, value) ||
-		weakSetHasAtLoad(genuineWrappers, value) ||
-		weakMapHasAtLoad(SELF_VIEW_NODES, value) ||
-		weakMapHasAtLoad(SELF_MEMBER_VIEWS, value) ||
-		weakMapHasAtLoad(FRAMEWORK_VIEW_TARGETS, value) ||
-		weakSetHasAtLoad(OWN_VIEWS_UNLISTED, value) ||
-		weakSetHasAtLoad(NODE_VALUE_OFS, value) ||
-		weakMapHasAtLoad(CROSSINGS, value) ||
-		weakSetHasAtLoad(CROSSING_PROMISES, value) ||
-		isSlothletProxy(value) ||
-		isFrameworkInternal(value) ||
-		isCompositionProxy(value) ||
-		runtime_isWrappedClassInstance(value)
-	);
 }
 
 /**
@@ -6432,7 +6376,6 @@ function runtime_carrierView(value, reader, slothlet) {
 	}
 	if (!byReader) CARRIER_VIEWS.set(value, (byReader = new WeakMap()));
 	byReader.set(reader, view);
-	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
 
@@ -6452,14 +6395,6 @@ const CROSSINGS = new WeakMap();
  * @private
  */
 const CROSSING_VIEWS = new WeakMap();
-
-/**
- * The promises the class prototype guard hands a reader in place of a plain promise another module handed on, settling
- * as it does with what it settles to crossed (see {@link runtime_crossPromise}).
- * @type {WeakSet<Promise>}
- * @private
- */
-const CROSSING_PROMISES = new WeakSet();
 
 /**
  * The guard's promise of each plain promise, by module, so the same promise read twice is the same promise and only
@@ -6878,7 +6813,6 @@ function runtime_crossPromise(promise, reader, slothlet, from) {
 			throw runtime_crossTo(reason, reader, slothlet, from);
 		}
 	]);
-	CROSSING_PROMISES.add(crossed);
 	if (!byKey) CROSSED_PROMISES.set(promise, (byKey = new Map()));
 	byKey.set(key, crossed);
 	return crossed;
@@ -9381,7 +9315,6 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 			return value;
 		}
 	});
-	OWN_VIEWS_UNLISTED.add(guarded);
 	return guarded;
 }
 

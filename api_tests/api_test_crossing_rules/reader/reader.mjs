@@ -19,6 +19,7 @@
  * @module api_test_crossing_rules/reader
  */
 
+import { types } from "node:util";
 import v8 from "node:v8";
 import { MessageChannel } from "node:worker_threads";
 import { self } from "@cldmv/slothlet/runtime";
@@ -37,7 +38,7 @@ function probe(key) {
 	} catch (error) {
 		write = error?.code ?? String(error);
 	}
-	return { wrapped: self.slothlet.wrapped(value), isHeld: self.owner.isHeld(value), write };
+	return { wrapped: types.isProxy(value), isHeld: self.owner.isHeld(value), write };
 }
 
 export const plain = (key) => probe(key);
@@ -56,7 +57,7 @@ let keptPrototype;
 export function keep() {
 	kept = self.owner.getHeld();
 	keptPrototype = Object.getPrototypeOf(kept.inst);
-	return self.slothlet.wrapped(kept);
+	return types.isProxy(kept);
 }
 
 /**
@@ -163,9 +164,9 @@ export function received(prefix) {
 		}
 	};
 	return {
-		heardWrapped: self.slothlet.wrapped(heard),
+		heardWrapped: types.isProxy(heard),
 		heardWrite: plant(heard, `${prefix}heard`),
-		hookedWrapped: self.slothlet.wrapped(hooked),
+		hookedWrapped: types.isProxy(hooked),
 		hookedWrite: plant(hooked, `${prefix}hooked`)
 	};
 }
@@ -253,7 +254,7 @@ export function typed(prefix, kind, size) {
 		}
 	}
 	// Native consumers take it either way: a copy is made from its bytes.
-	return { wrapped: self.slothlet.wrapped(value), write, first: value[0], length: value.length, copied: new Uint8Array(value).length };
+	return { wrapped: types.isProxy(value), write, first: value[0], length: value.length, copied: new Uint8Array(value).length };
 }
 
 /**
