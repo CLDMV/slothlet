@@ -32,6 +32,7 @@
  * @module tests/vitests/suites/permissions/permissions-helper-load
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
@@ -149,4 +150,46 @@ describe.each([
 			expect(await run(api, route)).toBe(SECRET);
 		});
 	});
+});
+
+/**
+ * Build one instance of the fixture `api_test_helper_copies` in a process of its own and read the vault from the
+ * queue its shared helper started when it loaded, through each of the two api files importing it. The first instance
+ * of a process loads slothlet's runtime while the api files load; a file's imports can then be evaluated inside the
+ * load of another file (here a CommonJS api file that does not import the helper), whose module the helper's timer
+ * then carries.
+ * @param {Array<object>} list - The permission rules.
+ * @returns {string[]} What `one.viaQueue()` and `two.viaQueue()` gave.
+ */
+function runFirstInstance(list) {
+	const base = path.resolve(DIR, "../../api_test_helper_copies/api");
+	const script = `
+		import slothlet from "@cldmv/slothlet";
+		const keep = setInterval(() => {}, 1000);
+		const api = await slothlet({ base: ${JSON.stringify(base)}, silent: true, permissions: { defaultPolicy: "allow", attribution: "fast", rules: ${JSON.stringify(list)} } });
+		console.log("RESULT " + JSON.stringify([await api.one.viaQueue(), await api.two.viaQueue()]));
+		await api.shutdown();
+		clearInterval(keep);
+	`;
+	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
+		cwd: path.resolve(DIR, "../../.."),
+		encoding: "utf8",
+		timeout: 120000
+	});
+	const line = String(child.stdout)
+		.split("\n")
+		.find((text) => text.startsWith("RESULT "));
+	if (!line) throw new Error(`no result: ${child.stderr}`);
+	return JSON.parse(line.slice("RESULT ".length));
+}
+
+describe("Permissions > what a helper file starts when it loads > the first instance of a process", () => {
+	it("is not refused when nothing is denied, whichever file's load the helper was evaluated in", () => {
+		expect(runFirstInstance([])).toEqual([SECRET, SECRET]);
+	}, 120000);
+
+	it("is held to every api file importing the helper", () => {
+		expect(runFirstInstance([{ caller: "two", target: "vault.**", effect: "deny" }])).toEqual([DENIED, DENIED]);
+		expect(runFirstInstance([{ caller: "one", target: "vault.**", effect: "deny" }])).toEqual([DENIED, DENIED]);
+	}, 240000);
 });

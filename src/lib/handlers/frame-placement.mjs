@@ -2002,7 +2002,10 @@ function runtime_topLevelRunning(record) {
 				return null;
 			}
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame, false) : null;
-			return UNACCOUNTED_SUPPLIER;
+			// Code of the instance the module does not import. A helper file's own code is the code of the api files that
+			// import it, under this flow's module too: a file's imports can be evaluated inside another file's load when
+			// several load at once, so the flow a helper's timer carries is not always its importer's.
+			return runtime_helperAnswer(record, frame) ?? UNACCOUNTED_SUPPLIER;
 		}
 		if (frames.truncated) return undefined;
 		return helper ? helperFlow(helper) : null;
