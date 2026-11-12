@@ -20,8 +20,9 @@
  * The rules (docs/API-RULES.md):
  * - A file named after its folder flattens into it: a default export becomes the folder itself,
  *   with the other files as properties (Rule 8); named exports become the folder's members (Rule 1).
- * - A FOLDER named after its parent is never hoisted on a normal load; it stays a nested namespace.
- *   (Only an `api.add` mount hoists a same-named direct child, Rule 13.)
+ * - A FOLDER named after its parent stays a nested namespace when anything else sits beside it. When it is its
+ *   parent's only entry the two are one level (Rule 22, #743). (An `api.add` mount also hoists a same-named direct
+ *   child, Rule 13.)
  * - A sibling file is never dropped.
  *
  * Each fixture is `api_tests/smart_flatten/api_smart_flatten_same_name_<case>`; every leaf returns its
@@ -94,10 +95,10 @@ const CASES = {
 		shape: ["s : fn", "s.helper : ns", "s.helper.fmt : fn"],
 		calls: { s: "s", "s.helper.fmt": "s.helper.fmt" }
 	},
-	// s/s/worker.mjs
+	// s/s/worker.mjs: the outer folder holds only the same-named folder, so the two are one level (#743)
 	f: {
-		shape: ["s : ns", "s.s : ns", "s.s.worker : ns", "s.s.worker.doWork : fn"],
-		calls: { "s.s.worker.doWork": "s.s.worker.doWork" }
+		shape: ["s : ns", "s.worker : ns", "s.worker.doWork : fn"],
+		calls: { "s.worker.doWork": "s.worker.doWork" }
 	},
 	// s/s.mjs (only named s) + s/helper.mjs
 	g: {

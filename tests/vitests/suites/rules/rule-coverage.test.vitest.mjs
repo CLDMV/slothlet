@@ -187,8 +187,8 @@ describe.skipIf(!hasSource)("Rule Coverage Validation", () => {
 	// no C## entry. Every OTHER rule must map at least one condition.
 	const NO_CONDITION_ALLOWED = new Set([]); // all 21 rules carry >= 1 condition in some series
 
-	test("Mapping table parsed successfully (21 rules)", () => {
-		expect(mappings.length).toBe(21);
+	test("Mapping table parsed successfully (22 rules)", () => {
+		expect(mappings.length).toBe(22);
 	});
 
 	test("INV-3: every rule has >= 1 condition OR >= 1 F##", () => {

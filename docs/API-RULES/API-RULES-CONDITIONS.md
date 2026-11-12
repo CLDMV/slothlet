@@ -727,6 +727,46 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 ---
 
+## C26: Same-Named Folder Deduplication
+
+**Category**: Flattening
+**Related Rule**: [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+**Flattening Guide**: [F09: Same-Named Folder Deduplication](API-FLATTENING.md#f09-same-named-folder-deduplication)
+**Status**: ✅ Active
+
+**Pattern**: Before a subdirectory's level is built, while it holds no files and exactly one subdirectory whose sanitized name equals its own, the inner directory is built in its place.
+
+**Purpose**: `e/e/x.mjs` is `api.e.x`, not `api.e.e.x`. The outer folder carries nothing of its own.
+
+**Function**: `#collapseSameNamedFolder()`
+**Source**: `src/lib/builders/modes-processor.mjs` - applied to each subdirectory of `processFiles()`, eager and lazy
+
+**Condition Check**:
+
+```javascript
+while (
+	dir.children.files.length === 0 &&
+	dir.children.directories.length === 1 &&
+	sanitize(dir.children.directories[0].name) === sanitize(dir.name)
+) {
+	dir = dir.children.directories[0];
+}
+```
+
+**Triggers**: no files + exactly one subdirectory + same sanitized name
+**Result**: One level. Every node under it records the collapsed path, which is the path it is reached at.
+**Used By**: [API-RULES Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+
+| Folder structure             | Collapsed | Reached at                    |
+| ---------------------------- | --------- | ----------------------------- |
+| `e/e/x.mjs`                  | yes       | `api.e.x`                     |
+| `t/t/t/x.mjs`                | yes       | `api.t.x`                     |
+| `c/z.mjs` + `c/c/x.mjs`      | no        | `api.c.z`, `api.c.c.x`        |
+| `s/s.mjs` + `s/s/worker.mjs` | no        | Rule 1 (the file) and `s.s.*` |
+| `g/h/g/x.mjs`                | no        | `api.g.h.g.x`                 |
+
+---
+
 ## Cross-Reference Index
 
 ### By Rule Number
@@ -741,6 +781,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 - **Rule 10**: [C14](#c14-parent-level-flattening---generic-filenames)
 - **Rule 11**: [C24](#c24-addapi-special-file-detection)
 - **Rule 13**: [C25](#c25-addapi-path-deduplication)
+- **Rule 22**: [C26](#c26-same-named-folder-deduplication)
 
 ### By Flattening Pattern
 

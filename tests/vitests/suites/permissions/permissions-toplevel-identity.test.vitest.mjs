@@ -70,12 +70,13 @@ const FORMS = [
 		reach: (api) => named(api.folder.part)
 	},
 	{
-		// A folder named after its parent folder is one level of the path, so the file's module is `deep.part`.
+		// A folder that is its parent folder's only entry and has its name is one level with it (#743), in the tree
+		// and in the path, so the file's module is `deep.part` and that is where it is reached.
 		form: "a file in a folder named after its parent folder",
 		file: "deep/deep/part.mjs",
 		module: "deep.part",
 		leaf: "deep.part.direct",
-		reach: (api) => named(api.deep.deep.part)
+		reach: (api) => named(api.deep.part)
 	},
 	{
 		form: "the only file of a folder",

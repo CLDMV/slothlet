@@ -28,7 +28,7 @@ This is the **top level** of slothlet's three-tier documentation system:
 
 ## Overview
 
-API flattening automatically removes unnecessary nesting levels when certain patterns are detected. Instead of `api.math.math.add()`, you get `api.math.add()`. The system analyzes your file structure and applies **eight flattening patterns** to create the most ergonomic API possible.
+API flattening automatically removes unnecessary nesting levels when certain patterns are detected. Instead of `api.math.math.add()`, you get `api.math.add()`. The system analyzes your file structure and applies **nine flattening patterns** to create the most ergonomic API possible.
 
 **Key Benefits:**
 
@@ -41,17 +41,17 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 
 ## Table of Contents
 
-- [The Eight Flattening Patterns](#the-eight-flattening-patterns)
+- [The Nine Flattening Patterns](#the-nine-flattening-patterns)
 - [Visual Decision Tree](#visual-decision-tree)
 - [Benefits and Examples](#benefits-and-examples)
 - [Advanced Scenarios](#advanced-scenarios)
 - [Cross-Reference Guide](#cross-reference-guide)
 
-> This document covers the **8 flattening-specific patterns** (F01-F08) which are a subset of the **13 comprehensive API rules** (Rules 1-13) in [../API-RULES.md](../API-RULES.md). The complete rules cover all API behaviors including non-flattening cases.
+> This document covers the **9 flattening-specific patterns** (F01-F09) which are a subset of the comprehensive API rules in [../API-RULES.md](../API-RULES.md). The complete rules cover all API behaviors including non-flattening cases.
 
 ---
 
-## The Eight Flattening Patterns
+## The Nine Flattening Patterns
 
 ### Mapping to Comprehensive Rules
 
@@ -63,6 +63,7 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 - **F06** → Rule 11 (AddApi Special File Pattern)
 - **F07** → Rule 12 (Module Ownership and Selective API Overwriting)
 - **F08** → Rule 13 (AddApi Path Deduplication Flattening)
+- **F09** → Rule 22 (Same-Named Folder Deduplication)
 
 **Non-Flattening Rules** (Rules 2-6, 9): Export handling, mixed exports, function naming, empty modules, self-referential protection.
 
@@ -324,6 +325,46 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 
 ---
 
+### F09: Same-Named Folder Deduplication
+
+**When:** A folder's only entry is a folder of the same name
+**Result:** The two are one level: the outer folder is dropped and the inner one stands for it
+**Detailed Coverage**: [API-RULES Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication) | **Technical**: [C26](API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)
+
+**Example:**
+
+```text
+api/
+├── e/
+│   └── e/
+│       └── x.mjs        → api.e.x          (not api.e.e.x)
+├── deep/
+│   └── deep/
+│       ├── part.mjs     → api.deep.part
+│       └── other.mjs    → api.deep.other
+└── c/
+    ├── z.mjs            → api.c.z
+    └── c/
+        └── x.mjs        → api.c.c.x        (z.mjs sits beside c/c/, so both levels stay)
+```
+
+```javascript
+api.e.x.where(); // ✅ one level
+api.deep.part.where(); // ✅ one level
+api.c.c.x.where(); // ✅ both levels: the outer folder holds something else too
+// NOT: api.e.e.x.where() ❌
+```
+
+**Guard - Only Entry:** The outer folder must hold nothing but the same-named folder. A file or another folder beside it keeps both levels, and a FILE named after its folder is F01's case, not this one. The rule repeats while it holds (`t/t/t/x.mjs` → `api.t.x`), applies at every depth, in eager and lazy mode, at initial load and under `api.slothlet.api.add()`.
+
+**One path everywhere:** The path a node records (`__metadata.apiPath`, what a permission rule or a hook pattern has to name, what ownership tracks) is the path it is reached at: `e.x.where` above, never `e.e.x.where`.
+
+**Why:** `e/e/` adds a level that carries nothing. This is the 2.x shape; 3.0.0 through 3.24.0 kept both levels (see #743).
+
+> **If you call `api.x.x.*` for such a folder:** drop the repeated segment (`api.x.*`), and name the same path in permission rules and hook patterns.
+
+---
+
 ## Visual Decision Tree
 
 ```mermaid
@@ -362,11 +403,12 @@ flowchart TD
 
 1. **F06 Priority**: Always check for `addapi.mjs` files first - special case
 2. **F08 Check**: AddApi path deduplication (direct subfolder match)
-3. **F01 & F04**: Folder/file name matching (with and without default export)
-4. **F02**: Index / generic filename transparency
-5. **F03**: Single named export matching folder
-6. **F05**: Single file default export promotion
-7. **Default**: No flattening when no rules match
+3. **F09**: A folder holding only a same-named folder is one level (applied before the folder's files are looked at)
+4. **F01 & F04**: Folder/file name matching (with and without default export)
+5. **F02**: Index / generic filename transparency
+6. **F03**: Single named export matching folder
+7. **F05**: Single file default export promotion
+8. **Default**: No flattening when no rules match
 
 ---
 
@@ -487,3 +529,4 @@ When a module exports an object that contains a key matching the filename/namesp
 | **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                                                                                      | [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)                                 | `api_tests/api_smart_flatten_addapi`                      |
 | **F07** | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting)                                                                   | [C19-C22](API-RULES-CONDITIONS.md#c19)                                                           | `src/lib/handlers/ownership.mjs`                          |
 | **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)                                                                             | [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)                                     | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| **F09** | [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)                                                                                  | [C26](API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)                               | `api_tests/api_test_folder_dedupe`                        |

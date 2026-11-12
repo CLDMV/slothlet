@@ -373,20 +373,20 @@ export const helper = () => flush; // the host running what this returns runs it
 
 Which path that is follows from how the file becomes part of the api (see [API-RULES.md](API-RULES.md)); it is the same in eager and lazy mode, in both runtimes and under both values of `permissions.attribution`:
 
-| File                                                | How it is loaded                                | Its leaves             | File-level code runs as |
-| --------------------------------------------------- | ----------------------------------------------- | ---------------------- | ----------------------- |
-| `m.mjs` at the root of the base folder              | several named exports                           | `m.a`, `m.b`           | `m`                     |
-| `m/m.mjs`                                           | a file named after its folder                   | `m.a`, `m.b`           | `m`                     |
-| `m/a.mjs`                                           | a file in a folder, alone or beside others      | `m.a.x`, `m.a.y`       | `m.a`                   |
-| `m/main.mjs`                                        | a file with a generic name                      | `m.main.x`, `m.main.y` | `m.main`                |
-| `m/m/a.mjs`                                         | a folder named after its parent folder          | `m.a.x`, `m.a.y`       | `m.a`                   |
-| `m.mjs` with `export default { … }`                 | a default export object                         | `m.a`, `m.b`           | `m`                     |
-| `m/f.mjs` with a default function and named exports | a callable node with members                    | `m.f`, `m.f.a`         | `m.f`                   |
-| `m.mjs` whose one export is `m`                     | a single named export                           | `m.m`                  | `m`                     |
-| `m.cjs`                                             | a CommonJS file                                 | `m.a`, `m.b`           | `m`                     |
-| `addapi.mjs` of a folder added at `m`               | `api.slothlet.api.add("m", folder)`             | `m.a`, `m.b`           | `m`                     |
-| `m/m.mjs` of a folder added at `m`                  | the sub-folder named after the mount is hoisted | `m.a`, `m.b`           | `m`                     |
-| `tool.mjs` of a folder added at `ext.m`             | a nested mount path                             | `ext.m.tool.a`         | `ext.m.tool`            |
+| File                                                | How it is loaded                                                           | Its leaves             | File-level code runs as |
+| --------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- | ----------------------- |
+| `m.mjs` at the root of the base folder              | several named exports                                                      | `m.a`, `m.b`           | `m`                     |
+| `m/m.mjs`                                           | a file named after its folder                                              | `m.a`, `m.b`           | `m`                     |
+| `m/a.mjs`                                           | a file in a folder, alone or beside others                                 | `m.a.x`, `m.a.y`       | `m.a`                   |
+| `m/main.mjs`                                        | a file with a generic name                                                 | `m.main.x`, `m.main.y` | `m.main`                |
+| `m/m/a.mjs`                                         | a folder that is its same-named parent's only entry (one level, `api.m.a`) | `m.a.x`, `m.a.y`       | `m.a`                   |
+| `m.mjs` with `export default { … }`                 | a default export object                                                    | `m.a`, `m.b`           | `m`                     |
+| `m/f.mjs` with a default function and named exports | a callable node with members                                               | `m.f`, `m.f.a`         | `m.f`                   |
+| `m.mjs` whose one export is `m`                     | a single named export                                                      | `m.m`                  | `m`                     |
+| `m.cjs`                                             | a CommonJS file                                                            | `m.a`, `m.b`           | `m`                     |
+| `addapi.mjs` of a folder added at `m`               | `api.slothlet.api.add("m", folder)`                                        | `m.a`, `m.b`           | `m`                     |
+| `m/m.mjs` of a folder added at `m`                  | the sub-folder named after the mount is hoisted                            | `m.a`, `m.b`           | `m`                     |
+| `tool.mjs` of a folder added at `ext.m`             | a nested mount path                                                        | `ext.m.tool.a`         | `ext.m.tool`            |
 
 The `caller` a `PERMISSION_DENIED` error names is that path. The table holds as well when a root file's default function makes `api` itself callable.
 

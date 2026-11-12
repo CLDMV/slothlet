@@ -459,6 +459,38 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * The folder a subdirectory's level is built from (#743). A folder whose only entry is a folder of the same name is
+	 * one level, not two: `e/e/x.mjs` is `api.e.x`. The outer folder is dropped and the inner one stands for it, as
+	 * often as that holds (`t/t/t/x.mjs` is `api.t.x`). With anything else beside the inner folder (a file, another
+	 * folder) both levels stay: `c/z.mjs` + `c/c/x.mjs` is `api.c.z` and `api.c.c.x`. A FILE named after its folder is
+	 * Rule 1's business, not this one's.
+	 * @param {{name: string, path?: string, children: {files: Array, directories: Array}}} subDir - A subdirectory's scan node.
+	 * @returns {{name: string, path?: string, sourceName?: string, children: {files: Array, directories: Array}}} The
+	 *   scan node to build from: `subDir` itself, or the innermost same-named folder, with `sourceName` set to its
+	 *   path below the folder `subDir` sits in.
+	 * @private
+	 *
+	 * @example
+	 * this.#collapseSameNamedFolder(scanOf("e/")).path; // ".../e/e" when e/ holds only e/
+	 */
+	#collapseSameNamedFolder(subDir) {
+		// Rule 22 (F09) - C26: Same-Named Folder Deduplication
+		const sanitize = this.slothlet.helpers.sanitize;
+		const name = sanitize.sanitizePropertyName(subDir.name);
+		let current = subDir;
+		let sourceName = subDir.name;
+		for (;;) {
+			const { files, directories } = current.children;
+			if (files.length !== 0 || directories.length !== 1) break;
+			const inner = directories[0];
+			if (sanitize.sanitizePropertyName(inner.name) !== name) break;
+			sourceName = `${sourceName}/${inner.name}`;
+			current = inner;
+		}
+		return current === subDir ? subDir : { ...current, sourceName };
+	}
+
+	/**
 	 * The member names a folder's own entries produce: its files and subdirectories, sanitized the way
 	 * the build names them. A FILE named after the folder is left out, since it flattens into the folder
 	 * rather than becoming a member; a subfolder named after it stays, because it is a nested namespace
@@ -495,6 +527,8 @@ export class ModesProcessor extends ComponentBase {
 	 * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
 	 * @param {string|null} [collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) that takes precedence over `collisionContext`'s config default for every leaf this call (and its own recursive calls) produces.
 	 * @param {boolean} [rootUnwrap=false] - The mount exposes its single root entry's exports directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api level.
+	 * @param {boolean} [transparent=false] - With `populateDirectly`: this directory is a transparent folder, poured into the mount's own level (the one `apiPathPrefix` names), so it adds no path segment.
+	 * @param {string|null} [ownPath=null] - The api path of the level this directory's entries are placed on, when the caller placed that level itself (a subdirectory's node, a lazy folder being loaded). Without it the level is `apiPathPrefix` plus the directory's name.
 	 * @returns {Promise<Function|null>} The root-level default-export contributor function, if one was found at this call's own top level; otherwise `null`.
 	 * @package
 	 */
@@ -513,7 +547,9 @@ export class ModesProcessor extends ComponentBase {
 		sourceFolder = null,
 		cacheBust = null,
 		collisionModeOverride = null,
-		rootUnwrap = false
+		rootUnwrap = false,
+		transparent = false,
+		ownPath = null
 	) {
 		// The effective per-call collision mode for every collision-detecting assignToApiPath() call
 		// this invocation makes: the caller's own override (e.g. api.add()'s forceOverwrite) when
@@ -527,71 +563,81 @@ export class ModesProcessor extends ComponentBase {
 			(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
 			"replace";
 
-		// Helper to build full apiPath with prefix
-		const buildApiPath = (path) => {
-			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
-			// An empty local path is produced only by the transparent-folder (populateDirectly) route,
-			// which lost its last in-suite driver when nested self-named directories under a mount
-			// prefix regained the standard hoist (#257) — every surface it composed is pinned green
-			// through that route instead. Kept wired for the remaining populateDirectly call-sites.
-			/* v8 ignore next */
-			if (!path) return apiPathPrefix;
-			if (!apiPathPrefix) return path;
-			// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
-			// Example: if prefix="config" and path="config.get", return "config.get" (don't make "config.config.get")
-			// But if prefix="config" and path="config" (matching subdirectory name), still add prefix for "config.config"
-			if (path.startsWith(`${apiPathPrefix}.`)) {
-				return path; // Already has prefix in chain
+		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
+
+		// Every api path this call records is derived from where the node is placed (#743): the path of the level this
+		// directory's entries go on, plus the key an entry is assigned under. Nothing rebuilds a path from strings a
+		// second time, so the tree and the recorded path cannot disagree: permissions, hooks, ownership and metadata
+		// all key off the recorded one.
+		//
+		// The level is the mount's own (the root, or a transparent folder poured into it, which adds no segment), or
+		// this directory's own: the path its caller placed it at, or its parent's path plus its name.
+		const atMountLevel = (isRoot && !populateDirectly) || (populateDirectly && transparent);
+		const levelPath = atMountLevel ? apiPathPrefix : (ownPath ?? (apiPathPrefix ? `${apiPathPrefix}.${categoryName}` : categoryName));
+
+		/**
+		 * Whether `addApiComponent` hoists an entry placed on the mount's level under the mount's last segment onto
+		 * the mount itself (Rule 13, F08/C25). It does when the entry comes from a direct child of the mounted folder:
+		 * a file at its root, or a file or folder directly inside its subfolder of that name. The test is the one
+		 * `addApiComponent` applies to the entry's file path, so the path recorded here is the path it ends up at.
+		 * @param {string|null|undefined} filePath - The file or folder the entry's node is built from.
+		 * @returns {boolean} Whether it is hoisted.
+		 */
+		const hoistedOntoMount = (filePath) => {
+			if (typeof filePath !== "string" || typeof sourceFolder !== "string") return true;
+			const entryDir = filePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+			const mountFolder = sourceFolder.replace(/\\/g, "/").replace(/\/$/, "");
+			return entryDir === mountFolder || entryDir === `${mountFolder}/${apiPathPrefix.split(".").pop()}`;
+		};
+
+		/**
+		 * The path of an entry placed on the mount's level under `key`.
+		 * @param {string} key - The key the entry is assigned under.
+		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @returns {string} Its api path.
+		 */
+		const rootKeyPath = (key, filePath = null) => {
+			if (!apiPathPrefix) return key;
+			// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly at the mount
+			// path, so the level named after the file is never on the api and contributes no segment.
+			if (rootUnwrap && isRoot) return apiPathPrefix;
+			// Rule 13 (F08/C25). `addApiComponent` hoists an entry named like the last segment of the mount path
+			// off the surface — `api.add("exts.alpha", …)` over a folder holding `alpha.mjs` yields
+			// `exts.alpha.op`, never `exts.alpha.alpha.op`. That level does not exist on the api and contributes no
+			// segment; leaving it in produced a path no caller could reach (#243). An entry it leaves in place
+			// (one from deeper in the folder) keeps its segment.
+			if (key === apiPathPrefix.split(".").pop() && hoistedOntoMount(filePath)) return apiPathPrefix;
+			return `${apiPathPrefix}.${key}`;
+		};
+
+		/**
+		 * The path of an entry this directory places on its level under `key`.
+		 * @param {string} key - The key the entry is assigned under.
+		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @returns {string} Its api path.
+		 */
+		const memberPath = (key, filePath = null) => {
+			if (atMountLevel) {
+				// A transparent folder's self-named file is a node of its own on the mount's level; what the folder
+				// places after it goes on that node, beneath its path.
+				const node = targetApi !== api ? resolveWrapper(targetApi) : null;
+				if (node) return `${node.____slothletInternal.apiPath}.${key}`;
+				// An entry merged into a node already at the key sits where that node does.
+				const existing = modes_effectiveCollisionMode === "replace" ? null : resolveWrapper(readApiMember(api, key));
+				if (existing && typeof existing.____slothletInternal.apiPath === "string") return existing.____slothletInternal.apiPath;
+				return rootKeyPath(key, filePath);
 			}
-			// Rule 13 (F08/C25) mirror. `addApiComponent` hoists a root-level entry named like the
-			// last segment of the mount path off the surface — `api.add("exts.alpha", …)` over a
-			// folder holding `alpha.mjs` yields `exts.alpha.op`, never `exts.alpha.alpha.op`. That
-			// level therefore does not exist on the api and must contribute no path segment; leaving
-			// it in produced a path no caller could reach, so a permission rule or hook written
-			// against the real surface never matched while the phantom form did (#243).
-			if (isRoot) {
-				// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly
-				// at the mount path, so the intermediate level named after the file is never on the api
-				// and must contribute no segment either.
-				if (rootUnwrap) {
-					const cut = path.indexOf(".");
-					// The dotted arm handles a sub-path beneath a single-file mount. Such a mount exposes the
-					// file's own exports flat at the mount path, so the sub-path is a single segment in every
-					// shape that can be built — the arm covers a synthetic mount carrying depth.
-					/* v8 ignore next */
-					return cut === -1 ? apiPathPrefix : `${apiPathPrefix}.${path.slice(cut + 1)}`;
-				}
-				const mountLeaf = apiPathPrefix.split(".").pop();
-				if (path === mountLeaf) return apiPathPrefix;
-				// Depth *below* a level that repeats the mount's last segment. Flattening collapses that level,
-				// so the paths reaching here are the collapsed form and match the equality check above; this
-				// arm covers a mount deep enough that the repeat is not the final level.
-				/* v8 ignore next */
-				if (path.startsWith(`${mountLeaf}.`)) return `${apiPathPrefix}.${path.slice(mountLeaf.length + 1)}`;
-			}
-			// Always add prefix - even if names match, they represent different levels
-			return `${apiPathPrefix}.${path}`;
+			return levelPath ? `${levelPath}.${key}` : key;
 		};
 		let rootDefaultFunction = null;
 		const rootContributors = []; // Track all root-level default exports for multi-detection
-		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		// A member read (#571): `session.name` is the string "session" when `session` has no `name`
 		// member yet, and the folder `session/name/` must not mistake that answer for itself.
 		let targetApi =
 			isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = readApiMember(api, categoryName) || {});
 
-		// The dotted prefix a nested directory must inherit: this level's own full path.
-		//
-		// A directory contributes a path segment exactly when it creates an api level — which is
-		// the same condition `targetApi` above branches on. A `populateDirectly` directory pours its
-		// contents into the parent's api and adds no level, so it must add no segment either.
-		//
-		// Recursing with the *unchanged* prefix is what made `apiPath` disagree with the surface
-		// below depth 1: a nested directory was pathed from its own name alone, so
-		// `deep.folder.config.get` was built as `folder.config.get`, and `deep.folder` and
-		// `deep2.folder` collapsed onto the same `folder` — indistinguishable to permissions,
-		// hooks, ownership and metadata, all of which key off this path.
-		const childPathPrefix = populateDirectly || !categoryName ? apiPathPrefix : buildApiPath(categoryName);
+		// The prefix a nested directory inherits is this level's own path.
+		const childPathPrefix = levelPath;
 
 		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
 		// This ensures file wrappers are materialized for collision handling
@@ -626,12 +672,12 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_WRAPPER_CREATED",
 						categoryName,
-						apiPath: buildApiPath(categoryName)
+						apiPath: levelPath
 					});
 				}
 				const wrapper = new UnifiedWrapper(this.slothlet, {
 					mode: effectiveMode,
-					apiPath: buildApiPath(categoryName),
+					apiPath: levelPath,
 					initialImpl,
 					filePath: directory.path,
 					// moduleID is always provided by callers; || categoryName fallback is unreachable.
@@ -649,7 +695,7 @@ export class ModesProcessor extends ComponentBase {
 						wrapper,
 						{
 							filePath: directory.path,
-							apiPath: buildApiPath(categoryName),
+							apiPath: levelPath,
 							// moduleID is always provided; || "base" fallback is unreachable.
 							/* v8 ignore next */
 							moduleID: moduleID || "base",
@@ -911,7 +957,7 @@ export class ModesProcessor extends ComponentBase {
 								// module's own array is never written to (#585 review).
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
-									apiPath: buildApiPath(categoryName),
+									apiPath: levelPath,
 									initialImpl:
 										Array.isArray(exportedValue) && files.length > 1
 											? copyForComposition(exportedValue, { addsMembers: true })
@@ -975,7 +1021,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID is always provided; || file.moduleID fallback is unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: buildApiPath(`${categoryName}.${key}`),
+										apiPath: memberPath(key, file.path),
 										source: "core",
 										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
@@ -1119,7 +1165,7 @@ export class ModesProcessor extends ComponentBase {
 						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
-								apiPath: buildApiPath(categoryName),
+								apiPath: levelPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
@@ -1155,7 +1201,7 @@ export class ModesProcessor extends ComponentBase {
 								if (modes_carryWinners.has(key)) {
 									continue;
 								}
-								const modes_namedApiPath = buildApiPath(`${categoryName}.${key}`);
+								const modes_namedApiPath = memberPath(key, file.path);
 								// A named export sharing a name with the default function's own member (`prototype`, `name`,
 								// `length`, a static) resolves by collision mode, as on every other path (#421): under merge
 								// or skip the function keeps its member (#585 review).
@@ -1214,7 +1260,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: buildApiPath(`${categoryName}.${key}`),
+										apiPath: memberPath(key, file.path),
 										source: "core",
 										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
@@ -1232,7 +1278,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								moduleID: moduleID || file.moduleID,
-								apiPath: buildApiPath(categoryName),
+								apiPath: levelPath,
 								source: "core",
 								collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 								filePath: file.path
@@ -1256,7 +1302,7 @@ export class ModesProcessor extends ComponentBase {
 							const matchingObj = mod[moduleName];
 							// Add matching object's properties to category
 							for (const [propKey, propValue] of Object.entries(matchingObj)) {
-								const modes_hybridApiPath = buildApiPath(`${categoryName}.${propKey}`);
+								const modes_hybridApiPath = memberPath(propKey, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_hybridModuleID = moduleID || file.moduleID;
@@ -1309,7 +1355,7 @@ export class ModesProcessor extends ComponentBase {
 							// Add other named exports from this file to category
 							for (const key of moduleKeys) {
 								if (key !== moduleName) {
-									const modes_hybridOtherApiPath = buildApiPath(`${categoryName}.${key}`);
+									const modes_hybridOtherApiPath = memberPath(key, file.path);
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
 									const modes_hybridOtherModuleID = moduleID || file.moduleID;
@@ -1382,7 +1428,7 @@ export class ModesProcessor extends ComponentBase {
 										propKey: key
 									});
 								}
-								const modes_multiApiPath = buildApiPath(`${categoryName}.${key}`);
+								const modes_multiApiPath = memberPath(key, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_multiModuleID = moduleID || file.moduleID;
@@ -1470,7 +1516,7 @@ export class ModesProcessor extends ComponentBase {
 						if (normalizedKey === normalizedModuleName) {
 							// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
 							const preferredName = key;
-							const modes_preferredApiPath = buildApiPath(`${categoryName}.${preferredName}`);
+							const modes_preferredApiPath = memberPath(preferredName, file.path);
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_preferredModuleID = moduleID || file.moduleID;
@@ -1540,12 +1586,8 @@ export class ModesProcessor extends ComponentBase {
 					const modes_hoistedAssigned = new Set();
 					for (const key of Object.keys(moduleContent)) {
 						const value = moduleContent[key];
-						// `isRoot` is guaranteed false by the guard above, so the keyPath only
-						// branches on whether we have a deeper apiPathPrefix or fall back to
-						// the immediate categoryName.
-						const keyPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
-
-						const modes_hoistedApiPath = buildApiPath(keyPath);
+						// The member is assigned on this directory's own level, under its own name.
+						const modes_hoistedApiPath = memberPath(key, file.path);
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_hoistedModuleID = moduleID || file.moduleID;
@@ -1588,8 +1630,7 @@ export class ModesProcessor extends ComponentBase {
 					if (this.slothlet.handlers.ownership) {
 						for (const key of Object.keys(moduleContent)) {
 							if (!modes_hoistedAssigned.has(key)) continue;
-							// `isRoot` is guaranteed false by the `!isRoot` guard above (mirrors keyPath).
-							const apiPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+							const apiPath = memberPath(key, file.path);
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
@@ -1639,11 +1680,7 @@ export class ModesProcessor extends ComponentBase {
 								continue;
 							}
 							const value = member.accessor ? moduleContent[key] : member.value;
-							// isRoot is always false in the addapi path; inner "": fallback unreachable.
-							/* v8 ignore next */
-							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
-
-							const modes_addapiApiPath = buildApiPath(keyPath);
+							const modes_addapiApiPath = memberPath(key, file.path);
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_addapiModuleID = moduleID || file.moduleID;
@@ -1686,9 +1723,7 @@ export class ModesProcessor extends ComponentBase {
 						if (this.slothlet.handlers.ownership) {
 							for (const key of Object.keys(modes_addapiMembers)) {
 								if (!modes_addapiAssigned.has(key)) continue;
-								// Third ternary arm (: key) unreachable — apiPathPrefix always set in this context.
-								/* v8 ignore next */
-								const apiPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : key;
+								const apiPath = memberPath(key, file.path);
 								this.slothlet.handlers.ownership.register({
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
@@ -1703,21 +1738,9 @@ export class ModesProcessor extends ComponentBase {
 					} else {
 						// NORMAL FLATTEN-TO-CATEGORY: Assign moduleContent (function or object) to category name
 						//
-						// Pass the LOCAL name and let buildApiPath apply the prefix. Embedding the prefix here
-						// defeated buildApiPath's own handling — the result already started with the prefix, so
-						// its collapse rules never got a chance to run.
-						//
-						// A `populateDirectly` directory pours its contents into the parent's api and creates
-						// no level (mirroring `targetApi` above), so it contributes no segment: an empty local
-						// path resolves to the prefix itself. Without that, a transparent folder reintroduced
-						// the very segment smart-flattening had dropped, leaving the wrapper — and every leaf
-						// beneath it — at a path no caller could reach (#243).
-						// The true arm is the transparent-folder route — see the buildApiPath empty-path note; its
-						// shapes now compose via the standard hoist and stay pinned green in the surface suites.
-						/* v8 ignore next */
-						const localPath = populateDirectly ? "" : effectiveCategoryName;
-
-						const modes_categoryApiPath = buildApiPath(localPath);
+						// The content is placed on this level under `effectiveCategoryName`. In a transparent folder that
+						// is the mount's last segment, which Rule 13 hoists onto the mount itself (#243).
+						const modes_categoryApiPath = memberPath(effectiveCategoryName, file.path);
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_categoryModuleID = moduleID || file.moduleID;
@@ -1765,11 +1788,7 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (modes_categoryAssigned && this.slothlet.handlers.ownership) {
-							// Mirror the wrapper's apiPath (buildApiPath(localPath) above): the hand-rolled
-							// form dropped the mount prefix under isRoot and skipped buildApiPath's Rule-13
-							// collapse, so an `api.add("shop", dir)` recorded a top-level `multi`/`obj`
-							// instead of `shop.multi`. buildApiPath is a no-op at base load (no prefix).
-							const apiPath = buildApiPath(localPath);
+							const apiPath = modes_categoryApiPath;
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
@@ -1786,7 +1805,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 
 				// Wrap in UnifiedWrapper
-				const modes_propertyApiPath = buildApiPath(isRoot ? propertyName : `${categoryName}.${propertyName}`);
+				const modes_propertyApiPath = memberPath(propertyName, file.path);
 				// moduleID always provided; fallback unreachable.
 				/* v8 ignore next */
 				const modes_propertyModuleID = moduleID || file.moduleID;
@@ -1896,7 +1915,8 @@ export class ModesProcessor extends ComponentBase {
 					key: "DEBUG_MODE_SUBDIRECTORY_LOOP_START",
 					count: directory.children.directories.length
 				});
-				for (const subDir of directory.children.directories) {
+				for (const scannedDir of directory.children.directories) {
+					const subDir = this.#collapseSameNamedFolder(scannedDir);
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_PROCESSING_SUBDIRECTORY",
 						name: subDir.name,
@@ -2068,7 +2088,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								// The folder's value is the module's own, as the lazy materializer returns it; a thenable
 								// one is refused here too, so both modes agree (#580 review).
-								this.#refuseThenableValue(implToWrap, buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName));
+								this.#refuseThenableValue(implToWrap, memberPath(subDirName, file.path));
 
 								// CRITICAL: File-vs-folder collision within same module directory.
 								// When a file and folder share the same name (e.g., math.mjs + math/),
@@ -2177,7 +2197,7 @@ export class ModesProcessor extends ComponentBase {
 								// Flatten: put the module content directly at targetApi[subDirName]
 								// categoryName always set; ": subDirName" fallback unreachable.
 								/* v8 ignore next */
-								const modes_subDirApiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
+								const modes_subDirApiPath = memberPath(subDirName, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_subDirModuleID = moduleID || file.moduleID;
@@ -2250,7 +2270,9 @@ export class ModesProcessor extends ComponentBase {
 							// Thread the per-call override through — a nested subdirectory must resolve
 							// under the same override as its parent (#365/#366 review); dropping it here
 							// silently fell back to the config default for every leaf below the top level.
-							collisionModeOverride
+							collisionModeOverride,
+							false, // rootUnwrap
+							true // transparent: the folder adds no path segment
 						);
 						continue;
 					}
@@ -2271,12 +2293,16 @@ export class ModesProcessor extends ComponentBase {
 						sourceFolder,
 						cacheBust,
 						// See the transparent-folder recursive call above — same override-threading fix.
-						collisionModeOverride
+						collisionModeOverride,
+						false, // rootUnwrap
+						false, // transparent
+						memberPath(subDirName, subDir.path) // the level this subdirectory is placed at
 					);
 				}
 			} else {
 				// Lazy mode: create lazy wrappers for subdirectories
-				for (const subDir of directory.children.directories) {
+				for (const scannedDir of directory.children.directories) {
+					const subDir = this.#collapseSameNamedFolder(scannedDir);
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
 
 					// Folder Transparency: if subfolder name matches current category, process its contents
@@ -2305,16 +2331,18 @@ export class ModesProcessor extends ComponentBase {
 							sourceFolder,
 							cacheBust,
 							// See the two eager-mode recursive calls above — same override-threading fix.
-							collisionModeOverride
+							collisionModeOverride,
+							false, // rootUnwrap
+							true // transparent: the folder adds no path segment
 						);
 						continue;
 					}
 
-					// Route through buildApiPath rather than concatenating: the manual form dropped the
+					// Derived from the level, not concatenated by hand: the manual form dropped the
 					// prefix whenever a categoryName was present (truncating nested lazy folders) and,
 					// at a mount root, appended the mount leaf a second time — producing the phantom
 					// `config.config.*` that the Rule 13 hoist then removed from the surface (#243).
-					const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
+					const apiPath = memberPath(subDirName, subDir.path);
 					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
@@ -2450,7 +2478,7 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						moduleID: moduleID || file.moduleID,
-						apiPath: buildApiPath(moduleName),
+						apiPath: memberPath(moduleName, file.path),
 						source: "core",
 						collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 						filePath: file.path
@@ -2479,7 +2507,7 @@ export class ModesProcessor extends ComponentBase {
 					moduleID
 				});
 				for (const { moduleName, file, defaultFunc } of rootContributors) {
-					const modes_rootApiPath = buildApiPath(moduleName);
+					const modes_rootApiPath = memberPath(moduleName, file.path);
 					// moduleID always provided; fallback unreachable.
 					/* v8 ignore next */
 					const modes_rootModuleID = moduleID || file.moduleID;
@@ -2600,8 +2628,8 @@ export class ModesProcessor extends ComponentBase {
 			// sourceFolder is always provided by callers; config?.dir fallback unreachable.
 			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
-				? `${sourceFolder}/${dir.name}`.replace(/\\/g, "/")
-				: `${this.slothlet.config?.dir}/${dir.name}`.replace(/\\/g, "/");
+				? `${sourceFolder}/${dir.sourceName ?? dir.name}`.replace(/\\/g, "/")
+				: `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`.replace(/\\/g, "/");
 			/* v8 ignore stop */
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)
@@ -2823,7 +2851,10 @@ export class ModesProcessor extends ComponentBase {
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
 				cacheBust,
-				collisionMode // Pass collision mode to child wrappers
+				collisionMode, // Pass collision mode to child wrappers
+				false, // rootUnwrap
+				false, // transparent
+				apiPath // the folder's own path: its contents are placed on its value
 			);
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
