@@ -52,7 +52,7 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
-import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Map, Set, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
 const NativePromise = Promise;

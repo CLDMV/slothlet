@@ -29,7 +29,7 @@
 import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { outerCallerCeiling } from "#handlers/frame-placement";
-import { Reflect, Objects, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, NativeProxy, Map, Set, WeakMap, WeakSet, Promise, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Excluded constructors that should NOT be wrapped

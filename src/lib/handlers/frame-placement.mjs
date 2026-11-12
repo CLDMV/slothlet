@@ -41,7 +41,20 @@ import {
 	VITE_LOADED_BY
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
-import { Reflect, Objects, Arrays, JSON, functionSource } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	JSON,
+	functionSource,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	WeakRef,
+	Symbol,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
@@ -2450,7 +2463,7 @@ const VITE_HOST_REGISTRY = isNode ? installViteHostRegistry(globalThis) : null;
  * installViteHostRegistry(globalThis).registered(frame.key, frame.hash);
  */
 export function installViteHostRegistry(target) {
-	const key = Symbol.for(VITE_HOST_SCRIPTS);
+	const key = Symbols.for(VITE_HOST_SCRIPTS);
 	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
 	if (current && !current.configurable) return typeof current.value?.registered === "function" ? current.value : null;
@@ -2551,7 +2564,7 @@ function runtime_loadedRecord(entry) {
  * installViteLoadedRegistry(globalThis).importersOf("/app/exts/x/extension.mjs"); // [] when only the host loaded it
  */
 export function installViteLoadedRegistry(target) {
-	const key = Symbol.for(VITE_LOADED_BY);
+	const key = Symbols.for(VITE_LOADED_BY);
 	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
 	if (current && !current.configurable) return typeof current.value?.importersOf === "function" ? current.value : null;

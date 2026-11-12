@@ -40,7 +40,7 @@ import { ComponentBase } from "#factories/component-base";
 import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
-import { Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Math, Map, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`
@@ -671,7 +671,7 @@ export class ModuleManager extends ComponentBase {
 		};
 
 		const workers = Arrays.from({ length: Math.min(concurrency, resolved.length) }, () => worker());
-		await Promise.all(workers);
+		await Promises.all(workers);
 
 		if (firstError) {
 			if (onFailure === "rollback") {

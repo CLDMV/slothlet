@@ -31,7 +31,7 @@ import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing

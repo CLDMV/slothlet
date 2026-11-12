@@ -42,6 +42,7 @@ import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
 import { createModuleLoad } from "#handlers/frame-placement";
+import { Map, Set, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`

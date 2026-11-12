@@ -305,3 +305,39 @@ export async function clones(owner = self.owner) {
 	await answer("copyIsPlain", () => Object.getPrototypeOf(structuredClone(data).inst) === Object.prototype);
 	return answers;
 }
+
+/**
+ * Replace one of the language's global constructors, reach the owner's instances while it is replaced, put it back,
+ * and try to write onto the owner's class through what was reached.
+ * @param {string} prefix - The prefix of the members written.
+ * @param {"Map"|"Set"|"WeakMap"|"WeakSet"|"WeakRef"|"Promise"|"Symbol"} name - The global constructor to replace.
+ * @returns {Object<string, string>} How reaching the instances ended, and how each write ended.
+ */
+export function steeredConstructor(prefix, name) {
+	const saved = globalThis[name];
+	let data;
+	let made;
+	let failure = null;
+	try {
+		// What stands in for the constructor makes nothing and has none of its members.
+		globalThis[name] = function () {
+			throw new Error(`replaced ${name}`);
+		};
+		data = self.owner.fresh();
+		made = self.owner.freshMaker()();
+	} catch (error) {
+		failure = error?.code ?? String(error);
+	} finally {
+		globalThis[name] = saved;
+	}
+	if (failure !== null) return { reached: failure };
+	const plant = (instance, key) => {
+		try {
+			Object.getPrototypeOf(instance)[key] = () => "planted";
+			return "written";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	return { reached: "both", data: plant(data.inst, `${prefix}data`), made: plant(made, `${prefix}made`) };
+}

@@ -20,7 +20,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"

@@ -28,7 +28,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { markFrameworkInternal, registerVersionDispatcher } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
-import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Symbol, Promises, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -115,7 +115,7 @@ function compareTuples(a, b) {
 
 // ─── Symbol used for inline version overrides ─────────────────────────────────
 
-const FORCE_VERSION_SYMBOL = Symbol.for("slothlet.versioning.force");
+const FORCE_VERSION_SYMBOL = Symbols.for("slothlet.versioning.force");
 
 // ─── VersionManager ───────────────────────────────────────────────────────────
 
@@ -786,7 +786,7 @@ export class VersionManager extends ComponentBase {
 		// all proxy traps), so it MUST be an own property of `target` — not just available
 		// via the get trap — for util.inspect(api.auth) to show the resolved versioned
 		// namespace content instead of the raw { __isVersionDispatcher, __logicalPath } target.
-		target[Symbol.for("nodejs.util.inspect.custom")] = function (_depth, options, inspectFn) {
+		target[Symbols.for("nodejs.util.inspect.custom")] = function (_depth, options, inspectFn) {
 			const vw = resolveVersionedWrapper();
 			if (vw) {
 				try {
@@ -1259,7 +1259,7 @@ export class VersionManager extends ComponentBase {
 		const isCurrent = () => this.#dispatchers.get(logicalPath) === dispatcher;
 		const mount = async () => {
 			const written = [];
-			const takeBack = () => Promise.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
+			const takeBack = () => Promises.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
 			try {
 				// Mount on api, then on boundApi.
 				for (const root of [api, boundApi]) {

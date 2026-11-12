@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Math, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Manager for tracking lazy folder materialization state

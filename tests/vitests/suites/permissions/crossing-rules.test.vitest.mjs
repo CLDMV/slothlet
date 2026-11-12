@@ -265,4 +265,26 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		});
 		expect(await api.owner.landed("__steered_")).toEqual([]);
 	});
+
+	describe.each(["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "Promise", "Symbol"])(
+		"with the global %s replaced after slothlet loaded",
+		(name) => {
+			it("still hands a view of another module's instance and refuses the write through it", async () => {
+				api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+				// The same outcome as with nothing replaced: the views slothlet makes rest on the constructors it loaded with.
+				expect(await api.reader.steeredConstructor(`__ctor_${name}_`, name)).toEqual({
+					reached: "both",
+					data: "LOOSE_SET_NOT_OWNED",
+					made: "LOOSE_SET_NOT_OWNED"
+				});
+				expect(await api.owner.landed(`__ctor_${name}_`)).toEqual([]);
+			});
+
+			it("still refuses a call a rule denies", async () => {
+				const rules = [{ caller: "reader.**", target: "owner.fresh", effect: "deny" }];
+				api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+				expect(await api.reader.steeredConstructor(`__ctor_denied_${name}_`, name)).toEqual({ reached: "PERMISSION_DENIED" });
+			});
+		}
+	);
 });

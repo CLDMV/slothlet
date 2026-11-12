@@ -79,7 +79,24 @@ import {
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
 import { setCloneViewReader } from "@cldmv/slothlet/helpers/clone-context";
-import { Reflect, Objects, Arrays, Math, functionSource, functionToString, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	functionSource,
+	functionToString,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	WeakRef,
+	Promise,
+	Symbol,
+	Promises,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).
@@ -248,7 +265,7 @@ const SELF_VIEW_READERS = new WeakMap();
  * @type {symbol}
  * @private
  */
-const INSPECT_CUSTOM = Symbol.for("nodejs.util.inspect.custom");
+const INSPECT_CUSTOM = Symbols.for("nodejs.util.inspect.custom");
 /**
  * The node each live-identity value (a class instance, an EventEmitter) was called on as `this`, kept
  * when the wrapper hands the value itself to a method as its receiver (#590, #340), so the value coming
@@ -509,7 +526,7 @@ const PROTOCOL_SYMBOLS = new Set([
 	...Object.getOwnPropertyNames(Symbol)
 		.map((name) => Symbol[name])
 		.filter((value) => typeof value === "symbol"),
-	Symbol.for("nodejs.util.inspect.custom")
+	Symbols.for("nodejs.util.inspect.custom")
 ]);
 
 /**
@@ -1089,7 +1106,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		(settled ??= Promise.prototype.then.call(
 			raw,
 			(resolved) => held(resolved),
-			(reason) => Promise.reject(held(reason))
+			(reason) => Promises.reject(held(reason))
 		));
 	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
@@ -2619,7 +2636,7 @@ export async function settleStandInChanges(slothlet, scope = null) {
 		const holders = [...pending].filter((holder) => !tried.has(holder) && qualifies(holder));
 		if (holders.length === 0) return;
 		for (const holder of holders) tried.add(holder);
-		await Promise.all(holders.map((holder) => holder._materialize().catch(() => {})));
+		await Promises.all(holders.map((holder) => holder._materialize().catch(() => {})));
 	}
 }
 
@@ -4672,7 +4689,7 @@ function runtime_slotHoldsCode(value, depth, budget) {
 	if (budget.remaining < 0) return true;
 	for (const key of keys) {
 		if (isEmitter && key === "_events") continue;
-		if (isTarget && typeof key === "symbol" && Symbol.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
+		if (isTarget && typeof key === "symbol" && Symbols.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
 		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
@@ -4859,7 +4876,7 @@ function runtime_isCodeObject(value) {
 function runtime_isPlainPromise(value) {
 	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
 	for (const key of Reflect.ownKeys(value))
-		if (typeof key !== "symbol" || Symbol.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
+		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
 	return true;
 }
 
@@ -16397,7 +16414,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
 				/* v8 ignore next */
-				return Promise.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
+				return Promises.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
 					if (!wrapper.____slothletInternal.state.materialized) {
 						// Materialization resolved without marking the wrapper as materialized —
 						// a defensive guard against corrupted internal state; unreachable in practice.

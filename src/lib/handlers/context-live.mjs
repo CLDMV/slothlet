@@ -46,7 +46,7 @@ import {
 	stackHoldsInstanceCode,
 	toComparablePath
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakMap, WeakRef, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };

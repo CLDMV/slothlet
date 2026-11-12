@@ -59,7 +59,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, NativeProxy, Set, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Safely retrieve the current ALS context without throwing.

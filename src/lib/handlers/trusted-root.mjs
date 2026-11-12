@@ -38,7 +38,7 @@
 
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, Math, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, NativeProxy, Map, WeakMap, WeakSet, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.

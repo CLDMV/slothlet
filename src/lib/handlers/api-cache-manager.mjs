@@ -36,7 +36,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Map, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.

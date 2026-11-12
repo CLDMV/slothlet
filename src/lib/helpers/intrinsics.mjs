@@ -30,6 +30,11 @@
  *   views with.
  * - `JSON` and `Math` are frozen copies of those namespaces, shadowing the globals like `Reflect`.
  * - `functionSource` is `Function.prototype.toString` applied to a function.
+ * - `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, `Promise` and `Symbol` are those constructors themselves, shadowing
+ *   the globals in a file that imports them: `new Map()`, `value instanceof Promise` and `Symbol.iterator` there use
+ *   the constructor slothlet loaded with, whatever `globalThis.Map` holds by then.
+ * - `Promises` and `Symbols` hold the static functions of `Promise` (bound to it) and `Symbol` on frozen objects with
+ *   no prototype, like `Objects` and `Arrays`.
  *
  * Methods a value inherits (`array.map`, `map.get`) are not covered here: they are looked up on the value when called.
  *
@@ -39,6 +44,8 @@
 
 const NativeObject = Object;
 const NativeReflect = globalThis.Reflect;
+const NativePromise = globalThis.Promise;
+const NativeSymbol = globalThis.Symbol;
 const { getOwnPropertyNames, getOwnPropertyDescriptor, freeze, create } = NativeObject;
 const { apply } = NativeReflect;
 
@@ -121,5 +128,113 @@ export function functionSource(fn) {
  * const view = new NativeProxy(shadow, handler);
  */
 export const NativeProxy = Proxy;
+
+/**
+ * The `Map` constructor, as it was when slothlet loaded.
+ * @type {MapConstructor}
+ * @internal
+ * @example
+ * import { Map } from "@cldmv/slothlet/helpers/intrinsics";
+ * const seen = new Map();
+ */
+export const Map = globalThis.Map;
+
+/**
+ * The `Set` constructor, as it was when slothlet loaded.
+ * @type {SetConstructor}
+ * @internal
+ * @example
+ * import { Set } from "@cldmv/slothlet/helpers/intrinsics";
+ * const seen = new Set();
+ */
+export const Set = globalThis.Set;
+
+/**
+ * The `WeakMap` constructor, as it was when slothlet loaded.
+ * @type {WeakMapConstructor}
+ * @internal
+ * @example
+ * import { WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+ * const views = new WeakMap();
+ */
+export const WeakMap = globalThis.WeakMap;
+
+/**
+ * The `WeakSet` constructor, as it was when slothlet loaded.
+ * @type {WeakSetConstructor}
+ * @internal
+ * @example
+ * import { WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+ * const marked = new WeakSet();
+ */
+export const WeakSet = globalThis.WeakSet;
+
+/**
+ * The `WeakRef` constructor, as it was when slothlet loaded.
+ * @type {WeakRefConstructor}
+ * @internal
+ * @example
+ * import { WeakRef } from "@cldmv/slothlet/helpers/intrinsics";
+ * const ref = new WeakRef(target);
+ */
+export const WeakRef = globalThis.WeakRef;
+
+/**
+ * The `Promise` constructor, as it was when slothlet loaded. Its static functions are on `Promises`.
+ * @type {PromiseConstructor}
+ * @internal
+ * @example
+ * import { Promise } from "@cldmv/slothlet/helpers/intrinsics";
+ * const done = new Promise((resolve) => setImmediate(resolve));
+ */
+export const Promise = NativePromise;
+
+/**
+ * The `Symbol` function, as it was when slothlet loaded. The well-known symbols (`Symbol.iterator`, …) are read from
+ * it; `Symbol.for` and `Symbol.keyFor` are on `Symbols`.
+ * @type {SymbolConstructor}
+ * @internal
+ * @example
+ * import { Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+ * const marker = Symbol("marker");
+ */
+export const Symbol = NativeSymbol;
+
+/**
+ * Bind the named static functions of a constructor to it, on a frozen object with no prototype.
+ * @param {Function} constructor - The constructor.
+ * @param {string[]} names - The static functions to take.
+ * @returns {object} The bound functions, by name.
+ * @private
+ */
+function boundStaticsOf(constructor, names) {
+	const copy = create(null);
+	for (const name of names) {
+		const fn = constructor[name];
+		copy[name] = (...args) => apply(fn, constructor, args);
+	}
+	return freeze(copy);
+}
+
+/**
+ * `Promise.resolve`, `reject`, `all`, `allSettled`, `race` and `any`, as they were when slothlet loaded, each called
+ * on the `Promise` constructor slothlet loaded with.
+ * @type {PromiseConstructor}
+ * @internal
+ * @example
+ * import { Promises } from "@cldmv/slothlet/helpers/intrinsics";
+ * await Promises.all(pending);
+ */
+export const Promises = boundStaticsOf(NativePromise, ["resolve", "reject", "all", "allSettled", "race", "any"]);
+
+/**
+ * `Symbol.for` and `Symbol.keyFor`, as they were when slothlet loaded.
+ * @type {SymbolConstructor}
+ * @internal
+ * @example
+ * import { Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+ * Symbols.for("nodejs.util.inspect.custom");
+ */
+export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
 
 export { NativeJSON as JSON, NativeMath as Math };

@@ -36,7 +36,7 @@ import {
 } from "@cldmv/slothlet/helpers/reserved-keys";
 import { runtime_selfModuleCeilings, runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, WeakMap, Symbol, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -1305,7 +1305,7 @@ export class PermissionManager extends ComponentBase {
 	 * await pm.resolvePrincipals(pm.stalePrincipals(caller, target, cf, tf, ctx));
 	 */
 	async resolvePrincipals(pairs) {
-		await Promise.all(pairs.map(({ name, identityKey }) => this.#resolvePrincipal(name, identityKey)));
+		await Promises.all(pairs.map(({ name, identityKey }) => this.#resolvePrincipal(name, identityKey)));
 	}
 
 	/**
@@ -1320,7 +1320,7 @@ export class PermissionManager extends ComponentBase {
 		const record = this.#principals.get(name);
 		// Unregistered or gone dormant between the stale scan and the resolve: nothing to do — the rule no
 		// longer matches.
-		if (!record || record.resolve === null) return Promise.resolve();
+		if (!record || record.resolve === null) return Promises.resolve();
 		const pending = record.inflight.get(identityKey);
 		if (pending) return pending;
 

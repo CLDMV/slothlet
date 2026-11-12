@@ -24,6 +24,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { runtime_selfModuleReader, runtime_selfView } from "#handlers/unified-wrapper";
+import { Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Lifecycle event manager for impl changes
@@ -341,7 +342,7 @@ export class Lifecycle extends ComponentBase {
 
 		// Wait for all async handlers to complete
 		if (handlerPromises.length > 0) {
-			await Promise.all(handlerPromises);
+			await Promises.all(handlerPromises);
 		}
 	}
 }

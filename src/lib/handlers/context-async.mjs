@@ -37,7 +37,7 @@ import {
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime

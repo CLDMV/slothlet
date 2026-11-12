@@ -74,7 +74,7 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -3662,7 +3662,7 @@ export class ApiManager extends ComponentBase {
 						apiPath: normalizedPath
 					});
 				}
-				await Promise.all(pendingMaterializations);
+				await Promises.all(pendingMaterializations);
 			}
 			/* v8 ignore stop */
 		}

@@ -26,7 +26,7 @@ import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, WeakMap, WeakSet, Promise, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
