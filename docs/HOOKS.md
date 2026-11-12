@@ -381,14 +381,17 @@ api.slothlet.hook.on("database.*:error", handler);
 
 ### Supported Pattern Syntax
 
-| Syntax        | Description                                | Example            |
-| ------------- | ------------------------------------------ | ------------------ |
-| `exact.path`  | Exact match                                | `"math.add"`       |
-| `namespace.*` | All functions in namespace                 | `"math.*"`         |
-| `*.funcName`  | Function name in any namespace             | `"*.add"`          |
-| `**`          | All functions                              | `"**"`             |
-| `{a,b,c}`     | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
-| `!pattern`    | Negation - matches anything except pattern | `"!internal.*"`    |
+| Syntax         | Description                                | Example            |
+| -------------- | ------------------------------------------ | ------------------ |
+| `exact.path`   | Exact match                                | `"math.add"`       |
+| `namespace.*`  | All functions in namespace                 | `"math.*"`         |
+| `*.funcName`   | Function name in any namespace             | `"*.add"`          |
+| `**`           | All functions                              | `"**"`             |
+| `namespace.**` | The namespace itself and everything below  | `"db.**"`          |
+| `{a,b,c}`      | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern`     | Negation - matches anything except pattern | `"!internal.*"`    |
+
+A `**` that is a whole segment matches any number of segments, none included, as in permission rules, routine names and `hidden` globs: `db.**` matches `db` itself (a callable folder's own function) as well as `db.query` and `db.pool.open`, `**.add` matches `add`, and `a.**.b` matches `a.b`. Several in a row say the same as one (`a.**.**` is `a.**`). A `*` is always exactly one segment.
 
 ### Pattern Examples
 

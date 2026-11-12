@@ -148,7 +148,7 @@ Setting `Infinity` (default) scans all subdirectories.
 **Type**: `string` | `string[]`
 **Default**: none
 
-Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any depth), `?` (one char), `{a,b}` (alternation), `!` (negation).
+Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any number of segments, none included: `tools/**` names `tools` itself, a root file `tools.mjs` included, as well as everything in the folder), `?` (one char), `{a,b}` (alternation), `!` (negation).
 
 > **Match the on-disk name, not the API key.** Globs are tested against the raw directory/file name as it appears on disk, _before_ it is sanitized into a JavaScript-safe API property. A folder `draft-notes` (surfaced as `api.draftNotes`) is hidden with `hidden: "draft-notes"`, not `hidden: "draftNotes"`.
 

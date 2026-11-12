@@ -174,10 +174,16 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
  * directory/file names — NOT the sanitized API keys. For a file that's the extension-stripped dotted
  * path (so `secret/config.mjs` matches `secret.config`); a folder `draft-notes` (surfaced as
  * `api.draftNotes`) matches `draft-notes`, not `draftNotes`. Reuses slothlet's dot-separated glob
- * dialect: `*` matches one segment, `**` any depth, `?` one char, `{a,b}` alternation. Globs may be
- * written folder-style (`a/b`) — `/` is normalized to `.`.
+ * dialect: `*` matches one segment, `**` any number of segments (none included, so `secret.**` names the folder
+ * `secret` itself as well as everything in it), `?` one char, `{a,b}` alternation. Globs may be written folder-style
+ * (`a/b`) — `/` is normalized to `.`.
+ *
+ * A folder a glob hides is not scanned. One case is scanned all the same: the glob that hides it also hides everything
+ * beneath it (`secret/**`) and a `!` glob follows it, since that glob may un-hide an entry inside
+ * (`["secret/**", "!secret/keep"]`). Its entries are then matched one by one, which hides the same ones.
  * @param {string|string[]|null} globs - Hidden glob(s).
- * @returns {?function(string): boolean} Matcher over the dot-joined relative path, or null.
+ * @returns {?function(string, boolean=): boolean} Matcher over the dot-joined relative path (pass `true` as the
+ *   second argument for a folder), or null.
  * @private
  */
 function compileHidden(globs) {
@@ -197,10 +203,20 @@ function compileHidden(globs) {
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
 	// un-hides paths an earlier glob hid (gitignore semantics).
-	return (relDotted) => {
+	return (relDotted, isFolder = false) => {
 		let hidden = false;
-		for (const rule of rules) {
-			if (rule.match(relDotted)) hidden = !rule.negated;
+		let winner = -1;
+		for (let index = 0; index < rules.length; index++) {
+			if (rules[index].match(relDotted)) {
+				hidden = !rules[index].negated;
+				winner = index;
+			}
+		}
+		if (hidden && isFolder) {
+			// Names no file or folder can have (a `.` would split them), so only a glob that matches everything
+			// beneath the folder matches both.
+			const coversBelow = rules[winner].match(`${relDotted}.\u0000`) && rules[winner].match(`${relDotted}.\u0000.\u0000`);
+			if (coversBelow && rules.slice(winner + 1).some((rule) => rule.negated)) return false;
 		}
 		return hidden;
 	};
@@ -899,7 +915,7 @@ export class Loader extends ComponentBase {
 				if (!scanHiddenFolders && isHiddenEntryName(entry.name)) {
 					continue;
 				}
-				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
+				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath), true)) {
 					continue;
 				}
 
@@ -1152,7 +1168,7 @@ export class Loader extends ComponentBase {
 				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
 				if (!scanHiddenFolders && isHiddenEntryName(dirName)) continue;
 				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
-				if (hiddenMatcher && hiddenMatcher(dirApiRel)) continue;
+				if (hiddenMatcher && hiddenMatcher(dirApiRel, true)) continue;
 
 				// apiDepth / maxDepth truncation: don't descend past the limit.
 				if (currentDepth >= maxDepth) continue;

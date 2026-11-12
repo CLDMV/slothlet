@@ -589,7 +589,7 @@ If a rule appears to be ignored, print `Object.keys()` along the namespace to se
 | `{a,b}` | Either `a` or `b` (brace expansion)          |
 | `!pat`  | Negation — matches everything _except_ `pat` |
 
-A `**` that is a whole segment takes the `.` beside it along when it matches no segment: `payments.**` matches `payments` itself as well as everything below it, `**.charge` matches `charge`, and `a.**.b` matches `a.b`. So a rule on `x.**` also covers the module path `x`, which code outside every export of `x`'s file runs as.
+A `**` that is a whole segment takes the `.` beside it along when it matches no segment: `payments.**` matches `payments` itself as well as everything below it, `**.charge` matches `charge`, and `a.**.b` matches `a.b`. Every `**` in a pattern does, wherever it stands, and several in a row say the same as one: `a.**.**` matches `a`, and `a.**.**.b` matches `a.b`. A `*` is always exactly one segment, so `a.**.*` matches `a.b` and not `a`. Hooks, routine names and the loader's `hidden` globs compile their patterns the same way. So a rule on `x.**` also covers the module path `x`, which code outside every export of `x`'s file runs as.
 
 ### Examples
 
