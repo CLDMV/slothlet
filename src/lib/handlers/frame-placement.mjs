@@ -3386,8 +3386,18 @@ export function outerCallerCeiling(contextManager, instanceID, slothlet = null) 
 	if (!identity?.currentWrapper) {
 		// Who runs it cannot be told (several calls are waiting and the stack names more than one, or none): it is no
 		// one's, and not the host's either, so the code is not run under its definer's rights alone.
-		if (identity?.unresolved && slothlet && runtime_checksPermissions(slothlet))
+		if (identity?.unresolved && slothlet && runtime_checksPermissions(slothlet)) {
+			// The engine reading a member of a value a promise is resolved with (its `then`) is no code running it: with
+			// only slothlet's and Node's own frames on the stack, nothing runs the code, and it stays its definer's.
+			let running = false;
+			for (const frame of runtime_captureFrames(FAR_FRAMES)) {
+				if (!frame.evaluated && (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:"))) continue;
+				running = true;
+				break;
+			}
+			if (!running) return null;
 			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+		}
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a
 		// flow slothlet pinned to the host.
