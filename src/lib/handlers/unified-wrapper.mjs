@@ -55,6 +55,7 @@ import {
 	setModuleNodeResolver,
 	setHostPrototypeCheck,
 	frameDefiner,
+	isLeafFileFunction,
 	outerCallerCeiling,
 	setApiValueCheck,
 	setHandedOutCheck,
@@ -4312,7 +4313,7 @@ function runtime_isBuiltinFunction(fn) {
  * The record of the module a wrapper belongs to (see {@link MAKERS}): one per module of an instance, so the same
  * value a module hands out from any of its functions is the same stand-in.
  * @param {object} wrapper - A wrapper of the module.
- * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>}} The module's record.
+ * @returns {{owner: object, made: WeakMap<object, object>, madeBy: WeakMap<object, WeakMap<object, object>>|null, handedIn: WeakSet<object>, exposed: WeakSet<object>}} The module's record.
  * @private
  */
 function runtime_makerOf(wrapper) {
@@ -4324,7 +4325,7 @@ function runtime_makerOf(wrapper) {
 	// A module removed and added again under the same id is a new module: what the old one made is not its.
 	if (maker && maker.owner.____slothletInternal?.invalid && maker.owner !== wrapper && !wrapper.____slothletInternal?.invalid) maker = null;
 	if (!maker) {
-		maker = { owner: wrapper, made: new WeakMap(), handedIn: new WeakSet(), exposed: new WeakSet() };
+		maker = { owner: wrapper, made: new WeakMap(), madeBy: null, handedIn: new WeakSet(), exposed: new WeakSet() };
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
 			for (const [id, other] of makers.byID) if (other.owner.____slothletInternal?.invalid) makers.byID.delete(id);
@@ -4488,10 +4489,12 @@ export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = n
  * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity this read
  *   resolved and the store it resolved it on, as {@link runtime_liveEntry} gives them, so a call made right after
  *   takes it instead of reading it again.
+ * @param {{ceiling?: object|ReadonlyArray<object>|null}|null} [held=resolved] - Receives, as `ceiling`, who else the
+ *   code is held to.
  * @returns {object|null} The definer's wrapper.
  * @private
  */
-function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null) {
+function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = resolved) {
 	const contextManager = slothlet?.contextManager;
 	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
 	if (slothlet.config?.permissions?.provenance === false) return null;
@@ -4506,7 +4509,11 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null) 
 	// module's, so it is not run as the host's.
 	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
 	const leaf = definer?.wrapper;
-	return leaf && leaf.slothlet === slothlet ? leaf : null;
+	if (!leaf || leaf.slothlet !== slothlet) return null;
+	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
+	// every other module importing the helper.
+	if (held && definer.callers?.length) held.ceiling = combineCeilings(...definer.callers);
+	return leaf;
 }
 
 /**
@@ -4523,12 +4530,25 @@ function runtime_callAsDefiner(target, call) {
 		const slothlet = target.slothlet;
 		// A caller identity already handed to the call (one resolved before an await) stands.
 		const resolved = handedEntry !== null && handedEntry.wrapper === target ? null : {};
-		const leaf = runtime_hostRunDefiner(slothlet, false, resolved);
+		const held = {};
+		const leaf = runtime_hostRunDefiner(slothlet, false, resolved, held);
 		const instanceID = leaf ? runtime_makerInstanceID(slothlet) : null;
 		// The call is made as it is, by the code whose identity was just read: the target's gate takes that identity
 		// as it starts, with nothing but slothlet's own code run in between, instead of reading the stack again.
 		if (instanceID === null) return resolved?.identity ? runtime_applyWithEntry(target, resolved, call) : call();
-		return slothlet.contextManager.runInContext(instanceID, call, undefined, [], leaf, true, false, null, null, false, true);
+		return slothlet.contextManager.runInContext(
+			instanceID,
+			call,
+			undefined,
+			[],
+			leaf,
+			true,
+			false,
+			held.ceiling ?? null,
+			null,
+			false,
+			true
+		);
 	};
 }
 
@@ -4908,8 +4928,18 @@ function runtime_handOut(maker, owner, value) {
 	// hands it to the reader as the node, whose own write rule holds.
 	if (SELF_INSTANCE_NODES.has(value)) return value;
 	const made = maker.made.get(value);
-	if (made) return made;
+	// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
+	// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
+	// the leaf that handed it out, each time.
+	const own = made ? runtime_ownStandIns(maker, owner, value, made) : null;
+	if (made && !own) return made;
 	try {
+		if (own) {
+			const mine = own.get(value);
+			if (mine) return mine;
+			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return runtime_kindStandIn(maker, owner, value, own);
+			return runtime_membrane(maker, owner, value, false, own);
+		}
 		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
@@ -4943,6 +4973,31 @@ function runtime_handOut(maker, owner, value) {
 		// A value that refuses to be described is handed out as it is.
 		return value;
 	}
+}
+
+/**
+ * Where the stand-ins a leaf makes of functions another leaf of its module handed out first are kept (#726), or null
+ * when the stand-in already made is the one to hand out: the value is not a plain function, the same leaf made it, it
+ * is a leaf's own function (which runs as that leaf whoever hands it out), it was not made as a stand-in, or it is
+ * written in a leaf's file (its frames name its definer when it runs, so one stand-in serves every leaf, and a class
+ * or closure two leaves return stays one value). What is left is code the stack cannot place on a leaf, a helper
+ * file's own function above all: each leaf handing it out gets a stand-in recording that leaf.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper handing the value out.
+ * @param {*} value - The value.
+ * @param {object} made - The stand-in the module made of it first.
+ * @returns {WeakMap<object, object>|null} The leaf's own stand-ins by original, or null.
+ * @private
+ */
+function runtime_ownStandIns(maker, owner, value, made) {
+	if (typeof value !== "function" || util.types.isProxy(value) || implWrappers.has(value)) return null;
+	const record = STAND_IN_RECORDS.get(made);
+	if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
+	if (isLeafFileFunction(value, [record.owner, owner])) return null;
+	maker.madeBy ??= new WeakMap();
+	let own = maker.madeBy.get(owner);
+	if (!own) maker.madeBy.set(owner, (own = new WeakMap()));
+	return own;
 }
 
 /**
@@ -5313,15 +5368,17 @@ const SOURCES = new WeakMap();
  * @param {object} owner - The wrapper it runs as.
  * @param {Function|object} original - The value.
  * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
+ * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
+ *   {@link runtime_ownStandIns}).
  * @returns {Function|object} The stand-in, the same one for the same value and module every time.
  * @private
  */
-function runtime_membrane(maker, owner, original, asNode = false) {
+function runtime_membrane(maker, owner, original, asNode = false, made = maker.made) {
 	// A node's own value (a Proxy export) is checked as a call of its node, so it runs as one: under no ceiling of its
 	// caller's. A value handed out runs under whoever runs it (#726).
 	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) =>
 		runtime_runAsMaker(who, fn, thisArg, args, attribute, asNode);
-	const existing = maker.made.get(original);
+	const existing = made.get(original);
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
 	const isFunction = typeof original === "function";
@@ -5624,7 +5681,7 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 		}
 	};
 	standIn = new NativeProxy(shadow, handler);
-	maker.made.set(original, standIn);
+	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
 	const leaf = implWrappers.get(original);
@@ -5639,11 +5696,13 @@ function runtime_membrane(maker, owner, original, asNode = false) {
  * @param {object} maker - The module's record.
  * @param {object} owner - The wrapper it runs as.
  * @param {Function} original - The function.
+ * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
+ *   {@link runtime_ownStandIns}).
  * @returns {Function} The stand-in, the same one for the same function and module every time.
  * @private
  */
-function runtime_kindStandIn(maker, owner, original) {
-	const existing = maker.made.get(original);
+function runtime_kindStandIn(maker, owner, original, made = maker.made) {
+	const existing = made.get(original);
 	if (existing) return existing;
 	const run = (thisArg, args) => runtime_runAsMaker(owner, original, runtime_handIn(maker, thisArg), runtime_handInAll(maker, args));
 	const isGenerator = util.types.isGeneratorFunction(original);
@@ -5684,7 +5743,7 @@ function runtime_kindStandIn(maker, owner, original) {
 		});
 	}
 	if (!Reflect.getOwnPropertyDescriptor(original, "name")) Reflect.deleteProperty(standIn, "name");
-	maker.made.set(original, standIn);
+	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	const leaf = implWrappers.get(original);
 	if (leaf) implWrappers.set(standIn, leaf);
@@ -13947,9 +14006,16 @@ export class UnifiedWrapper extends ComponentBase {
 				const ___creationCeiling = ___creationCallerWrapper ? (__readGateCaller?.ceiling ?? null) : null;
 				// Code a module handed out, run while no call runs or no call accounts for it, makes the call as its definer,
 				// told by its frames, as its `self` read was (#726). With `references.capture` off only the live caller counts.
+				const ___definerRead = {};
 				const ___capturedCallerWrapper =
-					___liveCallerWrapper ?? ___creationCallerWrapper ?? (___capture ? runtime_hostRunDefiner(wrapper.slothlet, true) : null);
-				const ___capturedCeiling = ___liveCallerWrapper ? ___liveCeiling : ___creationCeiling;
+					___liveCallerWrapper ??
+					___creationCallerWrapper ??
+					(___capture ? runtime_hostRunDefiner(wrapper.slothlet, true, ___definerRead) : null);
+				const ___capturedCeiling = ___liveCallerWrapper
+					? ___liveCeiling
+					: ___creationCallerWrapper
+						? ___creationCeiling
+						: (___definerRead.ceiling ?? null);
 				// A caller the live runtime cannot determine is refused now, as the node's own gate refuses it (#726): calls
 				// in flight it cannot tell apart, or code it cannot place. Only code no call accounts for, settled by the
 				// node's reader or the code's definer, goes on. Run after the load instead, the call would be gated on

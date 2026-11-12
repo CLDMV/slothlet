@@ -2762,7 +2762,9 @@ const AUTHORED = Symbol("authored");
 /**
  * The answer for code of the instance running inside a call that no call of it accounts for (#597): the leaf its file
  * was built for, under the call it runs inside and whatever that call runs under — with several leaves built from the
- * file, all of them. Null when no leaf was built from the file, or the frame does not run the file's own source.
+ * file, all of them. A helper file's code, which no leaf was built from, is the code of the modules whose api files
+ * import the helper (see {@link runtime_helperAnswer}). Null when neither names anyone, or the frame does not run the
+ * file's own source.
  * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call the code runs inside.
  * @param {{path: string, line: string}} frame - The code's frame.
  * @param {Iterable<object>} [outer] - The frames further out, innermost first.
@@ -2776,7 +2778,8 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
 	const further = Arrays.isArray(outer) ? outer : Arrays.from(outer);
 	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, further);
-	if (!authors.length) return null;
+	// No leaf was built from the file: a helper file's own code is the code of the modules importing the helper.
+	if (!authors.length) return runtime_helperAnswer(record, frame);
 	// A leaf's own exported function, entered as it is: a call of that leaf's node by whoever runs it.
 	if (authors.length === 1 && runtime_enteredAsItself(authors[0], frame, further))
 		return runtime_leafCallAnswer(authors[0], [record.wrapper, record.ceiling, supplierChainCeiling(record)]);
@@ -3424,8 +3427,8 @@ export function frameDefiner(running = null) {
 	for (const frame of frames) {
 		index++;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
-		// A helper's code with no leaf's code calling it (the helper's function handed out as it is): the module of the
-		// one file that imports it stands for it.
+		// A helper's code with no leaf's code calling it (the helper's function handed out as it is): the modules of the
+		// files that import it stand for it, all of them.
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
 		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
@@ -3521,23 +3524,124 @@ function runtime_importsHelper(helper, leaves) {
 }
 
 /**
- * The definer of a helper file's code that no leaf's code called: the module of the one api file that imports the
- * helper. Undefined when no api file is recorded as importing it; unplaced when several are.
+ * Whether a function a leaf hands out is written in a leaf's own file and in no helper file of its instance (#726), as
+ * far as the sources the loader recorded say. Such a function is told by its frames when it runs, so one stand-in of it
+ * serves every leaf of its module; any other (a helper file's own function, a bound or native function, one whose
+ * source cannot be found) is handed out per leaf, each stand-in recording the leaf that handed it out. A class is one
+ * value whoever hands it out. Decided from the function's text and the recorded sources alone: nothing of the function
+ * runs.
+ * @param {Function} fn - The function.
+ * @param {Array<object>} leaves - The wrappers of the leaves that handed it out.
+ * @returns {boolean} True when one stand-in serves every leaf.
+ * @internal
+ * @example
+ * isLeafFileFunction(fn, [first, owner]); // false for a function written in a helper file
+ */
+export function isLeafFileFunction(fn, leaves) {
+	let own;
+	try {
+		own = functionSource(fn);
+	} catch {
+		return false;
+	}
+	if (/^class(?![\w$])/.test(own)) return true;
+	if (/\{\s*\[native code\]\s*\}\s*$/.test(own)) return false;
+	let inLeaf = false;
+	for (const leaf of leaves) {
+		const internal = leaf?.____slothletInternal;
+		const filePath = internal?.filePath;
+		const slothlet = leaf?.slothlet;
+		if (typeof filePath !== "string" || !slothlet) continue;
+		const texts = [];
+		const locations = new Set([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
+		for (const imported of runtime_importedLocations(leaf, filePath) ?? []) locations.add(imported);
+		for (const location of locations) {
+			if (!location) continue;
+			for (const key of [`${location}\u0000${slothlet.instanceID ?? ""}\u0000${internal.moduleID ?? ""}`, `${location}\u0000\u0000`]) {
+				const text = loadedScriptText(key, null);
+				if (typeof text === "string") texts.push(text);
+			}
+		}
+		// Nothing recorded for the file (a loader slothlet's hook does not see): the file as it can be read.
+		if (!texts.length && isNode && !filePath.startsWith("synthetic:")) {
+			const source = runtime_sourceOf(filePath);
+			if (source) texts.push(source.text);
+		}
+		if (texts.some((text) => text.includes(own))) {
+			inLeaf = true;
+			break;
+		}
+	}
+	if (!inLeaf) return false;
+	// The same text in a helper file of the instance: the function may be the helper's.
+	for (const leaf of leaves) {
+		const slothlet = leaf.slothlet;
+		const family = slothlet?.instanceID;
+		if (!family) continue;
+		for (const file of runtime_importGraphEntry(family).files) {
+			if (/\.(?:json|node|wasm)$/i.test(file) || runtime_leavesAtFile(slothlet, file, null, null).length) continue;
+			// As recorded when the helper loaded; where the hook recorded nothing, the file as it can be read. A helper
+			// whose source cannot be found may hold the function.
+			const text =
+				loadedScriptText(`${file}\u0000${family}\u0000`, null) ??
+				loadedScriptText(`${file}\u0000\u0000`, null) ??
+				(isNode ? runtime_sourceOf(file)?.text : undefined);
+			if (typeof text !== "string" || text.includes(own)) return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * The modules of the api files that import a helper file, directly or through other helpers: for each such file, the
+ * file's own node (see {@link runtime_fileModuleOf}), or every leaf built from it where no node was built for the file.
  * @param {{slothlet: object, path: string}} helper - The helper.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|undefined} The definer.
+ * @returns {Array<object>} The modules' wrappers, none when no api file is recorded as importing it.
  * @private
  */
-function runtime_leafOfHelper(helper) {
+function runtime_helperModules(helper) {
 	const modules = new Set();
 	for (const file of runtime_helperImporters(helper)) {
 		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, null);
 		if (!leaves.length) continue;
 		for (const module of runtime_fileModuleOf(leaves)) modules.add(module);
 	}
-	if (!modules.size) return undefined;
-	const found = [...modules];
-	if (found.length === 1) return { wrapper: found[0], callers: [] };
-	return runtime_checksPermissions(helper.slothlet) ? { unplaced: true } : { wrapper: found[0], callers: [] };
+	return [...modules];
+}
+
+/**
+ * The definer of a helper file's code that no leaf's code called (#726): a helper file has no leaf of its own, so only
+ * the files importing it can stand for it. With one api file importing the helper, that file's module. With several,
+ * nothing on the stack says which of them the code runs for, so it is held to every one of them: the first is the
+ * definer and the others come as its `callers`, which have to be allowed as well. Undefined when no api file is
+ * recorded as importing it. With the permission system off nothing is checked, and the first gives the code its context.
+ * @param {{slothlet: object, path: string}} helper - The helper.
+ * @returns {{wrapper: object, callers: Array<object>}|undefined} The definer.
+ * @private
+ */
+function runtime_leafOfHelper(helper) {
+	const [first, ...others] = runtime_helperModules(helper);
+	if (!first) return undefined;
+	return { wrapper: first, callers: runtime_checksPermissions(helper.slothlet) ? others : [] };
+}
+
+/**
+ * The answer for a helper file's own code running inside a call whose leaf does not import the helper (#726): a
+ * function of the helper's that reached the call by some route (handed out by a leaf that imports it, then handed in).
+ * It is the code of the modules whose api files import the helper, all of them, under the call it runs inside, what
+ * that call runs under and the calls that handed code down. Null when the frame is no helper file of the call's
+ * instance, or no api file is recorded as importing it.
+ * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call the code runs inside.
+ * @param {{path: string, line: string}} frame - The code's frame.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The answer.
+ * @private
+ */
+function runtime_helperAnswer(record, frame) {
+	const helper = runtime_helperOwner(frame, record.wrapper.slothlet);
+	if (!helper) return null;
+	const [first, ...others] = runtime_helperModules(helper);
+	if (!first) return null;
+	return { wrapper: first, ceiling: combineCeilings(record.wrapper, record.ceiling, supplierChainCeiling(record), ...others) };
 }
 
 /**
