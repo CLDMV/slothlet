@@ -3451,6 +3451,14 @@ export function runtime_codeWritersOnStack(slothlet) {
 const NEAR_FRAMES = 28;
 
 /**
+ * The frames {@link runtime_foreignCodeRunning} reads when 48 hold only slothlet's and Node's own and the stack goes on:
+ * far enough for Node's own code recursing well over a hundred levels deep. Past it the access is refused.
+ * @type {number}
+ * @private
+ */
+const FAR_FRAMES = 1024;
+
+/**
  * The placers of single calls, by wrapper and description, so a call read again reuses its own.
  * @type {WeakMap<object, {description: object, place: Function}>}
  * @private
@@ -3545,7 +3553,14 @@ function runtime_foreignCodeRunning(record) {
 	const near = runtime_captureFrames(NEAR_FRAMES);
 	const settled = decide(near, !near.truncated);
 	if (settled !== undefined || !near.truncated) return settled ?? null;
-	return decide(runtime_captureFrames(48), true) ?? null;
+	const full = decide(runtime_captureFrames(48), true);
+	if (full !== undefined) return full;
+	// Cut off inside slothlet's and Node's own frames, with the stack going on: the code making the access was not
+	// reached (Node's own code recursing, say `util.inspect` deep in a value, calls an api function from the bottom of
+	// it). It is read further out, and when that still reaches no one's code nothing says whose access it is: it is
+	// refused, not taken to be the leaf's own.
+	const far = decide(runtime_captureFrames(FAR_FRAMES), true);
+	return far === undefined ? UNACCOUNTED_SUPPLIER : far;
 }
 
 /**

@@ -61,6 +61,21 @@ export { parseStackFrame, toComparablePath };
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 
 /**
+ * What a walk of the stack answers when the frames it read were only slothlet's and Node's own and the stack went on
+ * past them: the code making the access was not reached.
+ * @type {symbol}
+ * @private
+ */
+const CUT_OFF = Symbol("slothlet.callerIdentity.cutOff");
+
+/**
+ * The frames read when fifty hold only slothlet's and Node's own and the stack goes on.
+ * @type {number}
+ * @private
+ */
+const FAR_FRAMES = 1024;
+
+/**
  * Stack resolution found the running code placed in an instance's files while no suspended call accounts for any
  * of it — a module's callback from a boundary slothlet does not patch, run while another call is suspended. Refused
  * like {@link AMBIGUOUS}; reported apart from it so a node a module kept can still answer for its own reader (#661).
@@ -881,10 +896,13 @@ export class LiveContextManager {
 			const awaiting = [];
 			let syncEnded = false;
 			let byName = null;
+			// Whether every frame read is slothlet's own or Node's: the code making the access was not reached.
+			let onlyInternal = true;
 			// The synchronous frames below the outermost placed one: what started the job.
 			let below = [];
 			for (const frame of frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+				if (!frame.path.startsWith("node:")) onlyInternal = false;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;
 				if (frame.async) syncEnded = true;
@@ -906,7 +924,13 @@ export class LiveContextManager {
 				}
 			}
 			if (!syncEnded && truncated) return undefined;
-			if (!running.length && !awaiting.length) return byName ? settle(byName) : truncated ? undefined : null;
+			if (!running.length && !awaiting.length) {
+				if (byName) return settle(byName);
+				if (truncated) return undefined;
+				// Cut off inside slothlet's and Node's own frames with the stack going on: nothing read says whose code
+				// is running, so it is not taken to be the host's.
+				return frames.truncated && !syncEnded && onlyInternal ? CUT_OFF : null;
+			}
 
 			// With no placed frame of its own, the job is placed by the innermost flow awaiting it.
 			if (!running.length) {
@@ -944,8 +968,13 @@ export class LiveContextManager {
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
 		// that decide sit near the top of the stack. Only a trace the budget cut short that settled nothing is
 		// read again, deeper. The capture is kept out of a leaf's reach; see runtime_captureFrames.
-		const answer = walk(runtime_captureFrames(25), false);
-		return answer !== undefined ? answer : walk(runtime_captureFrames(50), true);
+		let answer = walk(runtime_captureFrames(25), false);
+		if (answer === undefined) answer = walk(runtime_captureFrames(50), true);
+		// Node's own code recursing (`util.inspect` deep in a value, say) can put more of its frames than that between
+		// an access and the code that started it. The stack is read further out, and when that still reaches no code
+		// of anyone's the access is refused.
+		if (answer === CUT_OFF) answer = walk(runtime_captureFrames(FAR_FRAMES), true);
+		return answer === CUT_OFF ? AMBIGUOUS : answer;
 	}
 
 	/**
