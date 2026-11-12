@@ -397,6 +397,24 @@ await api.tools.store.size; // 3
 (await api.tools.store.items).length; // 3
 ```
 
+### An exported data object answers as the module's own object
+
+A plain object a module exports (`export const config = { … }`, an object default, a CommonJS `module.exports` member), and any plain object held inside it, answers through the api as the object does in plain JavaScript, in eager and lazy mode and both runtimes, with the permission system off or on:
+
+- **A write through the api reaches the module's own object.** `api.m.config.port = 81`, `delete api.m.config.port` and `Object.defineProperty(api.m.config, …)` change the object the module itself holds, so the module's code reads what was written, as it does after the same statement on the object. A member keeps its place among the object's keys when it is replaced. A write the object refuses (a frozen object, a read-only member) is refused through the api too. A setter runs as it does on the object.
+- **A named export stays the file's binding.** A named export merged beside an object default's members (`api.settings.read` for `export default settings; export const read = …`) is not a member of the default object, so a value assigned over it through the api is held by the api node alone.
+- **Writes are still checked.** While the permission system is on, a write through the api is a write at that path: a module that neither owns it nor has a `:write` rule for it is refused, and the module's object is unchanged (see [PERMISSIONS.md](./PERMISSIONS.md)).
+
+```javascript
+// api/m.mjs
+export const config = { port: 80 };
+export const port = () => config.port;
+
+// Usage
+api.m.config.port = 81;
+api.m.port(); // 81
+```
+
 ---
 
 ## Nested Structure

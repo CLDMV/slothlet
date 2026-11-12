@@ -46,6 +46,24 @@ const REFUSALS = ["LOOSE_SET_NOT_OWNED", "PERMISSION_DENIED"];
 // What the victim's frozen members hold while no other module has changed them.
 const FROZEN_UNCHANGED = { shelf: '{"n":1}', inner: '{"n":1}', deep: '{"n":1}', box: '{"n":1}' };
 
+/**
+ * What the same members hold once every change the guest tries has been made, as the changes leave plain objects: the
+ * guest's `frozenMemberWrites` run here on objects of the same shape. With the permission system off the changes go
+ * through, and a write through the api reaches the victim's own objects (#746).
+ */
+const FROZEN_CHANGED = (() => {
+	const [element, inner, deep, box] = [{ n: 1 }, { n: 1 }, { n: 1 }, { n: 1 }];
+	element.planted = 1;
+	Object.defineProperty(element, "defined", { value: 1, configurable: true, writable: true, enumerable: true });
+	delete element.n;
+	inner.planted = 1;
+	delete inner.n;
+	deep.planted = 1;
+	delete deep.n;
+	box.planted = 1;
+	return { shelf: JSON.stringify(element), inner: JSON.stringify(inner), deep: JSON.stringify(deep), box: JSON.stringify(box) };
+})();
+
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
 	{ mode: "lazy", runtime: "async" },
@@ -188,7 +206,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
 			// Freezing a list leaves its elements open, so a change that goes through lands on the element.
 			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
-			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
+			expect(await api.victim.v.frozenState()).toEqual(off ? FROZEN_CHANGED : FROZEN_UNCHANGED);
 		});
 
 		it("holds a write through members another module holds frozen a module kept, made later from outside any call, to ownership", async () => {
@@ -197,7 +215,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(off ? allDone(report) : Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
-			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
+			expect(await api.victim.v.frozenState()).toEqual(off ? FROZEN_CHANGED : FROZEN_UNCHANGED);
 		});
 
 		it("refuses a later write through members another module holds frozen with captured references off", async () => {

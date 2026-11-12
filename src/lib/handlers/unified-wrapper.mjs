@@ -28,6 +28,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import {
 	copyForComposition,
+	copySourceOf,
 	setApiNodeCheck,
 	isCompositionLayer,
 	layerForwards,
@@ -3746,6 +3747,97 @@ function runtime_writeImplMember(wrapper, prop, value) {
 	if (!accessor) return Reflect.set(impl, prop, value);
 	if (typeof accessor.descriptor.set !== "function") return false;
 	runtime_runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
+	return true;
+}
+
+/**
+ * The module's own object a node fronts, when the node was built from a copy of it (#746): a plain object a module
+ * exports, or one held inside such an object. Adoption works on a copy (see copyForComposition), so the module's object
+ * stays whole, and a write made through the node is made to that object too, as a write to the object itself is. Null
+ * for a node whose impl is the module's value itself (a class instance, an emitter, an array, a wrap-on-set value),
+ * which takes its writes directly, and for a namespace slothlet composed (a file's module node, a folder), which is no
+ * object of a module's.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} [prop] - A member about to be written: null is answered for one the object does not hold
+ *   because the build put a named export of the file there.
+ * @returns {object|null} The module's object, or null.
+ * @private
+ *
+ * @example
+ * runtime_moduleObjectOf(resolveWrapper(api.m.config)); // the `config` object m.mjs exports
+ */
+function runtime_moduleObjectOf(wrapper, prop = undefined) {
+	const internal = wrapper.____slothletInternal;
+	const object = internal.moduleObject;
+	if (object === null || object === undefined || object === internal.impl) return null;
+	const impl = internal.impl;
+	if (impl === null || typeof impl !== "object" || Arrays.isArray(impl) || util.types.isProxy(impl)) return null;
+	// A named export the build put beside an object default's members is the file's binding, not a member of the
+	// default: the node holds it, and the module's object never does.
+	if (prop !== undefined) {
+		const origin = internal.memberExportPaths?.[prop];
+		if (Arrays.isArray(origin) && origin[0] !== "default" && !hasOwn(object, prop)) return null;
+	}
+	return object;
+}
+
+/**
+ * The plain object each reconstruction of a node's value stands for ({@link UnifiedWrapper._extractFullImpl}): the
+ * module's object the node fronts, so a node rebuilt from the reconstruction (a reload reusing it) still finds it.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const RECONSTRUCTED_FROM = new WeakMap();
+
+/**
+ * The module's own object behind the value a node is built from (#746): the value itself, or what the build's copies
+ * of it were copied from (see copySourceOf), when that is a plain object the node's file exports, or (`asMember`) one
+ * held inside such an object. A namespace the build composed from a file's exports is no module's object, and neither
+ * is a Proxy, an array, a class instance or a node.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {*} value - The value the node is built from.
+ * @param {boolean} asMember - True when the value was read off the value of the node's parent.
+ * @returns {object|null} The module's object, or null.
+ * @private
+ */
+function runtime_moduleObjectFor(wrapper, value, asMember) {
+	let root = value;
+	for (let depth = 0; depth < 8; depth++) {
+		const source = root !== null && typeof root === "object" ? (RECONSTRUCTED_FROM.get(root) ?? copySourceOf(root)) : undefined;
+		if (source === undefined) break;
+		root = source;
+	}
+	if (root === null || typeof root !== "object" || Arrays.isArray(root) || util.types.isProxy(root)) return null;
+	const prototype = Reflect.getPrototypeOf(root);
+	if (prototype !== null && prototype !== Object.prototype) return null;
+	const ownership = wrapper.slothlet?.handlers?.ownership;
+	const filePath = wrapper.____slothletInternal.filePath;
+	if (!ownership || !filePath) return null;
+	if (ownership.resolveExportPath(filePath, root)) return root;
+	return asMember && !ownership.resolveMemberExportPaths(filePath, root) ? root : null;
+}
+
+/**
+ * Write a member of the module's object a node fronts, as the same assignment to the object does (#746). Only the
+ * object's own members are touched: a new key becomes an ordinary member of it, and a setter the module has put there
+ * since the node was built runs on the object as the module the node belongs to, never as the writer (#597).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object (see {@link runtime_moduleObjectOf}).
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - What to write.
+ * @returns {boolean} Whether the object took the write.
+ * @private
+ */
+function runtime_writeModuleObject(wrapper, object, prop, value) {
+	const held = Reflect.getOwnPropertyDescriptor(object, prop);
+	if (held === undefined) {
+		return (
+			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true })
+		);
+	}
+	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { value });
+	if (typeof held.set !== "function") return false;
+	runtime_runAccessor(wrapper, held.set, object, [value]);
 	return true;
 }
 
@@ -10846,6 +10938,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.pendingChanges = null; // Changes made through stand-ins while it has not loaded, made once it has (#653)
 		internal.changeGeneration = 0; // Bumped when the node is reloaded or removed, so its old refusals are not its own (#653)
 		internal.proxy = null;
+		// The module's own object this node was built from a copy of, which a write through the node reaches (#746).
+		internal.moduleObject = null;
 		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
 		// the proxy is callable (or before it exists).
 		internal.proxyHandler = null;
@@ -10882,6 +10976,8 @@ export class UnifiedWrapper extends ComponentBase {
 		const adoptedImpl = runtime_adoptedImpl(this, initialImpl);
 		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(adoptedImpl, EventEmitter));
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
+		// The module's own object, when this node is built from a copy of one its file exports (#746).
+		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
 		runtime_registerLeafFunction(this, internal.impl);
 
 		internal.materializeFunc = materializeFunc;
@@ -11193,6 +11289,9 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
+		// A node rebuilt from the reconstruction fronts the module's object this one does (#746).
+		if (wrapper.____slothletInternal.moduleObject)
+			RECONSTRUCTED_FROM.set(extractFullImpl_result, wrapper.____slothletInternal.moduleObject);
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
 		for (const key of Objects.keys(impl)) {
@@ -11267,6 +11366,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(runtime_adoptedImpl(this, newImpl));
+		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
+		// node that hands it its value (see ___adoptImplChildren).
+		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
 		runtime_registerLeafFunction(this, this.____slothletInternal.impl);
 		this.____slothletInternal.invalid = false;
 
@@ -12378,6 +12480,8 @@ export class UnifiedWrapper extends ComponentBase {
 							true,
 							this.____slothletInternal.adoptOwner != null
 						);
+						// The reused node fronts the module's object the new node did (#746).
+						resolveWrapper(existingChild).____slothletInternal.moduleObject = newWrapper.____slothletInternal.moduleObject ?? null;
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -12409,6 +12513,12 @@ export class UnifiedWrapper extends ComponentBase {
 						this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
 						true,
 						this.____slothletInternal.adoptOwner != null
+					);
+					// The reused node fronts the module's object its new value is, or was copied from (#746).
+					resolveWrapper(existingChild).____slothletInternal.moduleObject = runtime_moduleObjectFor(
+						resolveWrapper(existingChild),
+						value,
+						true
 					);
 					wrapped = existingChild;
 				}
@@ -12891,6 +13001,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// The value the child was built from (before any clone), so a parent array can tell whether the
 		// element its cached child fronts is still the one at that index (#602).
 		nestedWrapper.____slothletInternal.sourceValue = value;
+		// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
+		nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? runtime_moduleObjectFor(nestedWrapper, value, true) : null;
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
@@ -16112,10 +16224,17 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 				}
 
-				// Delete property first if it exists (to allow reassignment)
-				if (hasOwn(wrapper, prop)) {
-					delete wrapper[prop];
-				}
+				// A node built from a copy of a module's own object (an exported plain object, or one inside it) writes to
+				// that object too, as the same assignment to the object does, so the module's code reads what was written
+				// (#746). The object refusing the write (a member it holds read-only) refuses it here, before the node
+				// changes. The framework's own writes (the build, a sibling file merged onto the node) change only the node:
+				// composing never changes a module's value.
+				const ownWrite = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper);
+				const moduleObject = ownWrite ? null : runtime_moduleObjectOf(wrapper, prop);
+				if (moduleObject !== null && !runtime_writeModuleObject(wrapper, moduleObject, prop, value)) return false;
+
+				// A member the node already holds is replaced where it stands (the definition below), so it keeps its
+				// place among the node's keys, as an assignment to an object's member does (#746).
 				// Wrap-on-set: give an assigned function OR object the SAME context-preserving wrapper
 				// construction api.add()/child-adoption uses, so its methods get working self/context AND
 				// its nested terminal values are permission read-gated exactly like a build-mounted leaf
@@ -16310,6 +16429,11 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				return false;
 			}
+			// A node built from a copy of a module's own object deletes the member from that object too, as deleting it
+			// from the object does (#746); a member the object holds non-configurably stays, and so does the node's.
+			// The framework's own removals (a mount taken off the node) change only the node.
+			const moduleObject = isInternal || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+			if (moduleObject !== null && hasOwn(moduleObject, prop) && !Reflect.deleteProperty(moduleObject, prop)) return false;
 			// Remove from _impl if it's an object, before anything is retired: the backing value may refuse (its own
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
@@ -16707,9 +16831,17 @@ export class UnifiedWrapper extends ComponentBase {
 						};
 					}
 				}
-				// Both are checked before either changes, so a refusal by one leaves the other as it was.
-				if ((bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) || !runtime_canDefine(wrapper, prop, descriptor))
+				// A node built from a copy of a module's own object defines the member on that object too, as the same
+				// definition of the object does (#746).
+				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+				// All are checked before any changes, so a refusal by one leaves the others as they were.
+				if (
+					(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
+					!runtime_canDefine(wrapper, prop, descriptor) ||
+					(moduleObject !== null && !runtime_canDefine(moduleObject, prop, descriptor))
+				)
 					return false;
+				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, descriptor)) return false;
 				if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
 				return Reflect.defineProperty(wrapper, prop, descriptor);
 			},

@@ -69,6 +69,13 @@ function isArrayIndex(key) {
 const LAYERS = new WeakMap();
 
 /**
+ * The plain object each copy {@link copyForComposition} made was copied from (see {@link copySourceOf}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const COPY_SOURCES = new WeakMap();
+
+/**
  * Recognizes an api node: a slothlet wrapper proxy, which a layer hands back as it is rather than
  * binding it as a method (a lazy one has a function target, and wrapping it would hide it as a node).
  * The wrapper module registers it through {@link setApiNodeCheck}; this module does not import it.
@@ -511,7 +518,23 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
 	// the value's descriptors, so a member the value would refuse to delete or redefine is refused too.
 	if (addsMembers) for (const descriptor of Object.values(descriptors)) descriptor.configurable = true;
-	return Object.create(Object.getPrototypeOf(value), descriptors);
+	const copy = Object.create(Object.getPrototypeOf(value), descriptors);
+	COPY_SOURCES.set(copy, value);
+	return copy;
+}
+
+/**
+ * The object a copy {@link copyForComposition} made was copied from, so a node built from the copy can find the
+ * module's own object behind it (a copy of a copy leads there in two steps).
+ * @param {unknown} copy - A value.
+ * @returns {object|undefined} The object it was copied from, or undefined for anything that is no such copy.
+ * @package
+ *
+ * @example
+ * copySourceOf(copyForComposition(mod.config)) === mod.config; // true
+ */
+export function copySourceOf(copy) {
+	return copy !== null && typeof copy === "object" ? COPY_SOURCES.get(copy) : undefined;
 }
 
 /**
