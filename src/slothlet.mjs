@@ -112,6 +112,7 @@ import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { enableClonePatching, disableClonePatching } from "@cldmv/slothlet/helpers/clone-context";
 import { enableAsyncResourcePatching, disableAsyncResourcePatching } from "@cldmv/slothlet/helpers/async-resource-context";
+import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cldmv/slothlet/helpers/function-source-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
@@ -1025,6 +1026,10 @@ class Slothlet {
 		// module hands another is a view while the permission system is on: the patch lets them copy the data behind it.
 		enableClonePatching();
 
+		// `Function.prototype.toString.call(node)` answers native code for any Proxy, and an api node of a function is
+		// one: the patch answers the function's source, as `node.toString()` does (#750).
+		enableFunctionSourcePatching();
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
 
@@ -1775,6 +1780,7 @@ class Slothlet {
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
 			disableClonePatching();
+			disableFunctionSourcePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off

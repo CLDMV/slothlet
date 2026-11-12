@@ -79,3 +79,29 @@ export const clone = () => {
 		return error?.name ?? "threw";
 	}
 };
+
+/**
+ * The source of the owner's functions as the language's own `Function.prototype.toString` answers it for what this
+ * module holds of them, and as each answers its own `toString()`.
+ * @returns {Object<string, string>} Each function's source, or the name of the error reading it threw.
+ */
+export const sources = () => {
+	const read = (take) => {
+		try {
+			return take();
+		} catch (error) {
+			return error?.code ?? error?.name ?? "threw";
+		}
+	};
+	return {
+		node: read(() => Function.prototype.toString.call(self.owner.state)),
+		nodeOwn: read(() => self.owner.state.toString()),
+		nodeString: read(() => String(self.owner.state)),
+		returned: read(() => Function.prototype.toString.call(self.owner.maker())),
+		returnedOwn: read(() => self.owner.maker().toString()),
+		inData: read(() => Function.prototype.toString.call(self.owner.bag().run)),
+		inDataOwn: read(() => self.owner.bag().run.toString()),
+		builtin: read(() => Function.prototype.toString.call(Math.max)),
+		itself: read(() => Function.prototype.toString.call(Function.prototype.toString))
+	};
+};

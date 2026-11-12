@@ -44,3 +44,22 @@ export const state = () => ({ port: config.port, nested: { ...config.nested }, k
 export const setPort = (port) => {
 	config.port = port;
 };
+
+/**
+ * A function the owner makes and returns.
+ * @returns {function(): number} The function.
+ */
+export const maker = () =>
+	function made() {
+		return 7;
+	};
+
+/**
+ * Data the owner returns, holding a function.
+ * @returns {{run: function(): number}} The data.
+ */
+export const bag = () => ({
+	run: function inBag() {
+		return 1;
+	}
+});

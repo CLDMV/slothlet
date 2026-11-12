@@ -99,13 +99,33 @@ const NativeJSON = staticsOf(JSON);
 const NativeMath = staticsOf(Math);
 
 /**
- * `Function.prototype.toString` itself, as it was when slothlet loaded.
+ * The function under every `toString` wrapper a copy of slothlet installed (see helpers/function-source-context): each
+ * holds what it wraps under a registered symbol, so a copy loaded while another's instance is up still takes the
+ * language's own function.
+ * @param {Function} fn - `Function.prototype.toString` as found.
+ * @returns {Function} The function under the wrappers.
+ * @private
+ */
+function unwrapToString(fn) {
+	const marker = Symbol.for("slothlet.functionSource.original");
+	let current = fn;
+	for (let depth = 0; depth < 16; depth++) {
+		const below = getOwnPropertyDescriptor(current, marker)?.value;
+		if (typeof below !== "function") break;
+		current = below;
+	}
+	return current;
+}
+
+/**
+ * `Function.prototype.toString` itself, as it was when slothlet loaded (the language's own, under any wrapper another
+ * copy of slothlet had installed then).
  * @type {Function}
  * @internal
  * @example
  * value === functionToString; // whether a member read is the language's own `toString`
  */
-export const functionToString = Function.prototype.toString;
+export const functionToString = unwrapToString(Function.prototype.toString);
 
 /**
  * The source text of a function, by the language's own `Function.prototype.toString` as it was when slothlet loaded.

@@ -80,6 +80,7 @@ import {
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
 import { setCloneViewReader, setCloneNodeReader } from "@cldmv/slothlet/helpers/clone-context";
+import { setFunctionSourceReader, isFunctionSourcePatch } from "@cldmv/slothlet/helpers/function-source-context";
 import {
 	Reflect,
 	Objects,
@@ -4301,6 +4302,9 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
+	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
+	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
+	if (isFunctionSourcePatch(fn)) return true;
 	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
 }
 
@@ -5499,7 +5503,7 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
 					return runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
-				if (value === functionToString && isFunction) {
+				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
 					let source = SOURCES.get(original);
 					if (!source) {
 						source = { toString: () => functionSource(original) }.toString;
@@ -6605,6 +6609,24 @@ function runtime_viewedNodeWrapper(value) {
 	}
 	return null;
 }
+
+// `Function.prototype.toString` answers the source of the function behind an api node, a view of one, a view of another
+// module's function, or a stand-in for a returned function (#750): what each already answers to its own `toString()`.
+// Only the function is told here; the patch reads its text and hands nothing out.
+setFunctionSourceReader((value) => {
+	if (typeof value !== "function") return undefined;
+	const wrapper = runtime_viewedNodeWrapper(value);
+	if (wrapper !== null) {
+		const internal = wrapper.____slothletInternal;
+		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return undefined;
+		const fn = runtime_functionOf(internal.impl);
+		// A function default with named exports beside it is held under a layer: the module's function is the one under it.
+		return fn ? layerUnderlying(fn) : undefined;
+	}
+	const behind = CROSSINGS.get(value)?.original ?? value;
+	const original = STAND_IN_RECORDS.get(behind)?.original ?? (behind !== value ? behind : undefined);
+	return typeof original === "function" ? original : undefined;
+});
 
 // The platform's cloning functions copy an api node's data too (#751): member by member through the node (or the view
 // of it the caller holds), so each read is the node's own, with its checks, and the module's object is never handed over.

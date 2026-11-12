@@ -397,6 +397,10 @@ await api.tools.store.size; // 3
 (await api.tools.store.items).length; // 3
 ```
 
+### An exported function's source reads as the function's
+
+`Function.prototype.toString.call(api.m.fn)` answers the source of the module's function, as `api.m.fn.toString()` and `String(api.m.fn)` do, for a function, an async function and a class, in eager and lazy mode and both runtimes, with the permission system off or on. An api node is a Proxy, for which the language itself answers `function () { [native code] }`, so slothlet wraps `Function.prototype.toString` while an instance is up; the wrapper changes nothing for any other value. See [PERMISSIONS.md](./PERMISSIONS.md#values-that-cross-between-modules) for how it is installed and removed.
+
 ### An exported data object answers as the module's own object
 
 A plain object a module exports (`export const config = { … }`, an object default, a CommonJS `module.exports` member), and any plain object held inside it, answers through the api as the object does in plain JavaScript, in eager and lazy mode and both runtimes, with the permission system off or on:

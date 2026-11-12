@@ -33,6 +33,11 @@ import { createRequire } from "node:module";
 import v8 from "node:v8";
 import { inspect } from "node:util";
 import slothlet from "@cldmv/slothlet";
+import { isFunctionSourcePatch, isFunctionSourcePatched } from "@cldmv/slothlet/helpers/function-source-context";
+import { functionSource } from "@cldmv/slothlet/helpers/intrinsics";
+
+/** `Function.prototype.toString` as the language provides it: taken before any instance is built. */
+const nativeToString = Function.prototype.toString;
 
 const FIXTURE = resolve("api_tests/api_test_api_node_plain_js");
 const require = createRequire(import.meta.url);
@@ -297,6 +302,43 @@ const CLONED = {
 	}
 };
 
+/** What the language's own `Function.prototype.toString` answers for `m`'s exports, and what goes with it. */
+const SOURCES = {
+	"an arrow function": (m) => Function.prototype.toString.call(m.arrow),
+	"a function declaration": (m) => Function.prototype.toString.call(m.named),
+	"an async function": (m) => Function.prototype.toString.call(m.later),
+	"a class": (m) => Function.prototype.toString.call(m.Animal),
+	"a derived class": (m) => Function.prototype.toString.call(m.Dog),
+	"the same text as the function's own toString()": (m) => Function.prototype.toString.call(m.arrow) === m.arrow.toString(),
+	"a function with a toString of its own, which the language's ignores": (m) => {
+		m.named.toString = () => "function named() { [native code] }";
+		return [Function.prototype.toString.call(m.named), String(m.named)];
+	},
+	"a captured toString applied later": (m) => {
+		const { toString } = Function.prototype;
+		return [toString.call(m.arrow), Reflect.apply(toString, m.named, [])];
+	},
+	"a bound copy of a function, which is native code": (m) => Function.prototype.toString.call(m.arrow.bind(null)),
+	"an instance's constructor": (m) => Function.prototype.toString.call(m.rex.constructor),
+	"an object, which is refused": (m) => answer(() => Function.prototype.toString.call(m.config)),
+	"an array, which is refused": (m) => answer(() => Function.prototype.toString.call(m.list)),
+	"a module, which is refused": (m) => answer(() => Function.prototype.toString.call(m)),
+	"a built-in function": () => [Function.prototype.toString.call(Math.max), Function.prototype.toString.call(Function.prototype.toString)],
+	"an ordinary function and non-functions": () => [
+		Function.prototype.toString.call(() => 1),
+		answer(() => Function.prototype.toString.call({})),
+		answer(() => Function.prototype.toString.call(undefined)),
+		answer(() => Function.prototype.toString.call("text"))
+	],
+	"what the function reports about itself": () => [
+		Function.prototype.toString.name,
+		Function.prototype.toString.length,
+		"prototype" in Function.prototype.toString,
+		Object.keys(Function.prototype.toString),
+		Object.getOwnPropertyDescriptor(Function.prototype, "toString").enumerable
+	]
+};
+
 describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
 	let api;
 
@@ -330,6 +372,57 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 			const expected = await answer(() => CLONED[name](module));
 			await start();
 			expect(await answer(() => CLONED[name](api.shapes))).toEqual(expected);
+		});
+	});
+
+	describe("Function.prototype.toString answers a node of a function as it answers the function (#750)", () => {
+		it.each(Object.keys(SOURCES))("%s", async (name) => {
+			const module = await twin("shapes.mjs");
+			const expected = answer(() => SOURCES[name](module));
+			await start();
+			expect(answer(() => SOURCES[name](api.shapes))).toEqual(expected);
+		});
+
+		it("is wrapped once while instances are up and put back when the last one shuts down", async () => {
+			expect(Function.prototype.toString).toBe(nativeToString);
+			await start();
+			const wrapped = Function.prototype.toString;
+			expect(wrapped).not.toBe(nativeToString);
+			expect(isFunctionSourcePatch(wrapped)).toBe(true);
+			expect(isFunctionSourcePatched(wrapped)).toBe(true);
+			const second = await build({ mode, runtime, ...(permissions ? { permissions } : {}) });
+			expect(Function.prototype.toString).toBe(wrapped);
+			await api.shutdown();
+			api = null;
+			expect(Function.prototype.toString).toBe(wrapped);
+			expect(Function.prototype.toString.call(second.shapes.arrow)).toBe(nativeToString.call((await twin("shapes.mjs")).arrow));
+			await second.shutdown();
+			expect(Function.prototype.toString).toBe(nativeToString);
+			// A copy kept from while it was wrapped answers as the language's own does from then on.
+			expect(wrapped.call(Math.max)).toBe(nativeToString.call(Math.max));
+			expect(wrapped.call(second.shapes.arrow)).toBe(nativeToString.call(second.shapes.arrow));
+		});
+
+		it("is told by identity, so a function carrying the wrapper's marker is not taken for it", async () => {
+			await start();
+			const forged = Object.defineProperty(() => "forged", Symbol.for("slothlet.functionSource.original"), { value: nativeToString });
+			expect(isFunctionSourcePatched(forged)).toBe(true);
+			expect(isFunctionSourcePatch(forged)).toBe(false);
+		});
+
+		it("leaves slothlet's own read of a function's text on the language's toString, whatever is installed later", async () => {
+			await start();
+			const installed = Function.prototype.toString;
+			const fn = () => 1;
+			try {
+				Function.prototype.toString = () => "function max() { [native code] }";
+				expect(functionSource(fn)).toBe(nativeToString.call(fn));
+				expect(functionSource(api.shapes.arrow)).toBe(nativeToString.call(api.shapes.arrow));
+			} finally {
+				Function.prototype.toString = installed;
+			}
+			// A node is a Proxy to the language's own toString: slothlet never reads a node's text as a built-in's name.
+			expect(functionSource(api.shapes.arrow)).toBe("function () { [native code] }");
 		});
 	});
 
@@ -502,6 +595,35 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 		}
 		expect(await api.writer.clone()).toBe(JSON.stringify(structuredClone(owner.config)));
 		expect(await api.owner.state()).toEqual(UNCHANGED);
+	});
+
+	it("answers a module the source of another module's functions as plain JavaScript does", async () => {
+		await mount(WRITER_MAY_WRITE);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		const source = (fn) => nativeToString.call(fn);
+		const expected = {
+			node: source(owner.state),
+			nodeOwn: owner.state.toString(),
+			nodeString: String(owner.state),
+			returned: source(owner.maker()),
+			returnedOwn: owner.maker().toString(),
+			inData: source(owner.bag().run),
+			inDataOwn: owner.bag().run.toString(),
+			builtin: source(Math.max),
+			itself: source(nativeToString)
+		};
+		expect(await api.reader.sources()).toEqual(expected);
+		expect(await api.writer.sources()).toEqual(expected);
+		expect(Function.prototype.toString.call(api.owner.maker())).toBe(expected.returned);
+		expect(Function.prototype.toString.call(api.owner.bag().run)).toBe(expected.inData);
+	});
+
+	it("answers a function's source the same through the language's toString and the function's own", async () => {
+		await mount([{ caller: "reader.**", target: "owner.state", effect: "deny" }]);
+		const sources = await api.reader.sources();
+		// Whatever a module denied the call gets from the function's own toString(), the language's gives it no more.
+		expect(sources.node).toBe(sources.nodeOwn);
+		expect(sources.nodeString).toBe(sources.nodeOwn);
 	});
 
 	it("hands a module that may only read another module's data a node, never the module's object", async () => {
