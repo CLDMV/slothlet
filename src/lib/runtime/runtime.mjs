@@ -58,6 +58,11 @@ function getCurrentRuntime() {
 	// live when a live instance has a stale currentInstanceID from a previous call.
 	const asyncCtx = asyncRuntime.tryGetContext();
 	if (asyncCtx) {
+		// A file's load runs in a store of its own. An instance on the live runtime which that file built and called is
+		// not that load: while one of its modules is executing, its own runtime answers.
+		if (asyncCtx.moduleLoad && liveRuntime.runningInstanceID() !== null && liveRuntime.getCallerIdentity()?.currentWrapper) {
+			return liveRuntimeModule;
+		}
 		return asyncRuntimeModule;
 	}
 

@@ -28,6 +28,10 @@ import { resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
 const OUTER = resolve("api_tests/api_test_load_nested/outer");
+const INNER = resolve("api_tests/api_test_load_nested/inner");
+const CHANGES = ["writeSync", "writeAfterAwait", "readAfterAwait", "removeAfterAwait", "defineAfterAwait"];
+/** What each change answers for a module changing the top level of its own `self` inside its call. */
+const EXPECTED = { writeSync: "ok", writeAfterAwait: "ok", readAfterAwait: "function", removeAfterAwait: "ok", defineAfterAwait: "ok" };
 
 describe.each(["eager", "lazy"].flatMap((mode) => ["async", "live"].map((runtime) => ({ mode, runtime }))))(
 	"an instance built while a file loads > $mode / $runtime",
@@ -44,6 +48,24 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["async", "live"].map((runtime
 			expect(await api.nested.loaded()).toBe(true);
 			// Plain JavaScript: the inner instance's closure calls its own `self.other.ping()`.
 			expect(await api.nested.answered).toBe("pong");
+		});
+
+		it("lets the inner instance's functions change their own self, on either runtime, as when the host builds it", async () => {
+			// The reference: the same inner instance built by the host itself, outside any file's load.
+			const reference = {};
+			for (const innerRuntime of ["async", "live"]) {
+				const inner = await slothlet({ base: INNER, runtime: innerRuntime, silent: true });
+				reference[innerRuntime] = {};
+				for (const change of CHANGES) reference[innerRuntime][change] = await inner.writer[change]();
+				await inner.slothlet.shutdown();
+			}
+			expect(reference).toEqual({ async: EXPECTED, live: EXPECTED });
+			api = await slothlet({ base: OUTER, mode, runtime, silent: true });
+			const { own, ...inner } = await api.nestedwrites.outcomes();
+			expect(inner).toEqual(reference);
+			// The loading file's own read of `self` answers the same with a call of an inner instance waiting as without one.
+			expect(own.async).toBe(own.alone);
+			expect(own.live).toBe(own.alone);
 		});
 	}
 );
