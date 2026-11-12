@@ -26,6 +26,7 @@ import { self } from "@cldmv/slothlet/runtime";
 // Subscribe. `on` returns the granted delivery level and an unsubscribe function.
 const { level, off } = self.slothlet.event.on("orders.created", (payload, meta) => {
 	// At `allow`: payload is the emitted value. At `notify`: payload is undefined.
+	// With the permission system not on (the default) every subscription is at `allow`.
 	// meta is always { event, at, instanceID }.
 });
 
@@ -67,6 +68,24 @@ Each subscriber's delivery is governed by a three-level effect, resolved from th
 - **`deny`** — subscription is refused. The listener is never registered and never fires.
 - **`notify`** — subscribed, but delivered only the trigger envelope `{ event, at, instanceID }` — no domain payload. This is the default: subscription is open, payload is opt-_in_.
 - **`allow`** — subscribed with the full domain payload.
+
+**The levels follow the permission mode.** Event levels are part of the permission system, so they are resolved only while it is on (a `permissions` config, `mode: "on"`, or after `control.enable()`). While it is off, which is what no `permissions` config means, or disabled (`mode: "disabled"`), no event rule is evaluated: every subscription is granted `allow` and receives the payload, whatever `events.default`, a manifest's rules or runtime rules say, as call and read rules are not evaluated there either. `on()`'s returned `level`, `resolveLevel`, the `levels` map of a strategy's envelope and the level each delivery is made at all report `allow`. Rules given in the config, by a manifest or through `event.rules.add` are kept and take effect when the system is switched on; a subscription made earlier is then resolved again on the next emit.
+
+| Permission mode                                                    | A module's subscription                                                           |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `"off"` (no `permissions` config, `mode: "off"`, `enabled: false`) | `allow`: the payload is delivered                                                 |
+| `"disabled"`                                                       | `allow`: the payload is delivered                                                 |
+| `"on"`                                                             | the event rules decide; with none matching, `events.default` (built-in: `notify`) |
+
+```javascript
+// No permissions config: the listener gets the payload.
+const api = await slothlet({ base: "./api" });
+// inside a module: self.slothlet.event.on("orders.created", (payload) => payload.id); // payload is { id: 42 }
+
+// Permissions on, no event rules: the built-in base level, `notify`. The listener is called with no payload.
+const guarded = await slothlet({ base: "./api", permissions: { defaultPolicy: "allow" } });
+// inside a module: self.slothlet.event.on("orders.created", (payload) => payload); // payload is undefined
+```
 
 A **host** subscription — one made with no module caller in context (the composing host, or any `run()` / `scope()` descended from the host root) — is trusted like a host-initiated call and always resolves `allow`.
 
@@ -110,7 +129,7 @@ const api = await slothlet({
 - `effect` — `deny` | `notify` | `allow`.
 - `condition` — optional, the same condition shape permission rules accept (see [PERMISSIONS-CONDITIONS.md](PERMISSIONS-CONDITIONS.md)), evaluated against the same `ctx`: the `context.run()` context in effect where the level is resolved (the caller of `resolveLevel`, or the emitter at emit time). Function conditions receive `null` call metadata — an emit has no call arguments. A subscriber's level is re-resolved per emit when any event rule is conditional.
 
-`default` overrides the built-in base level (`notify`) for subscribers that match no rule.
+`default` overrides the built-in base level (`notify`) for subscribers that match no rule. Both, and every rule, apply only while the permission system is on (see [Delivery levels](#delivery-levels)).
 
 ## Precedence
 

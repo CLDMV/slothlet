@@ -53,9 +53,11 @@ The permission system runs in one of three modes:
 
 | Mode                  | How                                                                                    | What applies                                                                                                                                                                                                                                                                                                                                                             |
 | --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `"on"`                | a `permissions` config (`mode: "on"`, or `enabled` not `false`), or `control.enable()` | Every rule: calls, reads, writes, and ownership.                                                                                                                                                                                                                                                                                                                         |
+| `"on"`                | a `permissions` config (`mode: "on"`, or `enabled` not `false`), or `control.enable()` | Every rule: calls, reads, writes, events, and ownership.                                                                                                                                                                                                                                                                                                                 |
 | `"off"` (the default) | no `permissions` config, `mode: "off"`, `enabled: false`, or `control.disable()`       | No call or read rule is evaluated (except those on `slothlet.permissions.control.**` and `.principal.**`) and no write is refused on ownership, but the built-in write rules, and host rules on what they cover, still keep module code from changing the framework's own namespace, root functions, or keys on api nodes (see [Write Permissions](#write-permissions)). |
 | `"disabled"`          | `mode: "disabled"` in the config only                                                  | Nothing but the reserved names `slothlet`, `shutdown` and `destroy` on `self`. A module may change the framework's own namespace, and call `control.*` and `principal.*` too, so it can turn the system on or off itself.                                                                                                                                                |
+
+[Event rules](#event-rules) are evaluated under `"on"` only: under `"off"` and `"disabled"` every event subscription is delivered at `allow`.
 
 `api.slothlet.permissions.control.mode` reports the mode. From `"disabled"`, `control.enable()` and `control.disable()` move to `"on"` and `"off"`.
 
@@ -1165,6 +1167,8 @@ const api = await slothlet({
 	}
 });
 ```
+
+Event rules are part of the permission system and follow its [mode](#modes): they are evaluated only while it is on. While it is off or disabled every subscription is delivered at `allow`, payload included, and the rules (the config's, a manifest's, runtime ones) wait until it is switched on.
 
 `caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
 

@@ -937,6 +937,11 @@ export class PermissionManager extends ComponentBase {
 	 * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
 	 * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
 	 *
+	 * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
+	 * which is also what no `permissions` config means, and `"disabled"`) no event rule is evaluated and every
+	 * subscription resolves "allow", as call and read rules are not evaluated there. An instance that has shut down
+	 * resolves "deny".
+	 *
 	 * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
 	 * @param {string} eventName - The event name being subscribed to / emitted.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -945,6 +950,8 @@ export class PermissionManager extends ComponentBase {
 	resolveEventLevel(subscriberPath, eventName, runtimeContext = null) {
 		// Host subscription (no module caller) is trusted like a host-initiated call → full payload.
 		if (subscriberPath == null) return "allow";
+		// Not on: the event rules are not evaluated, the built-in base level and `events.default` included.
+		if (!this.#enabled) return this.#endedOn ? "deny" : "allow";
 
 		const matches = [];
 		for (const entry of this.#eventRules.values()) {
@@ -2437,6 +2444,8 @@ export class PermissionManager extends ComponentBase {
 		this.#enabled = true;
 		this.#endedOn = false;
 		this.#disabled = false;
+		// The event pool follows the mode: levels resolved under the old one are resolved again.
+		this.#eventRulesEpoch++;
 		this.#clearCache();
 	}
 
@@ -2515,6 +2524,8 @@ export class PermissionManager extends ComponentBase {
 		this.#enabled = false;
 		this.#endedOn = false;
 		this.#disabled = false;
+		// The event pool follows the mode: levels resolved under the old one are resolved again.
+		this.#eventRulesEpoch++;
 		this.#clearCache();
 	}
 
@@ -2699,6 +2710,7 @@ export class PermissionManager extends ComponentBase {
 		if (this.#enabled) this.#endedOn = true;
 		this.#enabled = false;
 		this.#disabled = false;
+		this.#eventRulesEpoch++;
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 		this.#readGating = false;

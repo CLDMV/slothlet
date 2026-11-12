@@ -319,6 +319,8 @@ const api = await slothlet({
 
 The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). Two of them change what a module is handed, so they are described here too.
 
+With no `permissions` block the system is off: no call, read or event rule is evaluated. That includes the event levels ([EVENTS.md](./EVENTS.md#delivery-levels)): every `self.slothlet.event.on()` subscription is delivered at `allow`, with its payload. Under a `permissions` block the event rules apply, and a subscriber that matches none gets `permissions.events.default` (built-in: `notify`, the trigger without the payload).
+
 ### `permissions.typedArrayMembers`
 
 **Type**: `boolean | number`
