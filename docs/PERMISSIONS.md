@@ -295,7 +295,7 @@ Limits:
 
 A `self.*` call is allowed only when **both** of these are allowed:
 
-- the **definer** of the code making it: the nearest leaf on the stack. Walking out from the `self` call through the frames of the same file, the first one whose code sits inside an export's function text names that leaf, so a helper written outside every export, called from a leaf's code, runs as that leaf. Only when no frame of that file is inside any export is the definer the file's module. A frame of another file ends the walk; code the host wrote is the host's;
+- the **definer** of the code making it: the nearest leaf on the stack. Walking out from the `self` call through the frames of the same file, the first one whose code sits inside an export's function names that leaf, so a helper written outside every export, called from a leaf's code, runs as that leaf. Only when no frame of that file is inside any export is the definer the file's module. A frame of another file ends the walk; code the host wrote is the host's. Where each export's function sits is read from the source the engine was given when the file loaded (the compiled code for a TypeScript leaf), at the place the export is declared: `export const a = …`, `export function a`, `export default …`, a list (`export { t as a }`, also a minifier's), `exports.a = …`, `module.exports = { a }`. Two exports with the same text are therefore told apart, source maps change nothing, and neither does a file edited on disk after it loaded. An export built at runtime (a bound function, the result of a factory) has no place in the source, and its code is the file's module's;
 - the **caller** running it: the module call it runs inside, or the host when it runs inside none.
 
 Defining a function, storing it, returning it or passing it checks nothing. Where the code goes decides only who its caller is:
@@ -314,6 +314,23 @@ Defining a function, storing it, returning it or passing it checks nothing. Wher
   ```
 
   To lend on purpose, a module pins the function with `self.slothlet.lockCaller(fn)`, which runs as the module that pinned it whoever calls it, or exposes a leaf: calling `self.bag.read()` is a call of `bag`'s, checked as one.
+
+- **A call runs with the callee's rights.** Rules are per hop: a module that may call `bag.read` gets what `bag.read` returns, whatever `bag.read` itself had to reach to produce it. That is what a service is, and it holds however the caller came by the leaf's function. A module's **exported function handed out as it is** counts as a call of that function's api node: whoever runs it has to be allowed to call the leaf, and it then runs with the leaf's rights, exactly as `self.bag.read()` does. Under `"precise"` the function comes back as the node itself; under `"fast"`, and for one nested in returned data, it is recognised when it runs, by where its export is declared. A **private** function (one no export names) is the case above: it lends nothing.
+
+  ```javascript
+  // bag/bag.mjs (bag may read the vault)
+  export const viaLeaf = () => self.vault.get(); // the service's function
+  export const leafRef = () => self.bag.viaLeaf; // hands out the node
+  export const boundLeaf = () => viaLeaf; // hands out the exported function itself
+  export const closure = () => () => self.vault.get(); // hands out a private function
+
+  // sup/sup.mjs                          deny sup.** → vault.**     deny sup.** → bag.viaLeaf
+  self.bag.viaLeaf(); //                  "SECRET"                   refused
+  (await self.bag.boundLeaf())(); //      "SECRET"                   refused
+  (await self.bag.closure())(); //        refused                    "SECRET"
+  ```
+
+  With `sup` denied the vault it still gets the service's answer, by any of the first three: it calls the service, and the service reads the vault. Denied the service's function, it does not get it by being handed the function either.
 
 With `bag` allowed `vault.**`, every module allowed `bag.**` and `shared.**`, and nothing else allowed the vault:
 

@@ -4775,6 +4775,10 @@ function runtime_handOut(maker, owner, value) {
 			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
 			// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
 			const leaf = implWrappers.get(value);
+			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
+			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
+			const node = leaf && genuineWrappers.has(leaf) && leaf.slothlet === owner.slothlet ? leaf.____slothletInternal.proxy : null;
+			if (node && typeof node === "function") return node;
 			const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
 			if (leafMaker !== maker && leafMaker.made.has(value)) return leafMaker.made.get(value);
 			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))

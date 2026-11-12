@@ -129,6 +129,16 @@ const STATE = Symbol.for("@cldmv/slothlet.instanceImportState");
 const LOADED_SCRIPTS = new Map();
 
 /**
+ * The text of each source in {@link LOADED_SCRIPTS}, by script key and then by hash: the exact text the engine
+ * compiled (TypeScript with its types stripped), which is what a frame's line and column are positions in and what a
+ * function's own text is a piece of. Frame placement reads where each leaf's function sits from it, so a file changed
+ * on disk after it was loaded changes nothing. Kept and dropped with the hashes.
+ * @type {Map<string, Map<string, string>>}
+ * @private
+ */
+const LOADED_TEXTS = new Map();
+
+/**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
  * slashes, no query, the real path Node resolves to), the URLs of the files that import it — a module's instance copy
  * with its tags, a package file, the host's own — and, when the named importer is a file nothing loaded through the
@@ -247,6 +257,14 @@ function publishScripts(state) {
 				return { known: Boolean(hashes?.length), has: hash !== undefined && Boolean(hashes?.includes(hash)) };
 			},
 			hashes: (key) => [...(LOADED_SCRIPTS.get(key) ?? [])],
+			text: (key, hash) => {
+				const texts = LOADED_TEXTS.get(key);
+				if (!texts) return undefined;
+				if (hash !== undefined && hash !== null) return texts.get(hash);
+				// No hash to go by (an engine that reports none): the newest source loaded under the key.
+				const newest = LOADED_SCRIPTS.get(key)?.at(-1);
+				return newest === undefined ? undefined : texts.get(newest);
+			},
 			count: () => LOADED_SCRIPTS.size,
 			packageImporters: (path) => [...(PACKAGE_IMPORTERS.get(packageKey(path)) ?? [])]
 		})
@@ -271,7 +289,7 @@ function publishScripts(state) {
  *   private cache does not keep (each load evaluates the leaf anew). Created on first use.
  * @property {(instanceID: string, parent: string, children: string[]) => void} [recordImports] - Records a
  *   module's imports; called by the registration the vite plugin appends to each instance module.
- * @property {{lookup: Function, hashes: Function, count: Function, packageImporters: Function}} [scripts] - The frozen reader of
+ * @property {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}} [scripts] - The frozen reader of
  *   the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
  * @property {(url: string) => string} [scriptKeyOf] - How a URL is reduced to its script key, fixed once set.
  * @internal
@@ -768,7 +786,11 @@ export function releaseInstanceScope(instanceID) {
 	globalThis[STATE]?.graphs?.delete(instanceID);
 	globalThis[STATE]?.leaves?.delete(instanceID);
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
-	for (const key of LOADED_SCRIPTS.keys()) if (scriptKeyInstance(key) === String(instanceID)) LOADED_SCRIPTS.delete(key);
+	for (const key of LOADED_SCRIPTS.keys()) {
+		if (scriptKeyInstance(key) !== String(instanceID)) continue;
+		LOADED_SCRIPTS.delete(key);
+		LOADED_TEXTS.delete(key);
+	}
 }
 
 /**
@@ -1056,6 +1078,11 @@ function recordLoadedSource(url, result) {
 	let hashes = LOADED_SCRIPTS.get(key);
 	if (!hashes) LOADED_SCRIPTS.set(key, (hashes = []));
 	rememberNewest(hashes, hash);
+	// The text itself, for where each leaf's function sits in it (see LOADED_TEXTS); only the sources still listed.
+	let texts = LOADED_TEXTS.get(key);
+	if (!texts) LOADED_TEXTS.set(key, (texts = new Map()));
+	texts.set(hash, text);
+	for (const known of texts.keys()) if (!hashes.includes(known)) texts.delete(known);
 }
 
 /**
@@ -1068,6 +1095,21 @@ function recordLoadedSource(url, result) {
  */
 export function loadedScriptLookup(key, hash) {
 	return globalThis[STATE]?.scripts?.lookup(key, hash) ?? { known: false, has: false };
+}
+
+/**
+ * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the
+ * newest when no hash is given. Undefined when none is recorded (the hook did not load the file, or another slothlet
+ * copy's hook did and keeps no text).
+ * @param {string} key - The script key.
+ * @param {string|null} [hash] - The script's hash.
+ * @returns {string|undefined} The text.
+ * @internal
+ * @example
+ * loadedScriptText(key, frame.hash); // "export const a = () => 1;\n"
+ */
+export function loadedScriptText(key, hash) {
+	return globalThis[STATE]?.scripts?.text?.(key, hash);
 }
 
 /**

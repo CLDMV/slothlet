@@ -777,6 +777,8 @@ export class LiveContextManager {
 	 */
 	#recordIdentity(record, callerWrapper, callerCeiling) {
 		const supplier = resolveSupplier(record);
+		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
+		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
 		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
 		return {
 			currentWrapper: supplier ? supplier.wrapper : record.wrapper,

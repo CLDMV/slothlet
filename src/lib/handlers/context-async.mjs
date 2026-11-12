@@ -567,6 +567,8 @@ export class AsyncContextManager {
 		const supplier = resolveSupplier(record);
 		// Code no call accounts for: no caller, and unresolved, so only a node a module kept can settle it, as that
 		// module (#597, #661), as the live manager answers it.
+		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
+		if (supplier?.refused) return { currentWrapper: null, unresolved: true };
 		if (supplier?.unaccounted) return { currentWrapper: null, unresolved: true, unaccounted: true };
 		if (supplier) return { currentWrapper: supplier.wrapper, ceiling: supplier.ceiling };
 		return { currentWrapper: record.wrapper, ceiling: record.ceiling ?? undefined };

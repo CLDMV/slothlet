@@ -15,6 +15,9 @@ package-lock.json
 # Intentionally-malformed test fixtures (unparseable / must stay verbatim)
 api_tests/api_test_modules_malformed/
 
+# A minified fixture: its point is that it stays on one line with renamed locals
+api_tests/api_test_leaf_positions/mini.mjs
+
 # YAML — workflows are deliberately 4-space indented; prettier (tabWidth 2, and
 # YAML disallows tabs) would reindent every CI file 4->2 for no real gain.
 *.yml

@@ -31,6 +31,7 @@ import {
 	instanceCommonJSVersion,
 	instanceImporters,
 	loadedScriptLookup,
+	loadedScriptText,
 	packageImporters,
 	rememberNewest,
 	scriptKeyInstance,
@@ -595,7 +596,11 @@ function* runtime_siteFrames(callSites, lean) {
 			gap,
 			// Where in its file the frame runs: the leaf whose source range holds it is its definer (#726).
 			lineNumber: site.getLineNumber?.() ?? null,
-			columnNumber: site.getColumnNumber?.() ?? null
+			columnNumber: site.getColumnNumber?.() ?? null,
+			// Where the function the frame runs in starts: the start of a leaf's own function when the frame is that
+			// function itself, not one nested in it.
+			enclosingLine: site.getEnclosingLineNumber?.() ?? null,
+			enclosingColumn: site.getEnclosingColumnNumber?.() ?? null
 		};
 		gap = false;
 	}
@@ -1996,7 +2001,7 @@ function runtime_siblingAuthor(record, frame, outer) {
 	const leaf = record.wrapper;
 	const leaves = runtime_leavesAt(leaf.slothlet, frame);
 	if (leaves.length < 2 || !leaves.includes(leaf)) return null;
-	const source = runtime_sourceOf(leaf.____slothletInternal.filePath);
+	const source = runtime_sourceOf(leaf.____slothletInternal.filePath, frame);
 	if (!source) return null;
 	// The nearest frame of the file inside an export names the code's leaf; the leaf's own module node holds none.
 	let holder = runtime_leafHolding(leaves, source, frame);
@@ -2653,6 +2658,71 @@ function runtime_runsOwnerTransform(slothlet, frame) {
 }
 
 /**
+ * Whether the code at a frame runs inside a leaf's own exported function, entered as that function (#726): the frame,
+ * or one of the frames of its file that called it, is the leaf's function itself, starting exactly where the leaf's
+ * export is declared. A function written inside the export and run later (a closure it returned) has no such frame
+ * under it: it starts somewhere else, and nothing of the leaf's is on the stack between it and whoever runs it.
+ * Where the engine does not say where a frame's function starts, the answer is no.
+ * @param {object} leaf - The leaf.
+ * @param {{lineNumber?: number|null, columnNumber?: number|null, enclosingLine?: number|null, enclosingColumn?: number|null, path: string, line: string}} frame - The frame.
+ * @param {Array<object>} outer - The frames further out, innermost first.
+ * @returns {boolean} True when it was.
+ * @private
+ */
+function runtime_enteredAsItself(leaf, frame, outer) {
+	const filePath = leaf.____slothletInternal?.filePath;
+	const source = filePath ? runtime_sourceOf(filePath, frame) : null;
+	const range = source ? runtime_leafRange(leaf, source) : null;
+	if (!range) return false;
+	const starts = (candidate) =>
+		Boolean(candidate.enclosingLine && candidate.enclosingColumn) &&
+		(source.starts[candidate.enclosingLine - 1] ?? Infinity) + candidate.enclosingColumn - 1 === range[0];
+	if (starts(frame)) return true;
+	for (const candidate of outer) {
+		if (!runtime_sameFileFrame(candidate, frame)) return false;
+		if (starts(candidate)) return true;
+	}
+	return false;
+}
+
+/**
+ * The answer for a leaf's own exported function that code entered as it is (handed out by a module, or imported by
+ * another route), rather than through its api node (#726): it counts as a call of that node. Whoever runs it has to
+ * be allowed to call the leaf, each of them, and the function then runs as the leaf, with the leaf's rights and no
+ * one else's as its ceiling, as a call through the node does. A runner that may not call the leaf has the access
+ * refused (see {@link REFUSED_SUPPLIER}).
+ * @param {object} leaf - The leaf.
+ * @param {Array<object|ReadonlyArray<object>|null|undefined>} running - The calls running it: wrappers and ceilings.
+ * @returns {{wrapper: object, ceiling: null}|{unaccounted: true, refused: true}} The answer.
+ * @private
+ */
+function runtime_leafCallAnswer(leaf, running) {
+	const internal = leaf.____slothletInternal;
+	const permissionManager = leaf.slothlet?.handlers?.permissionManager;
+	const target = String(internal.apiPath ?? "");
+	const context = leaf.slothlet?.contextManager?.tryGetContext?.()?.context ?? null;
+	const runners = new Set();
+	for (const part of running) for (const member of ceilingMembers(part)) if (member && member !== leaf) runners.add(member);
+	for (const runner of runners) {
+		if (!genuineWrappers.has(runner)) return REFUSED_SUPPLIER;
+		const caller = String(runner.____slothletInternal.apiPath ?? "");
+		const allowed = permissionManager?.enforceAccess?.(
+			caller,
+			target,
+			runner.____slothletInternal.filePath ?? null,
+			internal.filePath ?? null,
+			context,
+			null,
+			{
+				moduleCaller: true
+			}
+		);
+		if (!allowed) return REFUSED_SUPPLIER;
+	}
+	return { wrapper: leaf, ceiling: null };
+}
+
+/**
  * What {@link resolveSupplier}'s chain walk answers when the code running is another leaf's, found by its file.
  * @type {symbol}
  * @private
@@ -2674,8 +2744,12 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
-	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, outer);
+	const further = Arrays.isArray(outer) ? outer : Arrays.from(outer);
+	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, further);
 	if (!authors.length) return null;
+	// A leaf's own exported function, entered as it is: a call of that leaf's node by whoever runs it.
+	if (authors.length === 1 && runtime_enteredAsItself(authors[0], frame, further))
+		return runtime_leafCallAnswer(authors[0], [record.wrapper, record.ceiling, supplierChainCeiling(record)]);
 	// Inside a call that was handed code, the calls that handed it down are held to as well (see supplierChainCeiling).
 	return {
 		wrapper: authors[0],
@@ -2684,27 +2758,61 @@ function runtime_authorAnswer(record, frame, outer = []) {
 }
 
 /**
- * Each file's text and line starts, read once (see {@link runtime_sourceOf}).
- * @type {Map<string, {text: string, starts: number[]}|null>}
+ * Each source's text and line starts, made once (see {@link runtime_sourceOf}): by script key and hash for a source the
+ * loader recorded, by file path for one read another way.
+ * @type {Map<string, {text: string, starts: number[], names: Map<string, Set<string>>|null}|null>}
  * @private
  */
 const FILE_SOURCES = new Map();
 
 /**
- * Each leaf's source range in its file, as `[start, end)` offsets, or null (see {@link runtime_leafRange}).
- * @type {WeakMap<object, number[]|null>}
+ * Each leaf's source range in a source, as `[start, end)` offsets, or null (see {@link runtime_leafRange}): the last
+ * source it was asked for.
+ * @type {WeakMap<object, {source: object, range: number[]|null}>}
  * @private
  */
 const LEAF_RANGES = new WeakMap();
 
 /**
- * A file's text with its line starts, read once: from disk, or under vite's module runner the code the runner was given
- * for it, which is what its frames and its functions' text are positions in.
- * @param {string} filePath - The file.
- * @returns {{text: string, starts: number[]}|null} The source, or null when it cannot be read.
+ * A text with its line starts.
+ * @param {string} text - The text.
+ * @returns {{text: string, starts: number[], names: null}} The source.
  * @private
  */
-function runtime_sourceOf(filePath) {
+function runtime_asSource(text) {
+	const starts = [0];
+	for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+	return { text, starts, names: null };
+}
+
+/**
+ * The source a frame's code was compiled from, with its line starts: what the frame's line and column, and the text of
+ * the functions written in it, are positions in.
+ *
+ * It is the text slothlet's load hook recorded when the engine was given the file (TypeScript with its types
+ * stripped), found by the frame's script key and hash, so it is the source of exactly the script the frame runs in:
+ * a file changed on disk since, or loaded again with other content, does not move anything. Where the hook recorded
+ * nothing, under vite's module runner it is the code the runner was given for the file, and otherwise (a loader
+ * slothlet's hook does not see, an engine that reports no script hash) the file as it is on disk now.
+ * @param {string} filePath - The file.
+ * @param {{key?: string|null, hash?: string|null}|null} [frame=null] - A frame of the file.
+ * @returns {{text: string, starts: number[], names: Map<string, Set<string>>|null}|null} The source, or null when it
+ *   cannot be read.
+ * @private
+ */
+function runtime_sourceOf(filePath, frame = null) {
+	if (frame?.key) {
+		const scriptID = `${frame.key}\u0000${frame.hash ?? ""}`;
+		const known = FILE_SOURCES.get(scriptID);
+		if (known) return known;
+		const recorded = loadedScriptText(frame.key, frame.hash ?? null);
+		if (typeof recorded === "string") {
+			const source = runtime_asSource(recorded);
+			if (FILE_SOURCES.size >= 4096) FILE_SOURCES.clear();
+			FILE_SOURCES.set(scriptID, source);
+			return source;
+		}
+	}
 	if (FILE_SOURCES.has(filePath)) return FILE_SOURCES.get(filePath);
 	let source;
 	try {
@@ -2720,10 +2828,9 @@ function runtime_sourceOf(filePath) {
 				}
 			}
 		}
-		const text = runnerCode ?? String(nodeFs(FS_READ_FILE, filePath.startsWith("file:") ? new URL(filePath) : filePath, "utf8"));
-		const starts = [0];
-		for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
-		source = { text, starts };
+		source = runtime_asSource(
+			runnerCode ?? String(nodeFs(FS_READ_FILE, filePath.startsWith("file:") ? new URL(filePath) : filePath, "utf8"))
+		);
 	} catch {
 		// A file that cannot be read gives no ranges: its code is the file's module.
 		source = null;
@@ -2733,30 +2840,117 @@ function runtime_sourceOf(filePath) {
 }
 
 /**
- * The source range of a leaf's function in its file: where the function's own text sits in it (#726). Null for a leaf
- * that is not a function, whose text is not found (a bound or native function), or whose text the file holds twice.
+ * An identifier as a pattern piece.
+ * @type {string}
+ * @private
+ */
+const IDENTIFIER = "[A-Za-z_$][\\w$]*";
+
+/**
+ * The names each export of a source is declared under in it, besides its own: the local a list names
+ * (`export { t as a }`, a minifier's `export{t as a}`), the identifier `export default` or `module.exports =` is
+ * given, the one `exports.a =` is assigned, and the ones a `module.exports = { a: t }` literal lists. Read from the
+ * text by pattern, once per source; it only ever helps pick between places that hold the same function text.
+ * @param {{text: string, names: Map<string, Set<string>>|null}} source - The source.
+ * @returns {Map<string, Set<string>>} Export name to local names.
+ * @private
+ */
+function runtime_exportLocals(source) {
+	if (source.names) return source.names;
+	const names = new Map();
+	const add = (exported, local) => {
+		if (!exported || !local) return;
+		let held = names.get(exported);
+		if (!held) names.set(exported, (held = new Set()));
+		held.add(local);
+	};
+	const { text } = source;
+	const entry = new RegExp(`^\\s*(${IDENTIFIER})(?:\\s+as\\s+(${IDENTIFIER}|"[^"]*"|'[^']*'))?\\s*$`);
+	for (const list of text.matchAll(/export\s*\{([^}]*)\}/g)) {
+		for (const part of list[1].split(",")) {
+			const named = entry.exec(part);
+			if (named) add((named[2] ?? named[1]).replace(/^["']|["']$/g, ""), named[1]);
+		}
+	}
+	for (const given of text.matchAll(new RegExp(`export\\s+default\\s+(${IDENTIFIER})\\s*(?:;|$)`, "gm"))) add("default", given[1]);
+	for (const given of text.matchAll(new RegExp(`module\\.exports\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm"))) add("default", given[1]);
+	for (const given of text.matchAll(new RegExp(`(?:module\\.)?exports\\.(${IDENTIFIER})\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm")))
+		add(given[1], given[2]);
+	const pair = new RegExp(`^\\s*(${IDENTIFIER})(?:\\s*:\\s*(${IDENTIFIER}))?\\s*$`);
+	for (const literal of text.matchAll(/module\.exports\s*=\s*\{([^{}]*)\}/g)) {
+		for (const part of literal[1].split(",")) {
+			const named = pair.exec(part);
+			if (named) add(named[1], named[2] ?? named[1]);
+		}
+	}
+	source.names = names;
+	return names;
+}
+
+/**
+ * Whether the function text at an offset of a source is where one of some names is declared: assigned or given as a
+ * property (`export const a =`, `exports.a =`, `a:`), named by the text itself (`function a(`, `class a`, a method
+ * `a(`), or, for a default export, what `export default` or `module.exports =` is given.
+ * @param {string} text - The source's text.
+ * @param {number} at - Where the function's text starts.
+ * @param {string} own - The function's text.
+ * @param {Set<string>} names - The names it may be declared under.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_declaredAt(text, at, own, names) {
+	// What precedes the function, less any parentheses it is wrapped in.
+	const before = text.slice(Math.max(0, at - 160), at).replace(/[\s(]+$/, "");
+	for (const name of names) {
+		if (name === "default" && /(?:export\s+default|module\.exports\s*=)$/.test(before)) return true;
+		const escaped = name.replace(/\$/g, "\\$");
+		if (new RegExp(`(?:^|[^\\w$])${escaped}\\s*[=:]$`).test(before)) return true;
+		if (new RegExp(`^(?:async\\s+)?function\\s*\\*?\\s*${escaped}(?![\\w$])`).test(own)) return true;
+		if (new RegExp(`^class\\s+${escaped}(?![\\w$])`).test(own)) return true;
+		if (new RegExp(`^(?:static\\s+)?(?:async\\s+)?(?:get\\s+|set\\s+)?\\*?\\s*${escaped}\\s*\\(`).test(own)) return true;
+	}
+	return false;
+}
+
+/**
+ * The source range of a leaf's function in a source: where the leaf's export is declared in it (#726). The function's
+ * own text says how long it is; its export's declaration says which place in the source holds it. A place counts when
+ * the text sits where the export's name is declared: `export const a = …`, `export function a`, `export class a`,
+ * `export default …`, the local a list names (`export { t as a }`), `exports.a = …`, or a member of an exported object
+ * or `module.exports = { a }`. With no declaration recognised, the one place the source holds the text is taken. Null
+ * for a leaf that is not a function, whose text the source does not hold (a bound or native function, one made at
+ * runtime), or when more than one place qualifies: the file's module then stands for its code.
  * @param {object} leaf - A leaf wrapper.
+ * @param {{text: string, starts: number[], names: Map<string, Set<string>>|null}} source - The source of the script
+ *   its code runs in.
  * @returns {number[]|null} `[start, end)`.
  * @private
  */
-function runtime_leafRange(leaf) {
-	if (LEAF_RANGES.has(leaf)) return LEAF_RANGES.get(leaf);
+function runtime_leafRange(leaf, source) {
+	const held = LEAF_RANGES.get(leaf);
+	if (held && held.source === source) return held.range;
 	let range = null;
 	const impl = leaf.____slothletInternal?.impl;
-	const filePath = leaf.____slothletInternal?.filePath;
-	if (typeof impl === "function" && filePath && NODE_FS) {
+	if (typeof impl === "function") {
 		try {
-			const text = functionSource(impl);
-			const source = runtime_sourceOf(filePath);
-			const start = source ? source.text.indexOf(text) : -1;
-			// Text found twice in the file cannot say which copy is the leaf's: the module stands for it instead.
-			const twice = start >= 0 && source.text.indexOf(text, start + 1) !== -1;
-			if (start >= 0 && !twice && !text.endsWith("{ [native code] }")) range = [start, start + text.length];
+			const own = functionSource(impl);
+			if (!own.endsWith("{ [native code] }")) {
+				const places = [];
+				for (let at = source.text.indexOf(own); at !== -1 && places.length < 64; at = source.text.indexOf(own, at + 1)) places.push(at);
+				if (places.length) {
+					const exportPath = leaf.____slothletInternal.exportPath;
+					const exported = Arrays.isArray(exportPath) && exportPath.length ? String(exportPath[exportPath.length - 1]) : null;
+					const names = new Set(exported === null ? [] : [exported, ...(runtime_exportLocals(source).get(exported) ?? [])]);
+					const declared = names.size ? places.filter((at) => runtime_declaredAt(source.text, at, own, names)) : [];
+					if (declared.length === 1) range = [declared[0], declared[0] + own.length];
+					else if (!declared.length && places.length === 1) range = [places[0], places[0] + own.length];
+				}
+			}
 		} catch {
 			range = null;
 		}
 	}
-	LEAF_RANGES.set(leaf, range);
+	LEAF_RANGES.set(leaf, { source, range });
 	return range;
 }
 
@@ -2816,7 +3010,7 @@ function runtime_leafHolding(leaves, source, frame) {
 	let best = null;
 	let bestLength = Infinity;
 	for (const leaf of leaves) {
-		const range = runtime_leafRange(leaf);
+		const range = runtime_leafRange(leaf, source);
 		if (range && range[0] <= offset && offset < range[1] && range[1] - range[0] < bestLength) {
 			best = leaf;
 			bestLength = range[1] - range[0];
@@ -2872,7 +3066,7 @@ function* runtime_framesAfter(frames, index) {
 function runtime_narrowToLeaf(leaves, frame, outer = []) {
 	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
 	const filePath = leaves.find((leaf) => leaf.____slothletInternal.filePath)?.____slothletInternal.filePath;
-	const source = filePath ? runtime_sourceOf(filePath) : null;
+	const source = filePath ? runtime_sourceOf(filePath, frame) : null;
 	if (!source) return leaves;
 	let best = runtime_leafHolding(leaves, source, frame);
 	if (!best) {
@@ -3371,7 +3565,11 @@ export function registerLeafFile(wrapper) {
 	let files = LEAF_FILES.get(slothlet);
 	if (!files) LEAF_FILES.set(slothlet, (files = new Map()));
 	const reference = new WeakRef(wrapper);
-	for (const location of new Set([toComparablePath(filePath), runtime_realComparablePath(filePath)])) {
+	// The file itself, and where its code actually runs from when that is another file: a TypeScript leaf runs from
+	// the compiled copy slothlet wrote for it, so that copy's frames are the leaf's.
+	const locations = new Set([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
+	for (const imported of runtime_importedLocations(wrapper, filePath) ?? []) locations.add(imported);
+	for (const location of locations) {
 		if (!location) continue;
 		let held = files.get(location);
 		if (!held) files.set(location, (held = new Set()));
@@ -3618,6 +3816,15 @@ function runtime_unaccountedInside(record) {
  * @private
  */
 const UNACCOUNTED_SUPPLIER = Objects.freeze({ unaccounted: true });
+
+/**
+ * What {@link resolveSupplier} answers for code that is accounted for and refused: a leaf's own exported function
+ * entered as it is by a caller that may not call that leaf. Unlike code no call accounts for, it is not read by its
+ * frames afterwards: the caller is unresolved, and every access under it is refused.
+ * @type {Readonly<{unaccounted: true, refused: true}>}
+ * @private
+ */
+const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
 
 /**
  * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under the leaf — or, with
