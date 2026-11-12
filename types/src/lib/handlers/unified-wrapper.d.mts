@@ -321,26 +321,6 @@ export function refusedChangeCount(slothlet: object): number;
  */
 export function runtime_resolvedAccess(contextManager: object, store: object | null | undefined, identity: object | undefined): object;
 /**
- * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
- * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
- * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
- * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, a crossing view of the class
- * prototype guard, the root api) and the ones that
- * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
- * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`; the promise
- * the guard hands a reader in place of another module's). It reads
- * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
- * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
- * slothlet's. Backs `api.slothlet.wrapped` (#671).
- * @param {*} value - The value.
- * @returns {boolean} True only for one of slothlet's own wrappers.
- * @public
- * @example
- * isSlothletWrapped(api.math); // true
- * isSlothletWrapped(new Proxy({}, {})); // false
- */
-export function isSlothletWrapped(value: any): boolean;
-/**
  * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
  * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
  * @param {object} slothlet - The instance.
@@ -382,10 +362,13 @@ export function registerRuntimeSelf(contextManager: object, selfProxy: object): 
  * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
  *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
  *   read as its definer.
+ * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
+ *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
+ *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null): {
+export function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null, hostFlowInstanceID?: string | null): {
     value: any;
 } | null;
 /**
@@ -708,6 +691,9 @@ export class UnifiedWrapper extends ComponentBase {
      * the function directly since keepImplProperties prevents depletion.
      *
      * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+     * @param {?function(Object, PropertyKey): {value: *, withheld: boolean}} [readMember=null] - Given when the
+     *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
+     *   The object is then built in the order its node lists its members (#747).
      * @returns {*} The reconstructed implementation mirroring original module exports
      * @static
      * @private

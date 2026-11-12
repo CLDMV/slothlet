@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-leaf-source-positions.test.vitest.mjs
+ *	@Date: 2026-11-11T22:56:51-08:00 (1794466611)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:01:02-08:00 (1794477662)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Which leaf of a file a piece of code belongs to is read from where each export is declared in the
  * source the engine was given when the file loaded, so it holds for exports with the same text, exports renamed by a
  * list, a default export, CommonJS exports, a TypeScript leaf, a minified file, with `--enable-source-maps` on or off,

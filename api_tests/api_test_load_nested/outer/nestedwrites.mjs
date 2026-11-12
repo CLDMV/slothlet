@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_load_nested/outer/nestedwrites.mjs
+ *	@Date: 2026-11-11T23:40:44-08:00 (1794469244)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T01:57:20-08:00 (1794477440)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A file that, while it loads, builds an inner instance on each runtime and has its functions change
  * their own `self`.
  * @module api_test_load_nested.outer.nestedwrites

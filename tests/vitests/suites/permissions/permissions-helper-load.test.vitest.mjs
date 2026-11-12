@@ -167,7 +167,7 @@ function runFirstInstance(list) {
 		import slothlet from "@cldmv/slothlet";
 		const keep = setInterval(() => {}, 1000);
 		const api = await slothlet({ base: ${JSON.stringify(base)}, silent: true, permissions: { defaultPolicy: "allow", attribution: "fast", rules: ${JSON.stringify(list)} } });
-		console.log("RESULT " + JSON.stringify([await api.one.viaQueue(), await api.two.viaQueue()]));
+		process.stdout.write("RESULT " + JSON.stringify([await api.one.viaQueue(), await api.two.viaQueue()]) + "\\n");
 		await api.shutdown();
 		clearInterval(keep);
 	`;

@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/context/async-resource-context.test.vitest.mjs
+ *	@Date: 2026-11-11T23:24:58-08:00 (1794468298)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:12-08:00 (1794477612)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The live runtime's patch of `AsyncLocalStorage.snapshot()`, `AsyncLocalStorage.bind()` and
  * `AsyncResource`: installed while an instance on the live runtime is up, removed when the last one shuts down, and
  * transparent to code that uses them.

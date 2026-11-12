@@ -133,6 +133,18 @@ export class LiveContextManager {
      */
     isAmbient(instanceID: string): boolean;
     /**
+     * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+     * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+     * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+     * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+     * runs.
+     * @returns {string|null} The instance's id.
+     * @internal
+     * @example
+     * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+     */
+    runningInstanceID(): string | null;
+    /**
      * Run `fn` outside every instance (#597), as the async manager does: no instance is active while its synchronous
      * body runs, so code an instance that has shut down made reaches no instance's api through the active one.
      * @param {Function} fn - What to run.

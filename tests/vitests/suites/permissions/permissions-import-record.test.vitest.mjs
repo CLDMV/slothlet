@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-import-record.test.vitest.mjs
+ *	@Date: 2026-11-12T01:13:22-08:00 (1794474802)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:01:01-08:00 (1794477661)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Whose code a helper file is does not depend on anything a module can write.
  *
  * @description
@@ -77,7 +92,7 @@ function runCases(config) {
 		await boxed.run();
 		out.claimed.tagged = await api.guest.peekTagged();
 		await api.slothlet.shutdown();
-		console.log("RESULT " + JSON.stringify(out));
+		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
 	`;
 	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
 		cwd: ROOT,

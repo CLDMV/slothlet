@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/smart-flattening/same-named-folder-dedupe.test.vitest.mjs
+ *	@Date: 2026-11-11T21:26:12-08:00 (1794461172)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:01:19-08:00 (1794477679)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A folder whose only entry is a folder of the same name is one level, and a node's recorded api path
  * is the path it is reached at (#743).
  *

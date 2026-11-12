@@ -493,8 +493,8 @@ export function createModuleLoad(slothlet: object, filePath: string, moduleID: s
  * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
  * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
  * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
- * instance is pending, or one alone imports the file. `false` when the code is a loading instance's and which load
- * cannot be told; null when it is not a loading file's code.
+ * instance is pending, and otherwise the first pending load whose file imports it. `false` when the code is a loading
+ * instance's and no pending load imports its file; null when it is not a loading file's code.
  * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
  * @returns {object|false|null} The load, false, or null.
  * @internal
@@ -514,6 +514,7 @@ export function loadOnStack(loads: Iterable<{
  * @param {string} instanceID - The instance.
  * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
 export function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null): object | ReadonlyArray<object> | null;
@@ -547,10 +548,13 @@ export function attributesResults(wrapper: object | null | undefined): boolean;
  * outside every export, in a tree where no node was built for the file itself).
  * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
  * runtime_outerCallers), which have to be allowed as well.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|null} The definer.
+ * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
+ *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
  * @internal
  */
-export function frameDefiner(): {
+export function frameDefiner(running?: string | null): {
     wrapper: object;
     callers: Array<object>;
 } | {
@@ -558,7 +562,23 @@ export function frameDefiner(): {
     callers: Array<object>;
 } | {
     unplaced: true;
+    shared?: true;
 } | null;
+/**
+ * Whether a function a leaf hands out is written in a leaf's own file and in no helper file of its instance (#726), as
+ * far as the sources the loader recorded say. Such a function is told by its frames when it runs, so one stand-in of it
+ * serves every leaf of its module; any other (a helper file's own function, a bound or native function, one whose
+ * source cannot be found) is handed out per leaf, each stand-in recording the leaf that handed it out. A class is one
+ * value whoever hands it out. Decided from the function's text and the recorded sources alone: nothing of the function
+ * runs.
+ * @param {Function} fn - The function.
+ * @param {Array<object>} leaves - The wrappers of the leaves that handed it out.
+ * @returns {boolean} True when one stand-in serves every leaf.
+ * @internal
+ * @example
+ * isLeafFileFunction(fn, [first, owner]); // false for a function written in a helper file
+ */
+export function isLeafFileFunction(fn: Function, leaves: Array<object>): boolean;
 /**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
  * @param {object} wrapper - A genuine wrapper.

@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/async-resource-context.mjs
+ *	@Date: 2026-11-11T23:21:05-08:00 (1794468065)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T01:59:45-08:00 (1794477585)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Carries the creating module's caller identity into what `AsyncLocalStorage.snapshot()`,
  * `AsyncLocalStorage.bind()` and an `AsyncResource` run later, in the live runtime.
  * @module @cldmv/slothlet/helpers/async-resource-context

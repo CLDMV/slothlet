@@ -95,6 +95,11 @@ export class PermissionManager extends ComponentBase {
      * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
      * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
      *
+     * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
+     * which is also what no `permissions` config means, and `"disabled"`) no event rule is evaluated and every
+     * subscription resolves "allow", as call and read rules are not evaluated there. An instance that has shut down
+     * resolves "deny".
+     *
      * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
      * @param {string} eventName - The event name being subscribed to / emitted.
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -746,6 +751,17 @@ export class PermissionManager extends ComponentBase {
      * await pm.shutdown();
      */
     shutdown(): Promise<void>;
+    /**
+     * A number that changes whenever the outcome of a rule may have changed: a rule added or removed, the system
+     * switched on or off, a module's rules dropped. What was decided from the rules and kept beside a value (whether
+     * a function is handed another module's value itself or a view) is good for the epoch it was decided in.
+     * @returns {number} The current rule epoch.
+     * @example
+     * const before = pm.ruleEpoch;
+     * pm.addRule(rule);
+     * pm.ruleEpoch !== before; // true
+     */
+    get ruleEpoch(): number;
     /**
      * Emit a debug message. Delegates to slothlet.debug().
      *

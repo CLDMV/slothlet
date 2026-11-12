@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-fast-no-provenance.test.vitest.mjs
+ *	@Date: 2026-11-11T22:31:06-08:00 (1794465066)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:56-08:00 (1794477656)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview `attribution: "fast"` with `provenance: false` keeps no author check: every function runs as whoever
  * runs it. `"precise"` with `provenance: false` still knows the author of code a module hands out.
  *

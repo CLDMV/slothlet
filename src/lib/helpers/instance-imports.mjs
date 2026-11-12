@@ -310,7 +310,7 @@ function publishScripts(state) {
  * @property {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null }|null} active - The
  *   scope a synchronous {@link requireInInstance} is running in (`anchor` is the file it required; `importer` the api
  *   file whose own copies are served, under `helpers: "module"`), else null.
- * @property {(filePath: string, instanceID: string, importer?: string|null, mount?: string|null) => *} requireCJS -
+ * @property {function(string, string, ?string, ?string): *} requireCJS -
  *   Entry point of the ESM wrapper generated for a CommonJS helper.
  * @property {Map<string, Map<string, Map<string, object>>>} [copies] - Per instance ID and importing api file (with
  *   its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.

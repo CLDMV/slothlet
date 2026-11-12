@@ -105,6 +105,17 @@ export function copyForComposition(value: unknown, { addsMembers }?: {
     addsMembers?: boolean | undefined;
 }): unknown;
 /**
+ * The object a copy {@link copyForComposition} made was copied from, so a node built from the copy can find the
+ * module's own object behind it (a copy of a copy leads there in two steps).
+ * @param {unknown} copy - A value.
+ * @returns {object|undefined} The object it was copied from, or undefined for anything that is no such copy.
+ * @package
+ *
+ * @example
+ * copySourceOf(copyForComposition(mod.config)) === mod.config; // true
+ */
+export function copySourceOf(copy: unknown): object | undefined;
+/**
  * The same layer laid over another value: what the layer holds and hides, over `underlying` (#597). Used where the
  * value a layer composes over is replaced by a stand-in for it.
  * @param {object} layered - A layer {@link copyForComposition} returned.

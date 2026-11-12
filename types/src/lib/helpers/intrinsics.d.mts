@@ -35,7 +35,8 @@ export const Objects: object;
  */
 export const Arrays: object;
 /**
- * `Function.prototype.toString` itself, as it was when slothlet loaded.
+ * `Function.prototype.toString` itself, as it was when slothlet loaded (the language's own, under any wrapper another
+ * copy of slothlet had installed then).
  * @type {Function}
  * @internal
  * @example

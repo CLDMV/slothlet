@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-deep-internal-stack.test.vitest.mjs
+ *	@Date: 2026-11-11T22:33:57-08:00 (1794465237)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:54-08:00 (1794477654)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview An access made from deep inside Node's own code is still held to the code that started it: when the
  * frames nearest the access are only slothlet's and Node's own, the stack is read further out, and code that still
  * cannot be reached is refused rather than taken to be the running leaf's.

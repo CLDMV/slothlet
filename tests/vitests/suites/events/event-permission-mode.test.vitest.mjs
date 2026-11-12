@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/events/event-permission-mode.test.vitest.mjs
+ *	@Date: 2026-11-11T21:59:15-08:00 (1794463155)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:22-08:00 (1794477622)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The event pool follows the permission mode. Event levels are part of the permission system
  * (`permissions.events`, #407): while it is not on, no event rule is evaluated and every subscription is delivered at
  * `allow`, payload included, as call and read rules are not evaluated there either.

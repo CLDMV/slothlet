@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_view_mirror_order/b.mjs
+ *	@Date: 2026-11-12T00:09:41-08:00 (1794470981)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T01:58:50-08:00 (1794477530)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Fixture: a module that keeps a node of `store`, reads it every way, and lends a function that
  * reads it to whoever runs it.
  * @module api_test_view_mirror_order.b

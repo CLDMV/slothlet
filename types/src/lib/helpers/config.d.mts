@@ -72,6 +72,18 @@ export class Config extends ComponentBase {
      */
     public normalizeMode(mode: string): string;
     /**
+     * Validate the `helpers` option: how often a helper file (a file an api file imports that is no api file itself)
+     * is loaded.
+     * @param {*} helpers - The option as given.
+     * @returns {"instance"|"module"} `"instance"` (the default: one copy per instance, shared by every api file
+     *   importing it) or `"module"` (one copy per importing api file).
+     * @throws {SlothletError} INVALID_CONFIG for any other value.
+     * @public
+     * @example
+     * config.normalizeHelpers(undefined); // "instance"
+     */
+    public normalizeHelpers(helpers: any): "instance" | "module";
+    /**
      * Normalize mutations configuration for API modification control
      * @param {Object} mutations - Mutations config object with add/remove/reload properties
      * @returns {Object} Normalized mutations configuration

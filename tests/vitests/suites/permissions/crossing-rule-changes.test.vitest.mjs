@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/crossing-rule-changes.test.vitest.mjs
+ *	@Date: 2026-11-11T22:27:48-08:00 (1794464868)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:45-08:00 (1794477645)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A rule added or removed at runtime is honoured for values a module was already handed a view of:
  * whether a function gets another module's value itself or a view is decided again after the rules change.
  *

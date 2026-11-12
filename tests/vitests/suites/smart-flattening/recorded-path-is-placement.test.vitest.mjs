@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/smart-flattening/recorded-path-is-placement.test.vitest.mjs
+ *	@Date: 2026-11-11T21:50:58-08:00 (1794462658)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:01:19-08:00 (1794477679)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A node's recorded api path is the path it is reached at (#743), for every node of a set of fixtures:
  * loaded as a base folder, and mounted with `api.slothlet.api.add()` under a plain path, a nested path, and paths
  * whose last segment repeats a name inside the folder (Rule 13).

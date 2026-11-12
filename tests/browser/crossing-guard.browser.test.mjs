@@ -87,8 +87,14 @@ describe("browser crossing guard", () => {
 							};
 							port1.postMessage({ theirs: data.list });
 						});
-						// A view answers the engine's brand check as the Proxy it is; the Map itself answers as a Map.
-						const viewed = Object.prototype.toString.call(data.map) !== "[object Map]";
+						// A view is a Proxy, which has no Map's internal data: the engine's own `size` getter refuses it and
+						// answers for the Map itself.
+						let viewed = false;
+						try {
+							Reflect.getOwnPropertyDescriptor(Map.prototype, "size").get.call(data.map);
+						} catch {
+							viewed = true;
+						}
 						return JSON.stringify([viewed, copy.a, copy.list, [...copy.map], copy !== data, posted]);
 					},
 					plant: (route, key) => {

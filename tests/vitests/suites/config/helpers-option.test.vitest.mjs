@@ -200,7 +200,7 @@ function runCommonJSHelper() {
 				results.push({ name: [mode, runtime, attribution, helpers, rules].join(" | "), rules, outcomes });
 				await api.shutdown();
 			}
-		console.log("RESULT " + JSON.stringify(results));
+		process.stdout.write("RESULT " + JSON.stringify(results) + "\\n");
 	`;
 	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
 		cwd: path.resolve(DIR, "../../.."),
@@ -244,7 +244,7 @@ function runFirstInstance(helpers, list) {
 		const settle = async (fn) => { try { return await fn(); } catch (error) { return error?.code ?? String(error?.message ?? error); } };
 		const queued = [await api.one.viaQueue(), await api.two.viaQueue()];
 		const { run } = await api.two.mislabelled();
-		console.log("RESULT " + JSON.stringify({ queued, mislabelled: await settle(() => run()) }));
+		process.stdout.write("RESULT " + JSON.stringify({ queued, mislabelled: await settle(() => run()) }) + "\\n");
 		await api.shutdown();
 		clearInterval(keep);
 	`;

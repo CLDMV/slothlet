@@ -11385,7 +11385,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * the function directly since keepImplProperties prevents depletion.
 	 *
 	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
-	 * @param {(function(Object, PropertyKey): {value?: *, withheld?: boolean})|null} [readMember=null] - Given when the
+	 * @param {?function(Object, PropertyKey): {value: *, withheld: boolean}} [readMember=null] - Given when the
 	 *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
 	 *   The object is then built in the order its node lists its members (#747).
 	 * @returns {*} The reconstructed implementation mirroring original module exports

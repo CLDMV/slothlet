@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-leaf-function-handed-out.test.vitest.mjs
+ *	@Date: 2026-11-11T22:59:51-08:00 (1794466791)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:01:01-08:00 (1794477661)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A module's exported function handed out as it is counts as a call of that function's api node: the
  * module running it has to be allowed to call the leaf, and it runs with the leaf's rights. A private function (one no
  * export names) lends nothing: it runs as its definer under whoever runs it.

@@ -44,7 +44,8 @@ export function isOwnPackageImport(child: string, parent: string): boolean;
 /**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
- * on vite ids (absolute paths with an optional query) alike.
+ * on vite ids (absolute paths with an optional query) alike. When the parent carries {@link HELPERS_PARAM}
+ * (the `helpers: "module"` option), the child is the copy of the api file the parent is, or was loaded for.
  * @param {string} specifier - The specifier as written in the importer.
  * @param {string|undefined} parent - The importer's URL or id.
  * @param {string} child - The resolved child URL or id.
@@ -76,13 +77,19 @@ export function propagateInstanceQuery(specifier: string, parent: string | undef
  * @param {object} [options] - Options.
  * @param {boolean} [options.fresh=false] - Evaluate the file itself anew instead of serving (and
  *   keeping) the instance's copy of it — how a leaf is loaded, so a partial reload re-runs it.
+ * @param {string|null} [options.importer=null] - The api file the copies are served for, when the instance loads
+ *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
+ *   instance.
+ * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
  * @returns {*} The file's `module.exports`.
  * @internal
  * @example
  * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
  */
-export function requireInInstance(filePath: string, instanceID: string, { fresh }?: {
+export function requireInInstance(filePath: string, instanceID: string, { fresh, importer, mount }?: {
     fresh?: boolean | undefined;
+    importer?: string | null | undefined;
+    mount?: string | null | undefined;
 }): any;
 /**
  * The import graph of an instance's own code: for each file a leaf of the instance reached through an
@@ -140,12 +147,15 @@ export function releaseInstanceScope(instanceID: string | null | undefined): voi
  * @param {string} filePath - Absolute path of the CommonJS file.
  * @param {string} instanceID - The instance ID.
  * @param {string|null|undefined|Uint8Array} source - Its source, when the loader already read it.
+ * @param {string|null} [importer=null] - The api file the copy is loaded for (`helpers: "module"`): the file then
+ *   runs through that api file's own CommonJS cache.
+ * @param {string|null} [mount=null] - That api file's mount.
  * @returns {string} The wrapper's ES module source.
  * @internal
  * @example
  * commonJSWrapperSource("/app/lib/state.cjs", "inst-a", null);
  */
-export function commonJSWrapperSource(filePath: string, instanceID: string, source: string | null | undefined | Uint8Array): string;
+export function commonJSWrapperSource(filePath: string, instanceID: string, source: string | null | undefined | Uint8Array, importer?: string | null, mount?: string | null): string;
 /**
  * Add a hash to a list of the newest {@link SCRIPTS_PER_KEY}: one already there becomes the newest again.
  * @param {Array<string>} hashes - The list, oldest first.
@@ -173,6 +183,18 @@ export function loadedScriptLookup(key: string, hash?: string): {
     known: boolean;
     has: boolean;
 };
+/**
+ * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the
+ * newest when no hash is given. Undefined when none is recorded (the hook did not load the file, or another slothlet
+ * copy's hook did and keeps no text).
+ * @param {string} key - The script key.
+ * @param {string|null} [hash] - The script's hash.
+ * @returns {string|undefined} The text.
+ * @internal
+ * @example
+ * loadedScriptText(key, frame.hash); // "export const a = () => 1;\n"
+ */
+export function loadedScriptText(key: string, hash?: string | null): string | undefined;
 /**
  * The URLs of the files that import a package file, as the resolve hook recorded them (#597).
  * @param {string} path - The package file's path.
@@ -267,6 +289,33 @@ export function slothletInstanceImports(): object;
  */
 export const INSTANCE_QUERY_KEYS: ReadonlyArray<string>;
 /**
+ * Query parameter a leaf's URL carries when its instance loads helper files once per importing api file (the
+ * `helpers: "module"` option), and its value. A helper loaded for such a leaf carries it too, with
+ * {@link HELPERS_FOR_PARAM} naming the api file it was loaded for and {@link HELPERS_MOUNT_PARAM} that file's mount,
+ * so each api file gets its own copy of every helper it imports, and a copy's stack frames name the file it runs for.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_PARAM: string;
+/**
+ * The value of {@link HELPERS_PARAM}.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_PER_MODULE: string;
+/**
+ * Query parameter of a helper copy: the path of the api file it was loaded for (see {@link HELPERS_PARAM}).
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_FOR_PARAM: string;
+/**
+ * Query parameter of a helper copy: the mount (`module` parameter) of the api file it was loaded for.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_MOUNT_PARAM: string;
+/**
  * How many script hashes are kept for one script key; a file loaded again with another source past that forgets its
  * oldest. Frame placement keeps the scripts it learns to the same number, newest kept.
  * @type {number}
@@ -296,64 +345,6 @@ export const VITE_LOADED_BY: string;
  */
 export const LOADED_BY_SPECIFIER: string;
 /**
- * Process-wide instance-import state.
- */
-export type InstanceImportState = {
-    /**
-     * - Per instance ID: the private CommonJS module
-     * copies of that instance, by filename.
-     */
-    scopes: Map<string, Map<string, object>>;
-    /**
-     * - The scope a synchronous
-     * {@link requireInInstance} is running in (`anchor` is the file it required), else null.
-     */
-    active: {
-        instanceID: string;
-        anchor: string;
-    } | null;
-    /**
-     * - Entry point of the ESM wrapper
-     * generated for a CommonJS helper.
-     */
-    requireCJS: (filePath: string, instanceID: string) => any;
-    /**
-     * - Entry point of the CommonJS stub generated for a
-     * `require()` of an ES module.
-     */
-    requireESM: (url: string) => any;
-    /**
-     * - Per instance ID: for each file of the
-     * instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
-     * state object made by an older slothlet copy gains it too.
-     */
-    graphs?: Map<string, Map<string, Set<string>>> | undefined;
-    /**
-     * - Per instance ID: the CommonJS leaves it loaded, which its
-     * private cache does not keep (each load evaluates the leaf anew). Created on first use.
-     */
-    leaves?: Map<string, Set<string>> | undefined;
-    /**
-     * - Records a
-     * module's imports; called by the registration the vite plugin appends to each instance module.
-     */
-    recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
-    /**
-     * - The frozen reader of
-     * the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
-     */
-    scripts?: {
-        lookup: Function;
-        hashes: Function;
-        count: Function;
-        packageImporters: Function;
-    } | undefined;
-    /**
-     * - How a URL is reduced to its script key, fixed once set.
-     */
-    scriptKeyOf?: ((url: string) => string) | undefined;
-};
-/**
  * Resolve-result shape shared by Node's resolve hooks.
  */
 export type ResolveResult = {
@@ -374,4 +365,73 @@ export type ResolveResult = {
  * Node's next-in-chain resolve function.
  */
 export type NextResolve = (specifier: string, context?: object | undefined) => ResolveResult | Promise<ResolveResult>;
+/**
+ * Process-wide instance-import state.
+ */
+export type InstanceImportState = {
+    /**
+     * - Per instance ID: the private CommonJS module
+     * copies of that instance, by filename.
+     */
+    scopes: Map<string, Map<string, object>>;
+    /**
+     * - The
+     * scope a synchronous {@link requireInInstance} is running in (`anchor` is the file it required; `importer` the api
+     * file whose own copies are served, under `helpers: "module"`), else null.
+     */
+    active: {
+        instanceID: string;
+        anchor: string;
+        importer?: string | null;
+        mount?: string | null;
+    } | null;
+    /**
+     * -
+     * Entry point of the ESM wrapper generated for a CommonJS helper.
+     */
+    requireCJS: (arg0: string, arg1: string, arg2: string | null, arg3: string | null) => any;
+    /**
+     * - Per instance ID and importing api file (with
+     * its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.
+     */
+    copies?: Map<string, Map<string, Map<string, object>>> | undefined;
+    /**
+     * - Entry point of the CommonJS stub generated for a
+     * `require()` of an ES module.
+     */
+    requireESM: (url: string) => any;
+    /**
+     * - The frozen reader of the import
+     * graphs the recording copy keeps (see publishImports): a copy of an instance's graph, importers by imported file.
+     */
+    imports?: {
+        of: (arg0: string) => (Map<string, Set<string>> | null);
+    } | undefined;
+    /**
+     * - Per instance ID: the CommonJS leaves it loaded, which its
+     * private cache does not keep (each load evaluates the leaf anew). Created on first use.
+     */
+    leaves?: Map<string, Set<string>> | undefined;
+    /**
+     * - Records a
+     * module's imports; called by the registration the vite plugin appends to each instance module. Fixed on the state,
+     * and only ever adds an importer.
+     */
+    recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
+    /**
+     * - The frozen reader of
+     * the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
+     */
+    scripts?: {
+        lookup: Function;
+        hashes: Function;
+        text: Function;
+        count: Function;
+        packageImporters: Function;
+    } | undefined;
+    /**
+     * - How a URL is reduced to its script key, fixed once set.
+     */
+    scriptKeyOf?: ((url: string) => string) | undefined;
+};
 //# sourceMappingURL=instance-imports.d.mts.map

@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/helpers/pattern-globstar-everywhere.test.vitest.mjs
+ *	@Date: 2026-11-11T21:01:12-08:00 (1794459672)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T02:00:27-08:00 (1794477627)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Hooks, routines and the loader's `hidden` globs read `**` as permission rules do: zero or more
  * segments, so `x.**` names `x` itself as well as everything below it.
  *

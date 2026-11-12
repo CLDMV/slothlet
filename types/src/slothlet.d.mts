@@ -79,6 +79,12 @@ export type SlothletOptions = {
      */
     runtime?: "async" | "live" | undefined;
     /**
+     * - How often a helper file (a file an api file imports that is no api file itself) is loaded.
+     * - `"instance"` — once per instance: every api file importing the helper shares one copy, and so its module state.
+     * - `"module"` — once per importing api file: each api file gets its own copy of every helper it imports, so helper state is not shared between api files, and the permission system can tell which api file a helper's code runs for. Node and the vite plugin only; a browser build keeps one copy.
+     */
+    helpers?: "module" | "instance" | undefined;
+    /**
      * - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
      */
     apiDepth?: number | undefined;

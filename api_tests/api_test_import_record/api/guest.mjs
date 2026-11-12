@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_import_record/api/guest.mjs
+ *	@Date: 2026-11-12T01:13:22-08:00 (1794474802)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-12T01:56:34-08:00 (1794477394)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Fixture: a module that imports a helper file and then rewrites, as far as it can reach it, the
  * process-wide record of which file imports which.
  * @module api_test_import_record.guest
