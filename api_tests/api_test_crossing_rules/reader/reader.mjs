@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T10:13:03-08:00 (1794420783)
+ *	@Last modified time: 2026-11-12T06:57:22-08:00 (1794495442)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -255,6 +255,32 @@ export function typed(prefix, kind, size) {
 	}
 	// Native consumers take it either way: a copy is made from its bytes.
 	return { wrapped: types.isProxy(value), write, first: value[0], length: value.length, copied: new Uint8Array(value).length };
+}
+
+/**
+ * Step the language's own iterators over the owner's values, and say how each step's result and the value in it reached
+ * this module, and how a write onto the class of an instance a step handed out ends.
+ * @param {string} prefix - The prefix of the member written.
+ * @param {number} size - The length of the owner's typed array.
+ * @returns {object} What each step gave.
+ */
+export function steps(prefix, size) {
+	const plant = (instance, name) => {
+		try {
+			Object.getPrototypeOf(instance)[`${prefix}${name}`] = () => "planted";
+			return "written";
+		} catch (error) {
+			return error?.code ?? String(error);
+		}
+	};
+	const bytes = self.owner.bytesWithMember(size);
+	const byte = bytes[Symbol.iterator]().next();
+	const entry = self.owner.instancesInMap().values().next();
+	return {
+		bytesViewed: types.isProxy(bytes),
+		byte: { proxy: types.isProxy(byte), keys: Object.keys(byte), value: byte.value, done: byte.done },
+		entry: { proxy: types.isProxy(entry), done: entry.done, instanceViewed: types.isProxy(entry.value), write: plant(entry.value, "entry") }
+	};
 }
 
 /**

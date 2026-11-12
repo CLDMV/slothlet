@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:42-08:00 (1794431682)
+ *	@Last modified time: 2026-11-12T07:00:09-08:00 (1794495609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,6 +91,18 @@ describe.each(matrix)("typed array members > $mode / $runtime / $attribution", (
 			});
 		}
 		expect(await api.owner.landed("__on_")).toEqual([]);
+	});
+
+	it("hands each step of the language's own iterators over as the plain result it is, the value in it as the reader gets it", async () => {
+		await open(true);
+		// Plain JavaScript: a step's result is a fresh object of the engine's, `{ value, done }`. What it holds is the
+		// owner's and reaches the reader as any other value of the owner's does.
+		expect(await api.reader.steps("__step_", 64)).toEqual({
+			bytesViewed: true,
+			byte: { proxy: false, keys: ["value", "done"], value: 0, done: false },
+			entry: { proxy: false, done: false, instanceViewed: true, write: "LOOSE_SET_NOT_OWNED" }
+		});
+		expect(await api.owner.landed("__step_")).toEqual([]);
 	});
 
 	it("hands over a typed array holding only its bytes as itself with the option true", async () => {

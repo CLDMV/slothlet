@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T14:25:44-08:00 (1794435944)
+ *	@Last modified time: 2026-11-12T06:59:15-08:00 (1794495555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -7415,6 +7415,23 @@ function runtime_crossRunsOnOriginal(state) {
 }
 
 /**
+ * Whether a value is the result the engine makes for one step of an iterator: a plain object holding `value` and
+ * `done` as data and nothing else. Told from its descriptors, so nothing of anyone's runs.
+ * @param {*} result - What a step returned.
+ * @returns {boolean} True for such a result.
+ * @private
+ */
+function runtime_isStepResult(result) {
+	if (result === null || typeof result !== "object" || util.types.isProxy(result)) return false;
+	if (Reflect.getPrototypeOf(result) !== Object.prototype) return false;
+	const keys = Reflect.ownKeys(result);
+	if (keys.length !== 2 || keys[0] !== "value" || keys[1] !== "done") return false;
+	const value = Reflect.getOwnPropertyDescriptor(result, "value");
+	const done = Reflect.getOwnPropertyDescriptor(result, "done");
+	return "value" in value && "value" in done && typeof done.value === "boolean";
+}
+
+/**
  * One of the language's or Node's own methods read through a crossing view of a value they run on
  * ({@link runtime_crossRunsOnOriginal}): it runs on the value itself, its results handed on to the reader and what the
  * reader passes it handed to the module the value came from. A callback the engine calls back with what the value holds
@@ -7434,6 +7451,14 @@ function runtime_crossEngineMethod(state, fn) {
 	if (!method) {
 		const name = fn.name;
 		const callsBack = SLOT_CALLBACK_METHODS.has(engineThenOf(fn) ?? fn);
+		// A step of one of the language's own iterators answers with an object the engine makes for that step.
+		const steps =
+			(name === "next" || name === "return" || name === "throw") &&
+			(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn)) &&
+			(runtime_isNativeIterator(original) ||
+				util.types.isMapIterator(original) ||
+				util.types.isSetIterator(original) ||
+				util.types.isGeneratorObject(original));
 		method = {
 			[name](...args) {
 				const receiver = this === state.view ? original : this;
@@ -7457,6 +7482,9 @@ function runtime_crossEngineMethod(state, fn) {
 				} catch (error) {
 					throw runtime_crossOut(state, error);
 				}
+				// The step's result is no one's value: the reader gets a result of its own, holding what the step gave as
+				// the reader gets it. Viewing the result itself would make a view for every element stepped over.
+				if (steps && runtime_isStepResult(result)) return { value: runtime_crossOut(state, result.value), done: result.done };
 				return runtime_crossOut(state, result);
 			}
 		}[name];

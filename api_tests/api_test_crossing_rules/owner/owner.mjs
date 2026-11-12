@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T10:13:02-08:00 (1794420782)
+ *	@Last modified time: 2026-11-12T06:57:21-08:00 (1794495441)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -130,6 +130,12 @@ export const freshMaker = () => () => new Foo();
 export const bytesWithMember = (size) => Object.assign(new Uint8Array(size), { inst: new Foo() });
 export const bufferWithMember = (size) => Object.assign(Buffer.alloc(size), { inst: new Foo() });
 export const bytes = (size) => new Uint8Array(size).fill(7);
+
+/**
+ * A Map holding an instance of this module's class.
+ * @returns {Map<string, Foo>} The map.
+ */
+export const instancesInMap = () => new Map([["k", new Foo()]]);
 
 export const cloneable = () => ({
 	a: { b: 1 },
