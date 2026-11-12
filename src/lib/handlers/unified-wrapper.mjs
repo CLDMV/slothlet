@@ -3842,6 +3842,24 @@ function runtime_writeModuleObject(wrapper, object, prop, value) {
 }
 
 /**
+ * Whether a data member a node reports takes a write (#749): as the module's object holds it where the node fronts
+ * one, or as the node's live value holds it; a member only the node holds is written through the node, so it is
+ * writable unless it was defined read-only through the node.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {boolean} What the member's description reports as `writable`.
+ * @private
+ */
+function runtime_reportsWritable(wrapper, prop) {
+	if (wrapper.____slothletInternal.readOnlyKeys?.has(prop)) return false;
+	const impl = wrapper.____slothletInternal.impl;
+	const live = impl !== null && (typeof impl === "object" || typeof impl === "function") && !util.types.isProxy(impl) ? impl : null;
+	const holder = runtime_moduleObjectOf(wrapper) ?? live;
+	const held = holder === null ? undefined : Reflect.getOwnPropertyDescriptor(holder, prop);
+	return held !== undefined && "value" in held ? held.writable === true : true;
+}
+
+/**
  * Run an operation on a wrapper's impl — a key check, a description, a listing — as the module the node belongs to
  * when the impl is a module's own Proxy, whose traps are that module's code (#597); otherwise as it is.
  * @template T
@@ -10940,6 +10958,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.proxy = null;
 		// The module's own object this node was built from a copy of, which a write through the node reaches (#746).
 		internal.moduleObject = null;
+		// The members defined read-only through the node (#749); null until one is.
+		internal.readOnlyKeys = null;
 		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
 		// the proxy is callable (or before it exists).
 		internal.proxyHandler = null;
@@ -11369,6 +11389,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 		// node that hands it its value (see ___adoptImplChildren).
 		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
+		// The node's members come from the new value from here on: none of them was defined read-only through the node.
+		this.____slothletInternal.readOnlyKeys = null;
 		runtime_registerLeafFunction(this, this.____slothletInternal.impl);
 		this.____slothletInternal.invalid = false;
 
@@ -15883,7 +15905,21 @@ export class UnifiedWrapper extends ComponentBase {
 				// Return descriptor if it exists
 				/* v8 ignore next */
 				if (desc) {
-					return virtualizeDescriptor(desc);
+					// The node keeps a member read-only on its own store, which only its traps write. What it reports is
+					// whether a write through the node is taken, as the module's object reports it (#749).
+					const described = virtualizeDescriptor(desc);
+					if (!("value" in described)) return described;
+					// A primitive member is held as a node of its own; its description holds the primitive, as a read of
+					// the member answers it.
+					const heldImpl = resolveWrapper(described.value)?.____slothletInternal.impl;
+					const heldType = typeof heldImpl;
+					const isPrimitive =
+						heldType === "string" || heldType === "number" || heldType === "boolean" || heldType === "bigint" || heldType === "symbol";
+					return {
+						...described,
+						value: isPrimitive ? heldImpl : described.value,
+						writable: runtime_reportsWritable(wrapper, prop)
+					};
 				}
 			}
 
@@ -16232,6 +16268,8 @@ export class UnifiedWrapper extends ComponentBase {
 				const ownWrite = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper);
 				const moduleObject = ownWrite ? null : runtime_moduleObjectOf(wrapper, prop);
 				if (moduleObject !== null && !runtime_writeModuleObject(wrapper, moduleObject, prop, value)) return false;
+				// A member defined read-only through the node takes no assignment, as on an object (#749).
+				if (!ownWrite && wrapper.____slothletInternal.readOnlyKeys?.has(prop) && hasOwn(wrapper, prop)) return false;
 
 				// A member the node already holds is replaced where it stands (the definition below), so it keeps its
 				// place among the node's keys, as an assignment to an object's member does (#746).
@@ -16442,8 +16480,9 @@ export class UnifiedWrapper extends ComponentBase {
 			if (deleteFrom && typeof deleteFrom === "object" && prop in deleteFrom && !Reflect.deleteProperty(deleteFrom, prop)) {
 				return false;
 			}
-			// A deleted key is no longer a user assignment to preserve across adoption (#543).
+			// A deleted key is no longer a user assignment to preserve across adoption (#543), nor one defined read-only.
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
+			wrapper.____slothletInternal.readOnlyKeys?.delete(prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
 			if (isOwnMember) {
 				const childWrapper = wrapper[prop];
@@ -16842,8 +16881,17 @@ export class UnifiedWrapper extends ComponentBase {
 				)
 					return false;
 				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, descriptor)) return false;
+				// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
+				// node's own store keeps every member read-only, so what was asked for is remembered beside it.
+				const wasData = hasOwn(wrapper, prop) && "value" in Reflect.getOwnPropertyDescriptor(wrapper, prop);
+				const wasWritable = wasData && runtime_reportsWritable(wrapper, prop);
 				if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
-				return Reflect.defineProperty(wrapper, prop, descriptor);
+				if (!Reflect.defineProperty(wrapper, prop, descriptor)) return false;
+				const isAccessor = "get" in descriptor || "set" in descriptor;
+				const staysWritable = !isAccessor && ("writable" in descriptor ? descriptor.writable === true : wasWritable);
+				if (isAccessor || staysWritable) internal.readOnlyKeys?.delete(prop);
+				else (internal.readOnlyKeys ??= new Set()).add(prop);
+				return true;
 			},
 			deleteProperty: deletePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`

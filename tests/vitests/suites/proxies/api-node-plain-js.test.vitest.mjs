@@ -168,6 +168,55 @@ const WRITES = {
 	}
 };
 
+/**
+ * A data member's description, its value left out where it is an object (a node on one side, the object on the other).
+ * @param {object} object - The object or node.
+ * @param {string} key - The member's key.
+ * @returns {object|undefined} The description.
+ */
+const described = (object, key) => {
+	const descriptor = Object.getOwnPropertyDescriptor(object, key);
+	if (!descriptor) return descriptor;
+	if ("value" in descriptor && descriptor.value !== null && typeof descriptor.value === "object") delete descriptor.value;
+	for (const half of ["get", "set"]) if (half in descriptor) descriptor[half] = typeof descriptor[half];
+	return descriptor;
+};
+
+/** How `m` describes the members of its exports. */
+const DESCRIPTIONS = {
+	"a data member": (m) => described(m.config, "port"),
+	"a member holding an object": (m) => described(m.config, "nested"),
+	"a member of an object inside it": (m) => described(m.config.nested, "a"),
+	"an accessor": (m) => described(m.config, "computed"),
+	"every member at once": (m) => Object.entries(Object.getOwnPropertyDescriptors(m.config)).map(([key, value]) => [key, value.writable]),
+	"a frozen object's member": (m) => described(m.frozen, "a"),
+	"a member the object keeps read-only": (m) => [described(m.partly, "fixed"), described(m.partly, "open")],
+	"a class instance's field": (m) => described(m.rex, "name"),
+	"a member written through the node": (m) => {
+		m.config.port = 81;
+		m.config.added = 1;
+		return [described(m.config, "port"), described(m.config, "added")];
+	},
+	"a member defined read-only through the node": (m) => {
+		Object.defineProperty(m.config, "locked", { value: 1, enumerable: true, configurable: true });
+		return [described(m.config, "locked"), Reflect.set(m.config, "locked", 2), m.config.locked];
+	},
+	"a member defined on a namespace of functions": (m) => {
+		Object.defineProperty(m.arrow, "locked", { value: 1, enumerable: true, configurable: true });
+		Object.defineProperty(m.arrow, "open", { value: 1, writable: true, enumerable: true, configurable: true });
+		m.arrow.assigned = 1;
+		const before = [described(m.arrow, "locked"), described(m.arrow, "open"), described(m.arrow, "assigned")];
+		const written = [Reflect.set(m.arrow, "locked", 2), Reflect.set(m.arrow, "open", 2), m.arrow.locked, m.arrow.open];
+		Object.defineProperty(m.arrow, "locked", { writable: true });
+		return [before, written, described(m.arrow, "locked"), Reflect.set(m.arrow, "locked", 3), m.arrow.locked];
+	},
+	"a sealed object's member": (m) => {
+		Object.seal(m.config.nested);
+		return [described(m.config.nested, "a"), Object.isSealed(m.config.nested), Object.isFrozen(m.config.nested)];
+	},
+	"what Object.isFrozen answers for an open object": (m) => [Object.isFrozen(m.config), Object.isFrozen(m.frozen)]
+};
+
 describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
 	let api;
 
@@ -177,6 +226,14 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 	afterEach(async () => {
 		await api?.shutdown?.();
 		api = null;
+	});
+
+	describe("a member is described as the module's own object describes it (#749)", () => {
+		it.each(Object.keys(DESCRIPTIONS))("%s", async (name) => {
+			const module = await twin("shapes.mjs");
+			await start();
+			expect(answer(() => DESCRIPTIONS[name](api.shapes))).toEqual(answer(() => DESCRIPTIONS[name](module)));
+		});
 	});
 
 	describe("a write through the node reaches the module's own object (#746)", () => {
