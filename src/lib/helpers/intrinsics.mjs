@@ -107,7 +107,7 @@ const NativeMath = staticsOf(Math);
  * @private
  */
 function unwrapToString(fn) {
-	const marker = Symbol.for("slothlet.functionSource.original");
+	const marker = NativeSymbol.for("slothlet.functionSource.original");
 	let current = fn;
 	for (let depth = 0; depth < 16; depth++) {
 		const below = getOwnPropertyDescriptor(current, marker)?.value;
