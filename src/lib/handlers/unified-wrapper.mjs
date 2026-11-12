@@ -79,7 +79,7 @@ import {
 } from "#handlers/hook-manager";
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
-import { setCloneViewReader } from "@cldmv/slothlet/helpers/clone-context";
+import { setCloneViewReader, setCloneNodeReader } from "@cldmv/slothlet/helpers/clone-context";
 import {
 	Reflect,
 	Objects,
@@ -6587,6 +6587,49 @@ setCloneViewReader((value) => {
 	const behind = crossing.original;
 	if (typeof behind !== "object") return behind;
 	return STAND_IN_RECORDS.get(behind)?.original ?? runtime_unwrapClassInstance(behind);
+});
+
+/**
+ * The wrapper of the api node a value is, or is a per-reader view of (a view `self` or a captured reference hands a
+ * module), or null for any other value. Only the registries are read, so none of the value's traps run.
+ * @param {*} value - The value.
+ * @returns {UnifiedWrapper|null} The node's wrapper.
+ * @private
+ */
+function runtime_viewedNodeWrapper(value) {
+	let current = value;
+	for (let depth = 0; depth < 4 && current !== null && (typeof current === "object" || typeof current === "function"); depth++) {
+		const wrapper = _proxyRegistry.get(current);
+		if (wrapper) return wrapper;
+		current = capturedViewNodes.get(current) ?? SELF_VIEW_NODES.get(current);
+	}
+	return null;
+}
+
+// The platform's cloning functions copy an api node's data too (#751): member by member through the node (or the view
+// of it the caller holds), so each read is the node's own, with its checks, and the module's object is never handed over.
+setCloneNodeReader((value) => {
+	const wrapper = runtime_viewedNodeWrapper(value);
+	if (wrapper === null) return undefined;
+	const internal = wrapper.____slothletInternal;
+	// A node with no value yet (lazy, not loaded) or no longer one has nothing to copy: the platform's refusal stands.
+	if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return undefined;
+	const impl = internal.impl;
+	if (impl === null || impl === undefined) return undefined;
+	// A function is refused by the platform, as the module's function is; a primitive is copied as itself.
+	const fn = runtime_functionOf(impl);
+	if (fn) return { value: fn };
+	if (typeof impl !== "object") return { value: impl };
+	if (Arrays.isArray(impl)) return { list: true };
+	// A module's own Proxy is refused by the platform, as it is in plain JavaScript.
+	if (util.types.isProxy(impl) && !isCompositionLayer(impl)) return { value: impl };
+	// A built-in data object (a `Date`, a `Map`, an error) holds its data in internal slots only the platform reads. It is
+	// handed over only while the permission system is off: no read through the node would stand between a module and it.
+	const data = layerUnderlying(impl);
+	if (runtime_dataKind(data) !== null || runtime_isErrorValue(data)) {
+		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? undefined : { value: data };
+	}
+	return { list: false };
 });
 
 /**

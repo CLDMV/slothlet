@@ -63,3 +63,19 @@ export const view = () => ({
  * @returns {string} `JSON.stringify(self.owner.config)`.
  */
 export const serialize = () => JSON.stringify(self.owner.config);
+
+/**
+ * Clone the owner's `config` with the platform's `structuredClone`, change the clone, and answer what it held.
+ * @returns {string} The clone as JSON before it was changed, or the name of the error cloning threw.
+ */
+export const clone = () => {
+	try {
+		const copy = structuredClone(self.owner.config);
+		const held = JSON.stringify(copy);
+		copy.port = -1;
+		if (copy.nested) copy.nested.a = -1;
+		return held;
+	} catch (error) {
+		return error?.name ?? "threw";
+	}
+};

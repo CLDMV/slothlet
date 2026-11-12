@@ -21,16 +21,18 @@
  * @description
  * While the permission system is on, what one module hands another reaches it as a view: a Proxy. The structured clone
  * algorithm refuses a Proxy, so `structuredClone(data)`, `v8.serialize(data)` and every `postMessage(data)` threw a
- * `DataCloneError` on data another module handed over, where plain JavaScript copies it.
+ * `DataCloneError` on data another module handed over, where plain JavaScript copies it. An api node is a Proxy as
+ * well, with the permission system on or off, so data read straight off the api (`structuredClone(api.m.config)`) was
+ * refused the same way (#751).
  *
  * This patch wraps those functions the way the other boundary patches wrap theirs (see
  * {@link module:@cldmv/slothlet/helpers/boundary-patch-layers}). A wrapper calls the function it wraps first, with
  * exactly what it was given, so nothing changes for a value that clones. Only when that call refuses the value does the
- * wrapper look for slothlet's views in it: it builds a copy of the plain objects, arrays, `Map`s and `Set`s on the way
- * to each view, with the value behind the view in the view's place, and hands that to the platform's own function as it
- * was when slothlet loaded. What comes back is the platform's clone (or nothing, for a message posted), so the caller
- * ends up with a copy of the data and never with the object behind a view. A value holding no view of slothlet's is
- * refused with the platform's own error, as before.
+ * wrapper look for slothlet's views and api nodes in it: it builds a copy of the plain objects, arrays, `Map`s and
+ * `Set`s on the way to each, with the value behind a view in the view's place and a node's data read member by member
+ * through the node, and hands that to the platform's own function as it was when slothlet loaded. What comes back is the platform's clone (or nothing, for a message posted), so the caller
+ * ends up with a copy of the data and never with the object behind a view or a node. A value holding no view or node of
+ * slothlet's is refused with the platform's own error, as before.
  *
  * Wrapped where they exist: `structuredClone`, `v8.serialize` (Node), and `postMessage` of `MessagePort`,
  * `BroadcastChannel`, `Worker` (the browser's and `node:worker_threads`'), and the browser's `window`.
@@ -154,9 +156,32 @@ export function setCloneViewReader(behind) {
 }
 
 /**
+ * Tells how an api node's data is copied, set by the handlers that make the nodes.
+ * @type {function(*): ({value: *}|{list: boolean}|undefined)}
+ * @private
+ */
+let nodeData = () => undefined;
+
+/**
+ * Set how the data of one of slothlet's api nodes is told.
+ * @param {function(*): ({value: *}|{list: boolean}|undefined)} shape - Answers `undefined` for a value that is no
+ *   loaded api node (or a view of one); `{ list }` for a node whose data is read member by member through the node
+ *   itself, as an array (`list: true`) or an object; `{ value }` for a node standing for a value the platform clones
+ *   or refuses as it is (a function, a primitive, a `Date`).
+ * @returns {void}
+ * @internal
+ * @example
+ * setCloneNodeReader((value) => (isLoadedNode(value) ? { list: Array.isArray(valueOf(value)) } : undefined));
+ */
+export function setCloneNodeReader(shape) {
+	nodeData = shape;
+}
+
+/**
  * A copy of a value for the platform to clone, with the value behind each of slothlet's views in the view's place. Plain
  * objects, arrays, `Map`s and `Set`s are copied member by member, read as the clone algorithm reads them; every other
- * object is left as it is for the platform to clone or refuse.
+ * object is left as it is for the platform to clone or refuse. An api node's data is copied member by member too, each
+ * member read through the node, so every read is one the node checks and the object behind the node is never taken.
  * @param {*} root - The value.
  * @returns {{found: boolean, value: *}} The copy, and whether any view was found.
  * @private
@@ -178,7 +203,29 @@ function runtime_reveal(root) {
 				return known;
 			}
 		}
-		if (typeof subject !== "object") return subject;
+		if (subject !== null && (typeof subject === "object" || typeof subject === "function")) {
+			const node = nodeData(subject);
+			if (node !== undefined) {
+				found = true;
+				if ("value" in node) {
+					subject = node.value;
+				} else {
+					// Read as the clone algorithm reads an object: its own enumerable string keys, each through the node.
+					const members = node.list ? [] : {};
+					apply(mapSet, copies, [value, members]);
+					if (subject !== value) apply(mapSet, copies, [subject, members]);
+					for (const key of ownKeys(subject)) {
+						if (typeof key !== "string") continue;
+						const descriptor = getOwnPropertyDescriptor(subject, key);
+						if (!descriptor || !descriptor.enumerable) continue;
+						members[key] = walk(subject[key]);
+					}
+					if (node.list) members.length = subject.length;
+					return members;
+				}
+			}
+		}
+		if (subject === null || typeof subject !== "object") return subject;
 		let copy;
 		let kind = "object";
 		if (isArray(subject)) copy = [];

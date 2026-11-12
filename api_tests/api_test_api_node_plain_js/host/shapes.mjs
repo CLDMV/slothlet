@@ -68,6 +68,18 @@ export const partly = Object.defineProperty({ open: 1 }, "fixed", { value: 1, wr
  */
 export const list = [1, { deep: 2 }, 3];
 
+/**
+ * Data holding the built-in kinds the structured clone algorithm copies.
+ * @type {{when: Date, tags: Set<string>, byName: Map<string, {n: number}>, bytes: Uint8Array, pattern: RegExp}}
+ */
+export const kinds = {
+	when: new Date(0),
+	tags: new Set(["a", "b"]),
+	byName: new Map([["one", { n: 1 }]]),
+	bytes: new Uint8Array([1, 2, 3]),
+	pattern: /x+/g
+};
+
 /** A base class. */
 export class Animal {
 	/**

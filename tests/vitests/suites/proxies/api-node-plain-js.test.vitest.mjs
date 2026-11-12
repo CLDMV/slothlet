@@ -30,6 +30,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import v8 from "node:v8";
+import { inspect } from "node:util";
 import slothlet from "@cldmv/slothlet";
 
 const FIXTURE = resolve("api_tests/api_test_api_node_plain_js");
@@ -79,6 +81,7 @@ async function build(options) {
 		api.shapes.frozen,
 		api.shapes.partly,
 		api.shapes.list,
+		api.shapes.kinds,
 		api.shapes.rex,
 		api.shapes.Animal,
 		api.shapes.Dog,
@@ -243,6 +246,57 @@ const SERIALIZED = {
 	"a function": (m) => [JSON.stringify(m.arrow), JSON.stringify({ held: m.arrow })]
 };
 
+/** What the platform's cloning functions make of `m`'s exports: each clone printed, so its kinds and members show. */
+const CLONED = {
+	"an object inside an exported object": (m) => inspect(structuredClone(m.config.nested)),
+	"an exported object with a getter": (m) => inspect(structuredClone(m.config)),
+	"an object holding one with getters": (m) => inspect(structuredClone(m.outer), { depth: 5 }),
+	"a frozen object, whose clone is open": (m) => {
+		const copy = structuredClone(m.frozen);
+		return [inspect(copy), Object.isFrozen(copy)];
+	},
+	"a list": (m) => {
+		const copy = structuredClone(m.list);
+		return [Array.isArray(copy), copy.length, inspect(copy)];
+	},
+	"a class instance, cloned as a plain object": (m) => {
+		const copy = structuredClone(m.rex);
+		return [inspect(copy), Object.getPrototypeOf(copy) === Object.prototype];
+	},
+	"dates, sets, maps, bytes and patterns": (m) => inspect(structuredClone(m.kinds), { depth: 5 }),
+	"nodes inside the caller's own object and array": (m) =>
+		inspect(structuredClone({ held: m.config.nested, list: [m.frozen, 1] }), { depth: 5 }),
+	"the same node twice, cloned once": (m) => {
+		const copy = structuredClone({ first: m.config.nested, second: m.config.nested });
+		return copy.first === copy.second;
+	},
+	"a clone is a copy: changing it changes nothing": (m) => {
+		const copy = structuredClone(m.config);
+		copy.port = -1;
+		copy.nested.a = -1;
+		return [m.readPort(), m.readNested("a"), m.config.port, m.config.nested.a];
+	},
+	"after a write through the node": (m) => {
+		m.config.nested.a = 2;
+		m.config.added = { deep: true };
+		return inspect(structuredClone(m.config), { depth: 5 });
+	},
+	"a function, which is refused": (m) => answer(() => structuredClone(m.arrow)),
+	"an object holding a function, which is refused": (m) => answer(() => structuredClone({ held: m.named })),
+	"a class, which is refused": (m) => answer(() => structuredClone(m.Animal)),
+	"a whole module, which holds functions": (m) => answer(() => structuredClone(m)),
+	"v8.serialize": (m) => inspect(v8.deserialize(v8.serialize(m.config)), { depth: 5 }),
+	"a message posted through a channel": async (m) => {
+		const { port1, port2 } = new MessageChannel();
+		const received = new Promise((resolve) => port2.once("message", resolve));
+		port1.postMessage({ held: m.config.nested, list: m.list });
+		const message = await received;
+		port1.close();
+		port2.close();
+		return inspect(message, { depth: 5 });
+	}
+};
+
 describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
 	let api;
 
@@ -267,6 +321,15 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 			const module = await twin("shapes.mjs");
 			await start();
 			expect(answer(() => SERIALIZED[name](api.shapes))).toEqual(answer(() => SERIALIZED[name](module)));
+		});
+	});
+
+	describe("the platform clones a node's data as it clones the module's own object (#751)", () => {
+		it.each(Object.keys(CLONED))("%s", async (name) => {
+			const module = await twin("shapes.mjs");
+			const expected = await answer(() => CLONED[name](module));
+			await start();
+			expect(await answer(() => CLONED[name](api.shapes))).toEqual(expected);
 		});
 	});
 
@@ -413,6 +476,32 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 		const readable = { port: owner.config.port, nested: owner.config.nested };
 		expect(await api.reader.serialize()).toBe(JSON.stringify(readable));
 		expect(await api.writer.serialize()).toBe(JSON.stringify(owner.config));
+	});
+
+	it("clones another module's data for a module as a copy, which changes nothing of the owner's when changed", async () => {
+		await mount(WRITER_MAY_WRITE);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		const expected = JSON.stringify(structuredClone(owner.config));
+		expect(await api.reader.clone()).toBe(expected);
+		expect(await api.writer.clone()).toBe(expected);
+		expect(await api.owner.state()).toEqual(UNCHANGED);
+	});
+
+	it("never copies out a member the cloning module may not read", async () => {
+		await mount([
+			{ caller: "reader.**", target: "owner.config.nested", effect: "deny" },
+			{ caller: "reader.**", target: "owner.config.nested.**", effect: "deny" }
+		]);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		const cloned = await api.reader.clone();
+		// Refused outright, or copied with nothing the reader may not read: either way no member of `nested` leaves.
+		if (cloned !== "DataCloneError") {
+			const { nested = {}, ...rest } = JSON.parse(cloned);
+			expect(nested).toEqual({});
+			expect(rest).toEqual({ port: owner.config.port, doubled: owner.config.doubled });
+		}
+		expect(await api.writer.clone()).toBe(JSON.stringify(structuredClone(owner.config)));
+		expect(await api.owner.state()).toEqual(UNCHANGED);
 	});
 
 	it("hands a module that may only read another module's data a node, never the module's object", async () => {
