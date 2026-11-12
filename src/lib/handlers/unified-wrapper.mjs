@@ -11420,6 +11420,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// impl because adoption skips it; copying it here would hand it to `toJSON` while `ownKeys`
 			// and `get` both withhold it).
 			if (isFrameworkReservedKey(key)) continue;
+			// An accessor the impl still holds (adoption leaves a module's getter and setter on it) is carried over as
+			// the accessor it is: reading it here would run the getter on the emptied impl and keep what that returned.
+			const extractFullImpl_held = Objects.getOwnPropertyDescriptor(impl, key);
+			if (extractFullImpl_held && !("value" in extractFullImpl_held)) {
+				Objects.defineProperty(extractFullImpl_result, key, extractFullImpl_held);
+				continue;
+			}
 			extractFullImpl_result[key] = impl[key];
 		}
 

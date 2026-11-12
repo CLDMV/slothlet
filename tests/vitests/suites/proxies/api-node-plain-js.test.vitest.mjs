@@ -426,6 +426,20 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 		});
 	});
 
+	describe("a getter of an exported object stays a getter when its module is reloaded", () => {
+		it("is described, read and serialized after a reload as on the module's own object", async () => {
+			const check = (m) => {
+				m.config.port = 5;
+				return [described(m.config, "computed"), m.config.computed, m.outer.inner.twice, JSON.stringify(m.config), JSON.stringify(m.outer)];
+			};
+			const module = await twin("shapes.mjs");
+			await start();
+			await api.slothlet.api.reload("shapes");
+			for (const node of [api.shapes, api.shapes.config, api.shapes.config.nested, api.shapes.outer, api.shapes.outer.inner]) await node;
+			expect(check(api.shapes)).toEqual(check(module));
+		});
+	});
+
 	describe("a write through the node reaches the module's own object (#746)", () => {
 		it.each(Object.keys(WRITES))("%s", async (name) => {
 			const module = await twin("shapes.mjs");
