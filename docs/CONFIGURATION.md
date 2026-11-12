@@ -354,6 +354,17 @@ A `self.*` call is allowed only when both the code making it (its definer: the l
 
 Wherever the stack names the definer, both use it. Plain data comes back as itself under both, unsearched, and with the permission system not on nothing is wrapped or checked under either. Any other value is rejected with `INVALID_CONFIG`.
 
+**`"fast"` together with `provenance: false` keeps no author check.** `provenance` reads who wrote code from the stack and `"precise"` records it on what a module hands out; with both off, every function runs as whoever runs it. It is the one combination in which the two values refuse different things:
+
+```javascript
+// rules: defaultPolicy "allow", { caller: "author.**", target: "vault.**", effect: "deny" }
+// author returns () => self.vault.get(); runner, which may read the vault, runs it.
+//
+// { attribution: "precise", provenance: false }  → PERMISSION_DENIED  (the function records author)
+// { attribution: "fast",    provenance: false }  → "SECRET"           (the function runs as runner)
+// either value with provenance on (the default)  → PERMISSION_DENIED  (the stack names author)
+```
+
 ```javascript
 const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", attribution: "fast", rules } });
 ```

@@ -946,6 +946,11 @@ export class LiveContextManager {
 			if (outermost.byFile && below.every(isRunnerFrame)) {
 				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
 				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
+				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
+				// callback it made: that call is what picked up again. Code it has called since (another module's function
+				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
+				// as it is in the async runtime.
+				if (outermost.matches.length && new Set(outermost.matches.map(callKey)).size === 1) return outermost.matches[0];
 			}
 			// Otherwise every placed frame of the synchronous part is code taking part in this access — the job's own, and
 			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no

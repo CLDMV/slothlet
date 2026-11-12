@@ -41,6 +41,7 @@ import {
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
 import { Reflect, Objects, Arrays, JSON, functionSource } from "@cldmv/slothlet/helpers/intrinsics";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -3041,11 +3042,16 @@ function runtime_checksPermissions(slothlet) {
  * @param {string} instanceID - The instance.
  * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
 export function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
 	const identity = contextManager?.getCallerIdentity?.(instanceID);
 	if (!identity?.currentWrapper) {
+		// Who runs it cannot be told (several calls are waiting and the stack names more than one, or none): it is no
+		// one's, and not the host's either, so the code is not run under its definer's rights alone.
+		if (identity?.unresolved && slothlet && runtime_checksPermissions(slothlet))
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a
 		// flow slothlet pinned to the host.
