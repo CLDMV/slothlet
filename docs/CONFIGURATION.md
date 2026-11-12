@@ -14,6 +14,7 @@ const api = await slothlet({
 	// API build
 	mode: "eager", // "eager" | "lazy"
 	runtime: "async", // "async" | "live"
+	helpers: "instance", // "instance" | "module" — one copy of each helper file per instance, or per importing api file
 	apiDepth: Infinity, // number | Infinity
 	hidden: [], // string | string[] — globs hiding files/folders from the API
 	scanHiddenFolders: false, // DEPRECATED escape hatch — scan "."/"__"-prefixed folders (removed in v4)
@@ -124,6 +125,53 @@ const api = await slothlet({ dir: "./api", runtime: "async" });
 ```
 
 See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for context runtime details.
+
+---
+
+### `helpers`
+
+**Type**: `"instance"` | `"module"`
+**Default**: `"instance"`
+
+How often an instance loads a **helper file**: a file an api file imports by a relative path (or from its own package) that is no api file itself, such as `api/orders.mjs` importing `../lib/queue.mjs`.
+
+- **`"instance"`** - Once per instance. Every api file importing the helper gets the same module, so state the helper keeps at module level (a cache, a counter, a queue) is shared between them, as in any JavaScript program. See [Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
+- **`"module"`** - Once per importing api file. Each api file gets its own copy of every helper it imports, directly or through other helpers. An api file mounted twice with `api.slothlet.api.add()` gets a copy per mount.
+
+```javascript
+// lib/tally.mjs
+let count = 0;
+export const bump = () => ++count;
+
+// api/one.mjs and api/two.mjs both:  import { bump } from "../lib/tally.mjs";  export const next = () => bump();
+```
+
+```javascript
+const shared = await slothlet({ base: "./api" });
+[await shared.one.next(), await shared.two.next()]; // [1, 2] - one count
+
+const apart = await slothlet({ base: "./api", helpers: "module" });
+[await apart.one.next(), await apart.two.next()]; // [1, 1] - a count each
+```
+
+**Why turn it on.** A helper file has no api path, so with one shared copy the permission system can only say that the helper's code belongs to the api files importing it, and holds it to all of them where it cannot tell more (see [a helper file's code](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). With a copy per api file, each copy's code is known to be that one file's: a helper function a leaf hands out, and a timer or queue the helper starts when it loads, run as the module of the api file the copy was loaded for, under `permissions.attribution: "fast"` as well.
+
+**What it costs.**
+
+- **Helper state is no longer shared between api files.** A cache, connection pool, registry or queue kept in a helper becomes one per importing api file. Programs that rely on api files sharing a helper's state must keep the default, or move that state to a package or to slothlet's `context`.
+- **Memory and load time.** Each helper is compiled and evaluated once per api file that imports it, and whatever it starts when it loads (timers, connections) starts once per copy.
+- `instanceof` between copies fails: a class declared in a helper is a different class in each copy.
+
+**Limits.**
+
+- **CommonJS helpers** are copied per api file too, so their state is separate, but a CommonJS file's stack frames carry only its path, not which copy is running. For permissions a CommonJS helper's own code therefore stays held to every api file that loads the helper.
+- **Packages are never copied**: a file in another package (`node_modules`, or a folder with its own named `package.json`) is one module for the whole process, as before.
+- **Browser builds are not affected.** Without Node's resolve hook or the vite plugin (`slothletInstanceImports()`), the browser loads what a file imports itself, so there is one copy and the every-importer rule applies. The option is accepted and does nothing there.
+- A partial reload re-imports the reloaded api files, which link against their existing helper copies, as with `"instance"`.
+
+```javascript
+const api = await slothlet({ base: "./api", helpers: "module" });
+```
 
 ---
 

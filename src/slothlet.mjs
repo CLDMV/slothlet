@@ -2007,6 +2007,9 @@ export default slothlet;
  *   - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
  *   - `"live"` — Experimental live bindings.
  *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
+ * @property {"instance"|"module"} [helpers="instance"] - How often a helper file (a file an api file imports that is no api file itself) is loaded.
+ *   - `"instance"` — once per instance: every api file importing the helper shares one copy, and so its module state.
+ *   - `"module"` — once per importing api file: each api file gets its own copy of every helper it imports, so helper state is not shared between api files, and the permission system can tell which api file a helper's code runs for. Node and the vite plugin only; a browser build keeps one copy.
  * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
  * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
  *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,

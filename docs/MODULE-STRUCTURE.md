@@ -549,7 +549,7 @@ a.plugins.extra.count(); // 4  — api.add mounts share the same instance copy
 b.tally.count(); // 1  — instance b has its own copy
 ```
 
-A helper is one copy per **instance** — the base leaves and every `api.slothlet.api.add` mount of that instance share it, and it lives as long as the instance ID does:
+A helper is one copy per **instance** — the base leaves and every `api.slothlet.api.add` mount of that instance share it, and it lives as long as the instance ID does. (The [`helpers: "module"`](CONFIGURATION.md#helpers) option loads a copy per importing api file instead, so api files no longer share a helper's state; what follows about reloads holds for each of those copies.)
 
 - **Partial reload** — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)` or a reload by moduleID re-imports the reloaded leaves, but they link against the instance's **existing** helper copy. Helper state is preserved, and reloaded and untouched leaves keep sharing it.
 - **Full reload** — `api.slothlet.reload()` (or a restart) gives the instance a new ID, and every leaf shares one **fresh** helper copy.

@@ -479,6 +479,31 @@ function runtime_frameModuleTag(line) {
 }
 
 /**
+ * The api file a helper copy's stack line says it was loaded for, and that file's mount: with `helpers: "module"` an
+ * instance loads each helper once per importing api file, under `&slothlet_for=<api file>` (and `&slothlet_mount=`
+ * for a mounted folder's file), so the copy's frames name the one api file whose code they are. Null for a helper
+ * loaded once per instance, which carries none.
+ * @param {string} line - One stack line.
+ * @returns {{path: string, mount: string|null}|null} The api file in comparable form and its mount, or null.
+ * @private
+ */
+function runtime_frameImporterTag(line) {
+	const tag = /[?&]slothlet_for=([^&#:)\s]+)/.exec(line)?.[1];
+	if (!tag) return null;
+	const decode = (value) => {
+		const spaced = value.replace(/\+/g, " ");
+		try {
+			return decodeURIComponent(spaced);
+		} catch {
+			// A malformed escape cannot name a file other than as spelled.
+			return spaced;
+		}
+	};
+	const mount = /[?&]slothlet_mount=([^&#:)\s]+)/.exec(line)?.[1];
+	return { path: toComparablePath(decode(tag)), mount: mount ? decode(mount) : null };
+}
+
+/**
  * Read the current call stack as frames, innermost first: each frame's function text, its location in
  * comparable form, and the raw text to look for an instance's import tag in.
  *
@@ -1255,10 +1280,13 @@ export function createFramePlacer(candidates) {
 		const commonJSFamilies = frameInstance ? null : commonJSFamiliesAt(frame.path);
 		const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamilies;
 		if (frameFamilies) {
+			// A helper copy loaded for one api file (`helpers: "module"`) names it: only that file's calls can be running it.
+			const loadedFor = frameInstance ? runtime_helperCopyOf(frameInstance, frame) : null;
 			const owners = candidates.filter((entry) => {
 				if (!frameFamilies.has(entry.family)) return false;
 				// A leaf's own copy names its mount: only that mount's calls can be running it.
 				if (frameModule && entry.moduleID !== frameModule) return false;
+				if (loadedFor) return isEntryLocation(loadedFor.path, entry) && (!loadedFor.mount || entry.moduleID === loadedFor.mount);
 				for (const importer of importersOf(entry.family, frame.path)) if (isEntryLocation(importer, entry)) return true;
 				return false;
 			});
@@ -3290,6 +3318,16 @@ export function loadOnStack(loads) {
 			if (tag) sameInstance.push(loading);
 		}
 		if (!sameInstance.length) return null;
+		// A helper copy loaded for one api file (`helpers: "module"`) is evaluated by that file's load.
+		const loadedFor = tag ? runtime_helperCopyOf(tag, frame) : null;
+		if (loadedFor) {
+			const own = sameInstance.filter(
+				(loading) =>
+					(toComparablePath(loading.filePath) === loadedFor.path || runtime_realComparablePath(loading.filePath) === loadedFor.path) &&
+					(!loadedFor.mount || !loading.moduleID || loading.moduleID === loadedFor.mount)
+			);
+			if (own.length) return own[0];
+		}
 		if (sameInstance.length === 1) return sameInstance[0];
 		// A helper several loads may be evaluating: the load whose file imports it, when one alone does.
 		const graph = runtime_importGraph(tag);
@@ -3531,11 +3569,40 @@ export function frameDefiner(running = null) {
 }
 
 /**
+ * The api file a helper copy's frame was loaded for (see {@link runtime_frameImporterTag}), when the instance's own
+ * record of imports bears it out: the copy's URL is text any code can write (an `import()` naming another api file),
+ * so the name stands only when that api file imports the helper's file, directly or through other helpers, as the
+ * resolve hook recorded it. Null for a frame that names none, or one the record does not bear out; the frame is then
+ * read as a helper loaded once per instance is.
+ * @param {string} family - The instance ID the frame carries.
+ * @param {{path: string, line: string}} frame - The frame.
+ * @returns {{path: string, mount: string|null}|null} The api file in comparable form and its mount, or null.
+ * @private
+ */
+function runtime_helperCopyOf(family, frame) {
+	const loadedFor = runtime_frameImporterTag(frame.line);
+	if (!loadedFor || loadedFor.path === frame.path) return null;
+	const graph = runtime_importGraph(family);
+	const seen = new Set([frame.path]);
+	const queue = [frame.path];
+	while (queue.length && seen.size <= PACKAGE_WALK) {
+		for (const importer of graph.get(queue.pop()) ?? []) {
+			if (importer === loadedFor.path) return loadedFor;
+			if (seen.has(importer)) continue;
+			seen.add(importer);
+			queue.push(importer);
+		}
+	}
+	return null;
+}
+
+/**
  * The running instance whose helper file a frame runs in: a file loaded under the instance's import tag, or one of its
  * CommonJS files, that no leaf was built from. Null for a CommonJS file more than one running instance loads.
  * @param {{path: string, line: string, evaluated?: boolean}} frame - The frame.
  * @param {object|null} [only=null] - Answer for this instance alone.
- * @returns {{slothlet: object, path: string}|null} The instance and the helper's file, or null.
+ * @returns {{slothlet: object, path: string, importer: {path: string, mount: string|null}|null}|null} The instance
+ *   and the helper's file, with the api file the copy was loaded for when its frame names one, or null.
  * @private
  */
 function runtime_helperOwner(frame, only = null) {
@@ -3549,19 +3616,22 @@ function runtime_helperOwner(frame, only = null) {
 		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
 		// A CommonJS helper two running instances load carries no tag to tell them apart (#735): it is no one's here.
 		if (found) return null;
-		found = { slothlet, path: frame.path };
+		// A copy loaded for one api file (`helpers: "module"`) names it.
+		found = { slothlet, path: frame.path, importer: tag ? runtime_helperCopyOf(id, frame) : null };
 	}
 	return found;
 }
 
 /**
  * The files of an instance that import a helper file, directly or through other helpers, as the instance's resolve
- * hook recorded them.
- * @param {{slothlet: object, path: string}} helper - The helper.
+ * hook recorded them. For a copy of the helper loaded for one api file (`helpers: "module"`), that api file.
+ * @param {{slothlet: object, path: string, importer?: {path: string, mount: string|null}|null}} helper - The helper.
  * @returns {Set<string>} The importing files, in comparable form, the helper's own included.
  * @private
  */
 function runtime_helperImporters(helper) {
+	// A copy loaded for one api file is that file's alone, whoever else imports the helper's file.
+	if (helper.importer) return new Set([helper.path, helper.importer.path]);
 	const graph = runtime_importGraph(helper.slothlet.instanceID);
 	const seen = new Set([helper.path]);
 	const queue = [helper.path];
@@ -3588,9 +3658,14 @@ function runtime_importsHelper(helper, leaves) {
 	if (leaves[0]?.slothlet !== helper.slothlet) return false;
 	const importers = runtime_helperImporters(helper);
 	if (importers.size === 1) return true;
+	const mount = helper.importer?.mount ?? null;
 	return leaves.some((leaf) => {
 		const filePath = leaf.____slothletInternal.filePath;
-		return Boolean(filePath) && (importers.has(toComparablePath(filePath)) || importers.has(runtime_realComparablePath(filePath)));
+		if (!filePath || (mount && leaf.____slothletInternal.moduleID !== mount)) return false;
+		if (importers.has(toComparablePath(filePath)) || importers.has(runtime_realComparablePath(filePath))) return true;
+		// A leaf run from another location (a TypeScript leaf's compiled copy) is named by it.
+		for (const location of runtime_importedLocations(leaf, filePath) ?? []) if (importers.has(location)) return true;
+		return false;
 	});
 }
 
@@ -3673,7 +3748,7 @@ export function isLeafFileFunction(fn, leaves) {
 function runtime_helperModules(helper) {
 	const modules = new Set();
 	for (const file of runtime_helperImporters(helper)) {
-		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, null);
+		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, helper.importer?.mount ?? null);
 		if (!leaves.length) continue;
 		for (const module of runtime_fileModuleOf(leaves)) modules.add(module);
 	}

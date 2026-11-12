@@ -40,7 +40,7 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
-import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
+import { installInstanceImportHooks, requireInInstance, HELPERS_PARAM, HELPERS_PER_MODULE } from "@cldmv/slothlet/helpers/instance-imports";
 import { createModuleLoad } from "#handlers/frame-placement";
 import { Map, Set, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -411,7 +411,7 @@ export class Loader extends ComponentBase {
 			// The hooks serve its require() of an ES module the instance's copy (#534).
 			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
 				ensureInstanceImportHooks();
-				return this.#loadCJSIsolated(filePath, instanceID);
+				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
 			}
 
 			// Relative helpers a leaf imports must follow the leaf's per-instance query (#518): the
@@ -584,6 +584,8 @@ export class Loader extends ComponentBase {
 				if (moduleID) {
 					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
+				// `helpers: "module"`: the resolve hook loads each helper this file imports as this file's own copy.
+				if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
 				// reference used by the live API (which would cause applyRootContributor's
@@ -687,8 +689,14 @@ export class Loader extends ComponentBase {
 	 * ns.default; // module.exports
 	 * @private
 	 */
-	#loadCJSIsolated(filePath, scopeKey) {
-		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
+	#loadCJSIsolated(filePath, scopeKey, moduleID = null) {
+		// With `helpers: "module"` the files the leaf requires are its own copies, not the instance's.
+		const perModule = this.slothlet.config?.helpers === "module";
+		const exports = requireInInstance(filePath, scopeKey, {
+			fresh: true,
+			importer: perModule ? filePath : null,
+			mount: perModule ? (moduleID ?? null) : null
+		});
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
 		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
@@ -831,6 +839,7 @@ export class Loader extends ComponentBase {
 		if (moduleID) {
 			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 		}
+		if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 		if (cacheBust) {
 			moduleUrl += `&_reload=${cacheBust}`;
 		}

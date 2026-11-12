@@ -76,6 +76,37 @@ import { commonJSExportNames } from "./cjs-export-names.mjs";
 export const INSTANCE_QUERY_KEYS = Object.freeze(["slothlet_instance"]);
 
 /**
+ * Query parameter a leaf's URL carries when its instance loads helper files once per importing api file (the
+ * `helpers: "module"` option), and its value. A helper loaded for such a leaf carries it too, with
+ * {@link HELPERS_FOR_PARAM} naming the api file it was loaded for and {@link HELPERS_MOUNT_PARAM} that file's mount,
+ * so each api file gets its own copy of every helper it imports, and a copy's stack frames name the file it runs for.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_PARAM = "slothlet_helpers";
+
+/**
+ * The value of {@link HELPERS_PARAM}.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_PER_MODULE = "module";
+
+/**
+ * Query parameter of a helper copy: the path of the api file it was loaded for (see {@link HELPERS_PARAM}).
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_FOR_PARAM = "slothlet_for";
+
+/**
+ * Query parameter of a helper copy: the mount (`module` parameter) of the api file it was loaded for.
+ * @type {string}
+ * @internal
+ */
+export const HELPERS_MOUNT_PARAM = "slothlet_mount";
+
+/**
  * The marker a parent's URL/id must carry for its imports to be rewritten.
  * @type {string}
  * @private
@@ -276,10 +307,13 @@ function publishScripts(state) {
  * @typedef {object} InstanceImportState
  * @property {Map<string, Map<string, object>>} scopes - Per instance ID: the private CommonJS module
  *   copies of that instance, by filename.
- * @property {{ instanceID: string, anchor: string }|null} active - The scope a synchronous
- *   {@link requireInInstance} is running in (`anchor` is the file it required), else null.
- * @property {(filePath: string, instanceID: string) => *} requireCJS - Entry point of the ESM wrapper
- *   generated for a CommonJS helper.
+ * @property {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null }|null} active - The
+ *   scope a synchronous {@link requireInInstance} is running in (`anchor` is the file it required; `importer` the api
+ *   file whose own copies are served, under `helpers: "module"`), else null.
+ * @property {(filePath: string, instanceID: string, importer?: string|null, mount?: string|null) => *} requireCJS -
+ *   Entry point of the ESM wrapper generated for a CommonJS helper.
+ * @property {Map<string, Map<string, Map<string, object>>>} [copies] - Per instance ID and importing api file (with
+ *   its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.
  * @property {(url: string) => *} requireESM - Entry point of the CommonJS stub generated for a
  *   `require()` of an ES module.
  * @property {Map<string, Map<string, Set<string>>>} [graphs] - Per instance ID: for each file of the
@@ -304,7 +338,12 @@ function publishScripts(state) {
 function sharedState() {
 	let state = globalThis[STATE];
 	if (state === undefined) {
-		state = { scopes: new Map(), active: null, requireCJS: (filePath, instanceID) => requireInInstance(filePath, instanceID), requireESM };
+		state = {
+			scopes: new Map(),
+			active: null,
+			requireCJS: (filePath, instanceID, importer = null, mount = null) => requireInInstance(filePath, instanceID, { importer, mount }),
+			requireESM
+		};
 		// Fixed once made, so no code can put another state object in its place.
 		Object.defineProperty(globalThis, STATE, { value: state, enumerable: false, configurable: false, writable: false });
 	}
@@ -395,6 +434,31 @@ function toSlashPath(ref) {
 		p = decodeURIComponent(p.replace(/^file:\/\/[^/]*/, ""));
 	}
 	return p.replace(/\\/g, "/");
+}
+
+/**
+ * The path an api file is named by on the helper copies loaded for it (see {@link HELPERS_FOR_PARAM}): its
+ * forward-slash path, a Windows drive path without the slash a `file:` URL puts before it, so the file's URL and its
+ * filesystem path name it alike.
+ * @param {string} ref - A `file:` URL, an absolute path (either separator), or a vite id.
+ * @returns {string} The path.
+ * @private
+ */
+function helperImporterPath(ref) {
+	const path = toSlashPath(ref);
+	return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path;
+}
+
+/**
+ * The key an api file's own CommonJS copies are kept under (`helpers: "module"`): the file, and its mount when it has
+ * one, so one file mounted twice keeps two sets.
+ * @param {string} importer - The api file, as {@link helperImporterPath} names it.
+ * @param {string|null} mount - Its mount.
+ * @returns {string} The key.
+ * @private
+ */
+function helperCopyKey(importer, mount) {
+	return mount ? `${importer}\u0000${mount}` : importer;
 }
 
 /**
@@ -573,7 +637,8 @@ function belongsToInstance(specifier, child, parent) {
 /**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
- * on vite ids (absolute paths with an optional query) alike.
+ * on vite ids (absolute paths with an optional query) alike. When the parent carries {@link HELPERS_PARAM}
+ * (the `helpers: "module"` option), the child is the copy of the api file the parent is, or was loaded for.
  * @param {string} specifier - The specifier as written in the importer.
  * @param {string|undefined} parent - The importer's URL or id.
  * @param {string} child - The resolved child URL or id.
@@ -591,9 +656,19 @@ export function propagateInstanceQuery(specifier, parent, child) {
 	const childParams = new URLSearchParams(childQuery);
 	if (childParams.has("slothlet_instance")) return child;
 	if (!belongsToInstance(specifier, childBase, parent)) return child;
-	const parentParams = new URLSearchParams(splitQuery(parent)[1] ?? "");
+	const [parentBase, parentQuery = ""] = splitQuery(parent);
+	const parentParams = new URLSearchParams(parentQuery);
 	for (const key of INSTANCE_QUERY_KEYS) {
 		if (parentParams.has(key)) childParams.set(key, parentParams.get(key));
+	}
+	// Helpers loaded once per importing api file: the copy names the api file it is loaded for (the importer, or the
+	// file the importing helper's own copy was loaded for) and that file's mount.
+	if (parentParams.get(HELPERS_PARAM) === HELPERS_PER_MODULE) {
+		childParams.set(HELPERS_PARAM, HELPERS_PER_MODULE);
+		const loadedFor = parentParams.get(HELPERS_FOR_PARAM);
+		childParams.set(HELPERS_FOR_PARAM, loadedFor ?? helperImporterPath(parentBase));
+		const mount = loadedFor === null ? parentParams.get("module") : parentParams.get(HELPERS_MOUNT_PARAM);
+		if (mount !== null) childParams.set(HELPERS_MOUNT_PARAM, mount);
 	}
 	const hashIdx = childBase.indexOf("#");
 	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
@@ -635,24 +710,47 @@ function splitQuery(ref) {
  * @param {object} [options] - Options.
  * @param {boolean} [options.fresh=false] - Evaluate the file itself anew instead of serving (and
  *   keeping) the instance's copy of it — how a leaf is loaded, so a partial reload re-runs it.
+ * @param {string|null} [options.importer=null] - The api file the copies are served for, when the instance loads
+ *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
+ *   instance.
+ * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
  * @returns {*} The file's `module.exports`.
  * @internal
  * @example
  * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
  */
-export function requireInInstance(filePath, instanceID, { fresh = false } = {}) {
+export function requireInInstance(filePath, instanceID, { fresh = false, importer = null, mount = null } = {}) {
 	const requireFn = nodeBuiltin("node:module").createRequire(filePath);
 	const resolved = requireFn.resolve(filePath);
 	const cache = requireFn.cache;
 	const state = sharedState();
 	const outer = state.active;
-	// Already inside this instance's scope (a helper reached during its require): the cache is swapped in.
-	if (!fresh && outer !== null && outer.instanceID === instanceID) return requireFn(resolved);
+	if (importer !== null) importer = helperImporterPath(importer);
+	// Already inside this scope (a helper reached during its require): the cache is swapped in.
+	if (
+		!fresh &&
+		outer !== null &&
+		outer.instanceID === instanceID &&
+		(outer.importer ?? null) === importer &&
+		(importer === null || (outer.mount ?? null) === mount)
+	)
+		return requireFn(resolved);
 
-	let scope = state.scopes.get(instanceID);
-	if (!scope) {
-		scope = new Map();
-		state.scopes.set(instanceID, scope);
+	let scope;
+	if (importer === null) {
+		scope = state.scopes.get(instanceID);
+		if (!scope) {
+			scope = new Map();
+			state.scopes.set(instanceID, scope);
+		}
+	} else {
+		// Helpers loaded once per importing api file: that file's own copies.
+		state.copies ??= new Map();
+		let copies = state.copies.get(instanceID);
+		if (!copies) state.copies.set(instanceID, (copies = new Map()));
+		const copyKey = helperCopyKey(importer, mount);
+		scope = copies.get(copyKey);
+		if (!scope) copies.set(copyKey, (scope = new Map()));
 	}
 	const owned = (file) => file === resolved || isInstanceScopedFile(file, resolved);
 	const keep = (file) => !(fresh && file === resolved);
@@ -679,7 +777,7 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 		if (!state.leaves.has(instanceID)) state.leaves.set(instanceID, new Set());
 		state.leaves.get(instanceID).add(resolved);
 	}
-	state.active = { instanceID, anchor: resolved };
+	state.active = { instanceID, anchor: resolved, importer, mount };
 	try {
 		return requireFn(resolved);
 	} finally {
@@ -749,7 +847,10 @@ export function instanceImporters(instanceID) {
 export function instanceCommonJSFiles(instanceID) {
 	const scope = globalThis[STATE]?.scopes.get(instanceID);
 	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
-	return [...(scope ? scope.keys() : []), ...(leaves ?? [])];
+	const files = [...(scope ? scope.keys() : []), ...(leaves ?? [])];
+	// The copies kept per importing api file (`helpers: "module"`).
+	for (const copies of globalThis[STATE]?.copies?.get(instanceID)?.values() ?? []) files.push(...copies.keys());
+	return files;
 }
 
 /**
@@ -766,8 +867,12 @@ export function instanceCommonJSFiles(instanceID) {
 export function instanceCommonJSVersion(instanceID) {
 	const scope = globalThis[STATE]?.scopes.get(instanceID);
 	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
-	const key = leaves ?? scope;
-	return key ? { key, count: (scope?.size ?? 0) + (leaves?.size ?? 0) } : null;
+	const copies = globalThis[STATE]?.copies?.get(instanceID);
+	const key = leaves ?? scope ?? copies;
+	if (!key) return null;
+	let count = (scope?.size ?? 0) + (leaves?.size ?? 0);
+	for (const held of copies?.values() ?? []) count += held.size;
+	return { key, count };
 }
 
 /**
@@ -783,6 +888,7 @@ export function instanceCommonJSVersion(instanceID) {
 export function releaseInstanceScope(instanceID) {
 	if (instanceID == null) return;
 	globalThis[STATE]?.scopes.delete(instanceID);
+	globalThis[STATE]?.copies?.delete(instanceID);
 	globalThis[STATE]?.graphs?.delete(instanceID);
 	globalThis[STATE]?.leaves?.delete(instanceID);
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
@@ -858,6 +964,12 @@ function markScopedRequire(specifier, context, result, active) {
 	if (typeof parent !== "string" || !isInstanceScopedFile(parent, active.anchor) || !belongsToInstance(specifier, url, parent))
 		return result;
 	const query = new URLSearchParams({ slothlet_instance: active.instanceID });
+	// Inside the copies of one api file (`helpers: "module"`), the ES module is that file's copy too.
+	if (active.importer) {
+		query.set(HELPERS_PARAM, HELPERS_PER_MODULE);
+		query.set(HELPERS_FOR_PARAM, active.importer);
+		if (active.mount) query.set(HELPERS_MOUNT_PARAM, active.mount);
+	}
 	query.set(REQUIRE_PARAM, "1");
 	return { ...result, url: `${url}?${query}` };
 }
@@ -870,12 +982,15 @@ function markScopedRequire(specifier, context, result, active) {
  * @param {string} filePath - Absolute path of the CommonJS file.
  * @param {string} instanceID - The instance ID.
  * @param {string|null|undefined|Uint8Array} source - Its source, when the loader already read it.
+ * @param {string|null} [importer=null] - The api file the copy is loaded for (`helpers: "module"`): the file then
+ *   runs through that api file's own CommonJS cache.
+ * @param {string|null} [mount=null] - That api file's mount.
  * @returns {string} The wrapper's ES module source.
  * @internal
  * @example
  * commonJSWrapperSource("/app/lib/state.cjs", "inst-a", null);
  */
-export function commonJSWrapperSource(filePath, instanceID, source) {
+export function commonJSWrapperSource(filePath, instanceID, source, importer = null, mount = null) {
 	const fs = nodeBuiltin("node:fs");
 	const { createRequire } = nodeBuiltin("node:module");
 	const text = source == null ? fs.readFileSync(filePath, "utf8") : typeof source === "string" ? source : new TextDecoder().decode(source);
@@ -886,13 +1001,19 @@ export function commonJSWrapperSource(filePath, instanceID, source) {
 		})
 	);
 	// Like Node, a module that has already run contributes the keys it actually exports.
-	const loaded = globalThis[STATE]?.scopes.get(instanceID)?.get(filePath);
+	const loaded = (
+		importer === null
+			? globalThis[STATE]?.scopes.get(instanceID)
+			: globalThis[STATE]?.copies?.get(instanceID)?.get(helperCopyKey(helperImporterPath(importer), mount))
+	)?.get(filePath);
 	if (loaded?.loaded && loaded.exports !== null && (typeof loaded.exports === "object" || typeof loaded.exports === "function")) {
 		for (const key of Object.keys(loaded.exports)) if (key !== "default" && key.isWellFormed()) names.add(key);
 	}
 	names.delete("module.exports");
 	const lines = [
-		`const m = globalThis[Symbol.for(${JSON.stringify(STATE.description)})].requireCJS(${JSON.stringify(filePath)}, ${JSON.stringify(instanceID)});`,
+		`const m = globalThis[Symbol.for(${JSON.stringify(STATE.description)})].requireCJS(${JSON.stringify(filePath)}, ${JSON.stringify(instanceID)}${
+			importer === null ? "" : `, ${JSON.stringify(importer)}, ${JSON.stringify(mount)}`
+		});`,
 		"export default m;",
 		'export { m as "module.exports" };'
 	];
@@ -902,6 +1023,17 @@ export function commonJSWrapperSource(filePath, instanceID, source) {
 		n++;
 	}
 	return lines.join("\n") + "\n";
+}
+
+/**
+ * The api file a helper copy's URL says it was loaded for (see {@link HELPERS_PARAM}), or null for a helper loaded
+ * once per instance.
+ * @param {URLSearchParams} params - The URL's query.
+ * @returns {string|null} The api file's path.
+ * @private
+ */
+function helperCopyImporter(params) {
+	return params.get(HELPERS_PARAM) === HELPERS_PER_MODULE ? params.get(HELPERS_FOR_PARAM) : null;
 }
 
 /**
@@ -950,7 +1082,13 @@ function loadInstanceModule(url, context, nextLoad) {
 	return {
 		format: "module",
 		shortCircuit: true,
-		source: commonJSWrapperSource(nodeBuiltin("node:url").fileURLToPath(base), instanceID, result.source)
+		source: commonJSWrapperSource(
+			nodeBuiltin("node:url").fileURLToPath(base),
+			instanceID,
+			result.source,
+			helperCopyImporter(params),
+			params.get(HELPERS_MOUNT_PARAM)
+		)
 	};
 }
 
@@ -1610,7 +1748,8 @@ export function slothletInstanceImports() {
 			if (/\.json$/i.test(toSlashPath(base)))
 				return { code: `export default ${JSON.stringify(JSON.parse(nodeBuiltin("node:fs").readFileSync(base, "utf8")))};\n`, map: null };
 			if (!isCommonJSFile(base)) return null;
-			return { code: commonJSWrapperSource(base, instanceID, null) };
+			const params = new URLSearchParams(query);
+			return { code: commonJSWrapperSource(base, instanceID, null, helperCopyImporter(params), params.get(HELPERS_MOUNT_PARAM)) };
 		}
 	};
 }
