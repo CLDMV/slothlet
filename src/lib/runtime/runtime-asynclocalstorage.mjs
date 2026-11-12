@@ -130,6 +130,12 @@ export const self = new NativeProxy(
 				if (read) return read.value;
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
+			// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
+			// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
+			if (!ctx.currentWrapper && !ctx.record && ctx.parentInstanceID) {
+				const read = runtime_selfReadAsDefiner(self, prop, null, ctx.parentInstanceID);
+				if (read) return read.value;
+			}
 			return runtime_selfMember(prop, ctx.self[prop]);
 		},
 		ownKeys() {

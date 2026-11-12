@@ -1253,6 +1253,27 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+	 * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+	 * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+	 * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+	 * runs.
+	 * @returns {string|null} The instance's id.
+	 * @internal
+	 * @example
+	 * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+	 */
+	runningInstanceID() {
+		const id = this.currentInstanceID;
+		if (id === null || id === undefined) return null;
+		const family = this.#familyOf(id);
+		// Naming an instance's own store while nothing of any instance is entered or waiting, the field is only the
+		// last instance used. A `run()` / `scope()` store is active only while its callback runs.
+		if (id === family && this.#syncDepth === 0 && this.#busyStores.size === 0) return null;
+		return family;
+	}
+
+	/**
 	 * Run a callback as no module and not as the host, for as long as its synchronous body runs: a permission check made
 	 * from it fails closed.
 	 * @param {string|null} instanceID - The instance, or null to hold every instance's store.

@@ -111,6 +111,7 @@ import {
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { enableClonePatching, disableClonePatching } from "@cldmv/slothlet/helpers/clone-context";
+import { enableAsyncResourcePatching, disableAsyncResourcePatching } from "@cldmv/slothlet/helpers/async-resource-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
@@ -1013,6 +1014,10 @@ class Slothlet {
 		// nothing for this patch, which runs on every `then` in the process (#601 review).
 		if (typeof this.contextManager.runRegisteredAsHost === "function") {
 			enablePromisePatching();
+			// `AsyncLocalStorage.snapshot()` / `bind()` and `AsyncResource` restore Node's async context, which the live
+			// runtime's identity is not part of: what they run is pinned to the caller that made them. Live runtime
+			// only, as the promise patch is, and released with it.
+			enableAsyncResourcePatching();
 			promisePatchHolders.add(this.instanceID);
 		}
 
@@ -1759,7 +1764,10 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		boundaryPatchHolders.delete(this.instanceID);
-		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
+		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) {
+			disablePromisePatching();
+			disableAsyncResourcePatching();
+		}
 		if (boundaryPatchHolders.size === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();

@@ -1864,19 +1864,28 @@ export function resolveSupplier(record) {
  * @param {Iterable<object>} frames - The capture, innermost first.
  * @param {number} index - The index of the frame the callers are further out than.
  * @param {object|null} [slothlet=null] - Read only this instance's leaves; every running instance's when null.
+ * @param {boolean} [throughOwnEntry=false] - Pass over the entry slothlet made for the running flow itself, when it
+ *   is the first thing further out: a flow the live runtime re-entered (what a file made at load, run from inside
+ *   some call) has that entry between its code and the code that ran it, where the async runtime has none.
  * @returns {Array<object>} The callers' wrappers, none when there are none.
  * @private
  */
-function runtime_outerCallers(frames, index, slothlet = null) {
+function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = false) {
 	const callers = new Set();
 	let position = -1;
+	// Whether anything but slothlet's own frames has been passed since the frame the walk started after.
+	let passedCode = false;
 	for (const frame of frames) {
 		position++;
 		if (position <= index) continue;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
-			if (frame.enter) break;
+			if (frame.enter) {
+				if (!throughOwnEntry || passedCode) break;
+				throughOwnEntry = false;
+			}
 			continue;
 		}
+		passedCode = true;
 		if (frame.async || isRunnerFrame(frame)) break;
 		if (frame.evaluated || frame.path.startsWith("node:") || isForeignScript(frame)) continue;
 		const leaves = slothlet ? runtime_leavesAt(slothlet, frame) : runtime_leavesAtLocation(frame.path, frame.line);
@@ -1919,12 +1928,20 @@ function runtime_topLevelRunning(record) {
 	const { place } = createFramePlacer([entry]);
 	const decide = (frames) => {
 		let index = -1;
+		// Whether the entry slothlet made for this flow itself was passed with no code of anyone's before it: the flow
+		// was re-entered (the live runtime's pin) by code further out, which is then what is asked about.
+		let passedOwnEntry = false;
+		let passedCode = false;
 		for (const frame of frames) {
 			index++;
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
-				if (frame.enter) return null;
+				if (frame.enter) {
+					if (passedOwnEntry || passedCode) return null;
+					passedOwnEntry = true;
+				}
 				continue;
 			}
+			passedCode = true;
 			if (frame.async || isRunnerFrame(frame)) return null;
 			if (frame.evaluated || isForeignScript(frame)) return UNACCOUNTED_SUPPLIER;
 			// Node's own code acts for whoever called it: the next frame out decides.
@@ -1937,7 +1954,7 @@ function runtime_topLevelRunning(record) {
 				if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return UNACCOUNTED_SUPPLIER;
 				const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 				// Every leaf whose code is further out on the stack is a caller too: the code ran through them.
-				const callers = runtime_outerCallers(frames, index, slothlet).filter((caller) => caller !== module && caller !== definers[0]);
+				const callers = runtime_outerCallers(frames, index, slothlet, true).filter((caller) => caller !== module && caller !== definers[0]);
 				if (definers.length === 1 && definers[0] === module && !callers.length) return null;
 				return { wrapper: definers[0], ceiling: combineCeilings(module, record.ceiling ?? null, ...definers.slice(1), ...callers) };
 			}
@@ -3319,12 +3336,14 @@ function runtime_instanceRuns(slothlet) {
  * made has no standing. With it off they are not: nothing is checked (#726). Null when
  * none match, or when leaves of more than one running instance do (a file two instances load without a tag telling them
  * apart). The copy an instance that has shut down left behind is read only when no running instance holds the file.
+ * A file several running instances hold is the one's whose flow is running, when something says which that is.
  * @param {string} path - Comparable path.
  * @param {string} line - Raw text holding the location's tags.
+ * @param {string|null} [running=null] - The instance whose flow is running, when one is.
  * @returns {Array<object>|null} Leaves of one instance.
  * @private
  */
-function runtime_leavesAtLocation(path, line) {
+function runtime_leavesAtLocation(path, line, running = null) {
 	const tag = runtime_frameInstanceTag(line);
 	const mount = runtime_frameModuleTag(line);
 	let found = null;
@@ -3332,6 +3351,8 @@ function runtime_leavesAtLocation(path, line) {
 	// What an instance that has shut down left behind: read only when no running instance holds the file.
 	let gone = null;
 	let goneInstance = null;
+	// Whether more than one running instance holds the file: only the one whose flow is running is then read.
+	let several = false;
 	for (const [id, reference] of LIVE_INSTANCES) {
 		if (tag && id !== tag) continue;
 		const slothlet = reference.deref();
@@ -3353,10 +3374,17 @@ function runtime_leavesAtLocation(path, line) {
 			goneInstance ??= slothlet;
 			continue;
 		}
-		if (instance && instance !== slothlet) return null;
+		// Leaves of a second running instance: the frame carries no tag to tell them apart. The instance whose flow is
+		// running holds the code that is running; with nothing naming one, the code cannot be placed.
+		if (instance && instance !== slothlet) {
+			if (running === null) return null;
+			several = true;
+			if (id !== running) continue;
+		}
 		instance = slothlet;
 		found = leaves;
 	}
+	if (several && instance.instanceID !== running) return null;
 	return found ?? gone;
 }
 
@@ -3369,10 +3397,13 @@ function runtime_leavesAtLocation(path, line) {
  * outside every export, in a tree where no node was built for the file itself).
  * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
  * runtime_outerCallers), which have to be allowed as well.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true}|null} The definer.
+ * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
+ *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
  * @internal
  */
-export function frameDefiner() {
+export function frameDefiner(running = null) {
 	const frames = runtime_captureFrames(24);
 	let index = -1;
 	// The helper file of an instance the innermost code runs in, while the walk looks for the leaf that called it.
@@ -3385,9 +3416,9 @@ export function frameDefiner() {
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
 		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
-		const leaves = runtime_leavesAtLocation(frame.path, frame.line);
+		const leaves = runtime_leavesAtLocation(frame.path, frame.line, running);
 		if (leaves === null) {
-			if (runtime_isInstanceFile(frame.path)) return { unplaced: true };
+			if (runtime_isInstanceFile(frame.path)) return { unplaced: true, shared: true };
 			// A helper file of an instance that is no api file (one a leaf imports): its code runs for the leaf whose code
 			// called it, so the walk goes on outward to the first frame of a leaf's file.
 			const owner = runtime_helperOwner(frame, helper?.slothlet ?? null);

@@ -50,8 +50,9 @@ for (const attribution of ["precise", "fast"])
 		for (const runtime of ["async", "live"]) MATRIX.push({ name: `${attribution} ${mode}/${runtime}`, attribution, mode, runtime });
 
 /**
- * The rule sets, each with what every route gives under it. `carried` routes ride on Node's async context, which only
- * the async runtime's store is part of: `null` where the live runtime has nothing to carry.
+ * The rule sets, each with what every route gives under it. `carried` routes ride on Node's async context
+ * (`AsyncLocalStorage.snapshot()`, an `AsyncResource`): the async runtime's store is part of it, and the live runtime
+ * pins what they run to the load that made them, so both carry the file's module.
  */
 const RULE_SETS = [
 	{
@@ -82,7 +83,7 @@ const RULE_SETS = [
 			nestedClosure: DENIED,
 			helperClosure: DENIED
 		},
-		carried: { async: DENIED, live: null }
+		carried: { async: DENIED, live: DENIED }
 	},
 	{
 		rules: "the module's leaves denied",

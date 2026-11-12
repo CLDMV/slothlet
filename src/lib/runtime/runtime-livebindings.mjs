@@ -194,6 +194,12 @@ export const self = new NativeProxy(
 				runtime_refuseUnknownCaller(prop);
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
+			// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
+			// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
+			if (resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID) {
+				const read = runtime_selfReadAsDefiner(self, prop, null, ctx.parentInstanceID);
+				if (read) return read.value;
+			}
 			return runtime_selfMember(prop, ctx.self[prop], resolved);
 		},
 		// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but

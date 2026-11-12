@@ -236,6 +236,66 @@ describe.each(MODES)("Permissions > attribution: fast > $name (#726)", ({ mode, 
 	});
 });
 
+/**
+ * As {@link runCommonJSPair}, with the host running each closure inside a `run()` flow of an instance: the flow names
+ * the instance whose code is running, which the frames of a CommonJS file do not.
+ * @param {string} attribution - The attribution value for both instances.
+ * @param {string} mode - Eager or lazy.
+ * @param {string} runtime - Async or live.
+ * @returns {{own: Array<*>, other: Array<*>}} What each closure returned, run in its own instance's flow and in the
+ *   other instance's, or the code of what it threw.
+ */
+function runCommonJSPairInFlow(attribution, mode, runtime) {
+	const script = `
+		import slothlet from "@cldmv/slothlet";
+		const settle = async (fn) => { try { return await fn(); } catch (e) { return e?.code ?? String(e?.message ?? e); } };
+		const base = ${JSON.stringify(path.resolve(HERE, "../../../../api_tests/api_test_definer_rule_cjs"))};
+		const pair = [];
+		for (const rules of [[{ caller: "bag.**", target: "vault.**", effect: "allow" }], []]) {
+			const instance = await slothlet({ base, mode: ${JSON.stringify(mode)}, runtime: ${JSON.stringify(runtime)}, silent: true,
+				permissions: { defaultPolicy: "deny", attribution: ${JSON.stringify(attribution)}, rules } });
+			await settle(() => instance.vault.get());
+			pair.push(instance);
+		}
+		const closures = await Promise.all(pair.map((instance) => instance.bag.make()));
+		const out = { own: [], other: [] };
+		for (let i = 0; i < 2; i++) out.own.push(await settle(() => pair[i].slothlet.context.run({}, () => closures[i]())));
+		for (let i = 0; i < 2; i++) out.other.push(await settle(() => pair[i].slothlet.context.run({}, () => closures[1 - i]())));
+		for (const instance of pair) await instance.shutdown();
+		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
+		process.exit(0);
+	`;
+	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
+		cwd: path.resolve(HERE, "../../../.."),
+		encoding: "utf8",
+		timeout: 120000
+	});
+	const line = String(child.stdout)
+		.split("\n")
+		.find((text) => text.startsWith("RESULT "));
+	if (!line) throw new Error(`no result: ${child.stderr}`);
+	return JSON.parse(line.slice("RESULT ".length));
+}
+
+describe.each(MODES)(
+	"Permissions > attribution > a CommonJS file two running instances load, in a flow that names the instance > $name",
+	({ mode, runtime }) => {
+		// The first instance lets bag read the vault, the second does not. Inside an instance's flow the code of a
+		// CommonJS file both hold is that instance's: checked under that instance's rules.
+		it("precise: each closure keeps the instance that made it, whichever flow runs it", () => {
+			// A stand-in records its instance: the first instance's closure reads the vault it may read, the second's is
+			// refused, and run in the other instance's flow each still answers by its own instance's rules.
+			expect(runCommonJSPairInFlow("precise", mode, runtime)).toEqual({ own: [42, DENIED], other: [DENIED, 42] });
+		});
+
+		it("fast: the code is the running instance's, where a flow names one", () => {
+			// Nothing records where a closure came from, so the flow decides: in the first instance's flow the code is
+			// that instance's bag (allowed), in the second's it is that instance's bag (denied), whichever closure runs.
+			expect(runCommonJSPairInFlow("fast", mode, runtime)).toEqual({ own: [42, DENIED], other: [42, DENIED] });
+		});
+	}
+);
+
 describe.each(MODES)("Permissions > attribution > removed and shut-down modules > $name (#726)", ({ mode, runtime }) => {
 	it.each([["precise"], ["fast"]])("%s: code of a removed node has no standing", async (attribution) => {
 		await open({ mode, runtime, attribution });

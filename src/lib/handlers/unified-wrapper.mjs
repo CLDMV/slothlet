@@ -4292,12 +4292,18 @@ export function registerRuntimeSelf(contextManager, selfProxy) {
  * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
  *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
  *   read as its definer.
+ * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
+ *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
+ *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null) {
-	const definer = frameDefiner();
+export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null) {
+	const definer = frameDefiner(loadingInstanceID ?? hostFlowInstanceID);
 	if (definer === null) return null;
+	// In a flow the host opened, code whose definer the frames cannot tell for want of a file (evaluated code) is
+	// the host's as before: only a file several running instances hold untold apart is refused there.
+	if (hostFlowInstanceID !== null && definer.unplaced && !definer.shared) return null;
 	if (loadingInstanceID !== null) {
 		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
 		if (!owner || owner.instanceID === loadingInstanceID) return null;
@@ -4364,7 +4370,11 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null) 
 		resolved.identity = identity;
 	}
 	if (identity?.currentWrapper || (identity?.unresolved && !(unaccounted && identity.unaccounted))) return null;
-	const leaf = frameDefiner()?.wrapper;
+	const definer = frameDefiner(contextManager.runningInstanceID?.() ?? null);
+	// Code of a file several running instances hold, with nothing naming which of them is running: it is some
+	// module's, so it is not run as the host's.
+	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	const leaf = definer?.wrapper;
 	return leaf && leaf.slothlet === slothlet ? leaf : null;
 }
 

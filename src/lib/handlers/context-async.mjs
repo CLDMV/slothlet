@@ -447,6 +447,20 @@ export class AsyncContextManager {
 	}
 
 	/**
+	 * The instance whose flow is running: the one the active store belongs to (a call, a hook, a `run()` or `scope()`
+	 * callback, a file's load), or null when no store is active. Code of a file that carries no instance tag (a
+	 * CommonJS file two instances load) is that instance's while its flow runs.
+	 * @returns {string|null} The instance's id.
+	 * @internal
+	 * @example
+	 * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+	 */
+	runningInstanceID() {
+		const store = this.als?.getStore();
+		return store ? (store.parentInstanceID ?? store.instanceID ?? null) : null;
+	}
+
+	/**
 	 * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
 	 * instance that has shut down made reaches no instance's api and no module's identity.
 	 * @param {Function} fn - What to run.
