@@ -20,8 +20,10 @@
  * and slothlet's runtime are made by no module and come back as themselves: `===` and `instanceof` hold against the
  * host's own import, for every module and instance. A package's exports are handed out as the module's, like its own
  * code — anyone can put code under `node_modules` — and work as they would, though `instanceof` holds against the class
- * the module hands out rather than the host's own import of the package. A function a module puts on a built-in,
- * and a plugin's own helper reached through its package name, are that module's code and stay stand-ins.
+ * the module hands out rather than the host's own import of the package. A function a module puts on a built-in is
+ * that module's code and stays a stand-in. A plugin's own helper, reached through its package name, is the plugin's
+ * too: the instance loads the plugin's files under its own URL (#731), so the function is the instance's copy of the
+ * helper, not the one the host's own import of the file evaluates, whether or not anything is wrapped.
  */
 
 import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
@@ -472,6 +474,10 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { moduleID: "plug" });
 		const helper = await api.plug.leaf.helper();
 		const own = await import(pathToFileURL(path.join(PACKAGES, "plug", "lib", "helper.mjs")).href);
+		// The permission system is off here, so nothing is wrapped: the helper is the plugin's function itself, not a
+		// stand-in. It differs from the host's import because the instance loads the plugin's own files under its own
+		// URL (#731): the plugin's `helperFn` is the instance's copy of `helper.mjs`, the host's is another.
+		expect(types.isProxy(helper)).toBe(false);
 		expect(helper).not.toBe(own.helperFn);
 		expect(helper()).toBe("helper");
 	});
