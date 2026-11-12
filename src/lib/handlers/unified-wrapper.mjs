@@ -11261,11 +11261,14 @@ export class UnifiedWrapper extends ComponentBase {
 	 * the function directly since keepImplProperties prevents depletion.
 	 *
 	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+	 * @param {(function(Object, PropertyKey): {value?: *, withheld?: boolean})|null} [readMember=null] - Given when the
+	 *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
+	 *   The object is then built in the order its node lists its members (#747).
 	 * @returns {*} The reconstructed implementation mirroring original module exports
 	 * @static
 	 * @private
 	 */
-	static _extractFullImpl(wrapper) {
+	static _extractFullImpl(wrapper, readMember = null) {
 		if (!wrapper) return null;
 
 		const impl = wrapper.____slothletInternal.impl;
@@ -11305,6 +11308,37 @@ export class UnifiedWrapper extends ComponentBase {
 				);
 			}
 			return extractFullImpl_layer;
+		}
+
+		// Serialized, the object is rebuilt as a read of it lists it (#747): the node's members in the order the node
+		// holds them, which is the order of the module's object, then what only the impl still holds. An accessor is
+		// read through the node, so the module's getter runs as the node runs it (on the node, as the module, behind
+		// the node's checks), where reading it off the emptied impl ran it on an object missing every adopted member.
+		if (readMember) {
+			const serialized = {};
+			const take = (key, holder) => {
+				const held = Objects.getOwnPropertyDescriptor(holder, key);
+				if ("value" in held && holder === wrapper) {
+					const child = resolveWrapper(held.value);
+					serialized[key] = child ? UnifiedWrapper._extractFullImpl(child, readMember) : held.value;
+					return;
+				}
+				if ("value" in held) {
+					serialized[key] = held.value;
+					return;
+				}
+				const read = readMember(wrapper, key);
+				if (read.withheld) return;
+				const answered = resolveWrapper(read.value);
+				serialized[key] = answered ? UnifiedWrapper._extractFullImpl(answered, readMember) : read.value;
+			};
+			for (const key of Objects.keys(wrapper)) {
+				if (!UnifiedWrapper.INTERNAL_KEYS.has(key)) take(key, wrapper);
+			}
+			for (const key of Objects.keys(impl)) {
+				if (!isFrameworkReservedKey(key) && !hasOwn(serialized, key) && !hasOwn(wrapper, key)) take(key, impl);
+			}
+			return serialized;
 		}
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
@@ -14755,7 +14789,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// The snapshot for the given readers (`undefined` for whoever is reading now), read through `node`: a
 				// module's kept node serializes for that module and for the module serializing it.
 				const serialize = (readers, node, kept = null) => {
-					const data = UnifiedWrapper._extractFullImpl(wrapper);
+					// A getter is read through its node as whoever serializes now; one that reader may not run is left out,
+					// as a member the reader may not read is.
+					const readMember = (holder, key) => {
+						try {
+							return { value: holder.createProxy()[key] };
+						} catch (error) {
+							if (error?.code === "PERMISSION_DENIED") return { withheld: true };
+							throw error;
+						}
+					};
+					const data = UnifiedWrapper._extractFullImpl(wrapper, readMember);
 					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
 					// paths — for lazy folder leaves) that must never leak into serialization output.
 					if (data && typeof data === "object") {

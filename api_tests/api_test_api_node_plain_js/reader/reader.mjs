@@ -57,3 +57,9 @@ export const view = () => ({
 	nested: types.isProxy(self.owner.config.nested),
 	port: self.owner.config.port
 });
+
+/**
+ * The owner's `config` as this module serializes it.
+ * @returns {string} `JSON.stringify(self.owner.config)`.
+ */
+export const serialize = () => JSON.stringify(self.owner.config);

@@ -19,10 +19,16 @@
  */
 
 /**
- * The owner's data object.
- * @type {{port: number, nested: {a: number}}}
+ * The owner's data object, with a getter that reads it through `this`.
+ * @type {{port: number, nested: {a: number}, doubled: number}}
  */
-export const config = { port: 80, nested: { a: 1 } };
+export const config = {
+	port: 80,
+	nested: { a: 1 },
+	get doubled() {
+		return this.port * 2;
+	}
+};
 
 /**
  * What the owner's own `config` holds, as the owner reads it.

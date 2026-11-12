@@ -35,14 +35,17 @@ export const config = {
 };
 
 /**
- * An object holding an object with a getter of its own.
- * @type {{inner: {base: number, twice: number}}}
+ * An object holding an object with getters of its own, one answering an object.
+ * @type {{inner: {base: number, twice: number, both: {base: number, twice: number}}}}
  */
 export const outer = {
 	inner: {
 		base: 2,
 		get twice() {
 			return this.base * 2;
+		},
+		get both() {
+			return { base: this.base, twice: this.twice };
 		}
 	}
 };

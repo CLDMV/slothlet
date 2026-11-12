@@ -217,6 +217,32 @@ const DESCRIPTIONS = {
 	"what Object.isFrozen answers for an open object": (m) => [Object.isFrozen(m.config), Object.isFrozen(m.frozen)]
 };
 
+/** What `JSON.stringify` makes of `m`'s exports. */
+const SERIALIZED = {
+	"an object with a getter that reads this": (m) => JSON.stringify(m.config),
+	"an object holding one with getters, one answering an object": (m) => JSON.stringify(m.outer),
+	"the object inside it": (m) => JSON.stringify(m.outer.inner),
+	"indented": (m) => JSON.stringify(m.config, null, 2),
+	"inside a plain object and an array": (m) => JSON.stringify({ held: m.config, list: [m.outer] }),
+	"through a replacer": (m) => {
+		const seen = [];
+		const text = JSON.stringify(m.config, (key, value) => {
+			seen.push(key);
+			return value;
+		});
+		return [text, seen];
+	},
+	"after a member is replaced and one is added": (m) => {
+		m.config.port = 81;
+		m.config.added = 1;
+		return JSON.stringify(m.config);
+	},
+	"a frozen object": (m) => JSON.stringify(m.frozen),
+	"a class instance": (m) => JSON.stringify(m.rex),
+	"a list": (m) => JSON.stringify(m.list),
+	"a function": (m) => [JSON.stringify(m.arrow), JSON.stringify({ held: m.arrow })]
+};
+
 describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
 	let api;
 
@@ -233,6 +259,14 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 			const module = await twin("shapes.mjs");
 			await start();
 			expect(answer(() => DESCRIPTIONS[name](api.shapes))).toEqual(answer(() => DESCRIPTIONS[name](module)));
+		});
+	});
+
+	describe("JSON.stringify serializes a node as it serializes the module's own object (#747)", () => {
+		it.each(Object.keys(SERIALIZED))("%s", async (name) => {
+			const module = await twin("shapes.mjs");
+			await start();
+			expect(answer(() => SERIALIZED[name](api.shapes))).toEqual(answer(() => SERIALIZED[name](module)));
 		});
 	});
 
@@ -292,10 +326,10 @@ describe.each(matrix)("api node, plain-JS answers > $mode / $runtime / $name", (
 });
 
 /** What the owner's own object holds before anything is written. */
-const UNCHANGED = { port: 80, nested: { a: 1 }, keys: ["port", "nested"] };
+const UNCHANGED = { port: 80, nested: { a: 1 }, keys: ["port", "nested", "doubled"] };
 
 /** What it holds once every change in the fixture's `change()` has been made. */
-const CHANGED = { port: 82, nested: {}, keys: ["port", "nested", "added", "defined"] };
+const CHANGED = { port: 82, nested: {}, keys: ["port", "nested", "doubled", "added", "defined"] };
 
 /** Lets the writer change the owner's subtree. */
 const WRITER_MAY_WRITE = [
@@ -339,7 +373,7 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 		for (const [change, outcome] of Object.entries(outcomes)) expect(outcome, change).toBe("LOOSE_SET_NOT_OWNED");
 		expect(await api.owner.state()).toEqual(UNCHANGED);
 		expect(api.owner.config.port).toBe(80);
-		expect(Object.keys(api.owner.config)).toEqual(["port", "nested"]);
+		expect(Object.keys(api.owner.config)).toEqual(["port", "nested", "doubled"]);
 		expect(api.owner.config.nested.a).toBe(1);
 	});
 
@@ -364,7 +398,21 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 		api.owner.config.port = 81;
 		api.owner.config.nested.a = 2;
 		api.owner.config.added = 1;
-		expect(await api.owner.state()).toEqual({ port: 81, nested: { a: 2 }, keys: ["port", "nested", "added"] });
+		expect(await api.owner.state()).toEqual({ port: 81, nested: { a: 2 }, keys: ["port", "nested", "doubled", "added"] });
+	});
+
+	it("serializes another module's data for a module as the module's own object serializes", async () => {
+		await mount(WRITER_MAY_WRITE);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		expect(await api.reader.serialize()).toBe(JSON.stringify(owner.config));
+	});
+
+	it("leaves a getter out for a module that may not read it, and still runs it for one that may", async () => {
+		await mount([{ caller: "reader.**", target: "owner.config.doubled", effect: "deny" }]);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		const readable = { port: owner.config.port, nested: owner.config.nested };
+		expect(await api.reader.serialize()).toBe(JSON.stringify(readable));
+		expect(await api.writer.serialize()).toBe(JSON.stringify(owner.config));
 	});
 
 	it("hands a module that may only read another module's data a node, never the module's object", async () => {
