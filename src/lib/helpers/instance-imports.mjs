@@ -316,18 +316,100 @@ function publishScripts(state) {
  *   its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.
  * @property {(url: string) => *} requireESM - Entry point of the CommonJS stub generated for a
  *   `require()` of an ES module.
- * @property {Map<string, Map<string, Set<string>>>} [graphs] - Per instance ID: for each file of the
- *   instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
- *   state object made by an older slothlet copy gains it too.
+ * @property {{of: function(string): (Map<string, Set<string>>|null)}} [imports] - The frozen reader of the import
+ *   graphs the recording copy keeps (see publishImports): a copy of an instance's graph, importers by imported file.
  * @property {Map<string, Set<string>>} [leaves] - Per instance ID: the CommonJS leaves it loaded, which its
  *   private cache does not keep (each load evaluates the leaf anew). Created on first use.
  * @property {(instanceID: string, parent: string, children: string[]) => void} [recordImports] - Records a
- *   module's imports; called by the registration the vite plugin appends to each instance module.
+ *   module's imports; called by the registration the vite plugin appends to each instance module. Fixed on the state,
+ *   and only ever adds an importer.
  * @property {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}} [scripts] - The frozen reader of
  *   the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
  * @property {(url: string) => string} [scriptKeyOf] - How a URL is reduced to its script key, fixed once set.
  * @internal
  */
+
+/**
+ * The import graphs this copy recorded, per instance ID: for each file of an instance's import graph, the files that
+ * import it (forward-slash paths). Kept here, out of every module's reach: whose code a helper file's code is follows
+ * from it, so nothing a module can get hold of may add to it other than a further importer, and nothing may drop or
+ * replace one. Other slothlet copies record into it and read copies of it through what {@link publishImports} fixes
+ * on the process-wide state.
+ * @type {Map<string, Map<string, Set<string>>>}
+ * @private
+ */
+const IMPORT_GRAPHS = new Map();
+
+/**
+ * Record, in this copy's graphs, that one file of an instance imports others. The function fixed on the process-wide
+ * state as `recordImports`: the registration the vite plugin appends to each instance module calls it, as does every
+ * slothlet copy's resolve hook. It only ever adds an importer.
+ * @param {string} instanceID - The instance.
+ * @param {string} parent - The importing file's URL or path.
+ * @param {string[]} children - The imported files' URLs or paths.
+ * @returns {void}
+ * @private
+ */
+function recordImportsHere(instanceID, parent, children) {
+	if (typeof instanceID !== "string" || typeof parent !== "string" || !Array.isArray(children)) return;
+	let graph = IMPORT_GRAPHS.get(instanceID);
+	if (!graph) {
+		graph = new Map();
+		IMPORT_GRAPHS.set(instanceID, graph);
+	}
+	const parentPath = toSlashPath(parent);
+	for (const child of children) {
+		if (typeof child !== "string") continue;
+		const childPath = toSlashPath(child);
+		let parents = graph.get(childPath);
+		if (!parents) {
+			parents = new Set();
+			graph.set(childPath, parents);
+		}
+		const before = parents.size;
+		parents.add(parentPath);
+		// Counted on the graph, so a reader can tell it changed without walking it.
+		if (parents.size !== before) graph.edges = (graph.edges ?? 0) + 1;
+	}
+}
+
+/**
+ * The reader of {@link IMPORT_GRAPHS} this copy fixes on the process-wide state: a copy of an instance's graph, so
+ * nothing read through it reaches the record itself.
+ * @type {{of: function(string): (Map<string, Set<string>>|null)}}
+ * @private
+ */
+const IMPORTS_READER = Object.freeze({
+	of: (instanceID) => {
+		const graph = IMPORT_GRAPHS.get(instanceID);
+		if (!graph) return null;
+		const copy = new Map();
+		for (const [file, importers] of graph) copy.set(file, new Set(importers));
+		copy.edges = graph.edges ?? 0;
+		return copy;
+	}
+});
+
+/**
+ * Fix on the process-wide state the function that records an import and the reader of what was recorded, both of the
+ * first slothlet copy to get here: the record itself stays in that copy (see {@link IMPORT_GRAPHS}). A state an older
+ * copy made carries a `recordImports` any code could replace and keeps its graphs on the state; that member is fixed
+ * to this copy's function.
+ * @param {InstanceImportState} state - The state.
+ * @returns {void}
+ * @private
+ */
+function publishImports(state) {
+	const held = Object.getOwnPropertyDescriptor(state, "recordImports");
+	if (!held || held.writable || held.configurable) {
+		try {
+			Object.defineProperty(state, "recordImports", { value: recordImportsHere, enumerable: true, writable: false, configurable: false });
+		} catch {
+			// A state that cannot take it keeps what it has.
+		}
+	}
+	fixOnState(state, "imports", IMPORTS_READER);
+}
 
 /**
  * The process-wide state, created on first use. Shared through the global object so a leaf loaded by
@@ -347,9 +429,7 @@ function sharedState() {
 		// Fixed once made, so no code can put another state object in its place.
 		Object.defineProperty(globalThis, STATE, { value: state, enumerable: false, configurable: false, writable: false });
 	}
-	state.recordImports ??= (instanceID, parent, children) => {
-		for (const child of children) recordImport(instanceID, parent, child);
-	};
+	publishImports(state);
 	return state;
 }
 
@@ -649,17 +729,24 @@ function belongsToInstance(specifier, child, parent) {
  * // → "file:///app/lib/state.mjs?slothlet_instance=a"
  */
 export function propagateInstanceQuery(specifier, parent, child) {
-	if (typeof parent !== "string" || !parent.includes(MARKER)) return child;
+	if (typeof parent !== "string" || !parent.includes(MARKER)) return withoutWrittenHelperTags(parent, child);
 	if (typeof child !== "string" || typeof specifier !== "string" || specifier.startsWith("node:")) return child;
 	if (!(child.startsWith("file:") || child.startsWith("/") || /^[A-Za-z]:[\\/]/.test(child))) return child;
 	const [childBase, childQuery = ""] = splitQuery(child);
 	const childParams = new URLSearchParams(childQuery);
-	if (childParams.has("slothlet_instance")) return child;
-	if (!belongsToInstance(specifier, childBase, parent)) return child;
 	const [parentBase, parentQuery = ""] = splitQuery(parent);
 	const parentParams = new URLSearchParams(parentQuery);
-	for (const key of INSTANCE_QUERY_KEYS) {
-		if (parentParams.has(key)) childParams.set(key, parentParams.get(key));
+	// A child that names its instance itself (a URL the importer wrote out) keeps the instance it names. Which api file
+	// a helper copy is loaded for is never the importer's to write: those tags are dropped and given as below.
+	const written = childParams.has("slothlet_instance");
+	if (written) {
+		if (!HELPER_TAGS.some((key) => childParams.has(key))) return child;
+		for (const key of HELPER_TAGS) childParams.delete(key);
+	} else {
+		if (!belongsToInstance(specifier, childBase, parent)) return child;
+		for (const key of INSTANCE_QUERY_KEYS) {
+			if (parentParams.has(key)) childParams.set(key, parentParams.get(key));
+		}
 	}
 	// Helpers loaded once per importing api file: the copy names the api file it is loaded for (the importer, or the
 	// file the importing helper's own copy was loaded for) and that file's mount.
@@ -670,6 +757,38 @@ export function propagateInstanceQuery(specifier, parent, child) {
 		const mount = loadedFor === null ? parentParams.get("module") : parentParams.get(HELPERS_MOUNT_PARAM);
 		if (mount !== null) childParams.set(HELPERS_MOUNT_PARAM, mount);
 	}
+	const hashIdx = childBase.indexOf("#");
+	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
+	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
+	return `${base}?${childParams.toString()}${hash}`;
+}
+
+/**
+ * The tags that say a file is a helper copy loaded for one api file (`helpers: "module"`). Only slothlet gives them:
+ * the loader to a leaf, and the resolve hook to what a tagged file imports.
+ * @type {string[]}
+ * @private
+ */
+const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
+
+/**
+ * A resolved child without the helper tags its URL carries, when its importer is neither an instance file nor one of
+ * slothlet's own: a package's file, the host's, evaluated code. A URL is text any code can write, and a copy's frames
+ * are read by those tags, so a file imported under tags its importer wrote is loaded as the same file without them.
+ * @param {string|undefined} parent - The importer's URL or id.
+ * @param {string} child - The resolved child URL or id.
+ * @returns {string} `child`, without the tags where they were not slothlet's to give.
+ * @private
+ */
+function withoutWrittenHelperTags(parent, child) {
+	if (typeof child !== "string" || !child.includes(MARKER)) return child;
+	if (!HELPER_TAGS.some((key) => child.includes(`${key}=`))) return child;
+	if (typeof parent === "string" && OWN_PREFIXES.some((prefix) => toSlashPath(parent).startsWith(prefix))) return child;
+	// Slothlet's loader imports a leaf from its own files; a first import with no importer is the host's entry.
+	if (typeof parent !== "string") return child;
+	const [childBase, childQuery = ""] = splitQuery(child);
+	const childParams = new URLSearchParams(childQuery);
+	for (const key of HELPER_TAGS) childParams.delete(key);
 	const hashIdx = childBase.indexOf("#");
 	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
 	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
@@ -801,23 +920,8 @@ export function requireInInstance(filePath, instanceID, { fresh = false, importe
  * @private
  */
 function recordImport(instanceID, parent, child) {
-	const state = sharedState();
-	state.graphs ??= new Map();
-	let graph = state.graphs.get(instanceID);
-	if (!graph) {
-		graph = new Map();
-		state.graphs.set(instanceID, graph);
-	}
-	const childPath = toSlashPath(child);
-	let parents = graph.get(childPath);
-	if (!parents) {
-		parents = new Set();
-		graph.set(childPath, parents);
-	}
-	const before = parents.size;
-	parents.add(toSlashPath(parent));
-	// Counted on the graph, so a reader can tell it changed without walking it.
-	if (parents.size !== before) graph.edges = (graph.edges ?? 0) + 1;
+	// Through the state, so every copy's imports land in the one record its readers read.
+	sharedState().recordImports(instanceID, parent, [child]);
 }
 
 /**
@@ -831,7 +935,10 @@ function recordImport(instanceID, parent, child) {
  * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
  */
 export function instanceImporters(instanceID) {
-	return globalThis[STATE]?.graphs?.get(instanceID) ?? null;
+	const reader = globalThis[STATE]?.imports;
+	// This copy keeps the record: read as it is. Another copy's is read through its reader, which hands out a copy.
+	if (reader === IMPORTS_READER) return IMPORT_GRAPHS.get(instanceID) ?? null;
+	return reader?.of?.(instanceID) ?? null;
 }
 
 /**
@@ -889,7 +996,8 @@ export function releaseInstanceScope(instanceID) {
 	if (instanceID == null) return;
 	globalThis[STATE]?.scopes.delete(instanceID);
 	globalThis[STATE]?.copies?.delete(instanceID);
-	globalThis[STATE]?.graphs?.delete(instanceID);
+	// Only the copy keeping the record drops from it: nothing on the state does.
+	IMPORT_GRAPHS.delete(instanceID);
 	globalThis[STATE]?.leaves?.delete(instanceID);
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
 	for (const key of LOADED_SCRIPTS.keys()) {
@@ -1330,6 +1438,9 @@ function applyToResult(specifier, context, result) {
 		}
 		return url === result?.url ? result : { ...result, url };
 	}
+	// An importer that is no instance file gives a file no helper tags (see withoutWrittenHelperTags).
+	const untagged = withoutWrittenHelperTags(parentURL, result?.url);
+	if (untagged !== result?.url) result = { ...result, url: untagged };
 	const active = globalThis[STATE]?.active;
 	if (!active) return result;
 	// A require inside an instance's CommonJS scope (see requireInInstance): its relative files, and those of its own
