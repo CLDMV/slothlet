@@ -488,6 +488,13 @@ export class PermissionManager extends ComponentBase {
 	#eventRulesEpoch = 0;
 
 	/**
+	 * Monotonic epoch that changes whenever a call, read or write rule's outcome may have changed (see
+	 * {@link ruleEpoch}).
+	 * @type {number}
+	 */
+	#ruleEpoch = 0;
+
+	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
 	 * `disable`, `addRule`, `removeRule`, `setReadGating`, `registerPrincipal`, `unregisterPrincipal`)
 	 * throw `PERMISSION_SEALED`. One-way: there is no unseal. `shutdown()` is never guarded (teardown
@@ -3312,6 +3319,21 @@ export class PermissionManager extends ComponentBase {
 		this.#resolvedCache.clear();
 		this.#writeCache.clear();
 		this.#subtreeCache.clear();
+		this.#ruleEpoch++;
+	}
+
+	/**
+	 * A number that changes whenever the outcome of a rule may have changed: a rule added or removed, the system
+	 * switched on or off, a module's rules dropped. What was decided from the rules and kept beside a value (whether
+	 * a function is handed another module's value itself or a view) is good for the epoch it was decided in.
+	 * @returns {number} The current rule epoch.
+	 * @example
+	 * const before = pm.ruleEpoch;
+	 * pm.addRule(rule);
+	 * pm.ruleEpoch !== before; // true
+	 */
+	get ruleEpoch() {
+		return this.#ruleEpoch;
 	}
 
 	/**

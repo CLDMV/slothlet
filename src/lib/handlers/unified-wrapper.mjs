@@ -6872,20 +6872,27 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	const views = CROSSING_VIEWS.get(value);
 	if (views !== undefined) {
 		const key = runtime_crossKey(reader);
-		// The function the first view was made for is the common reader: it was refused the value itself already.
-		if (views.key === key && views.reader === reader) return views.view;
 		const held = views.key === key ? views.view : views.others?.get(key);
 		if (held) {
 			if (!isModule) return held;
 			// The function the view was made for, and each one decided since, was refused the value itself already.
+			// That answer holds for the rules it was given under: a rule added or removed since (or the system switched
+			// off and on) has every function decided again.
 			const state = CROSSINGS.get(held);
-			if (state.reader === reader || state.decided?.has(reader)) return held;
+			const epoch = slothlet.handlers.permissionManager.ruleEpoch;
+			if (state.epoch !== epoch) {
+				state.epoch = epoch;
+				state.readerDecided = false;
+				state.decided = null;
+			}
+			if (state.reader === reader ? state.readerDecided : state.decided?.has(reader)) return held;
 			const itself = runtime_handedAsItself(slothlet, reader, from);
 			if (itself !== null) {
 				if (itself === "writer") runtime_recordOrigin(value, from);
 				return value;
 			}
-			(state.decided ??= new WeakSet()).add(reader);
+			if (state.reader === reader) state.readerDecided = true;
+			else (state.decided ??= new WeakSet()).add(reader);
 			return held;
 		}
 	}
@@ -6958,7 +6965,20 @@ function runtime_crossView(original, reader, slothlet, from) {
 	// `util.inspect` reads a Proxy's target, never its traps: the hook has to be the shadow's own, or inherited by it.
 	if (CROSSING_INSPECT !== null && (isFunction || Arrays.isArray(original)))
 		Reflect.defineProperty(shadow, INSPECT_CUSTOM, { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false });
-	const state = { original, reader, slothlet, from, view: null, onOriginal: null, methods: null, pinned: false, decided: null };
+	const state = {
+		original,
+		reader,
+		slothlet,
+		from,
+		view: null,
+		onOriginal: null,
+		methods: null,
+		pinned: false,
+		// The function the view is made for was just refused the value itself, under the rules as they are now.
+		epoch: slothlet?.handlers?.permissionManager?.ruleEpoch ?? 0,
+		readerDecided: true,
+		decided: null
+	};
 	const view = new NativeProxy(shadow, CROSSING_HANDLER);
 	state.view = view;
 	CROSSING_STATES.set(shadow, state);
@@ -6972,8 +6992,10 @@ function runtime_crossView(original, reader, slothlet, from) {
  * The state of each crossing view, by its shadow (see {@link runtime_crossView}). `onOriginal` is whether the
  * language's and Node's own methods run on the value itself ({@link runtime_crossRunsOnOriginal}), told when first
  * asked; `methods` holds those methods as the view hands them out; `pinned` is whether the shadow holds anything;
- * `decided` holds the other functions of the reader's module found not to be handed the value itself.
- * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, onOriginal: boolean|null, methods: WeakMap<Function, Function>|null, pinned: boolean, decided: WeakSet<object>|null}>}
+ * `readerDecided` is whether the function the view was made for was found not to be handed the value itself, and
+ * `decided` holds the other functions of its module found so, both under the rules as they were at `epoch` (the
+ * permission manager's `ruleEpoch`): a rule change since has each decided again.
+ * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, onOriginal: boolean|null, methods: WeakMap<Function, Function>|null, pinned: boolean, epoch: number, readerDecided: boolean, decided: WeakSet<object>|null}>}
  * @private
  */
 const CROSSING_STATES = new WeakMap();
