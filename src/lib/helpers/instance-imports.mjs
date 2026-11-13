@@ -233,14 +233,14 @@ const TICKETS = new Map();
 /**
  * How a URL is reduced to the key its script hashes are kept under, once frame placement has registered it (see
  * {@link setScriptKey}).
- * @type {(function(string): string)|null}
+ * @type {?function(string): string}
  * @private
  */
 let SCRIPT_KEY_OF = null;
 
 /**
  * Frame placement's check of who is calling into slothlet (see {@link setCallerCheck}).
- * @type {(function(Error): (string|null))|null}
+ * @type {?function(Error): ?string}
  * @private
  */
 let CALLER_CHECK = null;
