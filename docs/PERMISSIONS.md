@@ -1250,7 +1250,7 @@ const api = await slothlet({
 });
 ```
 
-Event rules are part of the permission system and follow its [mode](#modes): they are evaluated only while it is on. While it is off or disabled every subscription is delivered at `allow`, payload included, and the rules (the config's, a manifest's, runtime ones) wait until it is switched on.
+Event rules are part of the permission system and follow its [mode](#modes): they are evaluated only while it is on. While it is off or disabled every subscription is delivered at `allow`, payload included, and the rules (the config's, a manifest's, runtime ones) wait until it is switched on. Module code reaches `event.rules.add` / `remove` while the system is off or disabled, since no call rule is evaluated there, and is held to the same limits as when it is on: event rules for its own events only, never removing the host's, ranked below the host's, with conditions that run as the module; the rules it adds under `"off"` or `"disabled"` come along, as added, when the system is switched on.
 
 `caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
 
