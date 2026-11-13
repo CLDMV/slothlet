@@ -24,6 +24,7 @@ import path from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { Objects, Arrays, JSON, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
@@ -127,7 +128,7 @@ function findOwnership(api) {
  */
 function findInstance(api) {
 	if (!api || (typeof api !== "object" && typeof api !== "function")) return null;
-	for (const key of Object.keys(api)) {
+	for (const key of Objects.keys(api)) {
 		if (FRAMEWORK_ROOT_KEYS.has(key)) continue;
 		const wrapper = resolveWrapper(api[key]);
 		if (wrapper?.slothlet) return wrapper.slothlet;
@@ -143,7 +144,7 @@ function findInstance(api) {
  */
 function findRoutineNames(api) {
 	const routines = findInstance(api)?.config?.routines;
-	return new Set(Array.isArray(routines) ? routines.map((routine) => routine?.name).filter(Boolean) : []);
+	return new Set(Arrays.isArray(routines) ? routines.map((routine) => routine?.name).filter(Boolean) : []);
 }
 
 /**
@@ -163,7 +164,7 @@ function describeMembers(value, apiPath, context, ancestors) {
 	ancestors.add(value);
 	try {
 		const members = [];
-		for (const key of Object.keys(value)) {
+		for (const key of Objects.keys(value)) {
 			// Skip the framework's reserved names and its own root surface (typed by SlothletAPI). A module's
 			// `_`/`__`-prefixed export is a member of the api like any other, so it is typed.
 			if (isFrameworkReservedKey(key) || (apiPath === "" && FRAMEWORK_ROOT_KEYS.has(key))) {

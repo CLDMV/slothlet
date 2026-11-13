@@ -42,7 +42,7 @@ import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
 import { installInstanceImportHooks, requireInInstance, HELPERS_PARAM, HELPERS_PER_MODULE } from "@cldmv/slothlet/helpers/instance-imports";
 import { createModuleLoad } from "#handlers/frame-placement";
-import { Map, Set, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, JSON, Map, Set, Promise, URL } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
@@ -189,7 +189,7 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
  */
 function compileHidden(globs) {
 	if (!globs) return null;
-	const list = Array.isArray(globs) ? globs : [globs];
+	const list = Arrays.isArray(globs) ? globs : [globs];
 	const rules = [];
 	for (const g of list) {
 		if (typeof g !== "string" || g.length === 0) continue;
@@ -746,7 +746,7 @@ export class Loader extends ComponentBase {
 		// whatever its descriptor says. A `then` holding data does not make the namespace awaitable, and is
 		// an ordinary export.
 		if (exports !== null && (typeof exports === "object" || typeof exports === "function")) {
-			const thenDescriptor = Object.getOwnPropertyDescriptor(exports, "then");
+			const thenDescriptor = Objects.getOwnPropertyDescriptor(exports, "then");
 			if (thenDescriptor && (isAwaitableThen(thenDescriptor) || typeof exports.then === "function")) {
 				throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
 			}
@@ -757,7 +757,7 @@ export class Loader extends ComponentBase {
 		//   - each own key of module.exports becomes a named export
 		const namespace = { default: exports };
 		if (exports !== null && typeof exports === "object") {
-			for (const key of Object.keys(exports)) {
+			for (const key of Objects.keys(exports)) {
 				if (key !== "default") {
 					namespace[key] = exports[key];
 				}
@@ -766,7 +766,7 @@ export class Loader extends ComponentBase {
 		// import() of a CommonJS file exposes a "module.exports" binding, which is how the ownership index
 		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
 		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
-		Object.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
+		Objects.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
 		return namespace;
 	}
 
@@ -805,7 +805,7 @@ export class Loader extends ComponentBase {
 				const pkg = parseJsonOrNull(raw);
 				// Node rejects a package.json that is not a JSON object (ERR_INVALID_PACKAGE_CONFIG) and
 				// ignores a `type` other than "module" / "commonjs".
-				if (pkg === null || typeof pkg !== "object" || Array.isArray(pkg)) type = "invalid";
+				if (pkg === null || typeof pkg !== "object" || Arrays.isArray(pkg)) type = "invalid";
 				else type = pkg.type === "module" || pkg.type === "commonjs" ? pkg.type : "none";
 				break;
 			}
@@ -1368,7 +1368,7 @@ export class Loader extends ComponentBase {
 		}
 
 		// Add named exports (excluding module.exports which is a Node.js internal property)
-		for (const key of Object.keys(module)) {
+		for (const key of Objects.keys(module)) {
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				// Reserved-name rejection (#260): an export named for a framework-reserved key
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
@@ -1407,8 +1407,8 @@ export class Loader extends ComponentBase {
 		if (exports.default && typeof exports.default === "object" && exports.default !== null && "default" in exports.default) {
 			// Check if this looks like the CJS pattern:
 			// All named exports at root should also exist in exports.default
-			const rootNamedKeys = Object.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
-			const defaultKeys = Object.keys(exports.default).filter((k) => k !== "default");
+			const rootNamedKeys = Objects.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
+			const defaultKeys = Objects.keys(exports.default).filter((k) => k !== "default");
 
 			// If all root named exports exist in exports.default, this is the CJS pattern
 			const isCJSPattern = rootNamedKeys.every((k) => k in exports.default);

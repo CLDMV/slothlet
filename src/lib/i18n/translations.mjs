@@ -25,6 +25,7 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // browser static graph (#123). The default (en-us) is bundled via the JSON import above; additional
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
+import { Objects, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Get current directory path
@@ -330,7 +331,7 @@ export function translate(errorCode, params = {}) {
 
 	// Interpolate parameters
 	let message = template || `Error: ${errorCode}`;
-	for (const [key, value] of Object.entries(params)) {
+	for (const [key, value] of Objects.entries(params)) {
 		message = message.replace(new RegExp(`\\{${key}\\}`, "g"), value !== undefined ? String(value) : "");
 	}
 

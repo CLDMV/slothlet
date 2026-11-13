@@ -35,6 +35,7 @@ import { resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { JSON } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * IPC sender to the parent process (`process.send` in the fork).

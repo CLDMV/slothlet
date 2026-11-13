@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { JSON, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -298,7 +299,7 @@ export async function sweepStaleFallbackRoots() {
 		return;
 	}
 	const now = Date.now();
-	await Promise.allSettled(
+	await Promises.allSettled(
 		entries.map(async (entry) => {
 			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
 			const fullPath = path.join(tmpdir(), entry.name);
@@ -378,7 +379,7 @@ function sweepStaleSlothletCache(projectRoot) {
 			return;
 		}
 		const currentPid = process.pid;
-		await Promise.allSettled(
+		await Promises.allSettled(
 			entries.map(async (entry) => {
 				if (!entry.isDirectory()) return;
 				const match = entry.name.match(/^(\d+)-/);

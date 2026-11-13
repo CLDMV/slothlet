@@ -20,6 +20,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
+import { Objects, JSON, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -111,25 +112,25 @@ export class SlothletError extends Error {
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
-		Object.defineProperty(this, "code", {
+		Objects.defineProperty(this, "code", {
 			value: code,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "context", {
+		Objects.defineProperty(this, "context", {
 			value: context,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "originalError", {
+		Objects.defineProperty(this, "originalError", {
 			value: originalError,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "hint", {
+		Objects.defineProperty(this, "hint", {
 			value: translatedHint,
 			enumerable: false,
 			writable: false
@@ -152,7 +153,7 @@ export class SlothletError extends Error {
 
 		// Add only critical details
 		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
-		const detailKeys = Object.keys(this.context).filter((k) => criticalKeys.includes(k));
+		const detailKeys = Objects.keys(this.context).filter((k) => criticalKeys.includes(k));
 
 		if (detailKeys.length > 0) {
 			output += "\nDetails:\n";
@@ -168,7 +169,7 @@ export class SlothletError extends Error {
 	 * Custom inspect for console.log/console.error
 	 * @returns {string} Formatted error for display
 	 */
-	[Symbol.for("nodejs.util.inspect.custom")]() {
+	[Symbols.for("nodejs.util.inspect.custom")]() {
 		return this.toString() + `\n${this.stack}`;
 	}
 
@@ -232,7 +233,7 @@ export class SlothletWarning {
 			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
 			// Show context if provided (exclude synthetic 'key' field from display)
-			if (Object.keys(contextData).length > 0) {
+			if (Objects.keys(contextData).length > 0) {
 				console.warn("Context:", contextData);
 			}
 
@@ -336,7 +337,7 @@ export class SlothletDebug {
 		}
 
 		// Show interpolation params / extra context if present (never show 'key' or 'message')
-		if ((hasTranslation || message) && Object.keys(contextParams).length > 0) {
+		if ((hasTranslation || message) && Objects.keys(contextParams).length > 0) {
 			console.log(`${label} Context:`, contextParams);
 		}
 	}
@@ -346,7 +347,7 @@ export class SlothletDebug {
 	 * @returns {string} Debug info
 	 */
 	toString() {
-		return `[SlothletDebug] flags: ${Object.keys(this.debugFlags)
+		return `[SlothletDebug] flags: ${Objects.keys(this.debugFlags)
 			.filter((k) => this.debugFlags[k])
 			.join(", ")}`;
 	}

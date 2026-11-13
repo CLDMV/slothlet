@@ -117,6 +117,7 @@ import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defa
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -175,22 +176,22 @@ const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
 function copyConfigValue(value, freeze, seen = new Map()) {
 	if (!value || typeof value !== "object") return value;
 	if (seen.has(value)) return seen.get(value);
-	if (Array.isArray(value)) {
+	if (Arrays.isArray(value)) {
 		const out = [];
 		seen.set(value, out);
 		for (const item of value) out.push(copyConfigValue(item, freeze, seen));
-		return freeze ? Object.freeze(out) : out;
+		return freeze ? Objects.freeze(out) : out;
 	}
-	const proto = Object.getPrototypeOf(value);
-	if (proto !== Object.prototype && proto !== null) return value;
-	const out = proto === null ? Object.create(null) : {};
+	const proto = Objects.getPrototypeOf(value);
+	if (proto !== Objects.prototype && proto !== null) return value;
+	const out = proto === null ? Objects.create(null) : {};
 	seen.set(value, out);
 	for (const key of Reflect.ownKeys(value)) {
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(value, key);
 		if (!descriptor.enumerable) continue;
 		out[key] = copyConfigValue(value[key], freeze, seen);
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -207,10 +208,10 @@ function copyConfigValue(value, freeze, seen = new Map()) {
  */
 function copyTopLevelConfig(config, freeze) {
 	const out = {};
-	for (const key of Object.keys(config)) {
+	for (const key of Objects.keys(config)) {
 		out[key] = CONFIG_IDENTITY_KEYS.has(key) ? config[key] : copyConfigValue(config[key], freeze);
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -365,7 +366,7 @@ class Slothlet {
 					const module = await import(url.pathToFileURL(filePath).href);
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
-					const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+					const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
 
 					for (const ClassExport of classExports) {
 						const propName = ClassExport.slothletProperty;
@@ -454,7 +455,7 @@ class Slothlet {
 			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
-			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+			const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
 
 			for (const ClassExport of classExports) {
 				const propName = ClassExport.slothletProperty;
@@ -482,8 +483,8 @@ class Slothlet {
 			return;
 		}
 		const lifecycle = this.handlers.lifecycle;
-		for (const [event, handler] of Object.entries(map)) {
-			const handlers = Array.isArray(handler) ? handler : [handler];
+		for (const [event, handler] of Objects.entries(map)) {
+			const handlers = Arrays.isArray(handler) ? handler : [handler];
 			for (const fn of handlers) {
 				lifecycle.subscribe(event, fn);
 			}
@@ -881,17 +882,17 @@ class Slothlet {
 	 */
 	_captureEnvSnapshot(envConfig) {
 		const rawInclude = envConfig?.include;
-		const include = Array.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const include = Arrays.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
 		const useAllowlist = include !== null && include.length > 0;
 		const raw = useAllowlist
 			? include.reduce((acc, key) => {
-					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+					if (Objects.prototype.hasOwnProperty.call(process.env, key)) {
 						acc[key] = process.env[key];
 					}
 					return acc;
-				}, Object.create(null))
+				}, Objects.create(null))
 			: { ...process.env };
-		return Object.freeze(raw);
+		return Objects.freeze(raw);
 	}
 
 	/**
@@ -932,7 +933,7 @@ class Slothlet {
 		// browser, and even when running browser-mode tests under Node we must not
 		// leak Node env into the browser-mode api.slothlet.env surface.
 		if (!this.envSnapshot) {
-			this.envSnapshot = this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
+			this.envSnapshot = this.envTarget === "browser" ? Objects.freeze(Objects.create(null)) : this._captureEnvSnapshot(config.env);
 		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
@@ -1036,7 +1037,7 @@ class Slothlet {
 		// resolved context carries this marker — the basis for failing closed on absent caller.
 		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
 		// only the genuine base store and scope stores explicitly descended from it are trusted.
-		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -1149,7 +1150,7 @@ class Slothlet {
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {
 			// Set as global metadata so it's inherited by all future api.add() calls
-			for (const [key, value] of Object.entries(this.config.metadata)) {
+			for (const [key, value] of Objects.entries(this.config.metadata)) {
 				this.handlers.metadata.setGlobalMetadata(key, value);
 			}
 
@@ -1179,7 +1180,7 @@ class Slothlet {
 			const proxyTarget = isCallable ? function () {} : {};
 
 			this.boundApi = markSlothletProxy(
-				new Proxy(proxyTarget, {
+				new NativeProxy(proxyTarget, {
 					get: (target, prop) => (this.api ? this.api[prop] : undefined),
 					set: (target, prop, value) => {
 						if (this.api) {
@@ -1195,10 +1196,10 @@ class Slothlet {
 					getOwnPropertyDescriptor: (target, prop) => {
 						// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
 						if (isCallable && prop === "prototype") {
-							return Object.getOwnPropertyDescriptor(target, prop);
+							return Objects.getOwnPropertyDescriptor(target, prop);
 						}
 						if (this.api && prop in this.api) {
-							const desc = Object.getOwnPropertyDescriptor(this.api, prop);
+							const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
 							if (desc) {
 								return { ...desc, configurable: true };
 							}
@@ -1220,7 +1221,7 @@ class Slothlet {
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
-			Object.assign(this.boundApi, this.reference);
+			Objects.assign(this.boundApi, this.reference);
 		}
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
@@ -1321,7 +1322,7 @@ class Slothlet {
 			// dir per reload until shutdown — an unbounded leak in long-lived dev
 			// processes that reload frequently.
 			if (isNode && this._typescriptCacheDirs?.size) {
-				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
+				await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 				this._typescriptCacheDirs.clear();
 			}
 		}
@@ -1677,7 +1678,7 @@ class Slothlet {
 		const absoluteTargetDir = path.resolve(targetDir);
 
 		// Clear require.cache for CJS modules
-		for (const key of Object.keys(require.cache)) {
+		for (const key of Objects.keys(require.cache)) {
 			if (key.startsWith(absoluteTargetDir)) {
 				delete require.cache[key];
 			}
@@ -1773,13 +1774,13 @@ class Slothlet {
 					// then resolves via resolveWrapper() on the next recursion.
 					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
 					// getter (#597).
-					for (const key of Object.keys(wrapper)) {
+					for (const key of Objects.keys(wrapper)) {
 						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
-				for (const key of Object.keys(obj)) {
+				for (const key of Objects.keys(obj)) {
 					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
@@ -1788,12 +1789,12 @@ class Slothlet {
 			}
 		};
 
-		for (const key of Object.keys(this.api)) {
+		for (const key of Objects.keys(this.api)) {
 			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
-			await Promise.allSettled(pending);
+			await Promises.allSettled(pending);
 		}
 	}
 
@@ -1873,7 +1874,7 @@ class Slothlet {
 		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
 		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
 		if (isNode && this._typescriptCacheDirs?.size) {
-			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
+			await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
@@ -2033,7 +2034,7 @@ export async function slothlet(config) {
  *   routines: slothlet.defaults.routines.filter((r) => r.name !== "shutdown")
  * });
  */
-slothlet.defaults = Object.freeze({
+slothlet.defaults = Objects.freeze({
 	routines: DEFAULT_ROUTINES,
 	reservedExports: RESERVED_EXPORTS
 });
