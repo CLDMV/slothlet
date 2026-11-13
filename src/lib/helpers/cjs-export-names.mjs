@@ -40,6 +40,8 @@
  * while a missing one would turn an import that links natively into a SyntaxError.
  */
 
+import { Objects, Math, Set } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Characters after which a `/` starts a regular-expression literal rather than a division.
  * @type {string}
@@ -201,7 +203,7 @@ function stripComments(src) {
  * @type {Readonly<Record<string, string>>}
  * @private
  */
-const SIMPLE_ESCAPES = Object.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", 0: "\0" });
+const SIMPLE_ESCAPES = Objects.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", 0: "\0" });
 
 /**
  * Decode the body of a quoted JavaScript string literal (without its quotes), the way the language

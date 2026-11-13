@@ -38,6 +38,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Reflect, Functions, WeakMap, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * What is patched: the host object, the key, the wrapper installed and its layer.
@@ -234,7 +235,7 @@ export function enableAsyncResourcePatching() {
 			 * @returns {boolean} Whether it is an `AsyncResource`.
 			 */
 			static [Symbol.hasInstance](value) {
-				return Function.prototype[Symbol.hasInstance].call(Below, value);
+				return Functions.prototype[Symbol.hasInstance].call(Below, value);
 			}
 		}
 		return AsyncResource;

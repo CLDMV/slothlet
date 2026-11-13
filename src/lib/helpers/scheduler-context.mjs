@@ -38,6 +38,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.
@@ -77,12 +78,12 @@ function runtime_carryOwnExtras(wrapper, original) {
 		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
-		const descriptor = Object.getOwnPropertyDescriptor(original, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(original, key);
 		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
 		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
 		// stays an accessor, and a non-enumerable key stays non-enumerable.
-		Object.defineProperty(wrapper, key, descriptor);
+		Objects.defineProperty(wrapper, key, descriptor);
 	}
 }
 

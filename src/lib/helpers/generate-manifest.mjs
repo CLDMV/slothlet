@@ -79,6 +79,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { Objects, Arrays, JSON, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and
@@ -245,7 +246,7 @@ async function generateManifest(dir) {
 		// so reporting the type alone hides the real fault; surface it as "<empty>". typeof likewise
 		// reports "object" for both null and arrays, so distinguish those explicitly for an actionable
 		// message — matching the syntheticName validation (#136 review).
-		const received = typeof dir === "string" ? "<empty>" : dir === null ? "null" : Array.isArray(dir) ? "array" : typeof dir;
+		const received = typeof dir === "string" ? "<empty>" : dir === null ? "null" : Arrays.isArray(dir) ? "array" : typeof dir;
 		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received }, null, { validationError: true });
 	}
 
@@ -310,7 +311,7 @@ async function collectSlothletSpecifiers(root) {
 	// bare `@cldmv/slothlet/runtime` that internals never import directly, which the source scan below
 	// would otherwise miss (or pick up only fragilely from a doc comment that minification strips).
 	const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
-	for (const key of Object.keys(pkg.exports)) {
+	for (const key of Objects.keys(pkg.exports)) {
 		// Skip wildcard patterns here (every file under them is enumerated per-file just below) and
 		// non-module entries (the exported JSON schema is tooling-only, not a browser module import); i18n locales are enumerated separately.
 		if (key.includes("*") || key.endsWith(".json")) continue;
@@ -321,7 +322,7 @@ async function collectSlothletSpecifiers(root) {
 	// entry by construction — guaranteeing a browser can resolve any wildcard endpoint, even modules
 	// slothlet's own source never imports. (i18n locales are enumerated in generateImportMap; the
 	// JSON schema export isn't a browser module.)
-	for (const [key, value] of Object.entries(pkg.exports)) {
+	for (const [key, value] of Objects.entries(pkg.exports)) {
 		if (!key.includes("*") || key.startsWith("./i18n/language/")) continue;
 		const specPrefix = `@cldmv/slothlet${key.slice(1)}`.split("*")[0]; // bare-specifier prefix for this namespace (text before the wildcard)
 		// Every "*.mjs" filesystem target this export declares (dev `src/` + published `dist/`).
@@ -330,7 +331,7 @@ async function collectSlothletSpecifiers(root) {
 			if (typeof v === "string") {
 				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
 			} else if (v && typeof v === "object") {
-				for (const child of Object.values(v)) collectTargets(child);
+				for (const child of Objects.values(v)) collectTargets(child);
 			}
 		})(value);
 		for (const tmpl of targets) {
@@ -354,7 +355,7 @@ async function collectSlothletSpecifiers(root) {
 	// `#factories/*`) are no longer public exports, but slothlet's own browser code still imports
 	// them by their `#`-prefixed specifier — which the page's importmap must resolve. Browsers accept
 	// `#`-prefixed importmap keys, so the literal `#handlers/<name>` string becomes the map key.
-	for (const [key, value] of Object.entries(pkg.imports ?? {})) {
+	for (const [key, value] of Objects.entries(pkg.imports ?? {})) {
 		if (!key.includes("*")) continue;
 		const specPrefix = key.split("*")[0]; // e.g. "#handlers/" — the literal importmap-key prefix
 		const targets = [];
@@ -362,7 +363,7 @@ async function collectSlothletSpecifiers(root) {
 			if (typeof v === "string") {
 				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
 			} else if (v && typeof v === "object") {
-				for (const child of Object.values(v)) collectTargets(child);
+				for (const child of Objects.values(v)) collectTargets(child);
 			}
 		})(value);
 		for (const tmpl of targets) {
@@ -532,7 +533,7 @@ function packageNameOf(spec) {
 function pickBrowserTarget(value) {
 	if (value == null) return null;
 	if (typeof value === "string") return value;
-	if (Array.isArray(value)) {
+	if (Arrays.isArray(value)) {
 		for (const v of value) {
 			const t = pickBrowserTarget(v);
 			if (t) return t;
@@ -541,7 +542,7 @@ function pickBrowserTarget(value) {
 	}
 	if (typeof value === "object") {
 		for (const cond of ["browser", "import", "module", "default"]) {
-			if (Object.prototype.hasOwnProperty.call(value, cond)) {
+			if (Objects.prototype.hasOwnProperty.call(value, cond)) {
 				const t = pickBrowserTarget(value[cond]);
 				if (t) return t;
 			}
@@ -590,7 +591,7 @@ async function collectPackageSpecifiers(packageRoot) {
 	const field = pkg.exports;
 	let entries;
 	if (typeof field === "string") entries = [[".", field]];
-	else entries = Object.keys(field).some((k) => k.startsWith(".")) ? Object.entries(field) : [[".", field]];
+	else entries = Objects.keys(field).some((k) => k.startsWith(".")) ? Objects.entries(field) : [[".", field]];
 
 	for (const [key, value] of entries) {
 		if (!key.startsWith(".")) continue; // only subpath keys (conditions inside are handled by pickBrowserTarget)
@@ -802,7 +803,7 @@ async function generateBrowserAssets(apiDir, options = {}) {
 	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from slothletBase.
 	const base = String(slothletBase).endsWith("/") ? String(slothletBase) : `${slothletBase}/`;
 	const packagesBase = derivePackagesBase(base);
-	const [manifest, importmap, graphImports] = await Promise.all([
+	const [manifest, importmap, graphImports] = await Promises.all([
 		generateManifest(apiDir),
 		generateImportMap(slothletBase),
 		collectGraphImports(apiDir, packagesBase)

@@ -29,14 +29,27 @@
 import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { outerCallerCeiling } from "#handlers/frame-placement";
-import { Reflect, Objects, NativeProxy, Map, Set, WeakMap, WeakSet, Promise, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	NativeObject,
+	Arrays,
+	Functions,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	Promise,
+	Symbol
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Excluded constructors that should NOT be wrapped
  * @constant
  * @private
  */
-const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
+const EXCLUDED_CONSTRUCTORS = new Set([NativeObject, Arrays.prototype.constructor, Promise, Date, RegExp, Error]);
 
 /**
  * Sentinel marking a Proxy already produced by {@link runtime_wrapClassInstance}.
@@ -111,7 +124,7 @@ export function runtime_classInstanceCreator(value) {
 }
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+const weakMapHas = Functions.prototype.call.bind(WeakMap.prototype.has);
 
 // The language's own reflection, taken at load.
 const { getPrototypeOf, getOwnPropertyDescriptor } = Reflect;
@@ -169,7 +182,7 @@ export function runtime_shouldWrapMethod(value, prop) {
 		typeof value === "function" &&
 		typeof prop === "string" &&
 		prop !== "constructor" &&
-		!(prop in Object.prototype) &&
+		!(prop in Objects.prototype) &&
 		!isFrameworkReservedKey(prop)
 	);
 }

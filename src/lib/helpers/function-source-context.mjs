@@ -40,17 +40,17 @@
  * slothlet in the realm, and this copy installs its wrapper once however many instances ask.
  */
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { functionToString } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Functions, functionToString, WeakSet, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The key the wrapper holds the function it wraps under: the watermark of this patch.
  * @type {symbol}
  * @private
  */
-const ORIGINAL_TO_STRING = Symbol.for("slothlet.functionSource.original");
+const ORIGINAL_TO_STRING = Symbols.for("slothlet.functionSource.original");
 
 const { apply, getOwnPropertyDescriptor, defineProperty } = Reflect;
-const FunctionPrototype = Function.prototype;
+const FunctionPrototype = Functions.prototype;
 
 /**
  * Tells the function one of slothlet's stand-ins stands for, set by the handlers that make them.

@@ -34,6 +34,7 @@ import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { recordSharedExports } from "../handlers/shared-values.mjs";
+import { Arrays, Map, Set, WeakMap, WeakRef } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -832,7 +833,7 @@ export function cleanupEventEmitterResources() {
 					const entry = events[event];
 					if (typeof entry === "function") {
 						if (restore.has(entry)) events[event] = restore.get(entry);
-					} else if (Array.isArray(entry)) {
+					} else if (Arrays.isArray(entry)) {
 						for (let index = 0; index < entry.length; index++) {
 							if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
 						}

@@ -21,6 +21,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * General utility functions
@@ -39,8 +40,8 @@ export class Utilities extends ComponentBase {
 	 */
 	isPlainObject(obj) {
 		if (typeof obj !== "object" || obj === null) return false;
-		const proto = Object.getPrototypeOf(obj);
-		return proto === null || proto === Object.prototype;
+		const proto = Objects.getPrototypeOf(obj);
+		return proto === null || proto === Objects.prototype;
 	}
 
 	/**
@@ -68,7 +69,7 @@ export class Utilities extends ComponentBase {
 		const result = { ...target };
 
 		for (const key in source) {
-			if (Object.prototype.hasOwnProperty.call(source, key)) {
+			if (Objects.prototype.hasOwnProperty.call(source, key)) {
 				if (this.isPlainObject(source[key])) {
 					// Recurse: start from target[key] if it's a plain object, otherwise {}
 					// so new nested keys in source always produce a fresh copy.
@@ -112,7 +113,7 @@ export class Utilities extends ComponentBase {
 			// this a bare function fell through to the key-copy loop below and became `{}`.
 			if (typeof obj === "function") return obj;
 			if (obj instanceof Date) return new Date(obj.getTime());
-			if (Array.isArray(obj)) return obj.map((item) => this.deepClone(item));
+			if (Arrays.isArray(obj)) return obj.map((item) => this.deepClone(item));
 			// For callable Proxies and plain objects: clone all enumerable keys.
 			const cloned = {};
 			for (const key in obj) {

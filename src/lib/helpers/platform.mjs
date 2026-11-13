@@ -54,6 +54,21 @@
  * load check (the path a real consumer uses), not the coverage justification.
  */
 
+import {
+	Reflect,
+	Objects,
+	Functions,
+	JSON,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	Promise,
+	Symbol,
+	Promises,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
+
 // Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
 // browser run exercises that arm (the node run cannot — `process` is always present there).
 const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
@@ -90,7 +105,7 @@ let AsyncResource = null;
 let createRequire = null;
 
 if (isNode) {
-	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promise.all([
+	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promises.all([
 		import("node:fs"),
 		import("node:fs/promises"),
 		import("node:path"),
@@ -111,12 +126,12 @@ if (isNode) {
 	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
 	// What every generator object and every async generator object inherits from.
-	const GENERATOR_PROTOTYPES = [Object.getPrototypeOf(function* () {}).prototype, Object.getPrototypeOf(async function* () {}).prototype];
+	const GENERATOR_PROTOTYPES = [Objects.getPrototypeOf(function* () {}).prototype, Objects.getPrototypeOf(async function* () {}).prototype];
 	// What every generator function and every async generator function inherits from.
-	const GENERATOR_FUNCTION_PROTOTYPES = [Object.getPrototypeOf(function* () {}), Object.getPrototypeOf(async function* () {})];
+	const GENERATOR_FUNCTION_PROTOTYPES = [Objects.getPrototypeOf(function* () {}), Objects.getPrototypeOf(async function* () {})];
 	// What every `Map` iterator and every `Set` iterator inherits from.
-	const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]());
-	const SET_ITERATOR = Object.getPrototypeOf(new Set()[Symbol.iterator]());
+	const MAP_ITERATOR = Objects.getPrototypeOf(new Map()[Symbol.iterator]());
+	const SET_ITERATOR = Objects.getPrototypeOf(new Set()[Symbol.iterator]());
 	/**
 	 * A brand check made by calling one of a kind's own methods on the value: the method reads only the internal data of
 	 * an object of its kind and throws a `TypeError` for anything else.
@@ -136,7 +151,7 @@ if (isNode) {
 			}
 		};
 	/** The getter of an accessor a kind's prototype holds. */
-	const getterOf = (prototype, name) => Object.getOwnPropertyDescriptor(prototype, name).get;
+	const getterOf = (prototype, name) => Objects.getOwnPropertyDescriptor(prototype, name).get;
 	const IS_REGEXP = brand(getterOf(RegExp.prototype, "source"));
 	const IS_ARRAY_BUFFER = brand(getterOf(ArrayBuffer.prototype, "byteLength"));
 	const IS_SHARED_ARRAY_BUFFER =
@@ -149,7 +164,7 @@ if (isNode) {
 	// that always returns false only loses detection of *arbitrary user* proxies —
 	// a documented browser limitation, not a correctness bug for slothlet internals.
 	util = {
-		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
+		inspect: Objects.assign((value) => value, { custom: Symbols.for("nodejs.util.inspect.custom") }),
 		types: {
 			isProxy: () => false,
 			// A native promise of any realm (an iframe's), by its built-in tag: the browser stand-in for
@@ -159,7 +174,7 @@ if (isNode) {
 			isPromise: (value) => {
 				if (inheritsFrom(value, Promise)) return true;
 				try {
-					return Object.prototype.toString.call(value) === "[object Promise]";
+					return Objects.prototype.toString.call(value) === "[object Promise]";
 				} catch {
 					return false;
 				}
@@ -174,10 +189,10 @@ if (isNode) {
 			isGeneratorObject: (value) =>
 				value !== null &&
 				typeof value === "object" &&
-				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value)),
+				GENERATOR_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, value)),
 			// Prototype check: the browser stand-in for Node's brand check of a generator function, an async one included.
 			isGeneratorFunction: (fn) =>
-				typeof fn === "function" && GENERATOR_FUNCTION_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, fn)),
+				typeof fn === "function" && GENERATOR_FUNCTION_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, fn)),
 			// The rest are the engine's own brand checks, made by calling a method of the kind that reads nothing but the
 			// object's internal data and throws for any other object: none of a value's own code runs, and a Proxy never
 			// passes, as with Node's checks.
@@ -197,8 +212,8 @@ if (isNode) {
 			// `Error.isError` where the engine has it; the prototype chain otherwise, which an object merely inheriting
 			// from `Error.prototype` passes too.
 			isNativeError: typeof Error.isError === "function" ? (value) => Error.isError(value) : (value) => inheritsFrom(value, Error),
-			isMapIterator: (value) => value !== null && typeof value === "object" && Object.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
-			isSetIterator: (value) => value !== null && typeof value === "object" && Object.prototype.isPrototypeOf.call(SET_ITERATOR, value),
+			isMapIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
+			isSetIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(SET_ITERATOR, value),
 			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
 			isKeyObject: () => false,
 			isCryptoKey: (value) => typeof globalThis.CryptoKey === "function" && inheritsFrom(value, globalThis.CryptoKey)
@@ -322,7 +337,7 @@ function scheduleMacrotask(fn) {
  * @type {Function}
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
 
 /**
  * The language's own `Reflect.apply`, taken when this file loads, before any module runs: a module replacing

@@ -42,6 +42,7 @@ import { t } from "@cldmv/slothlet/i18n";
 // path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
 // filesystem manifest validation.
 import { path } from "@cldmv/slothlet/helpers/platform";
+import { Objects, Arrays, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Reserved mountPath root segments. Mirror of the list in
@@ -50,14 +51,14 @@ import { path } from "@cldmv/slothlet/helpers/platform";
  * the manifest layer instead of letting `api.add()` throw downstream.
  * @type {ReadonlySet<string>}
  */
-const RESERVED_MOUNTPATH_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
  * Allowed top-level fields in `slothlet.module.json`. Anything else throws
  * `MODULE_MANIFEST_UNKNOWN_FIELD` per the strict-schema decision in the design.
  * @type {ReadonlySet<string>}
  */
-const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
+const ALLOWED_TOP_LEVEL_FIELDS = Objects.freeze(
 	new Set([
 		"schemaVersion",
 		"name",
@@ -78,13 +79,13 @@ const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
  * Allowed effect values for permission rules.
  * @type {ReadonlySet<string>}
  */
-const PERMISSION_EFFECT_VALUES = Object.freeze(new Set(["allow", "deny"]));
+const PERMISSION_EFFECT_VALUES = Objects.freeze(new Set(["allow", "deny"]));
 
 /**
  * Allowed effect values for event rules (#407). Three-level, unlike the binary call rules.
  * @type {ReadonlySet<string>}
  */
-const EVENT_EFFECT_VALUES = Object.freeze(new Set(["deny", "notify", "allow"]));
+const EVENT_EFFECT_VALUES = Objects.freeze(new Set(["deny", "notify", "allow"]));
 
 /**
  * Validate a parsed slothlet.module.json manifest and return a normalized form.
@@ -116,7 +117,7 @@ const EVENT_EFFECT_VALUES = Object.freeze(new Set(["deny", "notify", "allow"]));
  * });
  */
 export function validateModuleManifest(manifest, packageContext) {
-	if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+	if (!manifest || typeof manifest !== "object" || Arrays.isArray(manifest)) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
@@ -133,7 +134,7 @@ export function validateModuleManifest(manifest, packageContext) {
 
 	// Reject unknown top-level fields BEFORE other validation so users see typos
 	// in field names rather than misleading "missing required field" errors.
-	for (const key of Object.keys(manifest)) {
+	for (const key of Objects.keys(manifest)) {
 		if (!ALLOWED_TOP_LEVEL_FIELDS.has(key)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_UNKNOWN_FIELD",
@@ -328,7 +329,7 @@ export function validateModuleManifest(manifest, packageContext) {
 
 	// dependencies: optional, object with string values
 	if (manifest.dependencies !== undefined) {
-		if (typeof manifest.dependencies !== "object" || manifest.dependencies === null || Array.isArray(manifest.dependencies)) {
+		if (typeof manifest.dependencies !== "object" || manifest.dependencies === null || Arrays.isArray(manifest.dependencies)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
@@ -340,7 +341,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{ validationError: true }
 			);
 		}
-		for (const [depName, depValue] of Object.entries(manifest.dependencies)) {
+		for (const [depName, depValue] of Objects.entries(manifest.dependencies)) {
 			if (typeof depValue !== "string") {
 				throw new SlothletError(
 					"MODULE_MANIFEST_INVALID",
@@ -368,7 +369,7 @@ export function validateModuleManifest(manifest, packageContext) {
 
 	// metadata: optional, plain object (free-form contents allowed inside)
 	if (manifest.metadata !== undefined) {
-		if (typeof manifest.metadata !== "object" || manifest.metadata === null || Array.isArray(manifest.metadata)) {
+		if (typeof manifest.metadata !== "object" || manifest.metadata === null || Arrays.isArray(manifest.metadata)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
@@ -424,7 +425,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 		}
 		return mountPath.split(".");
 	}
-	if (Array.isArray(mountPath)) {
+	if (Arrays.isArray(mountPath)) {
 		if (mountPath.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
@@ -502,7 +503,7 @@ function validateApiDirContainment(apiDir, packageRoot, packageName) {
  * @private
  */
 function validatePermissions(permissions, packageName, manifestPath) {
-	if (!Array.isArray(permissions)) {
+	if (!Arrays.isArray(permissions)) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
@@ -516,7 +517,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 	}
 	for (let i = 0; i < permissions.length; i++) {
 		const rule = permissions[i];
-		if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
+		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
@@ -579,7 +580,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
  * @private
  */
 function validateEventRules(events, packageName, manifestPath) {
-	if (!Array.isArray(events)) {
+	if (!Arrays.isArray(events)) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
@@ -593,7 +594,7 @@ function validateEventRules(events, packageName, manifestPath) {
 	}
 	for (let i = 0; i < events.length; i++) {
 		const rule = events[i];
-		if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
+		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) },

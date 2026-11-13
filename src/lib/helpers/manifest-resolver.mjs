@@ -58,6 +58,8 @@
  * @public
  */
 
+import { URL } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Create a `resolveModuleSpecifier` callback that resolves manifest file entries
  * to absolute URLs using a fixed base URL.

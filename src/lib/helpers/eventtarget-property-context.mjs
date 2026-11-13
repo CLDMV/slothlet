@@ -53,6 +53,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Objects, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -126,7 +127,7 @@ function runtime_patchHandlerProperty(ctor, propName) {
  * @private
  */
 function runtime_patchHandlerAccessor(proto, propName) {
-	const descriptor = proto && Object.getOwnPropertyDescriptor(proto, propName);
+	const descriptor = proto && Objects.getOwnPropertyDescriptor(proto, propName);
 	// Absent on this host's prototype, not an IDL-style accessor, or non-configurable: nothing to patch.
 	// Covers a host that lacks the interface entirely, an exotic embedder that exposes the handler as a
 	// plain data property instead, and a host that locked the accessor down — redefining a
@@ -181,7 +182,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		return result;
 	};
 
-	Object.defineProperty(proto, propName, {
+	Objects.defineProperty(proto, propName, {
 		configurable: descriptor.configurable,
 		enumerable: descriptor.enumerable,
 		get: wrapperGet,
@@ -225,7 +226,7 @@ export function enableEventTargetPropertyPatching() {
  * @private
  */
 function runtime_ownHandlerNames(target) {
-	return Object.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
+	return Objects.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
 }
 
 /**
@@ -245,14 +246,14 @@ function runtime_patchDiscoveredHandlers() {
 	if (typeof EventTargetCtor !== "function") return;
 	const base = EventTargetCtor.prototype;
 
-	for (const name of Object.getOwnPropertyNames(globalThis)) {
-		const value = Object.getOwnPropertyDescriptor(globalThis, name)?.value;
-		if (typeof value !== "function" || !value.prototype || !Object.prototype.isPrototypeOf.call(base, value.prototype)) continue;
+	for (const name of Objects.getOwnPropertyNames(globalThis)) {
+		const value = Objects.getOwnPropertyDescriptor(globalThis, name)?.value;
+		if (typeof value !== "function" || !value.prototype || !Objects.prototype.isPrototypeOf.call(base, value.prototype)) continue;
 		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (Object.prototype.isPrototypeOf.call(base, globalThis)) {
+	if (Objects.prototype.isPrototypeOf.call(base, globalThis)) {
 		for (const propName of runtime_ownHandlerNames(globalThis)) runtime_patchHandlerAccessor(globalThis, propName);
 	}
 }
@@ -272,9 +273,9 @@ export function disableEventTargetPropertyPatching() {
 
 	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
 		const restore = closeLayer(layer, runtime_descriptorGetter);
-		const current = Object.getOwnPropertyDescriptor(proto, propName);
+		const current = Objects.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {
-			Object.defineProperty(proto, propName, restore);
+			Objects.defineProperty(proto, propName, restore);
 		}
 	}
 

@@ -64,6 +64,7 @@
  */
 
 import { commonJSExportNames } from "./cjs-export-names.mjs";
+import { Objects, Arrays, JSON, Map, Set, WeakMap, Symbol, Symbols, URL, URLSearchParams } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -73,7 +74,7 @@ import { commonJSExportNames } from "./cjs-export-names.mjs";
  * @type {ReadonlyArray<string>}
  * @internal
  */
-export const INSTANCE_QUERY_KEYS = Object.freeze(["slothlet_instance"]);
+export const INSTANCE_QUERY_KEYS = Objects.freeze(["slothlet_instance"]);
 
 /**
  * Query parameter a leaf's URL carries when its instance loads helper files once per importing api file (the
@@ -118,7 +119,7 @@ const MARKER = "slothlet_instance=";
  * @type {symbol}
  * @private
  */
-const INSTALLED = Symbol.for("@cldmv/slothlet.instanceImports.hooks");
+const INSTALLED = Symbols.for("@cldmv/slothlet.instanceImports.hooks");
 
 /**
  * Query parameter marking a URL that a `require()` resolved inside an active instance scope (#534).
@@ -159,7 +160,7 @@ const FACADE_PREFIX = "slothlet-esm-facade:";
  * @type {symbol}
  * @private
  */
-const STATE = Symbol.for("@cldmv/slothlet.instanceImports");
+const STATE = Symbols.for("@cldmv/slothlet.instanceImports");
 
 /**
  * The expression the code slothlet generates reaches the shared object by.
@@ -366,7 +367,7 @@ function recordPackageImport(parentURL, url) {
  * @type {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}}
  * @private
  */
-const SCRIPTS_READER = Object.freeze({
+const SCRIPTS_READER = Objects.freeze({
 	lookup: (key, hash) => {
 		const hashes = LOADED_SCRIPTS.get(key);
 		return { known: Boolean(hashes?.length), has: hash !== undefined && Boolean(hashes?.includes(hash)) };
@@ -436,7 +437,7 @@ const GRAPH_VIEWS = new Map();
  * @private
  */
 function recordImportsHere(instanceID, parent, children) {
-	if (typeof instanceID !== "string" || typeof parent !== "string" || !Array.isArray(children)) return;
+	if (typeof instanceID !== "string" || typeof parent !== "string" || !Arrays.isArray(children)) return;
 	let graph = IMPORT_GRAPHS.get(instanceID);
 	if (!graph) {
 		graph = new Map();
@@ -467,7 +468,7 @@ function recordImportsHere(instanceID, parent, children) {
  * @private
  */
 function graphView(graph) {
-	return Object.freeze({
+	return Objects.freeze({
 		get edges() {
 			return graph.edges ?? 0;
 		},
@@ -491,7 +492,7 @@ function graphView(graph) {
  * @type {{of: function(string): (object|null)}}
  * @private
  */
-const IMPORTS_READER = Object.freeze({
+const IMPORTS_READER = Objects.freeze({
 	of: (instanceID) => {
 		const graph = IMPORT_GRAPHS.get(instanceID);
 		if (!graph) return null;
@@ -507,7 +508,7 @@ const IMPORTS_READER = Object.freeze({
  * @type {{files: function(string): string[], version: function(string): ({key: object, count: number}|null)}}
  * @private
  */
-const COMMONJS_READER = Object.freeze({
+const COMMONJS_READER = Objects.freeze({
 	files: (instanceID) => {
 		const scope = SCOPES.get(instanceID);
 		const files = [...(scope ? scope.keys() : []), ...(LEAVES.get(instanceID) ?? [])];
@@ -548,7 +549,7 @@ function sharedState() {
 	if (SHARED !== null) return SHARED;
 	const held = globalThis[STATE];
 	if (held !== undefined) return (SHARED = held);
-	OWN_STATE = Object.freeze({
+	OWN_STATE = Objects.freeze({
 		recordImports: recordImportsHere,
 		imports: IMPORTS_READER,
 		scripts: SCRIPTS_READER,
@@ -560,7 +561,7 @@ function sharedState() {
 		redeem: redeemTicket,
 		requireCJS: requireCJSFromRunner
 	});
-	Object.defineProperty(globalThis, STATE, { value: OWN_STATE, enumerable: false, configurable: false, writable: false });
+	Objects.defineProperty(globalThis, STATE, { value: OWN_STATE, enumerable: false, configurable: false, writable: false });
 	return (SHARED = OWN_STATE);
 }
 
@@ -599,7 +600,7 @@ const HOST = (() => {
 	const path = getBuiltinModule("node:path");
 	const vm = getBuiltinModule("node:vm");
 	const crypto = getBuiltinModule("node:crypto");
-	return Object.freeze({
+	return Objects.freeze({
 		randomUUID: crypto.randomUUID.bind(crypto),
 		readFile: fs.readFileSync.bind(fs),
 		exists: fs.existsSync.bind(fs),
@@ -711,7 +712,7 @@ function ownModuleBridge(url) {
 	const lines = [`const ns = ${STATE_REF}.own(${JSON.stringify(url)});`];
 	let n = 0;
 	// The runtime's entry files export by name only.
-	for (const name of Object.keys(OWN_MODULES.get(url))) {
+	for (const name of Objects.keys(OWN_MODULES.get(url))) {
 		lines.push(`const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
@@ -1142,7 +1143,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 	)
 		return requireFn(resolved);
 
-	if (!SCOPE_KEYS.has(instanceID)) SCOPE_KEYS.set(instanceID, Object.freeze({}));
+	if (!SCOPE_KEYS.has(instanceID)) SCOPE_KEYS.set(instanceID, Objects.freeze({}));
 	let scope;
 	if (importer === null) {
 		scope = SCOPES.get(instanceID);
@@ -1163,7 +1164,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 
 	// Set aside every global entry the require must not share, then serve this instance's copies.
 	const setAside = new Map();
-	for (const file of Object.keys(cache)) {
+	for (const file of Objects.keys(cache)) {
 		if (owned(file)) {
 			setAside.set(file, cache[file]);
 			delete cache[file];
@@ -1189,7 +1190,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		ACTIVE = outer;
 		recordScopeRequires(instanceID, cache, owned);
 		// Collect this instance's (possibly new) copies, then put the global cache back.
-		for (const file of [...Object.keys(cache).filter(owned), ...served]) {
+		for (const file of [...Objects.keys(cache).filter(owned), ...served]) {
 			if (!(file in cache)) continue;
 			if (keep(file)) scope.set(file, cache[file]);
 			delete cache[file];
@@ -1219,10 +1220,10 @@ const RECORDED_REQUIRES = new WeakMap();
  * @private
  */
 function recordScopeRequires(instanceID, cache, owned) {
-	for (const file of Object.keys(cache)) {
+	for (const file of Objects.keys(cache)) {
 		if (!owned(file)) continue;
 		const children = cache[file]?.children;
-		if (!Array.isArray(children) || RECORDED_REQUIRES.get(cache[file]) === children.length) continue;
+		if (!Arrays.isArray(children) || RECORDED_REQUIRES.get(cache[file]) === children.length) continue;
 		RECORDED_REQUIRES.set(cache[file], children.length);
 		for (const child of children) {
 			const required = child?.filename;
@@ -1327,7 +1328,7 @@ function claimHere(instanceID) {
 	if (typeof instanceID !== "string" || instanceID === "" || CLAIMS.has(instanceID)) return null;
 	// What a URL carrying the ID had recorded before the ID was claimed is not the claimer's.
 	if (SCOPE_KEYS.has(instanceID) || IMPORT_GRAPHS.has(instanceID)) releaseScope(instanceID);
-	const handle = Object.freeze({
+	const handle = Objects.freeze({
 		instanceID,
 		require: (filePath, options) => {
 			if (CLAIMS.get(instanceID) !== handle) throw new TypeError(`The files of instance "${instanceID}" have been released.`);
@@ -1507,7 +1508,7 @@ function redeemTicket(ticket) {
 	if (!held) throw new TypeError("This code was not generated by slothlet's load hook for this load.");
 	TICKETS.delete(ticket);
 	const { job } = held;
-	return Object.freeze({
+	return Objects.freeze({
 		requireCJS: () => job(),
 		requireESM: () => job(),
 		requireFromModule: (url, format, stub) => job(stub)
@@ -1570,7 +1571,7 @@ function requireCJSFromRunner(filePath, instanceID) {
  */
 function hasCondition(conditions, name) {
 	if (conditions == null) return false;
-	return typeof conditions.has === "function" ? conditions.has(name) : Array.prototype.includes.call(conditions, name);
+	return typeof conditions.has === "function" ? conditions.has(name) : Arrays.prototype.includes.call(conditions, name);
 }
 
 /**
@@ -1652,7 +1653,7 @@ function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
 		importer === null ? SCOPES.get(instanceID) : COPIES.get(instanceID)?.get(helperCopyKey(helperImporterPath(importer), mount))
 	)?.get(filePath);
 	if (loaded?.loaded && loaded.exports !== null && (typeof loaded.exports === "object" || typeof loaded.exports === "function")) {
-		for (const key of Object.keys(loaded.exports)) if (key !== "default" && key.isWellFormed()) names.add(key);
+		for (const key of Objects.keys(loaded.exports)) if (key !== "default" && key.isWellFormed()) names.add(key);
 	}
 	names.delete("module.exports");
 	const lines = [
@@ -2032,7 +2033,7 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 		if (registry[INSTALLED]) return true;
 		if (typeof nodeModule?.registerHooks !== "function") return false;
 		nodeModule.registerHooks(HOOKS);
-		Object.defineProperty(registry, INSTALLED, { value: true, enumerable: false });
+		Objects.defineProperty(registry, INSTALLED, { value: true, enumerable: false });
 		return true;
 	}
 	// The hooks read what slothlet keeps about each instance's files, so they are the keeping copy's.
@@ -2049,7 +2050,7 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
  * @type {{resolve: Function, load: Function}}
  * @private
  */
-const HOOKS = Object.freeze({
+const HOOKS = Objects.freeze({
 	resolve: (specifier, context, nextResolve) => {
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
 		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX) || specifier.startsWith(OWN_MODULE_PREFIX)) {
@@ -2371,7 +2372,7 @@ export function slothletInstanceImports() {
 				const bare = new Set();
 				const visit = (node) => {
 					if (!node || typeof node !== "object") return;
-					if (Array.isArray(node)) {
+					if (Arrays.isArray(node)) {
 						for (const child of node) visit(child);
 						return;
 					}
@@ -2380,7 +2381,7 @@ export function slothletInstanceImports() {
 					const source = isImport ? node.source?.value : undefined;
 					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
 					else if (typeof source === "string") bare.add(source);
-					for (const key of Object.keys(node)) if (key !== "type") visit(node[key]);
+					for (const key of Objects.keys(node)) if (key !== "type") visit(node[key]);
 				};
 				visit(ast.body);
 				// A file no instance tags that the module imports by a bare specifier (a linked package, its package's own

@@ -45,6 +45,7 @@
 import { AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Map, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Wrappers in use, per target.

@@ -42,17 +42,18 @@
  */
 import { isNode } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Reflect, Objects, Arrays, Map, Set, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The key a clone wrapper holds the function it wraps under: the watermark of this patch.
  * @type {symbol}
  * @private
  */
-const ORIGINAL_CLONE = Symbol.for("slothlet.clone.original");
+const ORIGINAL_CLONE = Symbols.for("slothlet.clone.original");
 
 const { apply, getOwnPropertyDescriptor, defineProperty, getPrototypeOf, ownKeys } = Reflect;
-const isArray = Array.isArray;
-const ObjectPrototype = Object.prototype;
+const isArray = Arrays.isArray;
+const ObjectPrototype = Objects.prototype;
 const NativeMap = Map;
 const NativeSet = Set;
 const mapForEach = Map.prototype.forEach;

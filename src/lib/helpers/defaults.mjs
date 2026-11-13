@@ -31,6 +31,7 @@
 // (the wrapper classes reach `helpers/platform`, which uses it).
 import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, Objects, NativeProxy, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
@@ -56,9 +57,9 @@ export const DEFAULT_API_DEPTH = Infinity;
  * entries by reference safely without risking a mutation here leaking across consumers.
  * @type {ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>}
  */
-export const DEFAULT_ROUTINES = Object.freeze([
-	Object.freeze({ name: "initialize", mode: "startup" }),
-	Object.freeze({ name: "shutdown", mode: "shutdown" })
+export const DEFAULT_ROUTINES = Objects.freeze([
+	Objects.freeze({ name: "initialize", mode: "startup" }),
+	Objects.freeze({ name: "shutdown", mode: "shutdown" })
 ]);
 
 /**
@@ -82,9 +83,9 @@ function freezeSet(set) {
 	// `[[Extensible]]` to false, which is what `Object.isFrozen()` actually checks — freezing the
 	// target keeps that introspection honest. The Proxy layer below is what actually stops
 	// `add`/`delete`/`clear`, which `Object.freeze()` alone never touches.
-	Object.freeze(set);
+	Objects.freeze(set);
 	return markSlothletProxy(
-		new Proxy(set, {
+		new NativeProxy(set, {
 			get(target, prop) {
 				if (prop === "add" || prop === "delete" || prop === "clear") {
 					return () => {

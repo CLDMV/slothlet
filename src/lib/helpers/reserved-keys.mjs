@@ -27,6 +27,8 @@
  * require(esm), which rejects any module graph containing top-level await.
  */
 
+import { Objects, Set } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Property names reserved by the slothlet wrapper machinery — served as
  * `ComponentBase.INTERNAL_KEYS`; see that static for what each group is used for.
@@ -108,14 +110,14 @@ export function isFrameworkReservedKey(key) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_WRITE_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes, which only the host's write rules may name (#625).
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_INTERNAL_WRITE_KEYS = Object.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
 
 /**
  * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
@@ -164,7 +166,7 @@ export function isFrameworkWriteTarget(pattern) {
  * dataMemberOf({ get x() { return 1; }, y: 2 }, "y"); // 2 — and "x" gives undefined without running the getter
  */
 export function dataMemberOf(owner, key) {
-	const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+	const descriptor = Objects.getOwnPropertyDescriptor(owner, key);
 	if (!descriptor) return owner[key];
-	return Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+	return Objects.hasOwn(descriptor, "value") ? descriptor.value : undefined;
 }

@@ -42,6 +42,7 @@
 import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Objects, WeakSet, Promise, Promises, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of
@@ -49,7 +50,7 @@ import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/he
  * @type {symbol}
  * @private
  */
-const ORIGINAL_THEN = Symbol.for("slothlet.promise.originalThen");
+const ORIGINAL_THEN = Symbols.for("slothlet.promise.originalThen");
 
 /**
  * Follow patched `then` functions down to the one they replaced.
@@ -92,7 +93,7 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
 		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
-		return NATIVE_THEN.call(Promise.resolve(promise), onFulfilled, onRejected);
+		return NATIVE_THEN.call(Promises.resolve(promise), onFulfilled, onRejected);
 	}
 }
 
@@ -145,7 +146,7 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
  */
 export function enablePromisePatching() {
 	if (installed) return;
-	const descriptor = Object.getOwnPropertyDescriptor(Promise.prototype, "then");
+	const descriptor = Objects.getOwnPropertyDescriptor(Promise.prototype, "then");
 	// A host that froze or replaced `then` with something exotic keeps it as it is: this patch is
 	// best-effort like the others, not a requirement.
 	if (!descriptor || typeof descriptor.value !== "function" || !descriptor.configurable) return;
@@ -164,11 +165,11 @@ export function enablePromisePatching() {
 			return original.call(this, fulfilled, rejected);
 		}
 	}.then;
-	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
+	Objects.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
 	THEN_WRAPPERS.add(wrapper);
 	markLayer(wrapper, layer);
 
-	Object.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
+	Objects.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
 	installed = { layer, wrapper };
 }
 
@@ -186,6 +187,6 @@ export function enablePromisePatching() {
 export function disablePromisePatching() {
 	if (!installed) return;
 	const restore = closeLayer(installed.layer, runtime_descriptorValue);
-	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Object.defineProperty(Promise.prototype, "then", restore);
+	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Objects.defineProperty(Promise.prototype, "then", restore);
 	installed = null;
 }

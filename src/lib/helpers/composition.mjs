@@ -45,6 +45,7 @@
  * write to the value would.
  */
 import { util } from "@cldmv/slothlet/helpers/platform";
+import { Reflect, Objects, Arrays, Functions, NativeProxy, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a property key is an array index, the keys an array's `length` follows.
@@ -142,7 +143,7 @@ export function layerHeldKeys(layer) {
 const BOUND_ORIGINALS = new WeakMap();
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
-const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+const weakMapHas = Functions.prototype.call.bind(WeakMap.prototype.has);
 
 /**
  * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
@@ -223,9 +224,9 @@ export function setApiNodeCheck(check) {
  * @private
  */
 function hasOwnClass(value) {
-	if (value === null || typeof value !== "object" || Array.isArray(value) || util.types.isProxy(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto !== null && proto !== Object.prototype;
+	if (value === null || typeof value !== "object" || Arrays.isArray(value) || util.types.isProxy(value)) return false;
+	const proto = Objects.getPrototypeOf(value);
+	return proto !== null && proto !== Objects.prototype;
 }
 
 /**
@@ -287,7 +288,7 @@ function layerOver(underlying, members = [], hidden = []) {
 	const added = new Map();
 	const removed = new Set(hidden);
 	const bound = new Map();
-	const isArray = Array.isArray(underlying);
+	const isArray = Arrays.isArray(underlying);
 	const isCallable = typeof underlying === "function";
 	const forwards = (key) => !added.has(key) && !removed.has(key);
 	// A method runs on the value itself, which is the receiver its private fields and internal slots
@@ -299,7 +300,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		if (typeof value !== "function" || isApiNode(value)) return value;
 		const cached = bound.get(key);
 		if (cached?.original === value) return cached.fn;
-		const fn = new Proxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
+		const fn = new NativeProxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
 		bound.set(key, { original: value, fn });
 		BOUND_ORIGINALS.set(fn, value);
 		return fn;
@@ -327,7 +328,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		return true;
 	};
 	for (const [key, descriptor] of members) hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
-	const layer = new Proxy(shell, {
+	const layer = new NativeProxy(shell, {
 		get(_shell, key, receiver) {
 			if (!added.has(key)) return forwards(key) ? read(key) : undefined;
 			const member = added.get(key);
@@ -450,9 +451,9 @@ function layerOver(underlying, members = [], hidden = []) {
  */
 function copyArray(value) {
 	const copy = [];
-	const { length, ...members } = Object.getOwnPropertyDescriptors(value);
-	Object.defineProperties(copy, members);
-	Object.defineProperty(copy, "length", length);
+	const { length, ...members } = Objects.getOwnPropertyDescriptors(value);
+	Objects.defineProperties(copy, members);
+	Objects.defineProperty(copy, "length", length);
 	return copy;
 }
 
@@ -467,9 +468,9 @@ function copyArray(value) {
 function runtime_holdsMember(value, key) {
 	// A Proxy's getPrototypeOf trap can lead the walk back to a value it already passed; it stops there.
 	const seen = new Set();
-	for (let current = value; current !== null && !seen.has(current); current = Object.getPrototypeOf(current)) {
+	for (let current = value; current !== null && !seen.has(current); current = Objects.getPrototypeOf(current)) {
 		seen.add(current);
-		if (Object.getOwnPropertyDescriptor(current, key)) return true;
+		if (Objects.getOwnPropertyDescriptor(current, key)) return true;
 	}
 	return false;
 }
@@ -506,19 +507,19 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (typeof value === "function") return addsMembers ? layerOver(value) : value;
 	// An instance of an Array subclass may hold private fields no copy reproduces: it is kept as itself,
 	// as a class instance is (#585 review).
-	if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) return addsMembers ? layerOver(value) : value;
-	if (Array.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
+	if (Arrays.isArray(value) && Objects.getPrototypeOf(value) !== Arrays.prototype) return addsMembers ? layerOver(value) : value;
+	if (Arrays.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	// A browser cannot tell a Proxy from the object it fronts, so the check above misses one there. A callable
 	// `then` that no own or inherited member holds can only come from a trap: such a value is layered, as a
 	// Proxy is in Node, so it keeps answering `then` and is refused as a thenable like it would be when awaited.
 	if (!runtime_holdsMember(value, "then") && typeof value.then === "function") return layerOver(value);
-	const descriptors = Object.getOwnPropertyDescriptors(value);
+	const descriptors = Objects.getOwnPropertyDescriptors(value);
 	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
 	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
 	// the value's descriptors, so a member the value would refuse to delete or redefine is refused too.
-	if (addsMembers) for (const descriptor of Object.values(descriptors)) descriptor.configurable = true;
-	const copy = Object.create(Object.getPrototypeOf(value), descriptors);
+	if (addsMembers) for (const descriptor of Objects.values(descriptors)) descriptor.configurable = true;
+	const copy = Objects.create(Objects.getPrototypeOf(value), descriptors);
 	COPY_SOURCES.set(copy, value);
 	return copy;
 }

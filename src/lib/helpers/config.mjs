@@ -32,6 +32,7 @@ import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/def
 // Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
 // rather than silently matching nothing forever (see normalizeRoutines()).
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { Objects, Arrays, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
 const VALID_ROUTINE_MODES = new Set(["manual", "startup", "shutdown", "destroy"]);
@@ -45,7 +46,7 @@ const VALID_ROUTINE_ORDERS = new Set(["mount", "depth"]);
  * teardown order; `"mount"` (registration order) for `startup`/`manual`.
  * @type {Readonly<Record<string, "mount"|"depth">>}
  */
-const DEFAULT_ROUTINE_ORDER_BY_MODE = Object.freeze({ startup: "mount", shutdown: "depth", destroy: "depth", manual: "mount" });
+const DEFAULT_ROUTINE_ORDER_BY_MODE = Objects.freeze({ startup: "mount", shutdown: "depth", destroy: "depth", manual: "mount" });
 
 /**
  * The two implicit routines `collectLifecycleHooks: true` expands into — replacing what used to be
@@ -55,9 +56,9 @@ const DEFAULT_ROUTINE_ORDER_BY_MODE = Object.freeze({ startup: "mount", shutdown
  * `docs/LIFECYCLE.md` ("Routines") for the full replacement rationale.
  * @type {ReadonlyArray<{name: string, mode: string, order: string}>}
  */
-const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Object.freeze([
-	Object.freeze({ name: "^**.shutdown", mode: "shutdown", order: "depth" }),
-	Object.freeze({ name: "^**.destroy", mode: "destroy", order: "depth" })
+const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Objects.freeze([
+	Objects.freeze({ name: "^**.shutdown", mode: "shutdown", order: "depth" }),
+	Objects.freeze({ name: "^**.destroy", mode: "destroy", order: "depth" })
 ]);
 
 /**
@@ -458,8 +459,8 @@ export class Config extends ComponentBase {
 		const manifestListsEntries =
 			config.manifest != null &&
 			typeof config.manifest === "object" &&
-			((Array.isArray(config.manifest.files) && config.manifest.files.length > 0) ||
-				(Array.isArray(config.manifest.directories) && config.manifest.directories.length > 0));
+			((Arrays.isArray(config.manifest.files) && config.manifest.files.length > 0) ||
+				(Arrays.isArray(config.manifest.directories) && config.manifest.directories.length > 0));
 		if ((!noBase && !rawBase) || (noBase && manifestListsEntries)) {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
@@ -467,10 +468,10 @@ export class Config extends ComponentBase {
 		// Browser-mode specific validation. With no base there is no base tree to describe, so the
 		// manifest is only required when a base is given.
 		if (envTarget === "browser") {
-			if (!noBase && (!config.manifest || typeof config.manifest !== "object" || Array.isArray(config.manifest))) {
+			if (!noBase && (!config.manifest || typeof config.manifest !== "object" || Arrays.isArray(config.manifest))) {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
 			}
-			if (!noBase && (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories))) {
+			if (!noBase && (!Arrays.isArray(config.manifest.files) || !Arrays.isArray(config.manifest.directories))) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG_BROWSER_MANIFEST_INVALID",
 					{
@@ -713,7 +714,7 @@ export class Config extends ComponentBase {
 		const KNOWN_FIX_IDS = new Set(["C03_116"]);
 		const REPO_PR_BASE = "https://github.com/CLDMV/slothlet/pull/";
 
-		if (!Array.isArray(suppressFixes) || suppressFixes.length === 0) {
+		if (!Arrays.isArray(suppressFixes) || suppressFixes.length === 0) {
 			return new Set();
 		}
 
@@ -805,8 +806,8 @@ export class Config extends ComponentBase {
 		if (value === undefined || value === null) return;
 		let valid;
 		if (kind === "plain-object") {
-			const proto = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
-			valid = typeof value === "object" && (proto === Object.prototype || proto === null);
+			const proto = typeof value === "object" ? Objects.getPrototypeOf(value) : undefined;
+			valid = typeof value === "object" && (proto === Objects.prototype || proto === null);
 		} else {
 			valid = typeof value === kind;
 		}
@@ -815,7 +816,7 @@ export class Config extends ComponentBase {
 			"INVALID_CONFIG",
 			{
 				option: `typescript.${name}`,
-				value: Array.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
+				value: Arrays.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
 				expected,
 				hint: "HINT_INVALID_CONFIG",
 				validationError: true
@@ -859,7 +860,7 @@ export class Config extends ComponentBase {
 		if (!env || typeof env !== "object") {
 			return null; // No restriction — full snapshot
 		}
-		const include = Array.isArray(env.include) ? env.include.filter((k) => typeof k === "string") : null;
+		const include = Arrays.isArray(env.include) ? env.include.filter((k) => typeof k === "string") : null;
 		if (include && include.length > 0) {
 			return { include };
 		}
@@ -896,12 +897,12 @@ export class Config extends ComponentBase {
 		if (lifecycle === undefined || lifecycle === null) {
 			return null;
 		}
-		if (typeof lifecycle !== "object" || Array.isArray(lifecycle)) {
+		if (typeof lifecycle !== "object" || Arrays.isArray(lifecycle)) {
 			throw new this.SlothletError(
 				"INVALID_CONFIG",
 				{
 					option: "lifecycle",
-					value: Array.isArray(lifecycle) ? "array" : typeof lifecycle,
+					value: Arrays.isArray(lifecycle) ? "array" : typeof lifecycle,
 					expected: "a plain object mapping event names to functions or arrays of functions",
 					hint: "HINT_INVALID_CONFIG",
 					validationError: true
@@ -914,8 +915,8 @@ export class Config extends ComponentBase {
 		// literal or Object.create(null) map is a valid lifecycle shape. A class instance often
 		// has zero enumerable own properties, so the per-entry loop below would silently pass it
 		// through unvalidated instead of rejecting the malformed config.
-		const lifecycleProto = Object.getPrototypeOf(lifecycle);
-		if (lifecycleProto !== null && lifecycleProto !== Object.prototype) {
+		const lifecycleProto = Objects.getPrototypeOf(lifecycle);
+		if (lifecycleProto !== null && lifecycleProto !== Objects.prototype) {
 			throw new this.SlothletError(
 				"INVALID_CONFIG",
 				{
@@ -929,8 +930,8 @@ export class Config extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		for (const [event, handler] of Object.entries(lifecycle)) {
-			const handlers = Array.isArray(handler) ? handler : [handler];
+		for (const [event, handler] of Objects.entries(lifecycle)) {
+			const handlers = Arrays.isArray(handler) ? handler : [handler];
 			for (const fn of handlers) {
 				if (typeof fn !== "function") {
 					throw new this.SlothletError(
@@ -1013,7 +1014,7 @@ export class Config extends ComponentBase {
 		if (routines === null) {
 			return [];
 		}
-		if (!Array.isArray(routines)) {
+		if (!Arrays.isArray(routines)) {
 			throw new this.SlothletError(
 				"INVALID_CONFIG",
 				{
@@ -1041,7 +1042,7 @@ export class Config extends ComponentBase {
 					name = entry.slice(0, sepIndex);
 					mode = entry.slice(sepIndex + 1);
 				}
-			} else if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+			} else if (entry && typeof entry === "object" && !Arrays.isArray(entry)) {
 				name = entry.name;
 				mode = entry.mode ?? "manual";
 			} else {
@@ -1049,7 +1050,7 @@ export class Config extends ComponentBase {
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}]`,
-						value: Array.isArray(entry) ? "array" : typeof entry,
+						value: Arrays.isArray(entry) ? "array" : typeof entry,
 						expected: 'a string ("name" or "name:mode") or an object ({ name, mode? })',
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
@@ -1465,7 +1466,7 @@ export class Config extends ComponentBase {
 		// security-relevant block. Mirrors the manifest and lifecycle array rejections.
 		if (
 			permissions.references !== undefined &&
-			(typeof permissions.references !== "object" || permissions.references === null || Array.isArray(permissions.references))
+			(typeof permissions.references !== "object" || permissions.references === null || Arrays.isArray(permissions.references))
 		) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
@@ -1499,7 +1500,7 @@ export class Config extends ComponentBase {
 		}
 
 		// Validate rules
-		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
+		if (permissions.rules !== undefined && !Arrays.isArray(permissions.rules)) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
 				{
@@ -1513,13 +1514,13 @@ export class Config extends ComponentBase {
 			);
 		}
 
-		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
+		const rules = Arrays.isArray(permissions.rules) ? permissions.rules : [];
 
 		// Validate the module-privacy block (#260). Rejects arrays the same way the manifest,
 		// lifecycle, and references blocks do (`typeof [] === "object"`).
 		if (
 			permissions.private !== undefined &&
-			(typeof permissions.private !== "object" || permissions.private === null || Array.isArray(permissions.private))
+			(typeof permissions.private !== "object" || permissions.private === null || Arrays.isArray(permissions.private))
 		) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
@@ -1560,7 +1561,7 @@ export class Config extends ComponentBase {
 		// Rejects arrays like the other sub-blocks (`typeof [] === "object"`).
 		if (
 			permissions.events !== undefined &&
-			(typeof permissions.events !== "object" || permissions.events === null || Array.isArray(permissions.events))
+			(typeof permissions.events !== "object" || permissions.events === null || Arrays.isArray(permissions.events))
 		) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
@@ -1588,7 +1589,7 @@ export class Config extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		if (permissions.events?.rules !== undefined && !Array.isArray(permissions.events.rules)) {
+		if (permissions.events?.rules !== undefined && !Arrays.isArray(permissions.events.rules)) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
 				{ option: "permissions.events.rules", value: permissions.events.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
@@ -1596,7 +1597,7 @@ export class Config extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		const eventRules = Array.isArray(permissions.events?.rules) ? permissions.events.rules : [];
+		const eventRules = Arrays.isArray(permissions.events?.rules) ? permissions.events.rules : [];
 
 		return {
 			defaultPolicy,
