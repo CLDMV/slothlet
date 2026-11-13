@@ -32,7 +32,9 @@
  * `Set`s on the way to each, with the value behind a view in the view's place and a node's data read member by member
  * through the node, and hands that to the platform's own function as it was when slothlet loaded. What comes back is the platform's clone (or nothing, for a message posted), so the caller
  * ends up with a copy of the data and never with the object behind a view or a node. A value holding no view or node of
- * slothlet's is refused with the platform's own error, as before.
+ * slothlet's is refused with the platform's own error, as before. A built-in data object behind a view or a node (a
+ * date, map, set, error, pattern, buffer, typed array, boxed primitive) is copied from reads of it, the language's own
+ * methods reading its internal slots, never handed to the platform as it is.
  *
  * Wrapped where they exist: `structuredClone`, `v8.serialize` (Node), and `postMessage` of `MessagePort`,
  * `BroadcastChannel`, `Worker` (the browser's and `node:worker_threads`'), and the browser's `window`.
@@ -64,6 +66,117 @@ const mapGet = Map.prototype.get;
 const mapHas = Map.prototype.has;
 const mapSize = getOwnPropertyDescriptor(Map.prototype, "size").get;
 const setSize = getOwnPropertyDescriptor(Set.prototype, "size").get;
+
+/**
+ * A getter of a built-in prototype, as it was when slothlet loaded, or null where the platform has none.
+ * @param {object|undefined} prototype - The prototype.
+ * @param {string|symbol} key - The getter's key.
+ * @returns {Function|null} The getter.
+ * @private
+ */
+const getterOf = (prototype, key) => (prototype ? (getOwnPropertyDescriptor(prototype, key)?.get ?? null) : null);
+
+const NativeDate = Date;
+const NativeRegExp = RegExp;
+const NativeError = Error;
+const ErrorPrototype = NativeError.prototype;
+const errorBrand = typeof NativeError.isError === "function" ? NativeError.isError : null;
+const NativeObject = Object;
+const NativeArrayBuffer = ArrayBuffer;
+const NativeUint8Array = Uint8Array;
+const NativeDataView = DataView;
+const dateGetTime = Date.prototype.getTime;
+const regExpSource = getterOf(RegExp.prototype, "source");
+/** The flag getters of `RegExp.prototype`, each with the letter it stands for, in the order `flags` lists them. */
+const REGEXP_FLAGS = [
+	["d", "hasIndices"],
+	["g", "global"],
+	["i", "ignoreCase"],
+	["m", "multiline"],
+	["s", "dotAll"],
+	["u", "unicode"],
+	["v", "unicodeSets"],
+	["y", "sticky"]
+]
+	.map(([letter, key]) => [letter, getterOf(RegExp.prototype, key)])
+	.filter(([, getter]) => getter !== null);
+const bufferByteLength = getterOf(ArrayBuffer.prototype, "byteLength");
+const bufferResizable = getterOf(ArrayBuffer.prototype, "resizable");
+const bufferMaxByteLength = getterOf(ArrayBuffer.prototype, "maxByteLength");
+const bufferDetached = getterOf(ArrayBuffer.prototype, "detached");
+const sharedByteLength = typeof SharedArrayBuffer === "function" ? getterOf(SharedArrayBuffer.prototype, "byteLength") : null;
+const TypedArrayPrototype = getPrototypeOf(Uint8Array.prototype);
+const typedBuffer = getterOf(TypedArrayPrototype, "buffer");
+const typedByteOffset = getterOf(TypedArrayPrototype, "byteOffset");
+const typedLength = getterOf(TypedArrayPrototype, "length");
+const typedTag = getterOf(TypedArrayPrototype, Symbol.toStringTag);
+const typedSet = TypedArrayPrototype.set;
+const viewBuffer = getterOf(DataView.prototype, "buffer");
+const viewByteOffset = getterOf(DataView.prototype, "byteOffset");
+const viewByteLength = getterOf(DataView.prototype, "byteLength");
+/** The typed array classes, by the name each instance's tag gives. */
+const TYPED_ARRAYS = new NativeMap(
+	[
+		"Int8Array",
+		"Uint8Array",
+		"Uint8ClampedArray",
+		"Int16Array",
+		"Uint16Array",
+		"Int32Array",
+		"Uint32Array",
+		"Float16Array",
+		"Float32Array",
+		"Float64Array",
+		"BigInt64Array",
+		"BigUint64Array"
+	]
+		.filter((name) => typeof globalThis[name] === "function")
+		.map((name) => [name, globalThis[name]])
+);
+/** The error classes the structured clone algorithm keeps, by name; any other error is copied as an `Error`. */
+const ERROR_CLASSES = new NativeMap(
+	["Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"].map((name) => [name, globalThis[name]])
+);
+/** The `valueOf` of each boxed primitive's prototype: the engine's brand check for that box. */
+const BOXED_VALUE_OF = [Number, String, Boolean, typeof BigInt === "function" ? BigInt : null, Symbol]
+	.filter((kind) => kind !== null)
+	.map((kind) => kind.prototype.valueOf);
+
+/**
+ * Run a built-in method on a value, answering `undefined` where the value is not of the method's kind.
+ * @param {Function|null} method - The method (a getter included).
+ * @param {*} value - The value.
+ * @returns {*} What the method answered.
+ * @private
+ */
+function runtime_tryBrand(method, value) {
+	if (method === null) return undefined;
+	try {
+		return apply(method, value, []);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Whether a value is a primitive boxed in an object (`new String("x")`, `new Number(1)`, …).
+ * @param {object} value - An object.
+ * @returns {boolean} True for one.
+ * @internal
+ * @example
+ * isBoxedPrimitive(new Number(4)); // true
+ */
+export function isBoxedPrimitive(value) {
+	for (const valueOf of BOXED_VALUE_OF) {
+		try {
+			apply(valueOf, value, []);
+			return true;
+		} catch {
+			// Not this kind of box.
+		}
+	}
+	return false;
+}
 
 /**
  * Whether a value is a `Map` or a `Set` of the engine's own, told by the engine's brand check.
@@ -158,17 +271,19 @@ export function setCloneViewReader(behind) {
 
 /**
  * Tells how an api node's data is copied, set by the handlers that make the nodes.
- * @type {function(*): ({value: *}|{list: boolean}|undefined)}
+ * @type {function(*): ({value: *}|{list: boolean}|{slots: object, members: object}|undefined)}
  * @private
  */
 let nodeData = () => undefined;
 
 /**
  * Set how the data of one of slothlet's api nodes is told.
- * @param {function(*): ({value: *}|{list: boolean}|undefined)} shape - Answers `undefined` for a value that is no
- *   loaded api node (or a view of one); `{ list }` for a node whose data is read member by member through the node
- *   itself, as an array (`list: true`) or an object; `{ value }` for a node standing for a value the platform clones
- *   or refuses as it is (a function, a primitive, a `Date`).
+ * @param {function(*): ({value: *}|{list: boolean}|{slots: object, members: object}|undefined)} shape - Answers
+ *   `undefined` for a value that is no loaded api node (or a view of one); `{ list }` for a node whose data is read
+ *   member by member through the node itself, as an array (`list: true`) or an object; `{ slots, members }` for a node
+ *   or view standing over a built-in data object or an error (`slots`), copied from what it holds and from reads of its
+ *   members through `members`, the node or view the caller holds; `{ value }` for a node standing for a value the
+ *   platform clones or refuses as it is (a function, a primitive, a `Date` while the permission system is off).
  * @returns {void}
  * @internal
  * @example
@@ -176,6 +291,167 @@ let nodeData = () => undefined;
  */
 export function setCloneNodeReader(shape) {
 	nodeData = shape;
+}
+
+/**
+ * A refusal, thrown where a value's data cannot be copied for the caller: the platform's own refusal then stands.
+ * @private
+ */
+class NotCopied extends Error {}
+
+/**
+ * A copy of a built-in data object (a date, map, set, error, pattern, buffer, typed array, `DataView`, boxed
+ * primitive) one of slothlet's views or api nodes stands over, made from reads of it the caller may make (#751): what
+ * the object holds in its internal slots, read with the language's own methods as they were when slothlet loaded (so
+ * none of a module's code runs, as none runs when the platform clones the object), and every value it holds read
+ * through `members` (the view or node the caller holds) or walked as the clone algorithm walks it. The copy is a new
+ * object of the caller's; the object behind the view is never part of it.
+ *
+ * Refused (the platform's own error then stands): a `WeakMap`, `WeakSet`, `WeakRef` or promise, as the platform refuses
+ * them; a detached buffer; and memory shared with the object (a `SharedArrayBuffer`, or an array over one), which a
+ * clone would hand over to be written as well as read.
+ * @param {object} data - The built-in object.
+ * @param {object} members - What the caller holds of it: reads of its members go through this.
+ * @param {function(*): *} walk - Copies a value the object holds, as the clone algorithm would.
+ * @param {function(object): void} remember - Records the copy before what it holds is walked, so a cycle finds it.
+ * @param {function(object): (object|undefined)} known - A copy already made of a buffer, by the buffer.
+ * @param {function(object, object): void} keep - Records a buffer's copy, so arrays over one buffer still share one.
+ * @returns {object} The copy.
+ * @private
+ */
+function runtime_slotCopy(data, members, walk, remember, known, keep) {
+	if (runtime_hasBrand(data, mapSize)) {
+		const copy = new NativeMap();
+		remember(copy);
+		const entries = [];
+		apply(mapForEach, data, [(member, key) => entries.push([key, member])]);
+		for (const [key, member] of entries) apply(mapSet, copy, [walk(key), walk(member)]);
+		return copy;
+	}
+	if (runtime_hasBrand(data, setSize)) {
+		const copy = new NativeSet();
+		remember(copy);
+		const entries = [];
+		apply(setForEach, data, [(member) => entries.push(member)]);
+		for (const member of entries) apply(setAdd, copy, [walk(member)]);
+		return copy;
+	}
+	const time = runtime_tryBrand(dateGetTime, data);
+	if (time !== undefined) return new NativeDate(time);
+	const source = runtime_tryBrand(regExpSource, data);
+	if (source !== undefined) {
+		let flags = "";
+		for (const [letter, getter] of REGEXP_FLAGS) if (apply(getter, data, [])) flags += letter;
+		// A copy starts at `lastIndex` 0, as the platform's does.
+		return new NativeRegExp(source, flags);
+	}
+	const bufferCopy = (buffer) => {
+		const kept = known(buffer);
+		if (kept !== undefined) return kept;
+		if (runtime_tryBrand(bufferByteLength, buffer) === undefined || runtime_tryBrand(bufferDetached, buffer) === true)
+			throw new NotCopied();
+		const length = apply(bufferByteLength, buffer, []);
+		const copy = runtime_tryBrand(bufferResizable, buffer)
+			? new NativeArrayBuffer(length, { maxByteLength: apply(bufferMaxByteLength, buffer, []) })
+			: new NativeArrayBuffer(length);
+		apply(typedSet, new NativeUint8Array(copy), [new NativeUint8Array(buffer)]);
+		keep(buffer, copy);
+		return copy;
+	};
+	const tag = runtime_tryBrand(typedTag, data);
+	if (tag !== undefined) {
+		const Kind = apply(mapGet, TYPED_ARRAYS, [tag]);
+		if (Kind === undefined) throw new NotCopied();
+		const buffer = bufferCopy(apply(typedBuffer, data, []));
+		const copy = new Kind(buffer, apply(typedByteOffset, data, []), apply(typedLength, data, []));
+		remember(copy);
+		return copy;
+	}
+	if (runtime_tryBrand(viewByteLength, data) !== undefined) {
+		const buffer = bufferCopy(apply(viewBuffer, data, []));
+		const copy = new NativeDataView(buffer, apply(viewByteOffset, data, []), apply(viewByteLength, data, []));
+		remember(copy);
+		return copy;
+	}
+	if (runtime_tryBrand(bufferByteLength, data) !== undefined) {
+		const copy = bufferCopy(data);
+		remember(copy);
+		return copy;
+	}
+	// Memory shared with the object: a clone would let the caller write it.
+	if (runtime_tryBrand(sharedByteLength, data) !== undefined) throw new NotCopied();
+	for (const valueOf of BOXED_VALUE_OF) {
+		let primitive;
+		try {
+			primitive = apply(valueOf, data, []);
+		} catch {
+			continue;
+		}
+		// A boxed symbol is refused by the platform, as the object is.
+		return NativeObject(primitive);
+	}
+	if (runtime_isError(data)) return runtime_errorCopy(data, members, walk, remember);
+	throw new NotCopied();
+}
+
+/**
+ * Whether a value is an error: by the engine's brand check where it has one, by its prototype chain otherwise (read
+ * with the language's own `getPrototypeOf`, so no `Symbol.hasInstance` a module gave a class runs).
+ * @param {object} value - An object.
+ * @returns {boolean} True for an error.
+ * @private
+ */
+function runtime_isError(value) {
+	if (errorBrand !== null) return errorBrand(value);
+	for (let current = getPrototypeOf(value); current !== null; current = getPrototypeOf(current)) {
+		if (current === ErrorPrototype) return true;
+	}
+	return false;
+}
+
+/**
+ * A copy of an error, made as the structured clone algorithm copies one: of the class its `name` names (one of the
+ * language's own, `Error` for any other), with its own `message`, its `stack`, and its own `cause`, walked. The kind is
+ * read from the error itself; the members through `members`, so a member the caller may not read is left out.
+ * @param {object} data - The error.
+ * @param {object} members - What the caller holds of it.
+ * @param {function(*): *} walk - Copies a value the error holds.
+ * @param {function(object): void} remember - Records the copy before its cause is walked.
+ * @returns {Error} The copy.
+ * @private
+ */
+function runtime_errorCopy(data, members, walk, remember) {
+	const read = (key) => {
+		try {
+			return { value: members[key] };
+		} catch {
+			return null;
+		}
+	};
+	const own = (key) => getOwnPropertyDescriptor(data, key);
+	let name;
+	try {
+		name = data.name;
+	} catch {
+		name = undefined;
+	}
+	const Kind = (typeof name === "string" ? apply(mapGet, ERROR_CLASSES, [name]) : undefined) ?? NativeError;
+	const copy = new Kind();
+	remember(copy);
+	const define = (key, value) => defineProperty(copy, key, { value, writable: true, enumerable: false, configurable: true });
+	// The platform reads a data `message` of the error's own, and the `stack` as any read of it gives it.
+	const message = own("message");
+	if (message && "value" in message) {
+		const value = read("message");
+		if (value !== null) define("message", value.value);
+	}
+	const stack = read("stack");
+	define("stack", stack === null ? undefined : stack.value);
+	if (own("cause")) {
+		const cause = read("cause");
+		if (cause !== null) define("cause", walk(cause.value));
+	}
+	return copy;
 }
 
 /**
@@ -208,6 +484,21 @@ function runtime_reveal(root) {
 			const node = nodeData(subject);
 			if (node !== undefined) {
 				found = true;
+				if ("slots" in node) {
+					const copy = runtime_slotCopy(
+						node.slots,
+						node.members,
+						walk,
+						(made) => {
+							apply(mapSet, copies, [value, made]);
+							if (subject !== value) apply(mapSet, copies, [subject, made]);
+						},
+						(buffer) => (apply(mapHas, copies, [buffer]) ? apply(mapGet, copies, [buffer]) : undefined),
+						(buffer, made) => apply(mapSet, copies, [buffer, made])
+					);
+					apply(mapSet, copies, [value, copy]);
+					return copy;
+				}
 				if ("value" in node) {
 					subject = node.value;
 				} else {

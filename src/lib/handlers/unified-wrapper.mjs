@@ -78,7 +78,7 @@ import {
 } from "#handlers/hook-manager";
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
-import { setCloneViewReader, setCloneNodeReader } from "@cldmv/slothlet/helpers/clone-context";
+import { setCloneViewReader, setCloneNodeReader, isBoxedPrimitive } from "@cldmv/slothlet/helpers/clone-context";
 import { setFunctionSourceReader, isFunctionSourcePatch } from "@cldmv/slothlet/helpers/function-source-context";
 import {
 	Reflect,
@@ -6688,9 +6688,27 @@ setFunctionSourceReader((value) => {
 	return typeof original === "function" ? original : undefined;
 });
 
+/**
+ * Whether a value keeps its data where only the engine reads it: a built-in data object, an error, or a boxed primitive.
+ * @param {object} value - An object.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_holdsSlottedData(value) {
+	return runtime_dataKind(value) !== null || runtime_isErrorValue(value) || isBoxedPrimitive(value);
+}
+
 // The platform's cloning functions copy an api node's data too (#751): member by member through the node (or the view
 // of it the caller holds), so each read is the node's own, with its checks, and the module's object is never handed over.
 setCloneNodeReader((value) => {
+	// A view `self` handed a module over a built-in data object or an error a module holds: while the permission system is
+	// on it is copied from reads of it (see `runtime_slotCopy` in clone-context), off it is the platform's to clone.
+	const record = SELF_MEMBER_VIEWS.get(value);
+	if (record !== undefined) {
+		const data = record.value;
+		if (data === null || typeof data !== "object" || !runtime_holdsSlottedData(data)) return undefined;
+		return record.slothlet?.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
+	}
 	const wrapper = runtime_viewedNodeWrapper(value);
 	if (wrapper === null) return undefined;
 	const internal = wrapper.____slothletInternal;
@@ -6705,11 +6723,12 @@ setCloneNodeReader((value) => {
 	if (Arrays.isArray(impl)) return { list: true };
 	// A module's own Proxy is refused by the platform, as it is in plain JavaScript.
 	if (util.types.isProxy(impl) && !isCompositionLayer(impl)) return { value: impl };
-	// A built-in data object (a `Date`, a `Map`, an error) holds its data in internal slots only the platform reads. It is
-	// handed over only while the permission system is off: no read through the node would stand between a module and it.
+	// A built-in data object (a `Date`, a `Map`, an error, a boxed primitive) holds its data in internal slots only the
+	// engine reads. While the permission system is on, the copy is made from reads of it, its members read through the
+	// node or view the caller holds; off, the platform clones it as it is.
 	const data = layerUnderlying(impl);
-	if (runtime_dataKind(data) !== null || runtime_isErrorValue(data)) {
-		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? undefined : { value: data };
+	if (runtime_holdsSlottedData(data)) {
+		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
 	}
 	return { list: false };
 });
