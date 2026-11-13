@@ -2031,8 +2031,9 @@ function runtime_topLevelRunning(record) {
 			}
 			if (!placement) return isNode ? runtime_packageAnswer(record, frame, false) : null;
 			// Code of the instance the module does not import. A helper file's own code is the code of the api files that
-			// import it, under this flow's module too: a file's imports can be evaluated inside another file's load when
-			// several load at once, so the flow a helper's timer carries is not always its importer's.
+			// import it, under this flow's module too: a helper waiting on a module with a top-level await is evaluated when
+			// that module is ready, in the flow of the file that started loading it, so the flow a helper's timer carries is
+			// not always its importer's. (Slothlet's own runtime, which awaits too, is loaded before any api file.)
 			return runtime_helperAnswer(record, frame) ?? UNACCOUNTED_SUPPLIER;
 		}
 		if (frames.truncated) return undefined;

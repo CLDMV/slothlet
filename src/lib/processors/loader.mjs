@@ -333,6 +333,42 @@ function ensureInstanceImportHooks() {
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
 }
 
+/**
+ * Whether slothlet's runtime (`@cldmv/slothlet/runtime`) has been loaded by this copy of slothlet.
+ * @type {boolean}
+ * @private
+ */
+let runtimeLoaded = false;
+
+/**
+ * The load of slothlet's runtime, started by the first api file load of the process.
+ * @type {Promise<void>|null}
+ * @private
+ */
+let runtimeLoading = null;
+
+/**
+ * Load slothlet's runtime before the first api file is loaded. The runtime awaits at its top level, so an api file
+ * importing it while it is still loading is not evaluated when its own import finishes resolving: the engine evaluates
+ * every file waiting on the runtime in one job, when the runtime is ready, and that job runs in the flow of whichever
+ * load asked for the runtime first. An api file's top level, and the helper files it imports, then ran inside another
+ * file's load. Loaded here first, from slothlet's own flow, no api file ever waits on it.
+ * @returns {Promise<void>} Resolves once the runtime is loaded.
+ * @private
+ */
+function ensureRuntimeLoaded() {
+	runtimeLoading ??= import("@cldmv/slothlet/runtime").then(
+		() => {
+			runtimeLoaded = true;
+		},
+		() => {
+			// A host that cannot resolve the runtime loads no api file that imports it either.
+			runtimeLoaded = true;
+		}
+	);
+	return runtimeLoading;
+}
+
 export class Loader extends ComponentBase {
 	static slothletProperty = "loader";
 
@@ -379,6 +415,8 @@ export class Loader extends ComponentBase {
 	 * @public
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
+		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
+		if (!runtimeLoaded) await ensureRuntimeLoaded();
 		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
 		const contextManager = this.slothlet.contextManager;
 		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
