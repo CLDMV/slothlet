@@ -350,8 +350,9 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 		if (runtime_tryBrand(bufferByteLength, buffer) === undefined || runtime_tryBrand(bufferDetached, buffer) === true)
 			throw new NotCopied();
 		const length = apply(bufferByteLength, buffer, []);
+		// A resizable buffer's copy is made resizable to the same limit (the constructor's second argument).
 		const copy = runtime_tryBrand(bufferResizable, buffer)
-			? new NativeArrayBuffer(length, { maxByteLength: apply(bufferMaxByteLength, buffer, []) })
+			? Reflect.construct(NativeArrayBuffer, [length, { maxByteLength: apply(bufferMaxByteLength, buffer, []) }])
 			: new NativeArrayBuffer(length);
 		apply(typedSet, new NativeUint8Array(copy), [new NativeUint8Array(buffer)]);
 		keep(buffer, copy);
