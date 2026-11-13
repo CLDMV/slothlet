@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:06-08:00 (1794477666)
+ *	@Last modified time: 2026-11-13T00:01:56-08:00 (1794556916)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,6 +32,11 @@
  *
  * The first row is the one the live runtime refused under `"fast"`: the bag's frame, which no waiting call accounts
  * for, made the whole access unplaceable.
+ *
+ * With several calls of `sup` waiting at once, a call that picks up in an unnamed function is not named by the stack.
+ * The async runtime knows the call from its store. The live runtime holds the access to every waiting call of the file
+ * (PERMISSIONS.md, "Overlapping calls"): it answers as the async runtime does when all of them are allowed, and
+ * refuses when any one of them is denied, also where the call really running is allowed.
  * @module tests/vitests/suites/permissions/permissions-resumed-call-runs-code
  */
 
@@ -96,10 +101,51 @@ describe.each(matrix)(
 				const [nested, exported, then] = await Promise.all([api.sup.inNested(), api.sup.inExport(), api.sup.inThen()]);
 				// The exported function names its call when it picks up again, and a promise callback carries the call that
 				// made it. An unnamed function nested in the export does neither: the async runtime's store still says which
-				// call it is, and the live runtime, which reads the stack, cannot tell it from the other waiting calls of
-				// its file and refuses (PERMISSIONS.md: narrowing that ends with several calls left fails closed).
+				// call it is, and the live runtime, which reads the stack, holds the access to every waiting call of its
+				// file. Under each of these rule sets all of them answer alike, so both runtimes give the same answer.
 				expect([exported, then]).toEqual([expected, expected]);
-				expect(nested).toBe(runtime === "live" ? DENIED : expected);
+				expect(nested).toBe(expected);
+			});
+
+			it(`with another call of sup waiting, sup's own code after an await answers ${own}`, async () => {
+				await open();
+				const [mine, nested] = await Promise.all([api.sup.own(), api.sup.inNested()]);
+				expect(mine).toBe(own);
+				expect(nested).toBe(expected);
+			});
+		});
+
+		describe("one waiting call of sup denied, the others allowed", () => {
+			/**
+			 * Build the instance with one leaf of `sup` denied the vault.
+			 * @param {string} leaf - The leaf's name.
+			 * @returns {Promise<void>}
+			 */
+			async function open(leaf) {
+				const rules = [{ caller: `sup.${leaf}`, target: "vault.**", effect: "deny" }];
+				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+			}
+
+			it("the call that cannot be told from a denied one is refused in the live runtime", async () => {
+				await open("inExport");
+				const [nested, exported, then] = await Promise.all([api.sup.inNested(), api.sup.inExport(), api.sup.inThen()]);
+				// `inExport` is denied and names itself; `inThen` is carried by its promise callback: both answer by their own
+				// rules in both runtimes. `inNested` picks up while `inExport` is waiting and the stack does not say which
+				// of the file's calls it is: the live runtime refuses it, as one of the calls it could be is denied.
+				expect([exported, then]).toEqual([DENIED, "SECRET"]);
+				expect(nested).toBe(runtime === "live" ? DENIED : "SECRET");
+			});
+
+			it("the denied call is refused whichever other calls are waiting", async () => {
+				await open("inNested");
+				const [nested, exported, then] = await Promise.all([api.sup.inNested(), api.sup.inExport(), api.sup.inThen()]);
+				expect([nested, exported, then]).toEqual([DENIED, "SECRET", "SECRET"]);
+			});
+
+			it("once the denied call has settled, the allowed one answers", async () => {
+				await open("inExport");
+				expect(await api.sup.inExport()).toBe(DENIED);
+				expect(await api.sup.inNested()).toBe("SECRET");
 			});
 		});
 	}

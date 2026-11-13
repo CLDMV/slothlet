@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:56:16-08:00 (1794470176)
+ *	@Last modified time: 2026-11-13T00:01:48-08:00 (1794556908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,8 +32,9 @@
  *   module has to be allowed.
  * - Run by another module, that module has to be allowed as well (`runner` always is here).
  * - The live runtime tells which call picked up after an `await` from the stack. The helper's async function picking
- *   up inside `runner`'s waiting call is code of the instance that no waiting call imports, which the live runtime
- *   refuses whatever the rules say (PERMISSIONS.md, "Overlapping calls").
+ *   up inside `runner`'s waiting call is code of the instance that no waiting call imports; the live runtime holds it
+ *   to every waiting call (here `runner`'s alone), so it answers as the async runtime does (PERMISSIONS.md,
+ *   "Overlapping calls").
  * - With the permission system not on, nothing is refused.
  *
  * @module tests/vitests/suites/permissions/permissions-helper-definer
@@ -107,12 +108,9 @@ const RULE_SETS = [
  * @param {{leaf: string, helper: string, returned: boolean, later?: boolean}} route - The route.
  * @param {string} attribution - `permissions.attribution`.
  * @param {"host"|"runner"} ranBy - Who runs the function.
- * @param {string} runtime - The runtime.
- * @returns {string[]|null} The caller paths that all have to be allowed, or null when the access is refused whatever
- *   the rules say.
+ * @returns {string[]} The caller paths that all have to be allowed.
  */
-function heldTo(route, attribution, ranBy, runtime) {
-	if (runtime === "live" && ranBy === "runner" && route.later) return null;
+function heldTo(route, attribution, ranBy) {
 	// The stand-in the host got records the leaf. `runner` is a file of the same module, so it is handed the function
 	// itself, and nested in data there is no stand-in: the stack names the helper, which its importers stand for.
 	if (attribution === "precise" && route.returned && ranBy === "host") return [route.leaf];
@@ -171,14 +169,13 @@ describe.each(MATRIX)("Permissions > a helper's function a leaf hands out > $nam
 
 		it.each(ROUTES)("$leaf, run by the host", async (route) => {
 			const fn = await handedOut(api, route);
-			const expected = heldTo(route, attribution, "host", runtime).some(denies) ? DENIED : SECRET;
+			const expected = heldTo(route, attribution, "host").some(denies) ? DENIED : SECRET;
 			expect(await settle(() => fn())).toBe(expected);
 		});
 
 		it.each(ROUTES)("$leaf, run by another module", async (route) => {
 			const fn = await handedOut(api, route);
-			const held = heldTo(route, attribution, "runner", runtime);
-			const expected = held === null || held.some(denies) ? DENIED : SECRET;
+			const expected = heldTo(route, attribution, "runner").some(denies) ? DENIED : SECRET;
 			expect(await api.runner.call(fn)).toBe(expected);
 		});
 

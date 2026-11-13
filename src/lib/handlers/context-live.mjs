@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:27:32-08:00 (1794554852)
+ *	@Last modified time: 2026-11-13T00:00:19-08:00 (1794556819)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
-import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, buildCapturedFlowStore, combineCeilings } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
@@ -44,6 +44,7 @@ import {
 	runtime_captureFrames,
 	runtime_namesEntry,
 	stackHoldsInstanceCode,
+	supplierChainCeiling,
 	toComparablePath
 } from "#handlers/frame-placement";
 import { Reflect, Objects, Arrays, Math, Map, Set, WeakMap, WeakRef, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
@@ -492,7 +493,10 @@ export class LiveContextManager {
 
 		const candidates = new Set();
 		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
-		const resolved = this.#resolveSuspendedFromStack(candidates);
+		let resolved = this.#resolveSuspendedFromStack(candidates);
+		// One of several calls, the stack not saying which: calls waiting on one store name it; calls of several are
+		// as code several instances account for.
+		if (resolved?.tied) resolved = new Set(resolved.tied.map((entry) => entry.store)).size === 1 ? resolved.tied[0] : AMBIGUOUS;
 		// Code several instances' calls account for could be any of them: the field would pick one of them at
 		// random, so no instance is active and the access is refused.
 		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return families.size > 1 ? null : raw;
@@ -656,6 +660,9 @@ export class LiveContextManager {
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
+		// The running code is one of several suspended calls and the stack does not say which: the access is held to
+		// all of them.
+		if (resolved?.tied) return this.#tiedIdentity(store, resolved.tied);
 		// The stack could not tell which of several suspended calls is executing: a frame named more
 		// than one of them (the same module suspended twice under different api paths, resuming in a
 		// file they share), and no frame further out pinned a single one. Deny rather than pick: report
@@ -751,6 +758,42 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The identity of code that is one of several suspended calls, when the stack does not say which (#756): one that
+	 * every one of those calls has to allow. Each call is read as it would be were it the one running — its leaf, or the
+	 * code it was handed or another module's function it runs, told by the frames — and the answer is the first call's
+	 * with every other call's added to its ceiling, along with the calls that handed code down to any of them. An
+	 * access is then checked against all of them and refused when any one refuses, so it is never given more than the
+	 * call really running may do. A call among them that cannot answer for the code (one pinned to the host, code
+	 * running as no module, or code a call cannot account for) leaves the whole unanswered, and refused.
+	 *
+	 * The caller reported (`metadata.caller()`, `lockCaller`) is the first call's, in the order the calls started
+	 * waiting; which call's it really is is not known.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @param {Array<object>} entries - The suspended calls the running code is one of.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object|ReadonlyArray<object>, callerCeiling?: object, unresolved?: boolean}} The identity.
+	 * @private
+	 */
+	#tiedIdentity(store, entries) {
+		let first = null;
+		const others = [];
+		for (const entry of entries) {
+			const identity = this.#entryIdentity(entry);
+			if (identity.unresolved || !identity.currentWrapper)
+				return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
+			if (!first) first = identity;
+			else others.push(identity.currentWrapper, identity.ceiling ?? null);
+			others.push(supplierChainCeiling(identity.record));
+		}
+		return {
+			currentWrapper: first.currentWrapper,
+			callerWrapper: first.callerWrapper,
+			ceiling: combineCeilings(first.ceiling ?? null, ...others) ?? undefined,
+			callerCeiling: first.callerCeiling
+		};
+	}
+
+	/**
 	 * The identity of a suspended call that is executing again.
 	 * @param {object} entry - The suspended call.
 	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record?: object}} The identity.
@@ -833,7 +876,8 @@ export class LiveContextManager {
 			return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
 		}
 		const resolved = this.#resolveSuspendedFromStack(suspended);
-		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return { wrapper: null, inFlight, ambiguous: true };
+		// One of several calls, the stack not saying which, is no one call to pin to: left unpinned too.
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED || resolved?.tied) return { wrapper: null, inFlight, ambiguous: true };
 		// Code running as no module registers as no one, never as the host (#597).
 		if (!resolved) return this.#unattributedOnStack(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
 		if (resolved.unattributed) return { wrapper: null, inFlight, ambiguous: true };
@@ -943,7 +987,11 @@ export class LiveContextManager {
 			// Only a function with nothing but the microtask runner below it is resuming: one a boundary or another
 			// module calls has their frames below it.
 			const outermost = running[running.length - 1];
-			if (outermost.byFile && below.every(isRunnerFrame)) {
+			// Only a function with nothing but the microtask runner below it is picking up after an `await`.
+			const resuming = below.every(isRunnerFrame);
+			// The waiting calls of the file the job picked up in, when no name says which of them it is.
+			let fileCalls = null;
+			if (outermost.byFile && resuming) {
 				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
 				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
 				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
@@ -951,23 +999,12 @@ export class LiveContextManager {
 				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
 				// as it is in the async runtime.
 				if (outermost.matches.length && new Set(outermost.matches.map(callKey)).size === 1) return outermost.matches[0];
+				// Several calls of that file are waiting: the job is one of them. When nothing below settles which, the
+				// access is held to every one of them (see tiedIdentity).
+				if (outermost.matches.length) fileCalls = outermost.matches;
 			}
-			// Otherwise every placed frame of the synchronous part is code taking part in this access — the job's own, and
-			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no
-			// suspended call accounts for refuses.
-			let agreed = null;
-			for (const { matches } of running) {
-				agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
-				if (!agreed.length) return running.every((placed) => !placed.matches.length) ? UNACCOUNTED : AMBIGUOUS;
-			}
-			if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
-			// Different functions of one file: a frame in a candidate's own file names the function as well.
-			for (const { frame, byFile } of running) {
-				if (!byFile) continue;
-				const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
-			}
-			return this.#narrow(awaiting, agreed, callKey, truncated);
+			const settled = this.#agree(running, awaiting, callKey, truncated, resuming ? suspended : null);
+			return fileCalls && (settled === AMBIGUOUS || settled === UNACCOUNTED) ? { tied: fileCalls } : settled;
 		};
 
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
@@ -980,6 +1017,49 @@ export class LiveContextManager {
 		// that still reaches the end of nothing the access is refused.
 		if (answer === CUT_OFF) answer = walk(runtime_captureFrames(FAR_FRAMES), true);
 		return answer === CUT_OFF ? AMBIGUOUS : answer;
+	}
+
+	/**
+	 * Settle a job by the placed frames of its synchronous part: every one of them is code taking part in the access —
+	 * the job's own, and the helpers it called or handed to a boundary — so all of them have to agree on the caller.
+	 *
+	 * Code no suspended call accounts for is refused ({@link UNACCOUNTED}), with one exception: a function that picked
+	 * up after an `await` (`waiting` given) and that a suspended call is awaiting. That is another module's async
+	 * function a call ran, or a helper's a leaf handed out, resuming inside a call whose file does not import it. Which
+	 * call ran it the stack does not say (the call awaiting a promise need not be the call that started it), so it is
+	 * held to every suspended call there is (see {@link LiveContextManager#tiedIdentity}), and whose code it is is told
+	 * when the access is checked, by its frames, as in the async runtime.
+	 *
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} running - Placed frames of the synchronous
+	 *   part, innermost first.
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} awaiting - Placed frames of the flows
+	 *   awaiting it, innermost first.
+	 * @param {function(object): string} callKey - What has to agree for enforcement.
+	 * @param {boolean} truncated - Whether frames further out were cut off.
+	 * @param {Set<object>|null} waiting - Every suspended call, when the job is a function picking up after an `await`.
+	 * @returns {object|{tied: Array<object>}|symbol|undefined} The entry, the calls the access is held to, AMBIGUOUS,
+	 *   UNACCOUNTED, or undefined when more frames could still settle it.
+	 * @private
+	 */
+	#agree(running, awaiting, callKey, truncated, waiting) {
+		let agreed = null;
+		for (const { matches } of running) {
+			agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
+			if (agreed.length) continue;
+			if (!running.every((placed) => !placed.matches.length)) return AMBIGUOUS;
+			if (!waiting) return UNACCOUNTED;
+			if (awaiting.some((placed) => placed.matches.length)) return waiting.size === 1 ? [...waiting][0] : { tied: [...waiting] };
+			// The flows awaiting it may lie past the frames read.
+			return truncated ? undefined : UNACCOUNTED;
+		}
+		if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
+		// Different functions of one file: a frame in a candidate's own file names the function as well.
+		for (const { frame, byFile } of running) {
+			if (!byFile) continue;
+			const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
+			if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+		}
+		return this.#narrow(awaiting, agreed, callKey, truncated);
 	}
 
 	/**
