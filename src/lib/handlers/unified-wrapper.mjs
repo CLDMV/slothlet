@@ -10824,6 +10824,15 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 			attributes.value = runtime_shellValue(wrapper, prop);
 			if (mirrors) delete mirrored.value;
 		}
+		// The shell holds a module object's accessor as data (see sealShell): the object's accessor takes only the
+		// attributes an accessor has, as freezing the object itself defines it (#757).
+		const held = mirrors && !Arrays.isArray(impl) ? Reflect.getOwnPropertyDescriptor(holder, prop) : undefined;
+		if (held !== undefined && !("value" in held)) {
+			if ("value" in descriptor) return false;
+			mirrored = { ...mirrored };
+			delete mirrored.value;
+			delete mirrored.writable;
+		}
 	}
 	// Both are checked before either changes, so a refusal by one leaves the other as it was.
 	if (!runtime_canDefine(target, prop, attributes) || (mirrors && !runtime_canDefine(holder, prop, mirrored))) return false;
@@ -17277,6 +17286,7 @@ export class UnifiedWrapper extends ComponentBase {
 					);
 				} else if (typeof array === "function") Reflect.setPrototypeOf(target, runtime_functionNodePrototype(wrapper, array));
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
+				const frontsModuleObject = !Arrays.isArray(target) && runtime_moduleObjectOf(wrapper) !== null;
 				for (const key of keys) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
 					// The shell's inspect hook stays the shell's own (see runtime_defineProxyInspect): the node holds no member
@@ -17291,16 +17301,20 @@ export class UnifiedWrapper extends ComponentBase {
 					// A data member is held as data, so the sealed node reports and freezes as an object of its own would;
 					// a writable one is not pinned, and reads keep going through the node. An accessor the module's
 					// array holds stays an accessor that reads and writes through the node.
-					const isArrayAccessor = Arrays.isArray(target) && !("value" in descriptor);
+					// So does an accessor of a module's own object the node fronts, as freezing the object keeps it one (#757).
+					const isArrayAccessor = (Arrays.isArray(target) || frontsModuleObject) && !("value" in descriptor);
 					Reflect.defineProperty(
 						target,
 						key,
 						isArrayAccessor
 							? {
-									get: () => node[key],
-									set: (value) => {
-										node[key] = value;
-									},
+									get: frontsModuleObject && typeof descriptor.get !== "function" ? undefined : () => node[key],
+									set:
+										frontsModuleObject && typeof descriptor.set !== "function"
+											? undefined
+											: (value) => {
+													node[key] = value;
+												},
 									enumerable: descriptor.enumerable,
 									configurable: true
 								}

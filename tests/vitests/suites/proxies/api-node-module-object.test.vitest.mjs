@@ -148,6 +148,12 @@ const NODE_CHANGES = {
 			Reflect.deleteProperty(m.config, "port")
 		];
 	},
+	"Object.seal, then Object.freeze, of an object holding a getter": (m) => {
+		Object.preventExtensions(m.config);
+		Object.seal(m.config);
+		Object.freeze(m.config);
+		return [m.state(), Object.isFrozen(m.config), m.config.computed, described(m.config, "computed")];
+	},
 	"Object.preventExtensions": (m) => {
 		Object.preventExtensions(m.config);
 		return [m.state(), Object.isExtensible(m.config), Reflect.set(m.config, "added", 1), "added" in m.config];
