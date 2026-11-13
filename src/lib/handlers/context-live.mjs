@@ -944,7 +944,8 @@ export class LiveContextManager {
 			let byName = null;
 			// The synchronous frames below the outermost placed one: what started the job.
 			let below = [];
-			for (const frame of frames) {
+			// Slothlet's own frames are passed over by their path alone, so they are read no further than that.
+			for (const frame of frames.lean?.() ?? frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;
