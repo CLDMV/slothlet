@@ -44,7 +44,7 @@
  */
 import { isNode } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Objects, Arrays, Map, Set, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, Set, Symbol, Symbols, NativeObject } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The key a clone wrapper holds the function it wraps under: the watermark of this patch.
@@ -81,7 +81,6 @@ const NativeRegExp = RegExp;
 const NativeError = Error;
 const ErrorPrototype = NativeError.prototype;
 const errorBrand = typeof NativeError.isError === "function" ? NativeError.isError : null;
-const NativeObject = Object;
 const NativeArrayBuffer = ArrayBuffer;
 const NativeUint8Array = Uint8Array;
 const NativeDataView = DataView;
