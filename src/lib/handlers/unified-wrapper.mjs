@@ -3841,6 +3841,7 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
 	if (!ownership || !filePath) return null;
 	if (ownership.resolveExportPath(filePath, root) || (asMember && !ownership.resolveMemberExportPaths(filePath, root))) {
 		runtime_moduleObjectKeys(root);
+		MODULE_OBJECT_SEEN.set(wrapper, { object: root, members: runtime_moduleObjectMembers(root) });
 		return root;
 	}
 	return null;
@@ -3874,6 +3875,64 @@ function runtime_moduleObjectKeys(object) {
 		MODULE_OBJECT_KEYS.set(object, keys);
 	}
 	return keys;
+}
+
+/**
+ * What the module's object each node fronts held when the node was built from it, and at each member the node has
+ * followed since (#757). The build decides what a node holds under a key (a collision's winner, a named export beside
+ * an object default's member, a co-owner's value after a removal), so a node follows a member only when the module
+ * has changed it on its object since: a member the object still holds as the build saw it is left as the build put it.
+ * @type {WeakMap<UnifiedWrapper, {object: object, members: Map<string, PropertyDescriptor>}>}
+ * @private
+ */
+const MODULE_OBJECT_SEEN = new WeakMap();
+
+/**
+ * The enumerable-or-not own string-keyed members of a module's object as they are now, for {@link MODULE_OBJECT_SEEN}.
+ * @param {object} object - The module's object.
+ * @returns {Map<string, PropertyDescriptor>} Each member's descriptor.
+ * @private
+ */
+function runtime_moduleObjectMembers(object) {
+	const members = new Map();
+	for (const key of Objects.getOwnPropertyNames(object)) members.set(key, Reflect.getOwnPropertyDescriptor(object, key));
+	return members;
+}
+
+/**
+ * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
+ * recording what the object holds now.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object.
+ * @param {string} key - The member's key.
+ * @param {PropertyDescriptor|undefined} held - The object's member now.
+ * @returns {boolean} True when the member was added, replaced, redefined or deleted.
+ * @private
+ */
+function runtime_moduleMemberChanged(wrapper, object, key, held) {
+	let seen = MODULE_OBJECT_SEEN.get(wrapper);
+	if (seen === undefined || seen.object !== object) {
+		// A node handed another node's object (a reload reusing it) was just built from that object as it is.
+		seen = { object, members: runtime_moduleObjectMembers(object) };
+		MODULE_OBJECT_SEEN.set(wrapper, seen);
+		return false;
+	}
+	const before = seen.members.get(key);
+	if (held === undefined) {
+		if (before === undefined) return false;
+		seen.members.delete(key);
+		return true;
+	}
+	if (
+		before !== undefined &&
+		before.enumerable === held.enumerable &&
+		"value" in before === "value" in held &&
+		("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
+	) {
+		return false;
+	}
+	seen.members.set(key, held);
+	return true;
 }
 
 /**
@@ -3925,6 +3984,7 @@ function runtime_followModuleMember(wrapper, object, seen, key) {
 	// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
 	if (internal.collisionMergedKeys?.has(key) || runtime_moduleObjectOf(wrapper, key) === null) return;
 	const held = Reflect.getOwnPropertyDescriptor(object, key);
+	if (!runtime_moduleMemberChanged(wrapper, object, key, held)) return;
 	const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
 	if (mine !== undefined && !mine.configurable) return;
 	if (held === undefined) {
