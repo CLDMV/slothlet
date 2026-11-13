@@ -25,7 +25,7 @@
  * @module @cldmv/slothlet/helpers/defaults
  * @internal
  */
-// The reserved-key Sets come from a module with no imports. index.mjs imports this file
+// The reserved-key Sets come from a module whose only import is helpers/intrinsics. index.mjs imports this file
 // statically to attach `slothlet.defaults`, and index.cjs loads index.mjs through Node's
 // synchronous require(esm), so this module's import graph must stay free of top-level await
 // (the wrapper classes reach `helpers/platform`, which uses it).

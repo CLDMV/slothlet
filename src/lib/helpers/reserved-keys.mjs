@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Framework-reserved property names, as plain Sets in a module with no imports.
+ * @fileoverview Framework-reserved property names, as plain Sets in a module whose only import is helpers/intrinsics (no top-level await).
  * @module @cldmv/slothlet/helpers/reserved-keys
  * @internal
  *
