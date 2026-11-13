@@ -2115,7 +2115,8 @@ function runtime_madeCodeDefiner(record) {
 	const recorded = record.wrapper;
 	const frames = runtime_captureFrames(24);
 	let index = -1;
-	for (const frame of frames) {
+	// Slothlet's own frames are passed over by their path and what they enter alone, so they are read no further.
+	for (const frame of frames.lean?.() ?? frames) {
 		index++;
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 			if (frame.enter) return undefined;
