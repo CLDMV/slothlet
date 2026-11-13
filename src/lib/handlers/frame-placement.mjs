@@ -1774,12 +1774,15 @@ export function supplierChainCeiling(record) {
  * resolution imposed.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null, unaccountedCaller?: boolean}|null|undefined} record - The running call.
+ * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point, inside slothlet's own
+ *   code, by a caller that read it already: read first instead of a capture of its own (see
+ *   runtime_foreignCodeRunning).
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The supplier's wrapper and
  *   the ceiling it runs under when it is a call above the leaf, `{unaccounted: true}` for code no call accounts for,
  *   otherwise null (the leaf's own code is running).
  * @internal
  */
-export function resolveSupplier(record) {
+export function resolveSupplier(record, capture = null) {
 	// Code a file started while it loaded: its module is the caller, and the code doing the access is told by its frames.
 	if (record?.topLevel)
 		return genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record) ? runtime_topLevelRunning(record) : null;
@@ -1790,12 +1793,12 @@ export function resolveSupplier(record) {
 		if (told !== undefined) return told;
 	}
 	if (!record?.flagged)
-		return runtime_guardsForeignCode(record) && genuineWrappers.has(record.wrapper) ? runtime_foreignCodeRunning(record) : null;
+		return runtime_guardsForeignCode(record) && genuineWrappers.has(record.wrapper) ? runtime_foreignCodeRunning(record, capture) : null;
 	const leaf = record.wrapper;
 	if (!genuineWrappers.has(leaf)) return null;
 	if (!record.parent?.wrapper) {
 		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
-		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record) : null;
+		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record, capture) : null;
 	}
 	const chain = [];
 	const seen = new Set([leaf]);
@@ -1823,7 +1826,7 @@ export function resolveSupplier(record) {
 	// running inside it is still told by its frames (#726).
 	if (!fallback) {
 		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
-		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record) : null;
+		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record, capture) : null;
 	}
 	// Any other leaf with no file of its own (a node a module made): none of the code running inside it can be told to be
 	// its own.
@@ -4043,11 +4046,14 @@ const SINGLE_PLACERS = new WeakMap();
  * function runs as that module, whoever calls it, so only the code doing the access matters. One read of the stack,
  * deep enough to pass slothlet's own frames above the access.
  * @param {{wrapper: object, flagged: boolean}} record - The leaf's call.
+ * @param {Iterable<object>|null} [capture=null] - A capture already taken at this same point, inside slothlet's own code
+ *   (the live runtime's, placing a waiting call): read in place of the first, short one. Only slothlet's own frames on
+ *   top differ, and those are passed over, so it reads the same frames the short one would, a few further out at most.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The leaf whose code it is
  *   and its ceiling, unaccounted code, or null when the leaf's own code (or the host's) is running.
  * @private
  */
-function runtime_foreignCodeRunning(record) {
+function runtime_foreignCodeRunning(record, capture = null) {
 	const leaf = record.wrapper;
 	const description = describeCall(leaf);
 	if (!description.filePath) return null;
@@ -4117,7 +4123,7 @@ function runtime_foreignCodeRunning(record) {
 	// capture finds it at a fraction of the cost of a full one, which is read only when the short one settles nothing.
 	// Both are read at this same point, so the short one's frames are the full one's first frames, and what they decide
 	// is what the full capture would decide.
-	const near = runtime_captureFrames(NEAR_FRAMES);
+	const near = capture ?? runtime_captureFrames(NEAR_FRAMES);
 	const settled = decide(near, !near.truncated);
 	if (settled !== undefined || !near.truncated) return settled ?? null;
 	const full = decide(runtime_captureFrames(48), true);

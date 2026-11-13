@@ -659,7 +659,10 @@ export class LiveContextManager {
 			if (!only.filePath && !only.unattributed) return this.#entryIdentity(only);
 		}
 
-		const resolved = this.#resolveSuspendedFromStack(suspended);
+		// The capture that placed the call is the stack at this same point: the call's own reading of whose code runs
+		// starts from it instead of capturing the stack again.
+		const read = { capture: null };
+		const resolved = this.#resolveSuspendedFromStack(suspended, read);
 		// The running code is one of several suspended calls and the stack does not say which: the access is held to
 		// all of them.
 		if (resolved?.tied) return this.#tiedIdentity(store, resolved.tied);
@@ -676,7 +679,7 @@ export class LiveContextManager {
 		if (resolved === UNACCOUNTED) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
 		}
-		if (resolved) return this.#entryIdentity(resolved);
+		if (resolved) return this.#entryIdentity(resolved, read.capture);
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
@@ -796,15 +799,16 @@ export class LiveContextManager {
 	/**
 	 * The identity of a suspended call that is executing again.
 	 * @param {object} entry - The suspended call.
+	 * @param {Iterable<object>|null} [capture=null] - The capture that placed it, taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record?: object}} The identity.
 	 * @private
 	 */
-	#entryIdentity(entry) {
+	#entryIdentity(entry, capture = null) {
 		// Code running as no module: who is calling cannot be told (#597).
 		if (entry.unattributed) return UNATTRIBUTED_IDENTITY;
 		// A host-pinned call carries no record: it runs as the host.
 		if (!entry.record) return { currentWrapper: entry.currentWrapper, callerWrapper: entry.callerWrapper };
-		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling);
+		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling, capture);
 	}
 
 	/**
@@ -815,11 +819,12 @@ export class LiveContextManager {
 	 * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}} record - The call.
 	 * @param {object|null} callerWrapper - Who called it.
 	 * @param {object|null|undefined} callerCeiling - Its caller's ceiling.
+	 * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record: object}} The identity.
 	 * @private
 	 */
-	#recordIdentity(record, callerWrapper, callerCeiling) {
-		const supplier = resolveSupplier(record);
+	#recordIdentity(record, callerWrapper, callerCeiling, capture = null) {
+		const supplier = resolveSupplier(record, capture);
 		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
 		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
 		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
@@ -914,12 +919,13 @@ export class LiveContextManager {
 	 * re-exports from, or code a browser leaf imports, runs inside that function or code it awaits.
 	 *
 	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
+	 * @param {{capture: Iterable<object>|null}|null} [read=null] - Receives, as `capture`, the last capture of the stack read.
 	 * @returns {object|symbol|null} The matching entry, {@link AMBIGUOUS} when the stack cannot tell
 	 *   several candidates apart or the running code is no suspended call's, or null when no frame names any
 	 *   candidate.
 	 * @private
 	 */
-	#resolveSuspendedFromStack(suspended) {
+	#resolveSuspendedFromStack(suspended, read = null) {
 		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
 		const candidates = [...suspended].filter((entry) => entry.filePath);
@@ -1011,12 +1017,17 @@ export class LiveContextManager {
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
 		// that decide sit near the top of the stack. Only a trace the budget cut short that settled nothing is
 		// read again, deeper. The capture is kept out of a leaf's reach; see runtime_captureFrames.
-		let answer = walk(runtime_captureFrames(25), false);
-		if (answer === undefined) answer = walk(runtime_captureFrames(50), true);
+		const capture = (limit) => {
+			const frames = runtime_captureFrames(limit);
+			if (read) read.capture = frames;
+			return frames;
+		};
+		let answer = walk(capture(25), false);
+		if (answer === undefined) answer = walk(capture(50), true);
 		// Code recursing — Node's own (`util.inspect` deep in a value, say), a package's or the host's — can put more
 		// frames than that between an access and the code that started it. The stack is read further out, and when
 		// that still reaches the end of nothing the access is refused.
-		if (answer === CUT_OFF) answer = walk(runtime_captureFrames(FAR_FRAMES), true);
+		if (answer === CUT_OFF) answer = walk(capture(FAR_FRAMES), true);
 		return answer === CUT_OFF ? AMBIGUOUS : answer;
 	}
 
