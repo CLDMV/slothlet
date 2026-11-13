@@ -352,7 +352,8 @@ let runtimeLoading = null;
  * importing it while it is still loading is not evaluated when its own import finishes resolving: the engine evaluates
  * every file waiting on the runtime in one job, when the runtime is ready, and that job runs in the flow of whichever
  * load asked for the runtime first. An api file's top level, and the helper files it imports, then ran inside another
- * file's load. Loaded here first, from slothlet's own flow, no api file ever waits on it.
+ * file's load. Loaded here first, from slothlet's own flow, no api file ever waits on it. It also makes this copy's
+ * runtime the one the process has before any file Node loads itself can ask for it (#760).
  * @returns {Promise<void>} Resolves once the runtime is loaded.
  * @private
  */

@@ -43,6 +43,9 @@
  */
 
 import { asyncRuntime } from "#factories/context";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+// This module's own namespace, registered below as the one copy of this file.
+import * as ownNamespace from "./runtime-asynclocalstorage.mjs";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
 	runtime_assertFrameworkRootChange,
@@ -386,3 +389,6 @@ for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for an async instance (#726).
 registerRuntimeSelf(asyncRuntime, self);
 registerRuntimeContext(asyncRuntime, context);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, ownNamespace);

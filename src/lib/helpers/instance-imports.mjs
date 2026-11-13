@@ -326,6 +326,8 @@ function publishScripts(state) {
  * @property {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}} [scripts] - The frozen reader of
  *   the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
  * @property {(url: string) => string} [scriptKeyOf] - How a URL is reduced to its script key, fixed once set.
+ * @property {(url: string) => (object|undefined)} [own] - The namespace of one of slothlet's runtime entry files the
+ *   hook's copy has evaluated (#760), fixed by that copy (see registerOwnModule).
  * @internal
  */
 
@@ -482,6 +484,67 @@ const OWN_PREFIXES = [
 ]
 	.filter((u) => u.protocol === "file:")
 	.map((u) => toSlashPath(u.href));
+
+/**
+ * Slothlet's runtime entry files, as `file:` URLs: the modules an api file imports `self`, `context` and `instanceID`
+ * from. Each is one module per process whichever loader is asked for it (#760).
+ * @type {string[]}
+ * @private
+ */
+const SINGLE_COPY_FILES = [
+	new URL("../runtime/runtime.mjs", import.meta.url),
+	new URL("../runtime/runtime-asynclocalstorage.mjs", import.meta.url),
+	new URL("../runtime/runtime-livebindings.mjs", import.meta.url)
+]
+	.filter((u) => u.protocol === "file:")
+	.map((u) => u.href);
+
+/**
+ * The namespace of each of {@link SINGLE_COPY_FILES} this copy of slothlet has evaluated, by its URL (#760).
+ * @type {Map<string, object>}
+ * @private
+ */
+const OWN_MODULES = new Map();
+
+/**
+ * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
+ * those files as its last statement. A process can run two module loaders at once: under vitest, slothlet's source is
+ * evaluated by vite's module runner, while a CommonJS file, or a file imported by its URL, is loaded by Node itself.
+ * Asked for the runtime by such a file, Node would evaluate the runtime's file a second time, and that second copy
+ * knows no instance. With the namespace recorded here, the load hook answers Node's load of the file with a module
+ * that re-exports the namespace already made (see {@link ownModuleBridge}), so the file is one module per process.
+ * Only the runtime's entry files are taken, each once.
+ * @param {string} url - The file's `import.meta.url`.
+ * @param {object} namespace - Its module namespace.
+ * @returns {void}
+ * @internal
+ * @example
+ * registerOwnModule(import.meta.url, runtimeNamespace);
+ */
+export function registerOwnModule(url, namespace) {
+	if (typeof url !== "string" || !SINGLE_COPY_FILES.includes(url) || OWN_MODULES.has(url)) return;
+	if (namespace === null || typeof namespace !== "object") return;
+	OWN_MODULES.set(url, namespace);
+}
+
+/**
+ * The source of the module Node is given for one of slothlet's runtime entry files this copy has already evaluated
+ * through another loader (#760): it exports what that namespace exports, read once from the reader fixed on the
+ * process-wide state. The runtime's exports are constants, so nothing is lost by reading them once.
+ * @param {string} url - The file's URL.
+ * @returns {string} The module's source.
+ * @private
+ */
+function ownModuleBridge(url) {
+	const lines = [`const ns = globalThis[Symbol.for(${JSON.stringify(STATE.description)})].own(${JSON.stringify(url)});`];
+	let n = 0;
+	for (const name of Object.keys(OWN_MODULES.get(url))) {
+		if (name === "default") lines.push("export default ns.default;");
+		else lines.push(`const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
+		n++;
+	}
+	return lines.join("\n") + "\n";
+}
 
 /**
  * Whether a specifier names a file relative to (or absolute from) its importer, as opposed to a
@@ -1475,6 +1538,7 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 	if (typeof nodeModule?.registerHooks === "function") {
 		// The copy whose hook records the sources is the one whose reader of them every copy uses.
 		publishScripts(sharedState());
+		fixOnState(sharedState(), "own", (url) => OWN_MODULES.get(url));
 		nodeModule.registerHooks({
 			resolve: (specifier, context, nextResolve) => {
 				// The two virtual modules behind require(esm) (#534) resolve to themselves.
@@ -1489,6 +1553,8 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 			// Only instance-marked URLs are touched; every other load passes straight through, a CommonJS file's
 			// source hash recorded on the way (#597).
 			load: (url, context, nextLoad) => {
+				// One of slothlet's runtime entry files, already evaluated through another loader: the same module (#760).
+				if (OWN_MODULES.has(url)) return { format: "module", shortCircuit: true, source: ownModuleBridge(url) };
 				if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
 				const result = nextLoad(url, context);
 				if (url.startsWith("file:") && shouldRecordCommonJS(url, result)) recordLoadedSource(url, result);

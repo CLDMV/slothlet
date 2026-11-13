@@ -42,6 +42,7 @@ import { recordSharedExports } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
 import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -230,3 +231,6 @@ for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // The runtime is made by no module and shared by every instance: a module handing it out hands out the runtime itself
 // (#597).
 recordSharedExports(runtimeNamespace);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, runtimeNamespace);

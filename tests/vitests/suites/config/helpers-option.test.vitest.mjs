@@ -176,55 +176,37 @@ describe.each(MODES)("Config > helpers > whose code a helper's is > $name", ({ m
 	});
 });
 
-/**
- * Run the CommonJS helper's function each ES module api file returns inside data, in a process of its own: a CommonJS
- * file reaches slothlet's runtime with a dynamic import, which under vitest loads a second copy of it.
- * @returns {Array<{name: string, outcomes: string[]}>} For each configuration and rule set, what `one` and `two` gave.
- */
-function runCommonJSHelper() {
-	const script = `
-		import slothlet from "@cldmv/slothlet";
-		const DIR = ${JSON.stringify(DIR)};
-		const RULES = ${JSON.stringify(RULE_SETS.map(({ rules, list }) => ({ rules, list })))};
-		const settle = async (fn) => { try { return await fn(); } catch (error) { return error?.code ?? String(error?.message ?? error); } };
-		const results = [];
-		for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) for (const attribution of ["precise", "fast"])
-			for (const helpers of ["instance", "module"]) for (const { rules, list } of RULES) {
-				const api = await slothlet({ base: DIR, mode, runtime, helpers, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: list } });
-				for (const file of ["one", "two", "three", "four"]) await api[file].bumpCjs();
-				const outcomes = [];
-				for (const file of ["one", "two"]) {
-					const { run } = await api[file].boxCjs();
-					outcomes.push(await settle(() => run()));
-				}
-				results.push({ name: [mode, runtime, attribution, helpers, rules].join(" | "), rules, outcomes });
-				await api.shutdown();
-			}
-		process.stdout.write("RESULT " + JSON.stringify(results) + "\\n");
-	`;
-	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
-		cwd: path.resolve(DIR, "../../.."),
-		encoding: "utf8",
-		timeout: 300000
-	});
-	const line = String(child.stdout)
-		.split("\n")
-		.find((text) => text.startsWith("RESULT "));
-	if (!line) throw new Error(`no result: ${child.stderr}`);
-	return JSON.parse(line.slice("RESULT ".length));
-}
+describe.each(MODES)("Config > helpers > a CommonJS helper's own code > $name", ({ mode, runtime }) => {
+	describe.each(["precise", "fast"])("attribution %s", (attribution) => {
+		describe.each(OPTIONS.filter(({ helpers }) => helpers))("$label", ({ helpers }) => {
+			describe.each(RULE_SETS)("$rules", ({ list, denies }) => {
+				let api;
 
-describe("Config > helpers > a CommonJS helper's own code", () => {
-	it("is held to every api file loading the helper, with one copy and with a copy per api file", () => {
-		// A CommonJS copy's frames carry the file's path and nothing else, so nothing says which api file's copy runs.
-		const results = runCommonJSHelper();
-		expect(results.length).toBe(2 * 2 * 2 * 2 * RULE_SETS.length);
-		for (const { name, rules, outcomes } of results) {
-			const { denies } = RULE_SETS.find((set) => set.rules === rules);
-			const expected = CJS_IMPORTERS.some(denies) ? DENIED : SECRET;
-			expect({ name, outcomes }).toEqual({ name, outcomes: [expected, expected] });
-		}
-	}, 300000);
+				beforeAll(async () => {
+					api = await slothlet({
+						base: DIR,
+						mode,
+						runtime,
+						helpers,
+						silent: true,
+						permissions: { defaultPolicy: "allow", attribution, rules: list }
+					});
+					for (const file of CJS_IMPORTERS) await api[file].bumpCjs();
+				});
+
+				afterAll(async () => {
+					await api?.shutdown();
+				});
+
+				// A CommonJS copy's frames carry the file's path and nothing else, so nothing says which api file's copy runs:
+				// it is held to every api file loading the helper, with one copy and with a copy per api file.
+				it.each(ESM_IMPORTERS)("the CommonJS helper's function %s returns inside data", async (file) => {
+					const { run } = await api[file].boxCjs();
+					expect(await settle(() => run())).toBe(CJS_IMPORTERS.some(denies) ? DENIED : SECRET);
+				});
+			});
+		});
+	});
 });
 
 /**
