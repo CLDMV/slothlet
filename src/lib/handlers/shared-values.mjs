@@ -29,7 +29,7 @@
  * @type {function(*): boolean}
  * @private
  */
-import { Reflect, Set, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Functions, Set, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 const IS_PROXY = globalThis.process?.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
 
@@ -46,7 +46,7 @@ const RECORD_BUDGET = 20000;
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
+const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
  * The values recorded.

@@ -28,7 +28,18 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { markFrameworkInternal, registerVersionDispatcher } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Symbol, Promises, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	NativeObject,
+	Arrays,
+	NativeProxy,
+	Map,
+	Set,
+	Symbol,
+	Promises,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -852,7 +863,7 @@ export class VersionManager extends ComponentBase {
 				// ── 4. constructor ────────────────────────────────────────────
 				// UnifiedWrapper intercepts "constructor" at L2351 before delegating to impl[prop].
 				/* v8 ignore next */
-				if (prop === "constructor") return Object.prototype.constructor;
+				if (prop === "constructor") return Objects.prototype.constructor;
 
 				// ── 5. Symbol.toStringTag → delegate to resolved versioned wrapper ─
 				if (prop === Symbol.toStringTag) {
@@ -992,7 +1003,7 @@ export class VersionManager extends ComponentBase {
 						// vw is always present for registered versioned paths — teardownDispatcher cleans up.
 						/* v8 ignore next */
 						if (vw) {
-							for (const k of Reflect.ownKeys(Object(vw))) {
+							for (const k of Reflect.ownKeys(NativeObject(vw))) {
 								keySet.add(k);
 							}
 						}

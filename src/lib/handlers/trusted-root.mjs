@@ -232,7 +232,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !Object.prototype.hasOwnProperty.call(owners, ownerKey)) return;
+	if (!owners || !Objects.prototype.hasOwnProperty.call(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
@@ -312,7 +312,7 @@ function isWrappableContextValue(value) {
 	if (value === null || typeof value !== "object") return false;
 	if (Arrays.isArray(value)) return true;
 	const proto = Objects.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	return proto === Objects.prototype || proto === null;
 }
 
 /**
@@ -402,7 +402,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  */
 export function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && Object.prototype.hasOwnProperty.call(owners, prop)) {
+	if (owners && Objects.prototype.hasOwnProperty.call(owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];

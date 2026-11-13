@@ -254,7 +254,7 @@ export class OwnershipManager extends ComponentBase {
 		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
 		// a second mount of it) yields new value identities, while wrappers from an earlier load may
 		// still be looked up against the earlier ones.
-		const isCommonJS = filePath.endsWith(".cjs") || Object.prototype.hasOwnProperty.call(mod, "module.exports");
+		const isCommonJS = filePath.endsWith(".cjs") || Objects.prototype.hasOwnProperty.call(mod, "module.exports");
 		let entry = this.exportIndex.get(filePath);
 		if (!entry) {
 			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };

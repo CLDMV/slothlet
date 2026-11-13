@@ -62,7 +62,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeProxy, Set, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, NativeObject, NativeProxy, Set, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -379,7 +379,7 @@ export const instanceID = new NativeProxy(
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.instanceID) return false;
 			// ctx.instanceID is a string — wrap in Object() so `in` doesn't throw
-			return prop in Object(ctx.instanceID);
+			return prop in NativeObject(ctx.instanceID);
 		}
 	}
 );

@@ -129,7 +129,7 @@ const CHECK_CALL_OPTIONS = Objects.freeze({ moduleCaller: true, via: "checkCall"
  * @internal
  */
 function resolveRuleLayer(layer, ownerModuleID) {
-	if (layer && Object.prototype.hasOwnProperty.call(RULE_LAYER_RANK, layer)) return layer;
+	if (layer && Objects.prototype.hasOwnProperty.call(RULE_LAYER_RANK, layer)) return layer;
 	if (ownerModuleID === "__builtin__") return "builtin";
 	return "instance";
 }
@@ -237,7 +237,7 @@ function runtime_isViewablePrincipalValue(value) {
 	if (value === null || typeof value !== "object") return false;
 	if (Arrays.isArray(value)) return true;
 	const proto = Objects.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	return proto === Objects.prototype || proto === null;
 }
 
 /**
@@ -2024,7 +2024,7 @@ export class PermissionManager extends ComponentBase {
 		if (seen.has(value)) return seen.get(value);
 		const isArray = Arrays.isArray(value);
 		const proto = Reflect.getPrototypeOf(value);
-		if (!isArray && proto !== Object.prototype && proto !== null) return value;
+		if (!isArray && proto !== Objects.prototype && proto !== null) return value;
 		const copy = isArray ? [] : Objects.create(proto);
 		seen.set(value, copy);
 		for (const key of Reflect.ownKeys(value)) {
@@ -2792,7 +2792,7 @@ export class PermissionManager extends ComponentBase {
 		const isPlainObject = (value) => {
 			if (value === null || typeof value !== "object") return false;
 			const proto = Objects.getPrototypeOf(value);
-			return proto === Object.prototype || proto === null;
+			return proto === Objects.prototype || proto === null;
 		};
 
 		const isValidConditionEntry = (value) => typeof value === "function" || isPlainObject(value);
@@ -2830,7 +2830,7 @@ export class PermissionManager extends ComponentBase {
 		for (const [key, val] of Objects.entries(pattern)) {
 			// Only recurse into plain objects; treat class instances / Date / etc. as leaves
 			const proto = val !== null && typeof val === "object" ? Objects.getPrototypeOf(val) : null;
-			const isPlainNested = proto === Object.prototype || proto === null;
+			const isPlainNested = proto === Objects.prototype || proto === null;
 			if (val !== null && typeof val === "object" && isPlainNested) {
 				// Recurse into nested plain object
 				if (!this.#deepObjectMatches(val, ctx[key])) return false;

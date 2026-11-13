@@ -890,7 +890,7 @@ export class ApiManager extends ComponentBase {
 		}
 		// A plain object a module stored can inherit the member: an inherited accessor is as unknown as an own one.
 		if (!raw && versionDispatcherRecord(node) === null) {
-			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Object.prototype; proto = Reflect.getPrototypeOf(proto)) {
+			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Objects.prototype; proto = Reflect.getPrototypeOf(proto)) {
 				const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
 				if (descriptor)
 					return "value" in descriptor
@@ -1346,7 +1346,7 @@ export class ApiManager extends ComponentBase {
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
 				const isInternal = isFrameworkReservedKey(key);
-				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (!isInternal && !Objects.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Objects.defineProperty(existingWrapper, key, {
 						value: childValue,
@@ -1436,7 +1436,7 @@ export class ApiManager extends ComponentBase {
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
 				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
-				if (Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (Objects.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
 					const existingChild = existingWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
@@ -2111,7 +2111,7 @@ export class ApiManager extends ComponentBase {
 		if (!current || (typeof current !== "object" && typeof current !== "function")) {
 			return false;
 		}
-		if (!Object.prototype.hasOwnProperty.call(current, finalKey)) {
+		if (!Objects.prototype.hasOwnProperty.call(current, finalKey)) {
 			return false;
 		}
 
@@ -2797,7 +2797,7 @@ export class ApiManager extends ComponentBase {
 			folderPath &&
 			typeof folderPath === "object" &&
 			!Arrays.isArray(folderPath) &&
-			Object.prototype.hasOwnProperty.call(folderPath, "exports")
+			Objects.prototype.hasOwnProperty.call(folderPath, "exports")
 		) {
 			const siblingOptions = { ...folderPath };
 			delete siblingOptions.exports;
@@ -2960,7 +2960,7 @@ export class ApiManager extends ComponentBase {
 			const isPlainObject = (value) => {
 				if (value === null || typeof value !== "object") return false;
 				const proto = Objects.getPrototypeOf(value);
-				return proto === Object.prototype || proto === null;
+				return proto === Objects.prototype || proto === null;
 			};
 			const describeNonPlain = (value) =>
 				value === null
@@ -2972,7 +2972,7 @@ export class ApiManager extends ComponentBase {
 							: typeof value;
 			if (typeof folderPath === "function") {
 				syntheticExports = { default: folderPath };
-			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+			} else if (Objects.prototype.hasOwnProperty.call(folderPath, "exports")) {
 				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
 				// { default?, ...named } export map (a plain, non-array object). Without this guard a
 				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] },
@@ -3035,7 +3035,7 @@ export class ApiManager extends ComponentBase {
 					// The default re-keys to def.name; if a named export already claims that key, warn and
 					// let the named export win (the spread below overwrites the re-keyed default). Console
 					// warning stays silent-gated; impl:warning fires regardless of `silent` (#148).
-					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+					if (Objects.prototype.hasOwnProperty.call(named, def.name)) {
 						if (this.slothlet && !this.____config?.silent) {
 							new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
 						}
@@ -3280,7 +3280,7 @@ export class ApiManager extends ComponentBase {
 		//      Deeper paths (e.g. services/services/services.mjs) match neither and are correctly rejected.
 		if (!isFile && normalizedPath) {
 			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
-			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
+			if (lastPart && Objects.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
 				const dupValue = apiToMerge[lastPart];
 				const dupType = typeof dupValue;
 				// dupValue from buildAPI is always a wrapper proxy (object/function); null and non-object arms unreachable.
@@ -4711,7 +4711,7 @@ export class ApiManager extends ComponentBase {
 				for (const shadow of shadows) {
 					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
 					// clobber a live member with a stale shadow.
-					if (Object.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
+					if (Objects.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
 					runtime_frameworkWrite(shadow.container, () =>
 						Objects.defineProperty(shadow.container, shadow.key, {
 							value: shadow.child,
@@ -5427,7 +5427,7 @@ export class ApiManager extends ComponentBase {
 						// the adopting wrapper would give the child its own folder; the child keeps its file here.
 						const childFile = childWrapper.____slothletInternal.filePath;
 						if (childFile) {
-							if (!Object.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
+							if (!Objects.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
 								Objects.defineProperty(implForReload, "__childFilePaths", {
 									value: {},
 									enumerable: false,
@@ -5964,7 +5964,7 @@ export class ApiManager extends ComponentBase {
 				// IMPORTANT: Run before recursive extraction so the wrapper proxy is still intact.
 				if (parts.length > 0 && implForReload && typeof implForReload === "object") {
 					const lastEndpointPart = parts[parts.length - 1];
-					if (lastEndpointPart && Object.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
+					if (lastEndpointPart && Objects.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
 						const dupValue = implForReload[lastEndpointPart];
 						const dupWrapperForDedup = resolveWrapper(dupValue);
 						if (dupWrapperForDedup) {
