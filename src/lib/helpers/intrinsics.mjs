@@ -282,7 +282,6 @@ export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
 
 /**
  * The `URL` constructor, as it was when slothlet loaded.
- * @type {typeof globalThis.URL}
  * @internal
  * @example
  * import { URL } from "@cldmv/slothlet/helpers/intrinsics";
@@ -292,7 +291,6 @@ export const URL = globalThis.URL;
 
 /**
  * The `URLSearchParams` constructor, as it was when slothlet loaded.
- * @type {typeof globalThis.URLSearchParams}
  * @internal
  * @example
  * import { URLSearchParams } from "@cldmv/slothlet/helpers/intrinsics";
