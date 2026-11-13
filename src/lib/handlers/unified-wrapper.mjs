@@ -5972,7 +5972,29 @@ function runtime_generatorStandIn(maker, owner, original) {
 	if (existing) return existing;
 	const isAsync = Object.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
-	const step = (name) => (value) => runtime_runAsMaker(owner, steps[name], original, [runtime_handIn(maker, value)]);
+	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
+	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
+	// promise settles to such a result.
+	const step = (name) => (value) => {
+		const box = { step: false, done: false };
+		const take = (result) => {
+			box.step = runtime_isStepResult(result);
+			if (!box.step) return result;
+			box.done = result.done;
+			return result.value;
+		};
+		const handed = runtime_runAsMaker(
+			owner,
+			(input) => {
+				const result = Reflect.apply(steps[name], original, [input]);
+				return isAsync ? Reflect.apply(SLOT_READERS.then, result, [take]) : take(result);
+			},
+			undefined,
+			[runtime_handIn(maker, value)]
+		);
+		const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
+		return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
+	};
 	const driver = { next: step("next"), return: step("return"), throw: step("throw") };
 	driver[isAsync ? Symbol.asyncIterator : Symbol.iterator] = () => driver;
 	const standIn = isAsync
@@ -7710,6 +7732,16 @@ function runtime_crossEngineMethod(state, fn) {
 				// The step's result is no one's value: the reader gets a result of its own, holding what the step gave as
 				// the reader gets it. Viewing the result itself would make a view for every element stepped over.
 				if (steps && runtime_isStepResult(result)) return { value: runtime_crossOut(state, result.value), done: result.done };
+				// An async generator's step settles to such a result: the reader's promise settles to a result of its own (#758).
+				if (steps && util.types.isPromise(result)) {
+					return Reflect.apply(SLOT_READERS.then, result, [
+						(settled) =>
+							runtime_isStepResult(settled)
+								? { value: runtime_crossOut(state, settled.value), done: settled.done }
+								: runtime_crossOut(state, settled),
+						(reason) => Promises.reject(runtime_crossOut(state, reason))
+					]);
+				}
 				return runtime_crossOut(state, result);
 			}
 		}[name];
