@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-handed-out-after-rule-change.test.vitest.mjs
+ *	@Date: 2026-11-12T22:55:00-08:00 (1794552900)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:23:40-08:00 (1794583420)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Code a module was handed before the host changes the rules answers by the new rules the next time it
  * runs: a deny added refuses it, the deny removed lets it answer again, and an allow added under `defaultPolicy:
  * "deny"` opens it.

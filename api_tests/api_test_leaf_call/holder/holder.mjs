@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_leaf_call/holder/holder.mjs
+ *	@Date: 2026-11-12T22:55:00-08:00 (1794552900)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:21:30-08:00 (1794583290)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A module that takes the service's functions once and keeps them, to run them again later, after the
  * host has changed the rules.
  * @module api_test_leaf_call.holder

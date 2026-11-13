@@ -979,6 +979,19 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private _materialize;
     /**
+     * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
+     * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
+     * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
+     * join a routine that names its path. Only the routine manager is told: ownership and metadata already
+     * hold this node from its construction, and the public `impl:created` for it has already fired.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * this.___reportLoadedContribution();
+     */
+    private ___reportLoadedContribution;
+    /**
      * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
      * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
      * counted, so each wrapper moves the count exactly once per transition no matter which path loads,

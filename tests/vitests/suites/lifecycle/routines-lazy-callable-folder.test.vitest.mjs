@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/lifecycle/routines-lazy-callable-folder.test.vitest.mjs
+ *	@Date: 2026-11-12T22:42:58-08:00 (1794552178)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:23:26-08:00 (1794583406)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A callable folder's own function is a routine contribution in lazy mode as in eager (#754).
  *
  * @description

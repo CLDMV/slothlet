@@ -385,6 +385,9 @@ export function supplierChainCeiling(record: {
  * resolution imposed.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null, unaccountedCaller?: boolean}|null|undefined} record - The running call.
+ * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point, inside slothlet's own
+ *   code, by a caller that read it already: read first instead of a capture of its own (see
+ *   runtime_foreignCodeRunning).
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The supplier's wrapper and
  *   the ceiling it runs under when it is a call above the leaf, `{unaccounted: true}` for code no call accounts for,
  *   otherwise null (the leaf's own code is running).
@@ -396,7 +399,7 @@ export function resolveSupplier(record: {
     flagged: boolean;
     ceiling?: object | null;
     unaccountedCaller?: boolean;
-} | null | undefined): {
+} | null | undefined, capture?: Iterable<object> | null): {
     wrapper: object;
     ceiling: object | ReadonlyArray<object>;
 } | {

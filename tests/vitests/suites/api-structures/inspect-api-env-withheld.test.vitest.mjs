@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-structures/inspect-api-env-withheld.test.vitest.mjs
+ *	@Date: 2026-11-12T22:47:25-08:00 (1794552445)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:23:04-08:00 (1794583384)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The structure inspection tool never prints the process environment (#759).
  * @description
  * `api.slothlet.env` is the process environment. The tool prints a structure listing and a JSON shape of the whole

@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-structures/fixture-scripts-not-api-files.test.vitest.mjs
+ *	@Date: 2026-11-12T22:47:25-08:00 (1794552445)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:23:04-08:00 (1794583384)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Child-process scripts at a fixture's root are not api files of that fixture (#759).
  * @description
  * `api_test_host_record_leaf/__probe-records.mjs` and `api_test_stream_plants/__probe.mjs` each build slothlet

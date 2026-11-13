@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/permissions-module-event-rules-off.test.vitest.mjs
+ *	@Date: 2026-11-12T22:52:19-08:00 (1794552739)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T07:23:44-08:00 (1794583424)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Which event rules module code may add or remove is checked when it adds or removes them, with the
  * permission system off too; the rules it added wait, and apply as added once the system is switched on.
  *

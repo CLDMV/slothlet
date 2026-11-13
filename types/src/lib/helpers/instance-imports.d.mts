@@ -1,4 +1,21 @@
 /**
+ * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
+ * those files as its last statement. A process can run two module loaders at once: under vitest, slothlet's source is
+ * evaluated by vite's module runner, while a CommonJS file, or a file imported by its URL, is loaded by Node itself.
+ * Asked for the runtime by such a file, Node would evaluate the runtime's file a second time, and that second copy
+ * knows no instance. With the namespace recorded here, the resolve hook sends Node's import of the file to a module
+ * that re-exports the namespace already made (see {@link ownModuleBridge}), so the importer gets the runtime slothlet
+ * runs on. A second copy of slothlet that Node loaded itself keeps Node's own evaluation of the file, which is that
+ * copy's runtime (see {@link isOtherCopysFile}). Only the runtime's entry files are taken, each once.
+ * @param {string} url - The file's `import.meta.url`.
+ * @param {object} namespace - Its module namespace.
+ * @returns {void}
+ * @internal
+ * @example
+ * registerOwnModule(import.meta.url, runtimeNamespace);
+ */
+export function registerOwnModule(url: string, namespace: object): void;
+/**
  * Whether a specifier names a file relative to (or absolute from) its importer, as opposed to a
  * bare package/builtin/subpath-import specifier.
  * @param {string} specifier - The import/require specifier as written.
@@ -57,51 +74,18 @@ export function isOwnPackageImport(child: string, parent: string): boolean;
  */
 export function propagateInstanceQuery(specifier: string, parent: string | undefined, child: string): string;
 /**
- * Run a CommonJS file through an instance's private CommonJS cache (#518, #534) and return its
- * `module.exports`.
- *
- * Node's `require.cache` is keyed on the file path alone, so the instance-scoped files the require
- * reaches (see {@link isInstanceScopedFile} — the file itself and its relative helpers, never
- * `node_modules` packages or slothlet's own files) are kept in a private cache per instance ID and
- * swapped into `require.cache` only for the duration of this synchronous require: global entries for
- * those files are set aside and restored afterwards, so neither the host's copies nor another
- * instance's copies are ever served, and `require.cache` does not grow. The cache is shared by every
- * leaf and mount of the instance and kept across partial reloads; a full reload rotates the instance
- * ID and so starts a fresh one ({@link releaseInstanceScope} drops the old one).
- *
- * While the require runs, the scope is active: a relative `require()` of an ES module from a file of
- * the scope is served the instance's copy of that module (the resolve and load hooks of
- * {@link installInstanceImportHooks}).
- * @param {string} filePath - Absolute path of the CommonJS file.
- * @param {string} instanceID - The instance whose copies are served.
- * @param {object} [options] - Options.
- * @param {boolean} [options.fresh=false] - Evaluate the file itself anew instead of serving (and
- *   keeping) the instance's copy of it — how a leaf is loaded, so a partial reload re-runs it.
- * @param {string|null} [options.importer=null] - The api file the copies are served for, when the instance loads
- *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
- *   instance.
- * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
- * @returns {*} The file's `module.exports`.
- * @internal
- * @example
- * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
- */
-export function requireInInstance(filePath: string, instanceID: string, { fresh, importer, mount }?: {
-    fresh?: boolean | undefined;
-    importer?: string | null | undefined;
-    mount?: string | null | undefined;
-}): any;
-/**
  * The import graph of an instance's own code: for each file a leaf of the instance reached through an
  * import or require that carries the instance (#601 review), the files that import it. The live runtime
  * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * What comes back is a read-only view (see graphView): it reads as a `Map` of importers by imported file does, hands
+ * out each collection of importers as a copy, and is one object per instance for as long as its graph lives.
  * @param {string} instanceID - The instance ID.
- * @returns {Map<string, Set<string>>|null} Importers by imported file (forward-slash paths), or null.
+ * @returns {object|null} Importers by imported file (forward-slash paths), or null.
  * @internal
  * @example
  * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
  */
-export function instanceImporters(instanceID: string): Map<string, Set<string>> | null;
+export function instanceImporters(instanceID: string): object | null;
 /**
  * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
  * They run under their plain path, with no import query, so the live runtime looks a stack frame up
@@ -114,31 +98,74 @@ export function instanceImporters(instanceID: string): Map<string, Set<string>> 
  */
 export function instanceCommonJSFiles(instanceID: string): string[];
 /**
- * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object
- * the instance's CommonJS state lives in, dropped by {@link releaseInstanceScope}, and how many files
- * the instance has. Files are only ever added while the instance lives, so an equal count means the same
- * files.
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object standing for
+ * the instance's CommonJS state, dropped by the instance's release, and how many files the instance has. Files are
+ * only ever added while the instance lives, so an equal count means the same files. The object holds nothing.
  * @param {string} instanceID - The instance ID.
  * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
  * @internal
  * @example
- * instanceCommonJSVersion("inst-a"); // { key: Set {…}, count: 3 }
+ * instanceCommonJSVersion("inst-a"); // { key: {}, count: 3 }
  */
 export function instanceCommonJSVersion(instanceID: string): {
     key: object;
     count: number;
 } | null;
 /**
- * Drop an instance's private CommonJS copies (#534): on shutdown, and for the old instance ID on a
- * full reload. Its ES module copies stay in Node's module cache (which has no eviction) but are no
- * longer reachable from a live instance.
+ * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
+ * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
+ * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
+ * or drop what is recorded about it, whatever it can import or reach through the global object. With two copies of
+ * slothlet in the process, the copy that loaded first keeps every instance's record, and this claims there.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{instanceID: string, require: function(string, object=): *, release: function(): void}|null} The handle,
+ *   or null when the ID is claimed already.
+ * @internal
+ * @example
+ * const scope = claimInstanceScope(instanceID);
+ * scope.require("/app/api/counter.cjs", { fresh: true });
+ * scope.release();
+ */
+export function claimInstanceScope(instanceID: string): {
+    instanceID: string;
+    require: (arg0: string, arg1: object | undefined) => any;
+    release: () => void;
+} | null;
+/**
+ * Run a CommonJS file through the private CommonJS cache of an instance ID no instance has claimed (see
+ * {@link scopeRequire} for what that does): for a caller that is not an instance, such as a test of the cache. An
+ * instance loads its files through the handle it claimed ({@link claimInstanceScope}); for an ID an instance holds,
+ * this throws.
+ * @param {string} filePath - Absolute path of the CommonJS file.
+ * @param {string} instanceID - The instance ID whose copies are served.
+ * @param {object} [options] - Options, as {@link scopeRequire} takes them (`fresh`, `importer`, `mount`).
+ * @returns {*} The file's `module.exports`.
+ * @throws {TypeError} When the ID is claimed by an instance.
+ * @internal
+ * @example
+ * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
+ */
+export function requireInInstance(filePath: string, instanceID: string, options?: object): any;
+/**
+ * Drop what is kept for an instance ID that {@link requireInInstance} claimed, or that no one claimed (what the hooks
+ * recorded for a URL carrying it). An ID an instance holds is released by the instance's own handle, and is left as
+ * it is here.
  * @param {string|null|undefined} instanceID - The instance ID.
  * @returns {void}
  * @internal
  * @example
- * releaseInstanceScope(oldInstanceID);
+ * releaseInstanceScope("inst-a");
  */
 export function releaseInstanceScope(instanceID: string | null | undefined): void;
+/**
+ * Register frame placement's check of who is calling into slothlet: given an `Error` slothlet created on entry, the
+ * location of the module whose own top-level code made the call, when vitest's or vite's module runner was evaluating
+ * that module, else null. Taken once, by the copy that keeps the shared object.
+ * @param {function(Error): (string|null)} check - The check.
+ * @returns {void}
+ * @internal
+ */
+export function setCallerCheck(check: (arg0: Error) => (string | null)): void;
 /**
  * Source of the ES module that stands in for a CommonJS helper imported by an instance (#534): it
  * runs the file through the instance's private CommonJS cache and exports what Node's own
@@ -227,7 +254,8 @@ export function recordedScriptCount(): number;
  */
 export function scriptKeyInstance(key: string): string | null;
 /**
- * Register the resolve and load hooks with Node, once per process (idempotent across slothlet copies).
+ * Register the resolve and load hooks with Node, once per process: the hooks of the slothlet copy that keeps every
+ * instance's record (the first to load), which another copy asks to register them.
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
  * (#534) and passes every unmarked URL straight through.
@@ -236,8 +264,9 @@ export function scriptKeyInstance(key: string): string | null;
  * trip to every import in the process and reorders module evaluation enough to break leaves that
  * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
  * @param {object} nodeModule - The `node:module` namespace.
- * @param {object} [registry=globalThis] - Where the process-wide "registered" flag lives; the global
- *   object in production, so every slothlet copy in the process sees one registration.
+ * @param {object} [registry=globalThis] - The global object in production. Any other object is a registry of the
+ *   caller's own: this copy's hooks are then registered on `nodeModule` once per registry, whichever copy keeps the
+ *   record.
  * @returns {boolean} True when a hook is (now or already) registered.
  * @internal
  * @example
@@ -366,72 +395,70 @@ export type ResolveResult = {
  */
 export type NextResolve = (specifier: string, context?: object | undefined) => ResolveResult | Promise<ResolveResult>;
 /**
- * Process-wide instance-import state.
+ * The object the slothlet copies of a process share, made and kept by the first copy to load. It is frozen, and holds
+ * no collection and no record: what slothlet keeps about an instance's files stays in module-private state of the
+ * copy that made the object, and every member here either reads from that state without handing any of it out, only
+ * ever adds to it what a module may add, or acts for one instance on proof of being that instance.
  */
 export type InstanceImportState = {
     /**
-     * - Per instance ID: the private CommonJS module
-     * copies of that instance, by filename.
+     * - Records a module's
+     * imports; called by the registration the vite plugin appends to each instance module. It only ever adds an importer.
      */
-    scopes: Map<string, Map<string, object>>;
+    recordImports: (instanceID: string, parent: string, children: string[]) => void;
     /**
-     * - The
-     * scope a synchronous {@link requireInInstance} is running in (`anchor` is the file it required; `importer` the api
-     * file whose own copies are served, under `helpers: "module"`), else null.
+     * - The reader of the import graphs (see graphView).
      */
-    active: {
-        instanceID: string;
-        anchor: string;
-        importer?: string | null;
-        mount?: string | null;
-    } | null;
+    imports: {
+        of: (arg0: string) => (object | null);
+    };
     /**
      * -
-     * Entry point of the ESM wrapper generated for a CommonJS helper.
+     * The reader of the sources the load hook recorded (#597).
      */
-    requireCJS: (arg0: string, arg1: string, arg2: string | null, arg3: string | null) => any;
-    /**
-     * - Per instance ID and importing api file (with
-     * its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.
-     */
-    copies?: Map<string, Map<string, Map<string, object>>> | undefined;
-    /**
-     * - Entry point of the CommonJS stub generated for a
-     * `require()` of an ES module.
-     */
-    requireESM: (url: string) => any;
-    /**
-     * - The frozen reader of the import
-     * graphs the recording copy keeps (see publishImports): a copy of an instance's graph, importers by imported file.
-     */
-    imports?: {
-        of: (arg0: string) => (Map<string, Set<string>> | null);
-    } | undefined;
-    /**
-     * - Per instance ID: the CommonJS leaves it loaded, which its
-     * private cache does not keep (each load evaluates the leaf anew). Created on first use.
-     */
-    leaves?: Map<string, Set<string>> | undefined;
-    /**
-     * - Records a
-     * module's imports; called by the registration the vite plugin appends to each instance module. Fixed on the state,
-     * and only ever adds an importer.
-     */
-    recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
-    /**
-     * - The frozen reader of
-     * the sources the hook's copy recorded (#597), fixed on the state by that copy (see publishScripts).
-     */
-    scripts?: {
+    scripts: {
         lookup: Function;
         hashes: Function;
         text: Function;
         count: Function;
         packageImporters: Function;
-    } | undefined;
+    };
     /**
-     * - How a URL is reduced to its script key, fixed once set.
+     * -
+     * The reader of an instance's CommonJS files.
      */
-    scriptKeyOf?: ((url: string) => string) | undefined;
+    commonJS: {
+        files: (arg0: string) => string[];
+        version: (arg0: string) => ({
+            key: object;
+            count: number;
+        } | null);
+    };
+    /**
+     * - How a URL is reduced to its script key.
+     */
+    scriptKeyOf: (url: string) => string;
+    /**
+     * - The namespace of one of slothlet's runtime entry files the
+     * keeping copy has evaluated (#760, see registerOwnModule).
+     */
+    own: (url: string) => (object | undefined);
+    /**
+     * - Claims an instance ID (see claimInstanceScope).
+     */
+    claim: (instanceID: string) => (object | null);
+    /**
+     * - Registers the keeping copy's hooks with Node, once.
+     */
+    hooks: () => boolean;
+    /**
+     * - Entry point of the code the load hook generates (see mintTicket).
+     */
+    redeem: (ticket: string) => object;
+    /**
+     * - Entry point of the wrapper the vite plugin
+     * generates for a CommonJS helper (see requireCJSFromRunner).
+     */
+    requireCJS: (filePath: string, instanceID: string) => any;
 };
 //# sourceMappingURL=instance-imports.d.mts.map
