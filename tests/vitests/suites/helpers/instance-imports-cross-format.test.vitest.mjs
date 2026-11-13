@@ -24,6 +24,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import * as nodeModule from "node:module";
+import { fileURLToPath } from "node:url";
 import { scanCommonJSExports, commonJSExportNames } from "@cldmv/slothlet/helpers/cjs-export-names";
 import {
 	requireInInstance,
@@ -34,6 +35,9 @@ import {
 	slothletInstanceImports
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
+
+/** Import a module with Node's own loader: the function is a CommonJS file's. */
+const nativeImport = createRequire(import.meta.url)(fileURLToPath(new URL("../runtime/fixtures/native-import.cjs", import.meta.url)));
 
 /**
  * Run a function while the CommonJS scope of an instance is active: from inside a file loaded through the instance's
@@ -363,6 +367,82 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 			expect(stub.source).toContain('requireESM("file:///x.mjs?slothlet_instance=a")');
 			const cjs = { format: "commonjs", source: "" };
 			expect(hooks.load("file:///x.js?slothlet_instance=a&slothlet_require=1", {}, () => cjs)).toBe(cjs);
+		});
+
+		describe("a require() an instance's ES module makes with createRequire (#755)", () => {
+			const req = new Set(["require", "node"]);
+			const at = (url) => () => ({ url });
+			/**
+			 * Run the CommonJS stub the load hook generated, as Node runs a CommonJS module's source.
+			 * @param {string} source - The stub's source.
+			 * @returns {object} The stub's `module`, with what it exported.
+			 */
+			const runStub = (source) => {
+				const stub = { id: "/stub.cjs", filename: "/stub.cjs", exports: {} };
+				new Function("module", source)(stub);
+				return stub;
+			};
+
+			it("marks the require of a file of the instance, and leaves an import, a JSON file and an addon as they are", () => {
+				const parentURL = `${new URL(`file://${path.join(root, "esm-plain.mjs")}`).href}?slothlet_instance=unit-mr`;
+				const helper = new URL(`file://${path.join(root, "helper.cjs")}`).href;
+				const marked = `${helper}?slothlet_instance=unit-mr&slothlet_module_require=1`;
+				expect(hooks.resolve("./helper.cjs", { parentURL, conditions: req }, at(helper)).url).toBe(marked);
+				expect(hooks.resolve("./helper.cjs", { parentURL, conditions: ["import"] }, at(helper)).url).toBe(
+					`${helper}?slothlet_instance=unit-mr`
+				);
+				for (const ext of ["json", "node"]) {
+					const file = new URL(`file://${path.join(root, `data.${ext}`)}`).href;
+					expect(hooks.resolve(`./data.${ext}`, { parentURL, conditions: req }, at(file)).url).toBe(`${file}?slothlet_instance=unit-mr`);
+				}
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("answers it with a stub that returns the instance's copy of a CommonJS file", () => {
+				const helper = path.join(root, "helper.cjs");
+				const target = `${new URL(`file://${helper}`).href}?slothlet_instance=unit-mr`;
+				const load = () => hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				const out = load();
+				expect(out.format).toBe("commonjs");
+				expect(out.source).toContain(`.requireFromModule(${JSON.stringify(target)}, "commonjs", module);`);
+				const first = runStub(out.source).exports;
+				expect(first.bump()).toBe(1);
+				// Required again, the stub hands out the same copy: one per instance.
+				expect(runStub(load().source).exports).toBe(first);
+				// A stub's code runs once: the ticket in it is taken.
+				expect(() => runStub(out.source)).toThrow(TypeError);
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("takes the stub out of Node's require cache, and nothing else", () => {
+				const helper = path.join(root, "helper.cjs");
+				const target = `${new URL(`file://${helper}`).href}?slothlet_instance=unit-mr`;
+				const cache = createRequire(import.meta.url).cache;
+				const out = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				const stub = { id: helper, filename: helper, exports: {} };
+				cache[helper] = stub;
+				new Function("module", out.source)(stub);
+				expect(cache[helper]).toBeUndefined();
+				// An entry that is not the stub's own stays.
+				const hostCopy = { id: helper, exports: { host: true }, loaded: true };
+				cache[helper] = hostCopy;
+				const again = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				new Function("module", again.source)({ id: helper, filename: helper, exports: {} });
+				expect(cache[helper]).toBe(hostCopy);
+				delete cache[helper];
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("answers the require of an ES module with the copy an import of it gives", async () => {
+				const file = path.join(root, "esm-plain.mjs");
+				const target = `${new URL(`file://${file}`).href}?slothlet_instance=unit-mr`;
+				const out = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "module", source: "" }));
+				expect(out.source).toContain(`.requireFromModule(${JSON.stringify(target)}, "module", module);`);
+				const required = runStub(out.source).exports;
+				const imported = await nativeImport(target);
+				expect(required.bump).toBe(imported.bump);
+				releaseInstanceScope("unit-mr");
+			});
 		});
 
 		it("wraps an instance-marked CommonJS module, reading the file when the loader gave no source", () => {

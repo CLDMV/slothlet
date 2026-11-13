@@ -695,8 +695,7 @@ const OWN_MODULE_PREFIX = "slothlet-own:";
  * registerOwnModule(import.meta.url, runtimeNamespace);
  */
 export function registerOwnModule(url, namespace) {
-	if (typeof url !== "string" || !SINGLE_COPY_FILES.includes(url) || OWN_MODULES.has(url)) return;
-	if (namespace === null || typeof namespace !== "object") return;
+	if (!SINGLE_COPY_FILES.includes(url) || OWN_MODULES.has(url)) return;
 	OWN_MODULES.set(url, namespace);
 }
 
@@ -711,9 +710,9 @@ export function registerOwnModule(url, namespace) {
 function ownModuleBridge(url) {
 	const lines = [`const ns = ${STATE_REF}.own(${JSON.stringify(url)});`];
 	let n = 0;
+	// The runtime's entry files export by name only.
 	for (const name of Object.keys(OWN_MODULES.get(url))) {
-		if (name === "default") lines.push("export default ns.default;");
-		else lines.push(`const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
+		lines.push(`const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
 	return lines.join("\n") + "\n";

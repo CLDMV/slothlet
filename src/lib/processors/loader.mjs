@@ -358,15 +358,11 @@ let runtimeLoading = null;
  * @private
  */
 function ensureRuntimeLoaded() {
-	runtimeLoading ??= import("@cldmv/slothlet/runtime").then(
-		() => {
-			runtimeLoaded = true;
-		},
-		() => {
-			// A host that cannot resolve the runtime loads no api file that imports it either.
-			runtimeLoaded = true;
-		}
-	);
+	// Loaded or not, the load is over: a host that cannot resolve the runtime loads no api file that imports it either.
+	const done = () => {
+		runtimeLoaded = true;
+	};
+	runtimeLoading ??= import("@cldmv/slothlet/runtime").then(done, done);
 	return runtimeLoading;
 }
 

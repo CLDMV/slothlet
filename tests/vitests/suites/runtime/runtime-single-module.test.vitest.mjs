@@ -39,6 +39,7 @@ import slothlet from "@cldmv/slothlet";
 import * as runtime from "@cldmv/slothlet/runtime";
 import * as asyncRuntime from "@cldmv/slothlet/runtime/async";
 import * as liveRuntime from "@cldmv/slothlet/runtime/live";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.resolve(HERE, "../../../../api_tests/api_test_runtime_single/api");
@@ -93,6 +94,18 @@ describe.each(MODES)("Runtime > one copy per process > $name", ({ mode, runtime:
 			expect(Object.keys(native).sort()).toEqual(Object.keys(own()).sort());
 			for (const name of Object.keys(own())) expect(native[name]).toBe(own()[name]);
 		});
+	});
+
+	it("takes each runtime entry file once, and no other file", async () => {
+		const api = await slothlet({ base: DIR, mode, runtime: runtimeName, silent: true });
+		try {
+			// A file that is not one of the runtime's, and a second namespace for one that is: neither is taken.
+			registerOwnModule("file:///not/the/runtime.mjs", { self: "other" });
+			registerOwnModule(import.meta.resolve("@cldmv/slothlet/runtime"), { self: "other" });
+			expect((await nativeImport("@cldmv/slothlet/runtime")).self).toBe(runtime.self);
+		} finally {
+			await api.shutdown();
+		}
 	});
 
 	describe.each(["precise", "fast"])("attribution %s", (attribution) => {
