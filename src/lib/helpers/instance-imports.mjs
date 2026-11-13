@@ -976,6 +976,7 @@ export function requireInInstance(filePath, instanceID, { fresh = false, importe
 		return requireFn(resolved);
 	} finally {
 		state.active = outer;
+		recordScopeRequires(instanceID, cache, owned);
 		// Collect this instance's (possibly new) copies, then put the global cache back.
 		for (const file of [...Object.keys(cache).filter(owned), ...served]) {
 			if (!(file in cache)) continue;
@@ -983,6 +984,39 @@ export function requireInInstance(filePath, instanceID, { fresh = false, importe
 			delete cache[file];
 		}
 		for (const [file, mod] of setAside) cache[file] = mod;
+	}
+}
+
+/**
+ * How many of each CommonJS module's requires have been recorded (see {@link recordScopeRequires}), so a module is
+ * read again only once it has required more.
+ * @type {WeakMap<object, number>}
+ * @private
+ */
+const RECORDED_REQUIRES = new WeakMap();
+
+/**
+ * Record the requires the files of an instance's CommonJS scope made, read from Node's own modules while the scope's
+ * copies are still in Node's require cache. The resolve hook records a require as it is resolved, but Node answers a
+ * require from its own caches, without asking the hook, when another file of the same folder made the same require
+ * before: that file's require went unrecorded, and the file was missing from the files loading the helper. Node lists
+ * on each module the modules it required, however each was answered.
+ * @param {string} instanceID - The instance.
+ * @param {Record<string, object>} cache - Node's require cache, with the scope's copies in it.
+ * @param {function(string): boolean} owned - Whether a file is one of the scope's.
+ * @returns {void}
+ * @private
+ */
+function recordScopeRequires(instanceID, cache, owned) {
+	for (const file of Object.keys(cache)) {
+		if (!owned(file)) continue;
+		const children = cache[file]?.children;
+		if (!Array.isArray(children) || RECORDED_REQUIRES.get(cache[file]) === children.length) continue;
+		RECORDED_REQUIRES.set(cache[file], children.length);
+		for (const child of children) {
+			const required = child?.filename;
+			if (typeof required === "string" && required !== file && owned(required)) recordImport(instanceID, file, required);
+		}
 	}
 }
 
