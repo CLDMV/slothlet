@@ -36,6 +36,7 @@ import {
 	rememberNewest,
 	scriptKeyInstance,
 	setScriptKey,
+	setCallerCheck,
 	LOADED_BY_SPECIFIER,
 	VITE_HOST_SCRIPTS,
 	VITE_LOADED_BY
@@ -705,6 +706,10 @@ const SCRIPT_HASHES = new Map();
 
 // The loader keeps what it records under the key a frame's location is read under.
 setScriptKey((url) => runtime_comparableLocation(url).key);
+
+// The wrapper the vite plugin generates for a CommonJS helper calls into slothlet from the module vitest's or vite's
+// runner evaluates for the helper: the call is taken on that module's own location (see requireCJSFromRunner).
+setCallerCheck((entry) => runtime_registeredScript(entry, true)?.location ?? null);
 
 /**
  * Add a script hash to a location's.
@@ -2500,10 +2505,12 @@ const READ_REGISTRATIONS = new WeakSet();
  * own code is a file of the `vitest` or `vite` package running that file's own source. Code a module compiled with `vm` under a host file's name
  * and registered itself has its own frame, not the runner's, below it.
  * @param {unknown} entry - What was pushed.
+ * @param {boolean} [called=false] - The error was created by slothlet's own code on being called, not by the file: the
+ *   frames of slothlet's own at the top are passed over, and the file's is the first below them.
  * @returns {{key: string, hash: string, location: string}|null} The script, with the location its frame names, or null.
  * @private
  */
-function runtime_registeredScript(entry) {
+function runtime_registeredScript(entry, called = false) {
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
 	if (Objects.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
@@ -2524,6 +2531,7 @@ function runtime_registeredScript(entry) {
 	let runner = null;
 	for (const frame of frames) {
 		if (!own) {
+			if (called && frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 			own = frame;
 			continue;
 		}

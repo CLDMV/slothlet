@@ -79,6 +79,8 @@
 		"HINT_MODULE_ID_IN_USE": "使われていないモジュール ID か、呼び出し元モジュール自身の ID を選んでください。",
 		"MODULE_IMPORT_FAILED": "モジュール '{modulePath}' のインポートに失敗しました: {error}。ファイルが存在し、構文が正しいか確認してください。",
 		"HINT_MODULE_IMPORT_FAILED": "モジュールファイルが存在し、インポート可能であることを確認してください。構文エラーや依存関係の不足がないかを確認してください。",
+		"INSTANCE_ID_IN_USE": "インスタンス ID '{instanceID}' はこのプロセスですでに使用されています。同じ ID でファイルを二重に読み込むことはできません。",
+		"HINT_INSTANCE_ID_IN_USE": "各インスタンスには固有の ID が必要です。先にもう一方のインスタンスをシャットダウンするか、ID を自動生成させてください。",
 		"CONTEXT_ALREADY_EXISTS": "インスタンス '{instanceID}' のコンテキストは既に存在します。2回初期化することはできません。",
 		"HINT_CONTEXT_ALREADY_EXISTS": "このコンテキストは既に存在します。同じインスタンスを2回初期化しようとしていないか確認してください。",
 		"CONTEXT_NOT_FOUND": "インスタンス '{instanceID}' のコンテキストが見つかりません。インスタンスが終了した可能性があります。利用可能なインスタンス: {availableInstances}",

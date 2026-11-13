@@ -38,7 +38,7 @@ let tagged = null;
  * @returns {Array<Set<string>>} The collections.
  */
 function reachable(file) {
-	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
 	const found = [];
 	for (const graph of [state?.graphs?.get?.(INSTANCE), state?.imports?.of?.(INSTANCE)]) {
 		const importers = graph?.get?.(file);
@@ -73,7 +73,7 @@ export const rewrite = () => {
  * api.guest.claim(); // true
  */
 export const claim = () => {
-	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
 	if (typeof state?.recordImports !== "function") return false;
 	state.recordImports(INSTANCE, TRUSTED, [HELPER, TAGGED]);
 	return true;

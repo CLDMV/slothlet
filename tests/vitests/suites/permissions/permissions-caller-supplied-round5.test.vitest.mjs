@@ -449,7 +449,8 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const url = `${freshURL("kept.mjs")}?slothlet_instance=${instanceID}&module=m`;
 		load(url, {}, () => ({ format: "module", source: "export const v = 1;\n" }));
 		const forged = sha256("forged");
-		const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+		const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
+		expect(state).toBeTypeOf("object");
 		const attempts = [
 			() => state.scriptHashes?.get?.(state.scriptKeyOf?.(url) ?? url)?.push?.(forged),
 			() => state.scriptHashes?.set?.(url, [forged]),

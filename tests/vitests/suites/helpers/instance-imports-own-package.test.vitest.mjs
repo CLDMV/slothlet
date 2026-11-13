@@ -29,6 +29,8 @@ import {
 	installInstanceImportHooks,
 	isOwnPackageImport,
 	propagateInstanceQuery,
+	requireInInstance,
+	releaseInstanceScope,
 	slothletInstanceImports
 } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -40,6 +42,9 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), "slothlet-715-own-")).replace
 const pkg = `${base}/pkg`;
 fs.mkdirSync(`${pkg}/api/a`, { recursive: true });
 fs.writeFileSync(`${pkg}/package.json`, JSON.stringify({ name: "own-pkg", imports: { "#h": "./lib/h.mjs" } }));
+// The CommonJS leaf: its only statement calls the function a test leaves on the global object, so the test runs while
+// the leaf's scope is active.
+fs.writeFileSync(`${pkg}/api/a/a.cjs`, 'module.exports = globalThis[Symbol.for("slothlet.test.inScope")]();');
 // A package directory under `node_modules` with no manifest of its own.
 const installed = `${base}/node_modules/bare-dir`;
 fs.mkdirSync(installed, { recursive: true });
@@ -91,13 +96,14 @@ describe("Helpers > instance-imports > bare specifiers into the leaf's own packa
 		 * @returns {string} The resolved URL.
 		 */
 		const resolveRequire = (specifier, url) => {
-			const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
-			const outer = state.active;
-			state.active = { instanceID: "abc", anchor: `${pkg}/api/a/a.cjs` };
+			const key = Symbol.for("slothlet.test.inScope");
+			globalThis[key] = () => hooks.resolve(specifier, { parentURL, conditions }, at(url)).url;
 			try {
-				return hooks.resolve(specifier, { parentURL, conditions }, at(url)).url;
+				// Loading the leaf through the instance's private cache makes its scope the active one.
+				return requireInInstance(`${pkg}/api/a/a.cjs`, "abc", { fresh: true });
 			} finally {
-				state.active = outer;
+				delete globalThis[key];
+				releaseInstanceScope("abc");
 			}
 		};
 

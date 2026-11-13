@@ -36,10 +36,24 @@ import {
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 /**
- * The process-wide instance-import state (documented global of helpers/instance-imports).
- * @returns {object} The state.
+ * Run a function while the CommonJS scope of an instance is active: from inside a file loaded through the instance's
+ * private cache, whose only statement calls it. What slothlet keeps about a running require is its own, so a test
+ * gets a scope active the way an instance does, by requiring a file in it.
+ * @param {string} file - A CommonJS file whose body is `module.exports = globalThis[Symbol.for("slothlet.test.inScope")]();`.
+ * @param {string} instanceID - The instance ID.
+ * @param {Function} body - The function.
+ * @returns {*} What the function returned.
  */
-const state = () => globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+const inScope = (file, instanceID, body) => {
+	const key = Symbol.for("slothlet.test.inScope");
+	globalThis[key] = body;
+	try {
+		return requireInInstance(file, instanceID, { fresh: true });
+	} finally {
+		delete globalThis[key];
+		releaseInstanceScope(instanceID);
+	}
+};
 
 /**
  * Names found by the scan, as an array.
@@ -185,6 +199,10 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		);
 		write("bridge.mjs", "import helper from './helper.cjs'; export { helper };");
 		write("reexporting.cjs", "module.exports = require('./helper.cjs');");
+		// Exports a key no scan of the source finds, and one named `default`.
+		write("late.cjs", "exports.bump = () => {}; exports['la' + 'te'] = 1; exports.default = 2;");
+		write("number.cjs", "module.exports = 42;");
+		write("in-scope.cjs", 'module.exports = globalThis[Symbol.for("slothlet.test.inScope")]();');
 	});
 
 	afterAll(async () => {
@@ -273,12 +291,16 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		expect(fresh).toContain('export { n0 as "bump" };');
 		expect(fresh).toContain("export default m;");
 		expect(fresh).toContain('export { m as "module.exports" };');
-		state().scopes.set("unit-w", new Map([[helper, { loaded: true, exports: { bump() {}, late: 1, default: 2 } }]]));
-		const withLoaded = commonJSWrapperSource(helper, "unit-w", new TextEncoder().encode("exports.bump = 1;"));
+		// A copy the instance has loaded: its keys are `bump`, `late` and `default`.
+		const late = path.join(root, "late.cjs");
+		requireInInstance(late, "unit-w");
+		const withLoaded = commonJSWrapperSource(late, "unit-w", new TextEncoder().encode("exports.bump = 1;"));
 		expect(withLoaded).toContain('as "late"');
 		expect(withLoaded).not.toContain('as "default"');
-		state().scopes.set("unit-w", new Map([[helper, { loaded: true, exports: 42 }]]));
-		expect(commonJSWrapperSource(helper, "unit-w", "exports.only = 1;")).toContain('as "only"');
+		// A loaded copy whose exports are no object contributes no key.
+		const number = path.join(root, "number.cjs");
+		requireInInstance(number, "unit-w");
+		expect(commonJSWrapperSource(number, "unit-w", "exports.only = 1;")).toContain('as "only"');
 		// A re-export is followed into the required file.
 		expect(commonJSWrapperSource(path.join(root, "reexporting.cjs"), "unit-w", null)).toContain('as "bump"');
 		releaseInstanceScope("unit-w");
@@ -354,11 +376,9 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		});
 
 		it("marks only relative require()s from the active scope's files that resolve to a possible ES module", () => {
-			const s = state();
-			const outer = s.active;
 			const leaf = path.join(root, "leaf.cjs");
-			s.active = { instanceID: "a b", anchor: leaf };
-			try {
+			// The scope of instance `a b`, anchored at a file beside the leaf.
+			inScope(path.join(root, "in-scope.cjs"), "a b", () => {
 				const parentURL = new URL(`file://${leaf}`).href;
 				const req = new Set(["require", "node"]);
 				const at = (url) => () => ({ url });
@@ -383,9 +403,7 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 				expect(hooks.resolve("./x.mjs", { conditions: req }, at(esm)).url).toBe(esm);
 				const pkgFile = new URL(`file://${path.join(root, "node_modules/pkg/x.mjs")}`).href;
 				expect(hooks.resolve("./node_modules/pkg/x.mjs", { parentURL, conditions: req }, at(pkgFile)).url).toBe(pkgFile);
-			} finally {
-				s.active = outer;
-			}
+			});
 		});
 	});
 

@@ -115,7 +115,7 @@ import { enableAsyncResourcePatching, disableAsyncResourcePatching } from "@cldm
 import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cldmv/slothlet/helpers/function-source-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
 
 /**
@@ -224,6 +224,54 @@ class Slothlet {
 
 	// Properties to skip during recursive operations (at any depth)
 	static SKIP_PROPS = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+
+	/**
+	 * The handle this instance claimed for its instance ID (see claimInstanceScope in helpers/instance-imports): how
+	 * its CommonJS files are loaded as its own, and how what slothlet keeps about its files is released. Held here
+	 * alone.
+	 * @type {{instanceID: string, require: function(string, object=): *, release: function(): void}|null}
+	 */
+	#importScope = null;
+
+	/**
+	 * Claim the instance's ID for its files, before any of them load. An ID this instance already holds stays held;
+	 * one it held before is released.
+	 * @returns {void}
+	 * @throws {SlothletError} INSTANCE_ID_IN_USE when the ID is held by something else in the process.
+	 * @private
+	 */
+	#claimImportScope() {
+		if (this.#importScope?.instanceID === this.instanceID) return;
+		this.#releaseImportScope();
+		const scope = claimInstanceScope(this.instanceID);
+		if (!scope) throw new this.SlothletError("INSTANCE_ID_IN_USE", { instanceID: this.instanceID, validationError: true });
+		this.#importScope = scope;
+	}
+
+	/**
+	 * Release what slothlet keeps about the files loaded under the instance ID this instance holds.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseImportScope() {
+		this.#importScope?.release();
+		this.#importScope = null;
+	}
+
+	/**
+	 * Run a CommonJS file of this instance through the instance's private CommonJS cache (see scopeRequire in
+	 * helpers/instance-imports).
+	 * @param {string} filePath - Absolute path of the CommonJS file.
+	 * @param {object} [options] - `fresh`, `importer` and `mount`, as scopeRequire takes them.
+	 * @returns {*} The file's `module.exports`.
+	 * @package
+	 * @example
+	 * slothlet.requireInScope("/app/api/counter.cjs", { fresh: true });
+	 */
+	requireInScope(filePath, options) {
+		this.#claimImportScope();
+		return this.#importScope.require(filePath, options);
+	}
 
 	constructor() {
 		// Expose error classes to components (no imports needed)
@@ -947,6 +995,8 @@ class Slothlet {
 
 		// Use preserved instance ID (from reload) or generate new one
 		this.instanceID = preservedInstanceID || this.helpers.utilities.generateId();
+		// The ID is claimed for this instance's files before any of them load.
+		this.#claimImportScope();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -1258,7 +1308,8 @@ class Slothlet {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			forgetInstanceScripts(oldInstanceID);
-			releaseInstanceScope(oldInstanceID);
+			this.#releaseImportScope();
+			this.#claimImportScope();
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
 			boundaryPatchHolders.delete(oldInstanceID);
@@ -1814,7 +1865,7 @@ class Slothlet {
 		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
 		// files, and the records of what its modules made (#597).
 		forgetInstanceScripts(this.instanceID);
-		releaseInstanceScope(this.instanceID);
+		this.#releaseImportScope();
 		releaseModuleMakers(this);
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).

@@ -79,6 +79,8 @@
 		"HINT_MODULE_ID_IN_USE": "Elige un ID de módulo que no esté en uso, o el del módulo que llama.",
 		"MODULE_IMPORT_FAILED": "Error al importar el módulo '{modulePath}': {error}. Compruebe que el archivo existe y tiene una sintaxis válida.",
 		"HINT_MODULE_IMPORT_FAILED": "Asegúrese de que el archivo del módulo existe y puede ser importado. Compruebe si hay errores de sintaxis o dependencias faltantes.",
+		"INSTANCE_ID_IN_USE": "El ID de instancia '{instanceID}' ya está en uso en este proceso. Sus archivos no se pueden cargar dos veces con el mismo ID.",
+		"HINT_INSTANCE_ID_IN_USE": "Cada instancia necesita un ID propio. Cierre primero la otra instancia o deje que slothlet genere el ID.",
 		"CONTEXT_ALREADY_EXISTS": "El contexto para la instancia '{instanceID}' ya existe. No se puede inicializar dos veces.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "Este contexto ya existe. Compruebe si está intentando inicializar la misma instancia dos veces.",
 		"CONTEXT_NOT_FOUND": "Contexto no encontrado para la instancia '{instanceID}'. Es posible que la instancia se haya cerrado. Instancias disponibles: {availableInstances}",

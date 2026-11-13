@@ -79,6 +79,8 @@
 		"HINT_MODULE_ID_IN_USE": "Wählen Sie eine unbenutzte Modul-ID oder die des aufrufenden Moduls.",
 		"MODULE_IMPORT_FAILED": "Fehler beim Importieren des Moduls '{modulePath}': {error}. Überprüfen Sie, ob die Datei existiert und eine gültige Syntax hat.",
 		"HINT_MODULE_IMPORT_FAILED": "Stellen Sie sicher, dass die Moduldatei existiert und importiert werden kann. Prüfen Sie auf Syntaxfehler oder fehlende Abhängigkeiten.",
+		"INSTANCE_ID_IN_USE": "Die Instanz-ID '{instanceID}' wird in diesem Prozess bereits verwendet. Ihre Dateien können nicht zweimal unter derselben ID geladen werden.",
+		"HINT_INSTANCE_ID_IN_USE": "Jede Instanz benötigt eine eigene ID. Fahren Sie zuerst die andere Instanz herunter oder lassen Sie slothlet die ID erzeugen.",
 		"CONTEXT_ALREADY_EXISTS": "Kontext für Instanz '{instanceID}' existiert bereits. Initialisierung kann nicht zweimal erfolgen.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "Dieser Kontext existiert bereits. Prüfen Sie, ob Sie versuchen, dieselbe Instanz zweimal zu initialisieren.",
 		"CONTEXT_NOT_FOUND": "Kontext für Instanz '{instanceID}' nicht gefunden. Instanz wurde möglicherweise heruntergefahren. Verfügbare Instanzen: {availableInstances}",

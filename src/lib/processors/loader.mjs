@@ -719,7 +719,7 @@ export class Loader extends ComponentBase {
 	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches are served from
 	 * the instance's private CommonJS cache — shared by every mount and kept across partial reloads; a
 	 * full reload rotates the instance ID and so starts a fresh one — and an ES module it require()s is
-	 * the instance's copy of that module (see requireInInstance in helpers/instance-imports).
+	 * the instance's copy of that module (see scopeRequire in helpers/instance-imports).
 	 * @param {string} filePath - Absolute path to the .cjs file
 	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
 	 * @returns {Object} Synthetic ESM namespace: { default, ...namedExports }
@@ -731,11 +731,13 @@ export class Loader extends ComponentBase {
 	#loadCJSIsolated(filePath, scopeKey, moduleID = null) {
 		// With `helpers: "module"` the files the leaf requires are its own copies, not the instance's.
 		const perModule = this.slothlet.config?.helpers === "module";
-		const exports = requireInInstance(filePath, scopeKey, {
-			fresh: true,
-			importer: perModule ? filePath : null,
-			mount: perModule ? (moduleID ?? null) : null
-		});
+		const options = { fresh: true, importer: perModule ? filePath : null, mount: perModule ? (moduleID ?? null) : null };
+		// The instance's own files load through the handle the instance holds for its ID; a load under another ID (a
+		// caller driving the loader directly) goes through the cache of an ID no instance holds.
+		const exports =
+			scopeKey === this.slothlet.instanceID && typeof this.slothlet.requireInScope === "function"
+				? this.slothlet.requireInScope(filePath, options)
+				: requireInInstance(filePath, scopeKey, options);
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
 		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
