@@ -8591,10 +8591,13 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
  * @param {string|symbol} prop - Property key being considered for disclosure.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
  *   {@link resolveEnforcedCaller}).
+ * @param {object|null} [access=null] - The access the read is part of (see {@link runtime_beginAccess}).
+ * @param {boolean} [listing=false] - Whether the key is being listed (`ownKeys`): a getter is withheld from a listing
+ *   too, while its description is still given.
  * @returns {boolean} True when the key must be withheld.
  * @private
  */
-function runtime_isReadRedacted(wrapper, prop, kept = null, access = null) {
+function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	const impl = wrapper.____slothletInternal?.impl;
@@ -8605,7 +8608,12 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null) {
 	const desc =
 		(impl && (typeof impl === "object" || typeof impl === "function") ? Objects.getOwnPropertyDescriptor(impl, prop) : undefined) ??
 		Objects.getOwnPropertyDescriptor(wrapper, prop);
-	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
+	if (!desc) return false;
+	// A getter is listed only to a caller that may read its path (#747): what it answers is not known without running
+	// it, and a read of it is refused to a caller the rules deny, so `Object.keys` and a spread leave it out as
+	// `JSON.stringify` and `toJSON` do. Its description is still given, and running the getter it holds is refused.
+	const isAccessor = listing && !("value" in desc) && typeof desc.get === "function";
+	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
 	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
 }
@@ -16569,7 +16577,7 @@ export class UnifiedWrapper extends ComponentBase {
 				for (const key of keys) {
 					const targetDesc = Objects.getOwnPropertyDescriptor(target, key);
 					if (targetDesc && !targetDesc.configurable) continue;
-					if (runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
+					if (runtime_isReadRedacted(wrapper, key, kept, null, true)) keys.delete(key);
 				}
 			}
 

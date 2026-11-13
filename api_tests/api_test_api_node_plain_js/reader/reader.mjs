@@ -65,6 +65,28 @@ export const view = () => ({
 export const serialize = () => JSON.stringify(self.owner.config);
 
 /**
+ * The keys the owner's data object shows this module through each way of listing it.
+ * @returns {{keys: string[], spread: string[], json: string[], toJSON: string[]}} What `Object.keys`, a spread,
+ *   `JSON.stringify` and the node's own `toJSON` list.
+ */
+export const listings = () => {
+	const config = self.owner.config;
+	const take = (read) => {
+		try {
+			return read();
+		} catch (error) {
+			return error?.code ?? "threw";
+		}
+	};
+	return {
+		keys: take(() => Object.keys(config)),
+		spread: take(() => Object.keys({ ...config })),
+		json: take(() => Object.keys(JSON.parse(JSON.stringify(config)))),
+		toJSON: take(() => Object.keys(config.toJSON()))
+	};
+};
+
+/**
  * Clone the owner's `config` with the platform's `structuredClone`, change the clone, and answer what it held.
  * @returns {string} The clone as JSON before it was changed, or the name of the error cloning threw.
  */

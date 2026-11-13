@@ -585,6 +585,15 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 		expect(await api.writer.serialize()).toBe(JSON.stringify(owner.config));
 	});
 
+	it("leaves a getter a module may not read out of every listing alike: keys, spread, JSON.stringify and toJSON (#747)", async () => {
+		await mount([{ caller: "reader.**", target: "owner.config.doubled", effect: "deny" }]);
+		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
+		const readable = Object.keys(owner.config).filter((key) => key !== "doubled");
+		expect(await api.reader.listings()).toEqual({ keys: readable, spread: readable, json: readable, toJSON: readable });
+		const all = Object.keys(owner.config);
+		expect(await api.writer.listings()).toEqual({ keys: all, spread: all, json: all, toJSON: all });
+	});
+
 	it("clones another module's data for a module as a copy, which changes nothing of the owner's when changed", async () => {
 		await mount(WRITER_MAY_WRITE);
 		const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-${++twins}`);
