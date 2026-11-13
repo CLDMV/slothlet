@@ -19,6 +19,7 @@ import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 import css from "@eslint/css";
 import { defineConfig } from "eslint/config";
+import capturedIntrinsics from "../tools/ci/eslint-captured-intrinsics.mjs";
 
 export default defineConfig([
 	// Global ignores - applies to all configurations
@@ -85,6 +86,20 @@ export default defineConfig([
 		languageOptions: { sourceType: "module" }
 	},
 	{ files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
+	// slothlet's own code uses the built-ins helpers/intrinsics took when slothlet loaded (see the rule's file).
+	{
+		files: ["src/**/*.{js,mjs,cjs}"],
+		ignores: [
+			"src/lib/helpers/intrinsics.mjs",
+			// Still read Object.prototype, Array.prototype, Function.prototype, Object(…) or Math.max from the globals;
+			// converted separately so concurrent changes to them stay conflict-free.
+			"src/lib/handlers/unified-wrapper.mjs",
+			"src/lib/handlers/frame-placement.mjs",
+			"src/lib/handlers/context-live.mjs"
+		],
+		plugins: { slothlet: capturedIntrinsics },
+		rules: { "slothlet/captured-intrinsics": "error" }
+	},
 	{
 		files: ["**/test/**/*test.js"],
 		languageOptions: {
