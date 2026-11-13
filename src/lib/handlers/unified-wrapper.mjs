@@ -3715,6 +3715,26 @@ function runtime_implAccessor(wrapper, prop) {
 }
 
 /**
+ * The prototype a member reaches a node fronting a module's own object from, when the object inherits it from a
+ * prototype set on it (#757) and the node's own copy of the object holds no member by that key: null otherwise, and
+ * for a member of `Object.prototype`, which the node's copy inherits too.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {object|null} The prototype to read it from, or null.
+ * @private
+ */
+function runtime_moduleInheritance(wrapper, prop) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return null;
+	const impl = internal.impl;
+	if (impl === null || typeof impl !== "object" || Reflect.has(impl, prop)) return null;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null) return null;
+	const prototype = Reflect.getPrototypeOf(object);
+	return prototype !== null && prototype !== Object.prototype && Reflect.has(prototype, prop) ? prototype : null;
+}
+
+/**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
  * {@link runtime_runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
  * @param {object} wrapper - The node's wrapper.
@@ -3724,6 +3744,9 @@ function runtime_implAccessor(wrapper, prop) {
  */
 function runtime_readImplMember(wrapper, prop) {
 	const impl = wrapper.____slothletInternal.impl;
+	// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
+	const inherited = runtime_moduleInheritance(wrapper, prop);
+	if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
 	const accessor = runtime_implAccessor(wrapper, prop);
 	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
 	if (accessor)
@@ -3816,8 +3839,190 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
 	const ownership = wrapper.slothlet?.handlers?.ownership;
 	const filePath = wrapper.____slothletInternal.filePath;
 	if (!ownership || !filePath) return null;
-	if (ownership.resolveExportPath(filePath, root)) return root;
-	return asMember && !ownership.resolveMemberExportPaths(filePath, root) ? root : null;
+	if (ownership.resolveExportPath(filePath, root) || (asMember && !ownership.resolveMemberExportPaths(filePath, root))) {
+		runtime_moduleObjectKeys(root);
+		return root;
+	}
+	return null;
+}
+
+/**
+ * The language's own `__proto__` setter, taken when this file loads.
+ * @type {function(this: object, (object|null)): void}
+ * @private
+ */
+const OBJECT_PROTO_SETTER = Reflect.getOwnPropertyDescriptor(Object.prototype, "__proto__").set;
+
+/**
+ * The members each module object a node fronts has held since slothlet first built a node from it (#757), so a member
+ * the module deletes from its object later is told from one the node alone holds.
+ * @type {WeakMap<object, Set<string>>}
+ * @private
+ */
+const MODULE_OBJECT_KEYS = new WeakMap();
+
+/**
+ * The members a module's object has held since slothlet first built a node from it (see {@link MODULE_OBJECT_KEYS}).
+ * @param {object} object - The module's object.
+ * @returns {Set<string>} Its keys, recorded on first sight.
+ * @private
+ */
+function runtime_moduleObjectKeys(object) {
+	let keys = MODULE_OBJECT_KEYS.get(object);
+	if (keys === undefined) {
+		keys = new Set(Objects.keys(object));
+		MODULE_OBJECT_KEYS.set(object, keys);
+	}
+	return keys;
+}
+
+/**
+ * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
+ * built-in value, a child node built from the same object, or an adoption of the same accessor.
+ * @param {PropertyDescriptor} mine - The node's own member.
+ * @param {PropertyDescriptor} held - The module's object's member.
+ * @returns {boolean} True when the node is in step with the object for this member.
+ * @private
+ */
+function runtime_holdsModuleMember(mine, held) {
+	if (!("value" in held)) {
+		if ("value" in mine) return false;
+		const original = runtime_originalAccessor(mine);
+		return original.get === held.get && original.set === held.set;
+	}
+	if (!("value" in mine)) return false;
+	if (Objects.is(mine.value, held.value)) return true;
+	const child = resolveWrapper(mine.value);
+	if (child === null) return false;
+	// A child node that keeps no record of what it was built from is not one this follows.
+	const internal = child.____slothletInternal;
+	if (!hasOwn(internal, "sourceValue")) return true;
+	// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
+	return (
+		internal.sourceValue === held.value ||
+		internal.moduleObject === held.value ||
+		internal.impl === held.value ||
+		(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
+	);
+}
+
+/**
+ * Bring one member a node fronts in step with the module's own object (#757): the module may change its object
+ * itself after the node was built (`config.port = 90` in its own code), and a read through the node gives what the
+ * object holds, as a read of the object does. A member the module replaced is adopted again, as the build adopts
+ * one; one it added is adopted; one it deleted is taken off the node. Only the node is changed, as the framework's
+ * own write: the module made the change.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object.
+ * @param {Set<string>} seen - The members the object has held (see {@link runtime_moduleObjectKeys}).
+ * @param {string} key - The member's key.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleMember(wrapper, object, seen, key) {
+	if (isFrameworkReservedKey(key)) return;
+	const internal = wrapper.____slothletInternal;
+	// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
+	if (internal.collisionMergedKeys?.has(key) || runtime_moduleObjectOf(wrapper, key) === null) return;
+	const held = Reflect.getOwnPropertyDescriptor(object, key);
+	const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
+	if (mine !== undefined && !mine.configurable) return;
+	if (held === undefined) {
+		if (mine === undefined || !seen.has(key)) return;
+		seen.delete(key);
+		const displaced = "value" in mine ? resolveWrapper(mine.value) : null;
+		if (displaced) runtime_retireChanges(displaced);
+		Reflect.deleteProperty(wrapper, key);
+		internal.readOnlyKeys?.delete(key);
+		return;
+	}
+	// The build adopts an object's enumerable members only.
+	if (!held.enumerable) return;
+	seen.add(key);
+	if (mine !== undefined && runtime_holdsModuleMember(mine, held)) return;
+	if (!("value" in held)) {
+		runtime_defineAdoptedAccessor(wrapper, key, held);
+		return;
+	}
+	const value = held.value;
+	let stored = value;
+	if (
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		!util.types.isProxy(value) &&
+		resolveWrapper(value) === null
+	) {
+		const displaced = mine !== undefined && "value" in mine ? resolveWrapper(mine.value) : null;
+		if (displaced) runtime_retireChanges(displaced);
+		const wrapped = wrapper.___createChildWrapper(key, value, null, internal.deferChildAdopt);
+		if (wrapped !== null && wrapped !== undefined) stored = wrapped;
+	}
+	Objects.defineProperty(wrapper, key, { value: stored, writable: false, enumerable: true, configurable: true });
+}
+
+/**
+ * Bring a node in step with the module's own object it fronts (#757), before a read, a description, a key check or a
+ * listing answers from the node: one member (`prop`), or every member and the object's extensibility (`prop`
+ * undefined). A node fronting no module object, the framework's own reads, and a closed node (whose members are fixed
+ * on its shell, as the object's are) are left as they are.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @param {PropertyKey} [prop] - The member read, or undefined for all.
+ * @param {boolean} [integrity=true] - With every member, whether the object's extensibility is followed too.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	if (prop !== undefined && typeof prop !== "string") return;
+	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (!Reflect.isExtensible(target)) return;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null) return;
+	internal.followingModule = true;
+	try {
+		const seen = runtime_moduleObjectKeys(object);
+		if (prop !== undefined) {
+			runtime_followModuleMember(wrapper, object, seen, prop);
+			return;
+		}
+		for (const key of Objects.keys(object)) runtime_followModuleMember(wrapper, object, seen, key);
+		for (const key of [...seen]) if (!hasOwn(object, key)) runtime_followModuleMember(wrapper, object, seen, key);
+	} finally {
+		internal.followingModule = false;
+	}
+	if (prop === undefined && integrity) runtime_followModuleIntegrity(wrapper, target);
+}
+
+/**
+ * Close a node when the module closed its own object itself (#757), as the build closes a node over a closed object:
+ * its members are brought in step first, then it is frozen, sealed or made non-extensible as the object is.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleIntegrity(wrapper, target) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (!Reflect.isExtensible(target)) return;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null || Reflect.isExtensible(object)) return;
+	runtime_followModuleObject(wrapper, target, undefined, false);
+	const { proxy } = internal;
+	const syncing = internal.integritySyncing;
+	internal.integritySyncing = true;
+	try {
+		runtime_frameworkWrite(wrapper, () => {
+			if (Objects.isFrozen(object)) Objects.freeze(proxy);
+			else if (Objects.isSealed(object)) Objects.seal(proxy);
+			else Objects.preventExtensions(proxy);
+		});
+	} finally {
+		internal.integritySyncing = syncing;
+	}
 }
 
 /**
@@ -3834,9 +4039,10 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
 function runtime_writeModuleObject(wrapper, object, prop, value) {
 	const held = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (held === undefined) {
-		return (
-			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true })
-		);
+		const added =
+			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true });
+		if (added && typeof prop === "string") runtime_moduleObjectKeys(object).add(prop);
+		return added;
 	}
 	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { value });
 	if (typeof held.set !== "function") return false;
@@ -10565,7 +10771,12 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 	// A non-extensible node takes no new key, as on the object itself.
 	if (!current) return false;
 	const impl = wrapper.____slothletInternal.impl;
-	const holder = Arrays.isArray(impl) ? runtime_arrayKeyHolder(impl, prop) : null;
+	// A node fronting a module's own object defines on that object too, as freezing the object would (#757).
+	const holder = Arrays.isArray(impl)
+		? runtime_arrayKeyHolder(impl, prop)
+		: FRAMEWORK_WRITES.has(wrapper)
+			? null
+			: runtime_moduleObjectOf(wrapper, prop);
 	const mirrors = holder !== null && hasOwn(holder, prop);
 	let attributes = descriptor;
 	let mirrored = descriptor;
@@ -14550,6 +14761,8 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		};
 		const getTrapFor = (kept, target, prop, ____receiver, access = null) => {
+			// What the module's own object holds now is what the node answers (#757).
+			runtime_followModuleObject(wrapper, target, prop);
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
@@ -15220,7 +15433,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// A Proxy answers reads through its get trap, which can serve members its `in` check does not
 				// report; the read below asks it, as eager does (#585 review).
 				!util.types.isProxy(wrapper.____slothletInternal.impl) &&
-				!(prop in wrapper.____slothletInternal.impl)
+				!(prop in wrapper.____slothletInternal.impl) &&
+				runtime_moduleInheritance(wrapper, prop) === null
 			) {
 				return undefined;
 			}
@@ -15970,6 +16184,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// `in` gates nothing: an access a kept node offers here is dropped first, before any code the answer runs
 			// (a Proxy among the impl's prototypes) could take it (#661).
 			runtime_takeCapturedAccess(wrapper);
+			runtime_followModuleObject(wrapper, target, prop);
 			if (prop === "_materialize") {
 				return true;
 			}
@@ -16008,7 +16223,7 @@ export class UnifiedWrapper extends ComponentBase {
 				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-				runtime_onImpl(wrapper, (impl) => prop in impl)
+				(runtime_onImpl(wrapper, (impl) => prop in impl) || runtime_moduleInheritance(wrapper, prop) !== null)
 			) {
 				return true;
 			}
@@ -16031,6 +16246,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A node a module kept, describing a member through this one, says who it reads for: taken first, before
 			// any code this description runs could take it, and handed to every gate it makes (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
+			if (!engineCheck) runtime_followModuleObject(wrapper, target, prop);
 			// What this description reads through the node itself, read for that reader too.
 			const readNode = () =>
 				kept
@@ -16219,6 +16435,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A node a module kept, listing this one's members, says who it reads for: taken first, and handed to every
 			// gate the listing makes (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
+			runtime_followModuleObject(wrapper, target);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -16347,6 +16564,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") {
 				runtime_assertOwnedWrite(wrapper, prop);
+				return true;
+			}
+			// `node.__proto__ = x` on a node fronting a module's own object runs the language's own `__proto__` setter, as
+			// the same assignment to the object does (#757): an object or null sets the prototype, through the setPrototypeOf
+			// trap and its checks, anything else is ignored. A `__proto__` member the object holds is written as a member.
+			if (prop === "__proto__" && !hasOwn(wrapper, prop) && runtime_moduleObjectOf(wrapper) !== null) {
+				Reflect.apply(OBJECT_PROTO_SETTER, wrapper.____slothletInternal.proxy, [value]);
 				return true;
 			}
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
@@ -16919,6 +17143,9 @@ export class UnifiedWrapper extends ComponentBase {
 			const internal = wrapper.____slothletInternal;
 			const impl = internal.impl;
 			if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			// A node fronting a module's own object holds that object's prototype, one set on it since included (#757).
+			const moduleObject = runtime_moduleObjectOf(wrapper);
+			if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
 			const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter));
 			return isLiveIdentity && impl && typeof impl === "object" ? Objects.getPrototypeOf(impl) : null;
 		};
@@ -17144,6 +17371,7 @@ export class UnifiedWrapper extends ComponentBase {
 				)
 					return false;
 				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, descriptor)) return false;
+				if (moduleObject !== null && typeof prop === "string") runtime_moduleObjectKeys(moduleObject).add(prop);
 				// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
 				// node's own store keeps every member read-only, so what was asked for is remembered beside it.
 				const wasData = hasOwn(wrapper, prop) && "value" in Reflect.getOwnPropertyDescriptor(wrapper, prop);
@@ -17191,6 +17419,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// Sealing or freezing a node changes what its owner may write to it, so a module may do it only to a
 				// node it owns (#625). Checked before anything is sealed: a refused freeze leaves the node as it was.
 				runtime_assertOwnedWrite(wrapper, null);
+				// A node fronting a module's own object closes that object too, as closing the object does (#757): the
+				// object refusing it refuses it here, before the node changes. Composing never changes a module's value.
+				const moduleObject = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
 				const syncing = internalState.integritySyncing;
@@ -17204,6 +17436,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A module may freeze or seal its own array after the node was read; the node reports what the array is.
 			isExtensible: (target) => {
 				runtime_syncArrayIntegrity(wrapper, target);
+				runtime_followModuleIntegrity(wrapper, target);
 				return Reflect.isExtensible(target);
 			},
 			// A prototype set on an array member is set on its array, under a composed node's layer, which refuses
@@ -17212,6 +17445,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// A prototype set on a node is set on its module's value: a module may do it only to a node it owns (#625).
 				runtime_assertOwnedWrite(wrapper, null);
 				const impl = wrapper.____slothletInternal.impl;
+				// A node fronting a module's own object sets that object's prototype, which the node reports (#757); a
+				// closed node keeps the one its shell holds, as the closed object does.
+				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				if (moduleObject !== null && !Arrays.isArray(impl)) {
+					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+					return Reflect.setPrototypeOf(moduleObject, runtime_unwrapSelfView(proto));
+				}
 				if (!Arrays.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
