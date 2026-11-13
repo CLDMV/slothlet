@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_stream_plants/probe.mjs
+ *	@Filename: /api_tests/api_test_stream_plants/__probe.mjs
  *	@Date: 2026-11-04T19:16:52-08:00 (1793848612)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -16,7 +16,7 @@
 /**
  * @fileoverview Runs the #708 plant fixture under Node's own loader, where a module's code is told apart by its file,
  * and prints what each planted read gave, as JSON, for every mode, runtime and permission set.
- * @module api_test_stream_plants.probe
+ * @module api_tests/api_test_stream_plants/__probe
  */
 import net from "node:net";
 import path from "node:path";

@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_host_record_leaf/probe-records.mjs
+ *	@Filename: /api_tests/api_test_host_record_leaf/__probe-records.mjs
  *	@Date: 2026-11-08T12:17:57-08:00 (1794169077)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -20,7 +20,7 @@
  * and a frozen argument, in eager and lazy mode and in both runtimes, after `ext.b.prepare` loaded its own code slothlet
  * does not tag and made its own nodes. Prints one JSON object keyed
  * `<mode>/<runtime>/<mount>/<row>/<kind>`.
- * @module api_tests/api_test_host_record_leaf/probe-records
+ * @module api_tests/api_test_host_record_leaf/__probe-records
  */
 
 import path from "node:path";
