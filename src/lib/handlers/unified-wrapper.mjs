@@ -1288,6 +1288,62 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 }
 
 /**
+ * What {@link runtime_selfDataMember} answers for a member it leaves to the node.
+ * @type {symbol}
+ * @private
+ */
+const NODE_MEMBER = Symbol("slothlet.nodeMember");
+
+/**
+ * The language's own members of the built-in data object a node holds (a file's default export that is a `Map`, a
+ * `Set`, a `Date`, …), as a reader is handed them through `self`: as a view of that object at the node's path hands them
+ * ({@link runtime_selfDataView}), so the node and the same object reached as a named export answer alike. A method that
+ * changes the object is a write at the node's path, and what a method hands back of the object (a map's entry, what
+ * its iterator yields, the object passed to a callback) is held to the owner's write rules. A reader that may make every
+ * write there (and the host, and every module while the permission system is off) gets each method running on the
+ * object itself.
+ * @param {object|null} inner - The node's wrapper, or null for a view of something else.
+ * @param {object} reader - Who reads it.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member read.
+ * @param {*} read - What the node answered for it.
+ * @returns {*} The member, or {@link NODE_MEMBER} when the node's own answer stands.
+ * @private
+ *
+ * @example
+ * // single/dmap.mjs: export default new Map([["one", { n: 1 }]]);
+ * self.single.dmap.get("one").n = 5; // LOOSE_SET_NOT_OWNED, as self.owner.dmap.get("one").n = 5 is
+ */
+function runtime_selfDataMember(inner, reader, slothlet, prop, read) {
+	if (inner === null || reader === HOST_READER || prop === "constructor") return NODE_MEMBER;
+	const impl = inner.____slothletInternal.impl;
+	if (runtime_dataKind(impl) === null || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	const view = runtime_selfDataView(impl, reader, slothlet, runtime_apiPathParts(inner));
+	if (view !== impl) return Reflect.get(view, prop, view);
+	// A member the node has no answer for (its iterator) runs on the object, as on the object itself.
+	const member = read === undefined ? Reflect.get(impl, prop, impl) : undefined;
+	if (typeof member !== "function") return NODE_MEMBER;
+	let byObject = SELF_DATA_METHODS.get(impl);
+	if (!byObject) {
+		byObject = new Map();
+		SELF_DATA_METHODS.set(impl, byObject);
+	}
+	let method = byObject.get(prop);
+	if (method?.fn !== member) {
+		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
+		byObject.set(prop, method);
+	}
+	return method.call;
+}
+
+/**
+ * The methods {@link runtime_selfDataMember} made to run on a data object itself, per object and key.
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
+ * @private
+ */
+const SELF_DATA_METHODS = new WeakMap();
+
+/**
  * Hand out a plain value reached through a node `self` handed out — a class's `prototype`, a method of it,
  * the constructor behind it, what those hold in turn — as a view held to the rule of the api path it was
  * reached at (#625).
@@ -1736,6 +1792,10 @@ export function runtime_selfView(node, reader, from = null, access = null) {
 	// What a read of a member hands out, the read and the description that follows it made as one access.
 	const readMember = (prop, access) => {
 		const value = runtime_readWithAccess(access, node, node, prop, node);
+		// The language's own member of the data object the node holds is handed out as the object's view hands it, once
+		// the node's own read of it has been made (and checked).
+		const dataMember = runtime_selfDataMember(inner, reader, slothlet, prop, value);
+		if (dataMember !== NODE_MEMBER) return dataMember;
 		// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
 		if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
 			const impl = inner?.____slothletInternal.impl;
