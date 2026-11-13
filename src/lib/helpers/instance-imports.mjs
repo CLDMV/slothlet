@@ -655,13 +655,38 @@ const SINGLE_COPY_FILES = [
 const OWN_MODULES = new Map();
 
 /**
+ * Those of {@link SINGLE_COPY_FILES} Node itself loaded before this copy had evaluated them: this copy's own, loaded
+ * by Node. Node then has the very module this copy runs on, and nothing is answered in its place.
+ * @type {Set<string>}
+ * @private
+ */
+const NODE_LOADED = new Set();
+
+/**
+ * The instance IDs claimed through this copy's own {@link claimInstanceScope}: the instances of the slothlet this
+ * copy of the module belongs to, as opposed to those another copy claimed through the shared object.
+ * @type {Set<string>}
+ * @private
+ */
+const OWN_CLAIMS = new Set();
+
+/**
+ * Virtual-module prefix: `slothlet-own:<url>` is an ES module that re-exports the namespace this copy evaluated for
+ * one of {@link SINGLE_COPY_FILES} (see {@link ownModuleBridge}).
+ * @type {string}
+ * @private
+ */
+const OWN_MODULE_PREFIX = "slothlet-own:";
+
+/**
  * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
  * those files as its last statement. A process can run two module loaders at once: under vitest, slothlet's source is
  * evaluated by vite's module runner, while a CommonJS file, or a file imported by its URL, is loaded by Node itself.
  * Asked for the runtime by such a file, Node would evaluate the runtime's file a second time, and that second copy
- * knows no instance. With the namespace recorded here, the load hook answers Node's load of the file with a module
- * that re-exports the namespace already made (see {@link ownModuleBridge}), so the file is one module per process.
- * Only the runtime's entry files are taken, each once.
+ * knows no instance. With the namespace recorded here, the resolve hook sends Node's import of the file to a module
+ * that re-exports the namespace already made (see {@link ownModuleBridge}), so the importer gets the runtime slothlet
+ * runs on. A second copy of slothlet that Node loaded itself keeps Node's own evaluation of the file, which is that
+ * copy's runtime (see {@link isOtherCopysFile}). Only the runtime's entry files are taken, each once.
  * @param {string} url - The file's `import.meta.url`.
  * @param {object} namespace - Its module namespace.
  * @returns {void}
@@ -692,6 +717,61 @@ function ownModuleBridge(url) {
 		n++;
 	}
 	return lines.join("\n") + "\n";
+}
+
+/**
+ * The instances a file Node loaded belongs to, for {@link isOtherCopysFile}: the one its URL names; else those whose
+ * CommonJS files hold its path; else those of the files recorded as loading it, a few steps up.
+ * @param {string} url - The file's URL.
+ * @returns {Set<string>} The instance IDs.
+ * @private
+ */
+function instancesOfFile(url) {
+	const found = new Set();
+	const seen = new Set();
+	const queue = [url];
+	while (queue.length && seen.size < 64) {
+		const next = queue.shift();
+		if (typeof next !== "string" || seen.has(next)) continue;
+		seen.add(next);
+		const tagged = new URLSearchParams(splitQuery(next)[1] ?? "").get("slothlet_instance");
+		if (tagged) {
+			found.add(tagged);
+			continue;
+		}
+		const path = packageKey(next);
+		let held = false;
+		for (const instanceID of SCOPE_KEYS.keys()) {
+			if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === path)) {
+				found.add(instanceID);
+				held = true;
+			}
+		}
+		if (!held) queue.push(...(PACKAGE_IMPORTERS.get(path) ?? []));
+	}
+	return found;
+}
+
+/**
+ * Whether a file Node loaded, which imports one of slothlet's runtime entry files, belongs to another copy of
+ * slothlet than this one (#760): one of slothlet's own files (a second copy of slothlet, loaded by Node while this one
+ * runs in another loader), or a file of an instance such a copy claimed and none of this copy's did. Its runtime is
+ * that copy's: Node's own evaluation of the file. Every other importer (a file of this copy's instances, the host's) is
+ * given the runtime this copy runs on.
+ * @param {string|undefined} parentURL - The importing file's URL.
+ * @returns {boolean} True when the importer is another copy's.
+ * @private
+ */
+function isOtherCopysFile(parentURL) {
+	if (typeof parentURL !== "string") return false;
+	const path = toSlashPath(parentURL);
+	if (OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`))) return true;
+	let other = false;
+	for (const instanceID of instancesOfFile(parentURL)) {
+		if (OWN_CLAIMS.has(instanceID)) return false;
+		if (CLAIMS.has(instanceID)) other = true;
+	}
+	return other;
 }
 
 /**
@@ -1225,6 +1305,7 @@ function releaseScope(instanceID) {
 	IMPORT_GRAPHS.delete(instanceID);
 	GRAPH_VIEWS.delete(instanceID);
 	CLAIMS.delete(instanceID);
+	OWN_CLAIMS.delete(instanceID);
 	for (const [ticket, held] of TICKETS) if (held.instanceID === instanceID) TICKETS.delete(ticket);
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
 	for (const key of LOADED_SCRIPTS.keys()) {
@@ -1277,7 +1358,10 @@ function claimHere(instanceID) {
  * scope.release();
  */
 export function claimInstanceScope(instanceID) {
-	return sharedState().claim(instanceID) ?? null;
+	const handle = sharedState().claim(instanceID) ?? null;
+	// Claimed by this copy's own slothlet: its files are given this copy's runtime (see isOtherCopysFile).
+	if (handle && isKeeper()) OWN_CLAIMS.add(instanceID);
+	return handle;
 }
 
 /**
@@ -1969,19 +2053,29 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 const HOOKS = Object.freeze({
 	resolve: (specifier, context, nextResolve) => {
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
-		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX)) {
+		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX) || specifier.startsWith(OWN_MODULE_PREFIX)) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
 		const resolved = applyToResult(specifier, context, nextResolve(specifier, context));
 		// Who imports a package's file, so its code can be told whose it is (#597).
 		recordPackageImport(context?.parentURL, resolved?.url);
+		// One of slothlet's runtime entry files, which this copy evaluated through another loader: the importer is given
+		// that module, unless it belongs to a second copy of slothlet Node loaded itself (#760).
+		const url = resolved?.url;
+		if (OWN_MODULES.has(url) && !NODE_LOADED.has(url) && !isOtherCopysFile(context?.parentURL)) {
+			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
+		}
 		return resolved;
 	},
 	// Only instance-marked URLs are touched; every other load passes straight through, a CommonJS file's
 	// source hash recorded on the way (#597).
 	load: (url, context, nextLoad) => {
-		// One of slothlet's runtime entry files, already evaluated through another loader: the same module (#760).
-		if (OWN_MODULES.has(url)) return { format: "module", shortCircuit: true, source: ownModuleBridge(url) };
+		// One of slothlet's runtime entry files, evaluated through another loader: the module that re-exports it (#760).
+		if (url.startsWith(OWN_MODULE_PREFIX)) {
+			return { format: "module", shortCircuit: true, source: ownModuleBridge(url.slice(OWN_MODULE_PREFIX.length)) };
+		}
+		// Node loading one of those files before this copy has evaluated it is loading this copy's own.
+		if (SINGLE_COPY_FILES.includes(url) && !OWN_MODULES.has(url)) NODE_LOADED.add(url);
 		if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
 		const result = nextLoad(url, context);
 		if (url.startsWith("file:") && shouldRecordCommonJS(url, result)) recordLoadedSource(url, result);

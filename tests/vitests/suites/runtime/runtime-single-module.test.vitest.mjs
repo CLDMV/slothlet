@@ -127,3 +127,32 @@ describe.each(MODES)("Runtime > one copy per process > $name", ({ mode, runtime:
 		});
 	});
 });
+
+describe.each(MODES)("Runtime > a second copy of slothlet loaded by Node > $name", ({ mode, runtime: runtimeName }) => {
+	// A copy of slothlet Node loads itself, beside the one this suite runs through vitest's module runner: each builds
+	// instances of its own, and each instance's files get the runtime of the copy that built it.
+	let own;
+	let other;
+
+	beforeAll(async () => {
+		own = await slothlet({ base: DIR, mode, runtime: runtimeName, silent: true });
+		const { default: nativeSlothlet } = await nativeImport("@cldmv/slothlet");
+		expect(nativeSlothlet).not.toBe(slothlet);
+		other = await nativeSlothlet({ base: DIR, mode, runtime: runtimeName, silent: true });
+	});
+
+	afterAll(async () => {
+		await own?.shutdown();
+		await other?.shutdown();
+	});
+
+	it("the files of an instance of each copy read their own instance's api", async () => {
+		expect(await settle(() => other.plain.read())).toBe(SECRET);
+		expect(await settle(() => other.native.read())).toBe(SECRET);
+		expect(await settle(() => own.plain.read())).toBe(SECRET);
+		expect(await settle(() => own.native.read())).toBe(SECRET);
+		// `helpers/reader.mjs` carries no instance's tag, so Node keeps one module of it for both copies, and one module
+		// imports one runtime: the copy whose instance loaded it first. It stays right for that copy.
+		expect(await settle(() => own.native.viaFile())).toBe(SECRET);
+	});
+});

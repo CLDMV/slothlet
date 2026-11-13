@@ -417,7 +417,11 @@ export class Loader extends ComponentBase {
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
 		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
-		if (!runtimeLoaded) await ensureRuntimeLoaded();
+		if (!runtimeLoaded) {
+			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).
+			if (this.slothlet.envTarget !== "browser") ensureInstanceImportHooks();
+			await ensureRuntimeLoaded();
+		}
 		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
 		const contextManager = this.slothlet.contextManager;
 		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
