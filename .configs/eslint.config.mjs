@@ -89,14 +89,7 @@ export default defineConfig([
 	// slothlet's own code uses the built-ins helpers/intrinsics took when slothlet loaded (see the rule's file).
 	{
 		files: ["src/**/*.{js,mjs,cjs}"],
-		ignores: [
-			"src/lib/helpers/intrinsics.mjs",
-			// Still read Object.prototype, Array.prototype, Function.prototype, Object(…) or Math.max from the globals;
-			// converted separately so concurrent changes to them stay conflict-free.
-			"src/lib/handlers/unified-wrapper.mjs",
-			"src/lib/handlers/frame-placement.mjs",
-			"src/lib/handlers/context-live.mjs"
-		],
+		ignores: ["src/lib/helpers/intrinsics.mjs"],
 		plugins: { slothlet: capturedIntrinsics },
 		rules: { "slothlet/captured-intrinsics": "error" }
 	},

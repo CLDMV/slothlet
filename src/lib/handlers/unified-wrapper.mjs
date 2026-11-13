@@ -96,7 +96,11 @@ import {
 	Promise,
 	Symbol,
 	Promises,
-	Symbols
+	Symbols,
+	Functions,
+	NativeObject,
+	URL,
+	URLSearchParams
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
@@ -111,7 +115,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
  * @returns {boolean} True if obj has own property key
  * @private
  */
-const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const hasOwn = (obj, key) => Objects.prototype.hasOwnProperty.call(obj, key);
 
 /**
  * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
@@ -527,7 +531,7 @@ function runtime_selfLap(record, value) {
  * @private
  */
 const PROTOCOL_SYMBOLS = new Set([
-	...Object.getOwnPropertyNames(Symbol)
+	...Objects.getOwnPropertyNames(Symbol)
 		.map((name) => Symbol[name])
 		.filter((value) => typeof value === "symbol"),
 	Symbols.for("nodejs.util.inspect.custom")
@@ -608,7 +612,7 @@ function runtime_hasInternalSlots(value) {
  * which an `instanceof` in slothlet's code would run with slothlet's values (#632).
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
 /** @private */
 const WEAKREF_DEREF = typeof WeakRef === "function" ? WeakRef.prototype.deref : null;
 /** @private */
@@ -854,7 +858,7 @@ const TYPED_ARRAY_READERS = new Set([
  */
 const ENGINE_DATA_PROTOTYPES = new Set(
 	[
-		Object.prototype,
+		Objects.prototype,
 		Map.prototype,
 		WeakMap.prototype,
 		Set.prototype,
@@ -923,7 +927,7 @@ function runtime_inheritedEngineMember(impl, prop, value) {
 	if (hasOwn(impl, prop)) return null;
 	const answered = layerMethodOriginal(value) ?? value;
 	// A callable node's own answer for `valueOf` (see runtime_valueOfFor), read through a layer over that node.
-	const original = NODE_VALUE_OFS.has(answered) ? Object.prototype.valueOf : answered;
+	const original = NODE_VALUE_OFS.has(answered) ? Objects.prototype.valueOf : answered;
 	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
 	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
 	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
@@ -954,7 +958,7 @@ function runtime_valueOfFor(node) {
 	let method = NODE_VALUE_OF_BY_NODE.get(node);
 	if (method) return method;
 	method = function valueOf() {
-		return this === undefined || this === null ? node : Reflect.apply(Object.prototype.valueOf, this, []);
+		return this === undefined || this === null ? node : Reflect.apply(Objects.prototype.valueOf, this, []);
 	};
 	NODE_VALUE_OFS.add(method);
 	NODE_VALUE_OF_BY_NODE.set(node, method);
@@ -968,7 +972,7 @@ const NODE_VALUE_OF_BY_NODE = new WeakMap();
 const NODE_VALUE_OFS = new WeakSet();
 
 /** The engine's prototypes every api node's value inherits from. @type {ReadonlyArray<object>} @private */
-const INHERITED_HOLDERS = Objects.freeze([Object.prototype, Function.prototype]);
+const INHERITED_HOLDERS = Objects.freeze([Objects.prototype, Functions.prototype]);
 
 /**
  * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
@@ -1171,8 +1175,8 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		// An iterator over what it holds yields it viewed.
 		if (holdsValues && typeof returned.next === "function") {
 			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
-			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Object.prototype);
-			const tag = Object.prototype.toString.call(returned).slice(8, -1);
+			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Objects.prototype);
+			const tag = Objects.prototype.toString.call(returned).slice(8, -1);
 			Objects.defineProperties(iterator, {
 				next: {
 					value: (...args) => {
@@ -3351,7 +3355,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
  * @private
  */
 function runtime_isTerminalData(value) {
-	if (value !== Object(value)) return true;
+	if (value !== NativeObject(value)) return true;
 	if (runtime_isSlothletValue(value)) return false;
 	return runtime_dataKind(value) !== null || runtime_isErrorValue(value);
 }
@@ -3686,7 +3690,7 @@ function runtime_implAccessor(wrapper, prop) {
 	try {
 		for (
 			let holder = wrapper.____slothletInternal.impl, depth = 0;
-			holder !== null && holder !== undefined && holder !== Object.prototype && depth < 64;
+			holder !== null && holder !== undefined && holder !== Objects.prototype && depth < 64;
 			depth++
 		) {
 			// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
@@ -3731,7 +3735,7 @@ function runtime_moduleInheritance(wrapper, prop) {
 	const object = runtime_moduleObjectOf(wrapper);
 	if (object === null) return null;
 	const prototype = Reflect.getPrototypeOf(object);
-	return prototype !== null && prototype !== Object.prototype && Reflect.has(prototype, prop) ? prototype : null;
+	return prototype !== null && prototype !== Objects.prototype && Reflect.has(prototype, prop) ? prototype : null;
 }
 
 /**
@@ -3835,7 +3839,7 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
 	}
 	if (root === null || typeof root !== "object" || Arrays.isArray(root) || util.types.isProxy(root)) return null;
 	const prototype = Reflect.getPrototypeOf(root);
-	if (prototype !== null && prototype !== Object.prototype) return null;
+	if (prototype !== null && prototype !== Objects.prototype) return null;
 	const ownership = wrapper.slothlet?.handlers?.ownership;
 	const filePath = wrapper.____slothletInternal.filePath;
 	if (!ownership || !filePath) return null;
@@ -3852,7 +3856,7 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
  * @type {function(this: object, (object|null)): void}
  * @private
  */
-const OBJECT_PROTO_SETTER = Reflect.getOwnPropertyDescriptor(Object.prototype, "__proto__").set;
+const OBJECT_PROTO_SETTER = Reflect.getOwnPropertyDescriptor(Objects.prototype, "__proto__").set;
 
 /**
  * The members each module object a node fronts has held since slothlet first built a node from it (#757), so a member
@@ -5022,7 +5026,7 @@ const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script
  */
 const VM_NATIVE_SCRIPT = (() => {
 	const parent = VM_SCRIPT === null ? null : Objects.getPrototypeOf(VM_SCRIPT);
-	return typeof parent === "function" && parent !== Function.prototype ? parent : null;
+	return typeof parent === "function" && parent !== Functions.prototype ? parent : null;
 })();
 
 /**
@@ -5530,7 +5534,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 function runtime_holdsOwnStandIn(maker, value, depth, budget) {
 	if (depth <= 0 || util.types.isProxy(value)) return false;
 	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
+	if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
 	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
@@ -6030,7 +6034,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 function runtime_generatorStandIn(maker, owner, original) {
 	const existing = maker.made.get(original);
 	if (existing) return existing;
-	const isAsync = Object.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
+	const isAsync = Objects.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
 	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
 	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
@@ -6461,7 +6465,7 @@ function runtime_classPrototypeSites(slothlet, prototype) {
  */
 function runtime_functionNodePrototype(wrapper, fn) {
 	const prototype = Objects.getPrototypeOf(fn);
-	if (prototype === null || prototype === Function.prototype) return prototype;
+	if (prototype === null || prototype === Functions.prototype) return prototype;
 	if (typeof prototype !== "function") {
 		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
 	}
@@ -6700,7 +6704,7 @@ function runtime_isCarrier(value) {
 	if (util.types.isProxy(value)) return false;
 	if (Arrays.isArray(value)) return true;
 	const prototype = Reflect.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null || runtime_isErrorValue(value);
+	return prototype === Objects.prototype || prototype === null || runtime_isErrorValue(value);
 }
 
 /**
@@ -7712,7 +7716,7 @@ function runtime_crossRunsOnOriginal(state) {
 		// A prototype of the language's or Node's own other than a plain object's or an array's: a class no module wrote,
 		// or a module's subclass of one.
 		for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
-			if (util.types.isProxy(link) || link === Object.prototype || link === Array.prototype) break;
+			if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
 			if (INTRINSICS.has(link) || runtime_isSharedValue(link)) answer = true;
 			link = Reflect.getPrototypeOf(link);
 		}
@@ -7730,7 +7734,7 @@ function runtime_crossRunsOnOriginal(state) {
  */
 function runtime_isStepResult(result) {
 	if (result === null || typeof result !== "object" || util.types.isProxy(result)) return false;
-	if (Reflect.getPrototypeOf(result) !== Object.prototype) return false;
+	if (Reflect.getPrototypeOf(result) !== Objects.prototype) return false;
 	const keys = Reflect.ownKeys(result);
 	if (keys.length !== 2 || keys[0] !== "value" || keys[1] !== "done") return false;
 	const value = Reflect.getOwnPropertyDescriptor(result, "value");
@@ -8335,7 +8339,7 @@ function runtime_unclassedInstancePrototype(wrapper) {
 function runtime_readsEngineProto(value) {
 	for (let holder = value, depth = 0; holder !== null && depth < 64; depth++) {
 		if (holder !== value && util.types.isProxy(holder)) return true;
-		if (Reflect.getOwnPropertyDescriptor(holder, "__proto__")) return holder === Object.prototype;
+		if (Reflect.getOwnPropertyDescriptor(holder, "__proto__")) return holder === Objects.prototype;
 		holder = Reflect.getPrototypeOf(holder);
 	}
 	return false;
@@ -8602,7 +8606,7 @@ function runtime_isArrayMember(array, prop) {
 	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
 	// array's class, which the array reports as plain JS does.
 	for (const holder of runtime_prototypeChain(array)) {
-		if (holder === Array.prototype || holder === Object.prototype) break;
+		if (holder === Arrays.prototype || holder === Objects.prototype) break;
 		if (hasOwn(holder, prop)) return holder === array || prop !== "constructor";
 	}
 	return false;
@@ -9456,7 +9460,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			? []
 			: typeof child === "function"
 				? runtime_namedFunction(typeof impl === "function" ? impl : child)
-				: proto !== null && proto !== Object.prototype
+				: proto !== null && proto !== Objects.prototype
 					? Objects.create(proto)
 					: {};
 		// A function's stand-in shows the methods its `prototype` holds, read through the view.
@@ -10195,7 +10199,7 @@ const wrapperDebugEnabled =
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
  * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
  * enumeration and the collision-merge paths filter exactly the same set. Defined in
- * `@cldmv/slothlet/helpers/reserved-keys` (a module with no imports) and re-exported here.
+ * `@cldmv/slothlet/helpers/reserved-keys` (which imports only helpers/intrinsics) and re-exported here.
  * @type {Set<string>}
  * @public
  */
@@ -10949,25 +10953,27 @@ function runtime_syncArrayIntegrity(wrapper, target) {
  */
 const RESTART_FORWARD_TRAPS = {
 	get: (live, target, prop) => live[prop],
-	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
-	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
-	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	set: (live, target, prop, value) => Reflect.set(NativeObject(live), prop, value),
+	has: (live, target, prop) => prop in NativeObject(live) || runtime_isFixedOnTarget(target, prop),
+	deleteProperty: (live, target, prop) =>
+		runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(NativeObject(live), prop),
 	defineProperty: (live, target, prop, descriptor) => {
-		const bindsTarget = runtime_bindsTarget(target, Object(live), prop, descriptor);
+		const bindsTarget = runtime_bindsTarget(target, NativeObject(live), prop, descriptor);
 		// A sealed stale target holds the old shape: a key it holds that the live node does not would carry
 		// that shape onto the live node, so it is refused.
-		if (!Reflect.isExtensible(target) && Reflect.getOwnPropertyDescriptor(Object(live), prop) === undefined) return false;
+		if (!Reflect.isExtensible(target) && Reflect.getOwnPropertyDescriptor(NativeObject(live), prop) === undefined) return false;
 		// Both are checked before either changes, and the live node defines first: its own traps may still
 		// refuse or throw (a callable `then`, a sealed callable node's accessor), and the stale target then
 		// stays as it was. A target that passed the check takes the definition.
-		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(Object(live), prop, descriptor)) return false;
-		if (!Reflect.defineProperty(Object(live), prop, descriptor)) return false;
+		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(NativeObject(live), prop, descriptor))
+			return false;
+		if (!Reflect.defineProperty(NativeObject(live), prop, descriptor)) return false;
 		if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
 		return true;
 	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
-		const keys = new Set(Reflect.ownKeys(Object(live)));
+		const keys = new Set(Reflect.ownKeys(NativeObject(live)));
 		for (const key of Reflect.ownKeys(target)) {
 			if (runtime_isFixedOnTarget(target, key)) keys.add(key);
 		}
@@ -10975,15 +10981,16 @@ const RESTART_FORWARD_TRAPS = {
 	},
 	getOwnPropertyDescriptor: (live, target, prop) => {
 		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
-		const descriptor = Reflect.getOwnPropertyDescriptor(Object(live), prop);
+		const descriptor = Reflect.getOwnPropertyDescriptor(NativeObject(live), prop);
 		return descriptor ? { ...descriptor, configurable: true } : undefined;
 	},
 	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
 	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
-	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target)),
+	getPrototypeOf: (live, target) =>
+		Reflect.isExtensible(target) ? Reflect.getPrototypeOf(NativeObject(live)) : Reflect.getPrototypeOf(target),
 	// A sealed stale target keeps the prototype it reports (proxy invariant); otherwise the live node takes it.
 	setPrototypeOf: (live, target, proto) =>
-		Reflect.isExtensible(target) ? Reflect.setPrototypeOf(Object(live), proto) : Reflect.getPrototypeOf(target) === proto,
+		Reflect.isExtensible(target) ? Reflect.setPrototypeOf(NativeObject(live), proto) : Reflect.getPrototypeOf(target) === proto,
 	// Sealing the stale node seals its own target; reflection then answers from that target.
 	preventExtensions: (live, target) => Reflect.preventExtensions(target),
 	isExtensible: (live, target) => Reflect.isExtensible(target)
@@ -13990,7 +13997,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged for everything except the shape that was losing data.
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
-								Objects.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+								Objects.keys(current).some((key) => !isFrameworkReservedKey(key) && !Objects.prototype.hasOwnProperty.call(finalImpl, key));
 							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 							// function behind it: that function carries no gate, so calling it would skip the node's call check
 							// (#632). The host, which no rule gates, still gets the function itself.
@@ -14188,7 +14195,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "valueOf") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return Function.prototype.valueOf.bind(waitingTarget);
+					return Functions.prototype.valueOf.bind(waitingTarget);
 				}
 				// prop === "toJSON" is never accessed on a lazy unmaterialized property-chain proxy in tests.
 				/* v8 ignore start */
@@ -15193,7 +15200,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (FUNCTION_NODES.get(wrapper.slothlet)?.get(answered)?.deref() !== undefined) return runtime_functionNodeFor(wrapper, answered);
 					return runtime_instanceClassNode(wrapper, answered) ?? answered;
 				}
-				return Object.prototype.constructor;
+				return Objects.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
 				// What the node shows to `util.inspect` (see runtime_inspectShown): the same as its target's own hook.
@@ -15312,7 +15319,7 @@ export class UnifiedWrapper extends ComponentBase {
 					return method.bind(fnImpl);
 				}
 				// A loaded object node reads its `valueOf` through the member read below.
-				if (impl === null || typeof impl !== "object") return Function.prototype.valueOf.bind(target);
+				if (impl === null || typeof impl !== "object") return Functions.prototype.valueOf.bind(target);
 			}
 			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
@@ -15614,7 +15621,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Reached only when impl doesn't have the key but target does (e.g., a property
 			// set directly on the wrapper object before the proxy was created).
 			/* v8 ignore next */
-			if (value === undefined && Object.prototype.hasOwnProperty.call(target, prop)) {
+			if (value === undefined && Objects.prototype.hasOwnProperty.call(target, prop)) {
 				value = target[prop];
 			}
 
@@ -15671,7 +15678,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// as it is, so reading it is checked as a call of the node (#632).
 			// A member inherited from the engine runs on the node, as on the plain value (#630).
 			const currentImpl = wrapper.____slothletInternal.impl;
-			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+			if (typeof currentImpl === "function" && !Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
 				runtime_enforceCodeMember(wrapper, value, kept);
@@ -16337,7 +16344,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			return Object.prototype.hasOwnProperty.call(target, prop);
+			return Objects.prototype.hasOwnProperty.call(target, prop);
 		};
 
 		/**
@@ -17629,7 +17636,7 @@ Objects.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
 export function isClassInstance(value) {
 	if (!value || typeof value !== "object" || Arrays.isArray(value)) return false;
 	const proto = Objects.getPrototypeOf(value);
-	return proto !== null && proto !== Object.prototype;
+	return proto !== null && proto !== Objects.prototype;
 }
 
 /**
@@ -17718,7 +17725,7 @@ export function readApiMember(container, key) {
 	// A plain object (the api root while it is built) holds its members as own properties; what it
 	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
 	// node would write the mount into the global builtin.
-	if (!wrapper) return Object.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
+	if (!wrapper) return Objects.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
 	// The framework reads its own tree, often while a module's call is executing (that module's own
 	// `api.add`), and works on the node itself: a read under a module's identity hands back that module's
 	// captured view, which is not the node, so the mount would merge the node into itself and write to it

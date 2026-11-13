@@ -565,7 +565,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineFor(store) {
-		if (!Object.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
+		if (!Objects.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
 			store.__baselineWrapper = store.currentWrapper ?? null;
 			// A replayed or scoped flow whose identity was code supplied from higher up keeps its ceiling (#597).
 			store.__baselineCeiling = store.currentCeiling ?? null;

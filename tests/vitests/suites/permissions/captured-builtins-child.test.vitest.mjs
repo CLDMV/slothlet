@@ -28,8 +28,7 @@
  *
  * The probe builds and shuts down one instance before replacing anything: `index.mjs` loads slothlet's own files with
  * the first instance, and they take their copies when they load. Left in place: `Promise.resolve`, which
- * `Promise.all` and the other combinators read off the constructor themselves, and `Math.max`, which
- * `handlers/frame-placement` still reads from the global.
+ * `Promise.all` and the other combinators read off the constructor themselves.
  */
 
 import path from "node:path";
@@ -73,8 +72,8 @@ beforeAll(() => {
 		"// Taken before anything is replaced: the probe itself runs on none of the replaced functions.",
 		"const CONSTRUCTORS = ['Map', 'Set', 'WeakMap', 'WeakSet', 'WeakRef', 'Promise', 'Symbol', 'Proxy', 'URL', 'URLSearchParams'];",
 		"const HOLDERS = [Object, Array, Reflect, JSON, Math, Promise, Symbol];",
-		"// Promise.all and the others read Promise.resolve off the constructor themselves; frame-placement reads Math.max.",
-		"const KEPT = [Promise.resolve, Math.max];",
+		"// Promise.all and the others read Promise.resolve off the constructor themselves.",
+		"const KEPT = [Promise.resolve];",
 		"const statics = [];",
 		"for (const holder of HOLDERS) {",
 		"\tfor (const name of Object.getOwnPropertyNames(holder)) {",

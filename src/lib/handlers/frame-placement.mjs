@@ -54,7 +54,10 @@ import {
 	WeakSet,
 	WeakRef,
 	Symbol,
-	Symbols
+	Symbols,
+	Math,
+	URL,
+	URLSearchParams
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
@@ -1613,9 +1616,9 @@ function runtime_isPlainData(value, depth, budget) {
 	try {
 		if (!Objects.isFrozen(value)) return false;
 		const prototype = Objects.getPrototypeOf(value);
-		if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
+		if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
 		// A frozen array's `length` is an own data property: reading it runs nothing.
-		if (prototype === Array.prototype && Arrays.isArray(value) && value.length > budget.remaining) return false;
+		if (prototype === Arrays.prototype && Arrays.isArray(value) && value.length > budget.remaining) return false;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return false;
@@ -1700,8 +1703,8 @@ export function handedLeafFunctions(thisArg, args) {
 			return;
 		try {
 			const prototype = Objects.getPrototypeOf(value);
-			if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return;
-			if (prototype === Array.prototype && Arrays.isArray(value) && value.length > budget.remaining) return;
+			if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return;
+			if (prototype === Arrays.prototype && Arrays.isArray(value) && value.length > budget.remaining) return;
 			const keys = Reflect.ownKeys(value);
 			budget.remaining -= keys.length;
 			if (budget.remaining < 0) return;
