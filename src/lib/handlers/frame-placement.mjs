@@ -577,6 +577,8 @@ function runtime_structuredFrames(_error, callSites) {
 		// The same frames, in the same order, with slothlet's own described only by where they are and what they enter:
 		// for a reader that passes over slothlet's own frames by those two alone.
 		lean: () => runtime_siteFrames(callSites, true),
+		// The same frames after the one at an index, converted only from there (see runtime_framesAfter).
+		after: (index) => runtime_siteFrames(callSites, false, index + 1),
 		structured: true,
 		truncated: callSites.length >= PristineError.stackTraceLimit,
 		// Whether the outermost frame is a builtin's, which has no location: what began the job is the engine's own.
@@ -588,10 +590,12 @@ function runtime_structuredFrames(_error, callSites) {
  * V8 call sites as frames, innermost first, each converted as it is reached.
  * @param {Array<object>} callSites - V8 call sites, innermost first.
  * @param {boolean} lean - Describe a frame located in slothlet's own folder by its `path` and `enter` alone.
+ * @param {number} [skip=0] - How many of the first frames to pass over unconverted: the frames from there are the same
+ *   frames, with the same `gap`, as a walk from the start yields at those places.
  * @returns {Generator<object>} The frames.
  * @private
  */
-function* runtime_siteFrames(callSites, lean) {
+function* runtime_siteFrames(callSites, lean, skip = 0) {
 	// Whether a frame with no location (a builtin's) was passed over since the last one yielded.
 	let gap = false;
 	for (const site of callSites) {
@@ -599,6 +603,14 @@ function* runtime_siteFrames(callSites, lean) {
 		const sourceURL = site.getScriptNameOrSourceURL?.() ?? null;
 		const fileName = site.getFileName?.() ?? null;
 		const location = sourceURL ?? fileName;
+		if (skip > 0) {
+			// A frame the walk would yield, passed over: whether a site has a location (or an eval origin) alone says that.
+			if (location || (site.isEval?.() && String(site.getEvalOrigin?.() ?? ""))) {
+				skip--;
+				gap = false;
+			} else gap = true;
+			continue;
+		}
 		if (lean && location) {
 			const described = runtime_comparableLocation(location);
 			if (described.path.startsWith(FRAMEWORK_PREFIX)) {
@@ -2882,7 +2894,8 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
-	const further = Arrays.isArray(outer) ? outer : Arrays.from(outer);
+	// Read as far as each reader goes, once: the readers stop at the first frame of another file.
+	const further = Arrays.isArray(outer) ? outer : runtime_replayable(outer);
 	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, further);
 	// No leaf was built from the file: a helper file's own code is the code of the modules importing the helper.
 	if (!authors.length) return runtime_helperAnswer(record, frame);
@@ -2893,6 +2906,37 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	return {
 		wrapper: authors[0],
 		ceiling: combineCeilings(record.wrapper, record.ceiling, supplierChainCeiling(record), ...authors.slice(1))
+	};
+}
+
+/**
+ * Frames read from an iterable as they are first asked for, and replayed from there for every later walk.
+ * @param {Iterable<object>} frames - The frames.
+ * @returns {Iterable<object>} The same frames, in the same order, for any number of walks.
+ * @private
+ */
+function runtime_replayable(frames) {
+	const read = [];
+	let source = null;
+	let done = false;
+	return {
+		*[Symbol.iterator]() {
+			for (let i = 0; ; i++) {
+				if (i < read.length) {
+					yield read[i];
+					continue;
+				}
+				if (done) return;
+				source ??= frames[Symbol.iterator]();
+				const next = source.next();
+				if (next.done) {
+					done = true;
+					return;
+				}
+				read.push(next.value);
+				yield next.value;
+			}
+		}
 	};
 }
 
@@ -3185,6 +3229,11 @@ function runtime_sameFileFrame(frame, inner) {
  * @private
  */
 function* runtime_framesAfter(frames, index) {
+	// A capture of call sites converts only the frames from there.
+	if (typeof frames.after === "function") {
+		yield* frames.after(index);
+		return;
+	}
 	let i = 0;
 	for (const frame of frames) if (i++ > index) yield frame;
 }
