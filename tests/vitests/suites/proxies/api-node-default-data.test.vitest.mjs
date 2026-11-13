@@ -27,6 +27,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import slothlet from "@cldmv/slothlet";
 
 const FIXTURE = resolve("api_tests/api_test_api_node_default_data");
@@ -203,3 +204,47 @@ describe.each(open)("data a file's default export holds, permission system off >
 		}
 	});
 });
+
+describe.each(guarded)(
+	"a read rule on a node of a file's default export > $mode / $runtime / $attribution",
+	({ mode, runtime, attribution }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+		});
+
+		const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+
+		/** Every answer refused, for each member. */
+		const refused = (members) => Object.fromEntries(members.map((member) => [member, { threw: "PERMISSION_DENIED" }]));
+
+		it.each([
+			{ key: "derr", members: ["name", "message", "stack", "cause"] },
+			{ key: "dmap", members: ["size", "get", "has", "forEach"] },
+			{ key: "dset", members: ["size", "has", "values"] },
+			{ key: "ddate", members: ["getTime", "toISOString"] }
+		])("a deny on the node's path refuses every member read through it, by either route: $key", async ({ key, members }) => {
+			api = await build([
+				{ caller: "reader.**", target: `single.${key}`, effect: "deny" },
+				{ caller: "reader.**", target: `owner.${key}`, effect: "deny" }
+			]);
+			expect(await api.reader.read("single", key, members)).toEqual(refused(members));
+			expect(await api.reader.read("owner", key, members)).toEqual(refused(members));
+			// Another module the rule does not name reads on.
+			expect(await api.writer.read("single", key, members)).not.toEqual(refused(members));
+		});
+
+		it("an allowed reader reads an error's message, stack and cause as plain JavaScript does", async () => {
+			const plain = (await import(`${pathToFileURL(join(FIXTURE, "single", "derr.mjs")).href}?plain-twin`)).default;
+			api = await build([]);
+			const read = await api.reader.read("single", "derr", ["message", "stack", "cause"]);
+			expect({ ...read, stack: String(read.stack).split("\n")[0] }).toEqual({
+				message: plain.message,
+				stack: plain.stack.split("\n")[0],
+				cause: { object: JSON.stringify(plain.cause) }
+			});
+		});
+	}
+);

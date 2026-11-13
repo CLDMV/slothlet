@@ -4085,6 +4085,49 @@ function runtime_followModuleMember(wrapper, object, seen, key) {
 }
 
 /**
+ * Check a member read through a node that holds built-in data or an error (a file's default export that is a `Map`, a
+ * `Date`, an error, …) as a read of that value at the node's path: the node is the value there, as the same value
+ * exported by name is, so a read rule naming the path refuses every member read through it, a getter of the engine's
+ * and a method alike. The framework's own keys, and `then` (which `await` asks for), are no member reads.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @param {object|null} access - The read of `self` this is part of, when it was resolved already.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the reader may not read the value.
+ * @private
+ *
+ * @example
+ * // single/derror.mjs: export default new RangeError("bad"); rule: deny reader.** → single.derror
+ * self.single.derror.message; // PERMISSION_DENIED, as self.owner.failure.message is under a rule on owner.failure
+ */
+function runtime_gateDataNodeMember(wrapper, prop, kept, access) {
+	if (prop === "then" || isFrameworkReservedKey(prop)) return;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object") return;
+	let isData = DATA_NODE_IMPLS.get(impl);
+	if (isData === undefined) {
+		isData = !util.types.isProxy(impl) && runtime_isTerminalData(impl);
+		DATA_NODE_IMPLS.set(impl, isData);
+	}
+	if (!isData) return;
+	const targetPath = wrapper.____slothletInternal.apiPath;
+	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access);
+	if (decision.allowed) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
+}
+
+/**
+ * Whether each value a node holds is built-in data or an error ({@link runtime_gateDataNodeMember}), decided once per
+ * value: what a value is does not change.
+ * @type {WeakMap<object, boolean>}
+ * @private
+ */
+const DATA_NODE_IMPLS = new WeakMap();
+
+/**
  * Bring a node in step with the module's own object it fronts (#757), before a read, a description, a key check or a
  * listing answers from the node: one member (`prop`), or every member and the object's extensibility (`prop`
  * undefined). A node fronting no module object, the framework's own reads, and a closed node (whose members are fixed
@@ -14939,6 +14982,8 @@ export class UnifiedWrapper extends ComponentBase {
 		const getTrapFor = (kept, target, prop, ____receiver, access = null) => {
 			// What the module's own object holds now is what the node answers (#757).
 			runtime_followModuleObject(wrapper, target, prop);
+			// A member of built-in data or an error the node holds is a read of that value at the node's path.
+			runtime_gateDataNodeMember(wrapper, prop, kept, access);
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.

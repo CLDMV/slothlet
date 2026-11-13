@@ -1118,6 +1118,8 @@ permissions: { defaultPolicy: "deny", readGating: false, rules: [ /* … */ ] }
 
 **What is gated:** terminal data values — primitives (`string`/`number`/`boolean`/`bigint`/`symbol`), `null`, and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`, `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`).
 
+A file whose default export is one of these built-ins (`export default new Map()`, `export default new RangeError(…)`) is an api node standing for that value at its path. A rule denying a read of that path refuses every member read through the node — an error's `name`, `message`, `stack` and `cause`, a map's `size` and its methods — as a read of the same value exported by name is refused. A plain object a file exports by default is a namespace: a rule on its path alone leaves its members readable, each gated at its own path.
+
 **What is NOT gated:**
 
 - **Namespace traversal** — walking `self.admin` → `.manage` → `.deleteUser` returns child wrappers, not data values, so a `defaultPolicy: "deny"` configuration does **not** need an allow rule for every intermediate path segment.
