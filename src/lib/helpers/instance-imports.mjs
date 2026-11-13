@@ -128,6 +128,15 @@ const INSTALLED = Symbol.for("@cldmv/slothlet.instanceImportHooks");
 const REQUIRE_PARAM = "slothlet_require";
 
 /**
+ * Query parameter marking a URL that a `require()` made by an instance's ES module resolved (`createRequire`, #755):
+ * the load hook answers it with a CommonJS stub that returns the instance's copy of the file and does not stay in
+ * Node's require cache.
+ * @type {string}
+ * @private
+ */
+const MODULE_REQUIRE_PARAM = "slothlet_module_require";
+
+/**
  * Virtual-module prefix: `slothlet-esm:<url>` is an ES module whose `"module.exports"` export is the
  * namespace of `<url>`, so a synchronous `require()` of it returns that namespace (#534).
  * @type {string}
@@ -316,6 +325,8 @@ function publishScripts(state) {
  *   its mount): that file's private CommonJS module copies (`helpers: "module"`). Created on first use.
  * @property {(url: string) => *} requireESM - Entry point of the CommonJS stub generated for a
  *   `require()` of an ES module.
+ * @property {(url: string, format: string, stub: object) => *} requireFromModule - Entry point of the CommonJS stub
+ *   generated for a `require()` an instance's ES module makes (#755).
  * @property {{of: function(string): (Map<string, Set<string>>|null)}} [imports] - The frozen reader of the import
  *   graphs the recording copy keeps (see publishImports): a copy of an instance's graph, importers by imported file.
  * @property {Map<string, Set<string>>} [leaves] - Per instance ID: the CommonJS leaves it loaded, which its
@@ -426,7 +437,8 @@ function sharedState() {
 			scopes: new Map(),
 			active: null,
 			requireCJS: (filePath, instanceID, importer = null, mount = null) => requireInInstance(filePath, instanceID, { importer, mount }),
-			requireESM
+			requireESM,
+			requireFromModule
 		};
 		// Fixed once made, so no code can put another state object in its place.
 		Object.defineProperty(globalThis, STATE, { value: state, enumerable: false, configurable: false, writable: false });
@@ -1101,6 +1113,31 @@ function requireESM(url) {
 }
 
 /**
+ * Answer a `require()` an instance's ES module made of a file of its instance (`createRequire(import.meta.url)`, #755):
+ * the instance's copy of the file, as an `import` of it from the same module gives. Called by the CommonJS stub the
+ * load hook generates for such a require. Node keeps one module per file path for the whole process, so the stub's
+ * entry is taken out of Node's require cache before anything else: left there, the first instance's copy would be
+ * handed to every later instance, and to the host, without the hooks being asked again.
+ * @param {string} url - The file's URL carrying the instance query.
+ * @param {string} format - `"module"` for an ES module; anything else is run through the instance's CommonJS cache.
+ * @param {object} stub - The stub's own `module`.
+ * @returns {*} The value `require()` returns.
+ * @private
+ */
+function requireFromModule(url, format, stub) {
+	const { createRequire } = nodeBuiltin("node:module");
+	const cache = createRequire(import.meta.url).cache;
+	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	if (format === "module") return requireESM(url);
+	const [base, query = ""] = splitQuery(url);
+	const params = new URLSearchParams(query);
+	return requireInInstance(nodeBuiltin("node:url").fileURLToPath(base), params.get("slothlet_instance"), {
+		importer: helperCopyImporter(params),
+		mount: params.get(HELPERS_MOUNT_PARAM)
+	});
+}
+
+/**
  * Whether a resolve/load context's conditions include `name` (an array on the import path; a Set on
  * Node 22's require path).
  * @param {Iterable<string>|undefined} conditions - The context's conditions.
@@ -1235,6 +1272,17 @@ function loadInstanceModule(url, context, nextLoad) {
 	// A CommonJS file's source is recorded as it is loaded, as an ES module's is below (#597) — but not a package's
 	// under `node_modules` as written: frame placement hashes such a file from disk when it needs to.
 	if (shouldRecordCommonJS(base, result)) recordLoadedSource(url, result);
+	if (params.has(MODULE_REQUIRE_PARAM)) {
+		// require() made by an instance's ES module: the instance's copy, from a stub that leaves Node's cache (#755).
+		params.delete(MODULE_REQUIRE_PARAM);
+		const target = JSON.stringify(`${base}?${params}`);
+		const format = result?.format === "module" || result?.format === "module-typescript" ? "module" : "commonjs";
+		return {
+			format: "commonjs",
+			shortCircuit: true,
+			source: `module.exports = globalThis[Symbol.for(${JSON.stringify(STATE.description)})].requireFromModule(${target}, ${JSON.stringify(format)}, module);\n`
+		};
+	}
 	if (params.has(REQUIRE_PARAM)) {
 		// require() of a file in an instance scope: an ES module is served the instance's copy;
 		// anything else is CommonJS (or JSON/addon) and already served by the scope's private cache.
@@ -1498,6 +1546,12 @@ function applyToResult(specifier, context, result) {
 		if (typeof url === "string" && url.includes(MARKER)) {
 			const instanceID = new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance");
 			if (instanceID) recordImport(instanceID, parentURL, url);
+			// A require() the module makes itself (`createRequire`): marked, so the load hook serves the instance's copy
+			// without leaving it in Node's require cache, which is keyed on the file's path alone (#755). Node reads a JSON
+			// file and an addon by their extension, whatever a hook answers, so those load as before: once per process.
+			if (url.startsWith("file:") && hasCondition(context?.conditions, "require") && !/\.(?:json|node)$/.test(splitQuery(url)[0])) {
+				return { ...result, url: `${url}&${MODULE_REQUIRE_PARAM}=1` };
+			}
 		}
 		return url === result?.url ? result : { ...result, url };
 	}
