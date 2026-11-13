@@ -3525,6 +3525,33 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
+ * Whether the value a node holds answers `name` or `length` itself, through its prototype chain, as an error answers
+ * `name` from its class: the node then answers it as a member, as the value does (`api.m.failure.name` is
+ * `"RangeError"`), instead of with its own answer (its last api-path segment, and `0`). Only a value that is not a
+ * function: a function node keeps its own answers. `Object.prototype` holds neither name, so a plain object without such
+ * a member keeps the node's answers. Read by descriptors, so no getter runs to decide it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @returns {boolean} Whether the value holds it.
+ * @private
+ *
+ * @example
+ * // m/failure.mjs: export default new RangeError("bad");
+ * api.m.failure.name; // "RangeError"
+ */
+function runtime_valueHoldsName(wrapper, prop) {
+	if (prop !== "name" && prop !== "length") return false;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object" || Arrays.isArray(impl) || util.types.isProxy(impl)) return false;
+	if (typeof Reflect.getOwnPropertyDescriptor(impl, "default")?.value === "function") return false;
+	for (let holder = impl, depth = 0; holder !== null && holder !== Objects.prototype && depth < 64; depth++) {
+		if (hasOwn(holder, prop)) return true;
+		holder = Reflect.getPrototypeOf(holder);
+	}
+	return false;
+}
+
+/**
  * The module's own getter or setter behind each half of an accessor adoption puts on a wrapper, so a
  * copy of the member onto another node runs it on the node it lands on (#585 review).
  * @type {WeakMap<Function, Function>}
@@ -15208,7 +15235,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// other member. Without this the wrapper's own answer (the api-path name, the impl's arity,
 			// …) shadowed the member and skipped enforcement entirely. Only those names and `then` consult it,
 			// so any other read skips the lookup.
-			const memberShadowsWrapperProp = (prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) && runtime_hasOwnMember(wrapper, prop);
+			const memberShadowsWrapperProp =
+				(prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) &&
+				(runtime_hasOwnMember(wrapper, prop) || runtime_valueHoldsName(wrapper, prop));
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
 				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
@@ -15314,6 +15343,12 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === Symbol.toStringTag) {
 				// Return "Object" for object exports, "Function" for function exports
 				const impl = wrapper.____slothletInternal.impl;
+				// A built-in data object answers the tag the language gives its kind (`Map`, `Set`, a typed array's), as it
+				// does itself; one whose kind has none (a date) answers "Object", as a Proxy of it does.
+				if (runtime_dataKind(impl) !== null) {
+					const tag = Reflect.get(impl, prop, impl);
+					return typeof tag === "string" ? tag : "Object";
+				}
 				if (typeof impl === "function") {
 					return "Function";
 				}

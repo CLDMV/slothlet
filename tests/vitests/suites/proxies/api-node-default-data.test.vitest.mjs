@@ -248,3 +248,71 @@ describe.each(guarded)(
 		});
 	}
 );
+
+const answering = MODES.flatMap((mode) =>
+	RUNTIMES.flatMap((runtime) =>
+		[null, "precise", "fast"].map((attribution) => ({
+			mode,
+			runtime,
+			attribution,
+			name: attribution ? `permissions on, ${attribution}` : "permissions off"
+		}))
+	)
+);
+
+/** The files whose default export's node is asked. */
+const ASKED = ["derr", "dmap", "dset", "dlist", "dconfig", "ditem", "ddate", "dbox"];
+
+/** The kinds whose `Object.prototype.toString` tag the engine reads from an internal slot, which a Proxy never has. */
+const SLOT_TAGGED = new Set(["derr", "ddate", "dbox"]);
+
+/**
+ * How a value answers `name`, `length`, `toString()`, `String()` and `Object.prototype.toString`.
+ * @param {*} value - The value or its node.
+ * @returns {object} The answers.
+ */
+function asks(value) {
+	const answer = (check) => {
+		try {
+			return check();
+		} catch (error) {
+			return { threw: error?.code ?? error?.name ?? "threw" };
+		}
+	};
+	return {
+		name: answer(() => value.name),
+		length: answer(() => value.length),
+		toString: answer(() => value.toString()),
+		string: answer(() => String(value)),
+		tag: answer(() => Object.prototype.toString.call(value))
+	};
+}
+
+describe.each(answering)(
+	"what a node of a file's default export answers for itself > $mode / $runtime / $name",
+	({ mode, runtime, attribution }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+		});
+
+		it.each(ASKED)("answers as the value does: %s", async (key) => {
+			const plain = asks((await import(`${pathToFileURL(join(FIXTURE, "single", `${key}.mjs`)).href}?plain-twin-asks`)).default);
+			// A value with no `name` or `length` of its own leaves the node's documented answers: its last api-path segment
+			// and 0 (an array's node answers as the array). A tag the engine reads from an internal slot is `[object Object]`
+			// for any Proxy.
+			const nodeAnswers = key !== "dlist";
+			const expected = {
+				...plain,
+				name: plain.name === undefined && nodeAnswers ? key : plain.name,
+				length: plain.length === undefined && nodeAnswers ? 0 : plain.length,
+				tag: SLOT_TAGGED.has(key) ? "[object Object]" : plain.tag
+			};
+			api = await mount({ mode, runtime, ...(attribution ? { permissions: { defaultPolicy: "allow", attribution } } : {}) });
+			expect(asks(api.single[key])).toEqual(expected);
+			expect(await api.reader.asks("single", key)).toEqual(expected);
+		});
+	}
+);
