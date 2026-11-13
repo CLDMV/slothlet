@@ -35,6 +35,9 @@
  *   the constructor slothlet loaded with, whatever `globalThis.Map` holds by then.
  * - `Promises` and `Symbols` hold the static functions of `Promise` (bound to it) and `Symbol` on frozen objects with
  *   no prototype, like `Objects` and `Arrays`.
+ * - `NativeObject` is the `Object` function itself, for `NativeObject(value)`; its static functions are on `Objects`.
+ * - `Functions` holds the data members of `Function` (`Functions.prototype`) like `Objects` and `Arrays`.
+ * - `URL` and `URLSearchParams` are those constructors themselves, shadowing the globals like `Map`.
  *
  * Methods a value inherits (`array.map`, `map.get`) are not covered here: they are looked up on the value when called.
  *
@@ -42,7 +45,17 @@
  * @internal
  */
 
-const NativeObject = Object;
+/**
+ * The `Object` function, as it was when slothlet loaded, for `NativeObject(value)`. Its static functions are on
+ * `Objects`: the function's own members are the ones a module can replace.
+ * @type {ObjectConstructor}
+ * @internal
+ * @example
+ * import { NativeObject } from "@cldmv/slothlet/helpers/intrinsics";
+ * NativeObject(value) === value; // whether value is an object
+ */
+export const NativeObject = Object;
+
 const NativeReflect = globalThis.Reflect;
 const NativePromise = globalThis.Promise;
 const NativeSymbol = globalThis.Symbol;
@@ -94,6 +107,16 @@ export const Objects = staticsOf(NativeObject);
  * Arrays.isArray(value);
  */
 export const Arrays = staticsOf(Array);
+
+/**
+ * The data members of `Function` (its `prototype`), as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Functions } from "@cldmv/slothlet/helpers/intrinsics";
+ * Reflect.getPrototypeOf(value) === Functions.prototype;
+ */
+export const Functions = staticsOf(Function);
 
 const NativeJSON = staticsOf(JSON);
 const NativeMath = staticsOf(Math);
@@ -256,5 +279,25 @@ export const Promises = boundStaticsOf(NativePromise, ["resolve", "reject", "all
  * Symbols.for("nodejs.util.inspect.custom");
  */
 export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
+
+/**
+ * The `URL` constructor, as it was when slothlet loaded.
+ * @type {typeof globalThis.URL}
+ * @internal
+ * @example
+ * import { URL } from "@cldmv/slothlet/helpers/intrinsics";
+ * const href = new URL("./a.mjs", import.meta.url).href;
+ */
+export const URL = globalThis.URL;
+
+/**
+ * The `URLSearchParams` constructor, as it was when slothlet loaded.
+ * @type {typeof globalThis.URLSearchParams}
+ * @internal
+ * @example
+ * import { URLSearchParams } from "@cldmv/slothlet/helpers/intrinsics";
+ * new URLSearchParams(query).get("slothlet_instance");
+ */
+export const URLSearchParams = globalThis.URLSearchParams;
 
 export { NativeJSON as JSON, NativeMath as Math };
