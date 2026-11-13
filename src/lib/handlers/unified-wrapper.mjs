@@ -1317,7 +1317,14 @@ const NODE_MEMBER = Symbol("slothlet.nodeMember");
 function runtime_selfDataMember(inner, reader, slothlet, prop, read) {
 	if (inner === null || reader === HOST_READER || prop === "constructor") return NODE_MEMBER;
 	const impl = inner.____slothletInternal.impl;
-	if (runtime_dataKind(impl) === null || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	if (impl === null || typeof impl !== "object") return NODE_MEMBER;
+	// Decided once per value: what a value is does not change, and every read through `self` asks.
+	let isData = SELF_DATA_VALUES.get(impl);
+	if (isData === undefined) {
+		isData = runtime_dataKind(impl) !== null;
+		SELF_DATA_VALUES.set(impl, isData);
+	}
+	if (!isData || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
 	const view = runtime_selfDataView(impl, reader, slothlet, runtime_apiPathParts(inner));
 	if (view !== impl) return Reflect.get(view, prop, view);
 	// A member the node has no answer for (its iterator) runs on the object, as on the object itself.
@@ -1335,6 +1342,13 @@ function runtime_selfDataMember(inner, reader, slothlet, prop, read) {
 	}
 	return method.call;
 }
+
+/**
+ * Whether each value a node holds is a built-in data object ({@link runtime_selfDataMember}), decided once per value.
+ * @type {WeakMap<object, boolean>}
+ * @private
+ */
+const SELF_DATA_VALUES = new WeakMap();
 
 /**
  * The methods {@link runtime_selfDataMember} made to run on a data object itself, per object and key.
