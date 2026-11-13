@@ -12050,6 +12050,10 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 
 					this.____slothletInternal.state.materialized = true;
+					// The value a lazy node loads is its module's contribution at this path, as the value an eager node is
+					// built with is (#754): a callable folder's own function joins the routines that name it. Eager reports
+					// it through the construction's impl:created; a lazy construction had no value yet.
+					this.___reportLoadedContribution();
 					// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
 					// being cleared passes through it too.
 					if (result === null && this.____slothletInternal.impl === null && this.____slothletInternal.lazyProxyTraps) {
@@ -12111,6 +12115,35 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	_materialize() {
 		return this.___materialize();
+	}
+
+	/**
+	 * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
+	 * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
+	 * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
+	 * join a routine that names its path. Only the routine manager is told: ownership and metadata already
+	 * hold this node from its construction, and the public `impl:created` for it has already fired.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * this.___reportLoadedContribution();
+	 */
+	___reportLoadedContribution() {
+		const internal = this.____slothletInternal;
+		const routineManager = this.slothlet.handlers?.routineManager;
+		if (!internal.filePath || !routineManager) return;
+		routineManager.onImplCreated({
+			apiPath: internal.apiPath,
+			wrapper: Objects.freeze({ __impl: internal.impl }),
+			__wrapperRef: this,
+			source: "lazy-materialization",
+			moduleID: internal.moduleID,
+			filePath: internal.filePath,
+			exportPath: internal.exportPath ?? null,
+			memberExportPaths: internal.memberExportPaths ?? null,
+			sourceFolder: internal.sourceFolder
+		});
 	}
 
 	/**

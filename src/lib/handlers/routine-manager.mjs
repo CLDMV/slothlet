@@ -1210,7 +1210,7 @@ export class RoutineManager extends ComponentBase {
 	 * strategy of discovering fresh at invocation time rather than trusting a stale pre-built cache.
 	 *
 	 * Scope is precise, not blanket (see `docs/LIFECYCLE.md` — "Routines"): a bare mount-relative
-	 * name never calls this at all (its mount's own top level is always eager); a dotted or
+	 * name never calls this at all (it loads only the node it names, see {@link #materializeFor}); a dotted or
 	 * `recursive: true` mount-relative name calls this once per KNOWN mount root; a `^`-anchored
 	 * name calls this once against the whole composed tree.
 	 * @param {object} root - Node to walk (a specific mount's own object, or the whole composed api).
@@ -1301,13 +1301,14 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #materializeGlobPath(node, segments) {
-		if (node === null || node === undefined || segments.length === 0) return;
+		if (node === null || node === undefined) return;
 		const nodeType = typeof node;
 		if (nodeType !== "object" && nodeType !== "function") return;
 
 		// The current node itself may still be an unmaterialized lazy wrapper (a subfolder reached
 		// via a previous segment) — force it now so its direct children are real, whichever branch
-		// below needs them.
+		// below needs them. The node the last segment names is loaded too: its own value can be the
+		// contribution (a callable folder's own function, #754).
 		const nodeWrapper = resolveWrapper(node);
 		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
 			try {
@@ -1316,6 +1317,7 @@ export class RoutineManager extends ComponentBase {
 				return; // Materialization failed — nothing further to resolve down this branch.
 			}
 		}
+		if (segments.length === 0) return;
 
 		const [segment, ...rest] = segments;
 
@@ -1367,8 +1369,8 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Force-materialize whatever a configured routine's pattern could require (see
-	 * {@link #requiresDescent} and {@link #materializeTree}) — a no-op for a bare mount-relative
-	 * name, since its mount's own top level is always eager in either mode.
+	 * {@link #requiresDescent} and {@link #materializeTree}) — for a bare mount-relative name, only
+	 * the node it names at each mount's top level.
 	 *
 	 * @description
 	 * A cascade needs COMPLETE information — every contribution anywhere the configured pattern
@@ -1378,8 +1380,9 @@ export class RoutineManager extends ComponentBase {
 	 * pending events and makes the registry complete.
 	 *
 	 * Scope is precise, not blanket, whenever a segment-by-segment walk can express it: a bare
-	 * mount-relative name never calls this at all (its mount's own top level is always eager). Every
-	 * other non-recursive, non-negated mount-relative name — literal, a single-level wildcard
+	 * mount-relative name loads only the one top-level node it names in each mount (the node is always
+	 * built, but a lazy node's own value, such as a callable folder's function, is there only once it
+	 * loads, #754), and a negated bare name each mount's top-level nodes. Every other non-recursive, non-negated mount-relative name — literal, a single-level wildcard
 	 * (`*`/`?`), a `**` anywhere in it, or `{}` brace-expansion — is walked one `.`-segment at a time
 	 * via {@link #materializeGlobPath}, which descends only as far as each segment actually requires
 	 * (never a sibling subtree the same mount also happens to contain): a literal segment steps into
@@ -1400,7 +1403,10 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #materializeFor(routine) {
-		if (!this.#requiresDescent(routine)) return;
+		// A bare name names a node at a mount's own top level. The node is always built, but a lazy one's
+		// own value (a callable folder's function) is only there once it loads (#754), so the named node
+		// is loaded: one node per mount, or each top-level node of a mount for a negated bare name.
+		const bare = !this.#requiresDescent(routine);
 		if (routine.name.startsWith("^")) {
 			await this.#materializeTree(this.slothlet.api);
 			return;
@@ -1410,13 +1416,14 @@ export class RoutineManager extends ComponentBase {
 		// #isCurrentOwner's note), so the ternary always takes the truthy branch.
 		/* v8 ignore next */
 		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
-		if (!routine.recursive && !routine.name.startsWith("!")) {
+		if (bare || (!routine.recursive && !routine.name.startsWith("!"))) {
 			// Every bounded shape (literal, `*`/`?`, `**`, `{}`) walks one `.`-segment at a time —
 			// #materializeGlobPath descends only as far as each segment actually requires. Brace
 			// alternatives are expanded into their own concrete segment chains first, since a brace
 			// option can embed a literal `.` a naive split here couldn't distinguish from a real
 			// segment boundary.
-			const segmentChains = expandBraces(routine.name).map((alternative) => alternative.split("."));
+			const segmentChains =
+				bare && routine.name.startsWith("!") ? [["*"]] : expandBraces(routine.name).map((alternative) => alternative.split("."));
 			for (const endpoint of endpoints) {
 				// Same "." vs "" root-endpoint equivalence as #matches() above.
 				const mountRoot =
@@ -1754,6 +1761,43 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Load a lazy node that sits where a routine's root cascade is about to be installed (#754). A bare
+	 * routine name equal to a top-level node's name (`svc` for a callable folder `svc/svc.mjs`) puts the
+	 * cascade in that node's place; the node's own function is one of the routine's contributions, and an
+	 * eager tree has already captured it. A lazy node that has not loaded would be replaced before its
+	 * function was ever seen, so it is loaded here first, with recording on so its contribution is captured.
+	 * @param {object|Function} api - The composed api root.
+	 * @param {string} name - The routine's name, which is the cascade's key on the root.
+	 * @returns {Promise<void>}
+	 * @private
+	 *
+	 * @example
+	 * await this.#loadCascadeSlot(api, "svc");
+	 */
+	async #loadCascadeSlot(api, name) {
+		let slot;
+		try {
+			slot = api[name];
+		} catch {
+			// A root member under the routine's name whose read throws (a getter that throws) can occur; the suite
+			// builds none, and such a slot is left to the cascade write's own best-effort handling.
+			/* v8 ignore next */
+			return;
+		}
+		const slotWrapper = resolveWrapper(slot);
+		if (!slotWrapper || slotWrapper.____slothletInternal.mode !== "lazy" || slotWrapper.____slothletInternal.state.materialized) return;
+		const wasRecording = this.recording;
+		this.recording = true;
+		try {
+			await slotWrapper._materialize();
+		} catch {
+			// A node that fails to load contributes nothing; the cascade is installed either way.
+		} finally {
+			this.recording = wasRecording;
+		}
+	}
+
+	/**
 	 * Overwrite every currently-known matching api path's slot on the live api tree with its
 	 * stacked callable, and (re)attach every configured routine's root cascade at the api root
 	 * (using the routine's `name` verbatim as the property key — a dotted or `^`-prefixed name is
@@ -1815,6 +1859,7 @@ export class RoutineManager extends ComponentBase {
 				if (ROOT_BUILTIN_NAMES.has(routine.name)) continue; // integrated via the existing dispose builtins instead
 				if (!routine.cascade) continue; // #400: cascade:false suppresses the root run-all `api.<name>()` cascade
 				const cascade = this.#buildCascadeCallable(routine.name);
+				await this.#loadCascadeSlot(api, routine.name);
 				try {
 					api[routine.name] = cascade;
 				} catch {
