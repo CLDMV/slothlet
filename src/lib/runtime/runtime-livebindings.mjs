@@ -61,7 +61,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeProxy, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, NativeProxy, NativeObject, Set, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -390,8 +390,62 @@ export const context = new NativeProxy(
 	}
 );
 
+/**
+ * The id of the store the running code's flow is on, as the async runtime's `instanceID` reads it from its store: the
+ * instance's own id inside one of its calls, a `run()` / `scope()` store's id inside that flow, and none outside any
+ * call or flow of an instance. The live runtime's store stays set between calls, so it is read only while a module is
+ * executing or a flow the host opened runs (see runtime_resolveExecutingContext).
+ * @returns {string|null} The id, or null.
+ * @private
+ */
+function runtime_executingInstanceID() {
+	let ctx;
+	try {
+		ctx = runtime_resolveExecutingContext();
+	} catch {
+		// No live instance at all: no store to read.
+		return null;
+	}
+	return ctx ? ctx.instanceID : null;
+}
+
+/**
+ * Current instance ID
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides access to the current slothlet instance ID, as the async runtime's `instanceID` does: it
+ * reads as the id inside a call (`String(instanceID)`, `${instanceID}`), and every member reads as undefined outside
+ * one. Useful for debugging and tracking which instance is handling a request.
+ *
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function getInstanceInfo() {
+ *   return { instanceID: String(instanceID) };
+ * }
+ */
+export const instanceID = new NativeProxy(
+	{},
+	{
+		get(_, prop) {
+			const id = runtime_executingInstanceID();
+			if (id === null) return undefined;
+			// Read as a whole (`String()`, a template, `valueOf`), it is the id.
+			if (prop === Symbol.toPrimitive || prop === "toString" || prop === "valueOf") return () => id;
+			return id[prop];
+		},
+		has(_, prop) {
+			const id = runtime_executingInstanceID();
+			if (id === null) return false;
+			return prop in NativeObject(id);
+		}
+	}
+);
+
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [self, context]) markSlothletProxy(proxy);
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
 registerRuntimeSelf(liveRuntime, self);
 registerRuntimeContext(liveRuntime, context);

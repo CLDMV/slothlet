@@ -214,13 +214,12 @@ export const context = new NativeProxy(
 export const instanceID = new NativeProxy(
 	{},
 	{
+		// Both runtimes export `instanceID` alike: read as the id inside a call, as nothing outside one (#764).
 		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? runtime.instanceID[prop] : undefined;
+			return getCurrentRuntime().instanceID[prop];
 		},
 		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? prop in runtime.instanceID : false;
+			return prop in getCurrentRuntime().instanceID;
 		}
 	}
 );
