@@ -31,7 +31,8 @@ import { ComponentBase } from "#factories/component-base";
 // fs/path/url resolved in the platform module (#123); all null in a browser — the filesystem
 // walking + stack-trace path resolution methods here are Node-only.
 import { fs, path, url } from "@cldmv/slothlet/helpers/platform";
-import { Boolean, Error, Errors, String, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Boolean, String, TypeError, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import { readStack, stackSites } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.
@@ -69,15 +70,22 @@ export class Resolver extends ComponentBase {
 	 * @public
 	 */
 	getStack(skipFn) {
-		const orig = Error.prepareStackTrace;
-		try {
-			Error.prepareStackTrace = (_, s) => s; // V8 CallSite[]
-			const e = new Error("Stack trace");
-			if (skipFn) Errors.captureStackTrace(e, skipFn);
-			return e.stack;
-		} finally {
-			Error.prepareStackTrace = orig;
-		}
+		return this.#read({ skip: skipFn });
+	}
+
+	/**
+	 * Read the stack as V8 call sites with slothlet's own formatter (see {@link readStack}), whatever the global `Error`
+	 * and its stack settings hold.
+	 * @param {object} options - What {@link readStack} takes.
+	 * @returns {Array} Array of CallSite objects
+	 * @throws {TypeError} When the stack cannot be read with slothlet's own formatter: no caller's folder is guessed.
+	 * @private
+	 */
+	#read(options) {
+		const read = readStack(stackSites, options);
+		if (!Arrays.isArray(read?.value))
+			throw new TypeError("slothlet could not read the call stack with its own formatter to resolve a relative path.");
+		return read.value;
 	}
 
 	/**
@@ -86,18 +94,9 @@ export class Resolver extends ComponentBase {
 	 * @private
 	 */
 	#getStack() {
-		const originalPrepare = Error.prepareStackTrace;
-		const originalLimit = Error.stackTraceLimit;
-		Error.prepareStackTrace = (___, stack) => stack;
 		// The whole stack: a module's call reaches slothlet through wrapper frames enough to push its own file past the
 		// default ten (#597).
-		Error.stackTraceLimit = Infinity;
-		try {
-			return new Error().stack;
-		} finally {
-			Error.prepareStackTrace = originalPrepare;
-			Error.stackTraceLimit = originalLimit;
-		}
+		return this.#read({ limit: Infinity });
 	}
 
 	/**

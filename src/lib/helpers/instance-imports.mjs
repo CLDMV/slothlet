@@ -86,6 +86,7 @@ import {
 	TextDecoder,
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { readStack, stackText } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -340,6 +341,20 @@ const TAGGED_FRAME = /(file:\/\/[^\s()?]+\?[^\s():]*slothlet_instance=[^\s():]+)
 const PristineError = Error;
 
 /**
+ * The current stack as text in V8's own frame format (`    at …` lines under an `Error` line), read with slothlet's
+ * own formatter whatever the global `Error` and its stack settings hold (see {@link readStack}).
+ * @param {number} limit - The most frames to read.
+ * @returns {string} The stack.
+ * @throws {TypeError} When the stack cannot be read with slothlet's own formatter: what it would decide is refused.
+ * @private
+ */
+function ownStackText(limit) {
+	const read = readStack(stackText, { limit });
+	if (read === null) throw new TypeError("slothlet could not read the call stack with its own formatter, so the load is refused.");
+	return String(read.value ?? read.text);
+}
+
+/**
  * The innermost module instance copy on the stack (see {@link TAGGED_FRAME}), read from the whole stack in V8's own
  * format: Node's loader frames between a module's `require()` and the resolve hook can run past a host's
  * `Error.stackTraceLimit` (Node 22's CommonJS loader puts more than ten there).
@@ -347,16 +362,7 @@ const PristineError = Error;
  * @private
  */
 function runningTaggedFrame() {
-	const previousLimit = PristineError.stackTraceLimit;
-	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.stackTraceLimit = Infinity;
-	PristineError.prepareStackTrace = undefined;
-	try {
-		return TAGGED_FRAME.exec(String(new PristineError().stack))?.[1];
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-		PristineError.prepareStackTrace = previousPrepare;
-	}
+	return TAGGED_FRAME.exec(ownStackText(Infinity))?.[1];
 }
 
 /**
@@ -415,18 +421,7 @@ const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
  * @private
  */
 function isInstanceRequireLoad(parentURL) {
-	const previousLimit = PristineError.stackTraceLimit;
-	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.stackTraceLimit = Infinity;
-	PristineError.prepareStackTrace = undefined;
-	let stack;
-	try {
-		stack = String(new PristineError().stack);
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-		PristineError.prepareStackTrace = previousPrepare;
-	}
-	const lines = stack.split("\n");
+	const lines = ownStackText(Infinity).split("\n");
 	let at = -1;
 	for (let i = 0; i < lines.length && at === -1; i++) {
 		if (lines[i].includes("(node:internal/modules/helpers:")) return false;
@@ -1299,18 +1294,7 @@ function frameLocation(line) {
  * @private
  */
 function isModuleRequire() {
-	const previousLimit = PristineError.stackTraceLimit;
-	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.stackTraceLimit = 64;
-	PristineError.prepareStackTrace = undefined;
-	let stack;
-	try {
-		stack = String(new PristineError().stack);
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-		PristineError.prepareStackTrace = previousPrepare;
-	}
-	const lines = stack.split("\n").slice(1);
+	const lines = ownStackText(64).split("\n").slice(1);
 	let i = 0;
 	// The resolve hook's own frames, then Node's loader.
 	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;

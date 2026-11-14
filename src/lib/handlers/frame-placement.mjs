@@ -67,6 +67,7 @@ import {
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { readStack } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -524,35 +525,28 @@ function runtime_frameImporterTag(line) {
  *
  * The frame budget is set for this capture only: the caller's frame sits below slothlet's own wrapper
  * frames, and the default of 10 can cut it off in a deep chain. The trace reports whether the budget cut it
- * short, so a reader that found nothing can look deeper. `prepareStackTrace` is set by this
- * capture for its duration as well. It is a writable global hook, so a leaf can install one that returns
- * an empty or forged trace — which would blank the frames this resolver matches on, and a caller that
- * cannot be attributed would otherwise be let through as though it were the host. Using the `Error`
- * captured at load and a formatter of slothlet's own keeps the capture out of a leaf's reach. Both
- * globals are restored immediately, so a legitimate consumer's formatter is unaffected.
+ * short, so a reader that found nothing can look deeper. The formatter is slothlet's own, set for this
+ * capture by {@link readStack}, which also holds the global `Error` and the frame budget as plain values for
+ * the read: a formatter, an accessor or another `Error` a leaf installed could otherwise blank or forge the
+ * frames this resolver matches on, and a caller that cannot be attributed would be let through as though it
+ * were the host. Everything is put back immediately, so a legitimate consumer's formatter is unaffected.
+ * When the read cannot be held that way (a setting fixed in place) the access is refused.
  *
  * @param {number} limit - The most frames to capture.
  * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: string|null, key: string|null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
+ * @throws {SlothletError} PERMISSION_DENIED when the stack cannot be read with slothlet's own formatter.
  * @private
  */
 export function runtime_captureFrames(limit) {
-	const previousLimit = PristineError.stackTraceLimit;
-	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.stackTraceLimit = limit;
-	PristineError.prepareStackTrace = runtime_structuredFrames;
-	let stack;
-	try {
-		stack = new PristineError().stack;
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-		PristineError.prepareStackTrace = previousPrepare;
-	}
-	if (stack?.structured) return stack;
+	const read = readStack(runtime_structuredFrames, { limit });
+	// The global `Error` or its stack settings were changed so that slothlet's own formatter could not be the one that
+	// ran: the frames are not the engine's, and what they would have decided is refused.
+	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (read.value?.structured) return read.value;
 	// An engine without V8's call-site hook formats the trace as text, which is parsed instead.
-	// The `?? ""` arm covers an Error with no stack, which no engine slothlet runs on produces.
 	/* v8 ignore next */
 	const frames = [];
-	for (const line of String(stack ?? "").split("\n")) {
+	for (const line of String(read.text ?? "").split("\n")) {
 		const frame = parseStackFrame(line);
 		if (frame) {
 			frames.push({
@@ -2540,18 +2534,14 @@ function runtime_registeredScript(entry, called = false) {
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
 	if (Objects.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
-	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.prepareStackTrace = (error, sites) => {
-		const frames = runtime_structuredFrames(error, sites);
-		READ_REGISTRATIONS.add(frames);
-		return frames;
-	};
-	let frames;
-	try {
-		frames = Reflect.apply(PRISTINE_STACK_GET, entry, []);
-	} finally {
-		PristineError.prepareStackTrace = previousPrepare;
-	}
+	const frames = readStack(
+		(error, sites) => {
+			const read = runtime_structuredFrames(error, sites);
+			READ_REGISTRATIONS.add(read);
+			return read;
+		},
+		{ error: entry }
+	)?.value;
 	if (!READ_REGISTRATIONS.has(frames)) return null;
 	let own = null;
 	let runner = null;
