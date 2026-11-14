@@ -116,6 +116,7 @@ import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cl
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { normalizePermissionsConfig } from "@cldmv/slothlet/helpers/config";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
 import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, Dates, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -941,6 +942,19 @@ class Slothlet {
 		// Will be re-initialised below with the fully normalised config.
 		this.debugLogger = new SlothletDebug(config);
 
+		// Normalise `permissions` once, up front, so the PermissionManager built by _initializeComponents() reads the
+		// normalised section (#772) and transformConfig() below normalises that same snapshot, never a second read of the
+		// raw value. An invalid value is left raw here: transformConfig() reports it as INVALID_CONFIG.
+		let normalizedConfig = config;
+		if (config.permissions !== undefined) {
+			try {
+				normalizedConfig = { ...config, permissions: normalizePermissionsConfig(config.permissions) };
+			} catch {
+				normalizedConfig = config;
+			}
+		}
+		this.config = normalizedConfig;
+
 		// Initialize all components via auto-discovery BEFORE transforming config
 		// This allows config helpers to be component classes
 		await this._initializeComponents();
@@ -960,7 +974,7 @@ class Slothlet {
 		this._setupLifecycleSubscribers();
 
 		// Transform and validate config using component classes
-		this.config = this.helpers.config.transformConfig(config);
+		this.config = this.helpers.config.transformConfig(normalizedConfig);
 
 		// Default routines present in the normalized routines config make their root paths host-only
 		// (#529) — decided here, per load, once the effective list is known.

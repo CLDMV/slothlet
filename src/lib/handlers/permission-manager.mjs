@@ -28,7 +28,6 @@ import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-ma
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
-import { expandPermissionsShorthand } from "@cldmv/slothlet/helpers/config";
 import {
 	WRAPPER_INTERNAL_KEYS,
 	IMPL_METADATA_KEYS,
@@ -641,7 +640,9 @@ export class PermissionManager extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 
-		const permConfig = expandPermissionsShorthand(slothlet.config?.permissions).value;
+		// `slothlet.config.permissions` is the normalised section (load() normalises it before the components are built), so
+		// every field below is present and valid.
+		const permConfig = slothlet.config?.permissions;
 		if (permConfig) {
 			// The "allow" fallback in || is uncovered when all tests supply defaultPolicy explicitly.
 			/* v8 ignore next */
