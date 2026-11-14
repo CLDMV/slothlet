@@ -416,13 +416,14 @@ const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
 /**
  * Whether the resolution the resolve hook is answering is a `require()` loading the file, made by an instance's code:
  * Node's CommonJS loader (`Module._load`, `Function._load` on Node 22) is reached on the stack before the `require` function Node hands each module
- * (a `require.resolve()` reaches that function first), and the `require` is made from an instance copy's URL or while
- * such a copy's code runs.
+ * (a `require.resolve()` reaches that function first), and the `require` is made from an instance copy's URL, from one
+ * of an instance's CommonJS files (the `require` Node hands that file), or while such a copy's code runs.
  * @param {string} parentURL - The requiring file's URL.
+ * @param {boolean} [commonJSParent=false] - Whether the requiring file is one of an instance's CommonJS files.
  * @returns {boolean} True for such a `require()`.
  * @private
  */
-function isInstanceRequireLoad(parentURL) {
+function isInstanceRequireLoad(parentURL, commonJSParent = false) {
 	const lines = ownStackText(Infinity).split("\n");
 	let at = -1;
 	for (let i = 0; i < lines.length && at === -1; i++) {
@@ -431,7 +432,29 @@ function isInstanceRequireLoad(parentURL) {
 		if (/^\s*at (?:Module|Function)\._load \(node:/.test(lines[i])) at = i;
 	}
 	if (at === -1) return false;
-	return parentURL.includes(MARKER) || lines.slice(at + 1).some((line) => INSTANCE_FRAME.test(line));
+	// The hook is answering that `require()` itself: between it and the loader's frame run only Node's own frames and
+	// slothlet's (a resolution asked for by other code that a `require()` further out is running is not one).
+	for (let i = 1; i < at; i++) {
+		const location = frameLocation(lines[i]);
+		if (location !== null && !location.startsWith("node:") && slothletCodePath(location) === null) return false;
+	}
+	return commonJSParent || parentURL.includes(MARKER) || lines.slice(at + 1).some((line) => INSTANCE_FRAME.test(line));
+}
+
+/**
+ * Whether a file no instance tags is one of an instance's CommonJS files: an api file or helper the CommonJS scope that
+ * is loading holds, or one an instance's CommonJS cache keeps (see {@link COMMONJS_READER}). Such a file runs under its
+ * plain path, so its URL carries no instance query.
+ * @param {string} ref - The file's URL or path.
+ * @returns {boolean} True for such a file.
+ * @private
+ */
+function isInstanceCommonJSFile(ref) {
+	if (ref.includes(MARKER)) return false;
+	const key = packageKey(ref);
+	if (ACTIVE !== null && (key === packageKey(ACTIVE.anchor) || isInstanceScopedFile(key, ACTIVE.anchor))) return true;
+	for (const instanceID of SCOPE_KEYS.keys()) if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === key)) return true;
+	return false;
 }
 
 /**
@@ -443,11 +466,13 @@ function isInstanceRequireLoad(parentURL) {
  * `require` an api file makes from its own path (`createRequire(fileURLToPath(import.meta.url))`) as for one it makes
  * from its URL, whichever file of the folder required it first, and in every instance after the first. The stub
  * answering the `require()` hands back the one module of the file and takes itself out of Node's caches, so each such
- * `require()` reaches the hook and is recorded. A `require.resolve()` still answers the file's path, and a `require()`
- * slothlet's own files make, or one made while a CommonJS api file loads (recorded from Node's own list, see
- * {@link recordScopeRequires}), is left as it is.
- * Only a `require()` whose importer is an instance copy, or one the resolve hook has seen nothing load (the path a
- * `require` was made from), is looked at.
+ * `require()` reaches the hook and is recorded. The same holds for a file of another package that an instance's
+ * CommonJS files require, while they load or later: Node answers the second file's `require` of the package from its
+ * caches too. A `require.resolve()` still answers the file's path, and a `require()` slothlet's own files make, or one
+ * of the CommonJS scope's own files made while a CommonJS api file loads (the scope's cache serves those, and they are
+ * recorded from Node's own list, see {@link recordScopeRequires}), is left as it is.
+ * Only a `require()` whose importer is an instance copy, one of an instance's CommonJS files, or one the resolve hook
+ * has seen nothing load (the path a `require` was made from), is looked at.
  * @param {object} context - Node's resolve context.
  * @param {ResolveResult} resolved - The resolution.
  * @returns {ResolveResult|null} The stub's resolution, or null.
@@ -456,16 +481,18 @@ function isInstanceRequireLoad(parentURL) {
 function sharedRequireStub(context, resolved) {
 	const url = resolved?.url;
 	const parentURL = context?.parentURL;
-	if (ACTIVE !== null || typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:json|node)$/.test(url))
-		return null;
+	if (typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:json|node)$/.test(url)) return null;
 	if (typeof parentURL !== "string" || !parentURL.startsWith("file:") || !hasCondition(context?.conditions, "require")) return null;
 	const own = (ref) => {
 		const path = toSlashPath(ref);
 		return OWN_TREE.some((dir) => path === dir || path.startsWith(dir.endsWith("/") ? dir : `${dir}/`));
 	};
 	if (own(parentURL) || own(url)) return null;
-	if (!parentURL.includes(MARKER) && PACKAGE_IMPORTERS.has(packageKey(parentURL))) return null;
-	if (!isInstanceRequireLoad(parentURL)) return null;
+	// An instance's CommonJS file requiring a file of another package; while a CommonJS api file loads, only that.
+	const commonJSParent = isInstanceCommonJSFile(parentURL) && !isInstanceScopedFile(url, parentURL);
+	if (ACTIVE !== null && !commonJSParent) return null;
+	if (!parentURL.includes(MARKER) && !commonJSParent && PACKAGE_IMPORTERS.has(packageKey(parentURL))) return null;
+	if (!isInstanceRequireLoad(parentURL, commonJSParent)) return null;
 	return { url: SHARED_REQUIRE_PREFIX + url, format: "commonjs", shortCircuit: true };
 }
 
