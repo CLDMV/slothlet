@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,7 @@ import { resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { JSON, NativeProcess, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * IPC sender to the parent process (`process.send` in the fork).
@@ -98,4 +99,4 @@ export function runIfEntry(argv1, configJson, send, exit) {
 	return runTypeGeneration(configJson, send).then(exit);
 }
 
-runIfEntry(process.argv[1], process.env.SLOTHLET_CONFIG, process.send?.bind(process), process.exit.bind(process));
+runIfEntry(NativeProcess.argv[1], NativeProcess.env.SLOTHLET_CONFIG, Processes.send, Processes.exit);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T15:32:47-07:00 (1791844367)
+ *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,9 +38,29 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
-import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
+import {
+	installInstanceImportHooks,
+	requireInInstance,
+	setImportRefusal,
+	noteModuleFile,
+	HELPERS_PARAM,
+	HELPERS_PER_MODULE
+} from "@cldmv/slothlet/helpers/instance-imports";
+import { createModuleLoad } from "#handlers/frame-placement";
+import {
+	Objects,
+	Arrays,
+	JSON,
+	Map,
+	Set,
+	Promise,
+	URL,
+	encodeURIComponent,
+	String,
+	NativeProcess
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
@@ -122,7 +142,7 @@ export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vi
  * `NODE_V8_COVERAGE`, which Node itself honours to write coverage (and each loaded module's source
  * map) for the process.
  */
-export function isCoverageRun({ worker = globalThis.__vitest_worker__, env = globalThis.process?.env } = {}) {
+export function isCoverageRun({ worker = globalThis.__vitest_worker__, env = NativeProcess?.env } = {}) {
 	if (worker?.config?.coverage?.enabled === true) return true;
 	return typeof env?.NODE_V8_COVERAGE === "string" && env.NODE_V8_COVERAGE.length > 0;
 }
@@ -173,15 +193,21 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
  * directory/file names — NOT the sanitized API keys. For a file that's the extension-stripped dotted
  * path (so `secret/config.mjs` matches `secret.config`); a folder `draft-notes` (surfaced as
  * `api.draftNotes`) matches `draft-notes`, not `draftNotes`. Reuses slothlet's dot-separated glob
- * dialect: `*` matches one segment, `**` any depth, `?` one char, `{a,b}` alternation. Globs may be
- * written folder-style (`a/b`) — `/` is normalized to `.`.
+ * dialect: `*` matches one segment, `**` any number of segments (none included, so `secret.**` names the folder
+ * `secret` itself as well as everything in it), `?` one char, `{a,b}` alternation. Globs may be written folder-style
+ * (`a/b`) — `/` is normalized to `.`.
+ *
+ * A folder a glob hides is not scanned. One case is scanned all the same: the glob that hides it also hides everything
+ * beneath it (`secret/**`) and a `!` glob follows it, since that glob may un-hide an entry inside
+ * (`["secret/**", "!secret/keep"]`). Its entries are then matched one by one, which hides the same ones.
  * @param {string|string[]|null} globs - Hidden glob(s).
- * @returns {?function(string): boolean} Matcher over the dot-joined relative path, or null.
+ * @returns {?function(string, boolean=): boolean} Matcher over the dot-joined relative path (pass `true` as the
+ *   second argument for a folder), or null.
  * @private
  */
 function compileHidden(globs) {
 	if (!globs) return null;
-	const list = Array.isArray(globs) ? globs : [globs];
+	const list = Arrays.isArray(globs) ? globs : [globs];
 	const rules = [];
 	for (const g of list) {
 		if (typeof g !== "string" || g.length === 0) continue;
@@ -196,10 +222,20 @@ function compileHidden(globs) {
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
 	// un-hides paths an earlier glob hid (gitignore semantics).
-	return (relDotted) => {
+	return (relDotted, isFolder = false) => {
 		let hidden = false;
-		for (const rule of rules) {
-			if (rule.match(relDotted)) hidden = !rule.negated;
+		let winner = -1;
+		for (let index = 0; index < rules.length; index++) {
+			if (rules[index].match(relDotted)) {
+				hidden = !rules[index].negated;
+				winner = index;
+			}
+		}
+		if (hidden && isFolder) {
+			// Names no file or folder can have (a `.` would split them), so only a glob that matches everything
+			// beneath the folder matches both.
+			const coversBelow = rules[winner].match(`${relDotted}.\u0000`) && rules[winner].match(`${relDotted}.\u0000.\u0000`);
+			if (coversBelow && rules.slice(winner + 1).some((rule) => rule.negated)) return false;
 		}
 		return hidden;
 	};
@@ -312,7 +348,45 @@ function runtime_encodeQueryValue(value) {
  */
 function ensureInstanceImportHooks() {
 	if (instanceImportHooksInstalled) return;
+	// A module's import of one of slothlet's own files is refused with slothlet's own error.
+	setImportRefusal(
+		({ specifier, file, allowed }) =>
+			new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }, null, { validationError: true })
+	);
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
+}
+
+/**
+ * Whether slothlet's runtime (`@cldmv/slothlet/runtime`) has been loaded by this copy of slothlet.
+ * @type {boolean}
+ * @private
+ */
+let runtimeLoaded = false;
+
+/**
+ * The load of slothlet's runtime, started by the first api file load of the process.
+ * @type {Promise<void>|null}
+ * @private
+ */
+let runtimeLoading = null;
+
+/**
+ * Load slothlet's runtime before the first api file is loaded. The runtime awaits at its top level, so an api file
+ * importing it while it is still loading is not evaluated when its own import finishes resolving: the engine evaluates
+ * every file waiting on the runtime in one job, when the runtime is ready, and that job runs in the flow of whichever
+ * load asked for the runtime first. An api file's top level, and the helper files it imports, then ran inside another
+ * file's load. Loaded here first, from slothlet's own flow, no api file ever waits on it. It also makes this copy's
+ * runtime the one the process has before any file Node loads itself can ask for it (#760).
+ * @returns {Promise<void>} Resolves once the runtime is loaded.
+ * @private
+ */
+function ensureRuntimeLoaded() {
+	// Loaded or not, the load is over: a host that cannot resolve the runtime loads no api file that imports it either.
+	const done = () => {
+		runtimeLoaded = true;
+	};
+	runtimeLoading ??= import("@cldmv/slothlet/runtime").then(done, done);
+	return runtimeLoading;
 }
 
 export class Loader extends ComponentBase {
@@ -361,6 +435,30 @@ export class Loader extends ComponentBase {
 	 * @public
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
+		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
+		if (!runtimeLoaded) {
+			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).
+			if (this.slothlet.envTarget !== "browser") ensureInstanceImportHooks();
+			await ensureRuntimeLoaded();
+		}
+		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
+		const contextManager = this.slothlet.contextManager;
+		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
+		return contextManager.runModuleLoad(createModuleLoad(this.slothlet, filePath, moduleID), () =>
+			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust)
+		);
+	}
+
+	/**
+	 * Load a single module's file (see {@link Loader#loadModule}).
+	 * @param {string} filePath - Path to module file
+	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
+	 * @param {string} [moduleID] - Module ID for additional cache busting
+	 * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting
+	 * @returns {Promise<Object>} Loaded module
+	 * @private
+	 */
+	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
@@ -375,7 +473,7 @@ export class Loader extends ComponentBase {
 			// The hooks serve its require() of an ES module the instance's copy (#534).
 			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
 				ensureInstanceImportHooks();
-				return this.#loadCJSIsolated(filePath, instanceID);
+				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
 			}
 
 			// Relative helpers a leaf imports must follow the leaf's per-instance query (#518): the
@@ -428,7 +526,7 @@ export class Loader extends ComponentBase {
 						await new Promise((resolve, reject) => {
 							const child = fork(scriptPath, [], {
 								stdio: ["pipe", "pipe", "pipe", "ipc"],
-								env: { ...process.env, SLOTHLET_CONFIG: childConfig }
+								env: { ...NativeProcess.env, SLOTHLET_CONFIG: childConfig }
 							});
 
 							let errorOutput = "";
@@ -548,6 +646,8 @@ export class Loader extends ComponentBase {
 				if (moduleID) {
 					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
+				// `helpers: "module"`: the resolve hook loads each helper this file imports as this file's own copy.
+				if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
 				// reference used by the live API (which would cause applyRootContributor's
@@ -568,6 +668,9 @@ export class Loader extends ComponentBase {
 			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 			byMount.set(moduleID ?? "", String(moduleUrl));
 			this.#importedLocationList = null;
+			// What the file imports is a module's, whichever loader evaluates it and however a require names it.
+			noteModuleFile(filePath);
+			noteModuleFile(String(moduleUrl));
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
@@ -642,7 +745,7 @@ export class Loader extends ComponentBase {
 	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches are served from
 	 * the instance's private CommonJS cache — shared by every mount and kept across partial reloads; a
 	 * full reload rotates the instance ID and so starts a fresh one — and an ES module it require()s is
-	 * the instance's copy of that module (see requireInInstance in helpers/instance-imports).
+	 * the instance's copy of that module (see scopeRequire in helpers/instance-imports).
 	 * @param {string} filePath - Absolute path to the .cjs file
 	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
 	 * @returns {Object} Synthetic ESM namespace: { default, ...namedExports }
@@ -651,8 +754,16 @@ export class Loader extends ComponentBase {
 	 * ns.default; // module.exports
 	 * @private
 	 */
-	#loadCJSIsolated(filePath, scopeKey) {
-		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
+	#loadCJSIsolated(filePath, scopeKey, moduleID = null) {
+		// With `helpers: "module"` the files the leaf requires are its own copies, not the instance's.
+		const perModule = this.slothlet.config?.helpers === "module";
+		const options = { fresh: true, importer: perModule ? filePath : null, mount: perModule ? (moduleID ?? null) : null };
+		// The instance's own files load through the handle the instance holds for its ID; a load under another ID (a
+		// caller driving the loader directly) goes through the cache of an ID no instance holds.
+		const exports =
+			scopeKey === this.slothlet.instanceID && typeof this.slothlet.requireInScope === "function"
+				? this.slothlet.requireInScope(filePath, options)
+				: requireInInstance(filePath, scopeKey, options);
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
 		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
@@ -661,7 +772,7 @@ export class Loader extends ComponentBase {
 		// whatever its descriptor says. A `then` holding data does not make the namespace awaitable, and is
 		// an ordinary export.
 		if (exports !== null && (typeof exports === "object" || typeof exports === "function")) {
-			const thenDescriptor = Object.getOwnPropertyDescriptor(exports, "then");
+			const thenDescriptor = Objects.getOwnPropertyDescriptor(exports, "then");
 			if (thenDescriptor && (isAwaitableThen(thenDescriptor) || typeof exports.then === "function")) {
 				throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
 			}
@@ -672,7 +783,7 @@ export class Loader extends ComponentBase {
 		//   - each own key of module.exports becomes a named export
 		const namespace = { default: exports };
 		if (exports !== null && typeof exports === "object") {
-			for (const key of Object.keys(exports)) {
+			for (const key of Objects.keys(exports)) {
 				if (key !== "default") {
 					namespace[key] = exports[key];
 				}
@@ -681,7 +792,7 @@ export class Loader extends ComponentBase {
 		// import() of a CommonJS file exposes a "module.exports" binding, which is how the ownership index
 		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
 		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
-		Object.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
+		Objects.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
 		return namespace;
 	}
 
@@ -720,7 +831,7 @@ export class Loader extends ComponentBase {
 				const pkg = parseJsonOrNull(raw);
 				// Node rejects a package.json that is not a JSON object (ERR_INVALID_PACKAGE_CONFIG) and
 				// ignores a `type` other than "module" / "commonjs".
-				if (pkg === null || typeof pkg !== "object" || Array.isArray(pkg)) type = "invalid";
+				if (pkg === null || typeof pkg !== "object" || Arrays.isArray(pkg)) type = "invalid";
 				else type = pkg.type === "module" || pkg.type === "commonjs" ? pkg.type : "none";
 				break;
 			}
@@ -795,6 +906,7 @@ export class Loader extends ComponentBase {
 		if (moduleID) {
 			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 		}
+		if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 		if (cacheBust) {
 			moduleUrl += `&_reload=${cacheBust}`;
 		}
@@ -880,7 +992,7 @@ export class Loader extends ComponentBase {
 				if (!scanHiddenFolders && isHiddenEntryName(entry.name)) {
 					continue;
 				}
-				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
+				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath), true)) {
 					continue;
 				}
 
@@ -1133,7 +1245,7 @@ export class Loader extends ComponentBase {
 				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
 				if (!scanHiddenFolders && isHiddenEntryName(dirName)) continue;
 				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
-				if (hiddenMatcher && hiddenMatcher(dirApiRel)) continue;
+				if (hiddenMatcher && hiddenMatcher(dirApiRel, true)) continue;
 
 				// apiDepth / maxDepth truncation: don't descend past the limit.
 				if (currentDepth >= maxDepth) continue;
@@ -1282,7 +1394,7 @@ export class Loader extends ComponentBase {
 		}
 
 		// Add named exports (excluding module.exports which is a Node.js internal property)
-		for (const key of Object.keys(module)) {
+		for (const key of Objects.keys(module)) {
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				// Reserved-name rejection (#260): an export named for a framework-reserved key
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
@@ -1321,8 +1433,8 @@ export class Loader extends ComponentBase {
 		if (exports.default && typeof exports.default === "object" && exports.default !== null && "default" in exports.default) {
 			// Check if this looks like the CJS pattern:
 			// All named exports at root should also exist in exports.default
-			const rootNamedKeys = Object.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
-			const defaultKeys = Object.keys(exports.default).filter((k) => k !== "default");
+			const rootNamedKeys = Objects.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
+			const defaultKeys = Objects.keys(exports.default).filter((k) => k !== "default");
 
 			// If all root named exports exist in exports.default, this is the CJS pattern
 			const isCJSPattern = rootNamedKeys.every((k) => k in exports.default);

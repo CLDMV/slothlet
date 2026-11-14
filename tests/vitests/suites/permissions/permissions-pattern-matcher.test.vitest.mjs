@@ -36,7 +36,7 @@ describe("Permissions > Pattern Matcher Unit Tests", () => {
 			const matcher = compilePattern("payments.**");
 			expect(matcher("payments.charge")).toBe(true);
 			expect(matcher("payments.charge.sub")).toBe(true);
-			expect(matcher("payments")).toBe(false);
+			expect(matcher("payments")).toBe(true);
 			expect(matcher("admin.manage")).toBe(false);
 		});
 

@@ -83,6 +83,9 @@ export function runtime_selfModuleCeilings(slothlet: object, writer?: object | n
  *
  * @param {*} node - Value read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object|null} [from=null] - The module handing the value on, when one is.
+ * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
+ *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -90,7 +93,7 @@ export function runtime_selfModuleCeilings(slothlet: object, writer?: object | n
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node: any, reader?: object): any;
+export function runtime_selfView(node: any, reader?: object, from?: object | null, access?: object | null): any;
 /**
  * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
@@ -306,23 +309,17 @@ export function releaseStandInChanges(slothlet: object): void;
  */
 export function refusedChangeCount(slothlet: object): number;
 /**
- * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
- * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
- * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
- * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, the root api) and the ones that
- * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
- * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`). It reads
- * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
- * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
- * slothlet's. Backs `api.slothlet.wrapped` (#671).
- * @param {*} value - The value.
- * @returns {boolean} True only for one of slothlet's own wrappers.
- * @public
+ * An access whose identity its caller resolved already, on the store it read it from.
+ * @param {object} contextManager - The context manager that resolved it.
+ * @param {object|null|undefined} store - The store it was resolved on.
+ * @param {object|undefined} identity - The identity.
+ * @returns {object} The access.
+ * @internal
+ *
  * @example
- * isSlothletWrapped(api.math); // true
- * isSlothletWrapped(new Proxy({}, {})); // false
+ * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
  */
-export function isSlothletWrapped(value: any): boolean;
+export function runtime_resolvedAccess(contextManager: object, store: object | null | undefined, identity: object | undefined): object;
 /**
  * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
  * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
@@ -343,6 +340,90 @@ export function releaseModuleMakers(slothlet: object, moduleID?: string): void;
  * moduleMakerCount(slothlet); // 3
  */
 export function moduleMakerCount(slothlet: object): number;
+/**
+ * Record a runtime's `self` for the context manager it reads its context from: a read of `self` made while no call
+ * runs is read through the `self` of the runtime the definer's instance runs, whichever runtime's `self` it was made
+ * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} selfProxy - The runtime's `self`.
+ * @returns {void}
+ * @internal
+ */
+export function registerRuntimeSelf(contextManager: object, selfProxy: object): void;
+/**
+ * A read of `self` made while no call runs — the host running code a module handed out, or code nested in data it
+ * returned (#726) — by code whose frames place it in a module's file: read as that code's definer, the leaf whose
+ * source range holds it (or the file's module, for code outside every export), so the definer's rules hold for it and
+ * the host's standing adds nothing. Code whose definer the frames cannot tell (evaluated code, a file several instances
+ * load untold apart, code outside every export where no node was built for the file) is refused with
+ * `PERMISSION_DENIED`, naming the identity it was read as. Code of the host's own gets `null`: `self` is not for it.
+ * @param {object} selfProxy - The runtime's `self`.
+ * @param {string|symbol} prop - The member.
+ * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
+ *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
+ *   read as its definer.
+ * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
+ *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
+ *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
+ * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
+ * @internal
+ */
+export function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null, hostFlowInstanceID?: string | null): {
+    value: any;
+} | null;
+/**
+ * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
+ * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
+ * ({@link runtime_selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
+ * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
+ * @param {object} contextProxy - The runtime's `context`.
+ * @param {string|symbol} prop - The member read.
+ * @returns {*} The member, or undefined.
+ * @internal
+ *
+ * @example
+ * if (!ctx) return runtime_contextReadAsDefiner(context, prop);
+ */
+export function runtime_contextReadAsDefiner(contextProxy: object, prop: string | symbol): any;
+/**
+ * Register a runtime's `context`.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} contextProxy - Its `context`.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * registerRuntimeContext(asyncRuntime, context);
+ */
+export function registerRuntimeContext(contextManager: object, contextProxy: object): void;
+/**
+ * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
+ * module handed it ({@link runtime_contextRead}). What the host stores, and what a module stores again after reading it
+ * from the host, is the host's and is recorded for no one.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value being stored.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_contextWritten(ctx, value);
+ * ctx.context[prop] = value;
+ */
+export function runtime_contextWritten(ctx: object, value: any): void;
+/**
+ * A value read from the runtime `context`, as whoever reads it gets it: what the host stored is the value itself, shared
+ * as the host meant it to be; what a module stored reaches another module through the class prototype guard
+ * ({@link runtime_crossTo}), and the host and the module that stored it as itself. Only the value stored under a key is
+ * covered: what a module puts into an object the host shares there is plain JavaScript between the modules holding it.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value read.
+ * @returns {*} What the reader gets.
+ * @internal
+ *
+ * @example
+ * return runtime_contextRead(ctx, ctx.context[prop]);
+ */
+export function runtime_contextRead(ctx: object, value: any): any;
 /**
  * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
  * emitted it to the module that registered the listener, so it crosses between modules as an argument does
@@ -610,6 +691,9 @@ export class UnifiedWrapper extends ComponentBase {
      * the function directly since keepImplProperties prevents depletion.
      *
      * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+     * @param {?function(Object, PropertyKey): {value: *, withheld: boolean}} [readMember=null] - Given when the
+     *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
+     *   The object is then built in the order its node lists its members (#747).
      * @returns {*} The reconstructed implementation mirroring original module exports
      * @static
      * @private
@@ -894,6 +978,19 @@ export class UnifiedWrapper extends ComponentBase {
      * await wrapper._materialize();
      */
     private _materialize;
+    /**
+     * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
+     * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
+     * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
+     * join a routine that names its path. Only the routine manager is told: ownership and metadata already
+     * hold this node from its construction, and the public `impl:created` for it has already fired.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * this.___reportLoadedContribution();
+     */
+    private ___reportLoadedContribution;
     /**
      * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
      * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never

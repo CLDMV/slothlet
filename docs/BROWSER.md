@@ -10,15 +10,13 @@ import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest
 
 const { manifest, importmap } = await generateBrowserAssets("./src/api");
 // → manifest:  the API-directory listing
-// → importmap: { imports: { "@cldmv/slothlet": "/node_modules/@cldmv/slothlet/…", … } }
+// → importmap: { imports: { "@cldmv/slothlet": "/node_modules/@cldmv/slothlet/…", … }, scopes: { … } }
 ```
 
 ```html
 <!-- the page — importmap MUST come before any module script that imports slothlet -->
 <script type="importmap">
-	{
-		"imports": {/* …importmap.imports… */}
-	}
+	/* …JSON.stringify(importmap): its imports AND its scopes… */
 </script>
 <script type="module">
 	import slothlet from "@cldmv/slothlet";
@@ -61,6 +59,8 @@ The recommended one-call entry point. Returns `{ manifest, importmap }`.
 | `slothletBase` | `string` | `"/node_modules/@cldmv/slothlet/"` | URL/path prefix where the `@cldmv/slothlet` package is served in the browser. |
 
 `slothletBase` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's _filesystem_ location, but not the _URL_ you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
+
+The importmap's `imports` maps what any script of the page may import of slothlet: `@cldmv/slothlet`, the runtime (`/runtime`, `/runtime/async`, `/runtime/live`) and `/helpers/manifest-resolver`. Every other specifier of slothlet's is slothlet's own, and the importmap maps it under `scopes`, for slothlet's own files alone (one scope per code folder and entry file under `slothletBase`), so an api leaf or a page script resolving `@cldmv/slothlet/helpers/…` or `#handlers/…` fails (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet)). Inline the whole object, `scopes` included: a page given `imports` alone cannot load slothlet. A browser loads any served file by its URL, so a file imported by its URL is not held this way.
 
 The importmap entries are resolved with `import.meta.resolve`, so they automatically point at the files that match the build's export conditions — `dist/*` for an installed package, `src/*` in slothlet's own dev tree. Locale JSON files (`@cldmv/slothlet/i18n/language/*.json`), which are loaded via a dynamic template import a static scan can't see, are enumerated and included automatically. You only ever set `slothletBase`; the per-file paths underneath it are filled in for you.
 
@@ -150,6 +150,8 @@ const api = await slothlet({
 - **Awaitable locale switching.** Use [`setLanguageAsync(lang)`](./I18N.md) instead of `setLanguage()` when you need to await a locale change, since browser locales arrive via dynamic `import(…, { with: { type: "json" } })`.
 - **No `node:*`.** All Node-builtin access is gated behind a single platform layer, so the browser graph never touches `node:fs` / `node:path` / `node:url` / `node:async_hooks`.
 - **An object `Proxy` default is composed as the value it fronts.** Node can tell a `Proxy` from its target (`util.types.isProxy`); a browser cannot, since a proxy is indistinguishable from what it fronts by design. So the layer that keeps an object `Proxy` default's traps working ([MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md)) is Node-only. In a browser, an object `Proxy` default is copied, keeping the members it reports but not its traps. The same holds for an object `Proxy` anywhere in a module's exports. A callable `Proxy` default is unaffected: every function default with named exports gets a callable layer, recognized by `typeof`, so its traps keep answering and nothing is written through them in a browser too.
+- **Values that cross between modules are viewed as in Node.** With the permission system on, what one module hands another reaches it as a view that keeps the owner's code to the owner's write rules ([PERMISSIONS.md](./PERMISSIONS.md#values-that-cross-between-modules)). The views read no stack and need no `node:util`: the brand checks they rest on (`Map`, `Set`, `Date`, `RegExp`, buffers, typed arrays, boxed primitives, iterators) come from the engine's own methods in a browser, and where a value cannot be told it is viewed, never handed on as it is. A browser cannot tell a `Proxy` from the object it fronts, so a module's own `Proxy` is described by its traps when slothlet reads its prototype and `constructor`.
+- **Cloning works on views as in Node.** `structuredClone` and `postMessage` (`MessagePort`, `BroadcastChannel`, `Worker`, `window`) are wrapped while an instance is up, so they copy the data behind a view another module was handed and the data of an api node ([PERMISSIONS.md](./PERMISSIONS.md#values-that-cross-between-modules)). `v8.serialize` is Node's alone.
 - **Permissions are a cooperative boundary in the browser, and cannot be made otherwise.** The permission system is an enforced boundary under the async runtime (module privacy + ALS isolation), which needs `async_hooks` and so is Node-only. A browser always runs the live runtime, where it is least-privilege among cooperative modules you trust, **not** a sandbox against adversarial code: any served module is importable by URL, page script has full DOM authority, and identity across deferred work rests on patched boundaries that code setting out to avoid them can step around. Unattributed work fails closed — it loses access rather than gaining any — but that is not the same as a sandbox. The blocking factor is the absence of an `AsyncLocalStorage` equivalent in browsers; if one ships (the TC39 `AsyncContext` proposal is the candidate), the enforced model becomes possible there too. Until then, isolate untrusted leaves in a Worker/iframe at the app level. See [PERMISSIONS.md → Why the browser cannot be made a hard boundary](./PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary).
 
 ## Verifying it works

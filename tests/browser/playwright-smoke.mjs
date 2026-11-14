@@ -57,17 +57,17 @@ const MIME = {
 
 /**
  * Build the smoke HTML page (importmap + browser-mode compose + result beacon).
- * @param {Record<string,string>} importmap
+ * @param {{imports: Record<string,string>, scopes: Record<string, Record<string,string>>}} importmap
  * @param {object} manifest
  * @returns {string}
  */
 function smokeHtml(importmap, manifest) {
 	const base = `http://localhost:${PORT}/${FIXTURE_REL}/`;
 	return `<!doctype html><meta charset="utf-8"><title>slothlet browser smoke</title>
-<script type="importmap">${JSON.stringify({ imports: importmap })}</script>
+<script type="importmap">${JSON.stringify(importmap)}</script>
 <script>window.__MANIFEST__ = ${JSON.stringify(manifest)};</script>
 <script type="module">
-const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, error: null };
+const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, error: null };
 const BASE = ${JSON.stringify(base)};
 const cfg = (extra) => ({ platform: "browser", base: BASE, manifest: window.__MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href, mode: "eager", ...extra });
 // calc may smart-flatten to a function or to an object exposing addViaSelf — handle both.
@@ -125,6 +125,20 @@ try {
 		out.perm = msg.includes("PERMISSION") ? "denied" : "other:" + msg;
 	}
 	if (typeof api2.shutdown === "function") await api2.shutdown();
+
+	// slothlet's own files are slothlet's: a script outside them resolves the main entry and the runtime, and none of
+	// slothlet's other specifiers.
+	const tried = [];
+	for (const spec of ["@cldmv/slothlet/helpers/instance-imports", "#handlers/context-async", "@cldmv/slothlet/i18n"]) {
+		try {
+			await import(spec);
+			tried.push("loaded:" + spec);
+		} catch {
+			tried.push("refused");
+		}
+	}
+	out.internal = tried.join(",");
+	out.runtime = typeof (await import("@cldmv/slothlet/runtime")).self;
 } catch (e) {
 	out.error = String((e && e.stack) || e);
 }
@@ -138,7 +152,7 @@ async function main() {
 	// slothletBase ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
 	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
 	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
-	const html = smokeHtml(importmap.imports, manifest);
+	const html = smokeHtml(importmap, manifest);
 
 	const server = createServer(async (req, res) => {
 		try {
@@ -206,6 +220,8 @@ async function main() {
 		events: String(smoke?.events).startsWith("fired"),
 		"api.add": smoke?.added === "mounted",
 		"perm=denied": smoke?.perm === "denied",
+		"internal=refused": smoke?.internal === "refused,refused,refused",
+		"runtime=loaded": smoke?.runtime === "function" || smoke?.runtime === "object",
 		"0 errors": errors.length === 0
 	};
 	const pass = Object.values(checks).every(Boolean);

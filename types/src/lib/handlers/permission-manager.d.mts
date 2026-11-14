@@ -95,6 +95,11 @@ export class PermissionManager extends ComponentBase {
      * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
      * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
      *
+     * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
+     * which is also what no `permissions` config means, and `"disabled"`) no event rule is evaluated and every
+     * subscription resolves "allow", as call and read rules are not evaluated there. An instance that has shut down
+     * resolves "deny".
+     *
      * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
      * @param {string} eventName - The event name being subscribed to / emitted.
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -307,6 +312,10 @@ export class PermissionManager extends ComponentBase {
      *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
      * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
      *   audit consumer can tell a query from the gate of a real call.
+     * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
+     *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
+     *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
+     *   allows it.
      * @returns {boolean} True if access is allowed.
      * @example
      * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -643,6 +652,15 @@ export class PermissionManager extends ComponentBase {
      */
     isEnabled(): boolean;
     /**
+     * Whether the permission system was on when the instance shut down. Values handed to modules as views while it
+     * was on are still held to what their holders could write then.
+     *
+     * @returns {boolean} True when it was.
+     * @example
+     * if (pm.isEnabled() || pm.wasOnAtShutdown()) { ... }
+     */
+    wasOnAtShutdown(): boolean;
+    /**
      * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
      * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
      * cover), or `"disabled"` (nothing applies).
@@ -737,6 +755,33 @@ export class PermissionManager extends ComponentBase {
      * await pm.shutdown();
      */
     shutdown(): Promise<void>;
+    /**
+     * Whether an allow rule for `callerPath` names something beneath `path` that a rule on `probePath`, a member of
+     * `path` no rule names, does not stand for: a more specific allow, which lets what it names through though the rules
+     * deny the caller the member's path and what it holds otherwise. It answers for what the rules could allow, so it
+     * errs toward yes: a condition is taken to match. Kept for the rule epoch.
+     * @param {string|null} callerPath - The caller's api path; null for a caller with none, which nothing allows.
+     * @param {string} path - The member's api path.
+     * @param {string} probePath - The path of a member of it no rule names.
+     * @returns {boolean} Whether such a rule exists.
+     * @internal
+     *
+     * @example
+     * // rules: deny reader.** → owner.config.nested, allow reader.** → owner.config.nested.public
+     * pm.allowsBeneath("reader", "owner.config.nested", probe); // true
+     */
+    allowsBeneath(callerPath: string | null, path: string, probePath: string): boolean;
+    /**
+     * A number that changes whenever the outcome of a rule may have changed: a rule added or removed, the system
+     * switched on or off, a module's rules dropped. What was decided from the rules and kept beside a value (whether
+     * a function is handed another module's value itself or a view) is good for the epoch it was decided in.
+     * @returns {number} The current rule epoch.
+     * @example
+     * const before = pm.ruleEpoch;
+     * pm.addRule(rule);
+     * pm.ruleEpoch !== before; // true
+     */
+    get ruleEpoch(): number;
     /**
      * Emit a debug message. Delegates to slothlet.debug().
      *

@@ -41,6 +41,8 @@ import { markSlothletProxy } from "#handlers/framework-internals";
 import { recordSharedExports } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
+import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -57,6 +59,11 @@ function getCurrentRuntime() {
 	// live when a live instance has a stale currentInstanceID from a previous call.
 	const asyncCtx = asyncRuntime.tryGetContext();
 	if (asyncCtx) {
+		// A file's load runs in a store of its own. An instance on the live runtime which that file built and called is
+		// not that load: while one of its modules is executing, its own runtime answers.
+		if (asyncCtx.moduleLoad && liveRuntime.runningInstanceID() !== null && liveRuntime.getCallerIdentity()?.currentWrapper) {
+			return liveRuntimeModule;
+		}
 		return asyncRuntimeModule;
 	}
 
@@ -102,7 +109,7 @@ export class SlothletSelf {}
  * // Inside an API function:
  * const result = await self.math.add(1, 2);
  */
-export const self = new Proxy(
+export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -167,7 +174,7 @@ export const self = new Proxy(
  * // context.run() overrides it only for the duration of that one call:
  * await api.slothlet.context.run({ userId: 42 }, myFn);
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -204,16 +211,15 @@ export const context = new Proxy(
  * import { instanceID } from "@cldmv/slothlet/runtime";
  * console.log(instanceID); // e.g. "slothlet-1"
  */
-export const instanceID = new Proxy(
+export const instanceID = new NativeProxy(
 	{},
 	{
+		// Both runtimes export `instanceID` alike: read as the id inside a call, as nothing outside one (#764).
 		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? runtime.instanceID[prop] : undefined;
+			return getCurrentRuntime().instanceID[prop];
 		},
 		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? prop in runtime.instanceID : false;
+			return prop in getCurrentRuntime().instanceID;
 		}
 	}
 );
@@ -224,3 +230,6 @@ for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // The runtime is made by no module and shared by every instance: a module handing it out hands out the runtime itself
 // (#597).
 recordSharedExports(runtimeNamespace);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, runtimeNamespace);

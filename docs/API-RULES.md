@@ -64,19 +64,19 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 
 ## Rule Categories
 
-| Category                | Rules       | Focus                       | Cross-References                                                                       |
-| ----------------------- | ----------- | --------------------------- | -------------------------------------------------------------------------------------- |
-| **Basic Flattening**    | 1, 7, 8     | Core flattening patterns    | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md)  |
-| **Export Handling**     | 2, 4, 5     | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C18](API-RULES/API-RULES-CONDITIONS.md)  |
-| **Special Cases**       | 3, 6, 9, 10 | Edge cases and protections  | [C01, C09a, C14-C16](API-RULES/API-RULES-CONDITIONS.md)                                |
-| **AddApi Extensions**   | 11, 12, 13  | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C24, C25](API-RULES/API-RULES-CONDITIONS.md) |
-| **Discovery**           | 14, 15      | File/package → leaf gating  | [G01-G14](API-RULES/API-DISCOVERY-CONDITIONS.md)                                       |
-| **Naming**              | 16          | Leaf-name derivation        | [N01-N08](API-RULES/API-NAMING-CONDITIONS.md)                                          |
-| **Collision/Ownership** | 12, 17      | Which value wins; ownership | [O01-O15](API-RULES/API-COLLISION-CONDITIONS.md)                                       |
-| **Mutation**            | 18          | Runtime add/remove/reload   | [M01-M09](API-RULES/API-MUTATION-CONDITIONS.md)                                        |
-| **Versioning**          | 19          | Versioned mounts            | [V01-V08](API-RULES/API-VERSIONING-CONDITIONS.md)                                      |
-| **Routines**            | 20          | Stackable routines/cascades | [T01-T10](API-RULES/API-ROUTINE-CONDITIONS.md)                                         |
-| **Built-in**            | 21          | Reserved keys/`slothlet.*`  | [B01-B04](API-RULES/API-BUILTIN-CONDITIONS.md)                                         |
+| Category                | Rules       | Focus                       | Cross-References                                                                                |
+| ----------------------- | ----------- | --------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Basic Flattening**    | 1, 7, 8, 22 | Core flattening patterns    | [F01-F05, F09](API-RULES/API-FLATTENING.md) → [C01-C11, C26](API-RULES/API-RULES-CONDITIONS.md) |
+| **Export Handling**     | 2, 4, 5     | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C18](API-RULES/API-RULES-CONDITIONS.md)           |
+| **Special Cases**       | 3, 6, 9, 10 | Edge cases and protections  | [C01, C09a, C14-C16](API-RULES/API-RULES-CONDITIONS.md)                                         |
+| **AddApi Extensions**   | 11, 12, 13  | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C24, C25](API-RULES/API-RULES-CONDITIONS.md)          |
+| **Discovery**           | 14, 15      | File/package → leaf gating  | [G01-G14](API-RULES/API-DISCOVERY-CONDITIONS.md)                                                |
+| **Naming**              | 16          | Leaf-name derivation        | [N01-N08](API-RULES/API-NAMING-CONDITIONS.md)                                                   |
+| **Collision/Ownership** | 12, 17      | Which value wins; ownership | [O01-O15](API-RULES/API-COLLISION-CONDITIONS.md)                                                |
+| **Mutation**            | 18          | Runtime add/remove/reload   | [M01-M09](API-RULES/API-MUTATION-CONDITIONS.md)                                                 |
+| **Versioning**          | 19          | Versioned mounts            | [V01-V08](API-RULES/API-VERSIONING-CONDITIONS.md)                                               |
+| **Routines**            | 20          | Stackable routines/cascades | [T01-T10](API-RULES/API-ROUTINE-CONDITIONS.md)                                                  |
+| **Built-in**            | 21          | Reserved keys/`slothlet.*`  | [B01-B04](API-RULES/API-BUILTIN-CONDITIONS.md)                                                  |
 
 ---
 
@@ -103,8 +103,9 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 19. [Rule 19: Versioned Mounts](#rule-19-versioned-mounts)
 20. [Rule 20: Stackable Routines & Cascades](#rule-20-stackable-routines--cascades)
 21. [Rule 21: Reserved Keys & Built-in Surface](#rule-21-reserved-keys--built-in-surface)
-22. [Verification Status](#verification-status)
-23. [Cross-Reference Index](#cross-reference-index)
+22. [Rule 22: Same-Named Folder Deduplication](#rule-22-same-named-folder-deduplication)
+23. [Verification Status](#verification-status)
+24. [Cross-Reference Index](#cross-reference-index)
 
 ---
 
@@ -168,7 +169,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **User Guide**: [F01](API-RULES/API-FLATTENING.md#f01)
 **Technical**: [C07, C10, C13, C20, C21](API-RULES/API-RULES-CONDITIONS.md#c10)
 
-**Condition**: A folder contains a single file whose exported function matches the folder/flatten anchor. When no single-function match applies, the default fallback (C07) preserves each file as its own namespace.
+**Condition**: A folder contains a single file whose exported function matches the folder/flatten anchor. A folder's only file whose default export is a function is the folder whatever the file or function is called ([Rule 8](#rule-8-object--namespace-default-flattening), [F05](API-RULES/API-FLATTENING.md#f05)). When neither applies, the default fallback (C07) preserves each file as its own namespace: every file of a multi-file folder, and a single file with no default-export function (`e/x.mjs` exporting `function x` is `api.e.x()`).
 **Behavior**: The matching single-function file's export is promoted to the folder level; otherwise namespaces are preserved.
 
 **Verified Examples**:
@@ -359,7 +360,7 @@ api.config.port; // 3000
 **User Guide**: [F04](API-RULES/API-FLATTENING.md#f04), [F05](API-RULES/API-FLATTENING.md#f05)
 **Technical**: [C11, C17, C23](API-RULES/API-RULES-CONDITIONS.md#c11)
 
-**Condition**: A module's default export is an object or function that becomes the namespace itself (e.g. a folder-name-matching file with a default export)
+**Condition**: A module's default export is an object or function that becomes the namespace itself (e.g. a folder-name-matching file with a default export). A folder's only file whose default export is a function becomes the folder whatever the file or function is called ([F05](API-RULES/API-FLATTENING.md#f05)); its other exports are the folder's members
 **Source Files**: `api_tests/api_test/logger.mjs`
 **Implementation**: `getFlatteningDecision()` → single module default export promotion
 
@@ -387,6 +388,17 @@ api.logger.utils.debug("x"); // other files remain as namespace properties
 ```
 
 This pattern applies consistently at root level and category level.
+
+**Single-File Folder Pattern** ([F05](API-RULES/API-FLATTENING.md#f05)): a folder holding one file and nothing else is that file's default-export function, whatever either is called:
+
+```javascript
+// File: e/x.mjs → export default function run(); export function helper()
+api.e(); // calls run
+api.e.helper(); // the file's other exports are members of the folder's function
+// not api.e.x() / api.e.x.helper()
+```
+
+A default export that is not a function (an object, a `Map`, a primitive) keeps the file's level (`api.e.x`).
 
 **Technical Implementation**:
 
@@ -646,7 +658,7 @@ await api.slothlet.api.add("config", "./new-config", {
 
 **Purpose**: When `api.slothlet.api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exports up to `api.config.*`.
 
-**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value's `filePath` has its parent directory equal to `resolvedFolderPath/lastPart` (direct child check), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key.
+**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value comes from a direct child of the mounted folder (a file at its root, or a file of its subfolder named `lastPart`), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key. The subfolder named `lastPart` is the one [Rule 22](#rule-22-same-named-folder-deduplication) leaves standing: when `folder/config/` holds nothing but `config/`, the inner folder is that direct child.
 
 **Verified Example**:
 
@@ -667,16 +679,41 @@ api.config.setNestedConfig(); // ✅
 api.config.main.getRootInfo(); // ✅ other files unaffected
 ```
 
-**Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
+**Guard - `isDirectChild`**: Rule 13 hoists one level, once. Only the direct child is hoisted; a folder named `lastPart` inside it is a nested namespace and stays:
 
 ```javascript
-// Should NOT hoist (services/services/services.mjs):
-// api.add("services", folder)  →  newApi has key "services"
-// but filePath = .../services/services/services.mjs
-//     dirname  = .../services/services   ≠ resolvedFolderPath/services
-// → Rule 13 does NOT fire
-// → api.services.services.getNestedService remains properly nested ✅
+// Folder structure: api_smart_flatten_nested/
+//   root.mjs
+//   services/
+//     api.mjs
+//     services/
+//       services.mjs   ← exports getNestedService
+
+await api.slothlet.api.add("services", "./api_smart_flatten_nested", {});
+
+api.services.api.getApiService(); // ✅ the direct child services/ is hoisted
+api.services.services.getNestedService(); // ✅ services/services/ inside it stays nested
+api.services.root.getRootFunction(); // ✅ other files unaffected
 ```
+
+The same holds when the inner folder has no self-named file (`c/z.mjs` + `c/c/x.mjs` mounted at `c` is `api.c.z` and `api.c.c.x`).
+
+**Combined with Rule 22**: a direct child that holds nothing but a same-named folder is one level, so it is hoisted as the folder it stands for would be. The mount builds what the base load builds for the same folder:
+
+```javascript
+// Folder structure: addfolder/
+//   e/
+//     e/
+//       e.mjs      ← exports a, b
+
+await api.slothlet.api.add("e", "./addfolder", {});
+
+api.e.a(); // ✅ as addfolder/e/e.mjs builds it (not api.e.e.a)
+```
+
+The direct child is composed by the same rules in eager and lazy mode before it is hoisted: a folder of one generic file (`e/main.mjs` or `e/e/main.mjs`, [Rule 10](#rule-10-generic-filename-parent-level-promotion)) mounted at `e` is `api.e.a`, a callable self-named file with a sibling (`e/e.mjs` default + `e/y.mjs`) is `api.e()` and `api.e.y`.
+
+Every node records the path it is placed at, after the hoist: `api.e.a.__metadata.apiPath === "e.a"`, and permission rules and hooks name `e.a`.
 
 **Childless leaf case**: When the matching key's value has no children of its own — a single self-named file such as `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)` — there is nothing to spread up from it. The value itself is what belongs at the mount path, so Rule 13 uses it directly rather than hoisting an empty set of children:
 
@@ -689,7 +726,7 @@ await api.slothlet.api.add("thing", "./addfolder", {});
 api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 ```
 
-**Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
+**Implementation**: `src/lib/builders/modes-processor.mjs` decides which entry is the direct child as it places it (`hoistedOntoMount`) and records the mount path on it; `src/lib/handlers/api-manager.mjs` hoists that node, immediately after the `buildAPI` call, before `setValueAtPath`
 
 ---
 
@@ -797,6 +834,41 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 ---
 
+## Rule 22: Same-Named Folder Deduplication
+
+**Category**: Flattening
+**Status**: ✅ Implemented (`api_tests/api_test_folder_dedupe`)
+**User Guide**: [F09](API-RULES/API-FLATTENING.md#f09-same-named-folder-deduplication)
+**Technical**: [C26](API-RULES/API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)
+
+**Purpose**: A folder whose only entry is a folder of the same name is one level, not two. The outer folder is dropped and the inner one stands for it.
+
+**Condition**: While a subdirectory holds no files and exactly one subdirectory, and that subdirectory's sanitized name equals its own, the inner directory is built in its place. Anything else beside the inner folder (a file, another folder) keeps both levels.
+
+**Verified Example**:
+
+```javascript
+// Folder structure: api_test_folder_dedupe/
+//   e/e/x.mjs                  ← exports where()
+//   deep/deep/{part,other}.mjs
+//   c/z.mjs  +  c/c/{x,y}.mjs
+//   t/t/t/x.mjs
+
+api.e.x.where(); // ✅ "e.x.where"        (not api.e.e.x)
+api.deep.part.where(); // ✅ "deep.part.where"
+api.c.c.x.where(); // ✅ "c.c.x.where"    (c/z.mjs beside c/c/: both levels stay)
+api.c.z.where(); // ✅ "c.z.where"
+api.t.x.where(); // ✅ "t.x.where"        (repeats while it holds)
+```
+
+**Recorded path**: every node records the path it is placed at (`api.e.x.where.__metadata.apiPath === "e.x.where"`), derived from the level it is placed on and the key it is assigned under. Permission rules, hooks, ownership and metadata all read that one path, so a rule or hook pattern names the path the node is called at.
+
+**History**: 2.x collapsed these folders; 3.0.0 through 3.24.0 built both levels, and recorded a repeated segment once whether or not the tree had it (#743). 3.25.0 restores the 2.x shape and derives the recorded path from the placement.
+
+**Implementation**: `src/lib/builders/modes-processor.mjs` - `#collapseSameNamedFolder`, applied to each subdirectory in eager and lazy mode
+
+---
+
 ## Verification Status
 
 | Rule | Title                                            | Status      | Test Source                                               |
@@ -822,6 +894,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 | 19   | Versioned Mounts                                 | ✅ Verified | `src/lib/handlers/version-manager.mjs`                    |
 | 20   | Stackable Routines & Cascades                    | ✅ Verified | `src/lib/handlers/routine-manager.mjs`                    |
 | 21   | Reserved Keys & Built-in Surface                 | ✅ Verified | `src/lib/builders/api_builder.mjs`                        |
+| 22   | Same-Named Folder Deduplication                  | ✅ Verified | `api_tests/api_test_folder_dedupe`                        |
 
 ---
 
@@ -831,17 +904,17 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 Each rule's conditions live in a per-family series. The flatten/placement series (`C##`) stays in `API-RULES-CONDITIONS.md`; every other family has its own document.
 
-| Series | Family                      | Rules             | Document                                                               |
-| ------ | --------------------------- | ----------------- | ---------------------------------------------------------------------- |
-| `C##`  | Flattening / placement      | 1-10              | [API-RULES-CONDITIONS.md](API-RULES/API-RULES-CONDITIONS.md)           |
-| `F##`  | Flattening patterns (guide) | 1, 4, 7, 8, 10-13 | [API-FLATTENING.md](API-RULES/API-FLATTENING.md)                       |
-| `G##`  | Discovery / inclusion       | 3, 14, 15         | [API-DISCOVERY-CONDITIONS.md](API-RULES/API-DISCOVERY-CONDITIONS.md)   |
-| `N##`  | Leaf-name derivation        | 16                | [API-NAMING-CONDITIONS.md](API-RULES/API-NAMING-CONDITIONS.md)         |
-| `O##`  | Collision / ownership       | 12, 17            | [API-COLLISION-CONDITIONS.md](API-RULES/API-COLLISION-CONDITIONS.md)   |
-| `M##`  | Dynamic mutation            | 3, 18             | [API-MUTATION-CONDITIONS.md](API-RULES/API-MUTATION-CONDITIONS.md)     |
-| `V##`  | Versioned mounts            | 19                | [API-VERSIONING-CONDITIONS.md](API-RULES/API-VERSIONING-CONDITIONS.md) |
-| `T##`  | Routines / cascades         | 20                | [API-ROUTINE-CONDITIONS.md](API-RULES/API-ROUTINE-CONDITIONS.md)       |
-| `B##`  | Reserved keys / built-ins   | 21                | [API-BUILTIN-CONDITIONS.md](API-RULES/API-BUILTIN-CONDITIONS.md)       |
+| Series | Family                      | Rules                 | Document                                                               |
+| ------ | --------------------------- | --------------------- | ---------------------------------------------------------------------- |
+| `C##`  | Flattening / placement      | 1-10, 22              | [API-RULES-CONDITIONS.md](API-RULES/API-RULES-CONDITIONS.md)           |
+| `F##`  | Flattening patterns (guide) | 1, 4, 7, 8, 10-13, 22 | [API-FLATTENING.md](API-RULES/API-FLATTENING.md)                       |
+| `G##`  | Discovery / inclusion       | 3, 14, 15             | [API-DISCOVERY-CONDITIONS.md](API-RULES/API-DISCOVERY-CONDITIONS.md)   |
+| `N##`  | Leaf-name derivation        | 16                    | [API-NAMING-CONDITIONS.md](API-RULES/API-NAMING-CONDITIONS.md)         |
+| `O##`  | Collision / ownership       | 12, 17                | [API-COLLISION-CONDITIONS.md](API-RULES/API-COLLISION-CONDITIONS.md)   |
+| `M##`  | Dynamic mutation            | 3, 18                 | [API-MUTATION-CONDITIONS.md](API-RULES/API-MUTATION-CONDITIONS.md)     |
+| `V##`  | Versioned mounts            | 19                    | [API-VERSIONING-CONDITIONS.md](API-RULES/API-VERSIONING-CONDITIONS.md) |
+| `T##`  | Routines / cascades         | 20                    | [API-ROUTINE-CONDITIONS.md](API-RULES/API-ROUTINE-CONDITIONS.md)       |
+| `B##`  | Reserved keys / built-ins   | 21                    | [API-BUILTIN-CONDITIONS.md](API-RULES/API-BUILTIN-CONDITIONS.md)       |
 
 ### By Rule → Conditions (`C##` flatten series)
 

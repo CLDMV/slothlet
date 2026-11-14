@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
+import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
@@ -54,7 +55,7 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		this._instanceId = `metadata_${this.clock.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 
 	// Secure WeakMap storage for immutable system metadata
@@ -62,7 +63,7 @@ export class Metadata extends ComponentBase {
 
 	// Centralized user metadata storage - keyed by moduleID
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
-	#globalUserMetadata = Object.create(null); // global user metadata (applies to all)
+	#globalUserMetadata = Objects.create(null); // global user metadata (applies to all)
 
 	/**
 	 * Merge metadata values while preserving nested plain-object structure.
@@ -127,7 +128,7 @@ export class Metadata extends ComponentBase {
 
 			ancestors.add(candidate);
 			try {
-				for (const nestedValue of Object.values(candidate)) {
+				for (const nestedValue of Objects.values(candidate)) {
 					if (utilities.isPlainObject(nestedValue)) {
 						validate(nestedValue, ancestors);
 					}
@@ -176,7 +177,7 @@ export class Metadata extends ComponentBase {
 		const utilities = this.slothlet.helpers?.utilities;
 
 		const walk = (candidate, path = "") => {
-			for (const [key, nestedValue] of Object.entries(candidate)) {
+			for (const [key, nestedValue] of Objects.entries(candidate)) {
 				if (blocked.has(key)) {
 					const fullPath = path ? `${path}.${key}` : key;
 					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
@@ -204,13 +205,13 @@ export class Metadata extends ComponentBase {
 	 */
 	#deepFreeze(obj) {
 		// Already frozen
-		if (Object.isFrozen(obj)) return obj;
+		if (Objects.isFrozen(obj)) return obj;
 
 		// Freeze the object itself
-		Object.freeze(obj);
+		Objects.freeze(obj);
 
 		// Recursively freeze all properties
-		Object.getOwnPropertyNames(obj).forEach((prop) => {
+		Objects.getOwnPropertyNames(obj).forEach((prop) => {
 			if (obj[prop] !== null && typeof obj[prop] === "object") {
 				this.#deepFreeze(obj[prop]);
 			}
@@ -271,14 +272,14 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Store in secure WeakMap (inaccessible externally)
-		const frozenSystem = Object.freeze({
+		const frozenSystem = Objects.freeze({
 			filePath: systemData.filePath,
 			sourceFolder: sourceFolder,
 			apiPath: systemData.apiPath,
 			moduleID: fullModuleID,
 			// Raw owning-module id, verbatim — the colon-safe source for base recovery (#303).
 			baseModuleID: systemData.moduleID,
-			taggedAt: Date.now()
+			taggedAt: this.clock.now()
 		});
 
 		this.#secureMetadata.set(target, frozenSystem);
@@ -339,7 +340,7 @@ export class Metadata extends ComponentBase {
 				const parentPath = parts.slice(0, i).join(".");
 				const parentMeta = this.#userMetadataStore.get(parentPath);
 				if (parentMeta?.metadata) {
-					Object.assign(collected, parentMeta.metadata);
+					Objects.assign(collected, parentMeta.metadata);
 				}
 			}
 
@@ -471,7 +472,7 @@ export class Metadata extends ComponentBase {
 
 			if (key === undefined) {
 				this.#userMetadataStore.delete(storeKey);
-			} else if (Array.isArray(key)) {
+			} else if (Arrays.isArray(key)) {
 				for (const k of key) {
 					if (typeof k !== "string") {
 						throw new this.SlothletError("INVALID_METADATA_KEY", {
@@ -483,8 +484,8 @@ export class Metadata extends ComponentBase {
 					delete storeEntry.metadata[k];
 				}
 			} else if (typeof key === "object" && key !== null) {
-				for (const [metadataKey, nestedKeys] of Object.entries(key)) {
-					if (!Array.isArray(nestedKeys)) {
+				for (const [metadataKey, nestedKeys] of Objects.entries(key)) {
+					if (!Arrays.isArray(nestedKeys)) {
 						throw new this.SlothletError("INVALID_METADATA_KEY", {
 							key: metadataKey,
 							type: typeof nestedKeys,
@@ -613,7 +614,7 @@ export class Metadata extends ComponentBase {
 
 		const metadataObj = typeof keyOrObj === "string" ? { [keyOrObj]: value } : keyOrObj;
 
-		if (!metadataObj || typeof metadataObj !== "object" || Array.isArray(metadataObj)) {
+		if (!metadataObj || typeof metadataObj !== "object" || Arrays.isArray(metadataObj)) {
 			throw new this.SlothletError(
 				"INVALID_ARGUMENT",
 				{ argument: "keyOrObj", expected: "string key or plain object", received: typeof keyOrObj },
@@ -649,7 +650,7 @@ export class Metadata extends ComponentBase {
 			const parentPath = parts.slice(0, i).join(".");
 			const parentMeta = this.#userMetadataStore.get(parentPath);
 			if (parentMeta?.metadata) {
-				Object.assign(collected, parentMeta.metadata);
+				Objects.assign(collected, parentMeta.metadata);
 			}
 		}
 		return { ...this.#globalUserMetadata, ...collected };
@@ -676,7 +677,7 @@ export class Metadata extends ComponentBase {
 
 		if (key === undefined) {
 			this.#userMetadataStore.delete(apiPath);
-		} else if (Array.isArray(key)) {
+		} else if (Arrays.isArray(key)) {
 			for (const k of key) {
 				if (typeof k !== "string") {
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
@@ -744,7 +745,7 @@ export class Metadata extends ComponentBase {
 
 		// Restore global metadata (merge, existing keys win)
 		if (state.globalMetadata) {
-			for (const [k, v] of Object.entries(state.globalMetadata)) {
+			for (const [k, v] of Objects.entries(state.globalMetadata)) {
 				if (!(k in this.#globalUserMetadata)) {
 					this.#globalUserMetadata[k] = v;
 				}

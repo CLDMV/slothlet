@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:07-08:00 (1794183787)
+ *	@Last modified time: 2026-11-13T21:48:11-08:00 (1794635291)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,10 +110,16 @@ import {
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
+import { enableClonePatching, disableClonePatching } from "@cldmv/slothlet/helpers/clone-context";
+import { enableAsyncResourcePatching, disableAsyncResourcePatching } from "@cldmv/slothlet/helpers/async-resource-context";
+import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cldmv/slothlet/helpers/function-source-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -172,22 +178,22 @@ const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
 function copyConfigValue(value, freeze, seen = new Map()) {
 	if (!value || typeof value !== "object") return value;
 	if (seen.has(value)) return seen.get(value);
-	if (Array.isArray(value)) {
+	if (Arrays.isArray(value)) {
 		const out = [];
 		seen.set(value, out);
 		for (const item of value) out.push(copyConfigValue(item, freeze, seen));
-		return freeze ? Object.freeze(out) : out;
+		return freeze ? Objects.freeze(out) : out;
 	}
-	const proto = Object.getPrototypeOf(value);
-	if (proto !== Object.prototype && proto !== null) return value;
-	const out = proto === null ? Object.create(null) : {};
+	const proto = Objects.getPrototypeOf(value);
+	if (proto !== Objects.prototype && proto !== null) return value;
+	const out = proto === null ? Objects.create(null) : {};
 	seen.set(value, out);
 	for (const key of Reflect.ownKeys(value)) {
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(value, key);
 		if (!descriptor.enumerable) continue;
 		out[key] = copyConfigValue(value[key], freeze, seen);
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -204,10 +210,10 @@ function copyConfigValue(value, freeze, seen = new Map()) {
  */
 function copyTopLevelConfig(config, freeze) {
 	const out = {};
-	for (const key of Object.keys(config)) {
+	for (const key of Objects.keys(config)) {
 		out[key] = CONFIG_IDENTITY_KEYS.has(key) ? config[key] : copyConfigValue(config[key], freeze);
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -221,6 +227,72 @@ class Slothlet {
 
 	// Properties to skip during recursive operations (at any depth)
 	static SKIP_PROPS = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+
+	/**
+	 * The handle this instance claimed for its instance ID (see claimInstanceScope in helpers/instance-imports): how
+	 * its CommonJS files are loaded as its own, and how what slothlet keeps about its files is released. Held here
+	 * alone.
+	 * @type {{instanceID: string, require: function(string, object=): *, release: function(): void}|null}
+	 */
+	#importScope = null;
+
+	/**
+	 * The clock this instance reads the time and schedules its deferred work with (the `clock` option): held here alone,
+	 * never part of the config the instance hands out, so only the host that created the instance can supply it.
+	 * @type {import("@cldmv/slothlet/helpers/clock").Clock}
+	 */
+	#clock = DEFAULT_CLOCK;
+
+	/**
+	 * The instance's clock: the functions the host gave in the `clock` option, or the ones slothlet loaded with.
+	 * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The frozen clock.
+	 * @internal
+	 * @example
+	 * slothlet.clock.now();
+	 */
+	get clock() {
+		return this.#clock;
+	}
+
+	/**
+	 * Claim the instance's ID for its files, before any of them load. An ID this instance already holds stays held;
+	 * one it held before is released.
+	 * @returns {void}
+	 * @throws {SlothletError} INSTANCE_ID_IN_USE when the ID is held by something else in the process.
+	 * @private
+	 */
+	#claimImportScope() {
+		if (this.#importScope?.instanceID === this.instanceID) return;
+		this.#releaseImportScope();
+		const scope = claimInstanceScope(this.instanceID);
+		if (!scope) throw new this.SlothletError("INSTANCE_ID_IN_USE", { instanceID: this.instanceID, validationError: true });
+		this.#importScope = scope;
+	}
+
+	/**
+	 * Release what slothlet keeps about the files loaded under the instance ID this instance holds.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseImportScope() {
+		this.#importScope?.release();
+		this.#importScope = null;
+	}
+
+	/**
+	 * Run a CommonJS file of this instance through the instance's private CommonJS cache (see scopeRequire in
+	 * helpers/instance-imports).
+	 * @param {string} filePath - Absolute path of the CommonJS file.
+	 * @param {object} [options] - `fresh`, `importer` and `mount`, as scopeRequire takes them.
+	 * @returns {*} The file's `module.exports`.
+	 * @package
+	 * @example
+	 * slothlet.requireInScope("/app/api/counter.cjs", { fresh: true });
+	 */
+	requireInScope(filePath, options) {
+		this.#claimImportScope();
+		return this.#importScope.require(filePath, options);
+	}
 
 	constructor() {
 		// Expose error classes to components (no imports needed)
@@ -314,7 +386,7 @@ class Slothlet {
 					const module = await import(url.pathToFileURL(filePath).href);
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
-					const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+					const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
 
 					for (const ClassExport of classExports) {
 						const propName = ClassExport.slothletProperty;
@@ -403,7 +475,7 @@ class Slothlet {
 			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
-			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+			const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
 
 			for (const ClassExport of classExports) {
 				const propName = ClassExport.slothletProperty;
@@ -431,8 +503,8 @@ class Slothlet {
 			return;
 		}
 		const lifecycle = this.handlers.lifecycle;
-		for (const [event, handler] of Object.entries(map)) {
-			const handlers = Array.isArray(handler) ? handler : [handler];
+		for (const [event, handler] of Objects.entries(map)) {
+			const handlers = Arrays.isArray(handler) ? handler : [handler];
 			for (const fn of handlers) {
 				lifecycle.subscribe(event, fn);
 			}
@@ -797,7 +869,7 @@ class Slothlet {
 				if (this.handlers?.lifecycle) {
 					this.handlers.lifecycle.emit("materialized:complete", {
 						total: this._totalLazyCount,
-						timestamp: Date.now()
+						timestamp: this.#clock.now()
 					});
 				}
 			}
@@ -830,17 +902,17 @@ class Slothlet {
 	 */
 	_captureEnvSnapshot(envConfig) {
 		const rawInclude = envConfig?.include;
-		const include = Array.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const include = Arrays.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
 		const useAllowlist = include !== null && include.length > 0;
 		const raw = useAllowlist
 			? include.reduce((acc, key) => {
-					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
-						acc[key] = process.env[key];
+					if (Objects.prototype.hasOwnProperty.call(NativeProcess.env, key)) {
+						acc[key] = NativeProcess.env[key];
 					}
 					return acc;
-				}, Object.create(null))
-			: { ...process.env };
-		return Object.freeze(raw);
+				}, Objects.create(null))
+			: { ...NativeProcess.env };
+		return Objects.freeze(raw);
 	}
 
 	/**
@@ -862,6 +934,14 @@ class Slothlet {
 	 * });
 	 */
 	async load(config = {}, preservedInstanceID = null) {
+		// The host's clock is read once and kept on the instance, never in the config the instance hands out. A reload
+		// passes the normalised config back in, which has none: the instance keeps the clock it has.
+		if (config.clock !== undefined) {
+			this.#clock = normalizeClockConfig(config.clock);
+			const { clock: _, ...rest } = config;
+			config = rest;
+		}
+
 		// Store raw config for components to access if needed
 		this.config = config;
 
@@ -881,13 +961,26 @@ class Slothlet {
 		// browser, and even when running browser-mode tests under Node we must not
 		// leak Node env into the browser-mode api.slothlet.env surface.
 		if (!this.envSnapshot) {
-			this.envSnapshot = this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
+			this.envSnapshot = this.envTarget === "browser" ? Objects.freeze(Objects.create(null)) : this._captureEnvSnapshot(config.env);
 		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
 		// produced inside _initializeComponents() are visible even before transformConfig runs.
 		// Will be re-initialised below with the fully normalised config.
 		this.debugLogger = new SlothletDebug(config);
+
+		// Normalise `permissions` once, up front, so the PermissionManager built by _initializeComponents() reads the
+		// normalised section (#772) and transformConfig() below normalises that same snapshot, never a second read of the
+		// raw value. An invalid value is left raw here: transformConfig() reports it as INVALID_CONFIG.
+		let normalizedConfig = config;
+		if (config.permissions !== undefined) {
+			try {
+				normalizedConfig = { ...config, permissions: normalizePermissionsConfig(config.permissions) };
+			} catch {
+				normalizedConfig = config;
+			}
+		}
+		this.config = normalizedConfig;
 
 		// Initialize all components via auto-discovery BEFORE transforming config
 		// This allows config helpers to be component classes
@@ -908,7 +1001,7 @@ class Slothlet {
 		this._setupLifecycleSubscribers();
 
 		// Transform and validate config using component classes
-		this.config = this.helpers.config.transformConfig(config);
+		this.config = this.helpers.config.transformConfig(normalizedConfig);
 
 		// Default routines present in the normalized routines config make their root paths host-only
 		// (#529) — decided here, per load, once the effective list is known.
@@ -944,6 +1037,8 @@ class Slothlet {
 
 		// Use preserved instance ID (from reload) or generate new one
 		this.instanceID = preservedInstanceID || this.helpers.utilities.generateId();
+		// The ID is claimed for this instance's files before any of them load.
+		this.#claimImportScope();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -972,10 +1067,10 @@ class Slothlet {
 		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
 			// Reload: DONT reuse store, delete old and create fresh
 			this.contextManager.cleanup(preservedInstanceID);
-			store = this.contextManager.initialize(this.instanceID, this.config);
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		} else {
 			// Fresh load: initialize new store
-			store = this.contextManager.initialize(this.instanceID, this.config);
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		}
 		// Mark this base store as the trusted root immediately, before any internal tree walk
 		// (ownership registration, materialization) reads through the permission read-gate. A
@@ -983,7 +1078,7 @@ class Slothlet {
 		// resolved context carries this marker — the basis for failing closed on absent caller.
 		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
 		// only the genuine base store and scope stores explicitly descended from it are trusted.
-		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -1012,8 +1107,20 @@ class Slothlet {
 		// nothing for this patch, which runs on every `then` in the process (#601 review).
 		if (typeof this.contextManager.runRegisteredAsHost === "function") {
 			enablePromisePatching();
+			// `AsyncLocalStorage.snapshot()` / `bind()` and `AsyncResource` restore Node's async context, which the live
+			// runtime's identity is not part of: what they run is pinned to the caller that made them. Live runtime
+			// only, as the promise patch is, and released with it.
+			enableAsyncResourcePatching();
 			promisePatchHolders.add(this.instanceID);
 		}
+
+		// The platform's cloning functions (`structuredClone`, `v8.serialize`, `postMessage`) refuse a Proxy, and what one
+		// module hands another is a view while the permission system is on: the patch lets them copy the data behind it.
+		enableClonePatching();
+
+		// `Function.prototype.toString.call(node)` answers native code for any Proxy, and an api node of a function is
+		// one: the patch answers the function's source, as `node.toString()` does (#750).
+		enableFunctionSourcePatching();
 
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
@@ -1074,7 +1181,7 @@ class Slothlet {
 				/* v8 ignore next */
 				collisionMode: this.config.collision?.initial || "merge",
 				config: { ...this.config },
-				timestamp: Date.now()
+				timestamp: this.#clock.now()
 			});
 		}
 
@@ -1084,7 +1191,7 @@ class Slothlet {
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {
 			// Set as global metadata so it's inherited by all future api.add() calls
-			for (const [key, value] of Object.entries(this.config.metadata)) {
+			for (const [key, value] of Objects.entries(this.config.metadata)) {
 				this.handlers.metadata.setGlobalMetadata(key, value);
 			}
 
@@ -1114,7 +1221,7 @@ class Slothlet {
 			const proxyTarget = isCallable ? function () {} : {};
 
 			this.boundApi = markSlothletProxy(
-				new Proxy(proxyTarget, {
+				new NativeProxy(proxyTarget, {
 					get: (target, prop) => (this.api ? this.api[prop] : undefined),
 					set: (target, prop, value) => {
 						if (this.api) {
@@ -1130,10 +1237,10 @@ class Slothlet {
 					getOwnPropertyDescriptor: (target, prop) => {
 						// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
 						if (isCallable && prop === "prototype") {
-							return Object.getOwnPropertyDescriptor(target, prop);
+							return Objects.getOwnPropertyDescriptor(target, prop);
 						}
 						if (this.api && prop in this.api) {
-							const desc = Object.getOwnPropertyDescriptor(this.api, prop);
+							const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
 							if (desc) {
 								return { ...desc, configurable: true };
 							}
@@ -1155,7 +1262,7 @@ class Slothlet {
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
-			Object.assign(this.boundApi, this.reference);
+			Objects.assign(this.boundApi, this.reference);
 		}
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
@@ -1240,10 +1347,11 @@ class Slothlet {
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
-			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+			this.instanceID = `${oldInstanceID}_reload_${this.#clock.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			forgetInstanceScripts(oldInstanceID);
-			releaseInstanceScope(oldInstanceID);
+			this.#releaseImportScope();
+			this.#claimImportScope();
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
 			boundaryPatchHolders.delete(oldInstanceID);
@@ -1255,7 +1363,7 @@ class Slothlet {
 			// dir per reload until shutdown — an unbounded leak in long-lived dev
 			// processes that reload frequently.
 			if (isNode && this._typescriptCacheDirs?.size) {
-				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
+				await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 				this._typescriptCacheDirs.clear();
 			}
 		}
@@ -1611,7 +1719,7 @@ class Slothlet {
 		const absoluteTargetDir = path.resolve(targetDir);
 
 		// Clear require.cache for CJS modules
-		for (const key of Object.keys(require.cache)) {
+		for (const key of Objects.keys(require.cache)) {
 			if (key.startsWith(absoluteTargetDir)) {
 				delete require.cache[key];
 			}
@@ -1707,13 +1815,13 @@ class Slothlet {
 					// then resolves via resolveWrapper() on the next recursion.
 					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
 					// getter (#597).
-					for (const key of Object.keys(wrapper)) {
+					for (const key of Objects.keys(wrapper)) {
 						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
-				for (const key of Object.keys(obj)) {
+				for (const key of Objects.keys(obj)) {
 					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
@@ -1722,12 +1830,12 @@ class Slothlet {
 			}
 		};
 
-		for (const key of Object.keys(this.api)) {
+		for (const key of Objects.keys(this.api)) {
 			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
-			await Promise.allSettled(pending);
+			await Promises.allSettled(pending);
 		}
 	}
 
@@ -1754,13 +1862,18 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		boundaryPatchHolders.delete(this.instanceID);
-		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
+		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) {
+			disablePromisePatching();
+			disableAsyncResourcePatching();
+		}
 		if (boundaryPatchHolders.size === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
+			disableClonePatching();
+			disableFunctionSourcePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off
@@ -1794,7 +1907,7 @@ class Slothlet {
 		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
 		// files, and the records of what its modules made (#597).
 		forgetInstanceScripts(this.instanceID);
-		releaseInstanceScope(this.instanceID);
+		this.#releaseImportScope();
 		releaseModuleMakers(this);
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
@@ -1802,7 +1915,7 @@ class Slothlet {
 		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
 		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
 		if (isNode && this._typescriptCacheDirs?.size) {
-			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
+			await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
@@ -1962,7 +2075,7 @@ export async function slothlet(config) {
  *   routines: slothlet.defaults.routines.filter((r) => r.name !== "shutdown")
  * });
  */
-slothlet.defaults = Object.freeze({
+slothlet.defaults = Objects.freeze({
 	routines: DEFAULT_ROUTINES,
 	reservedExports: RESERVED_EXPORTS
 });
@@ -1987,6 +2100,9 @@ export default slothlet;
  *   - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
  *   - `"live"` — Experimental live bindings.
  *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
+ * @property {"instance"|"module"} [helpers="instance"] - How often a helper file (a file an api file imports that is no api file itself) is loaded.
+ *   - `"instance"` — once per instance: every api file importing the helper shares one copy, and so its module state.
+ *   - `"module"` — once per importing api file: each api file gets its own copy of every helper it imports, so helper state is not shared between api files, and the permission system can tell which api file a helper's code runs for. Node and the vite plugin only; a browser build keeps one copy.
  * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
  * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
  *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
@@ -2008,7 +2124,7 @@ export default slothlet;
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
  *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
- * @property {object} [permissions] - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+ * @property {object|"on"|"off"|"disabled"|boolean} [permissions] - Permission system configuration. Omit it and the system is off entirely. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`, `true` and `false` mean `"on"` and `"off"`; any other string or non-object value throws `INVALID_CONFIG`. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
  * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
  * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
  * @property {"default"|"verbose"|boolean} [permissions.audit="default"] - Audit level; `true`/`false` normalize to `"default"`.
@@ -2024,11 +2140,16 @@ export default slothlet;
  * @property {boolean} [permissions.provenance=true] - A module's function reached by a route slothlet does not see — a
  *   callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
  *   the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
- *   call runs it.
+ *   call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
+ *   returned data keeps its definer.
  * @property {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
  *   (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
  *   `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
  *   it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
+ * @property {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+ *   another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
+ *   `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
+ *   a member is handed over as a view.
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
  * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
@@ -2044,6 +2165,10 @@ export default slothlet;
  * @property {boolean} [stackRoutines=false] - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+ * @property {object} [clock] - Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See [CONFIGURATION.md](docs/CONFIGURATION.md#clock).
+ * @property {function(): number} [clock.now] - The time in milliseconds: `maxAge` of principals, reload and run IDs, and every recorded timestamp.
+ * @property {Function} [clock.setTimeout] - Schedules the instance's deferred work (called with a delay of `0`); a host that fakes timers moves it with its own clock.
+ * @property {Function} [clock.clearTimeout] - Cancels a timer `clock.setTimeout` made.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
  * @property {"browser"|"node"} [platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).

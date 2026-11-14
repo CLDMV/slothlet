@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T00:51:11-08:00 (1794214271)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,6 +43,9 @@
  */
 
 import { asyncRuntime } from "#factories/context";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+// This module's own namespace, registered below as the one copy of this file.
+import * as ownNamespace from "./runtime-asynclocalstorage.mjs";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
 	runtime_assertFrameworkRootChange,
@@ -51,10 +54,15 @@ import {
 	runtime_selfView,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
+	runtime_contextRead,
+	runtime_contextWritten,
+	runtime_contextReadAsDefiner,
+	registerRuntimeContext,
 	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, NativeObject, NativeProxy, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -111,16 +119,25 @@ function runtime_selfMember(prop, value) {
  *   return self.otherFunction();
  * }
  */
-export const self = new Proxy(
+export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) {
 				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
-				const read = runtime_selfReadAsDefiner(self, prop);
+				// Code a file started while it loaded has a store of its own: without a module to run as, it has no `self`.
+				// Another instance's code running in that flow (a function an instance built by the loading file handed
+				// out) is not the load's: it is read as its definer, as with no store.
+				const read = runtime_selfReadAsDefiner(self, prop, ctx?.moduleLoad ? ctx.instanceID : null);
 				if (read) return read.value;
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
+			// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
+			if (!ctx.currentWrapper && !ctx.record && ctx.parentInstanceID) {
+				const read = runtime_selfReadAsDefiner(self, prop, null, ctx.parentInstanceID);
+				if (read) return read.value;
 			}
 			return runtime_selfMember(prop, ctx.self[prop]);
 		},
@@ -258,19 +275,21 @@ export const self = new Proxy(
  *   };
  * }
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) {
-				return undefined;
+				// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
+				return runtime_contextReadAsDefiner(context, prop);
 			}
 			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
 			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
 			// resolver lets the view identify the WRITER from the store active at write time — each
 			// module call runs in its own derived store, so the wrap-time store's identity is stale.
-			return readProtectedContextValue(ctx, prop, safeGetContext);
+			// What a module stored there reaches another module as values one module hands another do.
+			return runtime_contextRead(ctx, readProtectedContextValue(ctx, prop, safeGetContext));
 		},
 		set(_, prop, value) {
 			const ctx = safeGetContext();
@@ -286,6 +305,7 @@ export const context = new Proxy(
 			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 			// current caller doesn't own before mutating the context.
 			enforceContextKeyWrite(ctx, prop);
+			runtime_contextWritten(ctx, value);
 			ctx.context[prop] = value;
 			return true;
 		},
@@ -302,7 +322,9 @@ export const context = new Proxy(
 		getOwnPropertyDescriptor(_, prop) {
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) return undefined;
-			return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			if (!descriptor || !("value" in descriptor)) return descriptor;
+			return { ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
 		}
 	}
 );
@@ -339,7 +361,7 @@ export const context = new Proxy(
  *   return { instanceID };
  * }
  */
-export const instanceID = new Proxy(
+export const instanceID = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -357,7 +379,7 @@ export const instanceID = new Proxy(
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.instanceID) return false;
 			// ctx.instanceID is a string — wrap in Object() so `in` doesn't throw
-			return prop in Object(ctx.instanceID);
+			return prop in NativeObject(ctx.instanceID);
 		}
 	}
 );
@@ -366,3 +388,7 @@ export const instanceID = new Proxy(
 for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for an async instance (#726).
 registerRuntimeSelf(asyncRuntime, self);
+registerRuntimeContext(asyncRuntime, context);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, ownNamespace);

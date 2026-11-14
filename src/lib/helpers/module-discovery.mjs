@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,6 +61,7 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // filesystem-walking module discovery has no meaning in browser mode.
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
+import { Objects, Arrays, JSON, Map, Set, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
 // Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
@@ -206,10 +207,10 @@ export async function discoverModules(options = {}) {
 
 		const apiDirAbs = path.resolve(realPath, normalized.apiDir);
 		results.push(
-			Object.freeze({
+			Objects.freeze({
 				packageName: pkg.name,
 				packageRoot: realPath,
-				mountPath: Object.freeze([...normalized.mountPath]),
+				mountPath: Objects.freeze([...normalized.mountPath]),
 				apiDir: apiDirAbs,
 				manifest: deepFreeze(normalized)
 			})
@@ -236,7 +237,7 @@ async function resolveScanRoots(opt) {
 	if (typeof opt === "string") {
 		return [path.resolve(opt)];
 	}
-	if (Array.isArray(opt)) {
+	if (Arrays.isArray(opt)) {
 		return opt.map((p) => path.resolve(p));
 	}
 	throw new SlothletError(
@@ -259,7 +260,7 @@ async function resolveScanRoots(opt) {
  * @private
  */
 async function defaultScanRoot() {
-	let current = process.cwd();
+	let current = Processes.cwd();
 	for (let i = 0; i < UPWARD_WALK_CAP; i++) {
 		try {
 			const stat = await fsp.stat(path.join(current, "node_modules"));
@@ -271,7 +272,7 @@ async function defaultScanRoot() {
 		if (parent === current) break; // reached filesystem root
 		current = parent;
 	}
-	return process.cwd();
+	return Processes.cwd();
 }
 
 /**
@@ -377,7 +378,7 @@ async function enumerateFolderModules(root, prefixes) {
 function normalizePrefixes(opt) {
 	if (opt === undefined) return null;
 	if (typeof opt === "string") return [opt];
-	if (Array.isArray(opt)) {
+	if (Arrays.isArray(opt)) {
 		if (opt.length === 0) return null;
 		return opt.slice();
 	}
@@ -521,7 +522,7 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 		}
 		cur = cur[part];
 	}
-	if (cur === null || typeof cur !== "object" || Array.isArray(cur)) {
+	if (cur === null || typeof cur !== "object" || Arrays.isArray(cur)) {
 		return undefined;
 	}
 	return cur;
@@ -537,11 +538,11 @@ async function loadManifestRaw(manifestPath, source, packageName) {
  * @private
  */
 function applySchemaRemap(raw, schemaMap) {
-	if (!schemaMap || Object.keys(schemaMap).length === 0) {
+	if (!schemaMap || Objects.keys(schemaMap).length === 0) {
 		return raw;
 	}
 	const out = { ...raw };
-	for (const [canonical, legacy] of Object.entries(schemaMap)) {
+	for (const [canonical, legacy] of Objects.entries(schemaMap)) {
 		if (legacy === canonical) continue;
 		if (out[canonical] !== undefined) continue; // canonical name already present → don't override
 		if (legacy in out) {
@@ -570,9 +571,9 @@ function deepFreeze(obj) {
 	// All three conditions of this OR thus evaluate to false in every invocation
 	// today; the guard exists for callers that may legitimately pass a frozen tree.
 	/* v8 ignore next */
-	if (obj === null || typeof obj !== "object" || Object.isFrozen(obj)) return obj;
-	Object.freeze(obj);
-	for (const key of Object.keys(obj)) {
+	if (obj === null || typeof obj !== "object" || Objects.isFrozen(obj)) return obj;
+	Objects.freeze(obj);
+	for (const key of Objects.keys(obj)) {
 		const value = obj[key];
 		if (value !== null && typeof value === "object") {
 			deepFreeze(value);

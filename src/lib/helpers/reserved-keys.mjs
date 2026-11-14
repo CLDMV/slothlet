@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Framework-reserved property names, as plain Sets in a module with no imports.
+ * @fileoverview Framework-reserved property names, as plain Sets in a module whose only import is helpers/intrinsics (no top-level await).
  * @module @cldmv/slothlet/helpers/reserved-keys
  * @internal
  *
@@ -26,6 +26,8 @@
  * `helpers/defaults` statically and index.cjs loads index.mjs through Node's synchronous
  * require(esm), which rejects any module graph containing top-level await.
  */
+
+import { Objects, Set, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Property names reserved by the slothlet wrapper machinery — served as
@@ -108,14 +110,14 @@ export function isFrameworkReservedKey(key) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_WRITE_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes, which only the host's write rules may name (#625).
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_INTERNAL_WRITE_KEYS = Object.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
 
 /**
  * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
@@ -164,7 +166,7 @@ export function isFrameworkWriteTarget(pattern) {
  * dataMemberOf({ get x() { return 1; }, y: 2 }, "y"); // 2 — and "x" gives undefined without running the getter
  */
 export function dataMemberOf(owner, key) {
-	const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+	const descriptor = Objects.getOwnPropertyDescriptor(owner, key);
 	if (!descriptor) return owner[key];
-	return Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+	return Objects.hasOwn(descriptor, "value") ? descriptor.value : undefined;
 }

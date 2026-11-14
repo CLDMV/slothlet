@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Reflect, Objects, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Observer constructors patched by name.
@@ -84,12 +85,12 @@ function runtime_carryOwnExtras(wrapper, original) {
 		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
-		const descriptor = Object.getOwnPropertyDescriptor(original, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(original, key);
 		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
 		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
 		// stays an accessor, and a non-enumerable key stays non-enumerable.
-		Object.defineProperty(wrapper, key, descriptor);
+		Objects.defineProperty(wrapper, key, descriptor);
 	}
 }
 
@@ -101,6 +102,7 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchObserverConstructor(name) {
+	// The current global: the patch installs over whatever the host has there now.
 	const installed = globalThis[name];
 	// Absent in this host: all but `PerformanceObserver` are browser-only. Exercised by the vitest node compose.
 	if (typeof installed !== "function") return;
@@ -125,7 +127,7 @@ function runtime_patchObserverConstructor(name) {
 	// unpatched constructor instead of the wrapper now installed as `globalThis[name]`. Link to
 	// `original.prototype` (so `instanceof` still walks the real hierarchy) but give the wrapper its own
 	// prototype object with `constructor` pointing back at itself.
-	wrapper.prototype = Object.create(original.prototype, {
+	wrapper.prototype = Objects.create(original.prototype, {
 		constructor: { value: wrapper, writable: true, configurable: true }
 	});
 	runtime_carryOwnExtras(wrapper, original);

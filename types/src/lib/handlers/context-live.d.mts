@@ -15,6 +15,14 @@
 export class LiveContextManager {
     instances: Map<any, any>;
     /**
+     * Whether a flow a call starts carries that call however long it runs: not here. Once the call that started an
+     * async function has returned, nothing says which call that was when the function picks up again (see
+     * frameDefiner in frame-placement).
+     * @type {boolean}
+     * @internal
+     */
+    get carriesFlowCaller(): boolean;
+    /**
      * How many stores have a call suspended right now, across every instance.
      * @type {number}
      * @internal
@@ -114,6 +122,37 @@ export class LiveContextManager {
      */
     public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;
     /**
+     * Run the load of a module file, remembered as in progress until it settles (#726): what the file's top level
+     * registers meanwhile (a timer, a listener, a reaction) is pinned to the load, and runs later as the file's module.
+     * The async manager carries the same identity in a store.
+     *
+     * @param {object} loading - The load (see createModuleLoad).
+     * @param {function(): *} fn - What loads the file.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runModuleLoad(loading: object, fn: () => any): any;
+    /**
+     * Whether nothing slothlet entered is executing on an instance's store: no call, no pin to the host, no code run as
+     * no module. Code running then was started by nothing slothlet entered, so only its frames can say whose it is.
+     * @param {string} instanceID - The instance.
+     * @returns {boolean} True when nothing is entered.
+     * @internal
+     */
+    isAmbient(instanceID: string): boolean;
+    /**
+     * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+     * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+     * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+     * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+     * runs.
+     * @returns {string|null} The instance's id.
+     * @internal
+     * @example
+     * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+     */
+    runningInstanceID(): string | null;
+    /**
      * Run `fn` outside every instance (#597), as the async manager does: no instance is active while its synchronous
      * body runs, so code an instance that has shut down made reaches no instance's api through the active one.
      * @param {Function} fn - What to run.
@@ -177,13 +216,15 @@ export class LiveContextManager {
      *   (#597): the call is always checked for code another module made running inside it.
      * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
      *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
+     * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
+     *   file registered while it loaded (#726).
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean): any;
+    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean, load?: object | null): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *

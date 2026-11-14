@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@
 import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
@@ -37,6 +38,7 @@ import {
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
+import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -50,6 +52,16 @@ export class AsyncContextManager {
 		// genuinely exercised by the vitest browser run rather than ignored.
 		this.als = AsyncLocalStorage ? new AsyncLocalStorage() : null;
 		this.instances = new Map(); // instanceID → context data
+	}
+
+	/**
+	 * Whether a flow a call starts carries that call however long it runs: an async function a module started and let
+	 * go of runs in the store of the call that started it.
+	 * @type {boolean}
+	 * @internal
+	 */
+	get carriesFlowCaller() {
+		return true;
 	}
 
 	/**
@@ -68,10 +80,11 @@ export class AsyncContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
+	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceID, config = {}) {
+	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (this.instances.has(instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
@@ -81,7 +94,7 @@ export class AsyncContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Date.now()
+			createdAt: clock.now()
 		};
 
 		this.instances.set(instanceID, store);
@@ -144,7 +157,7 @@ export class AsyncContextManager {
 			if (!baseStore) {
 				throw new SlothletError("CONTEXT_NOT_FOUND", {
 					instanceID,
-					availableInstances: Array.from(this.instances.keys())
+					availableInstances: Arrays.from(this.instances.keys())
 				});
 			}
 		}
@@ -163,7 +176,7 @@ export class AsyncContextManager {
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
-			Object.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
+			Objects.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
 		} else if (currentWrapper) {
 			const parent = executionStore.record;
 			// The caller is the call executing in this flow — or, when that call was handed code and the code is
@@ -354,7 +367,7 @@ export class AsyncContextManager {
 		const base =
 			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
 		if (!base) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Array.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Arrays.from(this.instances.keys()) });
 		}
 		const ceiling = identity.ceiling ?? null;
 		const parent =
@@ -395,6 +408,68 @@ export class AsyncContextManager {
 			record: null
 		};
 		return this.als.run(store, fn);
+	}
+
+	/**
+	 * Run the load of a module file inside a store that names the file's module (#726), so what the file starts while
+	 * it loads (a timer, a listener, an async resource, an `AsyncLocalStorage.snapshot()`) carries the module as its
+	 * caller when it runs later, instead of running in no store, where it would count as the host's. The module's node
+	 * does not exist while the file loads and can change with a reload, so the store's identity is read from the load
+	 * whenever it is asked for. While there is none the store has no `self`, and its code is refused as code no one
+	 * accounts for.
+	 *
+	 * @param {{instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} loading - The load (see createModuleLoad).
+	 * @param {function(): *} fn - What loads the file.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runModuleLoad(loading, fn) {
+		const base = this.instances.get(loading.instanceID());
+		if (!base || !this.als) return fn();
+		const current = () => this.instances.get(loading.instanceID()) ?? null;
+		const store = { ...base, callerWrapper: null, callerCeiling: null, currentCeiling: null };
+		const live = (name, read) => Objects.defineProperty(store, name, { get: read, enumerable: true, configurable: true });
+		live("instanceID", () => current()?.instanceID ?? base.instanceID);
+		live("currentWrapper", () => loading.wrapper());
+		live("record", () => loading.record());
+		// The instance's api and context as they are when read: neither is built yet while the first files load.
+		live("self", () => (loading.wrapper() ? current()?.self : undefined));
+		live("context", () => current()?.context ?? base.context);
+		// Not spread onto the stores of the calls made from it: only this store is the load's.
+		Objects.defineProperty(store, "moduleLoad", { value: loading, enumerable: false });
+		const outside = this.als.getStore();
+		const result = this.als.run(store, fn);
+		// A lazy load runs detached, with no store ({@link runDetached}). Where `AsyncLocalStorage` rests on async hooks
+		// (Node 22), `exit()` switches the storage off and a `run()` inside it switches it back on, so what follows
+		// the load would see the store of the call that triggered it. The flow is left as it was found: detached.
+		if (outside === undefined && this.als.getStore() !== undefined) this.als.disable();
+		return result;
+	}
+
+	/**
+	 * Whether no flow of an instance is active: no store at all, or another instance's. Code running then was started
+	 * by nothing slothlet entered, so only its frames can say whose it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {boolean} True when no store of the instance is active.
+	 * @internal
+	 */
+	isAmbient(instanceID) {
+		const store = this.als?.getStore();
+		return !store || (store.instanceID !== instanceID && store.parentInstanceID !== instanceID);
+	}
+
+	/**
+	 * The instance whose flow is running: the one the active store belongs to (a call, a hook, a `run()` or `scope()`
+	 * callback, a file's load), or null when no store is active. Code of a file that carries no instance tag (a
+	 * CommonJS file two instances load) is that instance's while its flow runs.
+	 * @returns {string|null} The instance's id.
+	 * @internal
+	 * @example
+	 * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+	 */
+	runningInstanceID() {
+		const store = this.als?.getStore();
+		return store ? (store.parentInstanceID ?? store.instanceID ?? null) : null;
 	}
 
 	/**
@@ -476,12 +551,16 @@ export class AsyncContextManager {
 		const identity = this.#identityOf(store);
 		// Code no call accounts for (#597): no caller, unresolved, as the live manager answers it.
 		if (identity.unaccounted) return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
+		// Code a file started while it loaded whose module cannot be found: no caller, and not the host.
+		if (identity.unresolved) return { currentWrapper: null, callerWrapper: null, unresolved: true };
+		const record = this.#recordOf(store);
 		return {
 			currentWrapper: identity.currentWrapper,
 			callerWrapper: store.callerWrapper,
 			ceiling: identity.ceiling,
 			callerCeiling: store.callerCeiling ?? undefined,
-			made: this.#recordOf(store)?.made === true
+			made: record?.made === true,
+			record: record ?? undefined
 		};
 	}
 
@@ -506,10 +585,16 @@ export class AsyncContextManager {
 	 */
 	#identityOf(store) {
 		const record = this.#recordOf(store);
-		if (!record) return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		if (!record) {
+			// The store of a file's load (#726) while the file's module cannot be found: its code is no one's.
+			if (store.moduleLoad && !store.currentWrapper) return { currentWrapper: null, unresolved: true };
+			return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		}
 		const supplier = resolveSupplier(record);
 		// Code no call accounts for: no caller, and unresolved, so only a node a module kept can settle it, as that
 		// module (#597, #661), as the live manager answers it.
+		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
+		if (supplier?.refused) return { currentWrapper: null, unresolved: true };
 		if (supplier?.unaccounted) return { currentWrapper: null, unresolved: true, unaccounted: true };
 		if (supplier) return { currentWrapper: supplier.wrapper, ceiling: supplier.ceiling };
 		return { currentWrapper: record.wrapper, ceiling: record.ceiling ?? undefined };
@@ -596,7 +681,7 @@ export class AsyncContextManager {
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -619,11 +704,11 @@ export class AsyncContextManager {
 		return {
 			type: "async",
 			activeStore: this.als.getStore()?.instanceID || null,
-			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
+			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,
-				contextKeys: Object.keys(store.context),
-				selfKeys: Object.keys(store.self)
+				contextKeys: Objects.keys(store.context),
+				selfKeys: Objects.keys(store.self)
 			}))
 		};
 	}

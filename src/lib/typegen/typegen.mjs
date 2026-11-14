@@ -38,6 +38,7 @@ import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes as writeDeclarationFile } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { Arrays } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Generate a TypeScript declaration file (`.d.ts`) for a Slothlet API directory.
@@ -72,7 +73,7 @@ export async function generateTypes(options = {}) {
 	// Public API: callers may pass null / true / a primitive accidentally. JSDoc
 	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
 	// TypeError escape from `options.dir` dereference.
-	if (options === null || typeof options !== "object" || Array.isArray(options)) {
+	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
 			{

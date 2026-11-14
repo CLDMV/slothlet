@@ -45,7 +45,13 @@ export default defineConfig(async () => {
 	// can't statically rewrite — so the browser needs an importmap for them. Point it at the vite-served
 	// /src/* URLs (rewrite the default /dist/*) so those modules still go through vite's transform and
 	// their v8 coverage maps to src/** (the whole reason this beats the raw-source playwright-smoke).
-	const imports = Object.fromEntries(Object.entries(importmap.imports).map(([k, v]) => [k, v.replace("/dist/lib/", "/src/lib/")]));
+	// The importmap maps slothlet's own specifiers under `scopes` for slothlet's own files, so the page gets
+	// the whole object, `scopes` included.
+	const toSrc = (entries) => Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v.replace("/dist/lib/", "/src/lib/")]));
+	const imports = toSrc(importmap.imports);
+	const scopes = Object.fromEntries(
+		Object.entries(importmap.scopes ?? {}).map(([scope, entries]) => [scope.replace("/dist/", "/src/"), toSrc(entries)])
+	);
 
 	/** Expose the node-built fixture manifest + its served base path to browser tests. */
 	const fixtureManifestPlugin = {
@@ -61,7 +67,7 @@ export default defineConfig(async () => {
 		// Inject slothlet's importmap into the tester page (head-prepend, before any module script) so
 		// the runtime dynamic bare-specifier imports resolve to the vite-served src modules.
 		transformIndexHtml() {
-			return [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports }), injectTo: "head-prepend" }];
+			return [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports, scopes }), injectTo: "head-prepend" }];
 		}
 	};
 

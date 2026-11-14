@@ -35,4 +35,22 @@ export const self: ProxyConstructor;
  * }
  */
 export const context: ProxyConstructor;
+/**
+ * Current instance ID
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides access to the current slothlet instance ID, as the async runtime's `instanceID` does: it
+ * reads as the id inside a call (`String(instanceID)`, `${instanceID}`), and every member reads as undefined outside
+ * one. Useful for debugging and tracking which instance is handling a request.
+ *
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function getInstanceInfo() {
+ *   return { instanceID: String(instanceID) };
+ * }
+ */
+export const instanceID: ProxyConstructor;
 //# sourceMappingURL=runtime-livebindings.d.mts.map

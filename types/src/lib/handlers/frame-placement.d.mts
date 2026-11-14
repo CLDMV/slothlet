@@ -273,10 +273,27 @@ export function setResultAttributor(attributor: (arg0: object, arg1: any, arg2: 
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
+ * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper: object, value: any, callerIsHost?: boolean): any;
+export function attributeResult(wrapper: object, value: any, callerIsHost?: boolean, caller?: object | null): any;
+/**
+ * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
+ * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
+ * @returns {void}
+ * @internal
+ */
+export function setHostPrototypeCheck(check: (arg0: object, arg1: any) => boolean): void;
+/**
+ * Whether a value a module's call returned is a prototype of a module's class (or a view of one), which the host gets
+ * as the object itself under either runtime and with the permission system on or off (#667, #726).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {boolean} True for such a prototype.
+ * @internal
+ */
+export function isHostPrototype(wrapper: object, value: any): boolean;
 /**
  * Register how a stand-in is recognised (see {@link isHandedOut}).
  * @param {function(*): boolean} check - True for a stand-in.
@@ -327,6 +344,22 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
  */
 export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
 /**
+ * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
+ * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
+ * running inside the call may be code those calls handed in, and slothlet cannot tell it from code the leaf obtained
+ * itself, so it runs under all of them: returning a closure to a module lends that module nothing it can pass on.
+ * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
+ * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
+ *   by a module.
+ * @internal
+ * @example
+ * combineCeilings(leaf, supplierChainCeiling(record));
+ */
+export function supplierChainCeiling(record: {
+    parent?: object | null;
+    flagged?: boolean;
+} | null | undefined): object | ReadonlyArray<object> | null;
+/**
  * Who supplied the code that is running inside a call that was handed code (#597).
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
@@ -352,6 +385,9 @@ export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | 
  * resolution imposed.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null, unaccountedCaller?: boolean}|null|undefined} record - The running call.
+ * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point, inside slothlet's own
+ *   code, by a caller that read it already: read first instead of a capture of its own (see
+ *   runtime_foreignCodeRunning).
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The supplier's wrapper and
  *   the ceiling it runs under when it is a call above the leaf, `{unaccounted: true}` for code no call accounts for,
  *   otherwise null (the leaf's own code is running).
@@ -363,7 +399,7 @@ export function resolveSupplier(record: {
     flagged: boolean;
     ceiling?: object | null;
     unaccountedCaller?: boolean;
-} | null | undefined): {
+} | null | undefined, capture?: Iterable<object> | null): {
     wrapper: object;
     ceiling: object | ReadonlyArray<object>;
 } | {
@@ -422,6 +458,130 @@ export function installViteHostRegistry(target: object): {
 export function installViteLoadedRegistry(target: object): {
     importersOf: (path: string) => Array<string> | null;
 } | null;
+/**
+ * Register how the node at an api path is found: the file's module node of a lazy tree, built with no file of its own,
+ * is looked up by its path (#726).
+ * @param {function(object, string): (object|null)} resolver - Takes an instance and an api path; returns its node's
+ *   wrapper, or null.
+ * @returns {void}
+ * @internal
+ */
+export function setModuleNodeResolver(resolver: (arg0: object, arg1: string) => (object | null)): void;
+/**
+ * What a file's top level runs as (#726): made when slothlet loads the file, and read whenever something the file
+ * started while it loaded (a timer, a listener, a queue, an async resource) runs later. The identity is the file's
+ * module, the node code outside every export of the file runs as, found when it is asked for: the node does not exist
+ * yet while the file loads, and a reload or a removal changes it afterwards. While it cannot be found (the file is
+ * still loading, its node is gone, its instance has shut down) there is no identity, and the code is refused as code
+ * no one accounts for.
+ * @param {object} slothlet - The instance loading the file.
+ * @param {string} filePath - The file.
+ * @param {string|null|undefined} moduleID - The mount the file is loaded for.
+ * @returns {{slothlet: object, filePath: string, moduleID: string|null, instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} The load.
+ * @internal
+ * @example
+ * const loading = createModuleLoad(slothlet, "/app/api/sync.mjs", null);
+ * loading.wrapper(); // null while the file loads, then the node at `sync`
+ */
+export function createModuleLoad(slothlet: object, filePath: string, moduleID: string | null | undefined): {
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+    instanceID: () => (string | null);
+    wrapper: () => (object | null);
+    record: () => (object | null);
+};
+/**
+ * The load a stack's innermost code belongs to, among files being loaded (#726): the code registering something
+ * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
+ * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
+ * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
+ * instance is pending, and otherwise the first pending load whose file imports it. `false` when the code is a loading
+ * instance's and no pending load imports its file; null when it is not a loading file's code.
+ * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
+ * @returns {object|false|null} The load, false, or null.
+ * @internal
+ * @example
+ * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
+ */
+export function loadOnStack(loads: Iterable<{
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+}>): object | false | null;
+/**
+ * The ceiling code entered on its definer's behalf (a handed-out function, an instance method) runs under (#726): the
+ * caller running it, read now — its executing module and that module's own ceiling — or none for the host. Entering
+ * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
+ * @param {object} contextManager - The instance's context manager.
+ * @param {string} instanceID - The instance.
+ * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
+ * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
+ * @internal
+ */
+export function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null): object | ReadonlyArray<object> | null;
+/**
+ * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
+ * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
+ * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
+ * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
+ * `mode: "off"`, `enabled: false` or `mode: "disabled"`), nothing is wrapped and frames tell every definer.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while code is handed out as stand-ins.
+ * @internal
+ */
+export function handsOutAsModule(wrapper: object | null | undefined): boolean;
+/**
+ * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
+ * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * `"fast"` hands back only a node's own Proxy export as the node's member.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while results are attributed.
+ * @internal
+ */
+export function attributesResults(wrapper: object | null | undefined): boolean;
+/**
+ * The definer of the code doing an access while no call runs (the host running code a module handed out, #726): the
+ * innermost frame below slothlet's own, placed on the leaf whose source range holds it, or on the file's module for
+ * code outside every leaf's range. `null` when that frame is the host's (no running instance's file holds it);
+ * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
+ * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
+ * outside every export, in a tree where no node was built for the file itself).
+ * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
+ * runtime_outerCallers), which have to be allowed as well.
+ * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
+ *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
+ * @internal
+ */
+export function frameDefiner(running?: string | null): {
+    wrapper: object;
+    callers: Array<object>;
+} | {
+    leaves: Array<object>;
+    callers: Array<object>;
+} | {
+    unplaced: true;
+    shared?: true;
+} | null;
+/**
+ * Whether a function a leaf hands out is written in a leaf's own file and in no helper file of its instance (#726), as
+ * far as the sources the loader recorded say. Such a function is told by its frames when it runs, so one stand-in of it
+ * serves every leaf of its module; any other (a helper file's own function, a bound or native function, one whose
+ * source cannot be found) is handed out per leaf, each stand-in recording the leaf that handed it out. A class is one
+ * value whoever hands it out. Decided from the function's text and the recorded sources alone: nothing of the function
+ * runs.
+ * @param {Function} fn - The function.
+ * @param {Array<object>} leaves - The wrappers of the leaves that handed it out.
+ * @returns {boolean} True when one stand-in serves every leaf.
+ * @internal
+ * @example
+ * isLeafFileFunction(fn, [first, owner]); // false for a function written in a helper file
+ */
+export function isLeafFileFunction(fn: Function, leaves: Array<object>): boolean;
 /**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
  * @param {object} wrapper - A genuine wrapper.

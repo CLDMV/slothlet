@@ -37,12 +37,14 @@
  * The registry lives on the global object under a `Symbol.for` key, so every copy shares it.
  */
 
+import { Reflect, Objects, WeakMap, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Where the registry lives on the global object.
  * @type {symbol}
  * @private
  */
-const LAYERS = Symbol.for("slothlet.boundaryPatch.layers");
+const LAYERS = Symbols.for("slothlet.boundaryPatch.layers");
 
 /**
  * The shared registry: identifying function → layer.
@@ -54,7 +56,7 @@ function runtime_layers() {
 	if (!(registry instanceof WeakMap)) {
 		registry = new WeakMap();
 		// Non-enumerable, so the global object's own keys look the same as before.
-		Object.defineProperty(globalThis, LAYERS, { value: registry, configurable: true });
+		Objects.defineProperty(globalThis, LAYERS, { value: registry, configurable: true });
 	}
 	return registry;
 }

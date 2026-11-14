@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,6 +45,7 @@
 import { AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Map, WeakMap, Boolean, String, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Wrappers in use, per target.

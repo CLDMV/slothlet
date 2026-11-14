@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:11-07:00 (1792834931)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { runtime_selfModuleReader, runtime_selfView } from "#handlers/unified-wrapper";
+import { Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Lifecycle event manager for impl changes
@@ -220,7 +221,7 @@ export class Lifecycle extends ComponentBase {
 			this.eventLog.push({
 				event,
 				data: { ...data },
-				timestamp: Date.now()
+				timestamp: this.clock.now()
 			});
 
 			// Trim log if too large
@@ -341,7 +342,7 @@ export class Lifecycle extends ComponentBase {
 
 		// Wait for all async handlers to complete
 		if (handlerPromises.length > 0) {
-			await Promise.all(handlerPromises);
+			await Promises.all(handlerPromises);
 		}
 	}
 }

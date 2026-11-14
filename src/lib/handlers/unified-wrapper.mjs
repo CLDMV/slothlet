@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T19:32:55-08:00 (1794367975)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,6 @@
  * @internal
  */
 
-// Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
-const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // `util.types.isProxy` (proxy detection) and `util.inspect.custom` are the only members used
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
@@ -28,9 +26,9 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import {
 	copyForComposition,
+	copySourceOf,
 	setApiNodeCheck,
 	isCompositionLayer,
-	isCompositionProxy,
 	layerForwards,
 	layerHeldKeys,
 	layerMethodOriginal,
@@ -41,7 +39,12 @@ import {
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { runtime_isWrappedClassInstance, runtime_unwrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import {
+	runtime_isWrappedClassInstance,
+	runtime_unwrapClassInstance,
+	runtime_classInstanceCreator,
+	setModuleInstanceCheck
+} from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings, implWrappers } from "#handlers/trusted-root";
 import {
 	handedLeafFunctions,
@@ -50,6 +53,7 @@ import {
 	setModuleNodeResolver,
 	setHostPrototypeCheck,
 	frameDefiner,
+	isLeafFileFunction,
 	outerCallerCeiling,
 	setApiValueCheck,
 	setHandedOutCheck,
@@ -74,6 +78,76 @@ import {
 } from "#handlers/hook-manager";
 import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
+import { setCloneViewReader, setCloneNodeReader, isBoxedPrimitive } from "@cldmv/slothlet/helpers/clone-context";
+import { setFunctionSourceReader, isFunctionSourcePatch } from "@cldmv/slothlet/helpers/function-source-context";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	functionSource,
+	functionToString,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	WeakRef,
+	Promise,
+	Symbol,
+	Promises,
+	Symbols,
+	Functions,
+	NativeObject,
+	URL,
+	URLSearchParams,
+	Boolean,
+	Date,
+	Errors,
+	Error,
+	Number,
+	RegExp,
+	String,
+	TypeError,
+	EvalError,
+	RangeError,
+	ReferenceError,
+	SyntaxError,
+	URIError,
+	AggregateError,
+	BigInt,
+	ArrayBuffers,
+	ArrayBuffer,
+	DataView,
+	Float32Array,
+	Float64Array,
+	Int16Array,
+	Int32Array,
+	Int8Array,
+	Intl,
+	Uint16Array,
+	Uint32Array,
+	Uint8Array,
+	Uint8ClampedArray,
+	SharedArrayBuffer,
+	BigInt64Array,
+	BigUint64Array,
+	Float16Array,
+	Iterator,
+	Iterators,
+	Blob,
+	EventTarget,
+	MessageChannel,
+	queueMicrotask,
+	TextDecoder,
+	TextEncoder,
+	NativeProcess,
+	Processes
+} from "@cldmv/slothlet/helpers/intrinsics";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+
+// Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
+const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).
@@ -84,7 +158,7 @@ import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
  * @returns {boolean} True if obj has own property key
  * @private
  */
-const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const hasOwn = (obj, key) => Objects.prototype.hasOwnProperty.call(obj, key);
 
 /**
  * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
@@ -160,7 +234,7 @@ function runtime_takeInvariantRead(wrapper, prop) {
 }
 
 /** The fields a property descriptor can give. @type {ReadonlyArray<string>} @private */
-const DESCRIPTOR_FIELDS = Object.freeze(["value", "writable", "get", "set", "enumerable", "configurable"]);
+const DESCRIPTOR_FIELDS = Objects.freeze(["value", "writable", "get", "set", "enumerable", "configurable"]);
 
 /**
  * Whether defining `descriptor` on `holder`'s `prop` would change nothing (#667): the member is fixed (non-configurable)
@@ -176,7 +250,7 @@ function runtime_isUnchangingDefinition(holder, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
 	if (!current || current.configurable) return false;
 	for (const field of DESCRIPTOR_FIELDS) {
-		if (field in descriptor && !(field in current && Object.is(descriptor[field], current[field]))) return false;
+		if (field in descriptor && !(field in current && Objects.is(descriptor[field], current[field]))) return false;
 	}
 	return true;
 }
@@ -242,7 +316,7 @@ const SELF_VIEW_READERS = new WeakMap();
  * @type {symbol}
  * @private
  */
-const INSPECT_CUSTOM = Symbol.for("nodejs.util.inspect.custom");
+const INSPECT_CUSTOM = Symbols.for("nodejs.util.inspect.custom");
 /**
  * The node each live-identity value (a class instance, an EventEmitter) was called on as `this`, kept
  * when the wrapper hands the value itself to a method as its receiver (#590, #340), so the value coming
@@ -257,7 +331,7 @@ const SELF_INSTANCE_NODES = new WeakMap();
  * @type {object}
  * @private
  */
-const HOST_READER = Object.freeze({ reader: "host" });
+const HOST_READER = Objects.freeze({ reader: "host" });
 
 /**
  * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
@@ -265,7 +339,7 @@ const HOST_READER = Object.freeze({ reader: "host" });
  * @type {object}
  * @private
  */
-const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
+const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
 
 /**
  * Reader of the view a closed emitter's shell holds as its prototype (#667). The shell reports one prototype to whoever
@@ -274,7 +348,7 @@ const UNATTRIBUTED_READER = Object.freeze({ reader: "unattributed" });
  * @type {Readonly<{reader: string}>}
  * @private
  */
-const SEALED_SHELL_READER = Object.freeze({ reader: "sealed shell" });
+const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
 
 /**
  * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
@@ -299,11 +373,12 @@ export function runtime_unwrapSelfView(value) {
  * readers that are no module ({@link HOST_READER}, {@link UNATTRIBUTED_READER}).
  *
  * @param {object} slothlet - Instance the node belongs to.
+ * @param {object|null} [access=null] - The access the read is part of, when who is making it was resolved already.
  * @returns {object} The reader.
  * @private
  */
-function runtime_selfReader(slothlet) {
-	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+function runtime_selfReader(slothlet, access = null) {
+	const identity = runtime_accessIdentity(access, slothlet.contextManager, slothlet.instanceID);
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	return identity?.unresolved ? UNATTRIBUTED_READER : HOST_READER;
 }
@@ -442,7 +517,7 @@ function runtime_selfIsMethodNode(thisArg, method) {
  */
 function runtime_selfViewResult(result, reader, slothlet = null, from = null) {
 	// Only a plain native promise is followed: any other thenable is handed back exactly as it is.
-	if (runtime_inherits(result, Promise) && Object.getPrototypeOf(result) === Promise.prototype) {
+	if (runtime_inherits(result, Promise) && Objects.getPrototypeOf(result) === Promise.prototype) {
 		if (slothlet === null) return result.then((value) => runtime_selfView(value, reader, from));
 		// What it rejects with reaches the reader as values crossing between modules do (#667).
 		return result.then(
@@ -499,10 +574,10 @@ function runtime_selfLap(record, value) {
  * @private
  */
 const PROTOCOL_SYMBOLS = new Set([
-	...Object.getOwnPropertyNames(Symbol)
+	...Objects.getOwnPropertyNames(Symbol)
 		.map((name) => Symbol[name])
 		.filter((value) => typeof value === "symbol"),
-	Symbol.for("nodejs.util.inspect.custom")
+	Symbols.for("nodejs.util.inspect.custom")
 ]);
 
 /**
@@ -544,7 +619,7 @@ function runtime_gatherIntrinsics() {
 			}
 		};
 		next(Reflect.getPrototypeOf(current));
-		for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
+		for (const descriptor of Objects.values(Objects.getOwnPropertyDescriptors(current))) {
 			next(descriptor.value);
 			next(descriptor.get);
 			next(descriptor.set);
@@ -580,12 +655,16 @@ function runtime_hasInternalSlots(value) {
  * which an `instanceof` in slothlet's code would run with slothlet's values (#632).
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
 /** @private */
 const WEAKREF_DEREF = typeof WeakRef === "function" ? WeakRef.prototype.deref : null;
 /** @private */
 const ERROR_BRAND =
-	typeof Error.isError === "function" ? Error.isError : typeof util?.types?.isNativeError === "function" ? util.types.isNativeError : null;
+	typeof Errors.isError === "function"
+		? Errors.isError
+		: typeof util?.types?.isNativeError === "function"
+			? util.types.isNativeError
+			: null;
 /** @private */
 const IS_PROXY = typeof util?.types?.isProxy === "function" ? util.types.isProxy : null;
 
@@ -655,18 +734,22 @@ const DATA_KINDS = (() => {
 			"typedarray",
 			typeof types.isTypedArray === "function"
 				? (value) => types.isTypedArray(value)
-				: (value) => ArrayBuffer.isView(value) && !runtime_inherits(value, DataView)
+				: (value) => ArrayBuffers.isView(value) && !runtime_inherits(value, DataView)
 		],
 		["sharedarraybuffer", brand("isSharedArrayBuffer", typeof SharedArrayBuffer === "function" ? SharedArrayBuffer : null)],
 		["arraybuffer", brand("isArrayBuffer", ArrayBuffer)],
 		// No brand check exists for a WeakRef, and reading its tag would run a proxy's traps: this realm's only.
-		["weakref", (value) => runtime_isWeakRef(value)]
+		["weakref", (value) => runtime_isWeakRef(value)],
+		["error", brand("isNativeError", Error)],
+		// A `String`, `Number`, `Boolean`, `BigInt` or `Symbol` object. A realm without the brand check has no way to ask.
+		["boxed", typeof types.isBoxedPrimitive === "function" ? (value) => types.isBoxedPrimitive(value) : () => false]
 	];
 })();
 
 /**
  * Which kind of data object `value` is (#625): `"map"`, `"set"`, `"weakmap"`, `"weakset"`, `"date"`, `"regexp"`,
- * `"promise"`, `"dataview"`, `"typedarray"`, `"sharedarraybuffer"`, `"arraybuffer"`, `"weakref"` — or null for none.
+ * `"promise"`, `"dataview"`, `"typedarray"`, `"sharedarraybuffer"`, `"arraybuffer"`, `"weakref"`, `"error"`, `"boxed"` (a
+ * `String`, `Number`, `Boolean`, `BigInt` or `Symbol` object) — or null for none.
  * @param {*} value - A value.
  * @returns {string|null} Its kind.
  * @private
@@ -729,6 +812,25 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 		return runtime_selfDataView(value, reader, slothlet, parts, through);
 	if (!runtime_isPlainMember(value)) return runtime_selfView(value, reader);
 	return runtime_selfMemberView(value, reader, slothlet, parts, through);
+}
+
+/**
+ * A view is its reader's: a write another module's code, or the host's, makes through it has to be the reader's to make
+ * as well, so a function the reader hands someone to run (a bound built-in, which has no frame of the reader's) writes
+ * nothing the reader could not. A write the reader's own module makes is decided for the leaf executing it alone.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - Who the view belongs to.
+ * @param {object|null} writer - Who the write is made as: the module executing, or null for the host.
+ * @param {string[]} parts - The api path written.
+ * @returns {void}
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` or `PERMISSION_DENIED` when the reader may not make the write.
+ * @private
+ */
+function runtime_assertReaderWrite(slothlet, reader, writer, parts) {
+	if (!reader?.____slothletInternal || reader === writer) return;
+	if (writer !== null && runtime_sameModule(writer, reader)) return;
+	if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
+	slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 }
 
 /**
@@ -807,7 +909,7 @@ const TYPED_ARRAY_READERS = new Set([
  */
 const ENGINE_DATA_PROTOTYPES = new Set(
 	[
-		Object.prototype,
+		Objects.prototype,
 		Map.prototype,
 		WeakMap.prototype,
 		Set.prototype,
@@ -819,6 +921,19 @@ const ENGINE_DATA_PROTOTYPES = new Set(
 		DataView.prototype,
 		Promise.prototype,
 		typeof WeakRef === "function" ? WeakRef.prototype : null,
+		Error.prototype,
+		EvalError.prototype,
+		RangeError.prototype,
+		ReferenceError.prototype,
+		SyntaxError.prototype,
+		TypeError.prototype,
+		URIError.prototype,
+		typeof AggregateError === "function" ? AggregateError.prototype : null,
+		String.prototype,
+		Number.prototype,
+		Boolean.prototype,
+		typeof BigInt === "function" ? BigInt.prototype : null,
+		Symbol.prototype,
 		Reflect.getPrototypeOf(Uint8Array.prototype),
 		...[
 			Int8Array,
@@ -876,7 +991,7 @@ function runtime_inheritedEngineMember(impl, prop, value) {
 	if (hasOwn(impl, prop)) return null;
 	const answered = layerMethodOriginal(value) ?? value;
 	// A callable node's own answer for `valueOf` (see runtime_valueOfFor), read through a layer over that node.
-	const original = NODE_VALUE_OFS.has(answered) ? Object.prototype.valueOf : answered;
+	const original = NODE_VALUE_OFS.has(answered) ? Objects.prototype.valueOf : answered;
 	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
 	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
 	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
@@ -907,7 +1022,7 @@ function runtime_valueOfFor(node) {
 	let method = NODE_VALUE_OF_BY_NODE.get(node);
 	if (method) return method;
 	method = function valueOf() {
-		return this === undefined || this === null ? node : Reflect.apply(Object.prototype.valueOf, this, []);
+		return this === undefined || this === null ? node : Reflect.apply(Objects.prototype.valueOf, this, []);
 	};
 	NODE_VALUE_OFS.add(method);
 	NODE_VALUE_OF_BY_NODE.set(node, method);
@@ -921,7 +1036,7 @@ const NODE_VALUE_OF_BY_NODE = new WeakMap();
 const NODE_VALUE_OFS = new WeakSet();
 
 /** The engine's prototypes every api node's value inherits from. @type {ReadonlyArray<object>} @private */
-const INHERITED_HOLDERS = Object.freeze([Object.prototype, Function.prototype]);
+const INHERITED_HOLDERS = Objects.freeze([Objects.prototype, Functions.prototype]);
 
 /**
  * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
@@ -932,7 +1047,7 @@ const INHERITED_HOLDERS = Object.freeze([Object.prototype, Function.prototype]);
  */
 function runtime_isNativeFunction(fn) {
 	try {
-		const source = Function.prototype.toString.call(fn);
+		const source = functionSource(fn);
 		return /\{\s*\[native code\]\s*\}$/.test(source) && !String(fn.name).startsWith("bound ");
 	} catch {
 		return false;
@@ -977,6 +1092,8 @@ function runtime_isDataReader(value, name) {
 		return name === Symbol.toPrimitive || (typeof name === "string" && (name.startsWith("get") || name.startsWith("to")));
 	if (kind === "dataview") return typeof name === "string" && name.startsWith("get");
 	if (kind === "typedarray") return TYPED_ARRAY_READERS.has(name);
+	// A boxed primitive never changes: every method of its kind reads it.
+	if (kind === "boxed") return true;
 	return DATA_READERS.get(kind)?.has(name) ?? false;
 }
 
@@ -1063,13 +1180,14 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		(settled ??= Promise.prototype.then.call(
 			raw,
 			(resolved) => held(resolved),
-			(reason) => Promise.reject(held(reason))
+			(reason) => Promises.reject(held(reason))
 		));
-	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
+	const sharedBuffer = ArrayBuffers.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
 		const target = typeof prop === "string" ? [...parts, prop] : parts;
 		const writer = runtime_selfRootWriter(slothlet, reader, target);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+		runtime_assertReaderWrite(slothlet, reader, writer, target);
 	};
 	let view = null;
 	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null, record));
@@ -1105,7 +1223,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
-			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			const descriptors = Objects.getOwnPropertyDescriptors(raw);
 			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
 			Reflect.setPrototypeOf(shadow, viewedProto());
 			Reflect.preventExtensions(shadow);
@@ -1123,9 +1241,9 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		// An iterator over what it holds yields it viewed.
 		if (holdsValues && typeof returned.next === "function") {
 			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
-			const iterator = Object.create(typeof Iterator === "function" ? Iterator.prototype : Object.prototype);
-			const tag = Object.prototype.toString.call(returned).slice(8, -1);
-			Object.defineProperties(iterator, {
+			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Objects.prototype);
+			const tag = Objects.prototype.toString.call(returned).slice(8, -1);
+			Objects.defineProperties(iterator, {
 				next: {
 					value: (...args) => {
 						const step = returned.next(...args);
@@ -1150,7 +1268,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		}
 		if (holdsValues) return held(returned);
 		// Memory it shares is held to the rule too; a copy it made is the caller's own.
-		if (sharedBuffer !== null && (returned === sharedBuffer || (ArrayBuffer.isView(returned) && returned.buffer === sharedBuffer))) {
+		if (sharedBuffer !== null && (returned === sharedBuffer || (ArrayBuffers.isView(returned) && returned.buffer === sharedBuffer))) {
 			return held(returned);
 		}
 		return returned;
@@ -1166,7 +1284,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			// A comparison runs on a copy holding what the set holds viewed: the set-like it is handed is the caller's,
 			// and is shown nothing else, and what it makes is the caller's own.
 			// The set-like is handed on as the caller gave it: a view of another object stays that view.
-			if (compares) return Reflect.apply(fn, new Set(Array.from(raw, (entry) => held(entry))), args);
+			if (compares) return Reflect.apply(fn, new Set(Arrays.from(raw, (entry) => held(entry))), args);
 			// A key is looked up as the object holds it, so a view of one is unwrapped; what follows a callback (its
 			// `this`) is handed on as the caller gave it.
 			let afterCallback = false;
@@ -1184,7 +1302,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		methods.set(prop, { fn, call });
 		return call;
 	};
-	view = new Proxy(shadow, {
+	view = new NativeProxy(shadow, {
 		get(_, prop) {
 			mirrorClosed();
 			const fixed = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1234,6 +1352,111 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	SELF_MEMBER_VIEWS.set(view, record);
 	return view;
 }
+
+/**
+ * What {@link runtime_selfDataMember} answers for a member it leaves to the node.
+ * @type {symbol}
+ * @private
+ */
+const NODE_MEMBER = Symbol("slothlet.nodeMember");
+
+/**
+ * The language's own members of the built-in data object a node holds (a file's default export that is a `Map`, a
+ * `Set`, a `Date`, …), as a reader is handed them through `self`: as a view of that object at the node's path hands them
+ * ({@link runtime_selfDataView}), so the node and the same object reached as a named export answer alike. A method that
+ * changes the object is a write at the node's path, and what a method hands back of the object (a map's entry, what
+ * its iterator yields, the object passed to a callback) is held to the owner's write rules. A reader that may make every
+ * write there (and the host, and every module while the permission system is off) gets each method running on the
+ * object itself.
+ * @param {object|null} inner - The node's wrapper, or null for a view of something else.
+ * @param {object} reader - Who reads it.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member read.
+ * @returns {*} The member, or {@link NODE_MEMBER} when the node's own answer stands.
+ * @private
+ *
+ * @example
+ * // single/dmap.mjs: export default new Map([["one", { n: 1 }]]);
+ * self.single.dmap.get("one").n = 5; // LOOSE_SET_NOT_OWNED, as self.owner.dmap.get("one").n = 5 is
+ */
+function runtime_selfDataMember(inner, reader, slothlet, prop) {
+	if (inner === null || reader === HOST_READER || prop === "constructor") return NODE_MEMBER;
+	const impl = inner.____slothletInternal.impl;
+	if (!runtime_holdsDataKind(impl) || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	const view = runtime_selfDataView(impl, reader, slothlet, runtime_apiPathParts(inner));
+	// A reader handed the object itself gets the node's answer, the object's own member (see runtime_frontedDataMember).
+	return view !== impl ? Reflect.get(view, prop, view) : NODE_MEMBER;
+}
+
+/**
+ * Whether `value` is a built-in data object, decided once per value: what a value is does not change, and every read
+ * of a node holding one asks.
+ * @param {*} value - The value a node holds.
+ * @returns {boolean} Whether it is one.
+ * @private
+ */
+function runtime_holdsDataKind(value) {
+	if (value === null || typeof value !== "object") return false;
+	let isData = SELF_DATA_VALUES.get(value);
+	if (isData === undefined) {
+		isData = runtime_dataKind(value) !== null;
+		SELF_DATA_VALUES.set(value, isData);
+	}
+	return isData;
+}
+
+/**
+ * The member a node of a built-in data object (a file's default export that is a `Map`, a `Set`, a `Date`, …) answers
+ * from the object, as the object does: the node fronts the value as data, so a member its kind defines (`get`, `size`,
+ * `entries`, `Symbol.iterator`, a date's `getTime`) is the object's, read on it and, for a method, run on it, never an
+ * api child with a path of its own. What `Object.prototype` holds keeps the node's answers (see
+ * runtime_inheritedEngineMember), and so do `constructor` and `then`. A reader through `self` that may not change the
+ * object gets the view's member instead ({@link runtime_selfDataMember}).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @returns {*} The member, or {@link NODE_MEMBER} when the node answers it another way.
+ * @private
+ *
+ * @example
+ * // single/dmap.mjs: export default new Map([["one", { n: 1 }]]);
+ * [...api.single.dmap]; // [["one", { n: 1 }]]
+ * api.single.dmap.get("one"); // { n: 1 }, run on the map: `single.dmap.get` is no api path
+ */
+function runtime_frontedDataMember(wrapper, prop) {
+	if (prop === "then" || prop === "constructor") return NODE_MEMBER;
+	const impl = wrapper.____slothletInternal.impl;
+	if (!runtime_holdsDataKind(impl)) return NODE_MEMBER;
+	let holder = impl;
+	while (holder !== null && !hasOwn(holder, prop)) holder = Reflect.getPrototypeOf(holder);
+	if (holder === null || holder === impl || holder === Objects.prototype || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	const member = Reflect.get(impl, prop, impl);
+	if (typeof member !== "function") return member;
+	let byObject = SELF_DATA_METHODS.get(impl);
+	if (!byObject) {
+		byObject = new Map();
+		SELF_DATA_METHODS.set(impl, byObject);
+	}
+	let method = byObject.get(prop);
+	if (method?.fn !== member) {
+		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
+		byObject.set(prop, method);
+	}
+	return method.call;
+}
+
+/**
+ * Whether each value a node holds is a built-in data object ({@link runtime_selfDataMember}), decided once per value.
+ * @type {WeakMap<object, boolean>}
+ * @private
+ */
+const SELF_DATA_VALUES = new WeakMap();
+
+/**
+ * The methods {@link runtime_frontedDataMember} made to run on a data object itself, per object and key.
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
+ * @private
+ */
+const SELF_DATA_METHODS = new WeakMap();
 
 /**
  * Hand out a plain value reached through a node `self` handed out — a class's `prototype`, a method of it,
@@ -1287,7 +1510,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// A shadow of the same kind, so the view calls, constructs, and answers `Array.isArray` as the value does,
 	// and carries no fixed member the value lacks.
 	let shadow;
-	if (Array.isArray(raw)) shadow = [];
+	if (Arrays.isArray(raw)) shadow = [];
 	else if (typeof raw !== "function") shadow = {};
 	else if (!runtime_isConstructor(raw)) shadow = () => {};
 	else if (hasOwn(raw, "prototype")) shadow = function () {};
@@ -1321,7 +1544,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
-			const descriptors = Object.getOwnPropertyDescriptors(raw);
+			const descriptors = Objects.getOwnPropertyDescriptors(raw);
 			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
 			Reflect.setPrototypeOf(shadow, prototypeOf(false));
 			Reflect.preventExtensions(shadow);
@@ -1333,6 +1556,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		const target = typeof prop === "string" ? [...parts, prop] : parts;
 		const writer = runtime_selfRootWriter(slothlet, reader, target);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+		runtime_assertReaderWrite(slothlet, reader, writer, target);
 	};
 	// The value's prototype as the reader is handed it, by `Object.getPrototypeOf` and through `__proto__` alike (#667):
 	// a class's prototype a node of the instance fronts the class of is read through that node, as reading its
@@ -1348,7 +1572,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		if (check) return runtime_selfView(classNode, reader).prototype;
 		return runtime_selfMemberOf(proto, reader, slothlet, [...runtime_apiPathParts(classNode), "prototype"], "prototype");
 	};
-	const view = new Proxy(shadow, {
+	const view = new NativeProxy(shadow, {
 		get(_, prop, receiver) {
 			mirrorClosed();
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1497,6 +1721,9 @@ function runtime_selfHasInstance(prototype, instance) {
  *
  * @param {*} node - Value read through `self`.
  * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object|null} [from=null] - The module handing the value on, when one is.
+ * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
+ *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -1504,7 +1731,7 @@ function runtime_selfHasInstance(prototype, instance) {
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node, reader, from = null) {
+export function runtime_selfView(node, reader, from = null, access = null) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
 	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
@@ -1518,7 +1745,8 @@ export function runtime_selfView(node, reader, from = null) {
 			: memberRecord === undefined
 				? PROTOTYPE_PATHS.get(handed)
 				: runtime_knownPrototype(memberRecord.slothlet, handed);
-	if (handedPrototype !== undefined) return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet));
+	if (handedPrototype !== undefined)
+		return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet, access));
 	// A member view handed to another reader is that reader's view of the same value at the same path.
 	if (memberRecord) {
 		if (reader === undefined || reader === memberRecord.reader) return node;
@@ -1538,9 +1766,18 @@ export function runtime_selfView(node, reader, from = null) {
 	const dispatch = versionDispatcherRecord(node);
 	const inner = dispatch ? null : (resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null);
 	// Any other value another module hands on reaches the reader through the class prototype guard.
-	if (inner === null && dispatch === null) return runtime_crossTo(node, reader, null, from);
+	if (inner === null && dispatch === null) {
+		if (reader === undefined && from?.slothlet) reader = runtime_selfReader(from.slothlet, access);
+		if (from === null) {
+			// Handed on by no known module (the host's own value in a hook's arguments, say), it is handed on as it is,
+			// unless a module's call returned it to the host.
+			from = HOST_HANDED.get(node) ?? null;
+			if (from === null && !CROSSINGS.has(node)) return node;
+		}
+		return runtime_crossTo(node, reader, null, from);
+	}
 	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
-	if (reader === undefined) reader = runtime_selfReader(slothlet);
+	if (reader === undefined) reader = runtime_selfReader(slothlet, access);
 	let byReader = SELF_VIEWS.get(node);
 	if (!byReader) {
 		byReader = new WeakMap();
@@ -1667,31 +1904,39 @@ export function runtime_selfView(node, reader, from = null) {
 		if (inner && prototype === runtime_unclassedInstancePrototype(inner)) return viewMember(null, prototype);
 		return prototype;
 	};
+	// What a read of a member hands out, the read and the description that follows it made as one access.
+	const readMember = (prop, access) => {
+		const value = runtime_readWithAccess(access, node, node, prop, node);
+		// The language's own member of the data object the node holds is handed out as the object's view hands it, once
+		// the node's own read of it has been made (and checked).
+		const dataMember = runtime_selfDataMember(inner, reader, slothlet, prop);
+		if (dataMember !== NODE_MEMBER) return dataMember;
+		// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
+		if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
+			const impl = inner?.____slothletInternal.impl;
+			if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isClassInstance(impl) && runtime_readsEngineProto(impl))
+				return shownPrototype(value);
+		}
+		if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
+			hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
+			return hasInstance;
+		}
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		if (isFixed(runtime_describeWithAccess(access, node, node, prop))) return value;
+		return viewMember(prop, value);
+	};
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
-	const view = new Proxy(capturedViewShadows.get(node) ?? node, {
+	const view = new NativeProxy(capturedViewShadows.get(node) ?? node, {
 		get(_, prop) {
-			const value = Reflect.get(node, prop);
-			// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
-			if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
-				const impl = inner?.____slothletInternal.impl;
-				if (
-					impl !== null &&
-					typeof impl === "object" &&
-					!util.types.isProxy(impl) &&
-					isClassInstance(impl) &&
-					runtime_readsEngineProto(impl)
-				)
-					return shownPrototype(value);
+			// The read, and the description of the member that follows it, are one access by the same code.
+			const access = capturedViewShadows.has(node) ? runtime_beginAccess() : null;
+			try {
+				return readMember(prop, access);
+			} finally {
+				runtime_endAccess(access);
 			}
-			if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
-				hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
-				return hasInstance;
-			}
-			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-			if (isFixed(Reflect.getOwnPropertyDescriptor(node, prop))) return value;
-			return viewMember(prop, value);
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, prop);
@@ -2037,7 +2282,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		}
 		return writer;
 	};
-	const view = new Proxy(member, {
+	const view = new NativeProxy(member, {
 		get(target, prop) {
 			return asReader(() => {
 				// An accessor a module placed on the namespace runs with the view as `this`, never the member behind it,
@@ -2159,15 +2404,6 @@ const SELF_FRAMEWORK_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
 const SELF_ROOT_VIEWS = new WeakMap();
 
 /**
- * slothlet's own wrappers that no other registry holds (a root view, a promoted call's guarded result, a carrier's view
- * or frozen copy), recorded only so {@link isSlothletWrapped} knows them; nothing else reads it, so recording one
- * changes how no value is handled.
- * @type {WeakSet<object>}
- * @private
- */
-const OWN_VIEWS_UNLISTED = new WeakSet();
-
-/**
  * Who a change made through a root view at `parts` is made as: the module executing now, the host
  * (`null`) inside a `run()` / `scope()` it opened, or else the reader the view belongs to, when that reader
  * owns the path. Code the live runtime cannot attribute is refused, as it is through a node's view.
@@ -2249,7 +2485,7 @@ export function runtime_selfRootView(slothlet, reader) {
 		// A reserved name is refused whoever changes it, as an assignment to it is.
 		if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	};
-	const view = new Proxy(root, {
+	const view = new NativeProxy(root, {
 		get(target, prop) {
 			return member(prop, Reflect.get(target, prop));
 		},
@@ -2286,7 +2522,6 @@ export function runtime_selfRootView(slothlet, reader) {
 		}
 	});
 	byReader.set(reader, view);
-	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
 
@@ -2315,7 +2550,12 @@ export function runtime_markCallerLocked(fn) {
 	CALLER_LOCKED.add(fn);
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
 	if (hasOwn(fn, "_slothletOriginal")) {
-		Object.defineProperty(fn, "_slothletOriginal", { value: fn._slothletOriginal, writable: false, enumerable: true, configurable: false });
+		Objects.defineProperty(fn, "_slothletOriginal", {
+			value: fn._slothletOriginal,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		});
 	}
 	return fn;
 }
@@ -2366,16 +2606,19 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 	const viewed = function slothlet_viewedHook(payload, ...rest) {
 		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, [payload, ...rest]);
 		const originals = new Map();
-		const toView = (value) => {
-			const view = runtime_selfView(value, reader);
+		// What the call returned or threw comes from the node called, so a module's hook on its own function is handed
+		// its own values as they are.
+		const called = typeof payload.path === "string" ? runtime_nodeAtPath(slothlet, payload.path) : null;
+		const toView = (value, from = null) => {
+			const view = runtime_selfView(value, reader, from);
 			if (view !== value) originals.set(view, value);
 			return view;
 		};
 		// A promise of a node settles to the view. Its rejection is still the call's: the viewed promise
 		// is marked handled, so a handler that never awaits it reports nothing the call did not.
 		const viewValue = (value) => {
-			if (!runtime_inherits(value, Promise)) return toView(value);
-			const view = value.then(toView);
+			if (!runtime_inherits(value, Promise)) return toView(value, called);
+			const view = value.then((settled) => toView(settled, called));
 			view.catch(() => {});
 			originals.set(view, value);
 			return view;
@@ -2384,13 +2627,24 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		const fromViews = (list) => (list.some((value) => originals.has(value)) ? list.map(fromView) : list);
 		const handed = { ...payload };
 		if ("api" in payload) handed.api = payload.api === slothlet.boundApi ? runtime_selfRootView(slothlet, reader) : toView(payload.api);
-		const callArgs = Array.isArray(payload.args) ? payload.args : null;
-		const handedArgs = callArgs ? callArgs.map(toView) : null;
+		const callArgs = Arrays.isArray(payload.args) ? payload.args : null;
+		// An argument comes from whoever handed it to the call: another module's reaches this one as a view, its own as
+		// itself, and what the host built as it is.
+		const caller = runtime_permissionsOn(reader) ? runtime_callingModule(slothlet) : null;
+		const argView = (value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+			if (!runtime_permissionsOn(reader)) return toView(value);
+			const view = toView(value, CROSSINGS.has(value) ? null : runtime_argumentSource(value, caller, called));
+			const own = runtime_ownInstances(reader, runtime_ownArguments(reader, [view]))[0];
+			if (own !== view) originals.set(own, originals.has(view) ? originals.get(view) : value);
+			return own;
+		};
+		const handedArgs = callArgs ? callArgs.map(argView) : null;
 		let snapshot = handedArgs ? [...handedArgs] : null;
 		if (handedArgs) handed.args = handedArgs;
 		if ("result" in payload) handed.result = viewValue(payload.result);
 		// What the call threw, when that is a node: the handler's own view of it, as a result is.
-		if ("error" in payload) handed.error = toView(runtime_crossTo(payload.error, reader, slothlet));
+		if ("error" in payload) handed.error = toView(runtime_crossTo(payload.error, reader, slothlet, called), called);
 		// A change the handler makes to the args array in place reaches the call, as it would unviewed: before
 		// `next()` forwards them, and once the handler returns.
 		const writeBack = () => {
@@ -2404,10 +2658,10 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 			const next = payload.next;
 			handed.next = (nextArgs) => {
 				if (nextArgs === undefined) writeBack();
-				return viewValue(next(Array.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
+				return viewValue(next(Arrays.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
 			};
 		}
-		const settle = (out) => (Array.isArray(out) ? fromViews(out) : fromView(out));
+		const settle = (out) => (Arrays.isArray(out) ? fromViews(out) : fromView(out));
 		const out = Reflect.apply(handler, this, [handed, ...rest]);
 		writeBack();
 		if (runtime_inherits(out, Promise) && !originals.has(out)) {
@@ -2565,7 +2819,7 @@ export async function settleStandInChanges(slothlet, scope = null) {
 		const holders = [...pending].filter((holder) => !tried.has(holder) && qualifies(holder));
 		if (holders.length === 0) return;
 		for (const holder of holders) tried.add(holder);
-		await Promise.all(holders.map((holder) => holder._materialize().catch(() => {})));
+		await Promises.all(holders.map((holder) => holder._materialize().catch(() => {})));
 	}
 }
 
@@ -2660,9 +2914,9 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 	}
 	if (replayed) {
 		if (op === "set") node[prop] = payload;
-		else if (op === "defineProperty") Object.defineProperty(node, prop, payload);
+		else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
 		else if (op === "deleteProperty") delete node[prop];
-		else Object.setPrototypeOf(node, payload);
+		else Objects.setPrototypeOf(node, payload);
 		return true;
 	}
 	if (op === "set") return Reflect.set(node, prop, payload);
@@ -2682,9 +2936,9 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
  * @private
  */
 function runtime_lockAsStandIn(node, target) {
-	if (Object.isFrozen(target)) Object.freeze(node);
-	else if (Object.isSealed(target)) Object.seal(node);
-	else Object.preventExtensions(node);
+	if (Objects.isFrozen(target)) Objects.freeze(node);
+	else if (Objects.isSealed(target)) Objects.seal(node);
+	else Objects.preventExtensions(node);
 }
 
 /**
@@ -2877,7 +3131,7 @@ function runtime_retireChanges(wrapper, seen = new Set()) {
 	seen.add(wrapper);
 	wrapper.____slothletInternal.changeGeneration++;
 	runtime_dropRefusedChanges(wrapper);
-	for (const key of Object.keys(wrapper)) {
+	for (const key of Objects.keys(wrapper)) {
 		const child = resolveWrapper(wrapper[key]);
 		if (child) runtime_retireChanges(child, seen);
 	}
@@ -2954,6 +3208,188 @@ function runtime_accessAsKept(wrapper, reader, access) {
 	} finally {
 		capturedAccess = previous;
 	}
+}
+
+/**
+ * The node or view the next trap is entered on with an access handed to it (see {@link runtime_readWithAccess}).
+ * @type {object|null}
+ * @private
+ */
+let handedAccessKey = null;
+
+/**
+ * The access handed to that trap.
+ * @type {{filled: boolean, done: boolean, manager: object|null, store: object|null|undefined, identity: object|undefined}|null}
+ * @private
+ */
+let handedAccess = null;
+
+/**
+ * One access a module's code makes through a view (a member read, a description of a member): who is making it is
+ * resolved at most once, by the first check of the access that asks, and every later check of the same access takes
+ * that answer instead of reading the stack again.
+ *
+ * One access runs several of slothlet's traps, one inside another: the view of `self`, the view that keeps its reader,
+ * the node. The code making the access is the same for all of them, as only slothlet's own code runs between the
+ * outermost trap and each check. The answer never leaves the access: it travels only in the traps' own variables and
+ * through a hand-over the next trap takes as it starts ({@link runtime_takeAccess}), so code that runs inside the
+ * access (a getter, a module's Proxy, a listener) and makes an access of its own starts a new one, and the answer is
+ * dropped when the trap that began the access returns ({@link runtime_endAccess}), so nothing kept from it answers
+ * for a later access.
+ * @returns {{filled: boolean, done: boolean, manager: object|null, store: object|null|undefined, identity: object|undefined}} The access.
+ * @private
+ *
+ * @example
+ * const access = runtime_beginAccess();
+ * try {
+ * 	return runtime_readWithAccess(access, inner, child, prop, child);
+ * } finally {
+ * 	runtime_endAccess(access);
+ * }
+ */
+function runtime_beginAccess() {
+	return { filled: false, done: false, manager: null, store: undefined, identity: undefined };
+}
+
+/**
+ * End an access its trap began: its answer is no longer taken by anything that still holds it.
+ * @param {object|null} access - The access.
+ * @returns {void}
+ * @private
+ */
+function runtime_endAccess(access) {
+	if (access !== null) access.done = true;
+}
+
+/**
+ * Take the access handed to a trap, as the trap starts and before any other code runs. Whatever was handed is
+ * dropped, whether or not it was meant for this trap, so it reaches no trap entered later.
+ * @param {object} key - The node's wrapper, or the view, the trap belongs to.
+ * @returns {object|null} The access, or null when none was handed to this trap.
+ * @private
+ */
+function runtime_takeAccess(key) {
+	if (handedAccessKey === null) return null;
+	const access = handedAccessKey === key ? handedAccess : null;
+	handedAccessKey = null;
+	handedAccess = null;
+	return access;
+}
+
+/**
+ * Who is making an access, as `contextManager.getCallerIdentity(instanceID)` answers it: resolved once per access.
+ * An answer resolved on another store (a node of another instance reached inside the same access) is not taken.
+ * @param {object|null} access - The access, or null to resolve it now.
+ * @param {object|null|undefined} contextManager - The instance's context manager.
+ * @param {string} [instanceID] - The instance the identity is read for, as `getCallerIdentity` takes it.
+ * @returns {object|undefined} The identity.
+ * @private
+ */
+function runtime_accessIdentity(access, contextManager, instanceID) {
+	if (access === null || access.done || !contextManager?.tryGetContext || !contextManager.getCallerIdentity)
+		return contextManager?.getCallerIdentity?.(instanceID);
+	const store = contextManager.tryGetContext(instanceID);
+	if (access.filled) {
+		return access.manager === contextManager && access.store === store ? access.identity : contextManager.getCallerIdentity(instanceID);
+	}
+	const identity = contextManager.getCallerIdentity(instanceID);
+	access.manager = contextManager;
+	access.store = store;
+	access.identity = identity;
+	access.filled = true;
+	return identity;
+}
+
+/**
+ * The identity of an access with the store it was read on, in the form a permission check takes as resolved already
+ * (see {@link resolveEnforcedCaller}), or null when the access gives none for this node.
+ * @param {object|null} access - The access.
+ * @param {object} wrapper - The node being checked.
+ * @returns {{store: object|null|undefined, identity: object|undefined}|null} The resolved identity.
+ * @private
+ */
+function runtime_accessEntry(access, wrapper) {
+	if (access === null || access.done) return null;
+	const contextManager = wrapper.slothlet.contextManager;
+	if (!contextManager?.tryGetContext || !contextManager.getCallerIdentity) return null;
+	const instanceID = wrapper.slothlet.instanceID;
+	const identity = runtime_accessIdentity(access, contextManager, instanceID);
+	if (access.manager !== contextManager || access.identity !== identity) return null;
+	const store = contextManager.tryGetContext(instanceID);
+	return access.store === store ? { store, identity } : null;
+}
+
+/**
+ * An access whose identity its caller resolved already, on the store it read it from.
+ * @param {object} contextManager - The context manager that resolved it.
+ * @param {object|null|undefined} store - The store it was resolved on.
+ * @param {object|undefined} identity - The identity.
+ * @returns {object} The access.
+ * @internal
+ *
+ * @example
+ * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
+ */
+export function runtime_resolvedAccess(contextManager, store, identity) {
+	return { filled: true, done: false, manager: contextManager, store, identity };
+}
+
+/**
+ * Read a member of a node for an access, handing the access to the node's own trap. Only the node's current proxy is
+ * handed it: its traps take what is handed as they start. Anything else is read as it is.
+ * @param {object|null} access - The access.
+ * @param {object} key - The wrapper of the node, or the view, whose trap takes it.
+ * @param {object} target - The node or view read.
+ * @param {string|symbol} prop - The member.
+ * @param {*} receiver - The receiver.
+ * @returns {*} The member.
+ * @private
+ */
+function runtime_readWithAccess(access, key, target, prop, receiver) {
+	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.get(target, prop, receiver);
+	handedAccessKey = key;
+	handedAccess = access;
+	try {
+		return Reflect.get(target, prop, receiver);
+	} finally {
+		handedAccessKey = null;
+		handedAccess = null;
+	}
+}
+
+/**
+ * Describe a member of a node for an access, handing the access to the node's own trap (see
+ * {@link runtime_readWithAccess}).
+ * @param {object|null} access - The access.
+ * @param {object} key - The wrapper of the node, or the view, whose trap takes it.
+ * @param {object} target - The node or view described.
+ * @param {string|symbol} prop - The member.
+ * @returns {PropertyDescriptor|undefined} The descriptor.
+ * @private
+ */
+function runtime_describeWithAccess(access, key, target, prop) {
+	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+	handedAccessKey = key;
+	handedAccess = access;
+	try {
+		return Reflect.getOwnPropertyDescriptor(target, prop);
+	} finally {
+		handedAccessKey = null;
+		handedAccess = null;
+	}
+}
+
+/**
+ * Whether the first code a read or a description of `target` runs is a trap that takes a handed access: a view that
+ * keeps its reader (keyed by itself), or the current proxy of the node `key` is the wrapper of.
+ * @param {object} key - The view, or the node's wrapper.
+ * @param {object} target - What is read.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_takesAccess(key, target) {
+	if (key === target) return capturedViewShadows.has(target);
+	return key.____slothletInternal?.proxy === target;
 }
 
 /**
@@ -3065,14 +3501,14 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
  */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null) {
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null, access = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -3094,7 +3530,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
  * @private
  */
 function runtime_isTerminalData(value) {
-	if (value !== Object(value)) return true;
+	if (value !== NativeObject(value)) return true;
 	if (runtime_isSlothletValue(value)) return false;
 	return runtime_dataKind(value) !== null || runtime_isErrorValue(value);
 }
@@ -3116,7 +3552,7 @@ function runtime_isTerminalData(value) {
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null) {
 	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -3128,7 +3564,13 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
 		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
-	const decision = resolveEnforcedCaller(wrapper, callerOverride, kept);
+	// The live caller of an access that resolved it already is taken as resolved; an explicit caller is never replaced.
+	const decision = resolveEnforcedCaller(
+		wrapper,
+		callerOverride,
+		kept,
+		callerOverride === undefined ? runtime_accessEntry(access, wrapper) : null
+	);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -3182,9 +3624,74 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
 		callerFilePath,
 		targetFilePath,
 		/* v8 ignore next */
-		ctx.context ?? null
+		ctx.context ?? null,
+		null,
+		runtime_dataReadOptions(wrapper.slothlet)
 	);
 	return { allowed, caller: callerPath };
+}
+
+/**
+ * The enforcement options of a read of data, per instance: they tell the permission manager which paths above the
+ * target are object members of a module's data, so a deny naming one of them exactly covers what it holds.
+ * @type {WeakMap<object, {dataMember: function(string): boolean}>}
+ * @private
+ */
+const DATA_READ_OPTIONS = new WeakMap();
+
+/**
+ * The enforcement options of a read of data for an instance (see {@link DATA_READ_OPTIONS}).
+ * @param {object} slothlet - The instance.
+ * @returns {{dataMember: function(string): boolean}} The options.
+ * @private
+ */
+function runtime_dataReadOptions(slothlet) {
+	let options = DATA_READ_OPTIONS.get(slothlet);
+	if (options === undefined) {
+		options = Objects.freeze({ dataMember: (apiPath) => runtime_isDataMemberNode(runtime_nodeAtPath(slothlet, apiPath)) });
+		DATA_READ_OPTIONS.set(slothlet, options);
+	}
+	return options;
+}
+
+/**
+ * Whether each node holds an object member of a module's data, by the value it held when asked.
+ * @type {WeakMap<object, {impl: *, member: boolean}>}
+ * @private
+ */
+const DATA_MEMBER_NODES = new WeakMap();
+
+/**
+ * Whether a node stands for an object member of a module's data: a plain object or array a file exports by name, or
+ * one such a value holds, or one a file's default export holds. A folder, a file's own node (its default export
+ * included), a function, a built-in data value and a value no file exported are not. A rule naming such a member's
+ * path exactly is about the member, so it covers what the member holds, as reading the member itself is traversal.
+ * Decided once per value the node holds.
+ * @param {object|null} wrapper - The node's wrapper, or null when no node is there.
+ * @returns {boolean} Whether it is one.
+ * @private
+ *
+ * @example
+ * // owner.mjs: export const config = { nested: { a: 1 } };
+ * runtime_isDataMemberNode(nodeOf("owner.config.nested")); // true
+ * runtime_isDataMemberNode(nodeOf("owner")); // false
+ */
+function runtime_isDataMemberNode(wrapper) {
+	if (wrapper === null) return false;
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	const known = DATA_MEMBER_NODES.get(wrapper);
+	if (known !== undefined && known.impl === impl) return known.member;
+	const exportPath = internal.exportPath;
+	const member =
+		!internal.isCallable &&
+		impl !== null &&
+		typeof impl === "object" &&
+		!runtime_isTerminalData(impl) &&
+		Arrays.isArray(exportPath) &&
+		exportPath.length > (exportPath[0] === "default" ? 1 : 0);
+	DATA_MEMBER_NODES.set(wrapper, { impl, member });
+	return member;
 }
 
 /**
@@ -3196,6 +3703,33 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
  * @private
  */
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
+
+/**
+ * Whether the value a node holds answers `name` or `length` itself, through its prototype chain, as an error answers
+ * `name` from its class: the node then answers it as a member, as the value does (`api.m.failure.name` is
+ * `"RangeError"`), instead of with its own answer (its last api-path segment, and `0`). Only a value that is not a
+ * function: a function node keeps its own answers. `Object.prototype` holds neither name, so a plain object without such
+ * a member keeps the node's answers. Read by descriptors, so no getter runs to decide it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @returns {boolean} Whether the value holds it.
+ * @private
+ *
+ * @example
+ * // m/failure.mjs: export default new RangeError("bad");
+ * api.m.failure.name; // "RangeError"
+ */
+function runtime_valueHoldsName(wrapper, prop) {
+	if (prop !== "name" && prop !== "length") return false;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object" || Arrays.isArray(impl) || util.types.isProxy(impl)) return false;
+	if (typeof Reflect.getOwnPropertyDescriptor(impl, "default")?.value === "function") return false;
+	for (let holder = impl, depth = 0; holder !== null && holder !== Objects.prototype && depth < 64; depth++) {
+		if (hasOwn(holder, prop)) return true;
+		holder = Reflect.getPrototypeOf(holder);
+	}
+	return false;
+}
 
 /**
  * The module's own getter or setter behind each half of an accessor adoption puts on a wrapper, so a
@@ -3217,7 +3751,7 @@ const ADOPTED_ACCESSORS = new WeakMap();
  * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
 function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
-	Object.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
+	Objects.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
 }
 
 /**
@@ -3423,7 +3957,7 @@ function runtime_implAccessor(wrapper, prop) {
 	try {
 		for (
 			let holder = wrapper.____slothletInternal.impl, depth = 0;
-			holder !== null && holder !== undefined && holder !== Object.prototype && depth < 64;
+			holder !== null && holder !== undefined && holder !== Objects.prototype && depth < 64;
 			depth++
 		) {
 			// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
@@ -3452,6 +3986,26 @@ function runtime_implAccessor(wrapper, prop) {
 }
 
 /**
+ * The prototype a member reaches a node fronting a module's own object from, when the object inherits it from a
+ * prototype set on it (#757) and the node's own copy of the object holds no member by that key: null otherwise, and
+ * for a member of `Object.prototype`, which the node's copy inherits too.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {object|null} The prototype to read it from, or null.
+ * @private
+ */
+function runtime_moduleInheritance(wrapper, prop) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return null;
+	const impl = internal.impl;
+	if (impl === null || typeof impl !== "object" || Reflect.has(impl, prop)) return null;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null) return null;
+	const prototype = Reflect.getPrototypeOf(object);
+	return prototype !== null && prototype !== Objects.prototype && Reflect.has(prototype, prop) ? prototype : null;
+}
+
+/**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
  * {@link runtime_runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
  * @param {object} wrapper - The node's wrapper.
@@ -3461,6 +4015,9 @@ function runtime_implAccessor(wrapper, prop) {
  */
 function runtime_readImplMember(wrapper, prop) {
 	const impl = wrapper.____slothletInternal.impl;
+	// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
+	const inherited = runtime_moduleInheritance(wrapper, prop);
+	if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
 	const accessor = runtime_implAccessor(wrapper, prop);
 	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
 	if (accessor)
@@ -3488,6 +4045,401 @@ function runtime_writeImplMember(wrapper, prop, value) {
 	if (typeof accessor.descriptor.set !== "function") return false;
 	runtime_runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
 	return true;
+}
+
+/**
+ * The module's own object a node fronts, when the node was built from a copy of it (#746): a plain object a module
+ * exports, or one held inside such an object. Adoption works on a copy (see copyForComposition), so the module's object
+ * stays whole, and a write made through the node is made to that object too, as a write to the object itself is. Null
+ * for a node whose impl is the module's value itself (a class instance, an emitter, an array, a wrap-on-set value),
+ * which takes its writes directly, and for a namespace slothlet composed (a file's module node, a folder), which is no
+ * object of a module's.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} [prop] - A member about to be written: null is answered for one the object does not hold
+ *   because the build put a named export of the file there.
+ * @returns {object|null} The module's object, or null.
+ * @private
+ *
+ * @example
+ * runtime_moduleObjectOf(resolveWrapper(api.m.config)); // the `config` object m.mjs exports
+ */
+function runtime_moduleObjectOf(wrapper, prop = undefined) {
+	const internal = wrapper.____slothletInternal;
+	const object = internal.moduleObject;
+	if (object === null || object === undefined || object === internal.impl) return null;
+	const impl = internal.impl;
+	if (impl === null || typeof impl !== "object" || Arrays.isArray(impl) || util.types.isProxy(impl)) return null;
+	// A named export the build put beside an object default's members is the file's binding, not a member of the
+	// default: the node holds it, and the module's object never does.
+	if (prop !== undefined) {
+		const origin = internal.memberExportPaths?.[prop];
+		if (Arrays.isArray(origin) && origin[0] !== "default" && !hasOwn(object, prop)) return null;
+	}
+	return object;
+}
+
+/**
+ * The plain object each reconstruction of a node's value stands for ({@link UnifiedWrapper._extractFullImpl}): the
+ * module's object the node fronts, so a node rebuilt from the reconstruction (a reload reusing it) still finds it.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const RECONSTRUCTED_FROM = new WeakMap();
+
+/**
+ * The module's own object behind the value a node is built from (#746): the value itself, or what the build's copies
+ * of it were copied from (see copySourceOf), when that is a plain object the node's file exports, or (`asMember`) one
+ * held inside such an object. A namespace the build composed from a file's exports is no module's object, and neither
+ * is a Proxy, an array, a class instance or a node.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {*} value - The value the node is built from.
+ * @param {boolean} asMember - True when the value was read off the value of the node's parent.
+ * @returns {object|null} The module's object, or null.
+ * @private
+ */
+function runtime_moduleObjectFor(wrapper, value, asMember) {
+	let root = value;
+	for (let depth = 0; depth < 8; depth++) {
+		const source = root !== null && typeof root === "object" ? (RECONSTRUCTED_FROM.get(root) ?? copySourceOf(root)) : undefined;
+		if (source === undefined) break;
+		root = source;
+	}
+	if (root === null || typeof root !== "object" || Arrays.isArray(root) || util.types.isProxy(root)) return null;
+	const prototype = Reflect.getPrototypeOf(root);
+	if (prototype !== null && prototype !== Objects.prototype) return null;
+	const ownership = wrapper.slothlet?.handlers?.ownership;
+	const filePath = wrapper.____slothletInternal.filePath;
+	if (!ownership || !filePath) return null;
+	if (ownership.resolveExportPath(filePath, root) || (asMember && !ownership.resolveMemberExportPaths(filePath, root))) {
+		runtime_moduleObjectKeys(root);
+		MODULE_OBJECT_SEEN.set(wrapper, { object: root, members: runtime_moduleObjectMembers(root) });
+		return root;
+	}
+	return null;
+}
+
+/**
+ * The language's own `__proto__` setter, taken when this file loads.
+ * @type {function(this: object, (object|null)): void}
+ * @private
+ */
+const OBJECT_PROTO_SETTER = Reflect.getOwnPropertyDescriptor(Objects.prototype, "__proto__").set;
+
+/**
+ * The members each module object a node fronts has held since slothlet first built a node from it (#757), so a member
+ * the module deletes from its object later is told from one the node alone holds.
+ * @type {WeakMap<object, Set<string>>}
+ * @private
+ */
+const MODULE_OBJECT_KEYS = new WeakMap();
+
+/**
+ * The members a module's object has held since slothlet first built a node from it (see {@link MODULE_OBJECT_KEYS}).
+ * @param {object} object - The module's object.
+ * @returns {Set<string>} Its keys, recorded on first sight.
+ * @private
+ */
+function runtime_moduleObjectKeys(object) {
+	let keys = MODULE_OBJECT_KEYS.get(object);
+	if (keys === undefined) {
+		keys = new Set(Objects.keys(object));
+		MODULE_OBJECT_KEYS.set(object, keys);
+	}
+	return keys;
+}
+
+/**
+ * What the module's object each node fronts held when the node was built from it, and at each member the node has
+ * followed since (#757). The build decides what a node holds under a key (a collision's winner, a named export beside
+ * an object default's member, a co-owner's value after a removal), so a node follows a member only when the module
+ * has changed it on its object since: a member the object still holds as the build saw it is left as the build put it.
+ * @type {WeakMap<UnifiedWrapper, {object: object, members: Map<string, PropertyDescriptor>}>}
+ * @private
+ */
+const MODULE_OBJECT_SEEN = new WeakMap();
+
+/**
+ * The enumerable-or-not own string-keyed members of a module's object as they are now, for {@link MODULE_OBJECT_SEEN}.
+ * @param {object} object - The module's object.
+ * @returns {Map<string, PropertyDescriptor>} Each member's descriptor.
+ * @private
+ */
+function runtime_moduleObjectMembers(object) {
+	const members = new Map();
+	for (const key of Objects.getOwnPropertyNames(object)) members.set(key, Reflect.getOwnPropertyDescriptor(object, key));
+	return members;
+}
+
+/**
+ * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
+ * recording what the object holds now.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object.
+ * @param {string} key - The member's key.
+ * @param {PropertyDescriptor|undefined} held - The object's member now.
+ * @returns {boolean} True when the member was added, replaced, redefined or deleted.
+ * @private
+ */
+function runtime_moduleMemberChanged(wrapper, object, key, held) {
+	let seen = MODULE_OBJECT_SEEN.get(wrapper);
+	if (seen === undefined || seen.object !== object) {
+		// A node handed another node's object (a reload reusing it) was just built from that object as it is.
+		seen = { object, members: runtime_moduleObjectMembers(object) };
+		MODULE_OBJECT_SEEN.set(wrapper, seen);
+		return false;
+	}
+	const before = seen.members.get(key);
+	if (held === undefined) {
+		if (before === undefined) return false;
+		seen.members.delete(key);
+		return true;
+	}
+	if (
+		before !== undefined &&
+		before.enumerable === held.enumerable &&
+		"value" in before === "value" in held &&
+		("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
+	) {
+		return false;
+	}
+	seen.members.set(key, held);
+	return true;
+}
+
+/**
+ * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
+ * built-in value, a child node built from the same object, or an adoption of the same accessor.
+ * @param {PropertyDescriptor} mine - The node's own member.
+ * @param {PropertyDescriptor} held - The module's object's member.
+ * @returns {boolean} True when the node is in step with the object for this member.
+ * @private
+ */
+function runtime_holdsModuleMember(mine, held) {
+	if (!("value" in held)) {
+		if ("value" in mine) return false;
+		const original = runtime_originalAccessor(mine);
+		return original.get === held.get && original.set === held.set;
+	}
+	if (!("value" in mine)) return false;
+	if (Objects.is(mine.value, held.value)) return true;
+	const child = resolveWrapper(mine.value);
+	if (child === null) return false;
+	// A child node that keeps no record of what it was built from is not one this follows.
+	const internal = child.____slothletInternal;
+	if (!hasOwn(internal, "sourceValue")) return true;
+	// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
+	return (
+		internal.sourceValue === held.value ||
+		internal.moduleObject === held.value ||
+		internal.impl === held.value ||
+		(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
+	);
+}
+
+/**
+ * Bring one member a node fronts in step with the module's own object (#757): the module may change its object
+ * itself after the node was built (`config.port = 90` in its own code), and a read through the node gives what the
+ * object holds, as a read of the object does. A member the module replaced is adopted again, as the build adopts
+ * one; one it added is adopted; one it deleted is taken off the node. Only the node is changed, as the framework's
+ * own write: the module made the change.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object.
+ * @param {Set<string>} seen - The members the object has held (see {@link runtime_moduleObjectKeys}).
+ * @param {string} key - The member's key.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleMember(wrapper, object, seen, key) {
+	if (isFrameworkReservedKey(key)) return;
+	const internal = wrapper.____slothletInternal;
+	// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
+	if (internal.collisionMergedKeys?.has(key) || runtime_moduleObjectOf(wrapper, key) === null) return;
+	const held = Reflect.getOwnPropertyDescriptor(object, key);
+	if (!runtime_moduleMemberChanged(wrapper, object, key, held)) return;
+	const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
+	if (mine !== undefined && !mine.configurable) return;
+	if (held === undefined) {
+		if (mine === undefined || !seen.has(key)) return;
+		seen.delete(key);
+		const displaced = "value" in mine ? resolveWrapper(mine.value) : null;
+		if (displaced) runtime_retireChanges(displaced);
+		Reflect.deleteProperty(wrapper, key);
+		internal.readOnlyKeys?.delete(key);
+		return;
+	}
+	// The build adopts an object's enumerable members only.
+	if (!held.enumerable) return;
+	seen.add(key);
+	if (mine !== undefined && runtime_holdsModuleMember(mine, held)) return;
+	if (!("value" in held)) {
+		runtime_defineAdoptedAccessor(wrapper, key, held);
+		return;
+	}
+	const value = held.value;
+	let stored = value;
+	if (
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		!util.types.isProxy(value) &&
+		resolveWrapper(value) === null
+	) {
+		const displaced = mine !== undefined && "value" in mine ? resolveWrapper(mine.value) : null;
+		if (displaced) runtime_retireChanges(displaced);
+		const wrapped = wrapper.___createChildWrapper(key, value, null, internal.deferChildAdopt);
+		if (wrapped !== null && wrapped !== undefined) stored = wrapped;
+	}
+	Objects.defineProperty(wrapper, key, { value: stored, writable: false, enumerable: true, configurable: true });
+}
+
+/**
+ * Check a member read through a node that holds built-in data or an error (a file's default export that is a `Map`, a
+ * `Date`, an error, …) as a read of that value at the node's path: the node is the value there, as the same value
+ * exported by name is, so a read rule naming the path refuses every member read through it, a getter of the engine's
+ * and a method alike. The framework's own keys, and `then` (which `await` asks for), are no member reads.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @param {object|null} access - The read of `self` this is part of, when it was resolved already.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the reader may not read the value.
+ * @private
+ *
+ * @example
+ * // single/derror.mjs: export default new RangeError("bad"); rule: deny reader.** → single.derror
+ * self.single.derror.message; // PERMISSION_DENIED, as self.owner.failure.message is under a rule on owner.failure
+ */
+function runtime_gateDataNodeMember(wrapper, prop, kept, access) {
+	if (prop === "then" || isFrameworkReservedKey(prop)) return;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object") return;
+	let isData = DATA_NODE_IMPLS.get(impl);
+	if (isData === undefined) {
+		isData = !util.types.isProxy(impl) && runtime_isTerminalData(impl);
+		DATA_NODE_IMPLS.set(impl, isData);
+	}
+	if (!isData) return;
+	const targetPath = wrapper.____slothletInternal.apiPath;
+	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access);
+	if (decision.allowed) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
+}
+
+/**
+ * Whether each value a node holds is built-in data or an error ({@link runtime_gateDataNodeMember}), decided once per
+ * value: what a value is does not change.
+ * @type {WeakMap<object, boolean>}
+ * @private
+ */
+const DATA_NODE_IMPLS = new WeakMap();
+
+/**
+ * Bring a node in step with the module's own object it fronts (#757), before a read, a description, a key check or a
+ * listing answers from the node: one member (`prop`), or every member and the object's extensibility (`prop`
+ * undefined). A node fronting no module object, the framework's own reads, and a closed node (whose members are fixed
+ * on its shell, as the object's are) are left as they are.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @param {PropertyKey} [prop] - The member read, or undefined for all.
+ * @param {boolean} [integrity=true] - With every member, whether the object's extensibility is followed too.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	if (prop !== undefined && typeof prop !== "string") return;
+	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (!Reflect.isExtensible(target)) return;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null) return;
+	internal.followingModule = true;
+	try {
+		const seen = runtime_moduleObjectKeys(object);
+		if (prop !== undefined) {
+			runtime_followModuleMember(wrapper, object, seen, prop);
+			return;
+		}
+		for (const key of Objects.keys(object)) runtime_followModuleMember(wrapper, object, seen, key);
+		for (const key of [...seen]) if (!hasOwn(object, key)) runtime_followModuleMember(wrapper, object, seen, key);
+	} finally {
+		internal.followingModule = false;
+	}
+	if (prop === undefined && integrity) runtime_followModuleIntegrity(wrapper, target);
+}
+
+/**
+ * Close a node when the module closed its own object itself (#757), as the build closes a node over a closed object:
+ * its members are brought in step first, then it is frozen, sealed or made non-extensible as the object is.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @returns {void}
+ * @private
+ */
+function runtime_followModuleIntegrity(wrapper, target) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (!Reflect.isExtensible(target)) return;
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object === null || Reflect.isExtensible(object)) return;
+	runtime_followModuleObject(wrapper, target, undefined, false);
+	const { proxy } = internal;
+	const syncing = internal.integritySyncing;
+	internal.integritySyncing = true;
+	try {
+		runtime_frameworkWrite(wrapper, () => {
+			if (Objects.isFrozen(object)) Objects.freeze(proxy);
+			else if (Objects.isSealed(object)) Objects.seal(proxy);
+			else Objects.preventExtensions(proxy);
+		});
+	} finally {
+		internal.integritySyncing = syncing;
+	}
+}
+
+/**
+ * Write a member of the module's object a node fronts, as the same assignment to the object does (#746). Only the
+ * object's own members are touched: a new key becomes an ordinary member of it, and a setter the module has put there
+ * since the node was built runs on the object as the module the node belongs to, never as the writer (#597).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object (see {@link runtime_moduleObjectOf}).
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - What to write.
+ * @returns {boolean} Whether the object took the write.
+ * @private
+ */
+function runtime_writeModuleObject(wrapper, object, prop, value) {
+	const held = Reflect.getOwnPropertyDescriptor(object, prop);
+	if (held === undefined) {
+		const added =
+			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true });
+		if (added && typeof prop === "string") runtime_moduleObjectKeys(object).add(prop);
+		return added;
+	}
+	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { value });
+	if (typeof held.set !== "function") return false;
+	runtime_runAccessor(wrapper, held.set, object, [value]);
+	return true;
+}
+
+/**
+ * Whether a data member a node reports takes a write (#749): as the module's object holds it where the node fronts
+ * one, or as the node's live value holds it; a member only the node holds is written through the node, so it is
+ * writable unless it was defined read-only through the node.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {boolean} What the member's description reports as `writable`.
+ * @private
+ */
+function runtime_reportsWritable(wrapper, prop) {
+	if (wrapper.____slothletInternal.readOnlyKeys?.has(prop)) return false;
+	const impl = wrapper.____slothletInternal.impl;
+	const live = impl !== null && (typeof impl === "object" || typeof impl === "function") && !util.types.isProxy(impl) ? impl : null;
+	const holder = runtime_moduleObjectOf(wrapper) ?? live;
+	const held = holder === null ? undefined : Reflect.getOwnPropertyDescriptor(holder, prop);
+	return held !== undefined && "value" in held ? held.writable === true : true;
 }
 
 /**
@@ -3568,8 +4520,8 @@ const INBOUND_VIEWS = new WeakMap();
  * @private
  */
 const GENERATOR_PROTOTYPES = {
-	generator: Object.getPrototypeOf(function* () {}).prototype,
-	asyncGenerator: Object.getPrototypeOf(async function* () {}).prototype
+	generator: Objects.getPrototypeOf(function* () {}).prototype,
+	asyncGenerator: Objects.getPrototypeOf(async function* () {}).prototype
 };
 
 /**
@@ -3592,7 +4544,7 @@ const INTRINSICS = (() => {
 	}
 	/** Add every prototype above a sample, up to `Object.prototype`. */
 	const addChain = (sample) => {
-		for (let link = Object.getPrototypeOf(sample); link !== null; link = Object.getPrototypeOf(link)) add(link);
+		for (let link = Objects.getPrototypeOf(sample); link !== null; link = Objects.getPrototypeOf(link)) add(link);
 	};
 	const samples = [function* () {}, async function* () {}, async function () {}];
 	for (const sample of samples) {
@@ -3658,7 +4610,7 @@ const SHARED_BUILTINS = [
 	"zlib"
 ];
 
-if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(globalThis.process.getBuiltinModule(`node:${id}`));
+if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(Processes.getBuiltinModule(`node:${id}`));
 
 /**
  * The prototypes of Node's data classes (`URL`, `Blob`, `TextDecoder` …) and of what Node keeps inside the objects
@@ -3680,7 +4632,7 @@ const NODE_DATA_PROTOTYPES = new WeakSet();
  * @private
  */
 function runtime_recordNodeObjectPrototypes() {
-	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const crypto = Processes.getBuiltinModule("node:crypto");
 	const samples = [crypto.createSecretKey(new Uint8Array(16))];
 	const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 	samples.push(publicKey, privateKey);
@@ -3693,8 +4645,8 @@ function runtime_recordNodeObjectPrototypes() {
 		channel.port2.close();
 	}
 	// Node's data classes: what they do is on their prototypes, what they hold is data, none holds code of its own.
-	const util = globalThis.process.getBuiltinModule("node:util");
-	const net = globalThis.process.getBuiltinModule("node:net");
+	const util = Processes.getBuiltinModule("node:util");
+	const net = Processes.getBuiltinModule("node:net");
 	const data = [new URL("https://localhost/"), new URLSearchParams(), new TextDecoder(), new TextEncoder()];
 	if (typeof Blob === "function") data.push(new Blob([]));
 	if (typeof util.MIMEType === "function") data.push(new util.MIMEType("text/plain"));
@@ -3709,7 +4661,7 @@ function runtime_recordNodeObjectPrototypes() {
 		}
 	const isData = new Set([...data, ...held]);
 	for (const sample of [...samples, ...data, ...held])
-		for (let link = Object.getPrototypeOf(sample); link !== null && !INTRINSICS.has(link); link = Object.getPrototypeOf(link)) {
+		for (let link = Objects.getPrototypeOf(sample); link !== null && !INTRINSICS.has(link); link = Objects.getPrototypeOf(link)) {
 			recordSharedExports(link);
 			if (isData.has(sample)) NODE_DATA_PROTOTYPES.add(link);
 		}
@@ -3737,10 +4689,10 @@ const NODE_STREAM_STATE_PROTOTYPES = new WeakSet();
  * @private
  */
 function runtime_recordNodeStreamState() {
-	const stream = globalThis.process.getBuiltinModule("node:stream");
-	const zlib = globalThis.process.getBuiltinModule("node:zlib");
-	const net = globalThis.process.getBuiltinModule("node:net");
-	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const stream = Processes.getBuiltinModule("node:stream");
+	const zlib = Processes.getBuiltinModule("node:zlib");
+	const net = Processes.getBuiltinModule("node:net");
+	const crypto = Processes.getBuiltinModule("node:crypto");
 	const gzip = zlib.createGzip();
 	const socket = new net.Socket();
 	socket.on("error", () => {});
@@ -3767,7 +4719,7 @@ function runtime_recordNodeStreamState() {
 			if (key === "_events") continue;
 			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
 			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
-			const prototype = Object.getPrototypeOf(member);
+			const prototype = Objects.getPrototypeOf(member);
 			if (prototype !== null && !INTRINSICS.has(prototype)) NODE_STREAM_STATE_PROTOTYPES.add(prototype);
 		}
 	socket.destroy();
@@ -3850,51 +4802,6 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 	}
 }
 
-/** `WeakMap` and `WeakSet` `has` as they were when slothlet loaded, so a module replacing them changes no answer of {@link isSlothletWrapped}. */
-const weakMapHasAtLoad = Function.prototype.call.bind(WeakMap.prototype.has);
-const weakSetHasAtLoad = Function.prototype.call.bind(WeakSet.prototype.has);
-
-/**
- * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a module's or
- * the host's value. That is every Proxy of slothlet's (an api node, a per-reader, member, data, root, or framework
- * view, a version dispatcher, a stand-in, an inbound view, a class-instance wrapper, a composition layer, a guarded
- * promoted result, a context view, a carrier's view, a withheld prototype's stand-in, a crossing view of the class
- * prototype guard, the root api) and the ones that
- * are not Proxies (a module's async or generator function, generator object, or promise, handed out as a function,
- * generator, or promise of the same kind; a frozen carrier's frozen copy; a callable node's own `valueOf`; the promise
- * the guard hands a reader in place of another module's). It reads
- * only slothlet's identity registries, with the `has` functions captured at load, so no trap of the
- * value runs and nothing a module replaced later changes the answer. A Proxy wrapped around one of slothlet's is not
- * slothlet's. Backs `api.slothlet.wrapped` (#671).
- * @param {*} value - The value.
- * @returns {boolean} True only for one of slothlet's own wrappers.
- * @public
- * @example
- * isSlothletWrapped(api.math); // true
- * isSlothletWrapped(new Proxy({}, {})); // false
- */
-export function isSlothletWrapped(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	return (
-		weakMapHasAtLoad(_proxyRegistry, value) ||
-		weakSetHasAtLoad(capturedViewSet, value) ||
-		weakMapHasAtLoad(STAND_IN_RECORDS, value) ||
-		weakMapHasAtLoad(INBOUND_VIEWS, value) ||
-		weakSetHasAtLoad(genuineWrappers, value) ||
-		weakMapHasAtLoad(SELF_VIEW_NODES, value) ||
-		weakMapHasAtLoad(SELF_MEMBER_VIEWS, value) ||
-		weakMapHasAtLoad(FRAMEWORK_VIEW_TARGETS, value) ||
-		weakSetHasAtLoad(OWN_VIEWS_UNLISTED, value) ||
-		weakSetHasAtLoad(NODE_VALUE_OFS, value) ||
-		weakMapHasAtLoad(CROSSINGS, value) ||
-		weakSetHasAtLoad(CROSSING_PROMISES, value) ||
-		isSlothletProxy(value) ||
-		isFrameworkInternal(value) ||
-		isCompositionProxy(value) ||
-		runtime_isWrappedClassInstance(value)
-	);
-}
-
 /**
  * Whether a value is one slothlet hands out on its own account, already attributed: an api node, a per-reader view,
  * a stand-in, an inbound view, a class-instance wrapper, or another Proxy of slothlet's own (a context view).
@@ -3910,7 +4817,8 @@ function runtime_isSlothletValue(value) {
 		INBOUND_VIEWS.has(value) ||
 		genuineWrappers.has(value) ||
 		isSlothletProxy(value) ||
-		runtime_isWrappedClassInstance(value)
+		runtime_isWrappedClassInstance(value) ||
+		CROSSINGS.has(value)
 	);
 }
 
@@ -3976,14 +4884,17 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
-	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
+	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
+	if (isFunctionSourcePatch(fn)) return true;
+	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
 }
 
 /**
  * The record of the module a wrapper belongs to (see {@link MAKERS}): one per module of an instance, so the same
  * value a module hands out from any of its functions is the same stand-in.
  * @param {object} wrapper - A wrapper of the module.
- * @returns {{owner: object, made: WeakMap<object, object>, handedIn: WeakSet<object>, exposed: WeakSet<object>}} The module's record.
+ * @returns {{owner: object, made: WeakMap<object, object>, madeBy: WeakMap<object, WeakMap<object, object>>|null, handedIn: WeakSet<object>, exposed: WeakSet<object>}} The module's record.
  * @private
  */
 function runtime_makerOf(wrapper) {
@@ -3995,7 +4906,7 @@ function runtime_makerOf(wrapper) {
 	// A module removed and added again under the same id is a new module: what the old one made is not its.
 	if (maker && maker.owner.____slothletInternal?.invalid && maker.owner !== wrapper && !wrapper.____slothletInternal?.invalid) maker = null;
 	if (!maker) {
-		maker = { owner: wrapper, made: new WeakMap(), handedIn: new WeakSet(), exposed: new WeakSet() };
+		maker = { owner: wrapper, made: new WeakMap(), madeBy: null, handedIn: new WeakSet(), exposed: new WeakSet() };
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
 			for (const [id, other] of makers.byID) if (other.owner.____slothletInternal?.invalid) makers.byID.delete(id);
@@ -4091,12 +5002,25 @@ export function registerRuntimeSelf(contextManager, selfProxy) {
  * `PERMISSION_DENIED`, naming the identity it was read as. Code of the host's own gets `null`: `self` is not for it.
  * @param {object} selfProxy - The runtime's `self`.
  * @param {string|symbol} prop - The member.
+ * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
+ *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
+ *   read as its definer.
+ * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
+ *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
+ *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy, prop) {
-	const definer = frameDefiner();
+export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null) {
+	const definer = frameDefiner(loadingInstanceID ?? hostFlowInstanceID);
 	if (definer === null) return null;
+	// In a flow the host opened, code whose definer the frames cannot tell for want of a file (evaluated code) is
+	// the host's as before: only a file several running instances hold untold apart is refused there.
+	if (hostFlowInstanceID !== null && definer.unplaced && !definer.shared) return null;
+	if (loadingInstanceID !== null) {
+		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
+		if (!owner || owner.instanceID === loadingInstanceID) return null;
+	}
 	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
 	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
@@ -4112,6 +5036,9 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
 	// With `provenance` off no code is told by its frames: it runs under its caller, and the host's code has no `self`.
 	if (checks && leaf.slothlet.config?.permissions?.provenance === false) return null;
+	// With `references.capture` off a node read here would carry no reader, and a call through it, made while no call
+	// runs, would be taken for the host's: such code gets no `self`, as before it could be read as its definer at all.
+	if (checks && leaf.slothlet.config?.permissions?.references?.capture === false) return null;
 	const contextManager = leaf.slothlet?.contextManager;
 	// Calls are in flight and the live runtime cannot tell which of them runs this code (two api paths of one module
 	// resuming in a file they share), or that it is none of them: the caller is unknown, so the read is refused. Its
@@ -4124,9 +5051,11 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
 	const read = RUNTIME_SELVES.get(contextManager) ?? selfProxy;
+	// The leaves whose code is further out on the stack ran this code: they have to be allowed as well.
+	const ceiling = checks && definer.callers?.length ? combineCeilings(...definer.callers) : null;
 	return {
 		value: runtime_readOnBehalf(undefined, () =>
-			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
+			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, ceiling, null, false, true)
 		)
 	};
 }
@@ -4138,17 +5067,34 @@ export function runtime_selfReadAsDefiner(selfProxy, prop) {
  * and for code of another instance. With `unaccounted`, code the live runtime finds no call for is read the same way.
  * @param {object} slothlet - The instance of the node called.
  * @param {boolean} [unaccounted=false] - Read code no call accounts for by its frames too.
+ * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity this read
+ *   resolved and the store it resolved it on, as {@link runtime_liveEntry} gives them, so a call made right after
+ *   takes it instead of reading it again.
+ * @param {{ceiling?: object|ReadonlyArray<object>|null}|null} [held=resolved] - Receives, as `ceiling`, who else the
+ *   code is held to.
  * @returns {object|null} The definer's wrapper.
  * @private
  */
-function runtime_hostRunDefiner(slothlet, unaccounted = false) {
+function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = resolved) {
 	const contextManager = slothlet?.contextManager;
 	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
 	if (slothlet.config?.permissions?.provenance === false) return null;
 	const identity = contextManager.getCallerIdentity?.(slothlet.instanceID);
+	if (resolved && identity) {
+		resolved.store = contextManager.tryGetContext?.(slothlet.instanceID) ?? null;
+		resolved.identity = identity;
+	}
 	if (identity?.currentWrapper || (identity?.unresolved && !(unaccounted && identity.unaccounted))) return null;
-	const leaf = frameDefiner()?.wrapper;
-	return leaf && leaf.slothlet === slothlet ? leaf : null;
+	const definer = frameDefiner(contextManager.runningInstanceID?.() ?? null);
+	// Code of a file several running instances hold, with nothing naming which of them is running: it is some
+	// module's, so it is not run as the host's.
+	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	const leaf = definer?.wrapper;
+	if (!leaf || leaf.slothlet !== slothlet) return null;
+	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
+	// every other module importing the helper.
+	if (held && definer.callers?.length) held.ceiling = combineCeilings(...definer.callers);
+	return leaf;
 }
 
 /**
@@ -4163,10 +5109,27 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false) {
 function runtime_callAsDefiner(target, call) {
 	return () => {
 		const slothlet = target.slothlet;
-		const leaf = runtime_hostRunDefiner(slothlet);
+		// A caller identity already handed to the call (one resolved before an await) stands.
+		const resolved = handedEntry !== null && handedEntry.wrapper === target ? null : {};
+		const held = {};
+		const leaf = runtime_hostRunDefiner(slothlet, false, resolved, held);
 		const instanceID = leaf ? runtime_makerInstanceID(slothlet) : null;
-		if (instanceID === null) return call();
-		return slothlet.contextManager.runInContext(instanceID, call, undefined, [], leaf, true, false, null, null, false, true);
+		// The call is made as it is, by the code whose identity was just read: the target's gate takes that identity
+		// as it starts, with nothing but slothlet's own code run in between, instead of reading the stack again.
+		if (instanceID === null) return resolved?.identity ? runtime_applyWithEntry(target, resolved, call) : call();
+		return slothlet.contextManager.runInContext(
+			instanceID,
+			call,
+			undefined,
+			[],
+			leaf,
+			true,
+			false,
+			held.ceiling ?? null,
+			null,
+			false,
+			true
+		);
 	};
 }
 
@@ -4229,7 +5192,7 @@ function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attrib
 	// value handed out records its definer and grants nothing: the caller running it, read now, is its ceiling, so every
 	// access has to be allowed for both (#726). A node's own code (an accessor or a Proxy export of an api object, `new`
 	// on an exported class) is checked as a call of its node, and runs as that call does, under no ceiling of its caller.
-	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID);
+	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.slothlet);
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
 	);
@@ -4332,7 +5295,7 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
 		() => [][Symbol.iterator](),
 		() => /a/g[Symbol.matchAll](""),
 		() => [].values().map((value) => value),
-		() => Iterator.from({ next: () => ({ done: true, value: undefined }) }),
+		() => Iterators.from({ next: () => ({ done: true, value: undefined }) }),
 		() => new Intl.Segmenter().segment("")[Symbol.iterator]()
 	];
 	for (const sample of samples) {
@@ -4363,7 +5326,7 @@ function runtime_isNativeIterator(value) {
  * @type {Function|null}
  * @private
  */
-const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script : null;
+const VM_SCRIPT = isNode ? Processes.getBuiltinModule("node:vm").Script : null;
 
 /**
  * The native class `vm.Script` extends, whose instances hold compiled code the same way (#708): one made directly is a
@@ -4372,8 +5335,8 @@ const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script
  * @private
  */
 const VM_NATIVE_SCRIPT = (() => {
-	const parent = VM_SCRIPT === null ? null : Object.getPrototypeOf(VM_SCRIPT);
-	return typeof parent === "function" && parent !== Function.prototype ? parent : null;
+	const parent = VM_SCRIPT === null ? null : Objects.getPrototypeOf(VM_SCRIPT);
+	return typeof parent === "function" && parent !== Functions.prototype ? parent : null;
 })();
 
 /**
@@ -4441,7 +5404,7 @@ function runtime_slotHoldsCode(value, depth, budget) {
 	if (budget.remaining < 0) return true;
 	for (const key of keys) {
 		if (isEmitter && key === "_events") continue;
-		if (isTarget && typeof key === "symbol" && Symbol.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
+		if (isTarget && typeof key === "symbol" && Symbols.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
 		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
@@ -4485,7 +5448,7 @@ function runtime_holdsCode(value, depth, budget) {
 		// still read below.
 		if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
 			return true;
-		if (Array.isArray(value) && value.length > budget.remaining) return true;
+		if (Arrays.isArray(value) && value.length > budget.remaining) return true;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return true;
@@ -4530,6 +5493,9 @@ function runtime_handOut(maker, owner, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
+	// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
+	// reaches.
+	if (CROSSINGS.has(value)) return value;
 	// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
 	if (SELF_MEMBER_VIEWS.get(value)?.reader === SEALED_SHELL_READER) return value;
 	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
@@ -4543,14 +5509,28 @@ function runtime_handOut(maker, owner, value) {
 	// hands it to the reader as the node, whose own write rule holds.
 	if (SELF_INSTANCE_NODES.has(value)) return value;
 	const made = maker.made.get(value);
-	if (made) return made;
+	// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
+	// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
+	// the leaf that handed it out, each time.
+	const own = made ? runtime_ownStandIns(maker, owner, value, made) : null;
+	if (made && !own) return made;
 	try {
+		if (own) {
+			const mine = own.get(value);
+			if (mine) return mine;
+			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return runtime_kindStandIn(maker, owner, value, own);
+			return runtime_membrane(maker, owner, value, false, own);
+		}
 		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
 		if (typeof value === "function") {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
 			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
 			// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
 			const leaf = implWrappers.get(value);
+			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
+			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
+			const node = leaf && genuineWrappers.has(leaf) && leaf.slothlet === owner.slothlet ? leaf.____slothletInternal.proxy : null;
+			if (node && typeof node === "function") return node;
 			const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
 			if (leafMaker !== maker && leafMaker.made.has(value)) return leafMaker.made.get(value);
 			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))
@@ -4562,12 +5542,43 @@ function runtime_handOut(maker, owner, value) {
 		// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
 		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 		// it runs (#726).
-		if (!runtime_isCodeObject(value)) return value;
+		if (owner.slothlet?.config?.permissions?.provenance !== false) {
+			if (!runtime_isCodeObject(value)) return value;
+			return runtime_membrane(maker, owner, value);
+		}
+		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
+		// value is searched instead, as far as CODE_SEARCH reaches, and one holding code is handed out as the module's.
+		if (!runtime_holdsCode(value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
 		return runtime_membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
 		return value;
 	}
+}
+
+/**
+ * Where the stand-ins a leaf makes of functions another leaf of its module handed out first are kept (#726), or null
+ * when the stand-in already made is the one to hand out: the value is not a plain function, the same leaf made it, it
+ * is a leaf's own function (which runs as that leaf whoever hands it out), it was not made as a stand-in, or it is
+ * written in a leaf's file (its frames name its definer when it runs, so one stand-in serves every leaf, and a class
+ * or closure two leaves return stays one value). What is left is code the stack cannot place on a leaf, a helper
+ * file's own function above all: each leaf handing it out gets a stand-in recording that leaf.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper handing the value out.
+ * @param {*} value - The value.
+ * @param {object} made - The stand-in the module made of it first.
+ * @returns {WeakMap<object, object>|null} The leaf's own stand-ins by original, or null.
+ * @private
+ */
+function runtime_ownStandIns(maker, owner, value, made) {
+	if (typeof value !== "function" || util.types.isProxy(value) || implWrappers.has(value)) return null;
+	const record = STAND_IN_RECORDS.get(made);
+	if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
+	if (isLeafFileFunction(value, [record.owner, owner])) return null;
+	maker.madeBy ??= new WeakMap();
+	let own = maker.madeBy.get(owner);
+	if (!own) maker.madeBy.set(owner, (own = new WeakMap()));
+	return own;
 }
 
 /**
@@ -4615,7 +5626,7 @@ function runtime_isCodeObject(value) {
 function runtime_isPlainPromise(value) {
 	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
 	for (const key of Reflect.ownKeys(value))
-		if (typeof key !== "symbol" || Symbol.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
+		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
 	return true;
 }
 
@@ -4661,17 +5672,39 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 		const behind = runtime_behindMemberView(value);
 		if (runtime_knownPrototype(owner.slothlet, behind) !== undefined) return behind;
 	}
+	const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
+	// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
+	// a module gets it as the guard decides for it.
+	if (CROSSINGS.has(value)) return toModule ? runtime_crossTo(value, caller, owner.slothlet, owner) : runtime_uncross(value);
+	let handed = value;
 	if (!handsOutAsModule(owner)) {
+		if (!runtime_permissionsOn(owner)) return value;
 		// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
 		// as a call of the node, as under `"precise"` (#726).
-		if (!runtime_permissionsOn(owner) || !util.types.isProxy(value)) return value;
-		return runtime_makerOf(owner).made.get(value) ?? value;
+		if (util.types.isProxy(value)) handed = runtime_makerOf(owner).made.get(value) ?? value;
+	} else handed = runtime_handOut(runtime_makerOf(owner), owner, value);
+	// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
+	// guard.
+	if (toModule) return runtime_crossTo(handed, caller, owner.slothlet, owner);
+	// The host holds it as it is; where it came from is kept for when the host hands it on.
+	if (runtime_permissionsOn(owner) && !HOST_HANDED.has(handed) && !runtime_isShared(handed)) {
+		HOST_HANDED.set(handed, owner);
+		// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
+		if (handed !== value && !HOST_HANDED.has(value) && !runtime_isShared(value)) HOST_HANDED.set(value, owner);
 	}
-	const handed = runtime_handOut(runtime_makerOf(owner), owner, value);
-	// Data a module's call hands another module (a stand-in of its code run by that module, say) reaches it through the
-	// class prototype guard.
-	if (handed !== value || callerIsHost || !caller?.____slothletInternal) return handed;
-	return runtime_crossTo(value, caller, owner.slothlet, owner);
+	return handed;
+}
+
+/**
+ * Whether a value is one no module made (the language's own, a built-in's export, a node or a view of slothlet's): what
+ * the host is handed of these comes from no module.
+ * @param {object|Function} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_isShared(value) {
+	if (INTRINSICS.has(value) || runtime_isSharedValue(value)) return true;
+	return !STAND_IN_RECORDS.has(value) && runtime_isSlothletValue(value);
 }
 
 /**
@@ -4685,6 +5718,9 @@ function runtime_permissionsOn(wrapper) {
 }
 
 setResultAttributor(runtime_attributeResult);
+// Only an instance of a class some module wrote gets the async runtime's context wrapper (#328): a `URL`, a `Response`
+// or an `Intl.NumberFormat` a module returns is the object itself.
+setModuleInstanceCheck((value) => runtime_isCodeObject(value));
 setHostPrototypeCheck(
 	(owner, value) =>
 		value !== null &&
@@ -4696,6 +5732,7 @@ setHostPrototypeCheck(
 /**
  * The node at an api path of an instance, walked from its root through the nodes' own members, so no trap of a node
  * runs and nothing loads (#726): how the file's module node of a lazy tree, built with no file of its own, is found.
+ * The api root alone is read through a Proxy, which it is when a root file's default function makes the api callable.
  * @param {object} slothlet - The instance.
  * @param {string} apiPath - The path.
  * @returns {object|null} The node's wrapper, or null when no node is there.
@@ -4703,10 +5740,18 @@ setHostPrototypeCheck(
  */
 function runtime_nodeAtPath(slothlet, apiPath) {
 	let current = slothlet?.api;
+	// Whether the walk read through the root as a Proxy: the api is one when a root file's default function makes it
+	// callable. The root is the instance's own, so it alone is read through a Proxy, and the node found that way has
+	// to record the path asked for.
+	let throughRoot = false;
 	try {
 		for (const segment of String(apiPath).split(".")) {
 			const holder = resolveWrapper(current) ?? current;
-			if (holder === null || (typeof holder !== "object" && typeof holder !== "function") || util.types.isProxy(holder)) return null;
+			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) return null;
+			if (util.types.isProxy(holder)) {
+				if (current !== slothlet.api) return null;
+				throughRoot = true;
+			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, segment);
 			if (!descriptor || !("value" in descriptor)) return null;
 			current = descriptor.value;
@@ -4715,7 +5760,9 @@ function runtime_nodeAtPath(slothlet, apiPath) {
 		// A tree that refuses to be read has no node to offer.
 		return null;
 	}
-	return resolveWrapper(current);
+	const node = resolveWrapper(current);
+	if (throughRoot && node !== null && String(node.____slothletInternal.apiPath ?? "") !== String(apiPath)) return null;
+	return node;
 }
 
 setModuleNodeResolver(runtime_nodeAtPath);
@@ -4743,8 +5790,16 @@ setInboundOriginal((value) => {
  */
 function runtime_handIn(maker, value, owner = maker.owner) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	// A crossing view handed in is the value it stands over, decided below for this module.
-	value = runtime_uncross(value);
+	// A crossing view handed in stands for a value: this module's own comes back as itself, another module's stays a
+	// view, decided for this module.
+	const crossing = CROSSINGS.get(value);
+	if (crossing) {
+		const behind = crossing.original;
+		const own = STAND_IN_RECORDS.get(behind) ?? INBOUND_VIEWS.get(behind);
+		if (own?.maker === maker) return own.original;
+		if (maker.made.has(behind)) return behind;
+		return runtime_crossTo(value, owner, crossing.slothlet, crossing.from);
+	}
 	const record = STAND_IN_RECORDS.get(value) ?? INBOUND_VIEWS.get(value);
 	if (record) return record.maker === maker ? record.original : value;
 	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
@@ -4771,7 +5826,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 		const value = args[index];
 		const handed = runtime_handIn(maker, value, owner);
 		if (handed === value) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = Arrays.from(args);
 		result[index] = handed;
 	}
 	return result;
@@ -4789,8 +5844,8 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 function runtime_holdsOwnStandIn(maker, value, depth, budget) {
 	if (depth <= 0 || util.types.isProxy(value)) return false;
 	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
-	if (Array.isArray(value) && value.length > budget.remaining) return false;
+	if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
@@ -4833,7 +5888,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 	}
 	const fixed = (target, prop) => Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false;
 	const inward = (target, prop, member) => (fixed(target, prop) ? member : runtime_handIn(maker, member));
-	const view = new Proxy(value, {
+	const view = new NativeProxy(value, {
 		get: (target, prop, receiver) => inward(target, prop, Reflect.get(target, prop, receiver === view ? target : receiver)),
 		set: (target, prop, next, receiver) =>
 			Reflect.set(target, prop, runtime_handOut(maker, runtime_runningLeafOf(maker, owner), next), receiver === view ? target : receiver),
@@ -4894,15 +5949,17 @@ const SOURCES = new WeakMap();
  * @param {object} owner - The wrapper it runs as.
  * @param {Function|object} original - The value.
  * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
+ * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
+ *   {@link runtime_ownStandIns}).
  * @returns {Function|object} The stand-in, the same one for the same value and module every time.
  * @private
  */
-function runtime_membrane(maker, owner, original, asNode = false) {
+function runtime_membrane(maker, owner, original, asNode = false, made = maker.made) {
 	// A node's own value (a Proxy export) is checked as a call of its node, so it runs as one: under no ceiling of its
 	// caller's. A value handed out runs under whoever runs it (#726).
 	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) =>
 		runtime_runAsMaker(who, fn, thisArg, args, attribute, asNode);
-	const existing = maker.made.get(original);
+	const existing = made.get(original);
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
 	const isFunction = typeof original === "function";
@@ -4971,7 +6028,7 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 		}
 		return method;
 	};
-	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Array.isArray(original) ? [] : {};
+	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Arrays.isArray(original) ? [] : {};
 	let standIn = null;
 	// Operations on a module's Proxy already running as the module: one reached again while entering the module (its
 	// node reading the Proxy's `default`) runs as it is, already the module's.
@@ -5084,10 +6141,10 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
 					return runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
-				if (value === Function.prototype.toString && isFunction) {
+				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
 					let source = SOURCES.get(original);
 					if (!source) {
-						source = { toString: () => Function.prototype.toString.call(original) }.toString;
+						source = { toString: () => functionSource(original) }.toString;
 						SOURCES.set(original, source);
 					}
 					return source;
@@ -5204,8 +6261,8 @@ function runtime_membrane(maker, owner, original, asNode = false) {
 			return done;
 		}
 	};
-	standIn = new Proxy(shadow, handler);
-	maker.made.set(original, standIn);
+	standIn = new NativeProxy(shadow, handler);
+	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
 	const leaf = implWrappers.get(original);
@@ -5220,11 +6277,13 @@ function runtime_membrane(maker, owner, original, asNode = false) {
  * @param {object} maker - The module's record.
  * @param {object} owner - The wrapper it runs as.
  * @param {Function} original - The function.
+ * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
+ *   {@link runtime_ownStandIns}).
  * @returns {Function} The stand-in, the same one for the same function and module every time.
  * @private
  */
-function runtime_kindStandIn(maker, owner, original) {
-	const existing = maker.made.get(original);
+function runtime_kindStandIn(maker, owner, original, made = maker.made) {
+	const existing = made.get(original);
 	if (existing) return existing;
 	const run = (thisArg, args) => runtime_runAsMaker(owner, original, runtime_handIn(maker, thisArg), runtime_handInAll(maker, args));
 	const isGenerator = util.types.isGeneratorFunction(original);
@@ -5265,7 +6324,7 @@ function runtime_kindStandIn(maker, owner, original) {
 		});
 	}
 	if (!Reflect.getOwnPropertyDescriptor(original, "name")) Reflect.deleteProperty(standIn, "name");
-	maker.made.set(original, standIn);
+	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	const leaf = implWrappers.get(original);
 	if (leaf) implWrappers.set(standIn, leaf);
@@ -5285,9 +6344,31 @@ function runtime_kindStandIn(maker, owner, original) {
 function runtime_generatorStandIn(maker, owner, original) {
 	const existing = maker.made.get(original);
 	if (existing) return existing;
-	const isAsync = Object.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
+	const isAsync = Objects.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
-	const step = (name) => (value) => runtime_runAsMaker(owner, steps[name], original, [runtime_handIn(maker, value)]);
+	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
+	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
+	// promise settles to such a result.
+	const step = (name) => (value) => {
+		const box = { step: false, done: false };
+		const take = (result) => {
+			box.step = runtime_isStepResult(result);
+			if (!box.step) return result;
+			box.done = result.done;
+			return result.value;
+		};
+		const handed = runtime_runAsMaker(
+			owner,
+			(input) => {
+				const result = Reflect.apply(steps[name], original, [input]);
+				return isAsync ? Reflect.apply(SLOT_READERS.then, result, [take]) : take(result);
+			},
+			undefined,
+			[runtime_handIn(maker, value)]
+		);
+		const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
+		return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
+	};
 	const driver = { next: step("next"), return: step("return"), throw: step("throw") };
 	driver[isAsync ? Symbol.asyncIterator : Symbol.iterator] = () => driver;
 	const standIn = isAsync
@@ -5298,9 +6379,9 @@ function runtime_generatorStandIn(maker, owner, original) {
 				return yield* driver;
 			})();
 	Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
-	if (Object.isFrozen(original)) Object.freeze(standIn);
-	else if (Object.isSealed(original)) Object.seal(standIn);
-	else if (!Object.isExtensible(original)) Object.preventExtensions(standIn);
+	if (Objects.isFrozen(original)) Objects.freeze(standIn);
+	else if (Objects.isSealed(original)) Objects.seal(standIn);
+	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
 	maker.made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	return standIn;
@@ -5403,26 +6484,205 @@ function runtime_markWritten(wrapper, value) {
  * @private
  */
 function runtime_crossArguments(wrapper, args) {
-	if (!args?.length || !wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
-	const caller = wrapper.slothlet.contextManager?.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
-	if (!caller?.____slothletInternal || !genuineWrappers.has(caller)) return args;
-	if (runtime_sameModule(caller, wrapper)) return args;
+	const slothlet = wrapper?.slothlet;
+	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+	return runtime_crossArgumentsFrom(wrapper, args, runtime_callingModule(slothlet));
+}
+
+/**
+ * The module whose call is executing now, or null for the host.
+ * @param {object} slothlet - The instance.
+ * @returns {object|null} The module's wrapper.
+ * @private
+ */
+function runtime_callingModule(slothlet) {
+	const current = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
+	return current?.____slothletInternal && genuineWrappers.has(current) ? current : null;
+}
+
+/**
+ * {@link runtime_crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
+ * itself hands a module's code for someone else (an event's payload to a listener).
+ * @param {object} wrapper - The wrapper of the module handed the values.
+ * @param {ArrayLike<*>} args - The values.
+ * @param {object|null} caller - The wrapper of the module handing them over, or null for the host.
+ * @returns {ArrayLike<*>} The values, the same list when nothing changed.
+ * @private
+ */
+function runtime_crossArgumentsFrom(wrapper, args, caller) {
+	const slothlet = wrapper?.slothlet;
+	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+	if (caller !== null && runtime_asOneModule(slothlet, caller, wrapper)) return args;
 	let result = args;
 	for (let index = 0; index < args.length; index++) {
 		const value = args[index];
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
-		runtime_recordOrigin(value, caller);
-		if (typeof value === "function") {
-			const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
-			if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, caller);
-			continue;
+		let from = caller;
+		if (caller === null) {
+			// The host's own values are handed in as they are. What a module's call returned to the host, passed on as it
+			// is, still comes from that module.
+			from = HOST_HANDED.get(value) ?? (typeof value === "object" ? HOST_HANDED.get(runtime_unwrapClassInstance(value)) : null) ?? null;
+			if (from === null && !CROSSINGS.has(value)) continue;
+		} else {
+			// What the caller holds as itself is its own: handed back to it later, it is the value again.
+			runtime_recordOrigin(value, caller);
+			if (typeof value === "function" && !runtime_isSlothletValue(value)) {
+				const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
+				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, caller);
+			}
 		}
-		const crossed = runtime_crossTo(value, wrapper, wrapper.slothlet, caller);
+		const crossed = runtime_crossTo(value, wrapper, slothlet, from);
 		if (crossed === value) continue;
-		if (result === args) result = Array.from(args);
+		if (result === args) result = Arrays.from(args);
 		result[index] = crossed;
 	}
 	return result;
+}
+
+/**
+ * The arguments a call into a module is handed, with each class instance of the module's own that comes back in the
+ * async runtime's context wrapper (#328) handed in as the instance itself, as in plain JavaScript: the module's own
+ * object is `===` the one it made, and its private fields are there.
+ * @param {object} wrapper - The wrapper being called.
+ * @param {ArrayLike<*>} args - The call's arguments.
+ * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
+ * @private
+ */
+function runtime_ownInstances(wrapper, args) {
+	let result = args;
+	const count = args?.length ?? 0;
+	for (let index = 0; index < count; index++) {
+		const value = args[index];
+		if (value === null || typeof value !== "object" || !runtime_isWrappedClassInstance(value)) continue;
+		const creator = runtime_classInstanceCreator(value);
+		if (creator === null || !runtime_sameModule(creator, wrapper)) continue;
+		if (result === args) result = Arrays.from(args);
+		result[index] = runtime_unwrapClassInstance(value);
+	}
+	return result;
+}
+
+/**
+ * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
+ * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
+ * ({@link runtime_selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
+ * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
+ * @param {object} contextProxy - The runtime's `context`.
+ * @param {string|symbol} prop - The member read.
+ * @returns {*} The member, or undefined.
+ * @internal
+ *
+ * @example
+ * if (!ctx) return runtime_contextReadAsDefiner(context, prop);
+ */
+export function runtime_contextReadAsDefiner(contextProxy, prop) {
+	const definer = frameDefiner();
+	if (definer === null || definer.unplaced) return undefined;
+	const leaf = definer.wrapper ?? definer.leaves[0];
+	const slothlet = leaf?.slothlet;
+	if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.provenance === false) return undefined;
+	const contextManager = slothlet?.contextManager;
+	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(slothlet) : null;
+	if (instanceID === null) return undefined;
+	const read = RUNTIME_CONTEXTS.get(contextManager) ?? contextProxy;
+	return runtime_readOnBehalf(undefined, () =>
+		contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
+	);
+}
+
+/**
+ * Each runtime's own `context`, by its context manager, as {@link RUNTIME_SELVES} holds each runtime's `self`.
+ * @type {Map<object, object>}
+ * @private
+ */
+const RUNTIME_CONTEXTS = new Map();
+
+/**
+ * Register a runtime's `context`.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} contextProxy - Its `context`.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * registerRuntimeContext(asyncRuntime, context);
+ */
+export function registerRuntimeContext(contextManager, contextProxy) {
+	RUNTIME_CONTEXTS.set(contextManager, contextProxy);
+}
+
+/**
+ * The module whose call returned each object or function to the host while the permission system was on. The host
+ * holds the value itself; handed on by the host to another module as it is, it reaches that module as a value the
+ * first module handed it ({@link runtime_crossArguments}), and the module it came from as itself.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const HOST_HANDED = new WeakMap();
+
+/**
+ * The module that stored each object or function in the runtime `context` (see {@link runtime_contextWritten}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const CONTEXT_WRITERS = new WeakMap();
+
+/**
+ * Values a module read from the runtime `context` that no module stored there: the host's, which a module storing them
+ * again under another key does not make its own.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const CONTEXT_HOST_VALUES = new WeakSet();
+
+/**
+ * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
+ * module handed it ({@link runtime_contextRead}). What the host stores, and what a module stores again after reading it
+ * from the host, is the host's and is recorded for no one.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value being stored.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_contextWritten(ctx, value);
+ * ctx.context[prop] = value;
+ */
+export function runtime_contextWritten(ctx, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+	const writer = ctx?.currentWrapper;
+	if (!writer?.____slothletInternal || !genuineWrappers.has(writer)) return;
+	// A view keeps where its value came from; slothlet's own values are handed out their own way.
+	if (CROSSINGS.has(value) || runtime_isSlothletValue(value)) return;
+	if (CONTEXT_HOST_VALUES.has(value) || CONTEXT_WRITERS.has(value)) return;
+	CONTEXT_WRITERS.set(value, writer);
+}
+
+/**
+ * A value read from the runtime `context`, as whoever reads it gets it: what the host stored is the value itself, shared
+ * as the host meant it to be; what a module stored reaches another module through the class prototype guard
+ * ({@link runtime_crossTo}), and the host and the module that stored it as itself. Only the value stored under a key is
+ * covered: what a module puts into an object the host shares there is plain JavaScript between the modules holding it.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value read.
+ * @returns {*} What the reader gets.
+ * @internal
+ *
+ * @example
+ * return runtime_contextRead(ctx, ctx.context[prop]);
+ */
+export function runtime_contextRead(ctx, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	const reader = ctx?.currentWrapper;
+	const isModule = Boolean(reader?.____slothletInternal) && genuineWrappers.has(reader);
+	if (CROSSINGS.has(value)) return isModule ? runtime_crossTo(value, reader, reader.slothlet, null) : runtime_uncross(value);
+	if (!isModule) return value;
+	const writer = CONTEXT_WRITERS.get(value);
+	if (writer === undefined) {
+		if (!runtime_isSlothletValue(value)) CONTEXT_HOST_VALUES.add(value);
+		return value;
+	}
+	return runtime_crossTo(value, reader, reader.slothlet, writer);
 }
 
 /**
@@ -5514,8 +6774,8 @@ function runtime_classPrototypeSites(slothlet, prototype) {
  * @private
  */
 function runtime_functionNodePrototype(wrapper, fn) {
-	const prototype = Object.getPrototypeOf(fn);
-	if (prototype === null || prototype === Function.prototype) return prototype;
+	const prototype = Objects.getPrototypeOf(fn);
+	if (prototype === null || prototype === Functions.prototype) return prototype;
 	if (typeof prototype !== "function") {
 		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
 	}
@@ -5722,10 +6982,10 @@ function runtime_classInstanceOf(prototype) {
  * @private
  */
 function runtime_prototypeHandedTo(value, reader, slothlet = null) {
-	if (slothlet && !slothlet.handlers?.permissionManager?.isEnabled()) return value;
+	if (slothlet && !runtime_guardOn(slothlet)) return value;
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
-	if (!known.slothlet.handlers?.permissionManager?.isEnabled()) return value;
+	if (!runtime_guardOn(known.slothlet)) return value;
 	const [first] = known.sites;
 	if (known.sites.every((site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
 	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
@@ -5752,9 +7012,9 @@ const CLASS_INSTANCES = new WeakMap();
  */
 function runtime_isCarrier(value) {
 	if (util.types.isProxy(value)) return false;
-	if (Array.isArray(value)) return true;
+	if (Arrays.isArray(value)) return true;
 	const prototype = Reflect.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null || runtime_isErrorValue(value);
+	return prototype === Objects.prototype || prototype === null || runtime_isErrorValue(value);
 }
 
 /**
@@ -5769,7 +7029,7 @@ function runtime_isCarrier(value) {
  */
 function runtime_carriesPrototype(slothlet, value, depth, budget) {
 	if (depth <= 0) return false;
-	if (Array.isArray(value) && value.length > budget.remaining) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
@@ -5830,9 +7090,54 @@ function runtime_carryTo(value, reader, slothlet) {
  * @public
  */
 export function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
-	if (payload === null || typeof payload !== "object" || !listener?.____slothletInternal) return payload;
-	if (emitter?.____slothletInternal && runtime_makerOf(emitter) === runtime_makerOf(listener)) return payload;
-	return runtime_crossTo(payload, listener, slothlet, emitter?.____slothletInternal ? emitter : null);
+	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
+	const caller = emitter?.____slothletInternal ? emitter : null;
+	if (caller !== null && runtime_makerOf(caller) === runtime_makerOf(listener)) return payload;
+	// It is handed over as a call's argument is: what a module's call returned to the host and the host emits as it is
+	// still comes from that module, and the listener's own module's value comes back to it as itself.
+	const handed = runtime_handedAsArgument(listener, payload, caller);
+	// What the host emits of its own is handed on as it is, a prototype of a module's as reading it would (#667).
+	if (handed === payload && caller === null) return runtime_carryTo(payload, listener, slothlet);
+	return handed;
+}
+
+/**
+ * One value as a module gets it handed as a call's argument by `caller` (see {@link runtime_crossArgumentsFrom},
+ * {@link runtime_ownArguments}, {@link runtime_ownInstances}): another module's as a view while the permission system
+ * is on, its own as itself.
+ * @param {object} wrapper - The wrapper of the module handed the value.
+ * @param {*} value - The value.
+ * @param {object|null} caller - The wrapper of the module handing it over, or null for the host.
+ * @returns {*} What the module gets.
+ * @private
+ */
+function runtime_handedAsArgument(wrapper, value, caller) {
+	return runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, runtime_crossArgumentsFrom(wrapper, [value], caller)))[0];
+}
+
+/**
+ * The module a value in a hooked call's arguments comes from, as far as slothlet saw: the module whose call returned
+ * it to the host, the module whose stand-in or wrapped instance it is, a module seen holding it as itself, the module
+ * called when it made the value, and otherwise the module making the call. Null for a value the host built itself.
+ * @param {*} value - The value, as the function called holds it.
+ * @param {object|null} caller - The wrapper of the module making the call, or null for the host.
+ * @param {object|null} called - The wrapper of the node called.
+ * @returns {object|null} The wrapper of the module it comes from.
+ * @private
+ */
+function runtime_argumentSource(value, caller, called) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	const behind = typeof value === "object" ? runtime_unwrapClassInstance(value) : value;
+	const relayed = HOST_HANDED.get(value) ?? HOST_HANDED.get(behind);
+	if (relayed) return relayed;
+	const standIn = STAND_IN_RECORDS.get(value);
+	if (standIn) return standIn.owner;
+	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
+	if (creator) return creator;
+	const origin = CROSSING_ORIGINS.get(value);
+	if (origin) return origin.wrapper;
+	if (called?.____slothletInternal && called.slothlet && runtime_makerOf(called).made.has(value)) return called;
+	return caller;
 }
 
 /**
@@ -5852,17 +7157,17 @@ function runtime_carrierView(value, reader, slothlet) {
 	if (existing) return existing;
 	const carry = (member) => runtime_carryTo(member, reader, slothlet);
 	let view;
-	if (Object.isFrozen(value)) {
-		view = Array.isArray(value) ? [] : Object.create(Reflect.getPrototypeOf(value));
+	if (Objects.isFrozen(value)) {
+		view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
 		for (const key of Reflect.ownKeys(value)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			Reflect.defineProperty(view, key, "value" in descriptor ? { ...descriptor, value: carry(descriptor.value) } : descriptor);
 		}
-		Object.freeze(view);
+		Objects.freeze(view);
 	} else {
 		// A member held read-only and non-configurable must be reported as it is (proxy invariant).
 		const fixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-		view = new Proxy(value, {
+		view = new NativeProxy(value, {
 			get: (target, prop, receiver) => {
 				const member = Reflect.get(target, prop, receiver === view ? target : receiver);
 				return fixed(Reflect.getOwnPropertyDescriptor(target, prop)) ? member : carry(member);
@@ -5878,7 +7183,6 @@ function runtime_carrierView(value, reader, slothlet) {
 	}
 	if (!byReader) CARRIER_VIEWS.set(value, (byReader = new WeakMap()));
 	byReader.set(reader, view);
-	OWN_VIEWS_UNLISTED.add(view);
 	return view;
 }
 
@@ -5891,19 +7195,35 @@ function runtime_carrierView(value, reader, slothlet) {
 const CROSSINGS = new WeakMap();
 
 /**
- * The crossing views made of each value: its first reader's, and any other reader's by reader.
- * @type {WeakMap<object, {reader: object, view: object, others: WeakMap<object, object>|null}>}
+ * The crossing views made of each value: its first module's held inline, any other module's by module (see
+ * {@link runtime_crossKey}). Every leaf of one module gets the same view, so a value one module hands another is the
+ * same value in every function of the module it reaches, as it is in plain JavaScript.
+ * @type {WeakMap<object, {key: object, view: object, reader: object, others: Map<object, object>|null}>}
  * @private
  */
 const CROSSING_VIEWS = new WeakMap();
 
 /**
- * The promises the class prototype guard hands a reader in place of a plain promise another module handed on, settling
- * as it does with what it settles to crossed (see {@link runtime_crossTo}).
- * @type {WeakSet<Promise>}
+ * The guard's promise of each plain promise, by module, so the same promise read twice is the same promise and only
+ * one reaction is ever added to the original.
+ * @type {WeakMap<Promise, Map<object, Promise>>}
  * @private
  */
-const CROSSING_PROMISES = new WeakSet();
+const CROSSED_PROMISES = new WeakMap();
+
+/**
+ * Whether the class prototype guard holds in an instance: while its permission system is on, and after it shut down
+ * with the system on. A module handed a view because it may not write another module's code keeps a view, and what it
+ * reads through it stays viewed: the instance ending grants it nothing.
+ * @param {object|null} slothlet - The instance.
+ * @returns {boolean} True when it holds.
+ * @private
+ */
+function runtime_guardOn(slothlet) {
+	const permissionManager = slothlet?.handlers?.permissionManager;
+	if (!permissionManager) return false;
+	return permissionManager.isEnabled?.() === true || permissionManager.wasOnAtShutdown?.() === true;
+}
 
 /**
  * Whether a value is a crossing view.
@@ -5925,13 +7245,112 @@ function runtime_uncross(value) {
 	return runtime_isCrossing(value) ? CROSSINGS.get(value).original : value;
 }
 
+// The platform's cloning functions copy the data behind a crossing view (see helpers/clone-context): the value a
+// stand-in or the async runtime's context wrapper stands for, where the view is of one.
+setCloneViewReader((value) => {
+	const crossing = CROSSINGS.get(value);
+	if (crossing === undefined) return undefined;
+	const behind = crossing.original;
+	if (typeof behind !== "object") return behind;
+	return STAND_IN_RECORDS.get(behind)?.original ?? runtime_unwrapClassInstance(behind);
+});
+
+/**
+ * The wrapper of the api node a value is, or is a per-reader view of (a view `self` or a captured reference hands a
+ * module), or null for any other value. Only the registries are read, so none of the value's traps run.
+ * @param {*} value - The value.
+ * @returns {UnifiedWrapper|null} The node's wrapper.
+ * @private
+ */
+function runtime_viewedNodeWrapper(value) {
+	let current = value;
+	for (let depth = 0; depth < 4 && current !== null && (typeof current === "object" || typeof current === "function"); depth++) {
+		const wrapper = _proxyRegistry.get(current);
+		if (wrapper) return wrapper;
+		current = capturedViewNodes.get(current) ?? SELF_VIEW_NODES.get(current);
+	}
+	return null;
+}
+
+// `Function.prototype.toString` answers the source of the function behind an api node, a view of one, a view of another
+// module's function, or a stand-in for a returned function (#750): what each already answers to its own `toString()`.
+// Only the function is told here; the patch reads its text and hands nothing out.
+setFunctionSourceReader((value) => {
+	if (typeof value !== "function") return undefined;
+	const wrapper = runtime_viewedNodeWrapper(value);
+	if (wrapper !== null) {
+		const internal = wrapper.____slothletInternal;
+		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return undefined;
+		const fn = runtime_functionOf(internal.impl);
+		// A function default with named exports beside it is held under a layer: the module's function is the one under it.
+		return fn ? layerUnderlying(fn) : undefined;
+	}
+	const behind = CROSSINGS.get(value)?.original ?? value;
+	const original = STAND_IN_RECORDS.get(behind)?.original ?? (behind !== value ? behind : undefined);
+	return typeof original === "function" ? original : undefined;
+});
+
+/**
+ * Whether a value keeps its data where only the engine reads it: a built-in data object, an error, or a boxed primitive.
+ * @param {object} value - An object.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_holdsSlottedData(value) {
+	return runtime_dataKind(value) !== null || runtime_isErrorValue(value) || isBoxedPrimitive(value);
+}
+
+// The platform's cloning functions copy an api node's data too (#751): member by member through the node (or the view
+// of it the caller holds), so each read is the node's own, with its checks, and the module's object is never handed over.
+setCloneNodeReader((value) => {
+	// A view `self` handed a module over a built-in data object or an error a module holds: while the permission system is
+	// on it is copied from reads of it (see `runtime_slotCopy` in clone-context), off it is the platform's to clone.
+	const record = SELF_MEMBER_VIEWS.get(value);
+	if (record !== undefined) {
+		const data = record.value;
+		if (data === null || typeof data !== "object" || !runtime_holdsSlottedData(data)) return undefined;
+		return record.slothlet?.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
+	}
+	const wrapper = runtime_viewedNodeWrapper(value);
+	if (wrapper === null) return undefined;
+	const internal = wrapper.____slothletInternal;
+	// A node with no value yet (lazy, not loaded) or no longer one has nothing to copy: the platform's refusal stands.
+	if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return undefined;
+	const impl = internal.impl;
+	if (impl === null || impl === undefined) return undefined;
+	// A function is refused by the platform, as the module's function is; a primitive is copied as itself.
+	const fn = runtime_functionOf(impl);
+	if (fn) return { value: fn };
+	if (typeof impl !== "object") return { value: impl };
+	if (Arrays.isArray(impl)) return { list: true };
+	// A module's own Proxy is refused by the platform, as it is in plain JavaScript.
+	if (util.types.isProxy(impl) && !isCompositionLayer(impl)) return { value: impl };
+	// A built-in data object (a `Date`, a `Map`, an error, a boxed primitive) holds its data in internal slots only the
+	// engine reads. While the permission system is on, the copy is made from reads of it, its members read through the
+	// node or view the caller holds; off, the platform clones it as it is.
+	const data = layerUnderlying(impl);
+	if (runtime_holdsSlottedData(data)) {
+		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
+	}
+	return { list: false };
+});
+
 /**
  * The module a value was seen held as itself by, when it crossed to another module through slothlet (an argument, a
  * class a construction was made for): the guard hands it back to that module as itself.
- * @type {WeakMap<object, {slothlet: object, module: string|object}>}
+ * @type {WeakMap<object, {slothlet: object, module: string|object, wrapper: object}>}
  * @private
  */
 const CROSSING_ORIGINS = new WeakMap();
+
+/**
+ * The path each prototype no node exports is held to: that of the node that first handed it on (see
+ * {@link runtime_writtenPrototypeFor}). One path per prototype, so a class and its instances report the same checked
+ * view whichever of the module's functions handed each of them over.
+ * @type {WeakMap<object, {parts: string[], known: boolean}>}
+ * @private
+ */
+const CROSSED_PROTOTYPE_PATHS = new WeakMap();
 
 /**
  * Who a wrapper's module is, for the guard: its module id, or the wrapper itself when it has none.
@@ -5945,8 +7364,20 @@ function runtime_moduleKey(wrapper) {
 }
 
 /**
+ * What the views made for a reader are kept under: its module's record (see {@link runtime_makerOf}), one per module of
+ * an instance, or the reader itself when it is no module's wrapper.
+ * @param {object} reader - Who a view is for.
+ * @returns {object} The key.
+ * @private
+ */
+function runtime_crossKey(reader) {
+	return reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader) : reader;
+}
+
+/**
  * Record that `wrapper`'s module held a value as itself when it handed it on (see {@link CROSSING_ORIGINS}). A value it
- * held through a crossing view, or one already recorded, is left as it is.
+ * held through a crossing view, one of slothlet's own (another module's stand-in, a node), or one already recorded, is
+ * left as it is.
  * @param {*} value - The value.
  * @param {object} wrapper - The module's wrapper.
  * @returns {void}
@@ -5954,9 +7385,9 @@ function runtime_moduleKey(wrapper) {
  */
 function runtime_recordOrigin(value, wrapper) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function") || CROSSINGS.has(value)) return;
-	if (CROSSING_ORIGINS.has(value)) return;
+	if (CROSSING_ORIGINS.has(value) || runtime_isSlothletValue(value)) return;
 	const module = runtime_moduleKey(wrapper);
-	if (module !== null) CROSSING_ORIGINS.set(value, { slothlet: wrapper.slothlet, module });
+	if (module !== null) CROSSING_ORIGINS.set(value, { slothlet: wrapper.slothlet, module, wrapper });
 }
 
 /**
@@ -5981,7 +7412,23 @@ function runtime_sameModule(a, b) {
  */
 function runtime_isOwnOrigin(value, reader) {
 	const origin = CROSSING_ORIGINS.get(value);
-	return origin !== undefined && origin.slothlet === reader?.slothlet && origin.module === runtime_moduleKey(reader);
+	if (origin === undefined || origin.slothlet !== reader?.slothlet || origin.module !== runtime_moduleKey(reader)) return false;
+	// Modules of one id with a deny rule between them are not each other's.
+	return runtime_asOneModule(origin.slothlet, origin.wrapper, reader);
+}
+
+/**
+ * The api path of the module a value comes from, as segments: none when no module is known.
+ * @param {object|null} from - The wrapper of the module it comes from.
+ * @returns {string[]} The segments.
+ * @private
+ */
+function runtime_crossFromParts(from) {
+	return from?.____slothletInternal
+		? String(from.____slothletInternal.apiPath ?? "")
+				.split(".")
+				.filter(Boolean)
+		: [];
 }
 
 /**
@@ -6002,8 +7449,9 @@ function runtime_isWrittenClassPrototype(value) {
  * A prototype some module wrote, reached by a reader through a value another module handed it (an instance, the class,
  * the prototype held in data), as the reader gets it while the permission system is on. One whose class a node exports
  * is handed on as reading it at that path would ({@link runtime_prototypeHandedTo}). Any other is the code of the
- * module that handed it on and is held to that module's path: a checked view refusing a write the reader could not make
- * there. Handed on by no known module, it is held to the root, which only the host owns.
+ * module that first handed it on and is held to that module's path: the object itself to a reader that may make every
+ * write there, a checked view refusing a write the reader could not make there to any other. Handed on by no known
+ * module, it is held to the root, which only the host owns. Every leaf of a module gets the same view.
  * @param {object} prototype - The prototype.
  * @param {object} reader - Who reads it.
  * @param {object} slothlet - The instance.
@@ -6013,53 +7461,150 @@ function runtime_isWrittenClassPrototype(value) {
  */
 function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
-	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet);
-	const parts = from?.____slothletInternal
-		? String(from.____slothletInternal.apiPath ?? "")
-				.split(".")
-				.filter(Boolean)
-		: [];
-	return runtime_selfMemberOf(prototype, reader, slothlet, parts, null);
+	// One view per module: the first of its wrappers stands for all of them, and each write is still decided for the
+	// module executing it.
+	const standing = reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader).owner : reader;
+	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, standing, slothlet);
+	let site = CROSSED_PROTOTYPE_PATHS.get(prototype);
+	if (site === undefined || (!site.known && from?.____slothletInternal)) {
+		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
+		CROSSED_PROTOTYPE_PATHS.set(prototype, site);
+	}
+	MODULE_PROTOTYPES.add(prototype);
+	if (site.known && runtime_mayWritePath(slothlet, reader, site.parts)) return prototype;
+	// A view the reader's module already holds of it, handed over as data before anything showed it to be a prototype,
+	// is the object the module knows: it refuses the same writes ({@link runtime_crossAssertWrite}).
+	const views = CROSSING_VIEWS.get(prototype);
+	if (views !== undefined) {
+		const key = runtime_crossKey(reader);
+		const held = views.key === key ? views.view : views.others?.get(key);
+		if (held) return held;
+	}
+	return runtime_selfMemberOf(prototype, standing, slothlet, site.parts, null);
+}
+
+/**
+ * The objects slothlet has seen a module use as a prototype: each link some module wrote in the prototype chain of a
+ * value that crossed between modules. Such an object is that module's code wherever it is reached afterwards, handed
+ * on as data included: every change to it is held to the module's write rules.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const MODULE_PROTOTYPES = new WeakSet();
+
+/**
+ * Record the prototypes some module wrote in the chain of a value crossing between modules (see
+ * {@link MODULE_PROTOTYPES}). Only the chain is read, which runs none of the value's code; a Proxy in it, the
+ * language's own prototypes and those of Node's and slothlet's own values end the walk.
+ * @param {object|Function} value - The value crossing, not a Proxy.
+ * @returns {void}
+ * @private
+ */
+function runtime_notePrototypes(value) {
+	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
+		if (INTRINSICS.has(link) || MODULE_PROTOTYPES.has(link) || util.types.isProxy(link) || isSharedExport(link)) return;
+		if (runtime_isSlothletValue(link)) return;
+		MODULE_PROTOTYPES.add(link);
+		link = Reflect.getPrototypeOf(link);
+	}
+}
+
+/**
+ * Whether an object's internal data holds no reference to another object: a date, a regular expression, a buffer, a
+ * typed array, a `DataView`, or a boxed primitive.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_isOpaqueData(value) {
+	const types = util.types;
+	return (
+		types.isDate(value) ||
+		types.isRegExp(value) ||
+		types.isAnyArrayBuffer(value) ||
+		types.isArrayBufferView(value) ||
+		types.isBoxedPrimitive(value)
+	);
+}
+
+/**
+ * The engine's own `byteLength` and `length` of a typed array, taken when slothlet loaded.
+ * @type {Function}
+ * @private
+ */
+const TYPED_ARRAY_BYTE_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "byteLength").get;
+const TYPED_ARRAY_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "length").get;
+
+/**
+ * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,
+ * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
+ * what its kind gives it. A typed array's members under string keys are read only where `permissions.typedArrayMembers`
+ * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
+ * prototype and its symbol keys are checked.
+ * @param {object} value - Such an object.
+ * @param {object|null} slothlet - The instance it crosses in.
+ * @returns {boolean} True when nothing but its own data can be reached through it.
+ * @private
+ */
+function runtime_isPristineData(value, slothlet) {
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== null && !INTRINSICS.has(prototype) && !runtime_isSharedValue(prototype)) return false;
+	const types = util.types;
+	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
+		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
+		const listed = slothlet?.config?.permissions?.typedArrayMembers;
+		if (listed !== true && typeof listed !== "number") return true;
+		// Past the cap the array is not listed, as with the option off.
+		if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
+		// Its own keys are its indices, then any member stored under another name.
+		return Reflect.ownKeys(value).length === Reflect.apply(TYPED_ARRAY_LENGTH, value, []);
+	}
+	const keys = Reflect.ownKeys(value);
+	if (keys.length === 0) return true;
+	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
+	if (types.isBoxedPrimitive(value) && typeof value.valueOf() === "string") {
+		// A boxed string's own keys are its indices and its length.
+		return keys.length === value.valueOf().length + 1 && keys[keys.length - 1] === "length";
+	}
+	return false;
 }
 
 /**
  * Whether a value another module hands on is seen by its reader through a crossing view while the permission system is
  * on: any object or function that holds, or can later be given, a reference to another object. Primitives, the
- * language's own objects and functions, packages' and slothlet's own values, slothlet's views and stand-ins, and
- * objects whose internal data holds no references (dates, regular expressions, buffers, typed arrays, boxed
- * primitives) pass as they are.
+ * language's own objects and functions, packages' and slothlet's own values, slothlet's views, and objects whose
+ * internal data holds no references and that hold nothing else (dates, regular expressions, buffers, typed arrays, boxed
+ * primitives, see {@link runtime_isPristineData}) pass as they are. A stand-in of another module's code is viewed like
+ * the code it stands for.
  * @param {object|Function} value - The value.
+ * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.typedArrayMembers` decides whether a
+ *   typed array's own keys are listed.
  * @returns {boolean} True when it is viewed.
  * @private
  */
-function runtime_needsCrossing(value) {
+function runtime_needsCrossing(value, slothlet = null) {
 	if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
+	if (STAND_IN_RECORDS.has(value)) return true;
 	if (INTRINSICS.has(value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
 	if (SELF_MEMBER_VIEWS.has(value) || SELF_VIEW_NODES.has(value) || GUARD_VIEWS.has(value) || INBOUND_VIEWS.has(value)) return false;
 	if (resolveWrapper(value) !== null || capturedViewChildren.has(value) || isFrameworkInternal(value)) return false;
-	if (typeof value === "function") return !util.types.isProxy(value) ? !runtime_isBuiltinFunction(value) : true;
+	if (typeof value === "function") return util.types.isProxy(value) || !runtime_isBuiltinFunction(value);
 	if (util.types.isProxy(value)) return true;
-	if (util.types.isDate(value) || util.types.isRegExp(value) || util.types.isAnyArrayBuffer(value)) return false;
-	if (util.types.isArrayBufferView(value) || util.types.isBoxedPrimitive(value)) return false;
+	if (runtime_isOpaqueData(value)) return !runtime_isPristineData(value, slothlet);
 	return true;
 }
 
 /**
- * Whether `reader` may make every write at the path of the module a value comes from and beneath it, as the owner may:
- * it owns the path, or write rules grant it the whole subtree. Such a reader gets the value itself; a prototype on it of
- * a class exported elsewhere is still decided at that class's path ({@link runtime_writtenPrototypeFor}).
+ * Whether `reader` may make every write at a path and beneath it, as the path's owner may: it owns the path, or write
+ * rules grant it the whole subtree, and no write rule could refuse it one there.
  * @param {object} slothlet - The instance.
  * @param {object} reader - A module's wrapper.
- * @param {object|null} from - The wrapper of the module the value comes from.
+ * @param {string[]} parts - The path.
  * @returns {boolean} True when it may.
  * @private
  */
-function runtime_mayWriteFrom(slothlet, reader, from) {
-	if (!from?.____slothletInternal || !reader?.____slothletInternal) return false;
-	const parts = String(from.____slothletInternal.apiPath ?? "")
-		.split(".")
-		.filter(Boolean);
-	if (parts.length === 0) return false;
+function runtime_mayWritePath(slothlet, reader, parts) {
+	if (!reader?.____slothletInternal || parts.length === 0) return false;
 	const verdict = slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), parts.join("."));
 	if (verdict === "deny") return false;
 	if (verdict === "grant" && !slothlet.handlers.apiManager.isRemovedCaller(reader)) return true;
@@ -6067,13 +7612,109 @@ function runtime_mayWriteFrom(slothlet, reader, from) {
 }
 
 /**
+ * Whether `reader` may make every write at the path of the module a value comes from and beneath it
+ * ({@link runtime_mayWritePath}). Such a reader gets the value itself; a prototype on it of a class exported elsewhere is
+ * still decided at that class's path ({@link runtime_writtenPrototypeFor}).
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @returns {boolean} True when it may.
+ * @private
+ */
+function runtime_mayWriteFrom(slothlet, reader, from) {
+	if (!from?.____slothletInternal) return false;
+	return runtime_mayWritePath(slothlet, reader, runtime_crossFromParts(from));
+}
+
+/**
+ * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
+ * the path the value comes from ({@link runtime_mayWriteFrom}), as the owner may. `"written"`: the module the value
+ * comes from may make every write at the reader's path, so it has nothing to keep from the reader, and what the reader
+ * hands back stays the value. Neither holds across a write rule that refuses the other side: a module refused a write
+ * to the other is handed views of the other's values and has its own handed on as views, since what the other stores
+ * into a value it holds as itself comes back.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
+ * @private
+ */
+function runtime_handedAsItself(slothlet, reader, from) {
+	if (!from?.____slothletInternal) return null;
+	if (runtime_mayWriteFrom(slothlet, reader, from)) return runtime_writeDeniedWithin(slothlet, from, reader) ? null : "writer";
+	if (runtime_mayWriteFrom(slothlet, from, reader)) return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
+	return null;
+}
+
+/**
+ * Whether a write rule refuses `reader` a write somewhere in the subtree of a module of its own module id: modules
+ * loaded from one folder share an id and own each other's paths, but a deny rule between them still holds, so what one
+ * hands the other is viewed like another module's.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object} from - The wrapper of the module the value comes from, of the same module id.
+ * @returns {boolean} True when a rule refuses it.
+ * @private
+ */
+function runtime_writeDeniedWithin(slothlet, reader, from) {
+	if (reader === from) return false;
+	const parts = runtime_crossFromParts(from);
+	if (parts.length === 0) return false;
+	return slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), parts.join(".")) === "deny";
+}
+
+/**
+ * Whether two wrappers are of one module with nothing between them: the same module id, and no write rule refusing
+ * either one a write in the other's subtree. What such a pair hands each other is handed as it is; a pair with a deny
+ * rule between them is handed views in both directions, since what one stores into the other's value comes back.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} a - A wrapper.
+ * @param {object|null} b - Another.
+ * @returns {boolean} True when they are.
+ * @private
+ */
+function runtime_asOneModule(slothlet, a, b) {
+	if (a === b) return true;
+	if (!runtime_sameModule(a, b)) return false;
+	return !runtime_writeDeniedWithin(slothlet, a, b) && !runtime_writeDeniedWithin(slothlet, b, a);
+}
+
+/**
+ * The guard's promise of a plain promise another module handed on: it settles as the promise does, with what it
+ * settles to crossed for the reader. The same promise for the same module every time.
+ * @param {Promise} promise - The promise.
+ * @param {object} reader - Who it reaches.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} from - The wrapper of the module it comes from.
+ * @returns {Promise} The guard's promise.
+ * @private
+ */
+function runtime_crossPromise(promise, reader, slothlet, from) {
+	const key = runtime_crossKey(reader);
+	let byKey = CROSSED_PROMISES.get(promise);
+	const existing = byKey?.get(key);
+	if (existing) return existing;
+	const crossed = Reflect.apply(SLOT_READERS.then, promise, [
+		(settled) => runtime_crossTo(settled, reader, slothlet, from),
+		(reason) => {
+			throw runtime_crossTo(reason, reader, slothlet, from);
+		}
+	]);
+	if (!byKey) CROSSED_PROMISES.set(promise, (byKey = new Map()));
+	byKey.set(key, crossed);
+	return crossed;
+}
+
+/**
  * What a value reaches `reader` as when another module hands it on while the permission system is on (the class
  * prototype guard): the reader may change data it is handed, but never the code of a module it may not write, however
- * it gets to it. A prototype a module wrote is checked ({@link runtime_writtenPrototypeFor}); any other object is a
- * crossing view ({@link runtime_crossView}) through which every value read later — an instance, the class, a member
- * the owner stored after handing the object on — reaches the reader the same way. The host, the module the value came
- * from, and every reader while the system is off get the value itself; a crossing view handed on again is decided anew
- * for whoever it reaches.
+ * it gets to it. A prototype a module wrote is checked ({@link runtime_writtenPrototypeFor}); any other object or
+ * function, a stand-in of another module's code included, is a crossing view ({@link runtime_crossView}) through which
+ * every value read later — an instance, the class, a member the owner stored after handing the object on — reaches the
+ * reader the same way. The host, the module the value came from, a module that may make every write at the path it
+ * comes from, and every reader while the system is off get the value itself; a crossing view handed on again is decided
+ * anew for whoever it reaches. Where the value cannot be
+ * described it is viewed, never handed on as it is.
  * @param {*} value - The value.
  * @param {object|null|undefined} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}),
  *   or {@link SEALED_SHELL_READER} for a holder not known yet.
@@ -6092,38 +7733,86 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	}
 	if (reader === null || reader === undefined || reader === HOST_READER) return value;
 	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
-	if (!slothlet?.handlers?.permissionManager?.isEnabled?.()) return value;
-	if (from !== null && runtime_sameModule(from, reader)) return value;
+	if (!runtime_guardOn(slothlet)) return value;
+	const isModule = Boolean(reader.____slothletInternal);
+	// A class instance a node holds, handed back by one of its own methods, stands for its node (#625): the reader gets
+	// its view of the node, whose own write rule holds.
+	if (isModule && typeof value === "object" && SELF_INSTANCE_NODES.has(runtime_unwrapClassInstance(value)))
+		return runtime_selfView(value, reader);
+	// A stand-in comes from the module that made it. One of the reader's own module stays the stand-in here, as it is
+	// between two functions of one module; handed in as an argument it becomes the value again (see runtime_handIn).
+	const record = STAND_IN_RECORDS.get(value);
+	if (record) from ??= record.owner;
+	// The async runtime's context wrapper of a class instance (#328) stands for the instance: the reader's own module's
+	// comes back as the instance it made; another module's comes from that module.
+	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
+	if (creator !== null) {
+		if (isModule && runtime_asOneModule(slothlet, creator, reader)) return runtime_unwrapClassInstance(value);
+		from ??= creator;
+	}
+	if (isModule && from !== null && runtime_asOneModule(slothlet, from, reader)) return value;
 	// A value the reader's own module held as itself when it handed it on comes back to it as itself.
 	if (runtime_isOwnOrigin(value, reader)) return value;
+	// A view already made of it for the reader's module is what the module holds, except in a function of the module
+	// that may write everything at the path the value comes from: the view was made for another of the module's
+	// functions, and this one gets the value itself, as it would have had it read the value first.
+	const views = CROSSING_VIEWS.get(value);
+	if (views !== undefined) {
+		const key = runtime_crossKey(reader);
+		const held = views.key === key ? views.view : views.others?.get(key);
+		if (held) {
+			if (!isModule) return held;
+			// The function the view was made for, and each one decided since, was refused the value itself already.
+			// That answer holds for the rules it was given under: a rule added or removed since (or the system switched
+			// off and on) has every function decided again.
+			const state = CROSSINGS.get(held);
+			const epoch = slothlet.handlers.permissionManager.ruleEpoch;
+			if (state.epoch !== epoch) {
+				state.epoch = epoch;
+				state.readerDecided = false;
+				state.decided = null;
+			}
+			if (state.reader === reader ? state.readerDecided : state.decided?.has(reader)) return held;
+			const itself = runtime_handedAsItself(slothlet, reader, from);
+			if (itself !== null) {
+				if (itself === "writer") runtime_recordOrigin(value, from);
+				return value;
+			}
+			if (state.reader === reader) state.readerDecided = true;
+			else (state.decided ??= new WeakSet()).add(reader);
+			return held;
+		}
+	}
 	try {
-		// The async runtime's context wrapper of a class instance (#328) stands for the instance: what it is decides.
-		const plain = runtime_unwrapClassInstance(value);
-		if (typeof plain === "object" && !util.types.isProxy(plain)) {
-			if (runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
+		// A prototype handed out for a holder not known yet is decided for this one.
+		const sealed = SELF_MEMBER_VIEWS.get(value);
+		if (sealed?.reader === SEALED_SHELL_READER) value = sealed.value;
+		// The async runtime's context wrapper of a class instance (#328), and a stand-in, stand for a value: what it is
+		// decides.
+		const plain = record ? record.original : runtime_unwrapClassInstance(value);
+		if (plain !== null && typeof plain === "object" && !util.types.isProxy(plain)) {
+			if (MODULE_PROTOTYPES.has(plain) || runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
-		if (!runtime_needsCrossing(value)) return value;
-		// A module that may write everything at the path the value comes from gets the value itself, as the owner does.
-		// Handed back to the module it came from, it is that module's own value again.
-		if (runtime_mayWriteFrom(slothlet, reader, from)) {
-			runtime_recordOrigin(value, from);
+		if (!runtime_needsCrossing(value, slothlet)) return value;
+		// A module that may write everything at the path the value comes from gets the value itself, as the owner does,
+		// and so does a module handed a value by one that may write everything at its own path. Handed back to the
+		// module it came from, the first is that module's own value again.
+		const itself = isModule ? runtime_handedAsItself(slothlet, reader, from) : null;
+		if (itself !== null) {
+			if (itself === "writer") runtime_recordOrigin(value, from);
 			return value;
 		}
-		if (runtime_isPlainPromise(value)) {
-			const crossed = Reflect.apply(SLOT_READERS.then, value, [
-				(settled) => runtime_crossTo(settled, reader, slothlet, from),
-				(reason) => {
-					throw runtime_crossTo(reason, reader, slothlet, from);
-				}
-			]);
-			CROSSING_PROMISES.add(crossed);
-			return crossed;
-		}
+		// A promise the other module holds is viewed like any other object, not followed: no reaction is added to it
+		// until the reader adds one through the view (`then`, `catch`, `await`), so whether its rejection counts as
+		// handled is what the owner and the reader made it, as in plain JavaScript.
+		if (record && typeof value === "object" && util.types.isPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
 		return runtime_crossView(value, reader, slothlet, from);
-	} catch {
-		// A value that refuses to be described is handed on as it is.
-		return value;
+	} catch (error) {
+		// A refusal is the reader's answer. Anything else (a value that refuses to be described, a stack with no room
+		// left) leaves the value undecided: it is viewed, never handed on as it is.
+		if (runtime_inherits(error, SlothletError)) throw error;
+		return runtime_crossView(value, reader, slothlet, from);
 	}
 }
 
@@ -6133,36 +7822,67 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
  * target — reaching the reader as values another module hands on do, and every value the reader puts into it reaching
  * the module the value came from the same way. The view is lazy: nothing is searched when it is made, so a member the
  * owner stores later is seen as well. It stands over a shadow kept in step with the value for what the language fixes.
+ * Data members stay the reader's to change; the value's code does not ({@link runtime_crossAssertWrite}).
  * @param {object|Function} original - The value.
  * @param {object} reader - Who it reaches.
  * @param {object} slothlet - The instance.
  * @param {object|null} from - The wrapper of the module it comes from.
- * @returns {object|Function} The view, the same one for the same value and reader every time.
+ * @returns {object|Function} The view, the same one for the same value and module every time.
  * @private
  */
 function runtime_crossView(original, reader, slothlet, from) {
-	// The views of a value: its first reader's held inline, any other reader's in a map made only then.
+	// The views of a value: its first module's held inline, any other module's in a map made only then.
+	const key = runtime_crossKey(reader);
 	const views = CROSSING_VIEWS.get(original);
 	if (views !== undefined) {
-		if (views.reader === reader) return views.view;
-		const other = views.others?.get(reader);
+		if (views.key === key) return views.view;
+		const other = views.others?.get(key);
 		if (other) return other;
 	}
 	const isFunction = typeof original === "function";
-	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Array.isArray(original) ? [] : {};
-	const state = { original, reader, slothlet, from, view: null, slot: null, engineMethods: null };
-	const view = new Proxy(shadow, CROSSING_HANDLER);
+	// What the value inherits from that a module wrote is that module's code from here on, however it is reached.
+	if (!util.types.isProxy(original)) runtime_notePrototypes(original);
+	const shadow = isFunction
+		? runtime_isConstructor(original)
+			? function () {}.bind(null)
+			: () => {}
+		: Arrays.isArray(original)
+			? []
+			: Objects.create(CROSSING_SHADOW_PROTOTYPE);
+	// `util.inspect` reads a Proxy's target, never its traps: the hook has to be the shadow's own, or inherited by it.
+	if (CROSSING_INSPECT !== null && (isFunction || Arrays.isArray(original)))
+		Reflect.defineProperty(shadow, INSPECT_CUSTOM, { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false });
+	const state = {
+		original,
+		reader,
+		slothlet,
+		from,
+		view: null,
+		onOriginal: null,
+		methods: null,
+		pinned: false,
+		// The function the view is made for was just refused the value itself, under the rules as they are now.
+		epoch: slothlet?.handlers?.permissionManager?.ruleEpoch ?? 0,
+		readerDecided: true,
+		decided: null
+	};
+	const view = new NativeProxy(shadow, CROSSING_HANDLER);
 	state.view = view;
 	CROSSING_STATES.set(shadow, state);
 	CROSSINGS.set(view, state);
-	if (views === undefined) CROSSING_VIEWS.set(original, { reader, view, others: null });
-	else (views.others ??= new WeakMap()).set(reader, view);
+	if (views === undefined) CROSSING_VIEWS.set(original, { key, view, reader, others: null });
+	else (views.others ??= new Map()).set(key, view);
 	return view;
 }
 
 /**
- * The state of each crossing view, by its shadow (see {@link runtime_crossView}).
- * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, slot: boolean|null, engineMethods: WeakMap<Function, Function>|null}>}
+ * The state of each crossing view, by its shadow (see {@link runtime_crossView}). `onOriginal` is whether the
+ * language's and Node's own methods run on the value itself ({@link runtime_crossRunsOnOriginal}), told when first
+ * asked; `methods` holds those methods as the view hands them out; `pinned` is whether the shadow holds anything;
+ * `readerDecided` is whether the function the view was made for was found not to be handed the value itself, and
+ * `decided` holds the other functions of its module found so, both under the rules as they were at `epoch` (the
+ * permission manager's `ruleEpoch`): a rule change since has each decided again.
+ * @type {WeakMap<object, {original: object, reader: object, slothlet: object, from: object|null, view: object, onOriginal: boolean|null, methods: WeakMap<Function, Function>|null, pinned: boolean, epoch: number, readerDecided: boolean, decided: WeakSet<object>|null}>}
  * @private
  */
 const CROSSING_STATES = new WeakMap();
@@ -6190,7 +7910,7 @@ function runtime_crossOut(state, member) {
 function runtime_crossIn(state, member) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (member === state.view) return state.original;
-	return runtime_crossTo(member, state.from ?? HOST_READER, state.slothlet, state.reader);
+	return runtime_crossTo(member, state.from ?? HOST_READER, state.slothlet, state.reader?.____slothletInternal ? state.reader : null);
 }
 
 /**
@@ -6212,16 +7932,24 @@ function runtime_crossDescribe(state, descriptor) {
 }
 
 /**
- * Keep a crossing view's shadow in step with a member the language fixes.
+ * Keep a crossing view's shadow in step with a member the language fixes: one the value holds fixed, or any member once
+ * the shadow is closed, where what it holds is what the view has to report.
  * @param {object} shadow - The shadow.
+ * @param {object} state - The view's state.
  * @param {string|symbol} prop - The member.
  * @param {PropertyDescriptor|undefined} descriptor - Its reported descriptor.
  * @returns {void}
  * @private
  */
-function runtime_crossSync(shadow, prop, descriptor) {
-	if (!descriptor || descriptor.configurable || !Reflect.isExtensible(shadow)) return;
-	Reflect.defineProperty(shadow, prop, descriptor);
+function runtime_crossSync(shadow, state, prop, descriptor) {
+	const open = Reflect.isExtensible(shadow);
+	if (!descriptor) {
+		if (!open) Reflect.deleteProperty(shadow, prop);
+		return;
+	}
+	if (descriptor.configurable && open) return;
+	if (!open && !Reflect.getOwnPropertyDescriptor(shadow, prop)) return;
+	if (Reflect.defineProperty(shadow, prop, descriptor)) state.pinned = true;
 }
 
 /**
@@ -6234,7 +7962,10 @@ function runtime_crossSync(shadow, prop, descriptor) {
  */
 function runtime_crossPrototype(state, raw) {
 	if (raw === null || (typeof raw !== "object" && typeof raw !== "function")) return raw;
-	const prototype = runtime_unwrapClassInstance(raw);
+	// A stand-in's prototype for a holder not known yet, and the context wrapper of one, stand for the prototype.
+	const sealed = SELF_MEMBER_VIEWS.get(raw);
+	const standIn = STAND_IN_RECORDS.get(raw);
+	const prototype = sealed?.reader === SEALED_SHELL_READER ? sealed.value : standIn ? standIn.original : runtime_unwrapClassInstance(raw);
 	if (
 		typeof prototype === "object" &&
 		!util.types.isProxy(prototype) &&
@@ -6243,74 +7974,261 @@ function runtime_crossPrototype(state, raw) {
 		!runtime_isSlothletValue(prototype)
 	)
 		return runtime_writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from);
-	return runtime_crossOut(state, prototype);
+	return runtime_crossOut(state, raw);
 }
 
 /**
  * Make a closed value's crossing view report what the language fixes: its shadow holds every member, as the reader gets
- * it, and its prototype, and is closed too.
+ * it, and its prototype, and is closed too. Run again for a shadow already closed, it brings the shadow up to date with
+ * what the owner changed since: a member's value, or a member removed.
  * @param {object} shadow - The shadow.
  * @param {object} state - The view's state.
  * @returns {void}
  * @private
  */
 function runtime_crossSettle(shadow, state) {
-	if (!Reflect.isExtensible(shadow)) return;
 	const keys = Reflect.ownKeys(state.original);
+	const open = Reflect.isExtensible(shadow);
+	for (const key of Reflect.ownKeys(shadow)) if (!keys.includes(key) && key !== INSPECT_CUSTOM) Reflect.deleteProperty(shadow, key);
 	for (const key of keys) {
+		if (!open && !Reflect.getOwnPropertyDescriptor(shadow, key)) continue;
 		const descriptor = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, key));
 		if (descriptor) Reflect.defineProperty(shadow, key, descriptor);
 	}
-	for (const key of Reflect.ownKeys(shadow)) if (!keys.includes(key)) Reflect.deleteProperty(shadow, key);
+	state.pinned = true;
+	if (!open) return;
 	Reflect.setPrototypeOf(shadow, runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original)));
 	Reflect.preventExtensions(shadow);
 }
 
 /**
- * An engine method read through a crossing view of an object with internal slots (a `Map`, a `Set`, a `WeakRef`, an
- * iterator): it runs on the object itself, its results and the values it calls back with handed on to the reader, and
- * what the reader passes it handed to the module the object came from. Null for any other value.
+ * Whether the language's and Node's own methods read through a crossing view run on the value itself rather than on the
+ * view: an object with internal slots (a `Map`, a `Set`, a `WeakRef`, a date, an iterator, a boxed primitive), whose
+ * methods work only on the object, and an instance of a class no module wrote (a `URL`, an emitter, a stream), whose
+ * methods check the object they are called on. A plain object, an array and a function take them through the view.
+ * @param {object} state - The view's state.
+ * @returns {boolean} True when they run on the value.
+ * @private
+ */
+function runtime_crossRunsOnOriginal(state) {
+	if (state.onOriginal !== null) return state.onOriginal;
+	const { original } = state;
+	let answer = false;
+	if (typeof original !== "function" && !util.types.isProxy(original)) {
+		const types = util.types;
+		answer =
+			runtime_hasInternalSlots(original) ||
+			runtime_isNativeIterator(original) ||
+			types.isMapIterator(original) ||
+			types.isSetIterator(original) ||
+			types.isGeneratorObject(original) ||
+			types.isBoxedPrimitive(original);
+		// A prototype of the language's or Node's own other than a plain object's or an array's: a class no module wrote,
+		// or a module's subclass of one.
+		for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
+			if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
+			if (INTRINSICS.has(link) || runtime_isSharedValue(link)) answer = true;
+			link = Reflect.getPrototypeOf(link);
+		}
+	}
+	state.onOriginal = answer;
+	return answer;
+}
+
+/**
+ * Whether a value is the result the engine makes for one step of an iterator: a plain object holding `value` and
+ * `done` as data and nothing else. Told from its descriptors, so nothing of anyone's runs.
+ * @param {*} result - What a step returned.
+ * @returns {boolean} True for such a result.
+ * @private
+ */
+function runtime_isStepResult(result) {
+	if (result === null || typeof result !== "object" || util.types.isProxy(result)) return false;
+	if (Reflect.getPrototypeOf(result) !== Objects.prototype) return false;
+	const keys = Reflect.ownKeys(result);
+	if (keys.length !== 2 || keys[0] !== "value" || keys[1] !== "done") return false;
+	const value = Reflect.getOwnPropertyDescriptor(result, "value");
+	const done = Reflect.getOwnPropertyDescriptor(result, "done");
+	return "value" in value && "value" in done && typeof done.value === "boolean";
+}
+
+/**
+ * One of the language's or Node's own methods read through a crossing view of a value they run on
+ * ({@link runtime_crossRunsOnOriginal}): it runs on the value itself, its results handed on to the reader and what the
+ * reader passes it handed to the module the value came from. A callback the engine calls back with what the value holds
+ * gets each of those as the reader gets it. Null for any other value read.
  * @param {object} state - The view's state.
  * @param {*} fn - The value read.
  * @returns {Function|null} The method, the same each read.
  * @private
  */
 function runtime_crossEngineMethod(state, fn) {
-	if (typeof fn !== "function" || util.types.isProxy(fn) || !(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn))) return null;
+	if (typeof fn !== "function" || util.types.isProxy(fn)) return null;
+	if (!(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn) || isSharedExport(fn))) return null;
+	if (!runtime_crossRunsOnOriginal(state)) return null;
 	const { original } = state;
-	state.slot ??=
-		typeof original !== "function" &&
-		!util.types.isProxy(original) &&
-		(runtime_hasInternalSlots(original) ||
-			runtime_isNativeIterator(original) ||
-			util.types.isMapIterator(original) ||
-			util.types.isSetIterator(original) ||
-			util.types.isGeneratorObject(original));
-	if (!state.slot) return null;
-	state.engineMethods ??= new WeakMap();
-	let method = state.engineMethods.get(fn);
+	state.methods ??= new WeakMap();
+	let method = state.methods.get(fn);
 	if (!method) {
 		const name = fn.name;
+		const callsBack = SLOT_CALLBACK_METHODS.has(engineThenOf(fn) ?? fn);
+		// A step of one of the language's own iterators answers with an object the engine makes for that step.
+		const steps =
+			(name === "next" || name === "return" || name === "throw") &&
+			(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn)) &&
+			(runtime_isNativeIterator(original) ||
+				util.types.isMapIterator(original) ||
+				util.types.isSetIterator(original) ||
+				util.types.isGeneratorObject(original));
 		method = {
 			[name](...args) {
 				const receiver = this === state.view ? original : this;
 				const handed = args.map((arg) =>
-					typeof arg === "function"
-						? (...values) =>
-								Reflect.apply(
-									arg,
-									undefined,
-									values.map((item) => (item === original ? state.view : runtime_crossOut(state, item)))
-								)
+					callsBack && typeof arg === "function"
+						? function (...values) {
+								return runtime_crossIn(
+									state,
+									Reflect.apply(
+										arg,
+										this === original ? state.view : this,
+										values.map((item) => runtime_crossOut(state, item))
+									)
+								);
+							}
 						: runtime_crossIn(state, arg)
 				);
-				return runtime_crossOut(state, Reflect.apply(fn, receiver, handed));
+				let result;
+				try {
+					result = Reflect.apply(fn, receiver, handed);
+				} catch (error) {
+					throw runtime_crossOut(state, error);
+				}
+				// The step's result is no one's value: the reader gets a result of its own, holding what the step gave as
+				// the reader gets it. Viewing the result itself would make a view for every element stepped over.
+				if (steps && runtime_isStepResult(result)) return { value: runtime_crossOut(state, result.value), done: result.done };
+				// An async generator's step settles to such a result: the reader's promise settles to a result of its own (#758).
+				if (steps && util.types.isPromise(result)) {
+					return Reflect.apply(SLOT_READERS.then, result, [
+						(settled) =>
+							runtime_isStepResult(settled)
+								? { value: runtime_crossOut(state, settled.value), done: settled.done }
+								: runtime_crossOut(state, settled),
+						(reason) => Promises.reject(runtime_crossOut(state, reason))
+					]);
+				}
+				return runtime_crossOut(state, result);
 			}
 		}[name];
-		state.engineMethods.set(fn, method);
+		state.methods.set(fn, method);
 	}
 	return method;
 }
+
+/**
+ * Whether a member of the value behind a crossing view is code of the module the value came from: a function, or an
+ * accessor, that the reader's module did not put there itself.
+ * @param {object} state - The view's state.
+ * @param {PropertyDescriptor} descriptor - The member's descriptor on the value.
+ * @returns {boolean} True for the owner's code.
+ * @private
+ */
+function runtime_crossIsOwnersCode(state, descriptor) {
+	if (!("value" in descriptor)) return true;
+	const held = descriptor.value;
+	if (typeof held !== "function") return false;
+	// A function the reader's module stored there is the reader's to replace.
+	const crossing = CROSSINGS.get(held);
+	if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && runtime_sameModule(crossing.from, state.reader));
+	return !runtime_isOwnOrigin(held, state.reader);
+}
+
+/**
+ * Refuse a change through a crossing view that would change code of the module the value came from, unless whoever
+ * makes it may write that module's path: the view's reader and the module executing both have to be allowed, so a
+ * function another module runs for the reader gets it nothing. Data stays the reader's to change. Code is:
+ *
+ * - everything about a function (a class's statics, its `prototype`, its own prototype);
+ * - everything about an object slothlet has seen a module use as a prototype ({@link MODULE_PROTOTYPES}), handed on
+ *   as data: a member replaced, added or removed;
+ * - the prototype of any value (`Object.setPrototypeOf`);
+ * - a member of the value's own holding a function or accessor the reader's module did not put there (replaced,
+ *   redefined or deleted), except an assignment its own setter takes;
+ * - a member a prototype some module wrote holds as a function or accessor (shadowed by a member of the value's own),
+ *   except an assignment its setter takes.
+ * @param {object} state - The view's state.
+ * @param {string|symbol|null} prop - The member changed, or null for the value as a whole.
+ * @param {"set"|"define"|"delete"|"prototype"} change - The change.
+ * @returns {void}
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` or `PERMISSION_DENIED` when it is refused, `LOOSE_SET_UNATTRIBUTED` for
+ *   code the live runtime cannot attribute.
+ * @private
+ */
+function runtime_crossAssertWrite(state, prop, change) {
+	const { original, slothlet } = state;
+	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
+	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
+	const subject = STAND_IN_RECORDS.get(original)?.original ?? runtime_unwrapClassInstance(original);
+	// A function, and an object some module uses as a prototype, are code whole: every member, new ones included.
+	let held = typeof original === "function" || change === "prototype" || MODULE_PROTOTYPES.has(subject);
+	if (!held && !util.types.isProxy(subject)) {
+		const own = Reflect.getOwnPropertyDescriptor(subject, prop);
+		if (own) {
+			held = runtime_crossIsOwnersCode(state, own) && !(change === "set" && !("value" in own) && typeof own.set === "function");
+		} else if (change !== "delete") {
+			for (let link = Reflect.getPrototypeOf(subject), depth = 0; link !== null && depth < 64; depth++) {
+				if (util.types.isProxy(link) || INTRINSICS.has(link) || runtime_isSharedValue(link)) break;
+				const inherited = Reflect.getOwnPropertyDescriptor(link, prop);
+				if (inherited) {
+					const isCode = !("value" in inherited) || typeof inherited.value === "function";
+					held = isCode && !(change === "set" && !("value" in inherited) && typeof inherited.set === "function");
+					break;
+				}
+				link = Reflect.getPrototypeOf(link);
+			}
+		}
+	}
+	if (!held) return;
+	const parts = runtime_crossFromParts(state.from);
+	if (typeof prop === "string") parts.push(prop);
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.unresolved) {
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+	}
+	const writers = new Set();
+	if (state.reader?.____slothletInternal) writers.add(state.reader);
+	if (identity?.currentWrapper) {
+		writers.add(identity.currentWrapper);
+		for (const ceiling of identityCeilings(identity)) writers.add(ceiling);
+	}
+	for (const writer of writers) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+}
+
+/**
+ * What `util.inspect` prints for a crossing view: the value behind it, printed by slothlet's own inspector, so a view
+ * shows as the value does in a log. `util.inspect` calls it with the view as `this`. Nothing of the value is handed to
+ * the reader but the text. Null where there is no inspector (a browser).
+ * @type {Function|null}
+ * @private
+ */
+const CROSSING_INSPECT = isNode
+	? function slothlet_crossInspect(depth, options) {
+			const state = CROSSINGS.get(this);
+			if (!state) return this;
+			const behind = STAND_IN_RECORDS.get(state.original)?.original ?? runtime_unwrapClassInstance(state.original);
+			return util.inspect(behind, { ...options, depth: typeof depth === "number" ? depth : (options?.depth ?? 2) });
+		}
+	: null;
+
+/**
+ * What the shadow of a crossing view of a plain object inherits from: only the inspect hook, so making a view defines
+ * nothing on its shadow.
+ * @type {object}
+ * @private
+ */
+const CROSSING_SHADOW_PROTOTYPE = Objects.create(
+	null,
+	CROSSING_INSPECT === null ? {} : { [INSPECT_CUSTOM]: { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false } }
+);
 
 /**
  * The traps of every crossing view (see {@link runtime_crossView}), each finding its view's state by the shadow.
@@ -6320,55 +8238,79 @@ function runtime_crossEngineMethod(state, fn) {
 const CROSSING_HANDLER = {
 	get(shadow, prop, receiver) {
 		const state = CROSSING_STATES.get(shadow);
-		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
-		if (held && !held.configurable && "value" in held && !held.writable) return held.value;
-		const value = Reflect.get(state.original, prop, receiver === state.view ? state.original : receiver);
+		if (state.pinned) {
+			if (!Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
+			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (held && !held.configurable && "value" in held && !held.writable) return held.value;
+		}
+		const { original } = state;
+		const own = receiver === state.view;
+		const value = Reflect.get(original, prop, own ? original : receiver);
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-		const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
-		if (own && !own.configurable) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, own));
+		const fixed = Reflect.getOwnPropertyDescriptor(original, prop);
+		if (fixed && !fixed.configurable) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, fixed));
+		// The prototype read by its accessor is the prototype, as `Object.getPrototypeOf` reports it.
+		if (prop === "__proto__" && !fixed) {
+			const prototype = Reflect.getPrototypeOf(original);
+			if (prototype === value || STAND_IN_RECORDS.has(original)) return runtime_crossPrototype(state, prototype);
+		}
 		return runtime_crossEngineMethod(state, value) ?? runtime_crossOut(state, value);
 	},
 	set(shadow, prop, value, receiver) {
 		const state = CROSSING_STATES.get(shadow);
-		const into = receiver === state.view ? state.original : runtime_crossIn(state, receiver);
+		const own = receiver === state.view;
+		if (own) {
+			if (prop === "__proto__" && !Reflect.getOwnPropertyDescriptor(state.original, prop))
+				runtime_crossAssertWrite(state, null, "prototype");
+			else runtime_crossAssertWrite(state, prop, "set");
+		}
+		const into = own ? state.original : runtime_crossIn(state, receiver);
 		const done = Reflect.set(state.original, prop, runtime_crossIn(state, value), into);
-		const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
-		if (own && !own.configurable) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, own));
+		const fixed = Reflect.getOwnPropertyDescriptor(state.original, prop);
+		if (fixed && (!fixed.configurable || state.pinned)) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, fixed));
 		return done;
 	},
 	has(shadow, prop) {
-		return Reflect.has(CROSSING_STATES.get(shadow).original, prop);
+		const state = CROSSING_STATES.get(shadow);
+		if (state.pinned && !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
+		return Reflect.has(state.original, prop);
 	},
 	deleteProperty(shadow, prop) {
-		return Reflect.deleteProperty(CROSSING_STATES.get(shadow).original, prop);
+		const state = CROSSING_STATES.get(shadow);
+		runtime_crossAssertWrite(state, prop, "delete");
+		const done = Reflect.deleteProperty(state.original, prop);
+		if (done && state.pinned) Reflect.deleteProperty(shadow, prop);
+		return done;
 	},
 	ownKeys(shadow) {
 		const state = CROSSING_STATES.get(shadow);
-		if (!Reflect.isExtensible(state.original)) runtime_crossSettle(shadow, state);
+		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
 		if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
 		const keys = Reflect.ownKeys(state.original);
-		for (const key of Reflect.ownKeys(shadow))
-			if (!keys.includes(key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) keys.push(key);
+		if (state.pinned)
+			for (const key of Reflect.ownKeys(shadow))
+				if (!keys.includes(key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) keys.push(key);
 		return keys;
 	},
 	getOwnPropertyDescriptor(shadow, prop) {
 		const state = CROSSING_STATES.get(shadow);
-		if (!Reflect.isExtensible(state.original)) {
+		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) {
 			runtime_crossSettle(shadow, state);
 			return Reflect.getOwnPropertyDescriptor(shadow, prop);
 		}
 		const result = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop));
-		runtime_crossSync(shadow, prop, result);
+		runtime_crossSync(shadow, state, prop, result);
 		return result;
 	},
 	defineProperty(shadow, prop, descriptor) {
 		const state = CROSSING_STATES.get(shadow);
+		runtime_crossAssertWrite(state, prop, "define");
 		const into = { ...descriptor };
 		if ("value" in descriptor) into.value = runtime_crossIn(state, descriptor.value);
 		if ("get" in descriptor) into.get = runtime_crossIn(state, descriptor.get);
 		if ("set" in descriptor) into.set = runtime_crossIn(state, descriptor.set);
 		const done = Reflect.defineProperty(state.original, prop, into);
-		if (done) runtime_crossSync(shadow, prop, runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop)));
+		if (done) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop)));
 		return done;
 	},
 	getPrototypeOf(shadow) {
@@ -6377,8 +8319,14 @@ const CROSSING_HANDLER = {
 		return runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original));
 	},
 	setPrototypeOf(shadow, prototype) {
-		if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === prototype;
 		const state = CROSSING_STATES.get(shadow);
+		// The prototype it already reports changes nothing.
+		const reported = Reflect.isExtensible(shadow)
+			? runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original))
+			: Reflect.getPrototypeOf(shadow);
+		if (reported === prototype) return true;
+		if (!Reflect.isExtensible(shadow)) return false;
+		runtime_crossAssertWrite(state, null, "prototype");
 		return Reflect.setPrototypeOf(state.original, runtime_crossIn(state, prototype));
 	},
 	isExtensible(shadow) {
@@ -6388,6 +8336,7 @@ const CROSSING_HANDLER = {
 	},
 	preventExtensions(shadow) {
 		const state = CROSSING_STATES.get(shadow);
+		if (typeof state.original === "function") runtime_crossAssertWrite(state, null, "prototype");
 		const done = Reflect.preventExtensions(state.original);
 		if (done) runtime_crossSettle(shadow, state);
 		return done;
@@ -6399,7 +8348,7 @@ const CROSSING_HANDLER = {
 			result = Reflect.apply(
 				state.original,
 				runtime_crossIn(state, thisArg),
-				Array.from(args, (arg) => runtime_crossIn(state, arg))
+				Arrays.from(args, (arg) => runtime_crossIn(state, arg))
 			);
 		} catch (error) {
 			throw runtime_crossOut(state, error);
@@ -6408,12 +8357,22 @@ const CROSSING_HANDLER = {
 	},
 	construct(shadow, args, newTarget) {
 		const state = CROSSING_STATES.get(shadow);
+		let target = state.original;
+		if (newTarget !== state.view) {
+			// A class the reader constructs for is its own: what it makes the instance's prototype is the reader's.
+			target = runtime_uncross(newTarget);
+			if (state.reader?.____slothletInternal && typeof target === "function") {
+				runtime_recordOrigin(target, state.reader);
+				const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
+				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, state.reader);
+			}
+		}
 		let result;
 		try {
 			result = Reflect.construct(
 				state.original,
-				Array.from(args, (arg) => runtime_crossIn(state, arg)),
-				newTarget === state.view ? state.original : runtime_crossIn(state, newTarget)
+				Arrays.from(args, (arg) => runtime_crossIn(state, arg)),
+				target
 			);
 		} catch (error) {
 			throw runtime_crossOut(state, error);
@@ -6440,7 +8399,7 @@ const CROSSING_HANDLER = {
  * @private
  */
 function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName = true) {
-	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return true;
+	if (!runtime_guardOn(slothlet)) return true;
 	if (reader === null || reader === HOST_READER) return true;
 	if (reader === UNATTRIBUTED_READER || reader === SEALED_SHELL_READER || !reader?.____slothletInternal) return false;
 	const permissionManager = slothlet.handlers.permissionManager;
@@ -6690,7 +8649,7 @@ function runtime_unclassedInstancePrototype(wrapper) {
 function runtime_readsEngineProto(value) {
 	for (let holder = value, depth = 0; holder !== null && depth < 64; depth++) {
 		if (holder !== value && util.types.isProxy(holder)) return true;
-		if (Reflect.getOwnPropertyDescriptor(holder, "__proto__")) return holder === Object.prototype;
+		if (Reflect.getOwnPropertyDescriptor(holder, "__proto__")) return holder === Objects.prototype;
 		holder = Reflect.getPrototypeOf(holder);
 	}
 	return false;
@@ -6725,7 +8684,7 @@ function runtime_withheldPrototype(wrapper, nearest) {
 		enforcePermission(wrapper, [], false);
 		return false;
 	};
-	const standIn = new Proxy(Object.freeze(Object.create(nearest)), {
+	const standIn = new NativeProxy(Objects.freeze(Objects.create(nearest)), {
 		set: (target, prop, value, receiver) => (receiver === standIn ? refuse() : Reflect.set(target, prop, value, receiver)),
 		defineProperty: refuse,
 		deleteProperty: refuse,
@@ -6915,7 +8874,7 @@ function runtime_hasOwnMember(wrapper, prop) {
 	// A member a callable's composition layer holds is the module's (a named export that won the slot of
 	// the function's own `name` or `length`), not the function's built-in (#585 review).
 	if (typeof impl === "function" && isCompositionLayer(impl) && layerHeldKeys(impl).includes(prop)) return true;
-	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
+	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
 	return impl !== null && typeof impl === "object" && hasOwn(impl, prop);
 }
 
@@ -6957,7 +8916,7 @@ function runtime_isArrayMember(array, prop) {
 	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
 	// array's class, which the array reports as plain JS does.
 	for (const holder of runtime_prototypeChain(array)) {
-		if (holder === Array.prototype || holder === Object.prototype) break;
+		if (holder === Arrays.prototype || holder === Objects.prototype) break;
 		if (hasOwn(holder, prop)) return holder === array || prop !== "constructor";
 	}
 	return false;
@@ -6978,11 +8937,49 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 	if (hasOwn(wrapper, prop)) return true;
 	const impl = wrapper.____slothletInternal.impl;
 	// An array's members include those a prototype the module gave it supplies (see runtime_isArrayMember).
-	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop);
+	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop);
 	// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
 	return (
 		impl !== null && (typeof impl === "object" || typeof impl === "function") && Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
 	);
+}
+
+/**
+ * A segment no api path holds, standing for every member beneath a path in {@link runtime_readsNothingBeneath}.
+ * @type {string}
+ * @private
+ */
+const ANY_MEMBER_SEGMENT = "\u0000member";
+
+/**
+ * Whether the rules leave a reader nothing to read at the path of an object member of a module's data (see
+ * {@link runtime_isDataMemberNode}): a read there is refused, and so is a
+ * read of any member beneath it (`config.nested.**`, or a deny on `config.nested` alone, which covers what a member of a
+ * module's data holds). Such a member is no data the reader may see, and is left out of what lists or serializes the
+ * object holding it, as a member holding a value the reader may not read is. A more specific allow beneath it
+ * (`config.nested.public`) leaves the member listed, holding what that allow lets through.
+ * @param {object} wrapper - The node whose member it is.
+ * @param {string} targetPath - The member's api path.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+ * @param {object|null} [access] - The read of `self` this is part of, when it was resolved already.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ *
+ * @example
+ * // rule: deny reader.** → owner.config.nested.**
+ * Object.keys(self.owner.config); // ["prim", "open"], as for a denied primitive member
+ */
+function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null) {
+	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
+	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say.
+	if (!runtime_isDataMemberNode(runtime_nodeAtPath(wrapper.slothlet, targetPath))) return false;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept, access);
+	if (beneath.allowed) return false;
+	// A more specific allow beneath the member lets what it names through, so the member is listed with just that.
+	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -7006,10 +9003,13 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
  * @param {string|symbol} prop - Property key being considered for disclosure.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
  *   {@link resolveEnforcedCaller}).
+ * @param {object|null} [access=null] - The access the read is part of (see {@link runtime_beginAccess}).
+ * @param {boolean} [listing=false] - Whether the key is being listed (`ownKeys`): a getter is withheld from a listing
+ *   too, while its description is still given.
  * @returns {boolean} True when the key must be withheld.
  * @private
  */
-function runtime_isReadRedacted(wrapper, prop, kept = null) {
+function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	const impl = wrapper.____slothletInternal?.impl;
@@ -7018,11 +9018,22 @@ function runtime_isReadRedacted(wrapper, prop, kept = null) {
 	// and is gated at its parent instead — so the arm exists for a shape this path is not handed.
 	/* v8 ignore next 2 */
 	const desc =
-		(impl && (typeof impl === "object" || typeof impl === "function") ? Object.getOwnPropertyDescriptor(impl, prop) : undefined) ??
-		Object.getOwnPropertyDescriptor(wrapper, prop);
-	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
+		(impl && (typeof impl === "object" || typeof impl === "function") ? Objects.getOwnPropertyDescriptor(impl, prop) : undefined) ??
+		Objects.getOwnPropertyDescriptor(wrapper, prop);
+	if (!desc) return false;
+	// A getter is listed only to a caller that may read its path (#747): what it answers is not known without running
+	// it, and a read of it is refused to a caller the rules deny, so `Object.keys` and a spread leave it out as
+	// `JSON.stringify` and `toJSON` do. Its description is still given, and running the getter it holds is refused.
+	const isAccessor = listing && !("value" in desc) && typeof desc.get === "function";
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
-	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept).allowed;
+	// An object member the rules leave the reader nothing of is listed no more than a value it may not read is.
+	if (listing && "value" in desc && typeof prop === "string") {
+		const member = runtime_unwrapLeafValue(desc.value);
+		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member))
+			return runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access);
+	}
+	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
+	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
 }
 
 /**
@@ -7041,7 +9052,7 @@ function runtime_isReadRedacted(wrapper, prop, kept = null) {
  */
 function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 	const impl = wrapper.____slothletInternal.impl;
-	const isMember = Array.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
+	const isMember = Arrays.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
 	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
 	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
 	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
@@ -7085,17 +9096,18 @@ let describingAsHeld = null;
  * @param {object} wrapper - The node's wrapper.
  * @param {object} node - The node.
  * @param {string|symbol} prop - The member.
+ * @param {object|null} [access=null] - The access the description is part of (see {@link runtime_beginAccess}).
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @private
  *
  * @example
  * runtime_describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
  */
-function runtime_describeAsHeld(wrapper, node, prop) {
+function runtime_describeAsHeld(wrapper, node, prop, access = null) {
 	const previous = describingAsHeld;
 	describingAsHeld = { wrapper, prop };
 	try {
-		return Reflect.getOwnPropertyDescriptor(node, prop);
+		return runtime_describeWithAccess(access, wrapper, node, prop);
 	} finally {
 		describingAsHeld = previous;
 	}
@@ -7181,17 +9193,20 @@ const SERIALIZERS = new WeakMap();
  * @private
  */
 function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
-	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return data;
+	if (!data || typeof data !== "object" || Arrays.isArray(data) || seen.has(data)) return data;
 	seen.add(data);
 	let copy = null;
 	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
-	const own = () => (copy ??= Object.assign(Object.create(Object.getPrototypeOf(data)), data));
-	for (const key of Object.keys(data)) {
+	const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
+	for (const key of Objects.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
 			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-		} else if (Array.isArray(value)) {
+		} else if (value !== null && typeof value === "object" && runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
+			// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
+			delete own()[key];
+		} else if (Arrays.isArray(value)) {
 			own()[key] = node[key];
 		} else {
 			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
@@ -7405,7 +9420,7 @@ function runtime_deferForPrincipals(
  * @type {Readonly<{ principalGrace: true }>}
  * @private
  */
-const PRINCIPAL_GRACE = Object.freeze({ principalGrace: true });
+const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
 
 /**
  * Run a call whose permission gate was deferred for a principal resolve (#459), returning its result
@@ -7481,7 +9496,7 @@ function runtime_registerLeafFunction(wrapper, impl) {
 		return;
 	}
 	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
-	const fallback = Object.getOwnPropertyDescriptor(impl, "default")?.value;
+	const fallback = Objects.getOwnPropertyDescriptor(impl, "default")?.value;
 	if (typeof fallback === "function") implWrappers.set(fallback, wrapper);
 }
 
@@ -7669,11 +9684,11 @@ function runtime_namedFunction(fn) {
 	const name = typeof fn.name === "string" ? fn.name : "";
 	// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
 	// a method) shows none.
-	if (/^class\b/.test(Function.prototype.toString.call(fn))) return { [name]: class {} }[name];
+	if (/^class\b/.test(functionSource(fn))) return { [name]: class {} }[name];
 	if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
 	if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
 	if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
-	if (!Object.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
+	if (!Objects.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
 	return { [name]: function () {} }[name];
 }
 
@@ -7691,7 +9706,7 @@ function runtime_namedFunction(fn) {
  */
 function runtime_isConstructor(fn) {
 	try {
-		Reflect.construct(new Proxy(fn, { construct: () => ({}) }), []);
+		Reflect.construct(new NativeProxy(fn, { construct: () => ({}) }), []);
 		return true;
 	} catch {
 		return false;
@@ -7786,7 +9801,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// shadow of the same kind keeps the view callable, constructible, and an array where the child is; a function's
 	// shadow owns no `prototype`, so the view reports the child's own, or none where the child has none.
 	let shadow;
-	if (Array.isArray(child)) shadow = [];
+	if (Arrays.isArray(child)) shadow = [];
 	else if (typeof child !== "function") shadow = {};
 	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
 	else shadow = () => {};
@@ -7798,12 +9813,12 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const impl = inner.____slothletInternal.impl;
 		// An instance of a class keeps its class's prototype, so it shows as one; any other object shows as plain.
 		const proto = impl !== null && typeof impl === "object" ? Reflect.getPrototypeOf(impl) : null;
-		const out = Array.isArray(child)
+		const out = Arrays.isArray(child)
 			? []
 			: typeof child === "function"
 				? runtime_namedFunction(typeof impl === "function" ? impl : child)
-				: proto !== null && proto !== Object.prototype
-					? Object.create(proto)
+				: proto !== null && proto !== Objects.prototype
+					? Objects.create(proto)
 					: {};
 		// A function's stand-in shows the methods its `prototype` holds, read through the view.
 		if (typeof out === "function" && out.prototype) {
@@ -7824,7 +9839,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// `name`, `length` and `prototype`, which the stand-in has of its own.
 			if (typeof key === "symbol") continue;
 			if (typeof child === "function" && FUNCTION_OWN_KEYS.has(key)) continue;
-			if (key === util.inspect.custom || (Array.isArray(child) && key === "length")) continue;
+			if (key === util.inspect.custom || (Arrays.isArray(child) && key === "length")) continue;
 			try {
 				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
 				if (!descriptor) continue;
@@ -7892,11 +9907,11 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// is no transformation of the value, so it stays with each read (see get) rather than with the mirroring.
 	const shownValue = (value) => (resolveWrapper(value) === null ? value : runtime_capturedView(value, capturedCaller, gated, ceiling));
 	// An array's `length` is its shape, not a member it holds: mirrored as it is, never refused.
-	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Array.isArray(child));
+	const isMemberRead = (key, descriptor) => descriptor && "value" in descriptor && !(key === "length" && Arrays.isArray(child));
 	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
 	// holds, never an answer that depends on the reader or on when it read (rules change); each read through the view
 	// is gated as it is made.
-	const rawDescriptor = (key) => runtime_describeAsHeld(inner, child, key);
+	const rawDescriptor = (key, access = null) => runtime_describeAsHeld(inner, child, key, access);
 	// Whether the reader may read a member now.
 	const readable = (key) => {
 		try {
@@ -7911,11 +9926,11 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// A member the child holds fixed is mirrored onto the shadow as the view reports it, and reported from there. A
 	// member read for the reader is read as the reader may read it (the read gate, as for a plain read); one mirrored
 	// after the reader's own write is mirrored as the write left it.
-	const mirror = (prop, asRead = true) => {
+	const mirror = (prop, asRead = true, access = null) => {
 		// A closed shadow's inspect hook is its own, whatever the child holds at that key: the engine checks the view
 		// against the shadow, and the child's hook would describe the child unchecked.
 		if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.getOwnPropertyDescriptor(shadow, prop);
-		const descriptor = asRead ? asKept(() => Reflect.getOwnPropertyDescriptor(child, prop)) : rawDescriptor(prop);
+		const descriptor = asRead ? asKept(() => runtime_describeWithAccess(access, inner, child, prop)) : rawDescriptor(prop, access);
 		if (asRead && isMemberRead(prop, descriptor)) handOut(prop, descriptor.value);
 		if (!descriptor) {
 			const stale = prop === util.inspect.custom ? undefined : Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -7977,7 +9992,24 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		}
 	};
 
-	view = new Proxy(shadow, {
+	// The view's description of a member, made as part of one access.
+	const describeMember = (prop, access) => {
+		mirrorClosed();
+		try {
+			return mirror(prop, true, access);
+		} catch (error) {
+			if (error?.code !== "PERMISSION_DENIED") throw error;
+			// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
+			// describe every member it holds: one it may still change is described with its value withheld, as the
+			// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
+			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
+			if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
+			if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
+			throw error;
+		}
+	};
+
+	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
 			// handed out fixed is called with no view of `self` over it.
@@ -8013,36 +10045,38 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
 		},
 		get(_, prop, receiver) {
-			mirrorClosed();
-			if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.get(shadow, prop);
-			const descriptor = rawDescriptor(prop);
-			if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
-				// Read through the child, so its own read rules run, then gated against the reader; what is handed out
-				// is what the shadow holds, as the engine requires.
-				handOut(
+			// The access a view of `self` over this one is making, taken as the trap starts; a read made on this view
+			// itself is an access of its own. Its checks of the node ask who is reading once (see runtime_beginAccess).
+			const handed = runtime_takeAccess(view);
+			const access = handed ?? runtime_beginAccess();
+			try {
+				mirrorClosed();
+				if (prop === util.inspect.custom && !Reflect.isExtensible(shadow)) return Reflect.get(shadow, prop);
+				const descriptor = rawDescriptor(prop, access);
+				if (descriptor && !descriptor.configurable && "value" in descriptor && !descriptor.writable) {
+					// Read through the child, so its own read rules run, then gated against the reader; what is handed out
+					// is what the shadow holds, as the engine requires.
+					handOut(
+						prop,
+						asKept(() => runtime_readWithAccess(access, inner, child, prop, child))
+					);
+					return mirror(prop, true, access).value;
+				}
+				return handOut(
 					prop,
-					asKept(() => Reflect.get(child, prop, child))
+					readKept(() => runtime_readWithAccess(access, inner, child, prop, receiver === view ? child : receiver))
 				);
-				return mirror(prop).value;
+			} finally {
+				if (handed === null) runtime_endAccess(access);
 			}
-			return handOut(
-				prop,
-				readKept(() => Reflect.get(child, prop, receiver === view ? child : receiver))
-			);
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			mirrorClosed();
+			const handed = runtime_takeAccess(view);
+			const access = handed ?? runtime_beginAccess();
 			try {
-				return mirror(prop);
-			} catch (error) {
-				if (error?.code !== "PERMISSION_DENIED") throw error;
-				// A member the reader may not read is absent from an open view, as it is in a call. A closed view must
-				// describe every member it holds: one it may still change is described with its value withheld, as the
-				// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
-				const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
-				if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
-				if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
-				throw error;
+				return describeMember(prop, access);
+			} finally {
+				if (handed === null) runtime_endAccess(access);
 			}
 		},
 		has(_, prop) {
@@ -8203,11 +10237,13 @@ function runtime_registerInspectHook(hook) {
  * the bound `api` object has no executing module, so nothing is attached and host access is unchanged.
  *
  * @param {object} wrapper - Parent wrapper whose property was read.
+ * @param {string|symbol} prop - The member read.
  * @param {*} value - Value the `get` trap resolved.
+ * @param {object|null} [access=null] - The access the read is part of (see {@link runtime_beginAccess}).
  * @returns {*} The value, or a per-reader view of it.
  * @private
  */
-function runtime_bindCapturedIdentity(wrapper, prop, value) {
+function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
 	if (typeof prop !== "string" && typeof prop !== "symbol") return value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
@@ -8237,7 +10273,7 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
 		return value;
 
-	const capturedIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	const capturedIdentity = runtime_accessIdentity(access, wrapper.slothlet.contextManager);
 	const capturedCaller = capturedIdentity?.currentWrapper;
 	if (!capturedCaller) return value;
 	// A reader that is code supplied to another call keeps that call as its ceiling, so the reference cannot
@@ -8268,7 +10304,7 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 	const refuse = () => {
 		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
 	};
-	const guarded = new Proxy(promise, {
+	const guarded = new NativeProxy(promise, {
 		get(target, prop, receiver) {
 			if (prop === Symbol.toPrimitive || prop === "valueOf" || prop === "toString" || prop === "toJSON") {
 				return refuse;
@@ -8281,7 +10317,6 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 			return value;
 		}
 	});
-	OWN_VIEWS_UNLISTED.add(guarded);
 	return guarded;
 }
 
@@ -8338,14 +10373,15 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
+		if (!sources.some((entryRecord) => Objects.is(entryRecord.error, error))) sources.push({ error, source });
 	};
 	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
 	let unobserved = null;
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) => failureSource({ type: "function", timestamp: Date.now() }, runtime_readTargetFailure(wrapper, error));
+	const functionSource = (error) =>
+		failureSource({ type: "function", timestamp: wrapper.clock.now() }, runtime_readTargetFailure(wrapper, error));
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
@@ -8380,7 +10416,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const settleError = (error) => {
 		// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
 		// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
-		const recordedSource = sources.find((record) => Object.is(record.error, error))?.source;
+		const recordedSource = sources.find((record) => Objects.is(record.error, error))?.source;
 		const unrecorded = recordedSource === undefined && unobserved ? runtime_readTargetFailure(wrapper, error) : null;
 		const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
 		// A failure an inner hooked call already reported is not reported again (same rule as the
@@ -8454,7 +10490,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
 			// its `then` delivers them (see HookManager#observeThenable).
 			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-				onUnobserved({ type: "function", timestamp: Date.now() })
+				onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
 			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
@@ -8510,10 +10546,10 @@ function unwrapError(error) {
 
 const wrapperDebugEnabled =
 	isNode &&
-	(process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
-		process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
-		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
-		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
+	(NativeProcess.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
+		NativeProcess.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
+		NativeProcess.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+		NativeProcess.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
  * Framework metadata that rides on a module implementation but is not an api member.
@@ -8521,7 +10557,7 @@ const wrapperDebugEnabled =
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
  * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
  * enumeration and the collision-merge paths filter exactly the same set. Defined in
- * `@cldmv/slothlet/helpers/reserved-keys` (a module with no imports) and re-exported here.
+ * `@cldmv/slothlet/helpers/reserved-keys` (which imports only helpers/intrinsics) and re-exported here.
  * @type {Set<string>}
  * @public
  */
@@ -8575,7 +10611,7 @@ function getSafeFunctionName(apiPath, fallback) {
  */
 function createNamedProxyTarget(nameHint, fallback) {
 	const safeName = getSafeFunctionName(nameHint, fallback);
-	return Object.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
+	return Objects.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
 }
 
 /**
@@ -8605,7 +10641,7 @@ function runtime_nodeHarborsCode(value) {
 	const wrapper = _proxyRegistry.get(capturedViewNodes.get(value) ?? value);
 	if (!wrapper) return false;
 	const holdsSymbolFunction = (holder) => {
-		for (const key of Object.getOwnPropertySymbols(holder)) {
+		for (const key of Objects.getOwnPropertySymbols(holder)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
 			if (descriptor && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
 		}
@@ -8862,7 +10898,7 @@ function runtime_isPosition(key) {
  * runtime_isPastFixedLength(Object.defineProperty([1], "length", { writable: false }), "1"); // true
  */
 function runtime_isPastFixedLength(target, prop) {
-	if (!Array.isArray(target) || !runtime_isPosition(prop)) return false;
+	if (!Arrays.isArray(target) || !runtime_isPosition(prop)) return false;
 	return Reflect.getOwnPropertyDescriptor(target, "length")?.writable === false && Number(prop) >= target.length;
 }
 
@@ -8884,7 +10920,7 @@ function runtime_isPastFixedLength(target, prop) {
 function runtime_adoptArrayIntegrity(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	const { impl, proxy } = internal;
-	if (!Array.isArray(impl)) return;
+	if (!Arrays.isArray(impl)) return;
 	// A composed node's array sits under its layer, which refuses integrity operations itself.
 	const array = layerUnderlying(impl);
 	// Freezing the node reads its own descriptors, which must not start another sync meanwhile.
@@ -8898,8 +10934,8 @@ function runtime_adoptArrayIntegrity(wrapper) {
 			// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
 			if (!Reflect.isExtensible(array)) {
 				Reflect.preventExtensions(proxy);
-				if (Object.isFrozen(array)) Object.freeze(proxy);
-				else if (Object.isSealed(array)) Object.seal(proxy);
+				if (Objects.isFrozen(array)) Objects.freeze(proxy);
+				else if (Objects.isSealed(array)) Objects.seal(proxy);
 			}
 			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false)
 				Reflect.defineProperty(proxy, "length", { writable: false });
@@ -8927,7 +10963,7 @@ function runtime_adoptObjectIntegrity(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (!hasOwn(internal, "sourceValue")) return;
 	const source = internal.sourceValue;
-	if (source === null || typeof source !== "object" || Array.isArray(source) || util.types.isProxy(source)) return;
+	if (source === null || typeof source !== "object" || Arrays.isArray(source) || util.types.isProxy(source)) return;
 	if (Reflect.isExtensible(source)) return;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
 	const { proxy } = internal;
@@ -8935,9 +10971,9 @@ function runtime_adoptObjectIntegrity(wrapper) {
 	internal.integritySyncing = true;
 	try {
 		runtime_frameworkWrite(wrapper, () => {
-			if (Object.isFrozen(source)) Object.freeze(proxy);
-			else if (Object.isSealed(source)) Object.seal(proxy);
-			else Object.preventExtensions(proxy);
+			if (Objects.isFrozen(source)) Objects.freeze(proxy);
+			else if (Objects.isSealed(source)) Objects.seal(proxy);
+			else Objects.preventExtensions(proxy);
 		});
 	} finally {
 		internal.integritySyncing = syncing;
@@ -8962,7 +10998,7 @@ function runtime_adoptObjectIntegrity(wrapper) {
 function runtime_canDefine(object, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (current === undefined) return Reflect.isExtensible(object);
-	if (Array.isArray(object) && prop === "length" && "value" in descriptor) {
+	if (Arrays.isArray(object) && prop === "length" && "value" in descriptor) {
 		// Only the indices the array holds are checked: a sparse array can have any length up to 2^32 - 1.
 		for (const key of Reflect.ownKeys(object)) {
 			if (
@@ -8987,7 +11023,7 @@ function runtime_canDefine(object, prop, descriptor) {
 		return (!("get" in descriptor) || descriptor.get === current.get) && (!("set" in descriptor) || descriptor.set === current.set);
 	}
 	if (current.writable) return true;
-	return descriptor.writable !== true && (!("value" in descriptor) || Object.is(descriptor.value, current.value));
+	return descriptor.writable !== true && (!("value" in descriptor) || Objects.is(descriptor.value, current.value));
 }
 
 /**
@@ -9115,8 +11151,8 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 	// An element the array holds no descriptor for at its index (a proxy's get trap supplied it) keeps the index it was
 	// read at once nothing else holds it. Recorded now, from what the array holds, not rediscovered by proxy detection.
 	const parentArray = parent.____slothletInternal.impl;
-	const isVirtual = byIndex && Array.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
-	Object.defineProperty(internal, "apiPath", {
+	const isVirtual = byIndex && Arrays.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
+	Objects.defineProperty(internal, "apiPath", {
 		configurable: true,
 		enumerable: true,
 		get() {
@@ -9126,7 +11162,7 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 			// The array is read through its own descriptors, so resolving a path never runs the array's code:
 			// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
 			// keeps the index it was read at.
-			if (Array.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
+			if (Arrays.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
 				const current = runtime_elementDescriptor(array, index);
 				if (current && !("value" in current)) return `${base}.${index}`;
 				const found = runtime_indexOfElement(array, internal.sourceValue);
@@ -9150,9 +11186,9 @@ function runtime_followPosition(internal, parent, key, byIndex) {
  */
 function runtime_shellValue(wrapper, prop) {
 	const { impl, proxy } = wrapper.____slothletInternal;
-	const held = () => (hasOwn(wrapper, prop) ? Object.getOwnPropertyDescriptor(wrapper, prop) : undefined);
+	const held = () => (hasOwn(wrapper, prop) ? Objects.getOwnPropertyDescriptor(wrapper, prop) : undefined);
 	let raw;
-	if (Array.isArray(impl)) raw = Reflect.get(impl, prop, impl);
+	if (Arrays.isArray(impl)) raw = Reflect.get(impl, prop, impl);
 	else if (held() && "value" in held()) {
 		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
 		// yet and is kept as the node it is.
@@ -9163,7 +11199,7 @@ function runtime_shellValue(wrapper, prop) {
 	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
-	if (Array.isArray(impl) && !held()) Reflect.get(proxy, prop);
+	if (Arrays.isArray(impl) && !held()) Reflect.get(proxy, prop);
 	const cached = held();
 	return cached && "value" in cached && resolveWrapper(cached.value) !== null ? cached.value : raw;
 }
@@ -9197,7 +11233,12 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 	// A non-extensible node takes no new key, as on the object itself.
 	if (!current) return false;
 	const impl = wrapper.____slothletInternal.impl;
-	const holder = Array.isArray(impl) ? runtime_arrayKeyHolder(impl, prop) : null;
+	// A node fronting a module's own object defines on that object too, as freezing the object would (#757).
+	const holder = Arrays.isArray(impl)
+		? runtime_arrayKeyHolder(impl, prop)
+		: FRAMEWORK_WRITES.has(wrapper)
+			? null
+			: runtime_moduleObjectOf(wrapper, prop);
 	const mirrors = holder !== null && hasOwn(holder, prop);
 	let attributes = descriptor;
 	let mirrored = descriptor;
@@ -9212,6 +11253,15 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 		if (current.writable && descriptor.writable === false && !("value" in descriptor)) {
 			attributes.value = runtime_shellValue(wrapper, prop);
 			if (mirrors) delete mirrored.value;
+		}
+		// The shell holds a module object's accessor as data (see sealShell): the object's accessor takes only the
+		// attributes an accessor has, as freezing the object itself defines it (#757).
+		const held = mirrors && !Arrays.isArray(impl) ? Reflect.getOwnPropertyDescriptor(holder, prop) : undefined;
+		if (held !== undefined && !("value" in held)) {
+			if ("value" in descriptor) return false;
+			mirrored = { ...mirrored };
+			delete mirrored.value;
+			delete mirrored.writable;
 		}
 	}
 	// Both are checked before either changes, so a refusal by one leaves the other as it was.
@@ -9236,7 +11286,7 @@ function runtime_syncArrayIntegrity(wrapper, target) {
 	const internal = wrapper.____slothletInternal;
 	const impl = internal.impl;
 	// Sealing or freezing the node reads its members' descriptors, which would start another sync meanwhile.
-	if (internal.integritySyncing || !Array.isArray(impl) || !Array.isArray(target)) return;
+	if (internal.integritySyncing || !Arrays.isArray(impl) || !Arrays.isArray(target)) return;
 	const array = layerUnderlying(impl);
 	const extensible = Reflect.isExtensible(array);
 	const lengthFixed = Reflect.getOwnPropertyDescriptor(array, "length").writable === false;
@@ -9245,7 +11295,7 @@ function runtime_syncArrayIntegrity(wrapper, target) {
 	if (
 		!extensible &&
 		!Reflect.isExtensible(target) &&
-		Object.isFrozen(array) === Object.isFrozen(target) &&
+		Objects.isFrozen(array) === Objects.isFrozen(target) &&
 		lengthFixed === shellLengthFixed
 	)
 		return;
@@ -9261,25 +11311,27 @@ function runtime_syncArrayIntegrity(wrapper, target) {
  */
 const RESTART_FORWARD_TRAPS = {
 	get: (live, target, prop) => live[prop],
-	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
-	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
-	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	set: (live, target, prop, value) => Reflect.set(NativeObject(live), prop, value),
+	has: (live, target, prop) => prop in NativeObject(live) || runtime_isFixedOnTarget(target, prop),
+	deleteProperty: (live, target, prop) =>
+		runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(NativeObject(live), prop),
 	defineProperty: (live, target, prop, descriptor) => {
-		const bindsTarget = runtime_bindsTarget(target, Object(live), prop, descriptor);
+		const bindsTarget = runtime_bindsTarget(target, NativeObject(live), prop, descriptor);
 		// A sealed stale target holds the old shape: a key it holds that the live node does not would carry
 		// that shape onto the live node, so it is refused.
-		if (!Reflect.isExtensible(target) && Reflect.getOwnPropertyDescriptor(Object(live), prop) === undefined) return false;
+		if (!Reflect.isExtensible(target) && Reflect.getOwnPropertyDescriptor(NativeObject(live), prop) === undefined) return false;
 		// Both are checked before either changes, and the live node defines first: its own traps may still
 		// refuse or throw (a callable `then`, a sealed callable node's accessor), and the stale target then
 		// stays as it was. A target that passed the check takes the definition.
-		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(Object(live), prop, descriptor)) return false;
-		if (!Reflect.defineProperty(Object(live), prop, descriptor)) return false;
+		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(NativeObject(live), prop, descriptor))
+			return false;
+		if (!Reflect.defineProperty(NativeObject(live), prop, descriptor)) return false;
 		if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
 		return true;
 	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
-		const keys = new Set(Reflect.ownKeys(Object(live)));
+		const keys = new Set(Reflect.ownKeys(NativeObject(live)));
 		for (const key of Reflect.ownKeys(target)) {
 			if (runtime_isFixedOnTarget(target, key)) keys.add(key);
 		}
@@ -9287,15 +11339,16 @@ const RESTART_FORWARD_TRAPS = {
 	},
 	getOwnPropertyDescriptor: (live, target, prop) => {
 		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
-		const descriptor = Reflect.getOwnPropertyDescriptor(Object(live), prop);
+		const descriptor = Reflect.getOwnPropertyDescriptor(NativeObject(live), prop);
 		return descriptor ? { ...descriptor, configurable: true } : undefined;
 	},
 	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
 	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
-	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target)),
+	getPrototypeOf: (live, target) =>
+		Reflect.isExtensible(target) ? Reflect.getPrototypeOf(NativeObject(live)) : Reflect.getPrototypeOf(target),
 	// A sealed stale target keeps the prototype it reports (proxy invariant); otherwise the live node takes it.
 	setPrototypeOf: (live, target, proto) =>
-		Reflect.isExtensible(target) ? Reflect.setPrototypeOf(Object(live), proto) : Reflect.getPrototypeOf(target) === proto,
+		Reflect.isExtensible(target) ? Reflect.setPrototypeOf(NativeObject(live), proto) : Reflect.getPrototypeOf(target) === proto,
 	// Sealing the stale node seals its own target; reflection then answers from that target.
 	preventExtensions: (live, target) => Reflect.preventExtensions(target),
 	isExtensible: (live, target) => Reflect.isExtensible(target)
@@ -9317,12 +11370,16 @@ const RESTART_FORWARD_TRAPS = {
  */
 function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 	const wrapped = {};
-	for (const [trap, original] of Object.entries(handler)) {
+	for (const [trap, original] of Objects.entries(handler)) {
 		const forward = RESTART_FORWARD_TRAPS[trap];
 		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
 		// common, non-stale path must not allocate. No trap takes more than four arguments.
 		wrapped[trap] = function slothlet_restartForwardingTrap(a, b, c, d) {
 			if (runtime_isRestartStale(wrapper)) {
+				// An access or a caller identity handed to this node is not handed on to the node it forwards to.
+				handedAccessKey = null;
+				handedAccess = null;
+				handedEntry = null;
 				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
 			}
 			return original.call(handler, a, b, c, d);
@@ -9354,8 +11411,12 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
  * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
  */
 function runtime_forwardHandlerTo(trapHandler, resolveLive) {
-	for (const [trap, forward] of Object.entries(RESTART_FORWARD_TRAPS)) {
+	for (const [trap, forward] of Objects.entries(RESTART_FORWARD_TRAPS)) {
 		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
+			// An access or a caller identity handed to the replaced proxy is not handed on to the node it forwards to.
+			handedAccessKey = null;
+			handedAccess = null;
+			handedEntry = null;
 			return forward(resolveLive(), a, b, c, d);
 		};
 	}
@@ -9376,7 +11437,7 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (const key of Object.keys(node)) {
+	for (const key of Objects.keys(node)) {
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
@@ -9401,7 +11462,7 @@ function runtime_inspectMembers(wrapper) {
  */
 function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
 	const internal = wrapper.____slothletInternal;
-	const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+	const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
 	// A lazy node not loaded yet shows itself. impl is always null (not undefined) at this point; the || undefined
 	// branch is never evaluated.
@@ -9414,7 +11475,7 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
 	const label = runtime_codeLabel(internal.impl);
 	const members = runtime_inspectMembers(wrapper);
-	if (Object.keys(members).length === 0) return label;
+	if (Objects.keys(members).length === 0) return label;
 	const [, options, inspect] = args;
 	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(members, options)}`;
 }
@@ -9456,7 +11517,7 @@ function runtime_codeLabel(fn) {
 	const isProxy = util.types.isProxy(fn);
 	const name = isProxy ? "" : runtime_dataName(fn);
 	const named = name === "" ? " (anonymous)" : null;
-	if (!isProxy && /^class[\s{]/.test(Reflect.apply(FUNCTION_TO_STRING, fn, []))) {
+	if (!isProxy && /^class[\s{]/.test(functionSource(fn))) {
 		// As util.inspect gives it: the class it extends, by that class's own name.
 		const parent = Reflect.getPrototypeOf(fn);
 		const parentName = typeof parent === "function" && !util.types.isProxy(parent) ? runtime_dataName(parent) : "";
@@ -9485,13 +11546,6 @@ function runtime_dataName(fn) {
 }
 
 /**
- * The language's own `Function.prototype.toString`, taken before any module runs.
- * @type {Function}
- * @private
- */
-const FUNCTION_TO_STRING = Function.prototype.toString;
-
-/**
  * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
  * (or its impl), unless the target already has one.
  *
@@ -9510,14 +11564,14 @@ const FUNCTION_TO_STRING = Function.prototype.toString;
  * runtime_defineProxyInspect(wrapper, createNamedProxyTarget(apiPath, "callableProxy"));
  */
 function runtime_defineProxyInspect(wrapper, target) {
-	if (Array.isArray(target)) {
-		Object.defineProperty(target, util.inspect.custom, {
+	if (Arrays.isArray(target)) {
+		Objects.defineProperty(target, util.inspect.custom, {
 			// Shown through the node, so each element is read as the caller reading it may: the caller's `inspect`
 			// is not trusted with the backing array, which a callback that returns its argument would take.
 			value: runtime_registerInspectHook(() => {
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = [];
-				for (const key of Object.keys(node)) shown[key] = node[key];
+				for (const key of Objects.keys(node)) shown[key] = node[key];
 				shown.length = node.length;
 				return shown;
 			}),
@@ -9528,7 +11582,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 		return;
 	}
 	if (!(util.inspect.custom in target)) {
-		Object.defineProperty(target, util.inspect.custom, {
+		Objects.defineProperty(target, util.inspect.custom, {
 			value: runtime_registerInspectHook(function (...args) {
 				return runtime_inspectShown(wrapper, args);
 			}),
@@ -9677,7 +11731,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// where the real impl hasn't arrived yet and may turn out to be callable.
 		const isCallableLocked = isCallableValue || isCallableExplicit;
 
-		const internal = Object.create(null);
+		const internal = Objects.create(null);
 		internal.id = Math.random().toString(36).substr(2, 9); // Unique ID for debugging
 		internal.mode = mode;
 		internal.apiPath = apiPath;
@@ -9739,7 +11793,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Add wrapper self-reference as getter AFTER ____slothletInternal is set (avoid circular reference in traversal)
 		const wrapper = this;
-		Object.defineProperty(internal, "wrapper", {
+		Objects.defineProperty(internal, "wrapper", {
 			// internal.wrapper is an old back-reference path no longer accessed by any internal code.
 			/* v8 ignore start */
 			get() {
@@ -9759,6 +11813,10 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.pendingChanges = null; // Changes made through stand-ins while it has not loaded, made once it has (#653)
 		internal.changeGeneration = 0; // Bumped when the node is reloaded or removed, so its old refusals are not its own (#653)
 		internal.proxy = null;
+		// The module's own object this node was built from a copy of, which a write through the node reaches (#746).
+		internal.moduleObject = null;
+		// The members defined read-only through the node (#749); null until one is.
+		internal.readOnlyKeys = null;
 		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
 		// the proxy is callable (or before it exists).
 		internal.proxyHandler = null;
@@ -9795,6 +11853,8 @@ export class UnifiedWrapper extends ComponentBase {
 		const adoptedImpl = runtime_adoptedImpl(this, initialImpl);
 		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(adoptedImpl, EventEmitter));
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
+		// The module's own object, when this node is built from a copy of one its file exports (#746).
+		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
 		runtime_registerLeafFunction(this, internal.impl);
 
 		internal.materializeFunc = materializeFunc;
@@ -9815,7 +11875,7 @@ export class UnifiedWrapper extends ComponentBase {
 				apiPath,
 				// wrapper is a frozen minimal object to avoid leaking the raw UnifiedWrapper
 				// (and therefore .slothlet) into any payload a subscriber might retain.
-				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
 				// The real wrapper instance, INTERNAL-only, for RoutineManager#onImplCreated's
 				// invalidation-capture (resolveWrapper(__wrapperRef)). Never present on a public event.
 				__wrapperRef: this,
@@ -9844,7 +11904,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		if (initialImpl !== null && !deferChildAdopt) {
-			const implKeys = Object.keys(initialImpl || {});
+			const implKeys = Objects.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS",
@@ -9855,7 +11915,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			this.___adoptImplChildren();
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				const childKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+				const childKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
@@ -9873,21 +11933,25 @@ export class UnifiedWrapper extends ComponentBase {
 			if (slothlet.config.tracking?.materialization) {
 				// Defer to next tick to ensure wrapper and proxy are fully constructed
 				// Fire-and-forget: don't await, let it materialize in background
-				scheduleMacrotask(() => {
-					this._materialize().catch((err) => {
-						// Silently catch errors - background materialization is best-effort
-						// The FALSE branch (debug off, error silently dropped) requires inducing a background
-						// materialization failure without debug.materialize enabled — not testable deterministically.
-						/* v8 ignore next */
-						if (slothlet.config?.debug?.materialize) {
-							slothlet.debug("materialize", {
-								key: "DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR",
-								apiPath: this.____slothletInternal?.apiPath,
-								error: err.message
-							});
-						}
-					});
-				});
+				scheduleMacrotask(
+					() => {
+						this._materialize().catch((err) => {
+							// Silently catch errors - background materialization is best-effort
+							// The FALSE branch (debug off, error silently dropped) requires inducing a background
+							// materialization failure without debug.materialize enabled — not testable deterministically.
+							/* v8 ignore next */
+							if (slothlet.config?.debug?.materialize) {
+								slothlet.debug("materialize", {
+									key: "DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR",
+									apiPath: this.____slothletInternal?.apiPath,
+									error: err.message
+								});
+							}
+						});
+					},
+					undefined,
+					this.clock
+				);
 			}
 		}
 	}
@@ -9910,7 +11974,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
 		const w = _proxyRegistry.get(this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
-		const childKeys = Object.keys(w).filter((k) => !isFrameworkReservedKey(k));
+		const childKeys = Objects.keys(w).filter((k) => !isFrameworkReservedKey(k));
 		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
 			const inspectObj = {};
 			for (const key of childKeys) {
@@ -9982,7 +12046,7 @@ export class UnifiedWrapper extends ComponentBase {
 		if (value && typeof value === "object" && isThenableModuleValue(value)) return value;
 		// An array is the module's own array, as an import of it is: adoption takes nothing off it, and
 		// writes through the api reach it (#602).
-		if (Array.isArray(value)) return value;
+		if (Arrays.isArray(value)) return value;
 		// Everything else follows the one composition rule: a plain object is copied, a user Proxy gets
 		// a layer, an array is copied, and a class instance (never adopted) is used as-is.
 		return copyForComposition(value);
@@ -10007,16 +12071,16 @@ export class UnifiedWrapper extends ComponentBase {
 	 * UnifiedWrapper._copyMember(fileWrapper, folderWrapper, "total");
 	 */
 	static _copyMember(source, target, key) {
-		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set))) {
 			runtime_defineAdoptedAccessor(target, key, runtime_originalAccessor(descriptor));
 			return;
 		}
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			Object.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
+			Objects.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
 			return;
 		}
-		Object.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -10036,7 +12100,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Object.defineProperty(impl, "total", UnifiedWrapper._memberDescriptor(fileWrapper, "total"));
 	 */
 	static _memberDescriptor(source, key) {
-		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (descriptor.get || descriptor.set)) {
 			return { ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
 		}
@@ -10058,11 +12122,14 @@ export class UnifiedWrapper extends ComponentBase {
 	 * the function directly since keepImplProperties prevents depletion.
 	 *
 	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+	 * @param {?function(Object, PropertyKey): {value: *, withheld: boolean}} [readMember=null] - Given when the
+	 *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
+	 *   The object is then built in the order its node lists its members (#747).
 	 * @returns {*} The reconstructed implementation mirroring original module exports
 	 * @static
 	 * @private
 	 */
-	static _extractFullImpl(wrapper) {
+	static _extractFullImpl(wrapper, readMember = null) {
 		if (!wrapper) return null;
 
 		const impl = wrapper.____slothletInternal.impl;
@@ -10086,13 +12153,13 @@ export class UnifiedWrapper extends ComponentBase {
 		// Members adoption moved from the layer onto the wrapper are held on the copy again.
 		// An array with nothing beside it is returned itself, the module's own array the wrapper fronts: a
 		// reload that hands it to a reused wrapper keeps writes through a held reference reaching it (#602).
-		const extractFullImpl_hasMembers = Object.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key));
-		if (Array.isArray(impl) && !isCompositionLayer(impl) && !extractFullImpl_hasMembers) return impl;
-		if (isCompositionLayer(impl) || Array.isArray(impl)) {
+		const extractFullImpl_hasMembers = Objects.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key));
+		if (Arrays.isArray(impl) && !isCompositionLayer(impl) && !extractFullImpl_hasMembers) return impl;
+		if (isCompositionLayer(impl) || Arrays.isArray(impl)) {
 			const extractFullImpl_layer = copyForComposition(impl, {
-				addsMembers: Array.isArray(impl) && extractFullImpl_hasMembers
+				addsMembers: Arrays.isArray(impl) && extractFullImpl_hasMembers
 			});
-			for (const key of Object.keys(wrapper)) {
+			for (const key of Objects.keys(wrapper)) {
 				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
 				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
 				holdMember(
@@ -10104,17 +12171,58 @@ export class UnifiedWrapper extends ComponentBase {
 			return extractFullImpl_layer;
 		}
 
+		// Serialized, the object is rebuilt as a read of it lists it (#747): the node's members in the order the node
+		// holds them, which is the order of the module's object, then what only the impl still holds. An accessor is
+		// read through the node, so the module's getter runs as the node runs it (on the node, as the module, behind
+		// the node's checks), where reading it off the emptied impl ran it on an object missing every adopted member.
+		if (readMember) {
+			const serialized = {};
+			const take = (key, holder) => {
+				const held = Objects.getOwnPropertyDescriptor(holder, key);
+				if ("value" in held && holder === wrapper) {
+					const child = resolveWrapper(held.value);
+					serialized[key] = child ? UnifiedWrapper._extractFullImpl(child, readMember) : held.value;
+					return;
+				}
+				if ("value" in held) {
+					serialized[key] = held.value;
+					return;
+				}
+				const read = readMember(wrapper, key);
+				if (read.withheld) return;
+				const answered = resolveWrapper(read.value);
+				serialized[key] = answered ? UnifiedWrapper._extractFullImpl(answered, readMember) : read.value;
+			};
+			for (const key of Objects.keys(wrapper)) {
+				if (!UnifiedWrapper.INTERNAL_KEYS.has(key)) take(key, wrapper);
+			}
+			for (const key of Objects.keys(impl)) {
+				if (!isFrameworkReservedKey(key) && !hasOwn(serialized, key) && !hasOwn(wrapper, key)) take(key, impl);
+			}
+			return serialized;
+		}
+
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
+		// A node rebuilt from the reconstruction fronts the module's object this one does (#746).
+		if (wrapper.____slothletInternal.moduleObject)
+			RECONSTRUCTED_FROM.set(extractFullImpl_result, wrapper.____slothletInternal.moduleObject);
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
-		for (const key of Object.keys(impl)) {
+		for (const key of Objects.keys(impl)) {
 			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
 			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
 			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
 			// impl because adoption skips it; copying it here would hand it to `toJSON` while `ownKeys`
 			// and `get` both withhold it).
 			if (isFrameworkReservedKey(key)) continue;
+			// An accessor the impl still holds (adoption leaves a module's getter and setter on it) is carried over as
+			// the accessor it is: reading it here would run the getter on the emptied impl and keep what that returned.
+			const extractFullImpl_held = Objects.getOwnPropertyDescriptor(impl, key);
+			if (extractFullImpl_held && !("value" in extractFullImpl_held)) {
+				Objects.defineProperty(extractFullImpl_result, key, extractFullImpl_held);
+				continue;
+			}
 			extractFullImpl_result[key] = impl[key];
 		}
 
@@ -10136,7 +12244,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Add adopted children from wrapper's own enumerable keys.
 		// Skip all framework-reserved keys — user module properties with any prefix are fine.
-		for (const key of Object.keys(wrapper)) {
+		for (const key of Objects.keys(wrapper)) {
 			// Wrapper own keys are user-facing API names; INTERNAL_KEYS never appear as own enumerable keys.
 			/* v8 ignore next */
 			if (UnifiedWrapper.INTERNAL_KEYS.has(key)) continue;
@@ -10180,6 +12288,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(runtime_adoptedImpl(this, newImpl));
+		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
+		// node that hands it its value (see ___adoptImplChildren).
+		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
+		// The node's members come from the new value from here on: none of them was defined read-only through the node.
+		this.____slothletInternal.readOnlyKeys = null;
 		runtime_registerLeafFunction(this, this.____slothletInternal.impl);
 		this.____slothletInternal.invalid = false;
 
@@ -10210,7 +12323,7 @@ export class UnifiedWrapper extends ComponentBase {
 				this.____slothletInternal.lazyProxyHandler = null;
 				this.____slothletInternal.lazyProxyTraps = null;
 			} else if (
-				Array.isArray(settledImpl) ||
+				Arrays.isArray(settledImpl) ||
 				(settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")
 			) {
 				// null is not settled on: a node being cleared (remove, reload) passes through it.
@@ -10318,7 +12431,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const target = createNamedProxyTarget(internal.apiPath, "callableProxy");
 		runtime_defineProxyInspect(wrapper, target);
-		const newProxy = new Proxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
+		const newProxy = new NativeProxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
 		internal.proxy = newProxy;
 		internal.proxyHandler = null;
 		internal.proxyTraps = null;
@@ -10359,15 +12472,15 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// The value gets a shell of its own, as createProxy() builds it: an array shell for an array (#603,
 		// #609), an empty object otherwise.
-		const target = Array.isArray(internal.impl) ? [] : Object.create(null);
+		const target = Arrays.isArray(internal.impl) ? [] : Objects.create(null);
 		runtime_defineProxyInspect(wrapper, target);
 		const traps = runtime_withRestartForwarding(handler, wrapper);
-		const newProxy = new Proxy(target, traps);
+		const newProxy = new NativeProxy(target, traps);
 		internal.proxy = newProxy;
-		if (Array.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
+		if (Arrays.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
 		_proxyRegistry.set(newProxy, wrapper);
 		// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
-		if (!Array.isArray(target)) {
+		if (!Arrays.isArray(target)) {
 			internal.proxyHandler = handler;
 			internal.proxyTraps = traps;
 		}
@@ -10404,7 +12517,7 @@ export class UnifiedWrapper extends ComponentBase {
 			node = holder?.[segment];
 		}
 		if (node !== oldProxy) return;
-		Object.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
+		Objects.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
 	}
 
 	/**
@@ -10433,7 +12546,7 @@ export class UnifiedWrapper extends ComponentBase {
 				apiPath: this.____slothletInternal.apiPath,
 				// newImpl is always a valid object when ___setImpl is called; {} fallback is unreachable.
 				/* v8 ignore next */
-				newImplKeys: Object.keys(newImpl || {})
+				newImplKeys: Objects.keys(newImpl || {})
 			});
 		}
 		/* v8 ignore stop */
@@ -10465,7 +12578,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// (wrapped callable, no raw impl) once the reassignment is placed. No raw `impl` here.
 			this.slothlet.handlers.lifecycle.emitInternal("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
-				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
 				__wrapperRef: this,
 				source: "hot-reload",
 				moduleID: extractedModuleId,
@@ -10505,7 +12618,7 @@ export class UnifiedWrapper extends ComponentBase {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
 			hadImpl: this.____slothletInternal.impl !== null,
-			hadChildren: Object.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
+			hadChildren: Objects.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
 		});
 
 		// Invalidate and clear all child wrappers
@@ -10520,7 +12633,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (childRaw) {
 				childRaw.___invalidate();
 			}
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			// Child properties are always set configurable:true; non-configurable branch is unreachable.
 			/* v8 ignore next */
 			if (descriptor?.configurable) {
@@ -10645,6 +12758,10 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 
 					this.____slothletInternal.state.materialized = true;
+					// The value a lazy node loads is its module's contribution at this path, as the value an eager node is
+					// built with is (#754): a callable folder's own function joins the routines that name it. Eager reports
+					// it through the construction's impl:created; a lazy construction had no value yet.
+					this.___reportLoadedContribution();
 					// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
 					// being cleared passes through it too.
 					if (result === null && this.____slothletInternal.impl === null && this.____slothletInternal.lazyProxyTraps) {
@@ -10663,7 +12780,7 @@ export class UnifiedWrapper extends ComponentBase {
 							resultType: typeof result,
 							// result is always a resolved module object here; {} fallback is unreachable.
 							/* v8 ignore next */
-							resultKeys: Object.keys(result || {})
+							resultKeys: Objects.keys(result || {})
 						});
 					}
 				}
@@ -10709,6 +12826,35 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
+	 * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
+	 * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
+	 * join a routine that names its path. Only the routine manager is told: ownership and metadata already
+	 * hold this node from its construction, and the public `impl:created` for it has already fired.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * this.___reportLoadedContribution();
+	 */
+	___reportLoadedContribution() {
+		const internal = this.____slothletInternal;
+		const routineManager = this.slothlet.handlers?.routineManager;
+		if (!internal.filePath || !routineManager) return;
+		routineManager.onImplCreated({
+			apiPath: internal.apiPath,
+			wrapper: Objects.freeze({ __impl: internal.impl }),
+			__wrapperRef: this,
+			source: "lazy-materialization",
+			moduleID: internal.moduleID,
+			filePath: internal.filePath,
+			exportPath: internal.exportPath ?? null,
+			memberExportPaths: internal.memberExportPaths ?? null,
+			sourceFolder: internal.sourceFolder
+		});
+	}
+
+	/**
 	 * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
 	 * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
 	 * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
@@ -10731,8 +12877,8 @@ export class UnifiedWrapper extends ComponentBase {
 			UnifiedWrapper._invalidateTree(direct, seen);
 			return;
 		}
-		for (const key of Object.keys(impl)) {
-			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
+		for (const key of Objects.keys(impl)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(impl, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
 		}
@@ -10752,8 +12898,8 @@ export class UnifiedWrapper extends ComponentBase {
 	static _invalidateTree(wrapper, seen) {
 		if (seen.has(wrapper)) return;
 		seen.add(wrapper);
-		for (const key of Object.keys(wrapper)) {
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+		for (const key of Objects.keys(wrapper)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
 		}
@@ -10852,8 +12998,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * if (internal.lazyCount === "parked") wrapper.___parkChildren();
 	 */
 	___parkChildren(seen = new Set([this])) {
-		for (const key of Object.keys(this)) {
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+		for (const key of Objects.keys(this)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (!child || seen.has(child)) continue;
 			seen.add(child);
@@ -10889,7 +13035,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (isFrameworkReservedKey(key)) {
 				continue;
 			}
-			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			// ___adoptImplChildren always sets child properties with configurable:true; non-configurable branch is unreachable.
 			/* v8 ignore next */
 			if (descriptor?.configurable) {
@@ -10923,7 +13069,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___adoptImplChildren();
 	 */
 	___adoptImplChildren(forceReuseChildren = false) {
-		const preExistingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const preExistingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_ADOPT_START",
 			apiPath: this.____slothletInternal.apiPath,
@@ -10978,7 +13124,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// child wrappers would rebuild them as array-likes ({0,1,length:0}, Array.isArray false) and
 		// drop primitive members. Leave the array impl intact; createProxy gives it an array target
 		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
-		if (Array.isArray(this.____slothletInternal.impl)) return;
+		if (Arrays.isArray(this.____slothletInternal.impl)) return;
 
 		// An EventEmitter-derived impl (a real net.Socket, or any user class extending it) is
 		// likewise never a namespace to eagerly decompose (#340) — regardless of deferChildAdopt,
@@ -11035,7 +13181,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// CRITICAL: Check stored collision mode to determine how to handle existing properties
 		// - For "replace" mode: Clear existing properties before adopting new ones
 		// - For "merge" or "merge-replace": Keep existing properties and merge
-		const existingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const existingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		const storedCollisionMode = this.____slothletInternal.state.collisionMode; // Set during collision in api-assignment.mjs
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
@@ -11072,7 +13218,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (resolveWrapper(child) !== null) {
 					savedChildren.set(key, child);
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(this, key);
+				const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 				if (descriptor?.configurable) {
 					delete this[key];
 				}
@@ -11110,7 +13256,7 @@ export class UnifiedWrapper extends ComponentBase {
 				break;
 			}
 			/* v8 ignore stop */
-			const descriptor = Object.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
 			// `Object.keys(impl)` only returns own enumerable properties that always have a descriptor; `!descriptor` is unreachable.
 			/* v8 ignore start */
 			if (!descriptor) {
@@ -11266,11 +13412,11 @@ export class UnifiedWrapper extends ComponentBase {
 					if (
 						rawImpl &&
 						typeof rawImpl === "object" &&
-						!Array.isArray(rawImpl) &&
+						!Arrays.isArray(rawImpl) &&
 						typeof rawImpl !== "function" &&
-						Object.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
+						Objects.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
 					) {
-						const wrapperOwnKeys = Object.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
+						const wrapperOwnKeys = Objects.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
 						// A depleted impl always means the wrapper has its own keys (those being the "depletees"); `length===0` is unreachable.
 						/* v8 ignore next */
 						if (wrapperOwnKeys.length > 0) {
@@ -11291,6 +13437,8 @@ export class UnifiedWrapper extends ComponentBase {
 							true,
 							this.____slothletInternal.adoptOwner != null
 						);
+						// The reused node fronts the module's object the new node did (#746).
+						resolveWrapper(existingChild).____slothletInternal.moduleObject = newWrapper.____slothletInternal.moduleObject ?? null;
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -11322,6 +13470,12 @@ export class UnifiedWrapper extends ComponentBase {
 						this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
 						true,
 						this.____slothletInternal.adoptOwner != null
+					);
+					// The reused node fronts the module's object its new value is, or was copied from (#746).
+					resolveWrapper(existingChild).____slothletInternal.moduleObject = runtime_moduleObjectFor(
+						resolveWrapper(existingChild),
+						value,
+						true
 					);
 					wrapped = existingChild;
 				}
@@ -11362,7 +13516,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Store wrapper as property on wrapper itself (where proxy handlers can see it)
 				// Only define if property doesn't exist or is different wrapper
 				const existing = this[key];
-				const existingDescriptor = Object.getOwnPropertyDescriptor(this, key);
+				const existingDescriptor = Objects.getOwnPropertyDescriptor(this, key);
 
 				// Skip if property exists with same wrapper, or if it's non-configurable (like 'slothlet' from ComponentBase)
 				// existingDescriptor is always null/undefined when existing !== wrapped; the && branch never evaluates.
@@ -11390,7 +13544,7 @@ export class UnifiedWrapper extends ComponentBase {
 							propKey: key
 						});
 					}
-					Object.defineProperty(this, key, {
+					Objects.defineProperty(this, key, {
 						value: wrapped,
 						writable: false,
 						enumerable: true,
@@ -11437,7 +13591,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// accessor. Keeping the original static-value shape for the non-deferred case avoids
 				// that regression while still covering whatever deferred/`_applyNewImpl`-reload
 				// interaction this branch exists for.
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					get: () => {
 						const currentImpl = this.____slothletInternal.impl;
 						return currentImpl ? currentImpl[key] : undefined;
@@ -11454,7 +13608,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
 				// builtin live (mutating the same Map is visible from every reference to it); nothing
 				// further is needed the way the primitive branch above needs a live accessor.
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					value: value,
 					writable: false,
 					enumerable: true,
@@ -11467,7 +13621,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// wrapped is falsy but not null - shouldn't happen, but define value anyway
-				Object.defineProperty(this, key, {
+				Objects.defineProperty(this, key, {
 					value: value,
 					writable: false,
 					enumerable: true,
@@ -11484,7 +13638,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
-			const currentKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
+			const currentKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of currentKeys) {
 				if (!observedKeys.has(key)) {
 					const existing = this[key];
@@ -11494,7 +13648,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (existingRaw) {
 						existingRaw.___invalidate();
 					}
-					const descriptor = Object.getOwnPropertyDescriptor(this, key);
+					const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 					// Unreachable in practice: properties that reach this point are
 					// synthesised through the Proxy get-trap from the wrapper's impl,
 					// so they have no own property descriptor on the target object (or
@@ -11514,11 +13668,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
-			const existingKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+			const existingKeys = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of existingKeys) {
 				if (!(key in this)) {
 					const child = existingWrapper[key];
-					Object.defineProperty(this, key, {
+					Objects.defineProperty(this, key, {
 						value: child,
 						writable: false,
 						enumerable: true,
@@ -11644,7 +13798,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// write through the api reaches it, as a write to the array itself would (#602).
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(childImpl, EventEmitter));
-		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Array.isArray(childImpl)) {
+		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Arrays.isArray(childImpl)) {
 			childImpl = copyForComposition(childImpl);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
 			if (childImpl !== value) this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
@@ -11675,7 +13829,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
-					keys: Object.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
+					keys: Objects.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
 					propKey: keyStr,
 					found: !!this.____slothletInternal.impl.__childFilePaths[key]
 				});
@@ -11771,7 +13925,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// An array element's path is where the element sits now, and so is the path of everything below it
 		// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
 		// Only a canonical index below 2^32 - 1 is a position; "4294967295" and above are ordinary properties of the array.
-		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
+		const parentIsArray = Arrays.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
 		const position =
 			parentIsArray || this.____slothletInternal.followsPosition ? { parent: this, key, byIndex: parentIsArray, sourceValue: value } : null;
 		let nestedWrapper;
@@ -11804,6 +13958,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// The value the child was built from (before any clone), so a parent array can tell whether the
 		// element its cached child fronts is still the one at that index (#602).
 		nestedWrapper.____slothletInternal.sourceValue = value;
+		// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
+		nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? runtime_moduleObjectFor(nestedWrapper, value, true) : null;
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
@@ -11965,7 +14121,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const waitingHandler = {
 			set(target, prop, value) {
 				// A stand-in frozen (below) takes no write, as a frozen object takes none: the node will be frozen too.
-				if (Object.isFrozen(target)) return false;
+				if (Objects.isFrozen(target)) return false;
 				// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen({ value })) {
 					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
@@ -12020,7 +14176,8 @@ export class UnifiedWrapper extends ComponentBase {
 					if (wrapper.____slothletInternal.state.materialized) {
 						const queued = runtime_captureChange(wrapper, change);
 						const generation = wrapper.____slothletInternal.changeGeneration;
-						queueMicrotask(() => runtime_makeQueuedChange(wrapper, queued, generation));
+						// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+						queueMicrotask(pinToCurrentCaller(() => runtime_makeQueuedChange(wrapper, queued, generation)));
 					} else runtime_queueStandInChange(wrapper, change);
 				}
 				// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
@@ -12203,7 +14360,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// unchanged for everything except the shape that was losing data.
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
-								Object.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+								Objects.keys(current).some((key) => !isFrameworkReservedKey(key) && !Objects.prototype.hasOwnProperty.call(finalImpl, key));
 							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 							// function behind it: that function carries no gate, so calling it would skip the node's call check
 							// (#632). The host, which no rule gates, still gets the function itself.
@@ -12213,7 +14370,7 @@ export class UnifiedWrapper extends ComponentBase {
 							if (
 								callableCarriesWrapperMembers ||
 								callableReadByModule ||
-								(finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
+								(finalImpl !== null && typeof finalImpl === "object" && !Arrays.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
 							) {
 								const resolvedProxy = current.____slothletInternal.proxy;
 								// A module's captured floor has to survive the resolution: the snapshot taken when the
@@ -12397,11 +14554,11 @@ export class UnifiedWrapper extends ComponentBase {
 				if (prop === "name") return waitingTarget.name || "waitingProxyTarget";
 				if (prop === "toString") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return Function.prototype.toString.bind(waitingTarget);
+					return functionToString.bind(waitingTarget);
 				}
 				if (prop === "valueOf") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return Function.prototype.valueOf.bind(waitingTarget);
+					return Functions.prototype.valueOf.bind(waitingTarget);
 				}
 				// prop === "toJSON" is never accessed on a lazy unmaterialized property-chain proxy in tests.
 				/* v8 ignore start */
@@ -12620,9 +14777,16 @@ export class UnifiedWrapper extends ComponentBase {
 				const ___creationCeiling = ___creationCallerWrapper ? (__readGateCaller?.ceiling ?? null) : null;
 				// Code a module handed out, run while no call runs or no call accounts for it, makes the call as its definer,
 				// told by its frames, as its `self` read was (#726). With `references.capture` off only the live caller counts.
+				const ___definerRead = {};
 				const ___capturedCallerWrapper =
-					___liveCallerWrapper ?? ___creationCallerWrapper ?? (___capture ? runtime_hostRunDefiner(wrapper.slothlet, true) : null);
-				const ___capturedCeiling = ___liveCallerWrapper ? ___liveCeiling : ___creationCeiling;
+					___liveCallerWrapper ??
+					___creationCallerWrapper ??
+					(___capture ? runtime_hostRunDefiner(wrapper.slothlet, true, ___definerRead) : null);
+				const ___capturedCeiling = ___liveCallerWrapper
+					? ___liveCeiling
+					: ___creationCallerWrapper
+						? ___creationCeiling
+						: (___definerRead.ceiling ?? null);
 				// A caller the live runtime cannot determine is refused now, as the node's own gate refuses it (#726): calls
 				// in flight it cannot tell apart, or code it cannot place. Only code no call accounts for, settled by the
 				// node's reader or the code's definer, goes on. Run after the load instead, the call would be gated on
@@ -12772,7 +14936,7 @@ export class UnifiedWrapper extends ComponentBase {
 										{ validationError: true }
 									);
 								}
-								await new Promise((resolve) => scheduleMacrotask(resolve));
+								await new Promise((resolve) => scheduleMacrotask(resolve, undefined, wrapper.clock));
 							}
 							/* v8 ignore stop */
 						}
@@ -12976,7 +15140,7 @@ export class UnifiedWrapper extends ComponentBase {
 			getPrototypeOf: () => null
 		};
 		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
-		const waitingProxy = new Proxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
+		const waitingProxy = new NativeProxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
 
 		// Register waiting proxy in the global registry so resolveWrapper() can find the
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
@@ -13032,7 +15196,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Create a named function as proxy target for callable wrappers
 			// This ensures typeof proxy === "function" and enables function calls
 			proxyTarget = createNamedProxyTarget(wrapper.____slothletInternal.apiPath, "callableProxy");
-		} else if (Array.isArray(wrapper.____slothletInternal.impl)) {
+		} else if (Arrays.isArray(wrapper.____slothletInternal.impl)) {
 			// Array impl - an empty array shell the wrapper owns is the proxy target, so Array.isArray sees an
 			// array while every read, write and definition goes to the module's current array (getTrap
 			// delegates reads to the live impl; getPrototypeOf returns Array.prototype). The module's array is
@@ -13045,7 +15209,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// members stay on the wrapper, its live store, and sealing or freezing the node fixes them on the
 			// shell as it reports them, its permission check kept on every read (#609). The wrapper itself as the
 			// target would be frozen with the node, pinning its own state along with the members.
-			proxyTarget = Object.create(null);
+			proxyTarget = Objects.create(null);
 		}
 
 		runtime_defineProxyInspect(wrapper, proxyTarget);
@@ -13061,30 +15225,34 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Resolves properties from wrapper properties (children), impl values, or target properties.
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
-		const getTrap = (target, prop, ____receiver) => {
+		const getTrap = (target, prop, ____receiver, access = null) => {
 			// A node a module kept, reading through this one, says who it reads for: taken first, before any code this
 			// read runs (a getter, a Proxy's trap) could take it, and handed to this read's own gate (#661) and to a getter
 			// of the node's this read runs (see runtime_runAccessor).
 			const kept = runtime_takeCapturedAccess(wrapper);
-			if (!kept) return getTrapFor(null, target, prop, ____receiver);
+			if (!kept) return getTrapFor(null, target, prop, ____receiver, access);
 			const previous = keptAccessorRead;
 			keptAccessorRead = kept;
 			try {
-				return getTrapFor(kept, target, prop, ____receiver);
+				return getTrapFor(kept, target, prop, ____receiver, access);
 			} finally {
 				keptAccessorRead = previous;
 			}
 		};
-		const getTrapFor = (kept, target, prop, ____receiver) => {
+		const getTrapFor = (kept, target, prop, ____receiver, access = null) => {
+			// What the module's own object holds now is what the node answers (#757).
+			runtime_followModuleObject(wrapper, target, prop);
+			// A member of built-in data or an error the node holds is a read of that value at the node's path.
+			runtime_gateDataNodeMember(wrapper, prop, kept, access);
 			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
-			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept);
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept, access);
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
-				const desc = Object.getOwnPropertyDescriptor(target, prop);
+				const desc = Objects.getOwnPropertyDescriptor(target, prop);
 				// The function stub target is a bound function with no non-configurable own property (see
 				// createNamedProxyTarget); a target the wrapper does not create could still have one, and
 				// its member by that name wins only while the invariant allows (a writable one, #571).
@@ -13097,7 +15265,7 @@ export class UnifiedWrapper extends ComponentBase {
 					desc &&
 					"value" in desc &&
 					!desc.configurable &&
-					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Array.isArray(wrapper.____slothletInternal.impl)))
+					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Arrays.isArray(wrapper.____slothletInternal.impl)))
 				) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
@@ -13116,7 +15284,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// In practice all wrapper own-properties are configurable; the body is never entered.
 			/* v8 ignore start */
 			if (target === wrapper && typeof prop === "string") {
-				const desc = Object.getOwnPropertyDescriptor(target, prop);
+				const desc = Objects.getOwnPropertyDescriptor(target, prop);
 				if (desc && !desc.configurable) {
 					return target[prop];
 				}
@@ -13265,7 +15433,7 @@ export class UnifiedWrapper extends ComponentBase {
 			let arrayElement = null;
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
-				if (Array.isArray(arrImpl)) {
+				if (Arrays.isArray(arrImpl)) {
 					// A key the module put on the array itself (`list.toJSON = …`, `list.meta = {…}`) is a member
 					// like an element, not an intrinsic: reading it raw would skip the gates, hooks and context
 					// an object's member gets (#603 review). `length` stays the array's own.
@@ -13285,7 +15453,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// proxy array answers through its own get trap even for a key it does not hold (#603 review).
 					const element = Reflect.get(arrImpl, prop, arrImpl);
 					if (hasOwn(wrapper, prop)) {
-						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
+						const cached = Objects.getOwnPropertyDescriptor(wrapper, prop).value;
 						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
 						if (cached !== element && cachedSource !== element) delete wrapper[prop];
 					}
@@ -13294,13 +15462,18 @@ export class UnifiedWrapper extends ComponentBase {
 					// member → fall through to the child-wrapping path below, with the value just read.
 				}
 			}
+			// A node of a built-in data object answers what its kind defines from the object, as the object does.
+			const fronted = runtime_frontedDataMember(wrapper, prop);
+			if (fronted !== NODE_MEMBER) return fronted;
 			// #475 / #571: a member whose name collides with a property this trap otherwise answers
 			// itself (`name`, `length`, `toString`, …) — a module export, or a folder entry such as
 			// `session/name/` — takes the ordinary child path below: reachable, and read-gated like any
 			// other member. Without this the wrapper's own answer (the api-path name, the impl's arity,
 			// …) shadowed the member and skipped enforcement entirely. Only those names and `then` consult it,
 			// so any other read skips the lookup.
-			const memberShadowsWrapperProp = (prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) && runtime_hasOwnMember(wrapper, prop);
+			const memberShadowsWrapperProp =
+				(prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) &&
+				(runtime_hasOwnMember(wrapper, prop) || runtime_valueHoldsName(wrapper, prop));
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
 				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
@@ -13387,7 +15560,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// A `constructor` its prototype answers through an accessor of the module's is read as any accessor member
 				// is, run as the module (#597): the class it answers is handed out as above, as the plain instance answers it.
 				const constructorAccessor =
-					constructorImpl !== null && typeof constructorImpl === "object" && !Array.isArray(constructorImpl)
+					constructorImpl !== null && typeof constructorImpl === "object" && !Arrays.isArray(constructorImpl)
 						? runtime_implAccessor(wrapper, prop)
 						: null;
 				if (constructorAccessor?.descriptor) {
@@ -13397,7 +15570,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (FUNCTION_NODES.get(wrapper.slothlet)?.get(answered)?.deref() !== undefined) return runtime_functionNodeFor(wrapper, answered);
 					return runtime_instanceClassNode(wrapper, answered) ?? answered;
 				}
-				return Object.prototype.constructor;
+				return Objects.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
 				// What the node shows to `util.inspect` (see runtime_inspectShown): the same as its target's own hook.
@@ -13406,6 +15579,12 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === Symbol.toStringTag) {
 				// Return "Object" for object exports, "Function" for function exports
 				const impl = wrapper.____slothletInternal.impl;
+				// A built-in data object answers the tag the language gives its kind (`Map`, `Set`, a typed array's), as it
+				// does itself; one whose kind has none (a date) answers "Object", as a Proxy of it does.
+				if (runtime_dataKind(impl) !== null) {
+					const tag = Reflect.get(impl, prop, impl);
+					return typeof tag === "string" ? tag : "Object";
+				}
 				if (typeof impl === "function") {
 					return "Function";
 				}
@@ -13496,7 +15675,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl === null || typeof impl !== "object") {
 					// For non-callable wrappers, return a descriptive string
 					if (typeof target === "function") {
-						return Function.prototype.toString.bind(target);
+						return functionToString.bind(target);
 					}
 					return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 				}
@@ -13516,7 +15695,7 @@ export class UnifiedWrapper extends ComponentBase {
 					return method.bind(fnImpl);
 				}
 				// A loaded object node reads its `valueOf` through the member read below.
-				if (impl === null || typeof impl !== "object") return Function.prototype.valueOf.bind(target);
+				if (impl === null || typeof impl !== "object") return Functions.prototype.valueOf.bind(target);
 			}
 			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
@@ -13534,7 +15713,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// The snapshot for the given readers (`undefined` for whoever is reading now), read through `node`: a
 				// module's kept node serializes for that module and for the module serializing it.
 				const serialize = (readers, node, kept = null) => {
-					const data = UnifiedWrapper._extractFullImpl(wrapper);
+					// A getter is read through its node as whoever serializes now; one that reader may not run is left out,
+					// as a member the reader may not read is.
+					const readMember = (holder, key) => {
+						try {
+							return { value: holder.createProxy()[key] };
+						} catch (error) {
+							if (error?.code === "PERMISSION_DENIED") return { withheld: true };
+							throw error;
+						}
+					};
+					const data = UnifiedWrapper._extractFullImpl(wrapper, readMember);
 					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
 					// paths — for lazy folder leaves) that must never leak into serialization output.
 					if (data && typeof data === "object") {
@@ -13594,7 +15783,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if ((wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) && hasOwn(wrapper, prop)) {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
-					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
+					const cachedDesc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 					// Read as the module's own read of it (#597): a getter on the impl is the module's code.
 					const current = runtime_readImplMember(wrapper, prop);
 					const stale =
@@ -13612,7 +15801,7 @@ export class UnifiedWrapper extends ComponentBase {
 						apiPath: wrapper.apiPath,
 						prop: String(prop),
 						collisionMode: wrapper.____slothletInternal.state.collisionMode,
-						wrapperKeys: Object.keys(wrapper)
+						wrapperKeys: Objects.keys(wrapper)
 							.filter((k) => !isFrameworkReservedKey(k))
 							.join(", ")
 					});
@@ -13699,7 +15888,7 @@ export class UnifiedWrapper extends ComponentBase {
 						});
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_FOUND",
-							wrapperKeys: Object.keys(wrapper)
+							wrapperKeys: Objects.keys(wrapper)
 								.filter((k) => !isFrameworkReservedKey(k))
 								.join(", ")
 						});
@@ -13736,7 +15925,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// A Proxy answers reads through its get trap, which can serve members its `in` check does not
 				// report; the read below asks it, as eager does (#585 review).
 				!util.types.isProxy(wrapper.____slothletInternal.impl) &&
-				!(prop in wrapper.____slothletInternal.impl)
+				!(prop in wrapper.____slothletInternal.impl) &&
+				runtime_moduleInheritance(wrapper, prop) === null
 			) {
 				return undefined;
 			}
@@ -13807,7 +15997,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Reached only when impl doesn't have the key but target does (e.g., a property
 			// set directly on the wrapper object before the proxy was created).
 			/* v8 ignore next */
-			if (value === undefined && Object.prototype.hasOwnProperty.call(target, prop)) {
+			if (value === undefined && Objects.prototype.hasOwnProperty.call(target, prop)) {
 				value = target[prop];
 			}
 
@@ -13864,7 +16054,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// as it is, so reading it is checked as a call of the node (#632).
 			// A member inherited from the engine runs on the node, as on the plain value (#630).
 			const currentImpl = wrapper.____slothletInternal.impl;
-			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+			if (typeof currentImpl === "function" && !Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
 				runtime_enforceCodeMember(wrapper, value, kept);
@@ -13878,6 +16068,17 @@ export class UnifiedWrapper extends ComponentBase {
 			if (currentImpl !== null && typeof currentImpl === "object") {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
+				// A built-in data object keeps what it holds out of its own listing as plain JavaScript does: a member it holds
+				// non-enumerable (an error's `cause`, an aggregate error's `errors`) is read from it as data, not made a child
+				// node, which `Object.keys()` would then list.
+				if (
+					runtime_holdsDataKind(currentImpl) &&
+					hasOwn(currentImpl, prop) &&
+					!Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)
+				) {
+					runtime_enforceCodeMember(wrapper, value, kept);
+					return value;
+				}
 			}
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
@@ -13897,10 +16098,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// cycle-guard set through here.
 			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
 			// plain JavaScript, so a member it reads stays live (#590).
-			if (wrapped && typeof Object.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
+			if (wrapped && typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
-				Object.defineProperty(wrapper, prop, {
+				Objects.defineProperty(wrapper, prop, {
 					value: wrapped,
 					writable: false,
 					enumerable: true,
@@ -13928,6 +16129,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args, ___gatePassed = false, ___gateEntry = null) => {
+			// An identity handed over for this call (see runtime_applyWithEntry) is taken once, as the trap starts, before
+			// any code this call runs. One handed for another node's call is dropped: it reaches no call made later.
+			let ___handed = null;
+			if (handedEntry !== null) {
+				if (handedEntry.wrapper === wrapper) ___handed = handedEntry.entry;
+				handedEntry = null;
+			}
 			// A node a module kept, calling through this one, says who it calls for: taken first, before any code this
 			// call runs (`this`, its arguments) could take it, and handed to this call's own gate (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
@@ -13936,11 +16144,12 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
-			// A function or Proxy this module handed out comes back to it as itself (#597).
-			if (!___gatePassed) args = runtime_ownArguments(wrapper, args);
-			// What another module passes in reaches this one through the class prototype guard, so what this module stores
-			// into it reaches the caller the same way.
+			// What another module or the host passes in reaches this one through the class prototype guard, so what this
+			// module stores into it reaches the caller the same way. Done first, on the arguments as the caller holds them.
 			if (!___gatePassed) args = runtime_crossArguments(wrapper, args);
+			// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
+			// own class the async runtime wrapped (#328).
+			if (!___gatePassed) args = runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, args));
 
 			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 			// `this` — but a native method whose behavior depends on internal slots tied to exact
@@ -13994,12 +16203,6 @@ export class UnifiedWrapper extends ComponentBase {
 			// trap with three arguments).
 			// The identity the gate resolved is what the call is entered with (see enforcePermission), carried
 			// across a deferred gate too.
-			// An identity handed over for this call (see runtime_applyWithEntry) is taken once, as the trap starts.
-			let ___handed = null;
-			if (handedEntry && handedEntry.wrapper === wrapper) {
-				___handed = handedEntry.entry;
-				handedEntry = null;
-			}
 			const ___entry = ___gatePassed ? ___gateEntry : {};
 			if (!___gatePassed) {
 				const ___principalGate = enforcePermission(wrapper, args, true, kept, ___entry, ___handed, thisArg);
@@ -14135,7 +16338,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!isHookProcessed(error)) {
-								const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, failure);
+								const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -14299,7 +16502,7 @@ export class UnifiedWrapper extends ComponentBase {
 								return;
 								/* v8 ignore stop */
 							}
-							scheduleMacrotask(checkMaterialized);
+							scheduleMacrotask(checkMaterialized, undefined, wrapper.clock);
 						};
 						checkMaterialized();
 					});
@@ -14382,7 +16585,7 @@ export class UnifiedWrapper extends ComponentBase {
 								if (hasHooks) {
 									// A hook's failure, read from its record (see HookManager#failureOf), never in the caller's flow (#599).
 									const originalError = unwrapError(error);
-									const sourceInfo = failureSource({ type: "after", timestamp: Date.now() }, hookManager.failureOf(error));
+									const sourceInfo = failureSource({ type: "after", timestamp: wrapper.clock.now() }, hookManager.failureOf(error));
 									// The after chain reports its own hook's failure; this reports only what it did not.
 									if (!hookReported && !isHookProcessed(error)) {
 										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
@@ -14405,7 +16608,7 @@ export class UnifiedWrapper extends ComponentBase {
 								const failure = runtime_readTargetFailure(wrapper, error);
 								const originalError = failure.originalError();
 								if (!isHookProcessed(error)) {
-									const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, failure);
+									const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
 									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 								}
 								// Always hooks execute for rejected promises
@@ -14442,7 +16645,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// always hooks then take the unwrapped error from what was read.
 				const targetFailure = hasHooks && !hookReported ? runtime_readTargetFailure(wrapper, error) : null;
 				if (targetFailure && !isHookProcessed(error)) {
-					const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, targetFailure);
+					const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, targetFailure);
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
 				}
 
@@ -14484,6 +16687,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// `in` gates nothing: an access a kept node offers here is dropped first, before any code the answer runs
 			// (a Proxy among the impl's prototypes) could take it (#661).
 			runtime_takeCapturedAccess(wrapper);
+			runtime_followModuleObject(wrapper, target, prop);
 			if (prop === "_materialize") {
 				return true;
 			}
@@ -14501,7 +16705,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// An array-backed wrapper holds the elements it cached, but the array decides which indices
 			// exist: an element removed since (through the api or the module's own reference) is gone (#602).
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
+			if (Arrays.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
 				// A non-extensible target pins the answer to its own keys (proxy invariant), which is the
 				// array it was built over once a reload has replaced the impl.
 				if (!Reflect.isExtensible(target)) return Reflect.has(target, prop);
@@ -14522,12 +16726,12 @@ export class UnifiedWrapper extends ComponentBase {
 				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-				runtime_onImpl(wrapper, (impl) => prop in impl)
+				(runtime_onImpl(wrapper, (impl) => prop in impl) || runtime_moduleInheritance(wrapper, prop) !== null)
 			) {
 				return true;
 			}
 
-			return Object.prototype.hasOwnProperty.call(target, prop);
+			return Objects.prototype.hasOwnProperty.call(target, prop);
 		};
 
 		/**
@@ -14539,12 +16743,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @description
 		 * Provides descriptors for target (wrapper), impl properties, filtering internals.
 		 */
-		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
+		const getOwnPropertyDescriptorTrap = (target, prop, redact = true, access = null) => {
 			// The engine's check of a definition a view just made reads the node's fixed members ungated (#625).
 			const engineCheck = runtime_takeInvariantRead(wrapper, prop);
 			// A node a module kept, describing a member through this one, says who it reads for: taken first, before
 			// any code this description runs could take it, and handed to every gate it makes (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
+			if (!engineCheck) runtime_followModuleObject(wrapper, target, prop);
 			// What this description reads through the node itself, read for that reader too.
 			const readNode = () =>
 				kept
@@ -14578,11 +16783,11 @@ export class UnifiedWrapper extends ComponentBase {
 						...hookDescriptor,
 						value: function (...args) {
 							// Shown as to a module, whoever calls the copy later: it never hands out the module's code (#632).
-							const shown = Array.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
+							const shown = Arrays.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
 							if (shown === null || typeof shown !== "object") return shown;
-							const completed = Array.isArray(shown) ? [] : {};
-							for (const key of Object.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
-							if (Array.isArray(shown)) completed.length = shown.length;
+							const completed = Arrays.isArray(shown) ? [] : {};
+							for (const key of Objects.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
+							if (Arrays.isArray(shown)) completed.length = shown.length;
 							return completed;
 						}
 					};
@@ -14598,10 +16803,10 @@ export class UnifiedWrapper extends ComponentBase {
 				if (sealed && "value" in sealed && sealed.writable && prop !== "length") {
 					// A value the caller may not read is withheld, as the invariants allow for a writable member: the key
 					// must still be described, and sealing or freezing the node needs only its attributes.
-					if (redact && runtime_isReadRedacted(wrapper, prop, kept)) return { ...sealed, value: undefined };
+					if (redact && runtime_isReadRedacted(wrapper, prop, kept, access)) return { ...sealed, value: undefined };
 					return { ...sealed, value: readNode() };
 				}
-				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
+				if (sealed && prop === "length" && Arrays.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
 					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
 				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed, asHeld, kept);
@@ -14613,10 +16818,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// fixed keys keep their invariant-required form, carrying the current value where writable.
 			const arrayImpl = wrapper.____slothletInternal.impl;
 			// Every member is described this way, a named or symbol-keyed one as much as an element (#603 review).
-			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
+			if (Arrays.isArray(arrayImpl) && (prop === "length" || runtime_isArrayMember(arrayImpl, prop))) {
 				// An element a caller may not read is not described to it, as ownKeys leaves it out (#609); one
 				// fixed on the shell must still be described, with its value withheld.
-				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept);
+				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop, kept, access);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 				// An object element is described by its api node, not the module's object: reading the node is the read
 				// the permission rules see, where the raw object would hand every leaf under it to any caller.
@@ -14650,8 +16855,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
-			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
-			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept)) {
+			const ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
+			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept, access)) {
 				return undefined;
 			}
 
@@ -14677,12 +16882,26 @@ export class UnifiedWrapper extends ComponentBase {
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
-				const desc = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const desc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
 				// Return descriptor if it exists
 				/* v8 ignore next */
 				if (desc) {
-					return virtualizeDescriptor(desc);
+					// The node keeps a member read-only on its own store, which only its traps write. What it reports is
+					// whether a write through the node is taken, as the module's object reports it (#749).
+					const described = virtualizeDescriptor(desc);
+					if (!("value" in described)) return described;
+					// A primitive member is held as a node of its own; its description holds the primitive, as a read of
+					// the member answers it.
+					const heldImpl = resolveWrapper(described.value)?.____slothletInternal.impl;
+					const heldType = typeof heldImpl;
+					const isPrimitive =
+						heldType === "string" || heldType === "number" || heldType === "boolean" || heldType === "bigint" || heldType === "symbol";
+					return {
+						...described,
+						value: isPrimitive ? heldImpl : described.value,
+						writable: runtime_reportsWritable(wrapper, prop)
+					};
 				}
 			}
 
@@ -14696,7 +16915,7 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 			) {
-				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Object.getOwnPropertyDescriptor(impl, prop) : null));
+				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Objects.getOwnPropertyDescriptor(impl, prop) : null));
 				// A member holding the module's code is described only to a caller that may call the node, as reading it
 				// is checked (#632).
 				if (implDescriptor !== null && redact && !asHeld && runtime_isCodeMemberWithheld(wrapper, implDescriptor, kept)) return undefined;
@@ -14719,6 +16938,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A node a module kept, listing this one's members, says who it reads for: taken first, and handed to every
 			// gate the listing makes (#661).
 			const kept = runtime_takeCapturedAccess(wrapper);
+			runtime_followModuleObject(wrapper, target);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -14740,7 +16960,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// wrappers it cached. The target's fixed keys are still reported, as the invariants require,
 			// and so is a non-index member held on the wrapper (a mount under the array).
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl)) {
+			if (Arrays.isArray(arrayImpl)) {
 				// A non-extensible target must be listed exactly (proxy invariant).
 				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
@@ -14748,12 +16968,12 @@ export class UnifiedWrapper extends ComponentBase {
 					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
 				}
 				for (const key of Reflect.ownKeys(wrapper)) {
-					if (!runtime_isArrayIndex(key) && Object.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
+					if (!runtime_isArrayIndex(key) && Objects.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
 				}
 				for (const key of keys) {
 					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
 				}
-				return Array.from(keys);
+				return Arrays.from(keys);
 			}
 
 			// A function target's own `length` / `name` come first, as on any function.
@@ -14764,7 +16984,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Add all target keys (wrapper or function), checking configurability
 			for (const key of Reflect.ownKeys(target)) {
-				const descriptor = Object.getOwnPropertyDescriptor(target, key);
+				const descriptor = Objects.getOwnPropertyDescriptor(target, key);
 				// Include non-configurable properties (required by proxy invariants)
 				// OR enumerable properties (child wrappers)
 				if (!descriptor.configurable || descriptor.enumerable) {
@@ -14776,7 +16996,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// children are defined on wrapper, not target. Include wrapper's enumerable keys.
 			if (target !== wrapper) {
 				for (const key of Reflect.ownKeys(wrapper)) {
-					const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+					const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 					// Wrapper-owned sibling props are always enumerable in tests; non-enumerable path never taken.
 					/* v8 ignore next */
 					if (descriptor && descriptor.enumerable) {
@@ -14809,13 +17029,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// filtered — they are framework internals, never gated user data.
 			if (redact) {
 				for (const key of keys) {
-					const targetDesc = Object.getOwnPropertyDescriptor(target, key);
+					const targetDesc = Objects.getOwnPropertyDescriptor(target, key);
 					if (targetDesc && !targetDesc.configurable) continue;
-					if (runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
+					if (runtime_isReadRedacted(wrapper, key, kept, null, true)) keys.delete(key);
 				}
 			}
 
-			return Array.from(keys);
+			return Arrays.from(keys);
 		};
 
 		/**
@@ -14849,12 +17069,19 @@ export class UnifiedWrapper extends ComponentBase {
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true;
 			}
+			// `node.__proto__ = x` on a node fronting a module's own object runs the language's own `__proto__` setter, as
+			// the same assignment to the object does (#757): an object or null sets the prototype, through the setPrototypeOf
+			// trap and its checks, anything else is ignored. A `__proto__` member the object holds is written as a member.
+			if (prop === "__proto__" && !hasOwn(wrapper, prop) && runtime_moduleObjectOf(wrapper) !== null) {
+				Reflect.apply(OBJECT_PROTO_SETTER, wrapper.____slothletInternal.proxy, [value]);
+				return true;
+			}
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
 			// fixed on the shell when it was sealed, and reflection answers from there.
 			if (!Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
 			// A member fixed read-only on a frozen shell takes no write, as on a frozen object: refused before the node's
 			// own state changes, so a read of it still answers what the shell holds (#667).
-			if (!Array.isArray(target) && runtime_isFixedReadOnly(target, prop)) return false;
+			if (!Arrays.isArray(target) && runtime_isFixedReadOnly(target, prop)) return false;
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
@@ -14870,7 +17097,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// do through it) lands on the array, exactly as it would on the array (#602). That is the
 			// current impl, which an eager reload replaces under a held reference, not the proxy target.
 			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
-			if (Array.isArray(wrapper.____slothletInternal.impl)) {
+			if (Arrays.isArray(wrapper.____slothletInternal.impl)) {
 				const arrayImpl = wrapper.____slothletInternal.impl;
 				// A non-extensible array takes no new index, as on the array itself; reflection answers from
 				// the target then (see ownKeysTrap), so a write may not grow what it cannot report.
@@ -14895,13 +17122,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// `length` takes the shell's configurable elements past it away, as it did the array's. A length
 				// write the array refuses can still have removed the elements above a fixed one, so the shell
 				// follows what the array holds either way (#603 review).
-				if (prop === "length" && Array.isArray(target) && !Reflect.isExtensible(target)) Reflect.set(target, "length", arrayImpl.length);
+				if (prop === "length" && Arrays.isArray(target) && !Reflect.isExtensible(target)) Reflect.set(target, "length", arrayImpl.length);
 				if (!written) return false;
 				if (hasOwn(wrapper, prop)) delete wrapper[prop];
 				// An element moved by an array method keeps its node at the index it lands on: the node holds what was
 				// written through it, which a fresh node over the module's element would not (#603 review).
 				if (isOwnElement && runtime_isPosition(prop)) {
-					Object.defineProperty(wrapper, prop, {
+					Objects.defineProperty(wrapper, prop, {
 						value: moved.____slothletInternal.proxy,
 						writable: false,
 						enumerable: true,
@@ -14918,12 +17145,12 @@ export class UnifiedWrapper extends ComponentBase {
 			const uw_arrayImpl = wrapper.____slothletInternal.impl;
 			// An element or `length` is the array's own: written to it (through its layer, which passes it on),
 			// as a write to the array would be, so its length and elements follow (#585 review).
-			if (Array.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
+			if (Arrays.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
 				return Reflect.set(uw_arrayImpl, prop, value);
 			}
 			if (
 				!internalKeys.has(prop) &&
-				Array.isArray(uw_arrayImpl) &&
+				Arrays.isArray(uw_arrayImpl) &&
 				isCompositionLayer(uw_arrayImpl) &&
 				!(typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop))
 			) {
@@ -14935,7 +17162,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// accessor with no setter refuses the write (#585 review). The node's accessors are the module's
 				// (adopted, or merged in from an addapi file or a collision) or a live forward to the impl, and
 				// every one of them sets through its own setter.
-				const ownAccessor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const ownAccessor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				if (ownAccessor && !("value" in ownAccessor)) {
 					if (!ownAccessor.set) return false;
 					ownAccessor.set.call(wrapper.____slothletInternal.proxy ?? wrapper, value);
@@ -14984,9 +17211,9 @@ export class UnifiedWrapper extends ComponentBase {
 						// A setter the impl holds runs as the module the node belongs to, never as the writer (#597).
 						const setSucceeded = runtime_writeImplMember(wrapper, prop, value);
 						if (!setSucceeded) return false;
-						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+						const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
-							Object.defineProperty(wrapper, prop, {
+							Objects.defineProperty(wrapper, prop, {
 								get: () => {
 									const currentImpl = wrapper.____slothletInternal.impl;
 									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
@@ -15023,10 +17250,19 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 				}
 
-				// Delete property first if it exists (to allow reassignment)
-				if (hasOwn(wrapper, prop)) {
-					delete wrapper[prop];
-				}
+				// A node built from a copy of a module's own object (an exported plain object, or one inside it) writes to
+				// that object too, as the same assignment to the object does, so the module's code reads what was written
+				// (#746). The object refusing the write (a member it holds read-only) refuses it here, before the node
+				// changes. The framework's own writes (the build, a sibling file merged onto the node) change only the node:
+				// composing never changes a module's value.
+				const ownWrite = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper);
+				const moduleObject = ownWrite ? null : runtime_moduleObjectOf(wrapper, prop);
+				if (moduleObject !== null && !runtime_writeModuleObject(wrapper, moduleObject, prop, value)) return false;
+				// A member defined read-only through the node takes no assignment, as on an object (#749).
+				if (!ownWrite && wrapper.____slothletInternal.readOnlyKeys?.has(prop) && hasOwn(wrapper, prop)) return false;
+
+				// A member the node already holds is replaced where it stands (the definition below), so it keeps its
+				// place among the node's keys, as an assignment to an object's member does (#746).
 				// Wrap-on-set: give an assigned function OR object the SAME context-preserving wrapper
 				// construction api.add()/child-adoption uses, so its methods get working self/context AND
 				// its nested terminal values are permission read-gated exactly like a build-mounted leaf
@@ -15065,7 +17301,7 @@ export class UnifiedWrapper extends ComponentBase {
 						stored = wrapped;
 					}
 				}
-				Object.defineProperty(wrapper, prop, {
+				Objects.defineProperty(wrapper, prop, {
 					value: stored,
 					writable: false,
 					enumerable: true,
@@ -15111,9 +17347,9 @@ export class UnifiedWrapper extends ComponentBase {
 		 */
 		const definePropertyTrap = (target, prop, descriptor) => {
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (!Array.isArray(arrayImpl) || arrayImpl === target) {
+			if (!Arrays.isArray(arrayImpl) || arrayImpl === target) {
 				if (!Reflect.defineProperty(target, prop, descriptor)) return false;
-				if (Array.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
+				if (Arrays.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
 				return true;
 			}
 			// A key of the module's own array is defined on that array; a composed node's other members (a sibling file,
@@ -15185,10 +17421,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// does any key a non-extensible target holds once a reload has put another array in its place: the
 			// proxy may not report deleting what that target keeps.
 			const arrayImpl = wrapper.____slothletInternal.impl;
-			if (Array.isArray(arrayImpl) && runtime_isFixedOnTarget(target, prop)) return false;
+			if (Arrays.isArray(arrayImpl) && runtime_isFixedOnTarget(target, prop)) return false;
 			// A sealed array member holds its members on its shell (see preventExtensions): a configurable one is
 			// deleted from both the shell and the module's array, as deleting it from the array itself would.
-			if (Array.isArray(arrayImpl) && Array.isArray(target) && !Reflect.isExtensible(target) && hasOwn(target, prop)) {
+			if (Arrays.isArray(arrayImpl) && Arrays.isArray(target) && !Reflect.isExtensible(target) && hasOwn(target, prop)) {
 				if (!Reflect.getOwnPropertyDescriptor(target, prop).configurable) return false;
 				const holder = runtime_arrayKeyHolder(arrayImpl, prop);
 				if (hasOwn(holder, prop) && !Reflect.deleteProperty(holder, prop)) return false;
@@ -15196,7 +17432,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (hasOwn(wrapper, prop)) {
 					// A named member's held node is retired, as it is on the ordinary path below; a position's is only
 					// a cache of an element that may have moved (#602).
-					if (!runtime_isPosition(prop)) resolveWrapper(Object.getOwnPropertyDescriptor(wrapper, prop).value)?.___invalidate();
+					if (!runtime_isPosition(prop)) resolveWrapper(Objects.getOwnPropertyDescriptor(wrapper, prop).value)?.___invalidate();
 					delete wrapper[prop];
 				}
 				return true;
@@ -15221,16 +17457,22 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				return false;
 			}
+			// A node built from a copy of a module's own object deletes the member from that object too, as deleting it
+			// from the object does (#746); a member the object holds non-configurably stays, and so does the node's.
+			// The framework's own removals (a mount taken off the node) change only the node.
+			const moduleObject = isInternal || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+			if (moduleObject !== null && hasOwn(moduleObject, prop) && !Reflect.deleteProperty(moduleObject, prop)) return false;
 			// Remove from _impl if it's an object, before anything is retired: the backing value may refuse (its own
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
 			// A composed array node's own elements are the module's array's: deleting them from its layer only hides them.
-			const deleteFrom = Array.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
+			const deleteFrom = Arrays.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
 			if (deleteFrom && typeof deleteFrom === "object" && prop in deleteFrom && !Reflect.deleteProperty(deleteFrom, prop)) {
 				return false;
 			}
-			// A deleted key is no longer a user assignment to preserve across adoption (#543).
+			// A deleted key is no longer a user assignment to preserve across adoption (#543), nor one defined read-only.
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
+			wrapper.____slothletInternal.readOnlyKeys?.delete(prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
 			if (isOwnMember) {
 				const childWrapper = wrapper[prop];
@@ -15238,10 +17480,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// An array's element wrapper is only a cache of the element (#602): an array method deleting
 				// an index (`pop`, `shift`, `splice`) may have moved that element to another index, so the
 				// cache is dropped without invalidating the element's wrapper.
-				if (childWrapperRaw && !(Array.isArray(wrapper.____slothletInternal.impl) && runtime_isPosition(prop))) {
+				if (childWrapperRaw && !(Arrays.isArray(wrapper.____slothletInternal.impl) && runtime_isPosition(prop))) {
 					childWrapperRaw.___invalidate();
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				const descriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// Wrapper-owned props are always configurable; non-configurable descriptor branch is never reached.
 				/* v8 ignore next */
 				if (descriptor?.configurable) {
@@ -15259,7 +17501,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Remove from proxy target. An array-backed wrapper's target is the array it was built over; the
 			// current array (deleted from above) is the one that counts, and a replaced one is left alone.
-			if (!Array.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
+			if (!Arrays.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
 
 			return true;
 		};
@@ -15325,7 +17567,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
 				/* v8 ignore next */
-				return Promise.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
+				return Promises.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
 					if (!wrapper.____slothletInternal.state.materialized) {
 						// Materialization resolved without marking the wrapper as materialized —
 						// a defensive guard against corrupted internal state; unreachable in practice.
@@ -15403,9 +17645,14 @@ export class UnifiedWrapper extends ComponentBase {
 		const heldPrototype = () => {
 			const internal = wrapper.____slothletInternal;
 			const impl = internal.impl;
-			if (Array.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			// A node of a built-in data object fronts it as data, so `instanceof Map` holds of it as of the object.
+			if (runtime_holdsDataKind(impl)) return Reflect.getPrototypeOf(impl);
+			// A node fronting a module's own object holds that object's prototype, one set on it since included (#757).
+			const moduleObject = runtime_moduleObjectOf(wrapper);
+			if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
 			const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter));
-			return isLiveIdentity && impl && typeof impl === "object" ? Object.getPrototypeOf(impl) : null;
+			return isLiveIdentity && impl && typeof impl === "object" ? Objects.getPrototypeOf(impl) : null;
 		};
 		/**
 		 * The prototype the node reports to whoever asks now (#667), by `Object.getPrototypeOf` and, for an object node,
@@ -15418,7 +17665,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const reportedPrototype = (target, takeKept) => {
 			const impl = wrapper.____slothletInternal.impl;
 			// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
-			if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
+			if (Arrays.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
 			if (!Reflect.isExtensible(target)) {
 				// A sealed node reports its shell's prototype to every reader, as the invariants require: the module's own
 				// when the node is one of its emitters, as the view its shell holds, so reaching it is checked as a call of the
@@ -15459,7 +17706,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return runtime_emitterPrototypeForReader(wrapper, prototype, runtime_selfModuleReader(wrapper.slothlet) ?? kept?.reader ?? null);
 			}
 			while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
-				prototype = Object.getPrototypeOf(prototype);
+				prototype = Objects.getPrototypeOf(prototype);
 			return runtime_withheldPrototype(wrapper, prototype);
 		};
 		const sealShell = (target) => {
@@ -15478,7 +17725,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// shell's own `length` is a plain value the proxy invariants pin once it is sealed, so it takes
 				// the array's length now; it is the one member every reader sees as a value (#609).
 				const array = wrapper.____slothletInternal.impl;
-				if (Array.isArray(target) && Array.isArray(array)) {
+				if (Arrays.isArray(target) && Arrays.isArray(array)) {
 					// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
 					if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
 					// A shell whose `length` is already read-only (an export with a fixed length) holds the array's.
@@ -15503,13 +17750,14 @@ export class UnifiedWrapper extends ComponentBase {
 					);
 				} else if (typeof array === "function") Reflect.setPrototypeOf(target, runtime_functionNodePrototype(wrapper, array));
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
+				const frontsModuleObject = !Arrays.isArray(target) && runtime_moduleObjectOf(wrapper) !== null;
 				for (const key of keys) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
 					// The shell's inspect hook stays the shell's own (see runtime_defineProxyInspect): the node holds no member
 					// there to fix in its place, so an object node frozen with it read the hook as `undefined` (#667).
 					if (
 						key === util.inspect.custom &&
-						(Array.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
+						(Arrays.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
 					)
 						continue;
 					const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
@@ -15517,22 +17765,26 @@ export class UnifiedWrapper extends ComponentBase {
 					// A data member is held as data, so the sealed node reports and freezes as an object of its own would;
 					// a writable one is not pinned, and reads keep going through the node. An accessor the module's
 					// array holds stays an accessor that reads and writes through the node.
-					const isArrayAccessor = Array.isArray(target) && !("value" in descriptor);
+					// So does an accessor of a module's own object the node fronts, as freezing the object keeps it one (#757).
+					const isArrayAccessor = (Arrays.isArray(target) || frontsModuleObject) && !("value" in descriptor);
 					Reflect.defineProperty(
 						target,
 						key,
 						isArrayAccessor
 							? {
-									get: () => node[key],
-									set: (value) => {
-										node[key] = value;
-									},
+									get: frontsModuleObject && typeof descriptor.get !== "function" ? undefined : () => node[key],
+									set:
+										frontsModuleObject && typeof descriptor.set !== "function"
+											? undefined
+											: (value) => {
+													node[key] = value;
+												},
 									enumerable: descriptor.enumerable,
 									configurable: true
 								}
 							: {
 									value: runtime_shellValue(wrapper, key),
-									writable: Array.isArray(target) ? descriptor.writable !== false : true,
+									writable: Arrays.isArray(target) ? descriptor.writable !== false : true,
 									enumerable: descriptor.enumerable,
 									configurable: true
 								}
@@ -15546,12 +17798,14 @@ export class UnifiedWrapper extends ComponentBase {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => {
-				const value = getTrap(target, prop, receiver);
+				// The access a view is making into this node, taken as the trap starts (see runtime_beginAccess).
+				const access = runtime_takeAccess(wrapper);
+				const value = getTrap(target, prop, receiver, access);
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
-				return runtime_bindCapturedIdentity(wrapper, prop, value);
+				return runtime_bindCapturedIdentity(wrapper, prop, value, access);
 			},
 			apply: applyTrap,
 			construct: constructTrap,
@@ -15560,11 +17814,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// get trap binds it, so its description and a read of it give the same value (#667). A member fixed read-only on
 			// a frozen shell is described as the shell holds it (proxy invariant), as it is read.
 			getOwnPropertyDescriptor: (target, prop) => {
-				const descriptor = getOwnPropertyDescriptorTrap(target, prop);
+				const access = runtime_takeAccess(wrapper);
+				const descriptor = getOwnPropertyDescriptorTrap(target, prop, true, access);
 				if (!descriptor || !("value" in descriptor)) return descriptor;
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return descriptor;
-				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value);
+				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value, access);
 				return bound === descriptor.value ? descriptor : { ...descriptor, value: bound };
 			},
 			ownKeys: ownKeysTrap,
@@ -15595,7 +17850,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// An accessor defined at runtime runs as the node's module, as an exported one does (#597).
 				descriptor = runtime_adoptDefinedAccessor(wrapper, descriptor);
 				// An array member defines on its current array (#602), unless the position lies past a read-only length.
-				if (Array.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
+				if (Arrays.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
@@ -15615,11 +17870,29 @@ export class UnifiedWrapper extends ComponentBase {
 						};
 					}
 				}
-				// Both are checked before either changes, so a refusal by one leaves the other as it was.
-				if ((bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) || !runtime_canDefine(wrapper, prop, descriptor))
+				// A node built from a copy of a module's own object defines the member on that object too, as the same
+				// definition of the object does (#746).
+				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+				// All are checked before any changes, so a refusal by one leaves the others as they were.
+				if (
+					(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
+					!runtime_canDefine(wrapper, prop, descriptor) ||
+					(moduleObject !== null && !runtime_canDefine(moduleObject, prop, descriptor))
+				)
 					return false;
+				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, descriptor)) return false;
+				if (moduleObject !== null && typeof prop === "string") runtime_moduleObjectKeys(moduleObject).add(prop);
+				// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
+				// node's own store keeps every member read-only, so what was asked for is remembered beside it.
+				const wasData = hasOwn(wrapper, prop) && "value" in Reflect.getOwnPropertyDescriptor(wrapper, prop);
+				const wasWritable = wasData && runtime_reportsWritable(wrapper, prop);
 				if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
-				return Reflect.defineProperty(wrapper, prop, descriptor);
+				if (!Reflect.defineProperty(wrapper, prop, descriptor)) return false;
+				const isAccessor = "get" in descriptor || "set" in descriptor;
+				const staysWritable = !isAccessor && ("writable" in descriptor ? descriptor.writable === true : wasWritable);
+				if (isAccessor || staysWritable) internal.readOnlyKeys?.delete(prop);
+				else (internal.readOnlyKeys ??= new Set()).add(prop);
+				return true;
 			},
 			deleteProperty: deletePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
@@ -15656,6 +17929,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// Sealing or freezing a node changes what its owner may write to it, so a module may do it only to a
 				// node it owns (#625). Checked before anything is sealed: a refused freeze leaves the node as it was.
 				runtime_assertOwnedWrite(wrapper, null);
+				// A node fronting a module's own object closes that object too, as closing the object does (#757): the
+				// object refusing it refuses it here, before the node changes. Composing never changes a module's value.
+				const moduleObject = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
 				const syncing = internalState.integritySyncing;
@@ -15669,6 +17946,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// A module may freeze or seal its own array after the node was read; the node reports what the array is.
 			isExtensible: (target) => {
 				runtime_syncArrayIntegrity(wrapper, target);
+				runtime_followModuleIntegrity(wrapper, target);
 				return Reflect.isExtensible(target);
 			},
 			// A prototype set on an array member is set on its array, under a composed node's layer, which refuses
@@ -15677,7 +17955,14 @@ export class UnifiedWrapper extends ComponentBase {
 				// A prototype set on a node is set on its module's value: a module may do it only to a node it owns (#625).
 				runtime_assertOwnedWrite(wrapper, null);
 				const impl = wrapper.____slothletInternal.impl;
-				if (!Array.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
+				// A node fronting a module's own object sets that object's prototype, which the node reports (#757); a
+				// closed node keeps the one its shell holds, as the closed object does.
+				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				if (moduleObject !== null && !Arrays.isArray(impl)) {
+					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+					return Reflect.setPrototypeOf(moduleObject, runtime_unwrapSelfView(proto));
+				}
+				if (!Arrays.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
 			},
@@ -15685,8 +17970,8 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
-		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
-		if (Array.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
+		wrapper.____slothletInternal.proxy = new NativeProxy(proxyTarget, proxyTraps);
+		if (Arrays.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
 		else runtime_adoptObjectIntegrity(wrapper);
 		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
 		// replacement from the same handler and re-points these traps at it (#533).
@@ -15719,7 +18004,7 @@ export class UnifiedWrapper extends ComponentBase {
 // method declared in the class body would have produced. A plain assignment
 // would instead create an enumerable property, diverging from class-method
 // semantics.
-Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
+Objects.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
 	value: UnifiedWrapper.prototype.____inspectCustom,
 	writable: true,
 	enumerable: false,
@@ -15738,9 +18023,9 @@ Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
  * isClassInstance({ a: 1 }); // false
  */
 export function isClassInstance(value) {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto !== null && proto !== Object.prototype;
+	if (!value || typeof value !== "object" || Arrays.isArray(value)) return false;
+	const proto = Objects.getPrototypeOf(value);
+	return proto !== null && proto !== Objects.prototype;
 }
 
 /**
@@ -15829,7 +18114,7 @@ export function readApiMember(container, key) {
 	// A plain object (the api root while it is built) holds its members as own properties; what it
 	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
 	// node would write the mount into the global builtin.
-	if (!wrapper) return Object.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
+	if (!wrapper) return Objects.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
 	// The framework reads its own tree, often while a module's call is executing (that module's own
 	// `api.add`), and works on the node itself: a read under a module's identity hands back that module's
 	// captured view, which is not the node, so the mount would merge the node into itself and write to it

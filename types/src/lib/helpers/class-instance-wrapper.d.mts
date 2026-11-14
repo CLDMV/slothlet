@@ -1,4 +1,23 @@
 /**
+ * Set how an instance of a module's own class is told from one of the language's or Node's own (a `URL`, a
+ * `Response`, an `Intl.NumberFormat`), which needs no context and whose methods work only on the object itself.
+ * @package
+ * @param {function(object): boolean} check - Answers true for an instance of a class a module wrote.
+ * @returns {void}
+ * @example
+ * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
+ */
+export function setModuleInstanceCheck(check: (arg0: object) => boolean): void;
+/**
+ * The wrapper of the module that created the instance behind a Proxy {@link runtime_wrapClassInstance} produced.
+ * @package
+ * @param {*} value - Any value.
+ * @returns {object|null} The creating module's wrapper, or null for any other value or when none is known.
+ * @example
+ * runtime_classInstanceCreator(wrappedInstance); // the wrapper of the leaf that returned it
+ */
+export function runtime_classInstanceCreator(value: any): object | null;
+/**
  * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
  * @package
  * @param {*} value - The value.

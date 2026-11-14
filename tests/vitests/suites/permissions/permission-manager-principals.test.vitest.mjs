@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-13T21:50:15-08:00 (1794635415)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { PermissionManager } from "#handlers/permission-manager";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
 
 const CALLER = "client.app.files";
 const TARGET = "project.files.list";
@@ -32,15 +33,17 @@ const TARGET = "project.files.list";
  * Build a standalone manager with the given rules.
  * @param {object[]} rules - Config rules.
  * @param {object} [extra] - Extra permission config.
+ * @param {object} [clock] - The instance's clock, as an instance holds it; omitted, the manager reads the clock slothlet loaded with.
  * @returns {{ manager: PermissionManager, debug: import("vitest").Mock }} The manager and its debug spy.
  */
-const makeManager = (rules = [], extra = {}) => {
+const makeManager = (rules = [], extra = {}, clock = undefined) => {
 	const debug = vi.fn();
 	const manager = new PermissionManager({
 		config: { permissions: { enabled: true, defaultPolicy: "deny", rules, ...extra } },
 		handlers: {},
 		debug,
-		SlothletError
+		SlothletError,
+		clock
 	});
 	return { manager, debug };
 };
@@ -200,7 +203,8 @@ describe("PermissionManager > principals (#459)", () => {
 	it("maxAge expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
 		vi.useFakeTimers();
 		try {
-			({ manager } = makeManager([REQUIRES_ROLES]));
+			// The manager reads the clock it is given, as an instance's clock hands it the (fake) Date.now.
+			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
 			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 1000 });
 			await manager.resolvePrincipals([{ name: "roles", identityKey: "u1" }]);
 			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(true);
@@ -217,7 +221,7 @@ describe("PermissionManager > principals (#459)", () => {
 	it("expired identities are pruned once a maxAge principal's cache grows past the threshold", async () => {
 		vi.useFakeTimers();
 		try {
-			({ manager } = makeManager([REQUIRES_ROLES]));
+			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
 			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 10 });
 			await manager.resolvePrincipals(Array.from({ length: 1025 }, (_, i) => ({ name: "roles", identityKey: `u${i}` })));
 			vi.advanceTimersByTime(20);

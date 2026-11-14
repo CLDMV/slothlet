@@ -23,6 +23,29 @@ export function normalizeHookConfig(hook?: boolean | string | Object): {
     pin: boolean;
 };
 /**
+ * Expand the `permissions` shorthand forms to the object form.
+ *
+ * `"on"`, `"off"` and `"disabled"` mean `{ mode }`; `true` means `"on"`; `false` and any other falsy value mean no `permissions` config (off). An object, `null`
+ * and `undefined` come back as they are. Any other string, and any other value that is not an object, comes back as
+ * `undefined` with `valid: false`, so a bare value never quietly reads as a different mode than it names.
+ *
+ * Exported as a standalone function because the PermissionManager is constructed during `_initializeComponents`,
+ * before `transformConfig` runs, and must read the same shorthand from the raw config. It does not throw: the
+ * config normalizer reports the invalid value as `INVALID_CONFIG` right after.
+ *
+ * @param {*} permissions - Raw `permissions` option.
+ * @returns {{value: (object|null|undefined), valid: boolean}} The object form (or the absent value), and whether the input was a form `permissions` accepts.
+ * @public
+ *
+ * @example
+ * expandPermissionsShorthand("disabled"); // => { value: { mode: "disabled" }, valid: true }
+ * expandPermissionsShorthand("nope"); // => { value: undefined, valid: false }
+ */
+export function expandPermissionsShorthand(permissions: any): {
+    value: (object | null | undefined);
+    valid: boolean;
+};
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -71,6 +94,18 @@ export class Config extends ComponentBase {
      * @public
      */
     public normalizeMode(mode: string): string;
+    /**
+     * Validate the `helpers` option: how often a helper file (a file an api file imports that is no api file itself)
+     * is loaded.
+     * @param {*} helpers - The option as given.
+     * @returns {"instance"|"module"} `"instance"` (the default: one copy per instance, shared by every api file
+     *   importing it) or `"module"` (one copy per importing api file).
+     * @throws {SlothletError} INVALID_CONFIG for any other value.
+     * @public
+     * @example
+     * config.normalizeHelpers(undefined); // "instance"
+     */
+    public normalizeHelpers(helpers: any): "instance" | "module";
     /**
      * Normalize mutations configuration for API modification control
      * @param {Object} mutations - Mutations config object with add/remove/reload properties
@@ -295,7 +330,7 @@ export class Config extends ComponentBase {
     /**
      * Normalize permissions configuration.
      *
-     * @param {object|null} [permissions] - Raw permissions config from user.
+     * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
      * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
      * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
      *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
@@ -325,14 +360,20 @@ export class Config extends ComponentBase {
      *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
      *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
      *   call runs it.
+     * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+     *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+     *   wraps nothing and tells every definer from the stack.
+     * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+     *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
+     *   a whole number lists arrays of up to that many kilobytes.
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
      *
      * @example
      * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, rules: [...] }
+     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
      */
-    normalizePermissions(permissions?: object | null): object | null;
+    normalizePermissions(permissions?: object | string | boolean | null): object | null;
     #private;
 }
 import { ComponentBase } from "#factories/component-base";

@@ -1,57 +1,3 @@
-/**
- *
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/platform.mjs
- *	@Date: 2026-05-29T22:02:43-07:00 (1780117363)
- *	@Author: Nate Corcoran <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T03:44:57-08:00 (1793706297)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- *
- */
-/**
- * @fileoverview Single source of truth for Node.js-vs-browser host differences.
- * @module @cldmv/slothlet/helpers/platform
- * @internal
- *
- * @description
- * Slothlet runs in two hosts: Node.js (full filesystem access) and browser /
- * Electron-renderer "browser mode" (no `node:*` builtins, manifest-based loading).
- * Rather than scatter `typeof process` checks and gated `await import("node:*")`
- * blocks across a dozen modules (#123), every host difference is decided ONCE here
- * and the rest of the codebase imports the resolved builtins (or browser shims)
- * plus `isNode` via plain static imports — no `node:*` specifier ever enters the
- * static-import graph a browser must parse.
- *
- * The builtins are pulled in through a single top-level-await `import()` block
- * guarded by `isNode`. In a browser the same exports resolve to `null` (for the
- * Node-only ones, whose every call site is `isNode`-guarded) or to a minimal shim
- * (`util`, which is consumed in both hosts for `inspect` / `types.isProxy`).
- *
- * Anything that genuinely cannot run outside Node and is never reachable from a
- * browser module graph (TypeScript compilation, type generation, manifest
- * generation) keeps its own direct `node:*` imports — routing those through here
- * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
- *
- * ## Browser-only branches & coverage (policy)
- * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
- * i18n browser paths, the live-mode null-ALS arm) — are UNREACHABLE under the Node coverage run:
- * `process.versions.node` is always truthy there, even in the `platform:"browser"` node-side suites.
- *
- * They are now genuinely covered+counted by a **vitest browser-mode** run (real headless Chromium,
- * Playwright provider — `.configs/vitest.browser.config.mjs`, `tests/browser/*.browser.test.mjs`).
- * Because that run uses the SAME `@vitest/coverage-v8` provider over vite-transformed source as the
- * node run, the two `coverage-final.json` maps align and merge cleanly
- * (`tools/coverage/merge-browser-coverage.mjs`, wired as `npm run coverage:all`). An earlier merge was
- * rejected, but that was of the raw-source Playwright *smoke* (`npm run test:browser`), whose importmap
- * serves raw `src/` — those maps don't align with node's. The vitest-browser run does, which is what
- * makes the merge correct. Only arms unreachable in BOTH hosts (e.g. an exotic non-Node host with no
- * `process`/`navigator`) keep a precise v8 ignore-next comment. The smoke remains as a raw-importmap
- * load check (the path a real consumer uses), not the coverage justification.
- */
 export const isNode: boolean;
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
@@ -117,22 +63,28 @@ export function loadJson(ref: string): object | null | Promise<object | null>;
  * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
  * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
  * macrotask primitive the host offers, in order:
- * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
- *   installed by `helpers/scheduler-context` is the one used;
+ * - `setImmediate` (Node);
  * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
  * - `setTimeout(fn, 0)` as the last resort.
  *
- * All three run `fn` only after the current call stack and every queued microtask have drained,
- * which is the guarantee callers rely on.
+ * The schedulers are the host's as they were when slothlet loaded, and `fn` is pinned to its caller as the
+ * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
+ * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
  *
  * @param {Function} fn - Callback to run.
+ * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
+ *   schedulers to pick from: the host's own unless a test hands in others.
  * @returns {void}
  * @internal
  *
  * @example
  * scheduleMacrotask(() => patchAfterAssignment());
  */
-export function scheduleMacrotask(fn: Function): void;
+export function scheduleMacrotask(fn: Function, hosts?: {
+    setImmediate: Function | undefined;
+    MessageChannel: Function | undefined;
+    setTimeout: Function;
+}): void;
 /**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
  * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run

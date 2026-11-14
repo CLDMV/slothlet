@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,6 +38,19 @@
 
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	NativeProxy,
+	Map,
+	WeakMap,
+	WeakSet,
+	Symbol,
+	Dates,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
@@ -97,7 +110,7 @@ const CEILING_TRIE = { next: new WeakMap(), chain: null };
  * @type {ReadonlyArray<object>}
  * @private
  */
-const NO_CEILING = Object.freeze([]);
+const NO_CEILING = Objects.freeze([]);
 
 /**
  * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
@@ -152,7 +165,7 @@ export function combineCeilings(...parts) {
 		node = child;
 	}
 	if (!node.chain) {
-		node.chain = Object.freeze(members);
+		node.chain = Objects.freeze(members);
 		CEILING_CHAINS.add(node.chain);
 	}
 	return node.chain;
@@ -231,7 +244,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !Object.prototype.hasOwnProperty.call(owners, ownerKey)) return;
+	if (!owners || !Objects.prototype.hasOwnProperty.call(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
@@ -309,9 +322,9 @@ const PROTECTED_VIEW_CACHE = Symbol("slothlet.protectedViewCache");
  */
 function isWrappableContextValue(value) {
 	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value)) return true;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	if (Arrays.isArray(value)) return true;
+	const proto = Objects.getPrototypeOf(value);
+	return proto === Objects.prototype || proto === null;
 }
 
 /**
@@ -359,7 +372,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	const cached = cache.get(value);
 	if (cached) return cached;
 	const view = markSlothletProxy(
-		new Proxy(value, {
+		new NativeProxy(value, {
 			get(target, prop, receiver) {
 				// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
 				return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
@@ -401,7 +414,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  */
 export function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && Object.prototype.hasOwnProperty.call(owners, prop)) {
+	if (owners && Objects.prototype.hasOwnProperty.call(owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];
@@ -427,11 +440,11 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
 			instanceID,
-			availableInstances: Array.from(instances.keys()).join(", ") || "none"
+			availableInstances: Arrays.from(instances.keys()).join(", ") || "none"
 		});
 	}
 	const childStore = {
-		instanceID: `${instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+		instanceID: `${instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`,
 		context: captured.context,
 		self: baseStore.self,
 		config: baseStore.config,
@@ -446,7 +459,7 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		__contextOwners: captured.contextOwners
 	};
 	if (captured.trusted) {
-		Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
 	}
 	return childStore;
 }

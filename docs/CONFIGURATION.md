@@ -14,6 +14,7 @@ const api = await slothlet({
 	// API build
 	mode: "eager", // "eager" | "lazy"
 	runtime: "async", // "async" | "live"
+	helpers: "instance", // "instance" | "module" — one copy of each helper file per instance, or per importing api file
 	apiDepth: Infinity, // number | Infinity
 	hidden: [], // string | string[] — globs hiding files/folders from the API
 	scanHiddenFolders: false, // DEPRECATED escape hatch — scan "."/"__"-prefixed folders (removed in v4)
@@ -45,6 +46,9 @@ const api = await slothlet({
 	diagnostics: false,
 	tracking: false,
 	backgroundMaterialize: false,
+
+	// Time (host only) — see the `clock` section
+	clock: undefined, // { now, setTimeout, clearTimeout } — each member optional
 
 	// i18n (dev-facing; process-global)
 	i18n: { language: "en-us" },
@@ -127,6 +131,53 @@ See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for context runtime details
 
 ---
 
+### `helpers`
+
+**Type**: `"instance"` | `"module"`
+**Default**: `"instance"`
+
+How often an instance loads a **helper file**: a file an api file imports by a relative path (or from its own package) that is no api file itself, such as `api/orders.mjs` importing `../lib/queue.mjs`.
+
+- **`"instance"`** - Once per instance. Every api file importing the helper gets the same module, so state the helper keeps at module level (a cache, a counter, a queue) is shared between them, as in any JavaScript program. See [Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
+- **`"module"`** - Once per importing api file. Each api file gets its own copy of every helper it imports, directly or through other helpers. An api file mounted twice with `api.slothlet.api.add()` gets a copy per mount.
+
+```javascript
+// lib/tally.mjs
+let count = 0;
+export const bump = () => ++count;
+
+// api/one.mjs and api/two.mjs both:  import { bump } from "../lib/tally.mjs";  export const next = () => bump();
+```
+
+```javascript
+const shared = await slothlet({ base: "./api" });
+[await shared.one.next(), await shared.two.next()]; // [1, 2] - one count
+
+const apart = await slothlet({ base: "./api", helpers: "module" });
+[await apart.one.next(), await apart.two.next()]; // [1, 1] - a count each
+```
+
+**Why turn it on.** A helper file has no api path, so with one shared copy the permission system can only say that the helper's code belongs to the api files importing it, and holds it to all of them where it cannot tell more (see [a helper file's code](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). With a copy per api file, each copy's code is known to be that one file's: a helper function a leaf hands out, and a timer or queue the helper starts when it loads, run as the module of the api file the copy was loaded for, under `permissions.attribution: "fast"` as well.
+
+**What it costs.**
+
+- **Helper state is no longer shared between api files.** A cache, connection pool, registry or queue kept in a helper becomes one per importing api file. Programs that rely on api files sharing a helper's state must keep the default, or move that state to a package or to slothlet's `context`.
+- **Memory and load time.** Each helper is compiled and evaluated once per api file that imports it, and whatever it starts when it loads (timers, connections) starts once per copy.
+- `instanceof` between copies fails: a class declared in a helper is a different class in each copy.
+
+**Limits.**
+
+- **CommonJS helpers** are copied per api file too, so their state is separate, but a CommonJS file's stack frames carry only its path, not which copy is running. For permissions a CommonJS helper's own code therefore stays held to every api file that loads the helper.
+- **Packages are never copied**: a file in another package (`node_modules`, or a folder with its own named `package.json`) is one module for the whole process, as before.
+- **Browser builds are not affected.** Without Node's resolve hook or the vite plugin (`slothletInstanceImports()`), the browser loads what a file imports itself, so there is one copy and the every-importer rule applies. The option is accepted and does nothing there.
+- A partial reload re-imports the reloaded api files, which link against their existing helper copies, as with `"instance"`.
+
+```javascript
+const api = await slothlet({ base: "./api", helpers: "module" });
+```
+
+---
+
 ### `apiDepth`
 
 **Type**: `number` | `Infinity`
@@ -148,7 +199,7 @@ Setting `Infinity` (default) scans all subdirectories.
 **Type**: `string` | `string[]`
 **Default**: none
 
-Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any depth), `?` (one char), `{a,b}` (alternation), `!` (negation).
+Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any number of segments, none included: `tools/**` names `tools` itself, a root file `tools.mjs` included, as well as everything in the folder), `?` (one char), `{a,b}` (alternation), `!` (negation).
 
 > **Match the on-disk name, not the API key.** Globs are tested against the raw directory/file name as it appears on disk, _before_ it is sanitized into a JavaScript-safe API property. A folder `draft-notes` (surfaced as `api.draftNotes`) is hidden with `hidden: "draft-notes"`, not `hidden: "draftNotes"`.
 
@@ -317,7 +368,30 @@ const api = await slothlet({
 
 ## Permissions
 
-The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). One of them changes what a leaf's return looks like, so it is described here too.
+The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). Two of them change what a module is handed, so they are described here too.
+
+`permissions` may also be a bare mode: `"on"`, `"off"` or `"disabled"` is the same as `{ mode }`, `true` is `"on"` and `false` is no block. Any other string or non-object value is an `INVALID_CONFIG`.
+
+With no `permissions` block the system is off: no call, read or event rule is evaluated. That includes the event levels ([EVENTS.md](./EVENTS.md#delivery-levels)): every `self.slothlet.event.on()` subscription is delivered at `allow`, with its payload. Under a `permissions` block the event rules apply, and a subscriber that matches none gets `permissions.events.default` (built-in: `notify`, the trigger without the payload).
+
+### `permissions.typedArrayMembers`
+
+**Type**: `boolean | number`
+**Default**: `false`
+
+While the permission system is on, what one module hands another reaches it as a view, except values that hold nothing but their own bytes: a typed array or `Buffer` is handed over as itself, because native code needs the array. A member a module stored on the array under a string key (`bytes.item = instance`) can only be found by listing the array's keys, which lists every index (about 14 ms for 64 KB, 400 ms for 1 MB, on each crossing), so by default it is not looked for and rides along.
+
+| Value            | A typed array or `Buffer` one module hands another                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `false`          | handed over as itself, its keys never listed                                                                     |
+| `true`           | its keys are listed; one holding a member of its own is handed over as a view                                    |
+| a whole number N | listed when it is N kilobytes or smaller (`byteLength <= N * 1024`); a larger one is handed over as with `false` |
+
+Anything else is rejected with `INVALID_CONFIG`.
+
+```javascript
+const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", typedArrayMembers: 64, rules } });
+```
 
 ### `permissions.attribution`
 
@@ -332,6 +406,17 @@ A `self.*` call is allowed only when both the code making it (its definer: the l
 | `"fast"`    | the original itself: `===` holds and calls are plain calls                                | refused with `PERMISSION_DENIED`                                                                                                                                                                |
 
 Wherever the stack names the definer, both use it. Plain data comes back as itself under both, unsearched, and with the permission system not on nothing is wrapped or checked under either. Any other value is rejected with `INVALID_CONFIG`.
+
+**`"fast"` together with `provenance: false` keeps no author check.** `provenance` reads who wrote code from the stack and `"precise"` records it on what a module hands out; with both off, every function runs as whoever runs it. It is the one combination in which the two values refuse different things:
+
+```javascript
+// rules: defaultPolicy "allow", { caller: "author.**", target: "vault.**", effect: "deny" }
+// author returns () => self.vault.get(); runner, which may read the vault, runs it.
+//
+// { attribution: "precise", provenance: false }  → PERMISSION_DENIED  (the function records author)
+// { attribution: "fast",    provenance: false }  → "SECRET"           (the function runs as runner)
+// either value with provenance on (the default)  → PERMISSION_DENIED  (the stack names author)
+```
 
 ```javascript
 const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny", attribution: "fast", rules } });
@@ -566,6 +651,47 @@ const api = await slothlet({
 ```
 
 See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
+
+---
+
+### `clock`
+
+**Type**: `{ now?: () => number, setTimeout?: Function, clearTimeout?: Function }`
+**Default**: none (the functions slothlet loaded with)
+
+The functions an instance reads the time with and starts its deferred work with. Every member is optional, and a member you leave out is the copy slothlet took when it loaded. Anything that is not an object whose given members are functions throws `INVALID_CONFIG`.
+
+slothlet takes `Date.now` and the timers when it loads, so a script (or a test runner) that replaces them afterwards does not move an instance. That is deliberate: a principal's `maxAge` is measured on that clock, and a module that replaced `Date.now` must not be able to stretch it. `clock` is how a host that wants to control time, a test above all, hands an instance its own:
+
+- **`now`** is the time in milliseconds. It stamps the principal cache behind `maxAge` (a value older than `maxAge`, or resolved at a time later than `now()` reports, is stale), the ID a `reload()` gives the instance, the ID of a context run, and every time slothlet records: the `timestamp` of lifecycle events and hook failure sources, the `at` of event metadata, the time a rule or an ownership entry was registered.
+- **`setTimeout`** and **`clearTimeout`**: when you give `setTimeout`, slothlet's own deferred work (the background step of `backgroundMaterialize` and `tracking.materialization`, and the patch of a stack after an api change) runs through it with a delay of `0` instead of on the host's immediate queue, so a host that fakes timers moves it with its own clock. slothlet never cancels a timer it started, so `clearTimeout` is only kept for the host's use of the instance's clock.
+
+The option is read once, when the instance is created, and kept by the instance alone: it is not part of the config the instance reports (`api.slothlet.diag.inspect().config`), a module's manifest, the options of `api.slothlet.api.add()` and `context` cannot supply or replace it, and it carries across `reload()` and `restart()`. Two instances have two clocks.
+
+A clock whose `now` throws makes the call that read it throw. A `now` that answers something that is not a finite number, or that goes backwards, never keeps a principal alive past its `maxAge`: the value is stale.
+
+```javascript
+// Test a principal's maxAge without waiting for it
+let time = 1_000;
+const api = await slothlet({
+	base: "./api",
+	permissions: { defaultPolicy: "deny", rules },
+	clock: { now: () => time }
+});
+api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, maxAge: 10 });
+// ...resolve it, then
+time += 11; // the cached value is now stale, with no real wait
+```
+
+With a test runner's fake timers, install them before creating the instance and hand it the (now fake) functions:
+
+```javascript
+vi.useFakeTimers();
+const api = await slothlet({ base: "./api", clock: { now: Date.now, setTimeout, clearTimeout } });
+await vi.advanceTimersByTimeAsync(10); // moves the instance's clock and its deferred work
+```
+
+Process-wide work that belongs to no instance keeps the functions slothlet loaded with: the TypeScript processor's sweep of old transform folders, frame placement's sampling of the host's scripts, the `@generated` stamp of generated type files, and the cache-busting token of a module import.
 
 ---
 

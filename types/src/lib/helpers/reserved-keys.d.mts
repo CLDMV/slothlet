@@ -54,33 +54,6 @@ export function isFrameworkWriteTarget(pattern: string): boolean;
  */
 export function dataMemberOf(owner: object | Function, key: string | symbol): any;
 /**
- *
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/reserved-keys.mjs
- *	@Date: 2026-10-03T11:18:03-07:00 (1791051483)
- *	@Author: Nate Corcoran <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- *
- */
-/**
- * @fileoverview Framework-reserved property names, as plain Sets in a module with no imports.
- * @module @cldmv/slothlet/helpers/reserved-keys
- * @internal
- *
- * @description
- * `ComponentBase.INTERNAL_KEYS` (`#factories/component-base`) and `IMPL_METADATA_KEYS`
- * (`#handlers/unified-wrapper`) are these exact Set objects. They live here so
- * `helpers/defaults` can build `slothlet.defaults.reservedExports` without loading the wrapper
- * classes, whose import graph reaches `helpers/platform` and its top-level await. index.mjs imports
- * `helpers/defaults` statically and index.cjs loads index.mjs through Node's synchronous
- * require(esm), which rejects any module graph containing top-level await.
- */
-/**
  * Property names reserved by the slothlet wrapper machinery — served as
  * `ComponentBase.INTERNAL_KEYS`; see that static for what each group is used for.
  * @type {Set<string>}

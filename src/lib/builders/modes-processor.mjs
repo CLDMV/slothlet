@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:04:39-07:00 (1791835479)
+ *	@Last modified time: 2026-11-14T09:08:20-08:00 (1794676100)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,6 +39,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { Reflect, Objects, Arrays, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -133,18 +134,18 @@ export class ModesProcessor extends ComponentBase {
 	#addapiMembers(content) {
 		const members = {};
 		if (!isClassInstance(content)) {
-			for (const key of Object.keys(content)) {
-				const descriptor = Object.getOwnPropertyDescriptor(content, key);
+			for (const key of Objects.keys(content)) {
+				const descriptor = Objects.getOwnPropertyDescriptor(content, key);
 				// A getter or setter stays one on the folder's node, run on that node, as copying the member's
 				// descriptor would leave it in plain JavaScript (#585 review).
 				members[key] = descriptor && (descriptor.get || descriptor.set) ? { accessor: descriptor } : { value: content[key] };
 			}
 			return members;
 		}
-		for (let level = content; level && level !== Object.prototype; level = Object.getPrototypeOf(level)) {
-			for (const key of Object.getOwnPropertyNames(level)) {
-				if (key === "constructor" || Object.prototype.hasOwnProperty.call(members, key)) continue;
-				const descriptor = Object.getOwnPropertyDescriptor(level, key);
+		for (let level = content; level && level !== Objects.prototype; level = Objects.getPrototypeOf(level)) {
+			for (const key of Objects.getOwnPropertyNames(level)) {
+				if (key === "constructor" || Objects.prototype.hasOwnProperty.call(members, key)) continue;
+				const descriptor = Objects.getOwnPropertyDescriptor(level, key);
 				if (level === content && !descriptor.enumerable) continue;
 				if (typeof descriptor.value === "function" && isCompositionLayer(content)) {
 					// Through a layer, the instance's method, own or from its class, comes back already called on
@@ -160,7 +161,7 @@ export class ModesProcessor extends ComponentBase {
 							return method.apply(content, args);
 						}
 					}[key];
-					Object.defineProperty(bound, "length", { value: method.length });
+					Objects.defineProperty(bound, "length", { value: method.length });
 					members[key] = { value: bound };
 				} else {
 					// A field or an accessor is read and written through the instance, as the instance itself answers
@@ -327,7 +328,7 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	#accessorToCarry(source, key) {
 		const sourceWrapper = source instanceof UnifiedWrapper ? source : resolveWrapper(source);
-		const descriptor = sourceWrapper ? UnifiedWrapper._memberDescriptor(sourceWrapper, key) : Object.getOwnPropertyDescriptor(source, key);
+		const descriptor = sourceWrapper ? UnifiedWrapper._memberDescriptor(sourceWrapper, key) : Objects.getOwnPropertyDescriptor(source, key);
 		return descriptor && !("value" in descriptor)
 			? { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true }
 			: null;
@@ -344,14 +345,14 @@ export class ModesProcessor extends ComponentBase {
 	 * @private
 	 */
 	#carryWrapperChildren(sourceWrapper, fn) {
-		for (const key of Object.keys(sourceWrapper)) {
+		for (const key of Objects.keys(sourceWrapper)) {
 			// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name like
 			// `toString` or `call` would read as already present and be dropped, while the proxy surface
 			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
-			if (isFrameworkReservedKey(key) || Object.prototype.hasOwnProperty.call(fn, key)) continue;
+			if (isFrameworkReservedKey(key) || Objects.prototype.hasOwnProperty.call(fn, key)) continue;
 			const accessor = this.#accessorToCarry(sourceWrapper, key);
-			Object.defineProperty(fn, key, accessor ?? { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
+			Objects.defineProperty(fn, key, accessor ?? { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
 		}
 	}
 
@@ -380,15 +381,15 @@ export class ModesProcessor extends ComponentBase {
 			isCompositionLayer(moduleWrapper.____slothletInternal.impl) ||
 			extractedImpl === null ||
 			typeof extractedImpl !== "object" ||
-			Object.getPrototypeOf(extractedImpl) !== Object.prototype
+			Objects.getPrototypeOf(extractedImpl) !== Objects.prototype
 		) {
 			return null;
 		}
 		const copy = copyForComposition(composed, { addsMembers: true });
-		for (const key of Object.keys(moduleWrapper)) {
+		for (const key of Objects.keys(moduleWrapper)) {
 			if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(composed, key)) continue;
 			const accessor = this.#accessorToCarry(moduleWrapper, key);
-			if (accessor) Object.defineProperty(copy, key, accessor);
+			if (accessor) Objects.defineProperty(copy, key, accessor);
 			else holdMember(copy, key, moduleWrapper[key]);
 		}
 		return copy;
@@ -405,7 +406,7 @@ export class ModesProcessor extends ComponentBase {
 	#builtinNamedMembers(sourceWrapper) {
 		const members = new Map();
 		for (const key of ["name", "length", "prototype"]) {
-			if (Object.prototype.hasOwnProperty.call(sourceWrapper, key)) members.set(key, sourceWrapper[key]);
+			if (Objects.prototype.hasOwnProperty.call(sourceWrapper, key)) members.set(key, sourceWrapper[key]);
 		}
 		return members;
 	}
@@ -424,7 +425,7 @@ export class ModesProcessor extends ComponentBase {
 	#applyWithBuiltinMembers(setImpl, owner, value, members) {
 		if (!setImpl(value)) return;
 		for (const [key, member] of members) {
-			Object.defineProperty(owner, key, { value: member, writable: false, enumerable: true, configurable: true });
+			Objects.defineProperty(owner, key, { value: member, writable: false, enumerable: true, configurable: true });
 		}
 	}
 
@@ -456,6 +457,38 @@ export class ModesProcessor extends ComponentBase {
 			throw thenableExportError(this.slothlet.SlothletError, location);
 		}
 		return value;
+	}
+
+	/**
+	 * The folder a subdirectory's level is built from (#743). A folder whose only entry is a folder of the same name is
+	 * one level, not two: `e/e/x.mjs` is `api.e.x`. The outer folder is dropped and the inner one stands for it, as
+	 * often as that holds (`t/t/t/x.mjs` is `api.t.x`). With anything else beside the inner folder (a file, another
+	 * folder) both levels stay: `c/z.mjs` + `c/c/x.mjs` is `api.c.z` and `api.c.c.x`. A FILE named after its folder is
+	 * Rule 1's business, not this one's.
+	 * @param {{name: string, path?: string, children: {files: Array, directories: Array}}} subDir - A subdirectory's scan node.
+	 * @returns {{name: string, path?: string, sourceName?: string, children: {files: Array, directories: Array}}} The
+	 *   scan node to build from: `subDir` itself, or the innermost same-named folder, with `sourceName` set to its
+	 *   path below the folder `subDir` sits in.
+	 * @private
+	 *
+	 * @example
+	 * this.#collapseSameNamedFolder(scanOf("e/")).path; // ".../e/e" when e/ holds only e/
+	 */
+	#collapseSameNamedFolder(subDir) {
+		// Rule 22 (F09) - C26: Same-Named Folder Deduplication
+		const sanitize = this.slothlet.helpers.sanitize;
+		const name = sanitize.sanitizePropertyName(subDir.name);
+		let current = subDir;
+		let sourceName = subDir.name;
+		for (;;) {
+			const { files, directories } = current.children;
+			if (files.length !== 0 || directories.length !== 1) break;
+			const inner = directories[0];
+			if (sanitize.sanitizePropertyName(inner.name) !== name) break;
+			sourceName = `${sourceName}/${inner.name}`;
+			current = inner;
+		}
+		return current === subDir ? subDir : { ...current, sourceName };
 	}
 
 	/**
@@ -495,6 +528,8 @@ export class ModesProcessor extends ComponentBase {
 	 * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
 	 * @param {string|null} [collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) that takes precedence over `collisionContext`'s config default for every leaf this call (and its own recursive calls) produces.
 	 * @param {boolean} [rootUnwrap=false] - The mount exposes its single root entry's exports directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api level.
+	 * @param {boolean} [transparent=false] - With `populateDirectly`: this directory is a transparent folder, poured into the mount's own level (the one `apiPathPrefix` names), so it adds no path segment.
+	 * @param {string|null} [ownPath=null] - The api path of the level this directory's entries are placed on, when the caller placed that level itself (a subdirectory's node, a lazy folder being loaded). Without it the level is `apiPathPrefix` plus the directory's name.
 	 * @returns {Promise<Function|null>} The root-level default-export contributor function, if one was found at this call's own top level; otherwise `null`.
 	 * @package
 	 */
@@ -513,7 +548,9 @@ export class ModesProcessor extends ComponentBase {
 		sourceFolder = null,
 		cacheBust = null,
 		collisionModeOverride = null,
-		rootUnwrap = false
+		rootUnwrap = false,
+		transparent = false,
+		ownPath = null
 	) {
 		// The effective per-call collision mode for every collision-detecting assignToApiPath() call
 		// this invocation makes: the caller's own override (e.g. api.add()'s forceOverwrite) when
@@ -527,71 +564,104 @@ export class ModesProcessor extends ComponentBase {
 			(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
 			"replace";
 
-		// Helper to build full apiPath with prefix
-		const buildApiPath = (path) => {
-			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
-			// An empty local path is produced only by the transparent-folder (populateDirectly) route,
-			// which lost its last in-suite driver when nested self-named directories under a mount
-			// prefix regained the standard hoist (#257) — every surface it composed is pinned green
-			// through that route instead. Kept wired for the remaining populateDirectly call-sites.
-			/* v8 ignore next */
-			if (!path) return apiPathPrefix;
-			if (!apiPathPrefix) return path;
-			// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
-			// Example: if prefix="config" and path="config.get", return "config.get" (don't make "config.config.get")
-			// But if prefix="config" and path="config" (matching subdirectory name), still add prefix for "config.config"
-			if (path.startsWith(`${apiPathPrefix}.`)) {
-				return path; // Already has prefix in chain
+		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
+
+		// Every api path this call records is derived from where the node is placed (#743): the path of the level this
+		// directory's entries go on, plus the key an entry is assigned under. Nothing rebuilds a path from strings a
+		// second time, so the tree and the recorded path cannot disagree: permissions, hooks, ownership and metadata
+		// all key off the recorded one.
+		//
+		// The level is the mount's own (the root, or a transparent folder poured into it, which adds no segment), or
+		// this directory's own: the path its caller placed it at, or its parent's path plus its name.
+		const atMountLevel = (isRoot && !populateDirectly) || (populateDirectly && transparent);
+		const levelPath = atMountLevel ? apiPathPrefix : (ownPath ?? (apiPathPrefix ? `${apiPathPrefix}.${categoryName}` : categoryName));
+
+		// The folder the mount's direct child named like the mount's last segment is built from, Rule 22 applied: the
+		// transparent folder itself when this call pours it in, or found among the mount root's folders.
+		let mountChildFolder = null;
+		if (apiPathPrefix && populateDirectly && transparent) {
+			mountChildFolder = directory.path;
+		} else if (apiPathPrefix && isRoot && !populateDirectly) {
+			const sanitize = this.slothlet.helpers.sanitize;
+			const mountLeaf = sanitize.sanitizePropertyName(apiPathPrefix.split(".").pop());
+			const sameNamed = directory.children.directories.find((scanned) => sanitize.sanitizePropertyName(scanned.name) === mountLeaf);
+			mountChildFolder = sameNamed ? this.#collapseSameNamedFolder(sameNamed).path : null;
+		}
+
+		/**
+		 * Whether `addApiComponent` hoists an entry placed on the mount's level under the mount's last segment onto
+		 * the mount itself (Rule 13, F08/C25). It does when the entry comes from a direct child of the mounted folder:
+		 * a file at its root, or a file directly inside its subfolder of that name, which is the folder Rule 22 leaves
+		 * standing for it (`e/e/e.mjs` mounted at `e` is `e.a`, as `e/e.mjs` is). A folder is never hoisted: the one
+		 * named like the mount at its root is poured in as it is (never placed under the key), and one of that name
+		 * inside it is a nested namespace (`c/z.mjs` + `c/c/x.mjs` mounted at `c` is `c.z` and `c.c.x`). The node
+		 * placed for the hoist records the mount path, and `addApiComponent` hoists exactly the node that does, so the
+		 * path recorded here is the path it ends up at.
+		 * @param {string|null|undefined} filePath - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
+		 * @returns {boolean} Whether it is hoisted.
+		 */
+		const hoistedOntoMount = (filePath, isFolder = false) => {
+			if (isFolder) return false;
+			if (typeof filePath !== "string" || typeof sourceFolder !== "string") return true;
+			const normalize = (value) => value.replace(/\\/g, "/").replace(/\/$/, "");
+			const entryDir = normalize(filePath).split("/").slice(0, -1).join("/");
+			const mountFolder = normalize(sourceFolder);
+			const childFolder =
+				typeof mountChildFolder === "string" ? normalize(mountChildFolder) : `${mountFolder}/${apiPathPrefix.split(".").pop()}`;
+			return entryDir === mountFolder || entryDir === childFolder;
+		};
+
+		/**
+		 * The path of an entry placed on the mount's level under `key`.
+		 * @param {string} key - The key the entry is assigned under.
+		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
+		 * @returns {string} Its api path.
+		 */
+		const rootKeyPath = (key, filePath = null, isFolder = false) => {
+			if (!apiPathPrefix) return key;
+			// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly at the mount
+			// path, so the level named after the file is never on the api and contributes no segment.
+			if (rootUnwrap && isRoot) return apiPathPrefix;
+			// Rule 13 (F08/C25). `addApiComponent` hoists an entry named like the last segment of the mount path
+			// off the surface — `api.add("exts.alpha", …)` over a folder holding `alpha.mjs` yields
+			// `exts.alpha.op`, never `exts.alpha.alpha.op`. That level does not exist on the api and contributes no
+			// segment; leaving it in produced a path no caller could reach (#243). An entry it leaves in place
+			// (one from deeper in the folder) keeps its segment.
+			if (key === apiPathPrefix.split(".").pop() && hoistedOntoMount(filePath, isFolder)) return apiPathPrefix;
+			return `${apiPathPrefix}.${key}`;
+		};
+
+		/**
+		 * The path of an entry this directory places on its level under `key`.
+		 * @param {string} key - The key the entry is assigned under.
+		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
+		 * @returns {string} Its api path.
+		 */
+		const memberPath = (key, filePath = null, isFolder = false) => {
+			if (atMountLevel) {
+				// A transparent folder's self-named file is a node of its own on the mount's level; what the folder
+				// places after it goes on that node, beneath its path.
+				const node = targetApi !== api ? resolveWrapper(targetApi) : null;
+				if (node) return `${node.____slothletInternal.apiPath}.${key}`;
+				// An entry merged into a node already at the key sits where that node does.
+				const existing = modes_effectiveCollisionMode === "replace" ? null : resolveWrapper(readApiMember(api, key));
+				if (existing && typeof existing.____slothletInternal.apiPath === "string") return existing.____slothletInternal.apiPath;
+				return rootKeyPath(key, filePath, isFolder);
 			}
-			// Rule 13 (F08/C25) mirror. `addApiComponent` hoists a root-level entry named like the
-			// last segment of the mount path off the surface — `api.add("exts.alpha", …)` over a
-			// folder holding `alpha.mjs` yields `exts.alpha.op`, never `exts.alpha.alpha.op`. That
-			// level therefore does not exist on the api and must contribute no path segment; leaving
-			// it in produced a path no caller could reach, so a permission rule or hook written
-			// against the real surface never matched while the phantom form did (#243).
-			if (isRoot) {
-				// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly
-				// at the mount path, so the intermediate level named after the file is never on the api
-				// and must contribute no segment either.
-				if (rootUnwrap) {
-					const cut = path.indexOf(".");
-					// The dotted arm handles a sub-path beneath a single-file mount. Such a mount exposes the
-					// file's own exports flat at the mount path, so the sub-path is a single segment in every
-					// shape that can be built — the arm covers a synthetic mount carrying depth.
-					/* v8 ignore next */
-					return cut === -1 ? apiPathPrefix : `${apiPathPrefix}.${path.slice(cut + 1)}`;
-				}
-				const mountLeaf = apiPathPrefix.split(".").pop();
-				if (path === mountLeaf) return apiPathPrefix;
-				// Depth *below* a level that repeats the mount's last segment. Flattening collapses that level,
-				// so the paths reaching here are the collapsed form and match the equality check above; this
-				// arm covers a mount deep enough that the repeat is not the final level.
-				/* v8 ignore next */
-				if (path.startsWith(`${mountLeaf}.`)) return `${apiPathPrefix}.${path.slice(mountLeaf.length + 1)}`;
-			}
-			// Always add prefix - even if names match, they represent different levels
-			return `${apiPathPrefix}.${path}`;
+			return levelPath ? `${levelPath}.${key}` : key;
 		};
 		let rootDefaultFunction = null;
 		const rootContributors = []; // Track all root-level default exports for multi-detection
-		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		// A member read (#571): `session.name` is the string "session" when `session` has no `name`
 		// member yet, and the folder `session/name/` must not mistake that answer for itself.
 		let targetApi =
 			isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = readApiMember(api, categoryName) || {});
 
-		// The dotted prefix a nested directory must inherit: this level's own full path.
-		//
-		// A directory contributes a path segment exactly when it creates an api level — which is
-		// the same condition `targetApi` above branches on. A `populateDirectly` directory pours its
-		// contents into the parent's api and adds no level, so it must add no segment either.
-		//
-		// Recursing with the *unchanged* prefix is what made `apiPath` disagree with the surface
-		// below depth 1: a nested directory was pathed from its own name alone, so
-		// `deep.folder.config.get` was built as `folder.config.get`, and `deep.folder` and
-		// `deep2.folder` collapsed onto the same `folder` — indistinguishable to permissions,
-		// hooks, ownership and metadata, all of which key off this path.
-		const childPathPrefix = populateDirectly || !categoryName ? apiPathPrefix : buildApiPath(categoryName);
+		// The prefix a nested directory inherits is this level's own path.
+		const childPathPrefix = levelPath;
 
 		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
 		// This ensures file wrappers are materialized for collision handling
@@ -626,12 +696,12 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_WRAPPER_CREATED",
 						categoryName,
-						apiPath: buildApiPath(categoryName)
+						apiPath: levelPath
 					});
 				}
 				const wrapper = new UnifiedWrapper(this.slothlet, {
 					mode: effectiveMode,
-					apiPath: buildApiPath(categoryName),
+					apiPath: levelPath,
 					initialImpl,
 					filePath: directory.path,
 					// moduleID is always provided by callers; || categoryName fallback is unreachable.
@@ -649,7 +719,7 @@ export class ModesProcessor extends ComponentBase {
 						wrapper,
 						{
 							filePath: directory.path,
-							apiPath: buildApiPath(categoryName),
+							apiPath: levelPath,
 							// moduleID is always provided; || "base" fallback is unreachable.
 							/* v8 ignore next */
 							moduleID: moduleID || "base",
@@ -677,7 +747,7 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_TARGET_API_STATUS",
 						isWrapper: !!resolveWrapper(targetApi),
-						targetApiKeys: Object.keys(targetApi)
+						targetApiKeys: Objects.keys(targetApi)
 					});
 				}
 			}
@@ -721,11 +791,11 @@ export class ModesProcessor extends ComponentBase {
 					exports = this.slothlet.processors.loader.extractExports(loadedNamespace, file.path);
 				}
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
-				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+				const moduleKeys = Objects.keys(exports).filter((k) => k !== "default");
 				const analysis = {
-					hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
+					hasDefault: Objects.prototype.hasOwnProperty.call(exports, "default"),
 					hasNamed: moduleKeys.length > 0,
-					defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
+					defaultExportType: Objects.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 				};
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
@@ -755,6 +825,23 @@ export class ModesProcessor extends ComponentBase {
 				entry.moduleName = modes_addapiSelfName;
 				entry.file = { ...entry.file, name: modes_addapiSelfName, fullName: `${modes_addapiSelfName}${extension}` };
 			}
+		}
+		// F05 (Rule 8): a folder whose only entry is a file with a default-export function is that function, whatever
+		// the file or the function is called, so the file composes as the folder's self-named file (F04): `e/x.mjs`
+		// with `export default function run` and `export function helper` is `api.e()` and `api.e.helper()`. Only a
+		// folder level (the mount root has no folder of its own), a disk file, and nothing else in the folder.
+		if (
+			categoryName &&
+			loadedModules.length === 1 &&
+			(directory?.children?.directories?.length ?? 0) === 0 &&
+			!loadedModules[0].file.synthetic &&
+			loadedModules[0].moduleName !== categoryName &&
+			typeof loadedModules[0].mod.default === "function"
+		) {
+			const entry = loadedModules[0];
+			const extension = entry.file.fullName ? entry.file.fullName.slice(entry.file.fullName.lastIndexOf(".")) : "";
+			entry.moduleName = categoryName;
+			entry.file = { ...entry.file, name: categoryName, fullName: `${categoryName}${extension}` };
 		}
 		// Calculate if there are multiple default exports in this directory
 		const hasMultipleDefaults = loadedModules.filter((m) => m.analysis.hasDefault).length > 1;
@@ -899,7 +986,7 @@ export class ModesProcessor extends ComponentBase {
 									populateDirectly,
 									isRoot,
 									mode,
-									exportKeys: Object.keys(exportedValue)
+									exportKeys: Objects.keys(exportedValue)
 								});
 							}
 							// CRITICAL: Wrap the object so all its functions get context wrapping
@@ -911,9 +998,9 @@ export class ModesProcessor extends ComponentBase {
 								// module's own array is never written to (#585 review).
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
-									apiPath: buildApiPath(categoryName),
+									apiPath: levelPath,
 									initialImpl:
-										Array.isArray(exportedValue) && files.length > 1
+										Arrays.isArray(exportedValue) && files.length > 1
 											? copyForComposition(exportedValue, { addsMembers: true })
 											: exportedValue,
 									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
@@ -943,10 +1030,10 @@ export class ModesProcessor extends ComponentBase {
 									modes_case1ExistingW?.____slothletInternal.filePath !== file.path &&
 									modes_case1CollisionMode !== "replace"
 								) {
-									for (const existingKey of Object.keys(modes_case1Existing)) {
+									for (const existingKey of Objects.keys(modes_case1Existing)) {
 										// Conflicts resolve as in Case 2 below: the earlier contribution (the existing side)
 										// wins, except under merge-replace, where the incoming module's member wins.
-										if (modes_case1CollisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) {
+										if (modes_case1CollisionMode === "merge-replace" && Objects.prototype.hasOwnProperty.call(exportedValue, existingKey)) {
 											continue;
 										}
 										// Carried as described, so an accessor stays live on this module's node (#585 review).
@@ -963,11 +1050,11 @@ export class ModesProcessor extends ComponentBase {
 								this.slothlet.debug("modes", {
 									key: "DEBUG_MODE_SINGLE_FILE_FOLDER_WRAPPED",
 									categoryName,
-									implKeys: Object.keys(exportedValue)
+									implKeys: Objects.keys(exportedValue)
 								});
 							}
 							// Register each property for ownership tracking
-							for (const key of Object.keys(exportedValue)) {
+							for (const key of Objects.keys(exportedValue)) {
 								// ownership handler is always registered in test configurations; FALSE branch is unreachable.
 								/* v8 ignore next */
 								if (this.slothlet.handlers.ownership) {
@@ -975,7 +1062,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID is always provided; || file.moduleID fallback is unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: buildApiPath(`${categoryName}.${key}`),
+										apiPath: memberPath(key, file.path),
 										source: "core",
 										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
@@ -995,7 +1082,7 @@ export class ModesProcessor extends ComponentBase {
 						// Result: api.logger() callable + api.logger.utils.* from other files
 						// moduleKeys always has items in this code path; the Object.keys fallback is unreachable.
 						/* v8 ignore next */
-						const namedKeys = moduleKeys.length > 0 ? moduleKeys : Object.keys(mod).filter((key) => key !== "default");
+						const namedKeys = moduleKeys.length > 0 ? moduleKeys : Objects.keys(mod).filter((key) => key !== "default");
 						// mod.default is always a function in this code path; the moduleContent fallback is unreachable.
 						// Members are put on a callable layer over the module's function, never on the function
 						// itself: the layer the module's named exports were composed onto, or a fresh one (#585 review).
@@ -1079,7 +1166,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const namedKey of namedKeys) {
 								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
 								// `call` / `bind` / `toString` would read as already present and never be added.
-								if (!Object.prototype.hasOwnProperty.call(existingCategory, namedKey)) {
+								if (!Objects.prototype.hasOwnProperty.call(existingCategory, namedKey)) {
 									existingCategory[namedKey] = mod[namedKey];
 								}
 							}
@@ -1095,11 +1182,11 @@ export class ModesProcessor extends ComponentBase {
 							// Documented table: merge → the FIRST loaded (the existing slot) wins conflicts, so its
 							// member replaces the callable's same-named export; merge-replace → the second (this
 							// module) wins, so only non-conflicting members carry across.
-							for (const existingKey of Object.keys(existingCategory)) {
+							for (const existingKey of Objects.keys(existingCategory)) {
 								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
 								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
 								// skip carrying it, and merge would mis-record it as a conflict the first source won.
-								const existingKeyOnCallable = Object.prototype.hasOwnProperty.call(callableModule, existingKey);
+								const existingKeyOnCallable = Objects.prototype.hasOwnProperty.call(callableModule, existingKey);
 								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
 									continue;
 								}
@@ -1109,7 +1196,7 @@ export class ModesProcessor extends ComponentBase {
 									modes_carryWinners.add(existingKey);
 								}
 								const existingAccessor = this.#accessorToCarry(existingCategory, existingKey);
-								if (existingAccessor) Object.defineProperty(callableModule, existingKey, existingAccessor);
+								if (existingAccessor) Objects.defineProperty(callableModule, existingKey, existingAccessor);
 								else holdMember(callableModule, existingKey, existingCategory[existingKey]);
 							}
 						}
@@ -1119,7 +1206,7 @@ export class ModesProcessor extends ComponentBase {
 						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
-								apiPath: buildApiPath(categoryName),
+								apiPath: levelPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
@@ -1155,7 +1242,7 @@ export class ModesProcessor extends ComponentBase {
 								if (modes_carryWinners.has(key)) {
 									continue;
 								}
-								const modes_namedApiPath = buildApiPath(`${categoryName}.${key}`);
+								const modes_namedApiPath = memberPath(key, file.path);
 								// A named export sharing a name with the default function's own member (`prototype`, `name`,
 								// `length`, a static) resolves by collision mode, as on every other path (#421): under merge
 								// or skip the function keeps its member (#585 review).
@@ -1214,7 +1301,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: buildApiPath(`${categoryName}.${key}`),
+										apiPath: memberPath(key, file.path),
 										source: "core",
 										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
@@ -1232,7 +1319,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								moduleID: moduleID || file.moduleID,
-								apiPath: buildApiPath(categoryName),
+								apiPath: levelPath,
 								source: "core",
 								collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 								filePath: file.path
@@ -1248,15 +1335,15 @@ export class ModesProcessor extends ComponentBase {
 						// OR: multi_func.mjs with exports { uniqueOne, uniqueTwo, multi_func: {...} } → flatten multi_func object + expose others
 						// Check if this specific file has a matching object export
 						const hasMatchingObject = moduleKeys.some(
-							(key) => key === moduleName && typeof mod[key] === "object" && mod[key] !== null && !Array.isArray(mod[key])
+							(key) => key === moduleName && typeof mod[key] === "object" && mod[key] !== null && !Arrays.isArray(mod[key])
 						);
 						if (hasMatchingObject) {
 							// This file has export const folder = {...}
 							// Flatten the object's properties AND add other exports to category
 							const matchingObj = mod[moduleName];
 							// Add matching object's properties to category
-							for (const [propKey, propValue] of Object.entries(matchingObj)) {
-								const modes_hybridApiPath = buildApiPath(`${categoryName}.${propKey}`);
+							for (const [propKey, propValue] of Objects.entries(matchingObj)) {
+								const modes_hybridApiPath = memberPath(propKey, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_hybridModuleID = moduleID || file.moduleID;
@@ -1309,7 +1396,7 @@ export class ModesProcessor extends ComponentBase {
 							// Add other named exports from this file to category
 							for (const key of moduleKeys) {
 								if (key !== moduleName) {
-									const modes_hybridOtherApiPath = buildApiPath(`${categoryName}.${key}`);
+									const modes_hybridOtherApiPath = memberPath(key, file.path);
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
 									const modes_hybridOtherModuleID = moduleID || file.moduleID;
@@ -1372,7 +1459,7 @@ export class ModesProcessor extends ComponentBase {
 								this.slothlet.debug("modes", {
 									key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_TARGET_STATUS",
 									isWrapper: !!resolveWrapper(targetApi),
-									keysBefore: Object.keys(targetApi)
+									keysBefore: Objects.keys(targetApi)
 								});
 							}
 							for (const key of moduleKeys) {
@@ -1382,7 +1469,7 @@ export class ModesProcessor extends ComponentBase {
 										propKey: key
 									});
 								}
-								const modes_multiApiPath = buildApiPath(`${categoryName}.${key}`);
+								const modes_multiApiPath = memberPath(key, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_multiModuleID = moduleID || file.moduleID;
@@ -1416,7 +1503,7 @@ export class ModesProcessor extends ComponentBase {
 												this.slothlet.debug("modes", {
 													key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNED",
 													propKey: key,
-													keysAfter: Object.keys(targetApi)
+													keysAfter: Objects.keys(targetApi)
 												});
 											} else {
 												this.slothlet.debug("modes", {
@@ -1461,7 +1548,7 @@ export class ModesProcessor extends ComponentBase {
 				if (!analysis.hasDefault && moduleKeys.length === 1 && !isRoot) {
 					const key = moduleKeys[0];
 					const keyValue = mod[key];
-					const isMatchingObject = key === moduleName && typeof keyValue === "object" && keyValue !== null && !Array.isArray(keyValue);
+					const isMatchingObject = key === moduleName && typeof keyValue === "object" && keyValue !== null && !Arrays.isArray(keyValue);
 					// Skip matching objects - they need to go through the matching-object branch below
 					if (!isMatchingObject) {
 						// Only auto-flatten if the export name matches the module name (case-insensitive, ignore separators)
@@ -1470,7 +1557,7 @@ export class ModesProcessor extends ComponentBase {
 						if (normalizedKey === normalizedModuleName) {
 							// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
 							const preferredName = key;
-							const modes_preferredApiPath = buildApiPath(`${categoryName}.${preferredName}`);
+							const modes_preferredApiPath = memberPath(preferredName, file.path);
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_preferredModuleID = moduleID || file.moduleID;
@@ -1538,14 +1625,10 @@ export class ModesProcessor extends ComponentBase {
 					// loop below can skip a skip/warn-rejected key instead of recording it as owned
 					// (#366 review — see #373).
 					const modes_hoistedAssigned = new Set();
-					for (const key of Object.keys(moduleContent)) {
+					for (const key of Objects.keys(moduleContent)) {
 						const value = moduleContent[key];
-						// `isRoot` is guaranteed false by the guard above, so the keyPath only
-						// branches on whether we have a deeper apiPathPrefix or fall back to
-						// the immediate categoryName.
-						const keyPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
-
-						const modes_hoistedApiPath = buildApiPath(keyPath);
+						// The member is assigned on this directory's own level, under its own name.
+						const modes_hoistedApiPath = memberPath(key, file.path);
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_hoistedModuleID = moduleID || file.moduleID;
@@ -1586,10 +1669,9 @@ export class ModesProcessor extends ComponentBase {
 					// ownership handler is always registered when enabled; IF FALSE unreachable.
 					/* v8 ignore next */
 					if (this.slothlet.handlers.ownership) {
-						for (const key of Object.keys(moduleContent)) {
+						for (const key of Objects.keys(moduleContent)) {
 							if (!modes_hoistedAssigned.has(key)) continue;
-							// `isRoot` is guaranteed false by the `!isRoot` guard above (mirrors keyPath).
-							const apiPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+							const apiPath = memberPath(key, file.path);
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
@@ -1611,7 +1693,7 @@ export class ModesProcessor extends ComponentBase {
 					// Rule 11 (F06) - C24: AddApi Special File Pattern
 					const isAddapiFile = decision.flattenType === "addapi-metadata-default" || decision.flattenType === "addapi-special-file";
 
-					if (isAddapiFile && typeof moduleContent === "object" && !Array.isArray(moduleContent) && typeof moduleContent !== "function") {
+					if (isAddapiFile && typeof moduleContent === "object" && !Arrays.isArray(moduleContent) && typeof moduleContent !== "function") {
 						// ADDAPI OBJECT DEFAULT: Merge exports directly into targetApi without creating addapi namespace
 						// When api.add('plugins', './dir'), addapi exports become api.plugins.{exports}, NOT api.plugins.addapi.{exports}
 						// Tracks which keys' assignToApiPath call actually succeeded, so the registration
@@ -1622,14 +1704,14 @@ export class ModesProcessor extends ComponentBase {
 						// here as it is everywhere else (#571 review).
 						this.#refuseThenableValue(moduleContent, apiPathPrefix || effectiveCategoryName);
 						const modes_addapiMembers = this.#addapiMembers(moduleContent);
-						for (const key of Object.keys(modes_addapiMembers)) {
+						for (const key of Objects.keys(modes_addapiMembers)) {
 							const member = modes_addapiMembers[key];
 							// An accessor (a plain object's getter or setter, or a class instance's field or accessor, read
 							// and written through the instance) keeps both halves on the folder, as the object itself would
 							// answer it (#590). Defined only where the folder has no member of that name yet; a name
 							// already taken goes through the collision rules below.
-							if (member.accessor && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
-								Object.defineProperty(targetApi, key, {
+							if (member.accessor && !Objects.prototype.hasOwnProperty.call(targetApi, key)) {
+								Objects.defineProperty(targetApi, key, {
 									get: member.accessor.get,
 									set: member.accessor.set,
 									enumerable: true,
@@ -1639,11 +1721,7 @@ export class ModesProcessor extends ComponentBase {
 								continue;
 							}
 							const value = member.accessor ? moduleContent[key] : member.value;
-							// isRoot is always false in the addapi path; inner "": fallback unreachable.
-							/* v8 ignore next */
-							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
-
-							const modes_addapiApiPath = buildApiPath(keyPath);
+							const modes_addapiApiPath = memberPath(key, file.path);
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_addapiModuleID = moduleID || file.moduleID;
@@ -1684,11 +1762,9 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
-							for (const key of Object.keys(modes_addapiMembers)) {
+							for (const key of Objects.keys(modes_addapiMembers)) {
 								if (!modes_addapiAssigned.has(key)) continue;
-								// Third ternary arm (: key) unreachable — apiPathPrefix always set in this context.
-								/* v8 ignore next */
-								const apiPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : key;
+								const apiPath = memberPath(key, file.path);
 								this.slothlet.handlers.ownership.register({
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
@@ -1703,21 +1779,9 @@ export class ModesProcessor extends ComponentBase {
 					} else {
 						// NORMAL FLATTEN-TO-CATEGORY: Assign moduleContent (function or object) to category name
 						//
-						// Pass the LOCAL name and let buildApiPath apply the prefix. Embedding the prefix here
-						// defeated buildApiPath's own handling — the result already started with the prefix, so
-						// its collapse rules never got a chance to run.
-						//
-						// A `populateDirectly` directory pours its contents into the parent's api and creates
-						// no level (mirroring `targetApi` above), so it contributes no segment: an empty local
-						// path resolves to the prefix itself. Without that, a transparent folder reintroduced
-						// the very segment smart-flattening had dropped, leaving the wrapper — and every leaf
-						// beneath it — at a path no caller could reach (#243).
-						// The true arm is the transparent-folder route — see the buildApiPath empty-path note; its
-						// shapes now compose via the standard hoist and stay pinned green in the surface suites.
-						/* v8 ignore next */
-						const localPath = populateDirectly ? "" : effectiveCategoryName;
-
-						const modes_categoryApiPath = buildApiPath(localPath);
+						// The content is placed on this level under `effectiveCategoryName`. In a transparent folder that
+						// is the mount's last segment, which Rule 13 hoists onto the mount itself (#243).
+						const modes_categoryApiPath = memberPath(effectiveCategoryName, file.path);
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_categoryModuleID = moduleID || file.moduleID;
@@ -1765,11 +1829,7 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (modes_categoryAssigned && this.slothlet.handlers.ownership) {
-							// Mirror the wrapper's apiPath (buildApiPath(localPath) above): the hand-rolled
-							// form dropped the mount prefix under isRoot and skipped buildApiPath's Rule-13
-							// collapse, so an `api.add("shop", dir)` recorded a top-level `multi`/`obj`
-							// instead of `shop.multi`. buildApiPath is a no-op at base load (no prefix).
-							const apiPath = buildApiPath(localPath);
+							const apiPath = modes_categoryApiPath;
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
@@ -1786,7 +1846,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 
 				// Wrap in UnifiedWrapper
-				const modes_propertyApiPath = buildApiPath(isRoot ? propertyName : `${categoryName}.${propertyName}`);
+				const modes_propertyApiPath = memberPath(propertyName, file.path);
 				// moduleID always provided; fallback unreachable.
 				/* v8 ignore next */
 				const modes_propertyModuleID = moduleID || file.moduleID;
@@ -1896,7 +1956,8 @@ export class ModesProcessor extends ComponentBase {
 					key: "DEBUG_MODE_SUBDIRECTORY_LOOP_START",
 					count: directory.children.directories.length
 				});
-				for (const subDir of directory.children.directories) {
+				for (const scannedDir of directory.children.directories) {
+					const subDir = this.#collapseSameNamedFolder(scannedDir);
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_PROCESSING_SUBDIRECTORY",
 						name: subDir.name,
@@ -1926,13 +1987,13 @@ export class ModesProcessor extends ComponentBase {
 							const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
 							this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
-							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+							const moduleKeys = Objects.keys(exports).filter((k) => k !== "default");
 							const analysis = {
-								hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
+								hasDefault: Objects.prototype.hasOwnProperty.call(exports, "default"),
 								hasNamed: moduleKeys.length > 0,
-								defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
+								defaultExportType: Objects.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 							};
-							const modContent = Object.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
+							const modContent = Objects.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
 							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
@@ -1992,7 +2053,7 @@ export class ModesProcessor extends ComponentBase {
 								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
 									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-								} else if (Object.prototype.hasOwnProperty.call(exports, "default")) {
+								} else if (Objects.prototype.hasOwnProperty.call(exports, "default")) {
 									// Default export - use it. With named exports it gets a callable layer, so they are not
 									// written to the module's function (or through a Proxy's traps); alone it is the
 									// function itself, which keeps what it is (an async function stays one).
@@ -2068,7 +2129,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								// The folder's value is the module's own, as the lazy materializer returns it; a thenable
 								// one is refused here too, so both modes agree (#580 review).
-								this.#refuseThenableValue(implToWrap, buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName));
+								this.#refuseThenableValue(implToWrap, memberPath(subDirName, file.path));
 
 								// CRITICAL: File-vs-folder collision within same module directory.
 								// When a file and folder share the same name (e.g., math.mjs + math/),
@@ -2128,9 +2189,9 @@ export class ModesProcessor extends ComponentBase {
 										const modes_existingImpl = modes_existingWrapper.__impl;
 										// modes_existingImpl is always a non-null, non-array object here; IF FALSE unreachable.
 										/* v8 ignore next */
-										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
+										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Arrays.isArray(modes_existingImpl)) {
 											if (typeof implToWrap === "object" && implToWrap !== null) {
-												for (const k of Object.keys(modes_existingImpl)) {
+												for (const k of Objects.keys(modes_existingImpl)) {
 													// Unreachable in practice: ___adoptImplChildren() pre-merges all
 													// existing impl keys into implToWrap before this loop runs, so
 													// every key from modes_existingImpl is already present in implToWrap.
@@ -2138,8 +2199,8 @@ export class ModesProcessor extends ComponentBase {
 													if (!(k in implToWrap)) {
 														// Copied as described, not read: a getter adoption left on the impl stays a
 														// getter, and runs on the node it lands on (#585 review).
-														Object.defineProperty(implToWrap, k, {
-															...Object.getOwnPropertyDescriptor(modes_existingImpl, k),
+														Objects.defineProperty(implToWrap, k, {
+															...Objects.getOwnPropertyDescriptor(modes_existingImpl, k),
 															configurable: true
 														});
 													}
@@ -2149,7 +2210,7 @@ export class ModesProcessor extends ComponentBase {
 												// first, so a function-typed implToWrap is never observed here.
 												/* v8 ignore start */
 											} else if (typeof implToWrap === "function") {
-												for (const [k, v] of Object.entries(modes_existingImpl)) {
+												for (const [k, v] of Objects.entries(modes_existingImpl)) {
 													if (implToWrap[k] === undefined) {
 														implToWrap[k] = v;
 													}
@@ -2158,10 +2219,10 @@ export class ModesProcessor extends ComponentBase {
 											/* v8 ignore stop */
 										}
 										// Also absorb any child properties from existing wrapper
-										const modes_existingChildKeys = Object.keys(modes_existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+										const modes_existingChildKeys = Objects.keys(modes_existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 										for (const ck of modes_existingChildKeys) {
 											if (typeof implToWrap === "object" && implToWrap !== null && !(ck in implToWrap)) {
-												Object.defineProperty(implToWrap, ck, UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck));
+												Objects.defineProperty(implToWrap, ck, UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck));
 											} else if (typeof implToWrap === "function" && implToWrap[ck] === undefined) {
 												implToWrap[ck] = modes_existingWrapper[ck];
 											}
@@ -2169,7 +2230,7 @@ export class ModesProcessor extends ComponentBase {
 										this.slothlet.debug("modes", {
 											key: "DEBUG_MODE_FILE_FOLDER_COLLISION_MERGED",
 											subDir: subDirName,
-											mergedKeys: Object.keys(implToWrap)
+											mergedKeys: Objects.keys(implToWrap)
 										});
 									}
 								}
@@ -2177,7 +2238,7 @@ export class ModesProcessor extends ComponentBase {
 								// Flatten: put the module content directly at targetApi[subDirName]
 								// categoryName always set; ": subDirName" fallback unreachable.
 								/* v8 ignore next */
-								const modes_subDirApiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
+								const modes_subDirApiPath = memberPath(subDirName, file.path);
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_subDirModuleID = moduleID || file.moduleID;
@@ -2250,7 +2311,9 @@ export class ModesProcessor extends ComponentBase {
 							// Thread the per-call override through — a nested subdirectory must resolve
 							// under the same override as its parent (#365/#366 review); dropping it here
 							// silently fell back to the config default for every leaf below the top level.
-							collisionModeOverride
+							collisionModeOverride,
+							false, // rootUnwrap
+							true // transparent: the folder adds no path segment
 						);
 						continue;
 					}
@@ -2271,18 +2334,26 @@ export class ModesProcessor extends ComponentBase {
 						sourceFolder,
 						cacheBust,
 						// See the transparent-folder recursive call above — same override-threading fix.
-						collisionModeOverride
+						collisionModeOverride,
+						false, // rootUnwrap
+						false, // transparent
+						memberPath(subDirName, subDir.path, true) // the level this subdirectory is placed at
 					);
 				}
 			} else {
 				// Lazy mode: create lazy wrappers for subdirectories
-				for (const subDir of directory.children.directories) {
+				for (const scannedDir of directory.children.directories) {
+					const subDir = this.#collapseSameNamedFolder(scannedDir);
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
 
-					// Folder Transparency: if subfolder name matches current category, process its contents
-					// directly into targetApi instead of creating a nested namespace.
-					// Example: api.add('config', './path') where path/config/ exists → config/server.mjs becomes api.config.server
-					// Use eager mode so files at this level become objects (same as root-level file behavior).
+					// Folder Transparency at the mount root (Rule 13): the subfolder named like the mount's last segment
+					// is the mount's own level. Example: api.add('config', './path') where path/config/ exists →
+					// config/server.mjs becomes api.config.server.
+					// It is built as eager mode builds it, by the eager branch of a root call holding just this folder:
+					// that branch also composes a folder of one self-named or generic file (`e/main.mjs` is `e.a`,
+					// Rule 10) before Rule 13 hoists it, which pouring the folder's files in directly skipped, so lazy
+					// mode built `e.main.a` there (#743). The mount's files at this level become objects, as root-level
+					// files do.
 					// IMPORTANT: Only fire at root-level registration boundary (populateDirectly=false).
 					// When populateDirectly=true we are inside a lazy wrapper materialization -
 					// e.g. services/ materialising finds services/services/ whose name matches,
@@ -2292,29 +2363,31 @@ export class ModesProcessor extends ComponentBase {
 					if (subDirName === lazy_currentCategoryName && lazy_currentCategoryName !== null && !populateDirectly) {
 						await this.processFiles(
 							targetApi,
-							subDir.children.files,
-							subDir,
-							currentDepth + 1,
+							[], // the mount root's own files were placed above
+							{ ...directory, children: { files: [], directories: [subDir] } },
+							currentDepth,
 							"eager",
-							false,
+							true, // the mount root
 							true, // recursive = true to process nested subdirs too
-							true, // populateDirectly
+							false, // populateDirectly
 							apiPathPrefix,
 							collisionContext,
 							moduleID,
 							sourceFolder,
 							cacheBust,
 							// See the two eager-mode recursive calls above — same override-threading fix.
-							collisionModeOverride
+							collisionModeOverride,
+							false, // rootUnwrap
+							false // transparent
 						);
 						continue;
 					}
 
-					// Route through buildApiPath rather than concatenating: the manual form dropped the
+					// Derived from the level, not concatenated by hand: the manual form dropped the
 					// prefix whenever a categoryName was present (truncating nested lazy folders) and,
 					// at a mount root, appended the mount leaf a second time — producing the phantom
 					// `config.config.*` that the Rule 13 hoist then removed from the surface (#243).
-					const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
+					const apiPath = memberPath(subDirName, subDir.path, true);
 					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
@@ -2344,19 +2417,19 @@ export class ModesProcessor extends ComponentBase {
 						const existImpl = modes_lazyExistingW.__impl;
 						// existImpl is always a non-null, non-array object at this point; IF FALSE unreachable.
 						/* v8 ignore next */
-						if (existImpl && typeof existImpl === "object" && !Array.isArray(existImpl)) {
+						if (existImpl && typeof existImpl === "object" && !Arrays.isArray(existImpl)) {
 							// Copied as described, not spread: a spread runs a getter adoption left on the impl and keeps
 							// what it returned; described, it stays a getter and runs on the folder's node (#585 review).
 							modes_fileFolderImpl = {};
-							for (const key of Object.keys(existImpl)) {
-								Object.defineProperty(modes_fileFolderImpl, key, {
-									...Object.getOwnPropertyDescriptor(existImpl, key),
+							for (const key of Objects.keys(existImpl)) {
+								Objects.defineProperty(modes_fileFolderImpl, key, {
+									...Objects.getOwnPropertyDescriptor(existImpl, key),
 									configurable: true
 								});
 							}
 						}
 						// Also capture child properties from the existing wrapper
-						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !isFrameworkReservedKey(k));
+						const existChildKeys = Objects.keys(modes_lazyExistingW).filter((k) => !isFrameworkReservedKey(k));
 						for (const ck of existChildKeys) {
 							// Unreachable in practice: modes_fileFolderImpl is always initialised from
 							// existImpl in the block above because root files are processed eagerly
@@ -2368,7 +2441,7 @@ export class ModesProcessor extends ComponentBase {
 							// modes_fileFolderImpl never contains ck at this point; IF FALSE unreachable.
 							/* v8 ignore next */
 							if (!(ck in modes_fileFolderImpl)) {
-								Object.defineProperty(modes_fileFolderImpl, ck, UnifiedWrapper._memberDescriptor(modes_lazyExistingW, ck));
+								Objects.defineProperty(modes_fileFolderImpl, ck, UnifiedWrapper._memberDescriptor(modes_lazyExistingW, ck));
 							}
 						}
 					}
@@ -2450,7 +2523,7 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						moduleID: moduleID || file.moduleID,
-						apiPath: buildApiPath(moduleName),
+						apiPath: memberPath(moduleName, file.path),
 						source: "core",
 						collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 						filePath: file.path
@@ -2479,7 +2552,7 @@ export class ModesProcessor extends ComponentBase {
 					moduleID
 				});
 				for (const { moduleName, file, defaultFunc } of rootContributors) {
-					const modes_rootApiPath = buildApiPath(moduleName);
+					const modes_rootApiPath = memberPath(moduleName, file.path);
 					// moduleID always provided; fallback unreachable.
 					/* v8 ignore next */
 					const modes_rootModuleID = moduleID || file.moduleID;
@@ -2600,8 +2673,8 @@ export class ModesProcessor extends ComponentBase {
 			// sourceFolder is always provided by callers; config?.dir fallback unreachable.
 			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
-				? `${sourceFolder}/${dir.name}`.replace(/\\/g, "/")
-				: `${this.slothlet.config?.dir}/${dir.name}`.replace(/\\/g, "/");
+				? `${sourceFolder}/${dir.sourceName ?? dir.name}`.replace(/\\/g, "/")
+				: `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`.replace(/\\/g, "/");
 			/* v8 ignore stop */
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)
@@ -2624,13 +2697,13 @@ export class ModesProcessor extends ComponentBase {
 					const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
 					this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
-					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+					const moduleKeys = Objects.keys(exports).filter((k) => k !== "default");
 					const analysis = {
-						hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
+						hasDefault: Objects.prototype.hasOwnProperty.call(exports, "default"),
 						hasNamed: moduleKeys.length > 0,
-						defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
+						defaultExportType: Objects.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 					};
-					const modContent = Object.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
+					const modContent = Objects.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
 					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
@@ -2647,7 +2720,7 @@ export class ModesProcessor extends ComponentBase {
 					if (
 						filenameMatchesFolder &&
 						moduleKeys.length === 0 &&
-						Object.prototype.hasOwnProperty.call(exports, "default") &&
+						Objects.prototype.hasOwnProperty.call(exports, "default") &&
 						(exports.default === null || (typeof exports.default !== "object" && typeof exports.default !== "function"))
 					) {
 						return exports.default;
@@ -2675,7 +2748,7 @@ export class ModesProcessor extends ComponentBase {
 						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.
 							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-						} else if (Object.prototype.hasOwnProperty.call(exports, "default")) {
+						} else if (Objects.prototype.hasOwnProperty.call(exports, "default")) {
 							// An object default is copied, so the module's own default object is not mutated (#587). A
 							// function default gets a callable layer only when named exports are added to it.
 							implToWrap =
@@ -2725,9 +2798,9 @@ export class ModesProcessor extends ComponentBase {
 
 						// Tag implToWrap's functions with metadata so ___adoptImplChildren can inherit it
 						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.lifecycle) {
-							for (const key of Object.keys(implToWrap)) {
+							for (const key of Objects.keys(implToWrap)) {
 								// Read by descriptor: a getter runs only when the program reads it, never at load.
-								const descriptor = Object.getOwnPropertyDescriptor(implToWrap, key);
+								const descriptor = Objects.getOwnPropertyDescriptor(implToWrap, key);
 								const value = descriptor && "value" in descriptor ? descriptor.value : undefined;
 								if (typeof value === "function") {
 									// INTERNAL impl:created contribution event (#398) — delivered to the
@@ -2741,7 +2814,7 @@ export class ModesProcessor extends ComponentBase {
 									// a UnifiedWrapper, so there is no wrapper instance to capture for invalidation.
 									this.slothlet.handlers.lifecycle.emitInternal("impl:created", {
 										apiPath: `${apiPath}.${key}`,
-										wrapper: Object.freeze({ __impl: value }),
+										wrapper: Objects.freeze({ __impl: value }),
 										source: "lazy-materialization",
 										moduleID: moduleID,
 										filePath: file.path,
@@ -2757,10 +2830,10 @@ export class ModesProcessor extends ComponentBase {
 						// CRITICAL: Create __childFilePaths for ALL children in this folder
 						// Map each child to the file.path they came from. An array has no children: it is data, and the
 						// key would be listed among its elements.
-						if (implToWrap && typeof implToWrap === "object" && !Array.isArray(implToWrap)) {
+						if (implToWrap && typeof implToWrap === "object" && !Arrays.isArray(implToWrap)) {
 							// Initialize __childFilePaths with all children mapped to file.path
 							const childPaths = {};
-							for (const key of Object.keys(implToWrap)) {
+							for (const key of Objects.keys(implToWrap)) {
 								if (typeof key !== "symbol" && key !== "__childFilePaths" && key !== "__filePath") {
 									childPaths[key] = file.path;
 								}
@@ -2778,21 +2851,21 @@ export class ModesProcessor extends ComponentBase {
 						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
 						// Each member is copied as described, not read, so a getter stays a getter (#585 review).
 						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
-							for (const k of Object.keys(fileFolderCollisionImpl)) {
+							for (const k of Objects.keys(fileFolderCollisionImpl)) {
 								if (!(k in implToWrap)) {
-									Object.defineProperty(implToWrap, k, {
-										...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
+									Objects.defineProperty(implToWrap, k, {
+										...Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
 										configurable: true
 									});
 								}
 							}
 						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
-							for (const k of Object.keys(fileFolderCollisionImpl)) {
+							for (const k of Objects.keys(fileFolderCollisionImpl)) {
 								// Function impl never pre-sets the same keys as fileFolderCollisionImpl; false branch unreachable.
 								/* v8 ignore next */
 								if (implToWrap[k] === undefined) {
-									Object.defineProperty(implToWrap, k, {
-										...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
+									Objects.defineProperty(implToWrap, k, {
+										...Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
 										configurable: true
 									});
 								}
@@ -2823,20 +2896,23 @@ export class ModesProcessor extends ComponentBase {
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
 				cacheBust,
-				collisionMode // Pass collision mode to child wrappers
+				collisionMode, // Pass collision mode to child wrappers
+				false, // rootUnwrap
+				false, // transparent
+				apiPath // the folder's own path: its contents are placed on its value
 			);
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_RETURNING_IMPL",
 					dir: dir.name,
-					keys: Object.keys(materialized)
+					keys: Objects.keys(materialized)
 				});
 			}
 
 			// Merge file-folder collision exports into materialized result
 			// Applies when the processFiles path is used (non-flatten)
 			if (fileFolderCollisionImpl) {
-				for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+				for (const [k, v] of Objects.entries(fileFolderCollisionImpl)) {
 					// Collision impl keys never overlap with already-materialized keys in tests; false branch unreachable.
 					/* v8 ignore next */
 					if (!(k in materialized)) {
@@ -2845,7 +2921,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 			}
 
-			const materializedKeys = Object.keys(materialized);
+			const materializedKeys = Objects.keys(materialized);
 			// Check for folder/folder.mjs pattern - if materialized has a property matching the folder name,
 			// attach all other properties to it (e.g., logger/logger.mjs + logger/utils.mjs → logger function with .utils attached)
 			// GUARD: Only fire when there is an ACTUAL FILE named after the folder in this directory's
@@ -2855,7 +2931,12 @@ export class ModesProcessor extends ComponentBase {
 			// An `addapi` file in a folder with no self-named file is that folder's self-named file (Rule 11
 			// with F01; see processFiles), so it counts as one here too.
 			const _fileNames = dir.children.files.map((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name));
-			const _hasCategoryFile = _fileNames.includes(categoryName) || _fileNames.includes("addapi");
+			// So is a folder's only entry when processFiles composed it as the folder's file module (F05: a default-export
+			// function, whatever the file is called).
+			const _hasCategoryFile =
+				_fileNames.includes(categoryName) ||
+				_fileNames.includes("addapi") ||
+				(_fileNames.length === 1 && subDirs.length === 0 && this.#folderModuleValues.has(materialized[categoryName]));
 			// The hoist turns the folder into the self-named FILE's module (Rule 8: a default export becomes
 			// the folder, the other files its properties; a single named object export likewise). The value
 			// under the folder's own name can also be a NAMED export of that file that shares the name (Rule 1
@@ -2918,7 +2999,7 @@ export class ModesProcessor extends ComponentBase {
 					materializedKeys.some((key) => key !== categoryName) &&
 					resolveWrapper(mainValue) === null &&
 					(typeof mainValue === "function" ||
-						(mainValue !== null && typeof mainValue === "object" && Object.getPrototypeOf(mainValue) !== Object.prototype))
+						(mainValue !== null && typeof mainValue === "object" && Objects.getPrototypeOf(mainValue) !== Objects.prototype))
 				) {
 					mainValue = copyForComposition(mainValue, { addsMembers: true });
 				}
@@ -2933,21 +3014,21 @@ export class ModesProcessor extends ComponentBase {
 							valueType: typeof materialized[key]
 						});
 					}
-					const ownDescriptor = typeof mainValue === "function" ? Object.getOwnPropertyDescriptor(mainValue, key) : undefined;
+					const ownDescriptor = typeof mainValue === "function" ? Objects.getOwnPropertyDescriptor(mainValue, key) : undefined;
 					if (ownDescriptor && !ownDescriptor.enumerable) {
 						if (!(collisionMode === "merge-replace" && lazy_wrapperMembers.has(key))) lazy_wrapperMembers.set(key, materialized[key]);
 						continue;
 					}
-					if (collisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(mainValue, key)) continue;
+					if (collisionMode === "merge-replace" && Objects.prototype.hasOwnProperty.call(mainValue, key)) continue;
 					const lazy_accessor = this.#accessorToCarry(materialized, key);
-					if (lazy_accessor) Object.defineProperty(mainValue, key, lazy_accessor);
+					if (lazy_accessor) Objects.defineProperty(mainValue, key, lazy_accessor);
 					else holdMember(mainValue, key, materialized[key]);
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_RETURN",
 						categoryName,
-						keys: Object.keys(mainValue).filter((k) => !isFrameworkReservedKey(k))
+						keys: Objects.keys(mainValue).filter((k) => !isFrameworkReservedKey(k))
 					});
 				}
 				this.#refuseThenableValue(mainValue, apiPath);
@@ -2967,7 +3048,7 @@ export class ModesProcessor extends ComponentBase {
 				// nestedValue is always a valid lazy wrapper here (never null/undefined from processFiles).
 				/* v8 ignore next */
 				if (nestedValue && resolveWrapper(nestedValue) !== null) {
-					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
+					const attachedKeys = Objects.keys(nestedValue).filter((key) => key !== "____slothletInternal");
 					// Members named like a function's own built-in properties (`name`, `length`, `prototype`) are
 					// kept off `Object.keys` of a callable wrapper, so `attachedKeys` misses them. They belong to
 					// this folder as eager composes it: hand back the composed function and put them on the folder's
@@ -3005,11 +3086,22 @@ export class ModesProcessor extends ComponentBase {
 					// composition layer, so the value is handed on with them, as eager composes it (#585 review).
 					// An object's layer (over a Proxy, say) is handed on the same way, and a plain object is taken again
 					// from the value its file composed (see #fromComposedModule).
-					if (Array.isArray(nestedImpl) || (typeof nestedImpl === "object" && isCompositionLayer(nestedImpl))) {
+					if (Arrays.isArray(nestedImpl) || (typeof nestedImpl === "object" && isCompositionLayer(nestedImpl))) {
 						return UnifiedWrapper._extractFullImpl(nestedW);
 					}
 					const lazy_nestedComposed = this.#fromComposedModule(nestedValue, nestedW, UnifiedWrapper._extractFullImpl(nestedW));
 					if (lazy_nestedComposed !== null) return lazy_nestedComposed;
+					// A callable file module with a sibling attached beside it (`e/e.mjs` + `e/y.mjs`): the folder is the
+					// composed function with the sibling's members on it, as the single-file hoist above composes it. The
+					// module's own wrapper is not handed on as the folder's value: the folder's node would hold that node
+					// inside itself, and one call would run the hooks of both. The same holds for a folder's only file composed
+					// as its self-named file (F05) with no other export: the folder is the function itself.
+					if ((attachedKeys.length > 0 || _fileNames.length === 1) && typeof nestedImpl === "function") {
+						const composed = UnifiedWrapper._extractFullImpl(nestedW);
+						this.#carryWrapperChildren(nestedW, composed);
+						this.#refuseThenableValue(composed, apiPath);
+						return composed;
+					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {
@@ -3059,12 +3151,12 @@ export class ModesProcessor extends ComponentBase {
 		// adding non-conflicting file keys after materialization completes.
 		const shouldPrePopulate = collisionMode === "merge" || collisionMode === "warn";
 		if (fileFolderCollisionImpl && shouldPrePopulate) {
-			for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+			for (const [k, v] of Objects.entries(fileFolderCollisionImpl)) {
 				// Module export keys are always strings and never a framework-reserved name (the loader refuses
 				// one); false branch unreachable. A member named with a leading underscore is the module's own.
 				/* v8 ignore next */
 				if (typeof k === "string" && !isFrameworkReservedKey(k)) {
-					Object.defineProperty(wrapper, k, {
+					Objects.defineProperty(wrapper, k, {
 						value: v,
 						writable: false,
 						enumerable: true,
@@ -3093,10 +3185,10 @@ export class ModesProcessor extends ComponentBase {
 			// function object. ESM root contributors are always unique per instance because
 			// loadModule() appends ?slothlet_instance=<instanceID> to the import URL.
 			// No cross-instance contamination is possible.
-			Object.assign(rootFunction, api);
+			Objects.assign(rootFunction, api);
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
-					message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length })
+					message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Objects.keys(api).length })
 				});
 			}
 			return rootFunction;

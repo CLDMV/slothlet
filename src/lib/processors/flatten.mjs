@@ -30,13 +30,14 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { Reflect, Objects, Arrays, Functions, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
+const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
  * Flattening decision processor
@@ -277,7 +278,7 @@ export class Flatten extends ComponentBase {
 	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
 	 */
 	primitiveDefaultNamespace(value, mod, moduleKeys) {
-		if (!Object.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
+		if (!Objects.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
 		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
 		const namespace = { default: value };
 		for (const key of moduleKeys) namespace[key] = mod[key];
@@ -355,7 +356,7 @@ export class Flatten extends ComponentBase {
 			holdMember(target, key, value);
 			return;
 		}
-		Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -458,7 +459,7 @@ export class Flatten extends ComponentBase {
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
 			// A function default gets a callable layer that holds the named exports, and an object default is
@@ -487,19 +488,19 @@ export class Flatten extends ComponentBase {
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
 					// The copy carries the default object's own members.
-					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
+					for (const key of Objects.keys(mod.default)) members[key] = ["default", key];
 				}
 				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
 				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
@@ -525,12 +526,12 @@ export class Flatten extends ComponentBase {
 		if (isSelfReferential) {
 			if (mod[moduleName]) return { moduleContent: mod[moduleName], origins: { self: [moduleName], members: {} } };
 			const members = {};
-			for (const key of Object.keys(mod)) members[key] = [key];
+			for (const key of Objects.keys(mod)) members[key] = [key];
 			return { moduleContent: mod, origins: { self: null, members } };
 		}
 
 		// Hybrid pattern: default + named exports
-		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
@@ -587,7 +588,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }
@@ -672,7 +673,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 7 (F02, F03) - C12: Object auto-flatten (single named export matching filename)
-		if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
+		if (moduleName === categoryName && mod && typeof mod === "object" && !Arrays.isArray(mod) && currentDepth > 0) {
 			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 				return {
 					shouldFlatten: true,
@@ -692,7 +693,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 10 (F02) - C14: Parent-level flattening (generic filenames)
-		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
+		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Arrays.isArray(mod)) {
 			const genericFilenames = ["singlefile", "index", "main", "default"];
 			const isGenericFilename = genericFilenames.includes(moduleName.toLowerCase());
 

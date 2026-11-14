@@ -19,6 +19,7 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
+import { Objects, Arrays } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * API builder class for orchestrating mode-based API construction.
@@ -133,12 +134,12 @@ export class Builder extends ComponentBase {
 			// would otherwise pass a bare `typeof === "object"` check and produce empty/odd mounts.
 			const isPlainObject = (value) => {
 				if (value === null || typeof value !== "object") return false;
-				const proto = Object.getPrototypeOf(value);
-				return proto === Object.prototype || proto === null;
+				const proto = Objects.getPrototypeOf(value);
+				return proto === Objects.prototype || proto === null;
 			};
 			if (!isPlainObject(syntheticExports)) {
 				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
-					received: Array.isArray(syntheticExports)
+					received: Arrays.isArray(syntheticExports)
 						? "array"
 						: typeof syntheticExports === "object"
 							? `${syntheticExports.constructor?.name ?? "non-plain object"} instance`

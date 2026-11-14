@@ -211,9 +211,15 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 	});
 
-	describe("event rules module code adds, with the permission system off", () => {
+	// Event rules are part of the permission system: they are evaluated only while it is on (see events/event-permission-mode).
+	describe("event rules module code adds", () => {
+		// The system on, with the module allowed the event-rule functions it is asked to use.
+		const EVENT_RULES_ON = {
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.**", effect: "allow" }] }
+		};
+
 		it("refuses an event rule beyond the module's own events", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			const before = api.slothlet.event.resolveLevel("victim.v", "victim.ping");
 			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
 			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
@@ -221,7 +227,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("lets a module add and remove event rules for its own events", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			const ruleId = api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" });
 			expect(ruleId).toMatch(/^evt-/);
 			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
@@ -230,14 +236,14 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("refuses a module removing the host's event rule, even for its own events", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 			expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
 			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
 		});
 
 		it("ranks the module's event rule below the host's, across a reload too", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.*", effect: "allow" })).toMatch(/^evt-/);
 			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
@@ -245,8 +251,8 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
 		});
 
-		it("lets the condition of a module's event rule write anywhere, as nothing decides writes", async () => {
-			await load({});
+		it("holds the condition of a module's event rule to that module's own writes", async () => {
+			await load(EVENT_RULES_ON);
 			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
 			api.guest.x.takeConditionWrites();
 			api.victim.v.listen("guest.zap");
@@ -254,8 +260,19 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await new Promise((resolve) => setTimeout(resolve, 20));
 			const writes = api.guest.x.takeConditionWrites();
 			expect(writes.length).toBeGreaterThan(0);
-			expect([...new Set(writes)]).toEqual(["done"]);
-			expect(api.victim.v.viaCondition).toBe(1);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+
+		it("does not run the condition of a module's event rule while the permission system is off", async () => {
+			await load({});
+			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
+			api.guest.x.takeConditionWrites();
+			api.victim.v.listen("guest.zap");
+			await api.guest.x.shout("guest.zap", { n: 1 });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(api.guest.x.takeConditionWrites()).toEqual([]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
 		});
 	});
 
@@ -312,7 +329,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 	describe("a removed module's event rules", () => {
 		it("go with it, and stay gone across a reload", async () => {
-			await load({});
+			await load({
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.**", effect: "allow" }] }
+			});
 			const before = api.slothlet.event.resolveLevel("victim.v", "guest.ping");
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" })).toMatch(/^evt-/);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "victim.*", effect: "deny" });

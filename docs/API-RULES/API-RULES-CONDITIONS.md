@@ -178,7 +178,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Related Rule**: All rules (fallback)
 **Status**: ✅ Active
 
-**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default.
+**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default. In a folder it keeps every file of a multi-file folder at its own level, and a single file with no default-export function; a folder's only file whose default export is a function is the folder instead ([F05](API-FLATTENING.md#f05), composed in `processFiles()` of `src/lib/builders/modes-processor.mjs` as the folder's self-named file).
 
 **Function**: `getFlatteningDecision()`
 **Source**: `src/lib/processors/flatten.mjs` ~L174
@@ -488,6 +488,7 @@ if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__s
 ```
 
 **Triggers**: Module is an anonymous/unnamed function or explicit default + nested context
+**Note**: a named default function that is a folder's only file is promoted too, by [F05](API-FLATTENING.md#f05) (the file composes as the folder's self-named file), whatever its name.
 **Used By**: [API-RULES Rule 4](../API-RULES.md#rule-4-default-export-promotion)
 
 ---
@@ -672,21 +673,22 @@ api.tool.side(); // "tool.side"
 **Flattening Guide**: [F08: AddApi Path Deduplication Flattening](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)
 **Status**: ✅ Active (New in v3)
 
-**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value originated from a **direct subfolder** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
+**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value comes from a **direct child** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
 
 **Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.slothlet.api.add("config", folder)` should produce `api.config.*`, not `api.config.config.*`.
 
 **Function**: `addApiComponent()`
 **Source**: `src/lib/handlers/api-manager.mjs` - immediately after single-file unwrap block
 
-**Guard - `isDirectChild`**:
+**Guard - `isDirectChild`**: the value is a file at the mounted directory's root (`config.mjs`), or a file directly inside its subfolder named like the mount (`config/config.mjs`). That subfolder is the one [C26](#c26-same-named-folder-deduplication) leaves standing: when `config/` holds nothing but `config/`, the inner folder is the direct child. A folder is never the hoisted value: the subfolder named like the mount is poured into the mount's level, and a folder of that name inside it is a nested namespace.
+
+The builder decides this as it places the entry (`hoistedOntoMount` in `modes-processor.mjs`) and records the mount path itself on the node; `addApiComponent` hoists the node that records it:
 
 ```javascript
-// Ensures the matching key came from mountDir/lastPart/, not a deeper nested folder
-const isDirectChild = dirname(filePath) === path.join(resolvedFolderPath, lastPart);
+const isDirectChild = resolveWrapper(newApi[lastPart])?.____slothletInternal?.apiPath === effectivePath;
 ```
 
-This guard prevents incorrect hoisting when a deeply nested folder happens to share the mount path's last segment name.
+So the path a node records is the path it is reached at after the hoist.
 
 **Condition Check**:
 
@@ -719,11 +721,54 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **`isDirectChild` examples**:
 
-| Mount path   | Folder structure               | `isDirectChild` | Action      |
-| ------------ | ------------------------------ | --------------- | ----------- |
-| `"config"`   | `folder/config/config.mjs`     | `true`          | Hoist ✅    |
-| `"services"` | `folder/services/services.mjs` | `true`          | Hoist ✅    |
-| `"api"`      | `folder/api/nested/api.mjs`    | `false`         | No hoist ✅ |
+| Mount path   | Folder structure                                   | `isDirectChild`                   | Result                                           |
+| ------------ | -------------------------------------------------- | --------------------------------- | ------------------------------------------------ |
+| `"config"`   | `folder/config/config.mjs`                         | `true`                            | `api.config.*` ✅                                |
+| `"config"`   | `folder/config.mjs`                                | `true`                            | `api.config.*` ✅                                |
+| `"e"`        | `folder/e/e/e.mjs` (`e/` holds only `e/`)          | `true`                            | `api.e.*` ✅ (C26, then C25)                     |
+| `"services"` | `folder/services/{api.mjs, services/services.mjs}` | `false` for the inner `services/` | `api.services.api`, `api.services.services.*` ✅ |
+| `"c"`        | `folder/c/{z.mjs, c/x.mjs}`                        | `false` for the inner `c/`        | `api.c.z`, `api.c.c.x` ✅                        |
+| `"api"`      | `folder/api/nested/api.mjs`                        | `false` for `nested/api.mjs`      | `api.nested.api.*` ✅                            |
+
+---
+
+## C26: Same-Named Folder Deduplication
+
+**Category**: Flattening
+**Related Rule**: [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+**Flattening Guide**: [F09: Same-Named Folder Deduplication](API-FLATTENING.md#f09-same-named-folder-deduplication)
+**Status**: ✅ Active
+
+**Pattern**: Before a subdirectory's level is built, while it holds no files and exactly one subdirectory whose sanitized name equals its own, the inner directory is built in its place.
+
+**Purpose**: `e/e/x.mjs` is `api.e.x`, not `api.e.e.x`. The outer folder carries nothing of its own.
+
+**Function**: `#collapseSameNamedFolder()`
+**Source**: `src/lib/builders/modes-processor.mjs` - applied to each subdirectory of `processFiles()`, eager and lazy
+
+**Condition Check**:
+
+```javascript
+while (
+	dir.children.files.length === 0 &&
+	dir.children.directories.length === 1 &&
+	sanitize(dir.children.directories[0].name) === sanitize(dir.name)
+) {
+	dir = dir.children.directories[0];
+}
+```
+
+**Triggers**: no files + exactly one subdirectory + same sanitized name
+**Result**: One level. Every node under it records the collapsed path, which is the path it is reached at.
+**Used By**: [API-RULES Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+
+| Folder structure             | Collapsed | Reached at                    |
+| ---------------------------- | --------- | ----------------------------- |
+| `e/e/x.mjs`                  | yes       | `api.e.x`                     |
+| `t/t/t/x.mjs`                | yes       | `api.t.x`                     |
+| `c/z.mjs` + `c/c/x.mjs`      | no        | `api.c.z`, `api.c.c.x`        |
+| `s/s.mjs` + `s/s/worker.mjs` | no        | Rule 1 (the file) and `s.s.*` |
+| `g/h/g/x.mjs`                | no        | `api.g.h.g.x`                 |
 
 ---
 
@@ -741,6 +786,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 - **Rule 10**: [C14](#c14-parent-level-flattening---generic-filenames)
 - **Rule 11**: [C24](#c24-addapi-special-file-detection)
 - **Rule 13**: [C25](#c25-addapi-path-deduplication)
+- **Rule 22**: [C26](#c26-same-named-folder-deduplication)
 
 ### By Flattening Pattern
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:45:57-08:00 (1794177957)
+ *	@Last modified time: 2026-11-10T21:29:44-08:00 (1794374984)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -235,7 +235,11 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		});
 
 		it("runs a handed callback as the caller when it runs as a reaction with none of the leaf's frames below it", async () => {
-			expect(await api.project.hand(mount, "defer", "callback")).toEqual({ own: "secret", handed: DENIED });
+			// The reaction's only frame of the module's file is the callback's helper, outside every export. The async
+			// runtime's store names the call (`project.hand`); the live runtime reads the frames, and code outside every
+			// export with no leaf frame below it is its file's module (`project`). Refused under either name.
+			const refusedAs = runtime === "async" ? DENIED : "PERMISSION_DENIED:project";
+			expect(await api.project.hand(mount, "defer", "callback")).toEqual({ own: "secret", handed: refusedAs });
 		});
 
 		it.each(["vm", "vmScript", "sourceURL"])(

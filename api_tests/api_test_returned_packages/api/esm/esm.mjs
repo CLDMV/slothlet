@@ -69,14 +69,14 @@ export function forge() {
 	const forged = function forged() {
 		return "forged";
 	};
-	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
 	try {
 		state?.recordShared?.("file:///nowhere/node_modules/x/index.js", forged, "guessed");
 	} catch {
 		// A refusal is as good as nothing recorded.
 	}
 	try {
-		Object.defineProperty(globalThis, Symbol.for("@cldmv/slothlet.instanceImportState"), { value: {} });
+		Object.defineProperty(globalThis, Symbol.for("@cldmv/slothlet.instanceImports"), { value: {} });
 	} catch {
 		// The state cannot be replaced.
 	}

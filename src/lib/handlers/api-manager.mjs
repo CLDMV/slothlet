@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T01:51:32-08:00 (1793785892)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,6 +74,7 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises, Boolean, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -198,7 +199,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Handle array input - convert to dot-separated string
-		if (Array.isArray(apiPath)) {
+		if (Arrays.isArray(apiPath)) {
 			// Validate array elements
 			if (apiPath.length === 0) {
 				return { apiPath: "", parts: [] };
@@ -579,7 +580,7 @@ export class ApiManager extends ComponentBase {
 		// the reserved-name check the host meets.
 		// Code a caller supplied to another module's call writes as every module it acts for (#597): a list of
 		// wrappers, the executing one first, each of which has to own the path. The first owns what is created.
-		const writers = (Array.isArray(callerWrapper) ? callerWrapper : [callerWrapper]).filter(Boolean);
+		const writers = (Arrays.isArray(callerWrapper) ? callerWrapper : [callerWrapper]).filter(Boolean);
 		callerWrapper = writers[0] ?? null;
 		const rootSegment = coercedPath.split(".")[0];
 		if (callerWrapper && FRAMEWORK_ROOT_SEGMENTS.has(rootSegment)) {
@@ -696,7 +697,10 @@ export class ApiManager extends ComponentBase {
 	 * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
 	 */
 	ownershipEnforced() {
-		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		// An instance that shut down with the system on keeps holding module writes to it: a module no longer mounted
+		// owns nothing, so what it kept a view of stays as it could not write it.
+		return permissionManager?.isEnabled?.() === true || permissionManager?.wasOnAtShutdown?.() === true;
 	}
 
 	/**
@@ -886,7 +890,7 @@ export class ApiManager extends ComponentBase {
 		}
 		// A plain object a module stored can inherit the member: an inherited accessor is as unknown as an own one.
 		if (!raw && versionDispatcherRecord(node) === null) {
-			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Object.prototype; proto = Reflect.getPrototypeOf(proto)) {
+			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Objects.prototype; proto = Reflect.getPrototypeOf(proto)) {
 				const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
 				if (descriptor)
 					return "value" in descriptor
@@ -1014,7 +1018,7 @@ export class ApiManager extends ComponentBase {
 		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
 		if (!incarnations || incarnations.has(id)) return;
 		if (this.slothlet.handlers.ownership.getModuleMounts(moduleID).length > 0) return;
-		incarnations.set(id, Object.freeze({ moduleID: id }));
+		incarnations.set(id, Objects.freeze({ moduleID: id }));
 		this.slothlet._retiredIncarnations?.delete(id);
 	}
 
@@ -1031,7 +1035,7 @@ export class ApiManager extends ComponentBase {
 		if (!wrapper || visited.has(wrapper)) return;
 		visited.add(wrapper);
 		wrapper.____slothletInternal.removed = true;
-		for (const key of Object.keys(wrapper)) {
+		for (const key of Objects.keys(wrapper)) {
 			if (isFrameworkReservedKey(key)) continue;
 			const child = resolveWrapper(dataMemberOf(wrapper, key));
 			// Only nodes under the removed path: an alias stored there is another node, which stays (#625).
@@ -1233,8 +1237,8 @@ export class ApiManager extends ComponentBase {
 		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		// Transfer children from wrapper properties
-		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
-		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !isFrameworkReservedKey(k));
+		const existingChildKeys = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+		const nextChildKeys = Objects.keys(nextWrapper).filter((k) => !isFrameworkReservedKey(k));
 
 		// User-assigned overrides (wrap-on-set, tagged `userAssigned`) must survive selective reload
 		// verbatim — not be deleted or have the reloaded module's content merged back into them. Capture
@@ -1255,7 +1259,7 @@ export class ApiManager extends ComponentBase {
 				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_IMPL_KEYS",
 				// nextWrapper.impl is always an object or null (never undefined) after construction; || {} is unreachable.
 				/* v8 ignore next */
-				implKeys: Object.keys(nextWrapper.____slothletInternal.impl || {})
+				implKeys: Objects.keys(nextWrapper.____slothletInternal.impl || {})
 			});
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_CHILDCACHE_KEYS",
@@ -1325,7 +1329,7 @@ export class ApiManager extends ComponentBase {
 				// A user-assigned override at this key wins over the reloaded module's version (#329).
 				if (userAssignedKeys.has(key)) continue;
 				const childValue = nextWrapper[key];
-				Object.defineProperty(existingWrapper, key, {
+				Objects.defineProperty(existingWrapper, key, {
 					value: childValue,
 					writable: false,
 					enumerable: true,
@@ -1342,9 +1346,9 @@ export class ApiManager extends ComponentBase {
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
 				const isInternal = isFrameworkReservedKey(key);
-				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (!isInternal && !Objects.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
-					Object.defineProperty(existingWrapper, key, {
+					Objects.defineProperty(existingWrapper, key, {
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1362,7 +1366,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const syncWrapper_existingChildWrapper = resolveWrapper(existingChild) ?? existingChild;
-						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
+						const syncWrapper_hasGrandChildren = Objects.keys(syncWrapper_nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// #441: distinguish a genuine value leaf from a lazy-unmaterialized NAMESPACE whose
 						// children aren't visible yet. A leaf is fully resolved (no materializeFunc); a lazy
 						// directory carries a materializeFunc and hasn't materialized, so its own children —
@@ -1432,7 +1436,7 @@ export class ApiManager extends ComponentBase {
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
 				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
-				if (Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (Objects.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
 					const existingChild = existingWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
@@ -1443,7 +1447,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
-						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
+						const hasGrandChildren = Objects.keys(nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// A still-lazy incoming folder is a namespace too, whose children are not visible yet:
 						// merge it rather than swapping it in, which dropped the existing side's children (#525).
 						// The recursive call materializes both sides before comparing their keys.
@@ -1455,7 +1459,7 @@ export class ApiManager extends ComponentBase {
 							await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
 						} else {
 							delete existingWrapper[key];
-							Object.defineProperty(existingWrapper, key, { value: childValue, writable: false, enumerable: true, configurable: true });
+							Objects.defineProperty(existingWrapper, key, { value: childValue, writable: false, enumerable: true, configurable: true });
 						}
 					} else {
 						// Defensive: every api leaf (callable, data, or namespace) is a UnifiedWrapper proxy, so both
@@ -1463,7 +1467,7 @@ export class ApiManager extends ComponentBase {
 						// only for non-proxy adapter values (mirrors the defensive fallbacks in the replace branch).
 						/* v8 ignore start */
 						delete existingWrapper[key];
-						Object.defineProperty(existingWrapper, key, {
+						Objects.defineProperty(existingWrapper, key, {
 							value: childValue,
 							writable: false,
 							enumerable: true,
@@ -1473,7 +1477,7 @@ export class ApiManager extends ComponentBase {
 					}
 				} else {
 					// New key - add it
-					Object.defineProperty(existingWrapper, key, {
+					Objects.defineProperty(existingWrapper, key, {
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1584,8 +1588,8 @@ export class ApiManager extends ComponentBase {
 		if (!raw || seen.has(raw)) return;
 		seen.add(raw);
 		raw.___trackLazyLoad(parked ? "park" : "unpark");
-		for (const key of Object.keys(raw)) {
-			const descriptor = Object.getOwnPropertyDescriptor(raw, key);
+		for (const key of Objects.keys(raw)) {
+			const descriptor = Objects.getOwnPropertyDescriptor(raw, key);
 			if (descriptor && "value" in descriptor) this._setShadowParked(descriptor.value, parked, seen);
 		}
 	}
@@ -1652,7 +1656,7 @@ export class ApiManager extends ComponentBase {
 		// node survives this call entirely (#372/#373 review, suppressed finding).
 		// Members are read by descriptor: an accessor holds no wrapper of its own, and it is the module's code, which
 		// runs when something reads it, never as a side effect of this walk (#597).
-		for (const key of Object.keys(api)) {
+		for (const key of Objects.keys(api)) {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) continue;
 			const value = dataMemberOf(api, key);
@@ -1701,7 +1705,7 @@ export class ApiManager extends ComponentBase {
 				key: "DEBUG_MODE_MUTATE_API_VALUE_NEXT_VALUE_KEYS",
 				// nextValue is always an object here (caller checks nextIsObjectLike first); the [] fallback is unreachable.
 				/* v8 ignore next */
-				nextValueKeys: nextValue ? Object.keys(nextValue) : []
+				nextValueKeys: nextValue ? Objects.keys(nextValue) : []
 			});
 		}
 
@@ -1725,7 +1729,7 @@ export class ApiManager extends ComponentBase {
 		if (this.isWrapperProxy(existingValue) && !this.isWrapperProxy(nextValue)) {
 			// Check if next is an object or function with properties
 			const nextIsObjectLike = nextValue && (typeof nextValue === "object" || typeof nextValue === "function");
-			const nextHasKeys = nextIsObjectLike && Object.keys(nextValue).length > 0;
+			const nextHasKeys = nextIsObjectLike && Objects.keys(nextValue).length > 0;
 
 			if (nextHasKeys) {
 				if (config?.debug?.api) {
@@ -1734,7 +1738,7 @@ export class ApiManager extends ComponentBase {
 					});
 					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_KEYS",
-						keys: Object.keys(nextValue)
+						keys: Objects.keys(nextValue)
 					});
 				}
 				// Merge each child from nextValue into the existing wrapper
@@ -2107,7 +2111,7 @@ export class ApiManager extends ComponentBase {
 		if (!current || (typeof current !== "object" && typeof current !== "function")) {
 			return false;
 		}
-		if (!Object.prototype.hasOwnProperty.call(current, finalKey)) {
+		if (!Objects.prototype.hasOwnProperty.call(current, finalKey)) {
 			return false;
 		}
 
@@ -2185,7 +2189,7 @@ export class ApiManager extends ComponentBase {
 					wrapper.____slothletInternal.impl = null;
 				}
 				// Clear children from wrapper to release references
-				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+				const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 				for (const key of childKeys) {
 					delete wrapper[key];
 				}
@@ -2210,7 +2214,7 @@ export class ApiManager extends ComponentBase {
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
 			const value = parent[key];
-			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
+			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
 			}
@@ -2404,7 +2408,7 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#modulePathParts(apiPath) {
-		if (Array.isArray(apiPath)) return apiPath.map(String);
+		if (Arrays.isArray(apiPath)) return apiPath.map(String);
 		const trimmed = String(apiPath ?? "").trim();
 		return trimmed === "" ? [] : trimmed.split(".");
 	}
@@ -2501,11 +2505,11 @@ export class ApiManager extends ComponentBase {
 				// Members are read by descriptor: an accessor is still a path the content writes, but it is the module's code,
 				// which runs when something reads it, never as a side effect of this check (#597).
 				if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
-					for (const key of Object.keys(impl)) members.set(key, dataMemberOf(impl, key));
+					for (const key of Objects.keys(impl)) members.set(key, dataMemberOf(impl, key));
 				}
-				for (const key of Object.keys(raw)) members.set(key, dataMemberOf(raw, key));
+				for (const key of Objects.keys(raw)) members.set(key, dataMemberOf(raw, key));
 			} else {
-				members = new Map(Object.keys(node).map((key) => [key, dataMemberOf(node, key)]));
+				members = new Map(Objects.keys(node).map((key) => [key, dataMemberOf(node, key)]));
 			}
 			for (const [key, value] of members) {
 				if (isFrameworkReservedKey(key)) continue;
@@ -2654,11 +2658,11 @@ export class ApiManager extends ComponentBase {
 					validationError: true
 				});
 			}
-			copy[effect] = Array.isArray(descriptor.value)
-				? Object.freeze(Array.from(descriptor.value, (entry) => permissionManager.snapshotRule(entry)))
+			copy[effect] = Arrays.isArray(descriptor.value)
+				? Objects.freeze(Arrays.from(descriptor.value, (entry) => permissionManager.snapshotRule(entry)))
 				: descriptor.value;
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
@@ -2677,7 +2681,7 @@ export class ApiManager extends ComponentBase {
 	#normalizePermissionShorthandEntry(entry) {
 		const getValueType = (value) => {
 			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
+			if (Arrays.isArray(value)) return "array";
 			return typeof value;
 		};
 
@@ -2685,7 +2689,7 @@ export class ApiManager extends ComponentBase {
 			return { target: entry, condition: undefined };
 		}
 
-		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+		if (!entry || typeof entry !== "object" || Arrays.isArray(entry)) {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
 				received: getValueType(entry),
@@ -2767,7 +2771,7 @@ export class ApiManager extends ComponentBase {
 			params && "writerCeilings" in params ? params.writerCeilings : runtime_selfModuleCeilings(this.slothlet, callerWriter);
 
 		// Handle array of paths - process each sequentially
-		if (Array.isArray(folderPath)) {
+		if (Arrays.isArray(folderPath)) {
 			const moduleIDs = [];
 			for (const singlePath of folderPath) {
 				const moduleID = await this.addApiComponent({
@@ -2792,12 +2796,12 @@ export class ApiManager extends ComponentBase {
 		if (
 			folderPath &&
 			typeof folderPath === "object" &&
-			!Array.isArray(folderPath) &&
-			Object.prototype.hasOwnProperty.call(folderPath, "exports")
+			!Arrays.isArray(folderPath) &&
+			Objects.prototype.hasOwnProperty.call(folderPath, "exports")
 		) {
 			const siblingOptions = { ...folderPath };
 			delete siblingOptions.exports;
-			if (Object.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
+			if (Objects.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
 		}
 
 		const { metadata = {}, ...restOptions } = effectiveOptions;
@@ -2856,7 +2860,7 @@ export class ApiManager extends ComponentBase {
 				restOptions.permissions = this.#snapshotPermissionsOption(restOptions.permissions);
 			}
 			for (const effect of ["deny", "allow"]) {
-				for (const entry of Array.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
+				for (const entry of Arrays.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
 					const { target } = this.#normalizePermissionShorthandEntry(entry);
 					// Placed for the module code making the add, read before the build ran as no module (#597).
 					ruleLayers[effect].push(this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
@@ -2941,7 +2945,7 @@ export class ApiManager extends ComponentBase {
 		// filesystem is touched — it flows through buildAPI's synthetic path, so flatten / wrap /
 		// self / context / hooks / permissions apply exactly as for a file-loaded leaf.
 		const isSynthetic =
-			typeof folderPath === "function" || (folderPath !== null && typeof folderPath === "object" && !Array.isArray(folderPath));
+			typeof folderPath === "function" || (folderPath !== null && typeof folderPath === "object" && !Arrays.isArray(folderPath));
 		let syntheticExports = null;
 		let resolvedPath, isDirectory, isFile;
 		if (isSynthetic) {
@@ -2955,20 +2959,20 @@ export class ApiManager extends ComponentBase {
 			// instead of a structured validation error (#136 review).
 			const isPlainObject = (value) => {
 				if (value === null || typeof value !== "object") return false;
-				const proto = Object.getPrototypeOf(value);
-				return proto === Object.prototype || proto === null;
+				const proto = Objects.getPrototypeOf(value);
+				return proto === Objects.prototype || proto === null;
 			};
 			const describeNonPlain = (value) =>
 				value === null
 					? "null"
-					: Array.isArray(value)
+					: Arrays.isArray(value)
 						? "array"
 						: typeof value === "object"
 							? `${value.constructor?.name ?? "non-plain object"} instance`
 							: typeof value;
 			if (typeof folderPath === "function") {
 				syntheticExports = { default: folderPath };
-			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+			} else if (Objects.prototype.hasOwnProperty.call(folderPath, "exports")) {
 				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
 				// { default?, ...named } export map (a plain, non-array object). Without this guard a
 				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] },
@@ -3031,7 +3035,7 @@ export class ApiManager extends ComponentBase {
 					// The default re-keys to def.name; if a named export already claims that key, warn and
 					// let the named export win (the spread below overwrites the re-keyed default). Console
 					// warning stays silent-gated; impl:warning fires regardless of `silent` (#148).
-					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+					if (Objects.prototype.hasOwnProperty.call(named, def.name)) {
 						if (this.slothlet && !this.____config?.silent) {
 							new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
 						}
@@ -3229,21 +3233,21 @@ export class ApiManager extends ComponentBase {
 
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_ADD_API_COMPONENT_BUILD_RETURN",
-			topLevelKeys: Object.keys(newApi),
-			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
-			wrappers: Object.keys(newApi)
+			topLevelKeys: Objects.keys(newApi),
+			dottedKeys: Objects.keys(newApi).filter((k) => k.includes(".")),
+			wrappers: Objects.keys(newApi)
 				.filter((k) => resolveWrapper(newApi[k]) !== null)
 				.map((k) => {
 					const _w = resolveWrapper(newApi[k]);
 					return {
 						key: k,
 						apiPath: _w.apiPath,
-						implKeys: Object.keys(_w.____slothletInternal.impl || {}),
-						childCacheSize: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k)).length,
-						childCacheKeys: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k))
+						implKeys: Objects.keys(_w.____slothletInternal.impl || {}),
+						childCacheSize: Objects.keys(_w).filter((k) => !isFrameworkReservedKey(k)).length,
+						childCacheKeys: Objects.keys(_w).filter((k) => !isFrameworkReservedKey(k))
 					};
 				}),
-			nonWrappers: Object.keys(newApi)
+			nonWrappers: Objects.keys(newApi)
 				.filter((k) => resolveWrapper(newApi[k]) === null)
 				.map((k) => ({ key: k, type: typeof newApi[k] }))
 		});
@@ -3257,8 +3261,8 @@ export class ApiManager extends ComponentBase {
 		// Special handling for single file loads:
 		// When loading a single file, buildAPI returns { filename: exports }
 		// We want to expose the exports directly at the target path, not nested under filename
-		if ((isFile || isSynthetic) && Object.keys(newApi).length === 1) {
-			const fileName = Object.keys(newApi)[0];
+		if ((isFile || isSynthetic) && Objects.keys(newApi).length === 1) {
+			const fileName = Objects.keys(newApi)[0];
 			apiToMerge = newApi[fileName];
 		}
 
@@ -3270,47 +3274,38 @@ export class ApiManager extends ComponentBase {
 		//   1. normalizedPath is non-empty (not a root-level add)
 		//   2. newApi contains a key equal to the last segment of normalizedPath
 		//   3. The value at that key is an object or function (a real namespace, not a primitive)
-		//   4. The matching value originates from a direct child of the mounted directory:
-		//      a) A FILE at the root of the mounted folder (config.mjs → dupFileDir === resolvedFolderPath)
-		//      b) A DIRECT subfolder of the mounted directory (config/ → dupFileDir === resolvedFolderPath/lastPart)
-		//      Deeper paths (e.g. services/services/services.mjs) match neither and are correctly rejected.
+		//   4. The matching value comes from a direct child of the mounted directory: a FILE at its root
+		//      (config.mjs), or a file of its subfolder of that name (config/config.mjs), that subfolder being the one
+		//      Rule 22 leaves standing for it (config/config/config.mjs when config/ holds nothing else). A FOLDER of
+		//      that name inside the hoisted one is a nested namespace and stays (config/z.mjs + config/config/x.mjs is
+		//      config.z and config.config.x).
+		//   The builder decides (4) as it places the entry and records the mount path itself on a node this hoists
+		//   (modes-processor's `hoistedOntoMount`); the node's recorded path is read here, so the tree and the recorded
+		//   path cannot disagree (#743).
 		if (!isFile && normalizedPath) {
 			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
-			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
+			if (lastPart && Objects.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
 				const dupValue = apiToMerge[lastPart];
 				const dupType = typeof dupValue;
 				// dupValue from buildAPI is always a wrapper proxy (object/function); null and non-object arms unreachable.
 				/* v8 ignore next */
 				if (dupValue !== null && (dupType === "object" || dupType === "function")) {
-					// Verify the value came from a direct subfolder of the mounted directory.
-					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
-					// This prevents hoisting deeper subfolders that share the mount-path name
-					// (e.g. services/services/ inside a "services" mount).
+					// The builder recorded the mount path itself on a node it places for this hoist; any other node at
+					// the key keeps its own segment (a folder nested in the hoisted one, an entry from deeper down).
 					const dupWrapper = resolveWrapper(dupValue);
-					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
-					// dupFilePath is always set on a wrapper proxy from buildAPI; null fallback is unreachable.
+					// dupValue from buildAPI is always a wrapper proxy; the optional arms are defensive.
 					/* v8 ignore next */
-					const dupFileDir = dupFilePath ? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : null;
-					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
-					const expectedDir = normalizedFolderPath + "/" + lastPart;
-					// Accept two cases:
-					// 1. dupFileDir === expectedDir: the value came from a direct subfolder
-					//    (e.g. config/config.mjs inside a "config" mount)
-					// 2. dupFileDir === normalizedFolderPath: the value came from a file at the
-					//    root of the mounted folder (e.g. config.mjs inside a "config" mount)
-					// Deeper paths (e.g. services/services/services.mjs) match neither and are
-					// correctly rejected.
-					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
+					const isDirectChild = dupWrapper?.____slothletInternal?.apiPath === effectivePath;
 
 					if (isDirectChild) {
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
 						/* v8 ignore next */
-						const dupChildKeys = dupWrapper ? Object.keys(dupWrapper).filter((k) => !isFrameworkReservedKey(k)) : Object.keys(dupValue);
+						const dupChildKeys = dupWrapper ? Objects.keys(dupWrapper).filter((k) => !isFrameworkReservedKey(k)) : Objects.keys(dupValue);
 
 						// Alone at the mounted folder's root, the duplicate is the whole mount: it is used as it is, so
 						// what its value answers (a getter reading a later write, a Proxy's trapped members) stays live
 						// instead of being copied key by key into a new object (#585 review).
-						const dupHasSiblings = Object.keys(apiToMerge).some((k) => k !== lastPart);
+						const dupHasSiblings = Objects.keys(apiToMerge).some((k) => k !== lastPart);
 						if (dupChildKeys.length === 0 || !dupHasSiblings) {
 							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
 							// exported function) — it already IS what belongs at the mount path. Rebuilding it
@@ -3319,13 +3314,13 @@ export class ApiManager extends ComponentBase {
 							// the leaf (another file at the mounted folder's root) rides along as a property
 							// on the leaf itself, mirroring the callable-namespace-with-children pattern this
 							// function already supports below.
-							const siblingKeys = Object.keys(apiToMerge).filter((k) => k !== lastPart);
+							const siblingKeys = Objects.keys(apiToMerge).filter((k) => k !== lastPart);
 							for (const k of siblingKeys) dupValue[k] = apiToMerge[k];
 							apiToMerge = dupValue;
 						} else {
 							// Hoist all children of the duplicate key up to the same level
 							const hoisted = {};
-							for (const k of Object.keys(apiToMerge)) {
+							for (const k of Objects.keys(apiToMerge)) {
 								if (k !== lastPart) hoisted[k] = apiToMerge[k];
 							}
 							// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
@@ -3339,7 +3334,7 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_RULE_13_DEDUP_HOISTED_KEY",
 							lastPart,
-							newKeys: Object.keys(apiToMerge)
+							newKeys: Objects.keys(apiToMerge)
 						});
 					}
 				}
@@ -3349,7 +3344,7 @@ export class ApiManager extends ComponentBase {
 		if (this.____config.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_ADD_API_COMPONENT_MERGE_KEYS",
-				keys: Object.keys(apiToMerge),
+				keys: Objects.keys(apiToMerge),
 				isRootLevel: parts.length === 0
 			});
 		}
@@ -3402,7 +3397,7 @@ export class ApiManager extends ComponentBase {
 				// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
 				// File adds keep newApi (each file is already a top-level key).
 				rootSource = isSynthetic ? apiToMerge : newApi;
-				rootKeys = Object.keys(rootSource);
+				rootKeys = Objects.keys(rootSource);
 				// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
 				// default with no named exports flattens to a value with no enumerable keys, so the merge
 				// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
@@ -3590,7 +3585,7 @@ export class ApiManager extends ComponentBase {
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
-					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+					const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
 						collectPendingMaterializations(dataMemberOf(wrapper, key), depth + 1);
 					}
@@ -3602,7 +3597,7 @@ export class ApiManager extends ComponentBase {
 				}
 
 				// Non-wrapper value (plain object/array/function): recurse into its own child properties.
-				for (const key of Object.keys(obj)) {
+				for (const key of Objects.keys(obj)) {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
 					if (key !== "____slothletInternal") {
@@ -3658,7 +3653,7 @@ export class ApiManager extends ComponentBase {
 						apiPath: normalizedPath
 					});
 				}
-				await Promise.all(pendingMaterializations);
+				await Promises.all(pendingMaterializations);
 			}
 			/* v8 ignore stop */
 		}
@@ -3668,7 +3663,7 @@ export class ApiManager extends ComponentBase {
 		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
 		// e.g., "testMerge.config" → "testMerge", "nested.deep.path" → "nested"
 		// For root level (empty path), register metadata on each top-level key
-		if (anyAssignmentSucceeded && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+		if (anyAssignmentSucceeded && metadata && Objects.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
 			if (parts.length === 0) {
 				// Root level - register metadata only on the keys that actually landed. The full
 				// newApi includes keys a skip/warn collision rejected (never assigned onto the live
@@ -3732,7 +3727,7 @@ export class ApiManager extends ComponentBase {
 		// force-replaces by default, bypassing the original collision decision entirely — resurrect
 		// content that was never actually mounted (#372 review).
 		if (anyAssignmentSucceeded && this.slothlet.handlers.apiCacheManager) {
-			const cachedApi = parts.length === 0 ? Object.fromEntries([...rootSucceededKeys].map((key) => [key, rootSource[key]])) : newApi;
+			const cachedApi = parts.length === 0 ? Objects.fromEntries([...rootSucceededKeys].map((key) => [key, rootSource[key]])) : newApi;
 			this.slothlet.handlers.apiCacheManager.set(moduleID, {
 				endpoint: effectivePath,
 				moduleID: moduleID,
@@ -3747,7 +3742,7 @@ export class ApiManager extends ComponentBase {
 				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
-				timestamp: Date.now()
+				timestamp: this.clock.now()
 			});
 		}
 
@@ -3815,7 +3810,7 @@ export class ApiManager extends ComponentBase {
 			const perms = restOptions.permissions;
 			const callerPattern = `${normalizedPath}.**`;
 
-			if (Array.isArray(perms.deny)) {
+			if (Arrays.isArray(perms.deny)) {
 				perms.deny.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
@@ -3831,7 +3826,7 @@ export class ApiManager extends ComponentBase {
 					);
 				});
 			}
-			if (Array.isArray(perms.allow)) {
+			if (Arrays.isArray(perms.allow)) {
 				perms.allow.forEach((entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
@@ -4039,7 +4034,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	#restoreNamespaceFunction(live, apiPath) {
 		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
-		if (!Object.keys(live).some((key) => !isFrameworkReservedKey(key))) return;
+		if (!Objects.keys(live).some((key) => !isFrameworkReservedKey(key))) return;
 		const ownership = this.slothlet.handlers.ownership;
 		let fn = null;
 		for (const entry of ownership.getPathHistory(apiPath)) {
@@ -4084,15 +4079,15 @@ export class ApiManager extends ComponentBase {
 				await wrapper._materialize();
 			}
 		}
-		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !isFrameworkReservedKey(key));
+		const childKeys = (wrapper) => Objects.keys(wrapper).filter((key) => !isFrameworkReservedKey(key));
 		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
 		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
 		// ones and drop any child another module merged in.
-		const liveChildren = new Map(childKeys(live).map((key) => [key, Object.getOwnPropertyDescriptor(live, key)]));
+		const liveChildren = new Map(childKeys(live).map((key) => [key, Objects.getOwnPropertyDescriptor(live, key)]));
 		// Values set on the namespace by hand belong to neither module, so they are kept verbatim — detected
 		// exactly as a selective reload detects the custom properties it carries across (an empty fresh api:
 		// every plain or user-assigned value counts).
-		const customKeys = new Set(Object.keys(this._collectCustomProperties(live, {})));
+		const customKeys = new Set(Objects.keys(this._collectCustomProperties(live, {})));
 		const last = sources[sources.length - 1];
 		const impl = target ? target.impl : last.____slothletInternal.impl;
 		const moduleID = target ? target.moduleID : last.____slothletInternal.moduleID;
@@ -4141,7 +4136,7 @@ export class ApiManager extends ComponentBase {
 		}
 		runtime_frameworkWrite(live, () => {
 			for (const key of childKeys(live)) delete live[key];
-			for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+			for (const [key, descriptor] of [...layout, ...custom]) Objects.defineProperty(live, key, descriptor);
 		});
 	}
 
@@ -4197,7 +4192,7 @@ export class ApiManager extends ComponentBase {
 		let moduleID;
 
 		if (this.slothlet.handlers.ownership) {
-			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
+			const registeredModules = Arrays.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			let matchingModule = null;
 
 			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
@@ -4707,9 +4702,9 @@ export class ApiManager extends ComponentBase {
 				for (const shadow of shadows) {
 					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
 					// clobber a live member with a stale shadow.
-					if (Object.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
+					if (Objects.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
 					runtime_frameworkWrite(shadow.container, () =>
-						Object.defineProperty(shadow.container, shadow.key, {
+						Objects.defineProperty(shadow.container, shadow.key, {
 							value: shadow.child,
 							writable: false,
 							enumerable: true,
@@ -4998,7 +4993,7 @@ export class ApiManager extends ComponentBase {
 		cacheManager.set(moduleID, {
 			...oldEntry,
 			api: freshApi,
-			timestamp: Date.now()
+			timestamp: this.clock.now()
 		});
 
 		// DEBUG: Log freshApi keys before restore
@@ -5008,7 +5003,7 @@ export class ApiManager extends ComponentBase {
 			endpoint: oldEntry.endpoint,
 			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
 			/* v8 ignore next */
-			freshApiKeys: Object.keys(freshApi || {})
+			freshApiKeys: Objects.keys(freshApi || {})
 		});
 
 		// Traverse fresh API and update/create wrappers
@@ -5026,7 +5021,7 @@ export class ApiManager extends ComponentBase {
 			endpoint: oldEntry.endpoint,
 			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
 			/* v8 ignore next */
-			freshApiKeys: Object.keys(freshApi || {})
+			freshApiKeys: Objects.keys(freshApi || {})
 		});
 
 		this.slothlet.debug("reload", {
@@ -5133,7 +5128,7 @@ export class ApiManager extends ComponentBase {
 		// This ensures the freshly-tagged wrappers inherit the updated path metadata
 		// the next time getMetadata() is called on them.
 		const reloadMetadata = options?.metadata;
-		if (reloadMetadata && typeof reloadMetadata === "object" && Object.keys(reloadMetadata).length > 0) {
+		if (reloadMetadata && typeof reloadMetadata === "object" && Objects.keys(reloadMetadata).length > 0) {
 			// metadata handler is always registered when a Slothlet instance loads; FALSE never fires.
 			/* v8 ignore next */
 			if (this.slothlet.handlers.metadata) {
@@ -5288,12 +5283,12 @@ export class ApiManager extends ComponentBase {
 		// Get keys from fresh API to know which are "API" keys vs "custom" keys
 		// freshApi is always a plain object from buildAPI \u2014 the nullish fallback array is unreachable.
 		/* v8 ignore next */
-		const freshKeys = new Set(freshApi ? Object.keys(freshApi) : []);
+		const freshKeys = new Set(freshApi ? Objects.keys(freshApi) : []);
 
 		// Get all enumerable own properties on the wrapper that are user-accessible.
 		// Use the single authoritative framework key list from ComponentBase — only skip
 		// known slothlet internals, never blanket-filter by underscore prefix.
-		const ownKeys = Object.keys(wrapper).filter((k) => !ComponentBase.INTERNAL_KEYS.has(k));
+		const ownKeys = Objects.keys(wrapper).filter((k) => !ComponentBase.INTERNAL_KEYS.has(k));
 
 		for (const key of ownKeys) {
 			try {
@@ -5340,7 +5335,7 @@ export class ApiManager extends ComponentBase {
 			return;
 		}
 
-		for (const [key, value] of Object.entries(customProps)) {
+		for (const [key, value] of Objects.entries(customProps)) {
 			try {
 				runtime_frameworkWrite(proxy, () => {
 					proxy[key] = value;
@@ -5398,7 +5393,7 @@ export class ApiManager extends ComponentBase {
 		// keys set aside (implForReload is never null here — the caller checked the build).
 		if (split && (split.foreign.size > 0 || split.shared.size > 0) && typeof implForReload === "object") {
 			const withoutSetAside = {};
-			for (const k of Object.keys(implForReload)) {
+			for (const k of Objects.keys(implForReload)) {
 				if (!split.foreign.has(k) && !split.shared.has(k)) withoutSetAside[k] = implForReload[k];
 			}
 			implForReload = withoutSetAside;
@@ -5413,7 +5408,7 @@ export class ApiManager extends ComponentBase {
 		// implForReload is always an object here — freshApi is always a plain object from buildAPI.
 		/* v8 ignore next */
 		if (implForReload && typeof implForReload === "object") {
-			for (const key of Object.keys(implForReload)) {
+			for (const key of Objects.keys(implForReload)) {
 				const val = implForReload[key];
 				if (resolveWrapper(val) !== null) {
 					const childWrapper = resolveWrapper(val);
@@ -5423,8 +5418,8 @@ export class ApiManager extends ComponentBase {
 						// the adopting wrapper would give the child its own folder; the child keeps its file here.
 						const childFile = childWrapper.____slothletInternal.filePath;
 						if (childFile) {
-							if (!Object.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
-								Object.defineProperty(implForReload, "__childFilePaths", {
+							if (!Objects.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
+								Objects.defineProperty(implForReload, "__childFilePaths", {
 									value: {},
 									enumerable: false,
 									configurable: true,
@@ -5487,7 +5482,7 @@ export class ApiManager extends ComponentBase {
 		const impl = nodeWrapper.____slothletInternal.impl;
 		if (typeof impl === "function") return impl;
 		const children = {};
-		for (const key of Object.keys(nodeWrapper)) children[key] = nodeWrapper[key];
+		for (const key of Objects.keys(nodeWrapper)) children[key] = nodeWrapper[key];
 		return children;
 	}
 
@@ -5612,11 +5607,11 @@ export class ApiManager extends ComponentBase {
 		const foreign = new Map();
 		const shared = new Map();
 		const ownership = this.slothlet.handlers.ownership;
-		const keyOrder = Object.keys(wrapper);
+		const keyOrder = Objects.keys(wrapper);
 		for (const key of keyOrder) {
 			// Read the descriptor, not the property: a getter-backed child is not a module child and
 			// resolves to no wrapper here, so it stays where it is.
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			const child = resolveWrapper(descriptor.value);
 			if (!child || child.____slothletInternal.userAssigned) continue;
 			const childPath = `${apiPath}.${key}`;
@@ -5642,7 +5637,7 @@ export class ApiManager extends ComponentBase {
 				// Both sides contribute here. A namespace holds children from each, so it is rebuilt level by
 				// level; a leaf has one live value, which the cycle rebuilds only when it currently owns it.
 				const internal = child.____slothletInternal;
-				const isNamespace = Object.keys(child).length > 0 || (internal.mode === "lazy" && !internal.state.materialized);
+				const isNamespace = Objects.keys(child).length > 0 || (internal.mode === "lazy" && !internal.state.materialized);
 				if (isNamespace) {
 					shared.set(key, descriptor);
 					Reflect.deleteProperty(wrapper, key);
@@ -5671,8 +5666,8 @@ export class ApiManager extends ComponentBase {
 	_subtreeModuleIDs(rawWrapper, seen = new Set()) {
 		seen.add(rawWrapper);
 		const ids = new Set([rawWrapper.____slothletInternal.moduleID]);
-		for (const key of Object.keys(rawWrapper)) {
-			const child = resolveWrapper(Object.getOwnPropertyDescriptor(rawWrapper, key).value);
+		for (const key of Objects.keys(rawWrapper)) {
+			const child = resolveWrapper(Objects.getOwnPropertyDescriptor(rawWrapper, key).value);
 			if (!child || seen.has(child)) continue;
 			for (const id of this._subtreeModuleIDs(child, seen)) ids.add(id);
 		}
@@ -5694,20 +5689,20 @@ export class ApiManager extends ComponentBase {
 			// A key the rebuilt contribution also placed here yields to the set-aside child (the filter above
 			// keeps set-aside keys out of the impl, so this only replaces an adoption artefact).
 			Reflect.deleteProperty(wrapper, key);
-			Object.defineProperty(wrapper, key, descriptor);
+			Objects.defineProperty(wrapper, key, descriptor);
 		}
 		// Re-insert every enumerable child in order: prior keys first (in their prior order), then new.
-		const current = Object.keys(wrapper);
+		const current = Objects.keys(wrapper);
 		const currentSet = new Set(current);
 		const ordered = keyOrder.filter((k) => currentSet.has(k));
 		const orderedSet = new Set(ordered);
 		for (const k of current) if (!orderedSet.has(k)) ordered.push(k);
 		for (const key of ordered) {
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			// A non-configurable key cannot move: the delete fails and redefining its identical
 			// descriptor is a no-op, so it simply keeps its slot.
 			Reflect.deleteProperty(wrapper, key);
-			Object.defineProperty(wrapper, key, descriptor);
+			Objects.defineProperty(wrapper, key, descriptor);
 		}
 	}
 
@@ -5757,7 +5752,7 @@ export class ApiManager extends ComponentBase {
 			// Root level - update each existing wrapper's implementation directly
 			// Using ___setImpl preserves the wrapper proxy reference and custom properties
 			// (setValueAtPath/syncWrapper can replace the proxy reference, losing custom props)
-			for (const key of Object.keys(freshApi)) {
+			for (const key of Objects.keys(freshApi)) {
 				// Skip internal keys from the fresh API proxy's ownKeys trap
 				// Internal keys are always filtered by the proxy's ownKeysTrap before this loop; the startsWith guard never fires.
 				/* v8 ignore next */
@@ -5817,7 +5812,7 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_RESET_LAZY",
 							rootKey: key,
-							restoredCustomProps: Object.keys(customProps)
+							restoredCustomProps: Objects.keys(customProps)
 						});
 					} else {
 						// EAGER PATH: Fresh value is concrete (eager mode, or root-level file
@@ -5856,7 +5851,7 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_UPDATED_SETIMPL",
 							rootKey: key,
-							restoredCustomProps: Object.keys(customProps)
+							restoredCustomProps: Objects.keys(customProps)
 						});
 					}
 				} else if (existingAtKey === undefined) {
@@ -5902,7 +5897,7 @@ export class ApiManager extends ComponentBase {
 				// freshApi is always set from buildAPI — nullish fallback never fires.
 				/* v8 ignore start */
 				hasSetImpl: existing ? resolveWrapper(existing) !== null : false,
-				freshApiKeys: Object.keys(freshApi)
+				freshApiKeys: Objects.keys(freshApi)
 				/* v8 ignore stop */
 			});
 
@@ -5960,15 +5955,15 @@ export class ApiManager extends ComponentBase {
 				// IMPORTANT: Run before recursive extraction so the wrapper proxy is still intact.
 				if (parts.length > 0 && implForReload && typeof implForReload === "object") {
 					const lastEndpointPart = parts[parts.length - 1];
-					if (lastEndpointPart && Object.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
+					if (lastEndpointPart && Objects.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
 						const dupValue = implForReload[lastEndpointPart];
 						const dupWrapperForDedup = resolveWrapper(dupValue);
 						if (dupWrapperForDedup) {
 							const hoisted = {};
-							for (const k of Object.keys(implForReload)) {
+							for (const k of Objects.keys(implForReload)) {
 								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
 							}
-							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !isFrameworkReservedKey(k))) {
+							for (const k of Objects.keys(dupWrapperForDedup).filter((k) => !isFrameworkReservedKey(k))) {
 								hoisted[k] = dupWrapperForDedup[k];
 							}
 							implForReload = hoisted;
@@ -6002,7 +5997,7 @@ export class ApiManager extends ComponentBase {
 					endpoint,
 					moduleID,
 					forcedReplaceMode: true,
-					restoredCustomProps: Object.keys(customProps)
+					restoredCustomProps: Objects.keys(customProps)
 				});
 			} else {
 				// No wrapper exists - should not happen in reload, but handle gracefully
@@ -6023,7 +6018,7 @@ export class ApiManager extends ComponentBase {
 				/* v8 ignore next */
 				if (typeof freshApi === "function") {
 					implForContainer = {};
-					for (const key of Object.keys(freshApi)) {
+					for (const key of Objects.keys(freshApi)) {
 						implForContainer[key] = freshApi[key];
 					}
 				}

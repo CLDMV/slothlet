@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-10T21:29:11-08:00 (1794374951)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -237,8 +237,9 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			await turn();
 			releaseActivation();
 			// ext.activate and ext.peer.wait may differ in rights and both import resume.mjs, so neither is
-			// chosen. With no caller, `self` itself refuses (reported through the routine that ran the activation).
-			await expect(activation).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// chosen. A caller that cannot be determined is refused each access with `PERMISSION_DENIED` (#726), which the
+			// fixture reports as "denied", so the activation completes with every access refused.
+			expect(await activation).toEqual(["denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
@@ -253,8 +254,8 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			await turn();
 			releaseActivation();
 			// resume.mjs narrows the caller to ext.activate or ext.peer.wait; run.boot's frame further out is
-			// the flow that awaited it, not a way to settle which of the two is running.
-			await expect(chained).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// the flow that awaited it, not a way to settle which of the two is running. Each access is refused (#726).
+			expect(await chained).toEqual(["denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
@@ -268,12 +269,11 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			const waiting = api.ext.peer.wait(waitGate);
 			await turn();
 			releaseActivation();
-			// Eager references are the leaves themselves, gated on whoever calls them — unresolved here, so
-			// denied rather than handed the host exemption. A lazy reference to a not-yet-loaded leaf is a
-			// pending value that carries the caller it was taken under (ext.activate), and is gated on that.
-			// The permissions namespace is gated on the live caller in both modes.
-			const expected = config.mode === "lazy" ? ["rendered:sibling", "subscribed", "denied"] : ["denied", "denied", "denied"];
-			expect(await activation).toEqual(expected);
+			// A reference is gated on whoever calls it — unresolved here, so denied rather than handed the host
+			// exemption. A lazy reference to a not-yet-loaded leaf carries the caller it was taken under (ext.activate),
+			// which is enforced in addition to the live caller, never instead of it: with no known caller it is refused
+			// too, as the eager leaf is (#726). The permissions namespace is gated on the live caller in both modes.
+			expect(await activation).toEqual(["denied", "denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});

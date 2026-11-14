@@ -37,16 +37,19 @@
  * consumer's private member that happened to share the name, reopening exactly what #269 closed.
  */
 
+import { Functions, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Objects slothlet created and stamped with a framework-internal marker key. Weak so a branded
  * dispatcher/wrapper is never kept alive by the registry.
  * @type {WeakSet<object>}
  * @private
  */
+
 const FRAMEWORK_INTERNAL = new WeakSet();
 
 /** `WeakSet.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakSetHas = Function.prototype.call.bind(WeakSet.prototype.has);
+const weakSetHas = Functions.prototype.call.bind(WeakSet.prototype.has);
 
 /**
  * Reserved marker keys slothlet stamps as OWN properties on framework-internal objects.

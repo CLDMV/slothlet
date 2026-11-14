@@ -30,6 +30,8 @@ export class ModesProcessor extends ComponentBase {
      * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
      * @param {string|null} [collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) that takes precedence over `collisionContext`'s config default for every leaf this call (and its own recursive calls) produces.
      * @param {boolean} [rootUnwrap=false] - The mount exposes its single root entry's exports directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api level.
+     * @param {boolean} [transparent=false] - With `populateDirectly`: this directory is a transparent folder, poured into the mount's own level (the one `apiPathPrefix` names), so it adds no path segment.
+     * @param {string|null} [ownPath=null] - The api path of the level this directory's entries are placed on, when the caller placed that level itself (a subdirectory's node, a lazy folder being loaded). Without it the level is `apiPathPrefix` plus the directory's name.
      * @returns {Promise<Function|null>} The root-level default-export contributor function, if one was found at this call's own top level; otherwise `null`.
      * @package
      */
@@ -40,7 +42,7 @@ export class ModesProcessor extends ComponentBase {
             files: any[];
             directories: any[];
         };
-    }, currentDepth: number, mode: string, isRoot: boolean, recursive: boolean, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: string | null, sourceFolder?: string | null, cacheBust?: string | null, collisionModeOverride?: string | null, rootUnwrap?: boolean): Promise<Function | null>;
+    }, currentDepth: number, mode: string, isRoot: boolean, recursive: boolean, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: string | null, sourceFolder?: string | null, cacheBust?: string | null, collisionModeOverride?: string | null, rootUnwrap?: boolean, transparent?: boolean, ownPath?: string | null): Promise<Function | null>;
     /**
      * Create lazy wrapper for subdirectory (lazy mode only)
      * @param {Object} dir - Directory structure to materialize on first access.

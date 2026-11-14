@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,9 +19,10 @@
  * @internal
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
-import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { TRUSTED_ROOT, buildCapturedFlowStore, combineCeilings } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
@@ -39,12 +40,29 @@ import {
 	isRunnerFrame,
 	parseStackFrame,
 	resolveSupplier,
+	loadOnStack,
 	resolvesSupplier,
 	runtime_captureFrames,
 	runtime_namesEntry,
 	stackHoldsInstanceCode,
+	supplierChainCeiling,
 	toComparablePath
 } from "#handlers/frame-placement";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	Map,
+	Set,
+	WeakMap,
+	WeakRef,
+	Symbol,
+	Boolean,
+	FinalizationRegistry,
+	queueMicrotask,
+	Processes
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };
@@ -57,6 +75,21 @@ export { parseStackFrame, toComparablePath };
  * @private
  */
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
+
+/**
+ * What a walk of the stack answers when none of the frames it read could be placed and the stack went on past them:
+ * the code making the access was not reached.
+ * @type {symbol}
+ * @private
+ */
+const CUT_OFF = Symbol("slothlet.callerIdentity.cutOff");
+
+/**
+ * The frames read when fifty place nothing and the stack goes on.
+ * @type {number}
+ * @private
+ */
+const FAR_FRAMES = 1024;
 
 /**
  * Stack resolution found the running code placed in an instance's files while no suspended call accounts for any
@@ -86,7 +119,7 @@ const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
  * @type {Readonly<{currentWrapper: null, callerWrapper: null, unresolved: true}>}
  * @private
  */
-const UNATTRIBUTED_IDENTITY = Object.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
+const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
 
 /**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
@@ -95,7 +128,7 @@ const UNATTRIBUTED_IDENTITY = Object.freeze({ currentWrapper: null, callerWrappe
  */
 const PROMISE_HOOKS = (() => {
 	try {
-		return globalThis.process?.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
+		return Processes.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
 	} catch {
 		// A platform without the builtin follows promises by reacting to them instead.
 		return null;
@@ -138,7 +171,8 @@ const FOLLOWED_COLLECTED =
 		? new FinalizationRegistry(({ families, ref, follows }) => {
 				runtime_forgetRef(families, ref);
 				runtime_unfollowed();
-				for (const { onSettled } of follows) queueMicrotask(onSettled);
+				// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+				for (const { onSettled } of follows) queueMicrotask(pinToCurrentCaller(onSettled));
 			})
 		: null;
 
@@ -201,17 +235,17 @@ function runtime_unfollowInstance(family) {
  * @private
  */
 function runtime_inertConstructor(fn, realmFunctionPrototype) {
-	const prototype = Object.getOwnPropertyDescriptor(fn, "prototype");
+	const prototype = Objects.getOwnPropertyDescriptor(fn, "prototype");
 	if (!prototype || !("value" in prototype)) return false;
 	let nameSeen = false;
-	for (let link = fn; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = fn; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		const name = nameSeen ? undefined : Object.getOwnPropertyDescriptor(link, "name");
+		const name = nameSeen ? undefined : Objects.getOwnPropertyDescriptor(link, "name");
 		if (name) {
 			if (!("value" in name) || (typeof name.value === "string" && /[{<]/.test(name.value))) return false;
 			nameSeen = true;
 		}
-		const hasInstance = Object.getOwnPropertyDescriptor(link, Symbol.hasInstance);
+		const hasInstance = Objects.getOwnPropertyDescriptor(link, Symbol.hasInstance);
 		if (hasInstance) return link === realmFunctionPrototype && "value" in hasInstance;
 	}
 	return true;
@@ -228,23 +262,23 @@ function runtime_inertConstructor(fn, realmFunctionPrototype) {
  */
 function runtime_inspectablePromise(promise) {
 	for (const key of Reflect.ownKeys(promise)) {
-		const own = Object.getOwnPropertyDescriptor(promise, key);
+		const own = Objects.getOwnPropertyDescriptor(promise, key);
 		if (!("value" in own)) return false;
 		if ((typeof own.value === "object" && own.value !== null) || typeof own.value === "function") return false;
 	}
 	const chain = [];
-	for (let link = promise; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = promise; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
 		chain.push(link);
 	}
 	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
-	const realmObject = Object.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
+	const realmObject = Objects.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
 	if (!realmObject || typeof realmObject.value !== "function" || util.types.isProxy(realmObject.value)) return false;
-	const realmFunctionPrototype = Object.getPrototypeOf(realmObject.value);
+	const realmFunctionPrototype = Objects.getPrototypeOf(realmObject.value);
 	for (const link of chain) {
-		const tag = Object.getOwnPropertyDescriptor(link, Symbol.toStringTag);
+		const tag = Objects.getOwnPropertyDescriptor(link, Symbol.toStringTag);
 		if (tag && (!("value" in tag) || (typeof tag.value === "string" && /[{<]/.test(tag.value)))) return false;
-		const constructor = Object.getOwnPropertyDescriptor(link, "constructor");
+		const constructor = Objects.getOwnPropertyDescriptor(link, "constructor");
 		if (!constructor) continue;
 		if (!("value" in constructor)) return false;
 		if (typeof constructor.value === "function" && !runtime_inertConstructor(constructor.value, realmFunctionPrototype)) return false;
@@ -289,13 +323,14 @@ function runtime_promiseState(promise) {
 function runtime_followSettled(promise, onSettled, family = null) {
 	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
 	if (runtime_promiseState(promise) === "settled") {
-		queueMicrotask(onSettled);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		queueMicrotask(pinToCurrentCaller(onSettled));
 		return true;
 	}
 	let follows = FOLLOWED.get(promise);
 	if (!follows) {
 		const ref = typeof WeakRef === "function" ? new WeakRef(promise) : null;
-		follows = Object.assign([], { ref, families: new Set() });
+		follows = Objects.assign([], { ref, families: new Set() });
 		FOLLOWED.set(promise, follows);
 		followedCount++;
 		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref, follows }, follows);
@@ -314,7 +349,8 @@ function runtime_followSettled(promise, onSettled, family = null) {
 		FOLLOWED_COLLECTED?.unregister(done);
 		runtime_forgetRef(done.families, done.ref);
 		runtime_unfollowed();
-		for (const { onSettled: callback } of done) queueMicrotask(callback);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		for (const { onSettled: callback } of done) queueMicrotask(pinToCurrentCaller(callback));
 	});
 	return true;
 }
@@ -342,7 +378,7 @@ function runtime_forgetRef(families, ref) {
  * @type {Readonly<object>}
  * @private
  */
-const NO_CALL = Object.freeze({
+const NO_CALL = Objects.freeze({
 	filePath: null,
 	comparablePath: "",
 	realComparablePath: null,
@@ -406,6 +442,17 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Whether a flow a call starts carries that call however long it runs: not here. Once the call that started an
+	 * async function has returned, nothing says which call that was when the function picks up again (see
+	 * frameDefiner in frame-placement).
+	 * @type {boolean}
+	 * @internal
+	 */
+	get carriesFlowCaller() {
+		return false;
+	}
+
+	/**
 	 * How many stores have a call suspended right now, across every instance.
 	 * @type {number}
 	 * @internal
@@ -461,12 +508,29 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The store a value of the active-instance field stands for. Flows restore the field in the order they settle, so
+	 * once `run()` / `scope()` flows interleave it can be left naming the store of a flow that has already returned and
+	 * been removed (#763): no flow of it runs any more, so the field stands for the instance's own store, as nothing
+	 * opened over it is active. A `run()` / `scope()` store's id is its instance's id followed by `__run_`.
+	 * @param {string|null} id - The field's value.
+	 * @returns {string|null} The id, or its instance's when it names a removed `run()` / `scope()` store of a live instance.
+	 * @private
+	 */
+	#removedRunBase(id) {
+		if (id === null || this.instances.has(id)) return id;
+		const cut = id.lastIndexOf("__run_");
+		if (cut <= 0) return id;
+		const base = id.slice(0, cut);
+		return this.instances.has(base) ? base : id;
+	}
+
+	/**
 	 * Resolve the executing instance — see {@link LiveContextManager#currentInstanceID}.
 	 * @returns {string|null} The executing instance's store id, or the field when nothing better is known.
 	 * @private
 	 */
 	#resolveActiveID() {
-		const raw = this.#activeID;
+		const raw = this.#removedRunBase(this.#activeID);
 		if (this.#syncDepth > 0 || this.#busyStores.size === 0) return raw;
 		const rawFamily = raw === null ? null : this.#familyOf(raw);
 		const families = new Set();
@@ -475,7 +539,10 @@ export class LiveContextManager {
 
 		const candidates = new Set();
 		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
-		const resolved = this.#resolveSuspendedFromStack(candidates);
+		let resolved = this.#resolveSuspendedFromStack(candidates);
+		// One of several calls, the stack not saying which: calls waiting on one store name it; calls of several are
+		// as code several instances account for.
+		if (resolved?.tied) resolved = new Set(resolved.tied.map((entry) => entry.store)).size === 1 ? resolved.tied[0] : AMBIGUOUS;
 		// Code several instances' calls account for could be any of them: the field would pick one of them at
 		// random, so no instance is active and the access is refused.
 		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return families.size > 1 ? null : raw;
@@ -544,7 +611,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineFor(store) {
-		if (!Object.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
+		if (!Objects.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
 			store.__baselineWrapper = store.currentWrapper ?? null;
 			// A replayed or scoped flow whose identity was code supplied from higher up keeps its ceiling (#597).
 			store.__baselineCeiling = store.currentCeiling ?? null;
@@ -638,7 +705,13 @@ export class LiveContextManager {
 			if (!only.filePath && !only.unattributed) return this.#entryIdentity(only);
 		}
 
-		const resolved = this.#resolveSuspendedFromStack(suspended);
+		// The capture that placed the call is the stack at this same point: the call's own reading of whose code runs
+		// starts from it instead of capturing the stack again.
+		const read = { capture: null };
+		const resolved = this.#resolveSuspendedFromStack(suspended, read);
+		// The running code is one of several suspended calls and the stack does not say which: the access is held to
+		// all of them.
+		if (resolved?.tied) return this.#tiedIdentity(store, resolved.tied);
 		// The stack could not tell which of several suspended calls is executing: a frame named more
 		// than one of them (the same module suspended twice under different api paths, resuming in a
 		// file they share), and no frame further out pinned a single one. Deny rather than pick: report
@@ -652,7 +725,7 @@ export class LiveContextManager {
 		if (resolved === UNACCOUNTED) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
 		}
-		if (resolved) return this.#entryIdentity(resolved);
+		if (resolved) return this.#entryIdentity(resolved, read.capture);
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
@@ -734,17 +807,54 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The identity of code that is one of several suspended calls, when the stack does not say which (#756): one that
+	 * every one of those calls has to allow. Each call is read as it would be were it the one running — its leaf, or the
+	 * code it was handed or another module's function it runs, told by the frames — and the answer is the first call's
+	 * with every other call's added to its ceiling, along with the calls that handed code down to any of them. An
+	 * access is then checked against all of them and refused when any one refuses, so it is never given more than the
+	 * call really running may do. A call among them that cannot answer for the code (one pinned to the host, code
+	 * running as no module, or code a call cannot account for) leaves the whole unanswered, and refused.
+	 *
+	 * The caller reported (`metadata.caller()`, `lockCaller`) is the first call's, in the order the calls started
+	 * waiting; which call's it really is is not known.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @param {Array<object>} entries - The suspended calls the running code is one of.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object|ReadonlyArray<object>, callerCeiling?: object, unresolved?: boolean}} The identity.
+	 * @private
+	 */
+	#tiedIdentity(store, entries) {
+		let first = null;
+		const others = [];
+		for (const entry of entries) {
+			const identity = this.#entryIdentity(entry);
+			if (identity.unresolved || !identity.currentWrapper)
+				return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
+			if (!first) first = identity;
+			else others.push(identity.currentWrapper, identity.ceiling ?? null);
+			others.push(supplierChainCeiling(identity.record));
+		}
+		return {
+			currentWrapper: first.currentWrapper,
+			callerWrapper: first.callerWrapper,
+			ceiling: combineCeilings(first.ceiling ?? null, ...others) ?? undefined,
+			callerCeiling: first.callerCeiling
+		};
+	}
+
+	/**
 	 * The identity of a suspended call that is executing again.
 	 * @param {object} entry - The suspended call.
+	 * @param {Iterable<object>|null} [capture=null] - The capture that placed it, taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record?: object}} The identity.
 	 * @private
 	 */
-	#entryIdentity(entry) {
+	#entryIdentity(entry, capture = null) {
 		// Code running as no module: who is calling cannot be told (#597).
 		if (entry.unattributed) return UNATTRIBUTED_IDENTITY;
 		// A host-pinned call carries no record: it runs as the host.
 		if (!entry.record) return { currentWrapper: entry.currentWrapper, callerWrapper: entry.callerWrapper };
-		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling);
+		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling, capture);
 	}
 
 	/**
@@ -755,11 +865,14 @@ export class LiveContextManager {
 	 * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}} record - The call.
 	 * @param {object|null} callerWrapper - Who called it.
 	 * @param {object|null|undefined} callerCeiling - Its caller's ceiling.
+	 * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record: object}} The identity.
 	 * @private
 	 */
-	#recordIdentity(record, callerWrapper, callerCeiling) {
-		const supplier = resolveSupplier(record);
+	#recordIdentity(record, callerWrapper, callerCeiling, capture = null) {
+		const supplier = resolveSupplier(record, capture);
+		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
+		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
 		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
 		return {
 			currentWrapper: supplier ? supplier.wrapper : record.wrapper,
@@ -814,7 +927,8 @@ export class LiveContextManager {
 			return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
 		}
 		const resolved = this.#resolveSuspendedFromStack(suspended);
-		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return { wrapper: null, inFlight, ambiguous: true };
+		// One of several calls, the stack not saying which, is no one call to pin to: left unpinned too.
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED || resolved?.tied) return { wrapper: null, inFlight, ambiguous: true };
 		// Code running as no module registers as no one, never as the host (#597).
 		if (!resolved) return this.#unattributedOnStack(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
 		if (resolved.unattributed) return { wrapper: null, inFlight, ambiguous: true };
@@ -851,12 +965,13 @@ export class LiveContextManager {
 	 * re-exports from, or code a browser leaf imports, runs inside that function or code it awaits.
 	 *
 	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
+	 * @param {{capture: Iterable<object>|null}|null} [read=null] - Receives, as `capture`, the last capture of the stack read.
 	 * @returns {object|symbol|null} The matching entry, {@link AMBIGUOUS} when the stack cannot tell
 	 *   several candidates apart or the running code is no suspended call's, or null when no frame names any
 	 *   candidate.
 	 * @private
 	 */
-	#resolveSuspendedFromStack(suspended) {
+	#resolveSuspendedFromStack(suspended, read = null) {
 		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
 		const candidates = [...suspended].filter((entry) => entry.filePath);
@@ -881,7 +996,8 @@ export class LiveContextManager {
 			let byName = null;
 			// The synchronous frames below the outermost placed one: what started the job.
 			let below = [];
-			for (const frame of frames) {
+			// Slothlet's own frames are passed over by their path alone, so they are read no further than that.
+			for (const frame of frames.lean?.() ?? frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;
@@ -904,7 +1020,14 @@ export class LiveContextManager {
 				}
 			}
 			if (!syncEnded && truncated) return undefined;
-			if (!running.length && !awaiting.length) return byName ? settle(byName) : truncated ? undefined : null;
+			if (!running.length && !awaiting.length) {
+				if (byName) return settle(byName);
+				if (truncated) return undefined;
+				// Cut off with the stack going on and nothing placed — inside slothlet's and Node's own frames, or inside
+				// a package's or the host's own recursion: nothing read says whose code is running, so it is not taken to
+				// be the host's.
+				return frames.truncated && !syncEnded ? CUT_OFF : null;
+			}
 
 			// With no placed frame of its own, the job is placed by the innermost flow awaiting it.
 			if (!running.length) {
@@ -917,33 +1040,84 @@ export class LiveContextManager {
 			// Only a function with nothing but the microtask runner below it is resuming: one a boundary or another
 			// module calls has their frames below it.
 			const outermost = running[running.length - 1];
-			if (outermost.byFile && below.every(isRunnerFrame)) {
+			// Only a function with nothing but the microtask runner below it is picking up after an `await`.
+			const resuming = below.every(isRunnerFrame);
+			// The waiting calls of the file the job picked up in, when no name says which of them it is.
+			let fileCalls = null;
+			if (outermost.byFile && resuming) {
 				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
 				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
+				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
+				// callback it made: that call is what picked up again. Code it has called since (another module's function
+				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
+				// as it is in the async runtime.
+				if (outermost.matches.length && new Set(outermost.matches.map(callKey)).size === 1) return outermost.matches[0];
+				// Several calls of that file are waiting: the job is one of them. When nothing below settles which, the
+				// access is held to every one of them (see tiedIdentity).
+				if (outermost.matches.length) fileCalls = outermost.matches;
 			}
-			// Otherwise every placed frame of the synchronous part is code taking part in this access — the job's own, and
-			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no
-			// suspended call accounts for refuses.
-			let agreed = null;
-			for (const { matches } of running) {
-				agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
-				if (!agreed.length) return running.every((placed) => !placed.matches.length) ? UNACCOUNTED : AMBIGUOUS;
-			}
-			if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
-			// Different functions of one file: a frame in a candidate's own file names the function as well.
-			for (const { frame, byFile } of running) {
-				if (!byFile) continue;
-				const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
-			}
-			return this.#narrow(awaiting, agreed, callKey, truncated);
+			const settled = this.#agree(running, awaiting, callKey, truncated, resuming ? suspended : null);
+			return fileCalls && (settled === AMBIGUOUS || settled === UNACCOUNTED) ? { tied: fileCalls } : settled;
 		};
 
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
 		// that decide sit near the top of the stack. Only a trace the budget cut short that settled nothing is
 		// read again, deeper. The capture is kept out of a leaf's reach; see runtime_captureFrames.
-		const answer = walk(runtime_captureFrames(25), false);
-		return answer !== undefined ? answer : walk(runtime_captureFrames(50), true);
+		const capture = (limit) => {
+			const frames = runtime_captureFrames(limit);
+			if (read) read.capture = frames;
+			return frames;
+		};
+		let answer = walk(capture(25), false);
+		if (answer === undefined) answer = walk(capture(50), true);
+		// Code recursing — Node's own (`util.inspect` deep in a value, say), a package's or the host's — can put more
+		// frames than that between an access and the code that started it. The stack is read further out, and when
+		// that still reaches the end of nothing the access is refused.
+		if (answer === CUT_OFF) answer = walk(capture(FAR_FRAMES), true);
+		return answer === CUT_OFF ? AMBIGUOUS : answer;
+	}
+
+	/**
+	 * Settle a job by the placed frames of its synchronous part: every one of them is code taking part in the access —
+	 * the job's own, and the helpers it called or handed to a boundary — so all of them have to agree on the caller.
+	 *
+	 * Code no suspended call accounts for is refused ({@link UNACCOUNTED}), with one exception: a function that picked
+	 * up after an `await` (`waiting` given) and that a suspended call is awaiting. That is another module's async
+	 * function a call ran, or a helper's a leaf handed out, resuming inside a call whose file does not import it. Which
+	 * call ran it the stack does not say (the call awaiting a promise need not be the call that started it), so it is
+	 * held to every suspended call there is (see {@link LiveContextManager#tiedIdentity}), and whose code it is is told
+	 * when the access is checked, by its frames, as in the async runtime.
+	 *
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} running - Placed frames of the synchronous
+	 *   part, innermost first.
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} awaiting - Placed frames of the flows
+	 *   awaiting it, innermost first.
+	 * @param {function(object): string} callKey - What has to agree for enforcement.
+	 * @param {boolean} truncated - Whether frames further out were cut off.
+	 * @param {Set<object>|null} waiting - Every suspended call, when the job is a function picking up after an `await`.
+	 * @returns {object|{tied: Array<object>}|symbol|undefined} The entry, the calls the access is held to, AMBIGUOUS,
+	 *   UNACCOUNTED, or undefined when more frames could still settle it.
+	 * @private
+	 */
+	#agree(running, awaiting, callKey, truncated, waiting) {
+		let agreed = null;
+		for (const { matches } of running) {
+			agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
+			if (agreed.length) continue;
+			if (!running.every((placed) => !placed.matches.length)) return AMBIGUOUS;
+			if (!waiting) return UNACCOUNTED;
+			if (awaiting.some((placed) => placed.matches.length)) return waiting.size === 1 ? [...waiting][0] : { tied: [...waiting] };
+			// The flows awaiting it may lie past the frames read.
+			return truncated ? undefined : UNACCOUNTED;
+		}
+		if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
+		// Different functions of one file: a frame in a candidate's own file names the function as well.
+		for (const { frame, byFile } of running) {
+			if (!byFile) continue;
+			const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
+			if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+		}
+		return this.#narrow(awaiting, agreed, callKey, truncated);
 	}
 
 	/**
@@ -1022,8 +1196,15 @@ export class LiveContextManager {
 		const pinMany = (listeners) => {
 			// The store of the instance actually executing (#592), and who on it registered the callbacks.
 			const store = this.tryGetContext();
+			const registration = store ? this.#registrationIdentity(store) : null;
+			// Registered by a file's own top level while slothlet loads it (#726): pinned to the load, so what the file
+			// starts runs as the file's module, as the async runtime's store for the load has it.
+			if (!registration?.wrapper && this.#loads.size) {
+				const loading = loadOnStack(this.#loads);
+				if (loading !== null) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+			}
 			if (!store) return listeners;
-			const { wrapper, ceiling, inFlight, ambiguous } = this.#registrationIdentity(store);
+			const { wrapper, ceiling, inFlight, ambiguous } = registration;
 			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
 			// alone. Unattributable module code: not handed the host's standing either.
 			if (ambiguous || (!wrapper && !inFlight)) return listeners;
@@ -1071,6 +1252,24 @@ export class LiveContextManager {
 					false,
 					false
 				);
+			};
+		/**
+		 * The pinned replacement for a callback a file registered while it loaded: run as the file's module, found when
+		 * the callback runs. With no module to run as (the file's node is gone, or which load registered it could not be
+		 * told) it runs as no one, and is refused.
+		 * @param {Function} listener - The callback.
+		 * @param {object|false} loading - The load (see createModuleLoad), or false when it could not be told.
+		 * @returns {Function} The pinned callback.
+		 */
+		const pinLoad = (listener, loading) =>
+			function slothlet_pinnedLoadListener(...args) {
+				const manager = liveContextManagerRef;
+				const instanceID = loading ? loading.instanceID() : null;
+				// The instance is gone: unpinned, as any callback that outlives its instance.
+				if (loading && (instanceID === null || !manager.instances.has(instanceID))) return listener.apply(this, args);
+				const record = loading ? loading.record() : null;
+				if (!record) return manager.#runAsNoOne(instanceID, listener, this, args);
+				return manager.runInContext(instanceID, listener, this, args, record.wrapper, true, false, null, null, false, false, false, record);
 			};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
@@ -1138,6 +1337,98 @@ export class LiveContextManager {
 			this.#activeID = previousInstanceID;
 		}
 		return result;
+	}
+
+	/**
+	 * The loads of module files in progress (see {@link LiveContextManager#runModuleLoad}).
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#loads = new Set();
+
+	/**
+	 * Run the load of a module file, remembered as in progress until it settles (#726): what the file's top level
+	 * registers meanwhile (a timer, a listener, a reaction) is pinned to the load, and runs later as the file's module.
+	 * The async manager carries the same identity in a store.
+	 *
+	 * @param {object} loading - The load (see createModuleLoad).
+	 * @param {function(): *} fn - What loads the file.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runModuleLoad(loading, fn) {
+		this.#loads.add(loading);
+		let result;
+		try {
+			result = fn();
+		} catch (error) {
+			this.#loads.delete(loading);
+			throw error;
+		}
+		if (!util.types.isPromise(result)) {
+			this.#loads.delete(loading);
+			return result;
+		}
+		const done = () => this.#loads.delete(loading);
+		nativeThen(result, done, done);
+		return result;
+	}
+
+	/**
+	 * Whether nothing slothlet entered is executing on an instance's store: no call, no pin to the host, no code run as
+	 * no module. Code running then was started by nothing slothlet entered, so only its frames can say whose it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {boolean} True when nothing is entered.
+	 * @internal
+	 */
+	isAmbient(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		if (!store) return true;
+		if (store.__authoritativeWrapper) return false;
+		return this.#enteredFor(store).every((entry) => entry === null);
+	}
+
+	/**
+	 * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+	 * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+	 * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+	 * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+	 * runs.
+	 * @returns {string|null} The instance's id.
+	 * @internal
+	 * @example
+	 * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+	 */
+	runningInstanceID() {
+		const id = this.currentInstanceID;
+		if (id === null || id === undefined) return null;
+		const family = this.#familyOf(id);
+		// Naming an instance's own store while nothing of any instance is entered or waiting, the field is only the
+		// last instance used. A `run()` / `scope()` store is active only while its callback runs.
+		if (id === family && this.#syncDepth === 0 && this.#busyStores.size === 0) return null;
+		return family;
+	}
+
+	/**
+	 * Run a callback as no module and not as the host, for as long as its synchronous body runs: a permission check made
+	 * from it fails closed.
+	 * @param {string|null} instanceID - The instance, or null to hold every instance's store.
+	 * @param {Function} fn - The callback.
+	 * @param {*} thisArg - `this` for it.
+	 * @param {Array} args - Its arguments.
+	 * @returns {*} What it returned.
+	 * @private
+	 */
+	#runAsNoOne(instanceID, fn, thisArg, args) {
+		const stores = instanceID !== null && this.instances.has(instanceID) ? [this.instances.get(instanceID)] : [...this.instances.values()];
+		for (const store of stores) this.#enteredFor(store).push(UNATTRIBUTED_ENTRY);
+		this.#syncDepth++;
+		try {
+			return fn.apply(thisArg, args);
+		} finally {
+			this.#syncDepth--;
+			for (const store of stores) this.#enteredFor(store).pop();
+		}
 	}
 
 	/**
@@ -1265,10 +1556,11 @@ export class LiveContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
+	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceID, config = {}) {
+	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (this.instances.has(instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
@@ -1278,7 +1570,7 @@ export class LiveContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Date.now()
+			createdAt: clock.now()
 		};
 
 		this.instances.set(instanceID, store);
@@ -1317,6 +1609,8 @@ export class LiveContextManager {
 	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
 	 *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
+	 * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
+	 *   file registered while it loaded (#726).
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -1332,7 +1626,8 @@ export class LiveContextManager {
 		resolved = null,
 		attribute = false,
 		madeCode = false,
-		follow = true
+		follow = true,
+		load = null
 	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
@@ -1345,7 +1640,7 @@ export class LiveContextManager {
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
 				instanceID: targetInstanceID,
-				availableInstances: Array.from(this.instances.keys())
+				availableInstances: Arrays.from(this.instances.keys())
 			});
 		}
 
@@ -1382,6 +1677,14 @@ export class LiveContextManager {
 					made: madeCode
 				}
 			: null;
+		// A callback a file registered while it loaded (#726): the load's own record, so its code is read as the file's
+		// module with the code doing the access told by its frames.
+		if (record && load?.topLevel && load.wrapper === currentWrapper) {
+			record.topLevel = true;
+			record.file = load.file;
+			record.moduleID = load.moduleID;
+			record.parent = null;
+		}
 
 		this.#activeID = targetInstanceID;
 		if (asHost) {
@@ -1671,7 +1974,7 @@ export class LiveContextManager {
 		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
 		const store = this.instances.get(targetID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Array.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Arrays.from(this.instances.keys()) });
 		}
 		return this.runInFlow(
 			{
@@ -1705,7 +2008,7 @@ export class LiveContextManager {
 				"CONTEXT_NOT_FOUND",
 				{
 					instanceID: activeID,
-					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
+					availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none"
 				},
 				null,
 				{ validationError: true }
@@ -1830,7 +2133,7 @@ export class LiveContextManager {
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -1866,11 +2169,11 @@ export class LiveContextManager {
 		return {
 			type: "live",
 			currentInstanceID: this.currentInstanceID,
-			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
+			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,
-				contextKeys: Object.keys(store.context),
-				selfKeys: Object.keys(store.self)
+				contextKeys: Objects.keys(store.context),
+				selfKeys: Objects.keys(store.self)
 			}))
 		};
 	}

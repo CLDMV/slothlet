@@ -108,6 +108,22 @@ export function tsFunction(data: string): string {
 }
 ```
 
+### Timers and queues a file starts while it loads
+
+A file's top level runs under the file's own module: the async runtime loads each file inside a store that names it, and the live runtime pins what the file registers while it loads. So a timer, a job queue or a listener started at the top of a file has `self` and `context` when it runs later, and the permission system sees the file's module as the caller of whatever it runs (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). `self` is not usable at the top level itself while the file is still loading: the api is not built yet. A file that builds another slothlet instance while it loads can use that instance as usual: the inner instance's code, run from something the loading file started, reads its own `self` and `context`.
+
+One case is held to the wrong file: when two api files import a module with its own top-level `await` and the other file started loading it, a timer this file starts at its top level while it waits is held to the other file's module (async runtime). It only refuses more, never allows more; see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path) and [#762](https://github.com/CLDMV/slothlet/issues/762).
+
+### `AsyncLocalStorage.snapshot()`, `bind()` and `AsyncResource` in the live runtime
+
+These three capture Node's async context when they are made and restore it when they run code. In the async runtime slothlet's store is part of that context, so code they run later is the module that made them. The live runtime keeps identity outside Node's async context, so it patches them: `AsyncLocalStorage.snapshot()`, `AsyncLocalStorage.bind()`, and `AsyncResource` (its constructor, `runInAsyncScope()`, which a resource's `bind()` runs through, and the static `AsyncResource.bind()`). What a snapshot, a bound function or a resource runs is pinned to the load or call of the module that made it, so it carries that module, with the call that runs it as a caller too, as in the async runtime.
+
+- **Live runtime only.** An instance on the async runtime patches nothing. The patches are installed when the first live instance in the process is created and removed when the last live instance shuts down; while any live instance is running they stay in place.
+- **Code outside slothlet is unchanged.** A snapshot, binding or resource made while no module's load or call is running pins nothing, and Node's own functions run as they are. Arguments, receivers and results pass through.
+- **`AsyncResource` is a different class object while patched.** `require("node:async_hooks").AsyncResource` (and the ES module export, which Node refreshes) is a subclass of Node's class while the patches are installed. `instanceof` answers as before against either class, but comparing the class with `===` against a reference saved before the first live instance (or after the last one shut down) is `false`.
+- **A subclass made earlier keeps Node's class.** A library that subclassed `AsyncResource` before the first live instance was created extends Node's class, not the patched one, so its resources are not pinned. The same holds for the class kept in a variable before then (`const { AsyncResource } = require("node:async_hooks")` at the top of a file loaded earlier); an ES module's named import follows the refreshed export.
+- **Not tested against third-party users of these APIs.** The patches are covered by slothlet's own tests; libraries that build on `AsyncResource` or `AsyncLocalStorage.snapshot()` / `bind()` have not been tested against them.
+
 ### Writable `self.X = …`
 
 `self` is writable. Assigning to `self` from inside a Slothlet module persists the value for the instance's lifetime, makes it visible to other modules through `self.X` and to the outside through `api.X`.
@@ -561,6 +577,8 @@ const results = await Promise.all([
 
 > **Runtime caveat — live bindings / browser mode**: The concurrent isolation shown above relies on `AsyncLocalStorage`. Under the live-bindings runtime (`runtime: "live"`, and automatically in **browser mode**, where `node:async_hooks` is unavailable), the active context is tracked in a single global field. This isolates **sequential** `run()` / `scope()` calls — each restores the prior context when it returns — but **not interleaved concurrent** calls on the _same_ instance: across an `await`, a sibling `run()` overwrites the global and the resumed callback reads the wrong context. For concurrent per-request isolation, use the default async (ALS) runtime in Node; in a browser, give each concurrent flow its own slothlet instance or serialize the `run()` calls.
 
+> **Overlapping calls in the live runtime**: while several module calls are waiting at an `await`, the live runtime tells which of them picked up again from the call stack. Where the stack names a set of calls rather than one (several waiting calls of one file with the job picking up in an unnamed function, or another module's async function picking up inside a waiting call whose file does not import it), permission checks are held to every call of the set (see [PERMISSIONS.md](PERMISSIONS.md#runtime-choice--the-permission-boundary), Overlapping calls), and `context` is not told per call: the code sees the context of the store those calls are waiting on. Calls made on the same store (outside any `run()`, or inside one `run()`) share that context, so it is the right one. Calls made in interleaved `run()` flows see the context of whichever flow the active field names when they pick up, as above: one of the flows, or the instance's own once another of them has returned. Once every `run()` has returned, the host's next call runs with the instance's own context, as on the async runtime. `metadata.caller()` reports the caller of the call of the set that started waiting first. The async runtime knows the call and has neither limit. Telling the call in the live runtime is tracked in [#756](https://github.com/CLDMV/slothlet/issues/756).
+
 ---
 
 ## EventEmitter Context Propagation
@@ -633,7 +651,11 @@ const server = api.startServer(8080);
 
 Slothlet automatically preserves AsyncLocalStorage context across all class instance method calls. When your API functions return class instances, slothlet wraps them transparently so all method calls maintain full context access.
 
-**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Standard built-in types (Array, Date, Map, EventEmitter, etc.) are excluded from wrapping.
+**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Only an instance of a class a module wrote is wrapped: the language's and Node's own classes (`Array`, `Date`, `Map`, `EventEmitter`, `URL`, `Response`, `AbortController`, `Intl.NumberFormat`, …) keep their context on their own and are returned as they are.
+
+The wrapper stands for the instance. Members are read and written on the instance itself, so a getter or setter over a `#private` field works. The same instance comes back as the same wrapper every time (`(await api.make()) === (await api.make())` for a leaf returning one instance, and a method returning `this` returns the wrapper). Handed back to the module that created it, the wrapper is the instance again, so the module's own `===` and `#field in value` checks hold. On the wrapper itself `#field in value` is false, as for any Proxy.
+
+Code a module hands out that is not a class instance (a closure, a function inside returned data, a thenable, a generator) is not wrapped. Run by the host outside any call, it reads `self` and `context` as the instance it was made in gives them, told by the file its code is in; see [Code a module hands out runs as its definer](PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer). Code of a helper file (a file a leaf imports that is no api file itself) reads them the same way, as the instance whose api files import the helper.
 
 ### Data Processor Example
 

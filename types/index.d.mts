@@ -33,14 +33,11 @@ export type SlothletAPI = import("./src/slothlet.mjs").SlothletAPI;
 export function slothlet<T extends object = import("./src/lib/runtime/runtime.mjs").SlothletSelf>(options?: import("./src/slothlet.mjs").SlothletOptions): Promise<import("./src/slothlet.mjs").SlothletAPI & T>;
 export namespace slothlet {
     export let defaults: Readonly<{
-        routines: readonly (Readonly<{
-            name: "initialize";
-            mode: "startup";
-        }> | Readonly<{
-            name: "shutdown";
-            mode: "shutdown";
-        }>)[];
-        reservedExports: any;
+        routines: ReadonlyArray<{
+            name: string;
+            mode: "manual" | "startup" | "shutdown" | "destroy";
+        }>;
+        reservedExports: ReadonlySet<string>;
     }>;
     export { slothlet };
 }

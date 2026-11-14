@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:13:31-08:00 (1794219211)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,18 +41,27 @@
  */
 
 import { liveRuntime } from "#factories/context";
+import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+// This module's own namespace, registered below as the one copy of this file.
+import * as ownNamespace from "./runtime-livebindings.mjs";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
 	runtime_assertFrameworkRootChange,
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
+	runtime_resolvedAccess,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
+	runtime_contextRead,
+	runtime_contextWritten,
+	runtime_contextReadAsDefiner,
+	registerRuntimeContext,
 	registerRuntimeSelf
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
+import { Reflect, NativeProxy, NativeObject, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -77,15 +86,21 @@ const resolveActiveContext = () => liveRuntime.getContext();
  * calls could not be told apart. Refusing there is the conservative answer: an unattributable access
  * would otherwise be handed the host's exemption.
  *
+ * @param {{store?: object, identity?: object}|null} [resolved=null] - Receives the caller identity this read
+ *   resolved and the store it resolved it on, so the read it decides takes it instead of resolving it again.
  * @returns {object|null} The active store, or `null` when no module is executing.
  * @private
  */
-function runtime_resolveExecutingContext() {
+function runtime_resolveExecutingContext(resolved = null) {
 	const ctx = liveRuntime.getContext();
 	if (!ctx || !ctx.self) return null;
 	// `getCallerIdentity` reports no caller when the ambient field is stale, so its answer replaces the
 	// raw field rather than falling back to it — a fallback would reinstate exactly what it rejected.
 	const identity = liveRuntime.getCallerIdentity?.();
+	if (resolved && identity) {
+		resolved.store = ctx;
+		resolved.identity = identity;
+	}
 	// The else arm reads the raw field for a context manager without `getCallerIdentity`. The live
 	// manager always provides it; the fallback covers a partial or older manager being injected.
 	/* v8 ignore next */
@@ -138,12 +153,17 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  *
  * @param {string|symbol} prop - Member read.
  * @param {*} value - Its value.
+ * @param {{store?: object, identity?: object}|null} [resolved=null] - Who is making this read, when the read
+ *   resolved it already (see runtime_resolveExecutingContext).
  * @returns {*} The value, or a view of the node.
  * @private
  */
-function runtime_selfMember(prop, value) {
+function runtime_selfMember(prop, value, resolved = null) {
 	if (typeof prop !== "string") return value;
-	return FRAMEWORK_SELF_ROOTS.has(prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
+	if (FRAMEWORK_SELF_ROOTS.has(prop)) return runtime_selfFrameworkView(value);
+	// The reader of the view is the code whose identity this same read just resolved.
+	const access = resolved?.identity ? runtime_resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
+	return runtime_selfView(value, undefined, null, access);
 }
 
 /**
@@ -162,11 +182,12 @@ function runtime_selfMember(prop, value) {
  *   return self.otherFunction();
  * }
  */
-export const self = new Proxy(
+export const self = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = runtime_resolveExecutingContext();
+			const resolved = {};
+			const ctx = runtime_resolveExecutingContext(resolved);
 			if (!ctx || !ctx.self) {
 				// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
 				const read = runtime_selfReadAsDefiner(self, prop);
@@ -176,7 +197,13 @@ export const self = new Proxy(
 				runtime_refuseUnknownCaller(prop);
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			return runtime_selfMember(prop, ctx.self[prop]);
+			// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
+			// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
+			if (resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID) {
+				const read = runtime_selfReadAsDefiner(self, prop, null, ctx.parentInstanceID);
+				if (read) return read.value;
+			}
+			return runtime_selfMember(prop, ctx.self[prop], resolved);
 		},
 		// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
 		// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to
@@ -315,19 +342,21 @@ export const self = new Proxy(
  *   };
  * }
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				return undefined;
+				// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
+				return runtime_contextReadAsDefiner(context, prop);
 			}
 			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
 			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
 			// resolver lets the view identify the WRITER from the store active at write time rather
 			// than a stale wrap-time snapshot.
-			return readProtectedContextValue(ctx, prop, resolveActiveContext);
+			// What a module stored there reaches another module as values one module hands another do.
+			return runtime_contextRead(ctx, readProtectedContextValue(ctx, prop, resolveActiveContext));
 		},
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();
@@ -337,6 +366,7 @@ export const context = new Proxy(
 			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 			// current caller doesn't own before mutating the context.
 			enforceContextKeyWrite(ctx, prop);
+			runtime_contextWritten(ctx, value);
 			ctx.context[prop] = value;
 			return true;
 		},
@@ -353,12 +383,72 @@ export const context = new Proxy(
 		getOwnPropertyDescriptor(_, prop) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) return undefined;
-			return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
+			if (!descriptor || !("value" in descriptor)) return descriptor;
+			return { ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
+		}
+	}
+);
+
+/**
+ * The id of the store the running code's flow is on, as the async runtime's `instanceID` reads it from its store: the
+ * instance's own id inside one of its calls, a `run()` / `scope()` store's id inside that flow, and none outside any
+ * call or flow of an instance. The live runtime's store stays set between calls, so it is read only while a module is
+ * executing or a flow the host opened runs (see runtime_resolveExecutingContext).
+ * @returns {string|null} The id, or null.
+ * @private
+ */
+function runtime_executingInstanceID() {
+	let ctx;
+	try {
+		ctx = runtime_resolveExecutingContext();
+	} catch {
+		// No live instance at all: no store to read.
+		return null;
+	}
+	return ctx ? ctx.instanceID : null;
+}
+
+/**
+ * Current instance ID
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides access to the current slothlet instance ID, as the async runtime's `instanceID` does: it
+ * reads as the id inside a call (`String(instanceID)`, `${instanceID}`), and every member reads as undefined outside
+ * one. Useful for debugging and tracking which instance is handling a request.
+ *
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function getInstanceInfo() {
+ *   return { instanceID: String(instanceID) };
+ * }
+ */
+export const instanceID = new NativeProxy(
+	{},
+	{
+		get(_, prop) {
+			const id = runtime_executingInstanceID();
+			if (id === null) return undefined;
+			// Read as a whole (`String()`, a template, `valueOf`), it is the id.
+			if (prop === Symbol.toPrimitive || prop === "toString" || prop === "valueOf") return () => id;
+			return id[prop];
+		},
+		has(_, prop) {
+			const id = runtime_executingInstanceID();
+			if (id === null) return false;
+			return prop in NativeObject(id);
 		}
 	}
 );
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [self, context]) markSlothletProxy(proxy);
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
 registerRuntimeSelf(liveRuntime, self);
+registerRuntimeContext(liveRuntime, context);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, ownNamespace);
