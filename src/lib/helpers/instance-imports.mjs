@@ -154,6 +154,24 @@ const ESM_PREFIX = "slothlet-esm:";
 const FACADE_PREFIX = "slothlet-esm-facade:";
 
 /**
+ * Virtual-module prefix: `slothlet-shared-require:<url>` is the CommonJS stub that answers a `require()` an instance's
+ * code makes of a file no instance tags (see {@link sharedRequireStub}): it hands back the file's one module of the
+ * process and leaves Node's require cache, so Node asks the resolve hook again at the next such `require()`.
+ * @type {string}
+ * @private
+ */
+const SHARED_REQUIRE_PREFIX = "slothlet-shared-require:";
+
+/**
+ * The file a stub {@link sharedRequireStub} gave is requiring from slothlet's own file while it runs (see
+ * {@link requireShared}), or null. That `require()` is slothlet's, made on the requiring api file's behalf, so the
+ * resolve hook neither records slothlet's file as loading it nor answers it with a stub.
+ * @type {string|null}
+ * @private
+ */
+let SERVING = null;
+
+/**
  * Global key of the object the slothlet copies of a process share (#534): the entry points of the code slothlet
  * generates, and what a second copy of slothlet needs from the first (see {@link sharedState}). A copy older than
  * this one keeps its own state under another key, and shares nothing with this one.
@@ -356,6 +374,102 @@ function recordPackageImport(parentURL, url) {
 	let importers = PACKAGE_IMPORTERS.get(key);
 	if (!importers) PACKAGE_IMPORTERS.set(key, (importers = new Set()));
 	for (const loader of loaders) importers.add(loader);
+}
+
+/**
+ * A frame of a module's instance copy in a stack line, whichever loader evaluated it: its URL or path carries the
+ * instance query (a `file:` URL under Node's loader, a path under vite's module runner).
+ * @type {RegExp}
+ * @private
+ */
+const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
+
+/**
+ * Whether the resolution the resolve hook is answering is a `require()` loading the file, made by an instance's code:
+ * Node's CommonJS loader (`Module._load`) is reached on the stack before the `require` function Node hands each module
+ * (a `require.resolve()` reaches that function first), and the `require` is made from an instance copy's URL or while
+ * such a copy's code runs.
+ * @param {string} parentURL - The requiring file's URL.
+ * @returns {boolean} True for such a `require()`.
+ * @private
+ */
+function isInstanceRequireLoad(parentURL) {
+	const previousLimit = PristineError.stackTraceLimit;
+	const previousPrepare = PristineError.prepareStackTrace;
+	PristineError.stackTraceLimit = Infinity;
+	PristineError.prepareStackTrace = undefined;
+	let stack;
+	try {
+		stack = String(new PristineError().stack);
+	} finally {
+		PristineError.stackTraceLimit = previousLimit;
+		PristineError.prepareStackTrace = previousPrepare;
+	}
+	const lines = stack.split("\n");
+	let at = -1;
+	for (let i = 0; i < lines.length && at === -1; i++) {
+		if (lines[i].includes("(node:internal/modules/helpers:")) return false;
+		if (/^\s*at Module\._load \(node:/.test(lines[i])) at = i;
+	}
+	if (at === -1) return false;
+	return parentURL.includes(MARKER) || lines.slice(at + 1).some((line) => INSTANCE_FRAME.test(line));
+}
+
+/**
+ * The resolution a `require()` an instance's code makes of a file no instance tags is answered with (see
+ * {@link SHARED_REQUIRE_PREFIX}), or null when the resolution stands as it is. Node keeps such a file once for the
+ * process, and answers a later `require()` of it by the same specifier from the same folder from its own caches,
+ * without asking the resolve hook: the api file making it would go unrecorded among the files loading it (see
+ * {@link PACKAGE_IMPORTERS}), and the file's own code would not be told apart as that api file's. This happens for a
+ * `require` an api file makes from its own path (`createRequire(fileURLToPath(import.meta.url))`) as for one it makes
+ * from its URL, whichever file of the folder required it first, and in every instance after the first. The stub
+ * answering the `require()` hands back the one module of the file and takes itself out of Node's caches, so each such
+ * `require()` reaches the hook and is recorded. A `require.resolve()` still answers the file's path, and a `require()`
+ * slothlet's own files make, or one made while a CommonJS api file loads (recorded from Node's own list, see
+ * {@link recordScopeRequires}), is left as it is.
+ * Only a `require()` whose importer is an instance copy, or one the resolve hook has seen nothing load (the path a
+ * `require` was made from), is looked at.
+ * @param {object} context - Node's resolve context.
+ * @param {ResolveResult} resolved - The resolution.
+ * @returns {ResolveResult|null} The stub's resolution, or null.
+ * @private
+ */
+function sharedRequireStub(context, resolved) {
+	const url = resolved?.url;
+	const parentURL = context?.parentURL;
+	if (ACTIVE !== null || typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:json|node)$/.test(url))
+		return null;
+	if (typeof parentURL !== "string" || !parentURL.startsWith("file:") || !hasCondition(context?.conditions, "require")) return null;
+	const own = (ref) => {
+		const path = toSlashPath(ref);
+		return OWN_TREE.some((dir) => path === dir || path.startsWith(dir.endsWith("/") ? dir : `${dir}/`));
+	};
+	if (own(parentURL) || own(url)) return null;
+	if (!parentURL.includes(MARKER) && PACKAGE_IMPORTERS.has(packageKey(parentURL))) return null;
+	if (!isInstanceRequireLoad(parentURL)) return null;
+	return { url: SHARED_REQUIRE_PREFIX + url, format: "commonjs", shortCircuit: true };
+}
+
+/**
+ * Answer a `require()` through the stub {@link sharedRequireStub} gives: the file's one module of the process, as
+ * Node's own `require()` of it gives, required from slothlet's own file. The stub's entry is taken out of Node's
+ * require cache first, so the next `require()` of the file by that specifier asks the resolve hook again.
+ * @param {string} url - The file's URL.
+ * @param {object} stub - The stub's own `module`.
+ * @returns {*} The value `require()` returns.
+ * @private
+ */
+function requireShared(url, stub) {
+	const requireFn = nodeBuiltin("node:module").createRequire(import.meta.url);
+	const cache = requireFn.cache;
+	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	const outer = SERVING;
+	SERVING = url;
+	try {
+		return requireFn(nodeBuiltin("node:url").fileURLToPath(url));
+	} finally {
+		SERVING = outer;
+	}
 }
 
 /**
@@ -2057,8 +2171,13 @@ const HOOKS = Objects.freeze({
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
 		const resolved = applyToResult(specifier, context, nextResolve(specifier, context));
-		// Who imports a package's file, so its code can be told whose it is (#597).
-		recordPackageImport(context?.parentURL, resolved?.url);
+		// Who imports a package's file, so its code can be told whose it is (#597); an instance's require() of it is
+		// answered so that every later one is recorded too.
+		if (SERVING === null || SERVING !== resolved?.url || context?.parentURL !== import.meta.url) {
+			recordPackageImport(context?.parentURL, resolved?.url);
+			const stub = sharedRequireStub(context, resolved);
+			if (stub !== null) return stub;
+		}
 		// One of slothlet's runtime entry files, which this copy evaluated through another loader: the importer is given
 		// that module, unless it belongs to a second copy of slothlet Node loaded itself (#760).
 		const url = resolved?.url;
@@ -2070,6 +2189,16 @@ const HOOKS = Objects.freeze({
 	// Only instance-marked URLs are touched; every other load passes straight through, a CommonJS file's
 	// source hash recorded on the way (#597).
 	load: (url, context, nextLoad) => {
+		// An instance's require() of a file no instance tags: the file's one module, from a stub that leaves Node's caches.
+		if (url.startsWith(SHARED_REQUIRE_PREFIX)) {
+			const target = url.slice(SHARED_REQUIRE_PREFIX.length);
+			const ticket = mintTicket(null, (stub) => requireShared(target, stub));
+			return {
+				format: "commonjs",
+				shortCircuit: true,
+				source: `module.exports = ${STATE_REF}.redeem(${JSON.stringify(ticket)}).requireFromModule(${JSON.stringify(target)}, "commonjs", module);\n`
+			};
+		}
 		// One of slothlet's runtime entry files, evaluated through another loader: the module that re-exports it (#760).
 		if (url.startsWith(OWN_MODULE_PREFIX)) {
 			return { format: "module", shortCircuit: true, source: ownModuleBridge(url.slice(OWN_MODULE_PREFIX.length)) };

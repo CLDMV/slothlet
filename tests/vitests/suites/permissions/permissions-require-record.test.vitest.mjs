@@ -26,14 +26,26 @@
  * Denying any one of the four refuses it, the second CommonJS file to require it as much as the first; with none
  * denied it reads the vault.
  *
+ * Fixture `api_test_plain_require`: the api files `five.mjs` and `six.mjs`, of one folder, each require
+ * `helpers/plain.cjs` through a `require` made from their own plain path (`createRequire(fileURLToPath(import.meta.url))`),
+ * which loads the helper once per process; Node answers the second file's require, and every later instance's, from
+ * its own caches. Each file's `read()` runs the helper's `read()` inside its own call. A helper both files load is
+ * each one's own code inside its own call (docs/PERMISSIONS.md: a module calling a helper it shares with another is
+ * still itself), so only the file whose module is denied is refused. The expected values are what the same two files
+ * give when Node's caches cannot answer for the second (each in a folder of its own), where both requires reach the
+ * resolve hook.
+ *
  * @module tests/vitests/suites/permissions/permissions-require-record
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import slothlet from "@cldmv/slothlet";
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_helper_copies/api");
+const PLAIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_plain_require/api");
+const PLAIN_HELPER = path.resolve(PLAIN_DIR, "../helpers/plain.cjs");
 const DENIED = "PERMISSION_DENIED";
 const SECRET = "SECRET";
 
@@ -96,3 +108,72 @@ describe.each(MATRIX)("Permissions > every api file requiring a CommonJS helper 
 		});
 	});
 });
+
+/** The api files requiring the helper through a `require` made from a plain path. */
+const PLAIN_LOADERS = ["five", "six"];
+
+/** The rule sets for them: nothing denied, then each one's module denied the vault in turn. */
+const PLAIN_RULE_SETS = [
+	{ rules: "nothing denied", list: [], denied: null },
+	...PLAIN_LOADERS.map((file) => ({
+		rules: `the module path ${file} denied`,
+		list: [{ caller: `${file}.**`, target: "vault.**", effect: "deny" }],
+		denied: file
+	}))
+];
+
+describe.each(MATRIX)("Permissions > every api file requiring a helper from a plain path > $name", ({ attribution, mode, runtime }) => {
+	describe.each(["instance", "module"])('helpers: "%s"', (helpers) => {
+		describe.each(PLAIN_RULE_SETS)("$rules", ({ list, denied }) => {
+			let api;
+
+			beforeAll(async () => {
+				api = await slothlet({
+					base: PLAIN_DIR,
+					mode,
+					runtime,
+					helpers,
+					silent: true,
+					permissions: { defaultPolicy: "allow", attribution, rules: list }
+				});
+				for (const file of PLAIN_LOADERS) await api[file].bump();
+			});
+
+			afterAll(async () => {
+				await api?.shutdown();
+			});
+
+			it.each(PLAIN_LOADERS)("the helper's own function read inside the call of %s", async (file) => {
+				expect(await settle(() => api[file].read())).toBe(file === denied ? DENIED : SECRET);
+			});
+		});
+	});
+});
+
+describe.each(MATRIX.filter((config) => config.attribution === "precise"))(
+	"Permissions > a helper required from a plain path stays one module of the process > $mode/$runtime",
+	({ mode, runtime }) => {
+		let api;
+
+		beforeAll(async () => {
+			api = await slothlet({ base: PLAIN_DIR, mode, runtime, silent: true });
+		});
+
+		afterAll(async () => {
+			await api?.shutdown();
+		});
+
+		it("every require of it, the host's included, gets the one module", async () => {
+			const helper = createRequire(import.meta.url)(PLAIN_HELPER);
+			const start = helper.bump();
+			expect(await api.five.bump()).toBe(start + 1);
+			expect(await api.six.bump()).toBe(start + 2);
+			expect(await api.five.bump()).toBe(start + 3);
+			expect(helper.bump()).toBe(start + 4);
+		});
+
+		it.each(PLAIN_LOADERS)("require.resolve() in %s names the helper's file", async (file) => {
+			expect(await api[file].where()).toBe(PLAIN_HELPER);
+		});
+	}
+);
