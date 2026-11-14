@@ -518,6 +518,8 @@ const SCRIPTS_READER = Objects.freeze({
  * @property {(instanceID: string) => (object|null)} claim - Claims an instance ID (see claimInstanceScope).
  * @property {() => boolean} hooks - Registers the keeping copy's hooks with Node, once.
  * @property {(ticket: string) => object} redeem - Entry point of the code the load hook generates (see mintTicket).
+ * @property {(specifier: *, importer: string) => *} checkImport - Holds an import or `import.meta.resolve` an instance
+ *   module vite loaded makes by a specifier only known as it runs (see checkModuleImport).
  * @property {(filePath: string, instanceID: string) => *} requireCJS - Entry point of the wrapper the vite plugin
  *   generates for a CommonJS helper (see requireCJSFromRunner).
  * @internal
@@ -673,7 +675,8 @@ function sharedState() {
 		claim: claimHere,
 		hooks: () => installInstanceImportHooks(NODE_MODULE),
 		redeem: redeemTicket,
-		requireCJS: requireCJSFromRunner
+		requireCJS: requireCJSFromRunner,
+		checkImport: checkModuleImport
 	});
 	Objects.defineProperty(globalThis, STATE, { value: OWN_STATE, enumerable: false, configurable: false, writable: false });
 	return (SHARED = OWN_STATE);
@@ -1089,6 +1092,17 @@ function mayNameOwnPackage(specifier, importer) {
 	if (specifier.startsWith("#")) return true;
 	const root = packageRoot(toSlashPath(importer));
 	if (root === null) return false;
+	const name = packageName(root);
+	return name !== null && (specifier === name || specifier.startsWith(`${name}/`));
+}
+
+/**
+ * The name a package's `package.json` gives it (see {@link PACKAGE_NAMES}), or null when it gives none.
+ * @param {string} root - The package's directory, as {@link packageRoot} found it.
+ * @returns {string|null} The name.
+ * @private
+ */
+function packageName(root) {
 	if (!PACKAGE_NAMES.has(root)) {
 		let name = null;
 		try {
@@ -1098,8 +1112,302 @@ function mayNameOwnPackage(specifier, importer) {
 		}
 		PACKAGE_NAMES.set(root, typeof name === "string" ? name : null);
 	}
-	const name = PACKAGE_NAMES.get(root);
-	return name !== null && (specifier === name || specifier.startsWith(`${name}/`));
+	return PACKAGE_NAMES.get(root);
+}
+
+/**
+ * The folders of a slothlet package that hold its code: its source and its build.
+ * @type {string[]}
+ * @private
+ */
+const CODE_DIRS = ["src/", "dist/"];
+
+/**
+ * The files of slothlet's code a module's files may import, by their path inside a code folder: the runtime's entry
+ * files (`@cldmv/slothlet/runtime`, `/runtime/async`, `/runtime/live`). The package's entry files (`@cldmv/slothlet`)
+ * are outside its code folders.
+ * @type {string[]}
+ * @private
+ */
+const MODULE_IMPORTABLE = ["lib/runtime/runtime.mjs", "lib/runtime/runtime-asynclocalstorage.mjs", "lib/runtime/runtime-livebindings.mjs"];
+
+/**
+ * The specifiers a module's files may import slothlet by, for the refusal's message.
+ * @type {string}
+ * @private
+ */
+const MODULE_IMPORTABLE_SPECIFIERS =
+	"'@cldmv/slothlet', '@cldmv/slothlet/runtime', '@cldmv/slothlet/runtime/async', '@cldmv/slothlet/runtime/live'";
+
+/**
+ * The entry files of a slothlet package, at its root.
+ * @type {string[]}
+ * @private
+ */
+const ENTRY_FILES = ["index.mjs", "index.cjs"];
+
+/**
+ * Where a file is in slothlet's code, as a forward-slash path inside the package (`src/lib/…`, `dist/lib/…`,
+ * `index.mjs`), or null for a file that is no slothlet package's code. Every copy of slothlet in the process counts,
+ * however it is installed: a package named `@cldmv/slothlet`, its `src/` or `dist/` folder and its entry files.
+ * @param {string} ref - The file's URL, path or vite id.
+ * @returns {string|null} Its path inside the package, or null.
+ * @private
+ */
+function slothletCodePath(ref) {
+	if (typeof ref !== "string" || HOST === null) return null;
+	const path = toSlashPath(ref);
+	if (!path.includes("/src/") && !path.includes("/dist/") && !ENTRY_FILES.some((entry) => path.endsWith(`/${entry}`))) return null;
+	const root = packageRoot(path);
+	if (root === null || packageName(root) !== "@cldmv/slothlet") return null;
+	const inside = (path.startsWith(`${root}/`) ? path : path.replace(/^\/([a-z]:\/)/i, "$1")).slice(root.length + 1);
+	return CODE_DIRS.some((dir) => inside.startsWith(dir)) || ENTRY_FILES.includes(inside) ? inside : null;
+}
+
+/**
+ * Whether a file is one of slothlet's own files a module's files may not import: any file of slothlet's code but the
+ * runtime's entry files (see {@link MODULE_IMPORTABLE}).
+ * @param {string} ref - The file's URL, path or vite id.
+ * @returns {boolean} True when only slothlet's own files may import it.
+ * @internal
+ * @example
+ * isSlothletInternal("file:///app/node_modules/@cldmv/slothlet/dist/lib/helpers/config.mjs"); // true
+ * isSlothletInternal("file:///app/node_modules/@cldmv/slothlet/dist/lib/runtime/runtime.mjs"); // false
+ */
+export function isSlothletInternal(ref) {
+	const inside = slothletCodePath(ref);
+	if (inside === null || ENTRY_FILES.includes(inside)) return false;
+	const dir = CODE_DIRS.find((code) => inside.startsWith(code));
+	return !MODULE_IMPORTABLE.includes(inside.slice(dir.length));
+}
+
+/**
+ * The paths of the api files slothlet has loaded (see {@link noteModuleFile}), by {@link packageKey}.
+ * @type {Set<string>}
+ * @private
+ */
+const MODULE_FILES = new Set();
+
+/**
+ * Record that slothlet loads an api file: its path, so the file's own code is told to be a module's wherever it runs
+ * under its path alone (a loader evaluating the copy under another name, a `require` made from the file's plain path).
+ * @param {string} ref - The api file's path or URL.
+ * @returns {void}
+ * @internal
+ */
+export function noteModuleFile(ref) {
+	if (typeof ref === "string" && ref !== "") MODULE_FILES.add(packageKey(ref));
+}
+
+/**
+ * Whether a file, of no instance's tag, is code of an instance's module: a CommonJS file of an instance (an api file,
+ * or a helper the instance's CommonJS cache holds), one required while a CommonJS api file of the instance loads, or a
+ * file of a module's own package (outside `node_modules`) that an instance's file loaded, directly or through other
+ * such files (a helper required through a `require` made from a plain path, see {@link PACKAGE_IMPORTERS}). A file of
+ * another package stays the host's, and so does any file of slothlet's own.
+ * @param {string} ref - The file's URL or path.
+ * @returns {boolean} True when it is a module's code.
+ * @private
+ */
+function isUntaggedModuleFile(ref) {
+	if (typeof ref !== "string" || ref.includes(MARKER) || slothletCodePath(ref) !== null) return false;
+	const key = packageKey(ref);
+	if (MODULE_FILES.has(key)) return true;
+	if (ACTIVE !== null && (key === packageKey(ACTIVE.anchor) || isInstanceScopedFile(key, ACTIVE.anchor))) return true;
+	for (const instanceID of SCOPE_KEYS.keys()) if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === key)) return true;
+	if (/\/node_modules\//.test(key)) return false;
+	const seen = new Set([key]);
+	const queue = [key];
+	while (queue.length && seen.size < 64) {
+		for (const loader of PACKAGE_IMPORTERS.get(queue.shift()) ?? []) {
+			if (loader.includes(MARKER) || MODULE_FILES.has(packageKey(loader))) {
+				if (isInstanceScopedFile(key, splitQuery(loader)[0])) return true;
+				continue;
+			}
+			const through = packageKey(loader);
+			if (!seen.has(through) && !/\/node_modules\//.test(through)) {
+				seen.add(through);
+				queue.push(through);
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * The location a stack line names: the file, URL or vite id of the frame, without its line and column, or null for a
+ * line naming none (`<anonymous>`, an `eval` frame).
+ * @param {string} line - One line of a stack.
+ * @returns {string|null} The location.
+ * @private
+ */
+function frameLocation(line) {
+	const match = /\(([^()]+):\d+:\d+\)\s*$/.exec(line) ?? /^\s*at (?:async )?([^\s()]+):\d+:\d+\s*$/.exec(line);
+	return match ? match[1] : null;
+}
+
+/**
+ * Whether the code that made the `require()` or `require.resolve()` the resolve hook is answering is a module's: the
+ * first frame below Node's own and slothlet's own frames is an instance's copy, or a file of a module's that no
+ * instance tags (see {@link isUntaggedModuleFile}). A `require` can be made from any path (`createRequire`), so the
+ * importer Node names says nothing about who is requiring.
+ * @returns {boolean} True when a module's code made it.
+ * @private
+ */
+function isModuleRequire() {
+	const previousLimit = PristineError.stackTraceLimit;
+	const previousPrepare = PristineError.prepareStackTrace;
+	PristineError.stackTraceLimit = 64;
+	PristineError.prepareStackTrace = undefined;
+	let stack;
+	try {
+		stack = String(new PristineError().stack);
+	} finally {
+		PristineError.stackTraceLimit = previousLimit;
+		PristineError.prepareStackTrace = previousPrepare;
+	}
+	const lines = stack.split("\n").slice(1);
+	let i = 0;
+	// The resolve hook's own frames, then Node's loader.
+	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;
+	while (i < lines.length && (frameLocation(lines[i]) ?? "node:").startsWith("node:")) i++;
+	const caller = i < lines.length ? frameLocation(lines[i]) : null;
+	if (caller === null || slothletCodePath(caller) !== null) return false;
+	return INSTANCE_FRAME.test(caller) || isUntaggedModuleFile(caller);
+}
+
+/**
+ * Whether an import or require resolving to one of slothlet's own files is a module's (see {@link refuseInternalImport}):
+ * the importer is an instance's copy, a file of a module's that no instance tags, or a module whose URL an instance's
+ * file imported (a `data:` URL); or the code making a `require()` is a module's, whatever importer it names.
+ * Slothlet's own files import slothlet's files.
+ * @param {string|undefined} parentURL - The importer Node names.
+ * @param {string[]|undefined} conditions - The resolution's conditions.
+ * @returns {boolean} True when it is a module's import.
+ * @private
+ */
+function isModuleImport(parentURL, conditions) {
+	if (typeof parentURL === "string") {
+		if (parentURL.includes(MARKER)) return true;
+		if (
+			slothletCodePath(parentURL) === null &&
+			(parentURL.startsWith("file:") ? isUntaggedModuleFile(parentURL) : MODULE_URLS.has(parentURL))
+		)
+			return true;
+	}
+	return hasCondition(conditions, "require") && isModuleRequire();
+}
+
+/**
+ * The URLs other than files (`data:` modules) that an instance's file imported, so what such a module imports is
+ * held as the importing file's own imports are.
+ * @type {Set<string>}
+ * @private
+ */
+const MODULE_URLS = new Set();
+
+/**
+ * The refusal {@link refuseInternalImport} throws, as slothlet builds it once loaded (see {@link setImportRefusal}).
+ * @type {?function(object): Error}
+ * @private
+ */
+let IMPORT_REFUSAL = null;
+
+/**
+ * Register how a refused import is reported: a function given `{ specifier, file, allowed }` that returns the error to
+ * throw. Taken once, by the copy that keeps the shared object.
+ * @param {function(object): Error} make - Builds the error.
+ * @returns {void}
+ * @internal
+ */
+export function setImportRefusal(make) {
+	if (isKeeper() && IMPORT_REFUSAL === null && typeof make === "function") IMPORT_REFUSAL = make;
+}
+
+/**
+ * The error for a module's import of one of slothlet's own files.
+ * @param {string} specifier - The specifier as written.
+ * @param {string} file - The file it resolved to.
+ * @returns {Error} The error.
+ * @private
+ */
+function importRefusal(specifier, file) {
+	const details = { specifier, file: toSlashPath(file), allowed: MODULE_IMPORTABLE_SPECIFIERS };
+	if (IMPORT_REFUSAL !== null) return IMPORT_REFUSAL(details);
+	// Slothlet registers its error before any module loads; a host using the hooks on their own gets the bare code.
+	const error = new PristineError(`MODULE_INTERNAL_NOT_IMPORTABLE: ${details.specifier} (${details.file})`);
+	error.code = "MODULE_INTERNAL_NOT_IMPORTABLE";
+	return error;
+}
+
+/**
+ * Hold an import an instance module that vite's module runner evaluates makes by a specifier only known as it runs
+ * (`import(name)`), or what its `import.meta.resolve()` answered, to the rule of {@link refuseInternalImport}. The
+ * runner names no importer when it resolves such an import by a path or URL, so the vite plugin has every such
+ * `import()` and `import.meta.resolve()` of an instance module go through here (see {@link slothletInstanceImports}):
+ * a path, a `file:` URL or a relative specifier that names one of slothlet's own files is refused. A bare specifier is
+ * held where vite resolves it.
+ * @param {*} specifier - The specifier, or what `import.meta.resolve()` answered.
+ * @param {string} importer - The module's `import.meta.url`.
+ * @returns {*} `specifier`, when it may be imported.
+ * @throws {Error} MODULE_INTERNAL_NOT_IMPORTABLE for one of slothlet's own files.
+ * @private
+ */
+function checkModuleImport(specifier, importer) {
+	const text = typeof specifier === "string" ? specifier : String(specifier);
+	// A module the instance module imports by a URL that is no file's (`data:`): what it imports is held as the
+	// module's own imports are, where Node's loader resolves them.
+	if (/^[a-z][a-z0-9+.-]+:/i.test(text) && !text.startsWith("file:") && !text.startsWith("node:")) MODULE_URLS.add(text);
+	if (isFileSpecifier(text) || /^[A-Za-z]:[\\/]/.test(text)) {
+		let file = text;
+		if (!text.startsWith("file:") && !(text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text))) file = new URL(text, importer).href;
+		if (isSlothletInternal(file)) throw importRefusal(text, file);
+	}
+	return specifier;
+}
+
+/**
+ * The error the vite plugin throws for a module's import of one of slothlet's own files: slothlet's own error, loaded
+ * where the plugin runs (vite's server, which need not have loaded slothlet).
+ * @param {string} specifier - The specifier as written.
+ * @param {string} file - The file it resolved to.
+ * @returns {Promise<Error>} The error.
+ * @private
+ */
+async function viteImportRefusal(specifier, file) {
+	if (IMPORT_REFUSAL === null) {
+		try {
+			const { SlothletError } = await import("@cldmv/slothlet/errors");
+			IMPORT_REFUSAL = ({ specifier: named, file: target, allowed }) =>
+				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed }, null, { validationError: true });
+		} catch {
+			// Without slothlet's errors loadable here the refusal carries its code alone (see importRefusal).
+		}
+	}
+	return importRefusal(specifier, file);
+}
+
+/**
+ * Keep slothlet's own files to slothlet: an import or require a module's code makes that resolves to any file of
+ * slothlet's code but the runtime's entry files is refused, however it is spelled (a package subpath, `#imports`, a
+ * file URL, an absolute or relative path, `import.meta.resolve`, `require.resolve`). The host's own imports, and
+ * slothlet's own, resolve as before.
+ * @param {string} specifier - The specifier as written.
+ * @param {object} context - Node's resolve context.
+ * @param {ResolveResult} result - The resolution.
+ * @returns {void}
+ * @throws {Error} MODULE_INTERNAL_NOT_IMPORTABLE for a module's import of such a file.
+ * @private
+ */
+function refuseInternalImport(specifier, context, result) {
+	const url = result?.url;
+	if (typeof url === "string" && !url.startsWith("file:") && !url.startsWith("node:") && isModuleImport(context?.parentURL, [])) {
+		// A module an instance's file imports by a URL that is no file's: what it imports is held as the file's imports are.
+		MODULE_URLS.add(url);
+		return;
+	}
+	if (!isSlothletInternal(url)) return;
+	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
 }
 
 /**
@@ -2170,7 +2478,9 @@ const HOOKS = Objects.freeze({
 		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX) || specifier.startsWith(OWN_MODULE_PREFIX)) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
-		const resolved = applyToResult(specifier, context, nextResolve(specifier, context));
+		const next = nextResolve(specifier, context);
+		refuseInternalImport(specifier, context, next);
+		const resolved = applyToResult(specifier, context, next);
 		// Who imports a package's file, so its code can be told whose it is (#597); an instance's require() of it is
 		// answered so that every later one is recorded too.
 		if (SERVING === null || SERVING !== resolved?.url || context?.parentURL !== import.meta.url) {
@@ -2284,6 +2594,13 @@ export const LOADED_BY_SPECIFIER = "virtual:slothlet-loaded-by?";
  * @private
  */
 const NO_RECORD_ID = "\0virtual:slothlet-loaded-by-none";
+
+/**
+ * The specifier of the virtual module the vite plugin has an instance module import {@link checkModuleImport} from.
+ * @type {string}
+ * @private
+ */
+const IMPORT_CHECK_SPECIFIER = "virtual:slothlet-import-check";
 
 /**
  * The files of slothlet's own a host-file registration is never appended to: its source or build tree and the package's
@@ -2432,6 +2749,27 @@ export function slothletInstanceImports() {
 	 */
 	const isOwnRecord = (source, importer) =>
 		typeof importer === "string" && isOwnRecordQuery(source.slice(LOADED_BY_SPECIFIER.length), importer);
+	/**
+	 * Whether an importer is a module's code (see {@link refuseInternalImport}): an instance file, or a file a module
+	 * loaded that no instance tags, outside `node_modules` and outside slothlet's own files.
+	 * @param {string} importer - The importing module's id.
+	 * @returns {boolean} True for a module's code.
+	 */
+	const isModuleImporter = (importer) =>
+		importer.includes(MARKER) ||
+		moduleFiles.has(toSlashPath(importer)) ||
+		(moduleImporters.has(importer) && !/\/node_modules\//.test(toSlashPath(importer)) && slothletCodePath(importer) === null);
+	/**
+	 * The files vite has loaded as an instance's copy, by path: vite names the importer of a dynamic `import()` by its
+	 * file alone, without the query its id carries, so an import from one of these paths is a module's.
+	 * @type {Set<string>}
+	 */
+	const moduleFiles = new Set();
+	/**
+	 * What the name an instance module imports the import check under ends with: one no module can know beforehand.
+	 * @type {string}
+	 */
+	const checkName = HOST === null ? "0" : HOST.randomUUID().replace(/-/g, "");
 	return {
 		name: "slothlet-instance-imports",
 		enforce: "pre",
@@ -2446,8 +2784,14 @@ export function slothletInstanceImports() {
 		async resolveId(source, importer, options) {
 			if (typeof source === "string" && source.startsWith(LOADED_BY_SPECIFIER))
 				return isOwnRecord(source, importer) ? `\0${source}` : NO_RECORD_ID;
+			if (source === IMPORT_CHECK_SPECIFIER) return `\0${IMPORT_CHECK_SPECIFIER}`;
 			if (typeof importer !== "string") return null;
 			const tagged = importer.includes(MARKER);
+			// Slothlet's own files are slothlet's: a module's code cannot import them, by any spelling that can reach them.
+			if (isModuleImporter(importer) && (isFileSpecifier(source) || source.startsWith("@cldmv/slothlet") || source.startsWith("#"))) {
+				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
+				if (target && !target.external && isSlothletInternal(target.id)) throw await viteImportRefusal(source, target.id);
+			}
 			// A file only the host loaded imports as vite resolves it.
 			if (!tagged && !moduleImporters.has(importer)) return null;
 			// A bare specifier an instance file imports that cannot name a file of its own package is recorded where the file
@@ -2484,6 +2828,7 @@ export function slothletInstanceImports() {
 				if (typeof id !== "string") return null;
 				if (!id.includes(MARKER)) return hostScriptRegistration(code, id);
 				const [base, query = ""] = splitQuery(id);
+				moduleFiles.add(toSlashPath(base));
 				const instanceID = new URLSearchParams(query).get("slothlet_instance");
 				if (instanceID === null || isCommonJSFile(base)) return null;
 				// The script vite compiled an instance file into is registered too, so its code is told to be the file's own
@@ -2499,6 +2844,8 @@ export function slothletInstanceImports() {
 				// Static imports and re-exports, and dynamic import() calls with a literal specifier anywhere in the module.
 				const specifiers = new Set();
 				const bare = new Set();
+				// Each import() and import.meta.resolve() of the module, held as it runs (see checkModuleImport).
+				const checked = [];
 				const visit = (node) => {
 					if (!node || typeof node !== "object") return;
 					if (Arrays.isArray(node)) {
@@ -2506,6 +2853,15 @@ export function slothletInstanceImports() {
 						return;
 					}
 					if (typeof node.type !== "string") return;
+					if (node.type === "ImportExpression" && node.source) checked.push(node.source);
+					else if (
+						node.type === "CallExpression" &&
+						node.callee?.type === "MemberExpression" &&
+						node.callee.object?.type === "MetaProperty" &&
+						node.callee.object.meta?.name === "import" &&
+						node.callee.property?.name === "resolve"
+					)
+						checked.push(node);
 					const isImport = /^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/.test(node.type);
 					const source = isImport ? node.source?.value : undefined;
 					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
@@ -2536,8 +2892,17 @@ export function slothletInstanceImports() {
 				const imports = children.length
 					? `\n;globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`
 					: "";
-				const tail = `${registration}${loadedBy}${imports}`;
-				return tail ? { code: `${code}${tail}\n`, map: null } : null;
+				// The check is imported under a name the module cannot know, at the end so no line moves (imports are hoisted).
+				let body = code;
+				let check = "";
+				if (checked.length) {
+					const name = `__slothlet_import_check_${checkName}`;
+					for (const node of checked.sort((a, b) => b.start - a.start))
+						body = `${body.slice(0, node.start)}${name}(${body.slice(node.start, node.end)}, import.meta.url)${body.slice(node.end)}`;
+					check = `\nimport { checkImport as ${name} } from ${JSON.stringify(IMPORT_CHECK_SPECIFIER)};`;
+				}
+				const tail = `${registration}${loadedBy}${imports}${check}`;
+				return tail || body !== code ? { code: `${body}${tail}\n`, map: null } : null;
 			}
 		},
 		/**
@@ -2549,6 +2914,8 @@ export function slothletInstanceImports() {
 		 */
 		load(id) {
 			if (id === NO_RECORD_ID) return { code: "export {};\n", map: null };
+			// Read once, as the module importing it loads, from the shared object that module's own code cannot replace.
+			if (id === `\0${IMPORT_CHECK_SPECIFIER}`) return { code: `export const checkImport = ${STATE_REF}.checkImport;\n`, map: null };
 			if (typeof id === "string" && id.startsWith(`\0${LOADED_BY_SPECIFIER}`)) {
 				const query = id.slice(1 + LOADED_BY_SPECIFIER.length);
 				// A record the plugin did not resolve a module's import of the file for records nothing (#715).

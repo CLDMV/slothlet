@@ -10,15 +10,13 @@ import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest
 
 const { manifest, importmap } = await generateBrowserAssets("./src/api");
 // → manifest:  the API-directory listing
-// → importmap: { imports: { "@cldmv/slothlet": "/node_modules/@cldmv/slothlet/…", … } }
+// → importmap: { imports: { "@cldmv/slothlet": "/node_modules/@cldmv/slothlet/…", … }, scopes: { … } }
 ```
 
 ```html
 <!-- the page — importmap MUST come before any module script that imports slothlet -->
 <script type="importmap">
-	{
-		"imports": {/* …importmap.imports… */}
-	}
+	/* …JSON.stringify(importmap): its imports AND its scopes… */
 </script>
 <script type="module">
 	import slothlet from "@cldmv/slothlet";
@@ -61,6 +59,8 @@ The recommended one-call entry point. Returns `{ manifest, importmap }`.
 | `slothletBase` | `string` | `"/node_modules/@cldmv/slothlet/"` | URL/path prefix where the `@cldmv/slothlet` package is served in the browser. |
 
 `slothletBase` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's _filesystem_ location, but not the _URL_ you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
+
+The importmap's `imports` maps what any script of the page may import of slothlet: `@cldmv/slothlet`, the runtime (`/runtime`, `/runtime/async`, `/runtime/live`) and `/helpers/manifest-resolver`. Every other specifier of slothlet's is slothlet's own, and the importmap maps it under `scopes`, for slothlet's own files alone (one scope per code folder and entry file under `slothletBase`), so an api leaf or a page script resolving `@cldmv/slothlet/helpers/…` or `#handlers/…` fails (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet)). Inline the whole object, `scopes` included: a page given `imports` alone cannot load slothlet. A browser loads any served file by its URL, so a file imported by its URL is not held this way.
 
 The importmap entries are resolved with `import.meta.resolve`, so they automatically point at the files that match the build's export conditions — `dist/*` for an installed package, `src/*` in slothlet's own dev tree. Locale JSON files (`@cldmv/slothlet/i18n/language/*.json`), which are loaded via a dynamic template import a static scan can't see, are enumerated and included automatically. You only ever set `slothletBase`; the per-file paths underneath it are filled in for you.
 

@@ -81,6 +81,8 @@
 		"HINT_MODULE_IMPORT_FAILED": "Certifique-se de que o arquivo do módulo existe e pode ser importado. Verifique se há erros de sintaxe ou dependências ausentes.",
 		"INSTANCE_ID_IN_USE": "O ID de instância '{instanceID}' já está em uso neste processo. Seus arquivos não podem ser carregados duas vezes com o mesmo ID.",
 		"HINT_INSTANCE_ID_IN_USE": "Cada instância precisa de um ID próprio. Encerre primeiro a outra instância ou deixe o slothlet gerar o ID.",
+		"MODULE_INTERNAL_NOT_IMPORTABLE": "'{specifier}' aponta para {file}, um dos arquivos próprios do slothlet, que só os arquivos do próprio slothlet podem importar. Os arquivos de um módulo podem importar {allowed}.",
+		"HINT_MODULE_INTERNAL_NOT_IMPORTABLE": "Acesse outros módulos por meio de self e deixe os arquivos próprios do slothlet para o código do host.",
 		"CONTEXT_ALREADY_EXISTS": "O contexto para a instância '{instanceID}' já existe. Não é possível inicializar duas vezes.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "Este contexto já existe. Verifique se você está tentando inicializar a mesma instância duas vezes.",
 		"CONTEXT_NOT_FOUND": "Contexto não encontrado para a instância '{instanceID}'. A instância pode ter sido encerrada. Instâncias disponíveis: {availableInstances}",

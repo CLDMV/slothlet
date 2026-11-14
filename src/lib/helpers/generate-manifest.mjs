@@ -107,6 +107,20 @@ const IMPORT_SPEC_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
 const DEFAULT_SLOTHLET_BASE = "/node_modules/@cldmv/slothlet/";
 
 /**
+ * The specifiers of slothlet's any script of the page may import: the package's main entry, the runtime a module's
+ * files import `self`, `context` and `instanceID` from, and the manifest resolver a page hands slothlet. Every other
+ * specifier of slothlet's maps only for slothlet's own files (see {@link generateImportMap}).
+ * @type {Set<string>}
+ */
+const PAGE_SPECIFIERS = new Set([
+	"@cldmv/slothlet",
+	"@cldmv/slothlet/runtime",
+	"@cldmv/slothlet/runtime/async",
+	"@cldmv/slothlet/runtime/live",
+	"@cldmv/slothlet/helpers/manifest-resolver"
+]);
+
+/**
  * Extensions treated as loadable API modules.
  * @type {Set<string>}
  */
@@ -424,17 +438,30 @@ async function collectSlothletSpecifiers(root) {
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
  * the build process — then rebased onto `slothletBase` (where the package is served).
  *
+ * Slothlet's own files are slothlet's: `imports` maps only what any script of the page may import (the main entry,
+ * the runtime and the manifest resolver), and every other specifier of slothlet's is mapped under `scopes`, for
+ * slothlet's own files alone (its code folders and entry files under `slothletBase`). An api file, or any other
+ * script, importing one of them by its specifier fails to resolve it. Inline the whole object, `scopes` included.
+ *
  * @param {string} [slothletBase="/node_modules/@cldmv/slothlet/"] - URL/path prefix where the
  *   `@cldmv/slothlet` package is served in the browser. Defaults to the conventional node_modules
  *   location; override with a CDN URL, an Electron protocol path, or `"/"` when the package is
  *   served at the web root.
- * @returns {Promise<{ imports: Object<string,string> }>} An importmap object ready to inline as
- *   `<script type="importmap">`.
+ * @returns {Promise<{ imports: Object<string,string>, scopes: Object<string, Object<string,string>> }>} An importmap
+ *   object ready to inline as `<script type="importmap">`.
  */
 async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	const base = String(slothletBase).endsWith("/") ? String(slothletBase) : `${slothletBase}/`;
 	const root = slothletPackageRoot();
 	const imports = {};
+	// Slothlet's own specifiers, for its own files (see PAGE_SPECIFIERS).
+	const own = {};
+	// Where slothlet's own files are served: a code folder (`src/`, `dist/`) or an entry file, per mapped file.
+	const ownFiles = new Set();
+	const place = (spec, rel) => {
+		(PAGE_SPECIFIERS.has(spec) ? imports : own)[spec] = base + rel;
+		ownFiles.add(rel.includes("/") ? `${base}${rel.slice(0, rel.indexOf("/") + 1)}` : base + rel);
+	};
 
 	for (const spec of await collectSlothletSpecifiers(root)) {
 		let resolved;
@@ -451,7 +478,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 			continue;
 		}
 		const rel = path.relative(root, fileURLToPath(resolved)).replace(/\\/g, "/");
-		imports[spec] = base + rel;
+		place(spec, rel);
 	}
 
 	// i18n locales arrive via dynamic import("@cldmv/slothlet/i18n/language/<lang>.json") — a
@@ -460,7 +487,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		const sampleDir = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet/i18n/language/en-us.json")));
 		for (const f of (await fs.readdir(sampleDir)).filter((n) => n.endsWith(".json"))) {
 			const rel = path.relative(root, path.join(sampleDir, f)).replace(/\\/g, "/");
-			imports[`@cldmv/slothlet/i18n/language/${f}`] = base + rel;
+			place(`@cldmv/slothlet/i18n/language/${f}`, rel);
 		}
 	} catch {
 		// No locales resolvable (unexpected) — importmap is still valid without them.
@@ -487,7 +514,9 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		// Pack not installed — its locale entries are simply absent (core stays English-only).
 	}
 
-	return { imports };
+	const scopes = {};
+	for (const prefix of [...ownFiles].sort()) scopes[prefix] = { ...own };
+	return { imports, scopes };
 }
 
 /**
@@ -775,8 +804,8 @@ function derivePackagesBase(base) {
  *   node_modules location (slothlet installed as a dependency, node_modules served at the web
  *   root). Override with a CDN URL, an Electron protocol path, or `"/"` when the package is served
  *   at the web root.
- * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
- *   The API manifest and slothlet's own browser importmap.
+ * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string>, scopes: Object<string, Object<string,string>> } }>}
+ *   The API manifest and slothlet's own browser importmap (see {@link generateImportMap} for its `scopes`).
  *
  * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *

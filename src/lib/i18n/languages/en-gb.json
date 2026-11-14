@@ -81,6 +81,8 @@
 		"HINT_MODULE_IMPORT_FAILED": "Ensure the module file exists and can be imported. Check for syntax errors or missing dependencies.",
 		"INSTANCE_ID_IN_USE": "Instance ID '{instanceID}' is already in use in this process. Its files cannot be loaded under the same ID twice.",
 		"HINT_INSTANCE_ID_IN_USE": "Each instance needs an ID of its own. Shut the other instance down first, or let slothlet generate the ID.",
+		"MODULE_INTERNAL_NOT_IMPORTABLE": "'{specifier}' resolves to {file}, one of slothlet's own files, which only slothlet's own files may import. A module's files may import {allowed}.",
+		"HINT_MODULE_INTERNAL_NOT_IMPORTABLE": "Reach other modules through self, and keep slothlet's own files to the host's code.",
 		"CONTEXT_ALREADY_EXISTS": "Context for instance '{instanceID}' already exists. Cannot initialize twice.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "This context already exists. Check if you're trying to initialize the same instance twice.",
 		"CONTEXT_NOT_FOUND": "Context not found for instance '{instanceID}'. Instance may have been shut down. Available instances: {availableInstances}",

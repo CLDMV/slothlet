@@ -42,7 +42,9 @@ describe("Security > Export surface narrowing (H1)", () => {
 	});
 
 	it("browser importmap still resolves the internal specifiers via #-prefixed keys", async () => {
-		const { imports } = await generateImportMap("/");
+		// For slothlet's own files: the scopes that map slothlet's own specifiers for them.
+		const map = await generateImportMap("/");
+		const imports = Object.assign({}, map.imports, ...Object.values(map.scopes));
 
 		const handlerKeys = Object.keys(imports).filter((k) => k.startsWith("#handlers/"));
 		const factoryKeys = Object.keys(imports).filter((k) => k.startsWith("#factories/"));

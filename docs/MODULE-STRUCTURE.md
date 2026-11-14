@@ -19,6 +19,7 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Hidden Entries](#hidden-entries)
 - [Utility Modules](#utility-modules)
 - [Helper Modules Are Per Instance](#helper-modules-are-per-instance)
+- [What a Module Imports From slothlet](#what-a-module-imports-from-slothlet)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
 
@@ -583,6 +584,29 @@ Limits of the rule:
 - **Requires that run after a CommonJS module has loaded.** The per-instance `require` cache is in place only while a CommonJS leaf or helper is being loaded. A `require()` — or `import()` — that a CommonJS module makes later, inside a function the api calls, reaches the shared copy. Require helpers at the top of the file.
 - **ES modules required under vitest.** A `.cjs` leaf always loads natively, so an ES module it `require()`s is Node's per-instance copy, while the instance's ES module leaves import their copy through vite's module graph — two copies within one instance (each still separate from other instances). `.cjs` helpers do not have this split: the plugin serves them through the same per-instance CommonJS cache.
 - Browser mode loads leaves from the manifest without a per-instance query, so neither leaves nor their helpers are per instance there.
+
+---
+
+## What a Module Imports From slothlet
+
+An api file, and every file it loads, imports slothlet by two names: the package itself (`@cldmv/slothlet`, which creates instances of its own) and the runtime (`@cldmv/slothlet/runtime`, `/runtime/async`, `/runtime/live`), which gives it `self`, `context` and `instanceID`. Everything else of slothlet's is slothlet's own: its helpers, processors, builders, modes, handlers, errors and translations resolve only for slothlet's own files.
+
+```js
+// api/report.mjs
+import { self, context } from "@cldmv/slothlet/runtime"; // loads
+import slothlet from "@cldmv/slothlet"; // loads
+
+await import("@cldmv/slothlet/helpers/sanitize"); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+```
+
+The rule holds however the file is named and however it is loaded: a package subpath, a `#imports` specifier, a file URL, an absolute or relative path into slothlet's `src/` or `dist/`, a static `import`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` from `createRequire` (whatever path the `require` is made from, slothlet's own included), and a CommonJS file's own `require`. It holds for the api file's helpers too: a helper it imports, one of its own package that it requires through a `require` made from a plain path, and a `data:` module it imports. An api file that imports one of slothlet's own files at its top does not load (`MODULE_IMPORT_FAILED`, with the refusal as its cause).
+
+The host's own imports are unchanged: the host, its tools and its tests import any of slothlet's files they did before (`@cldmv/slothlet/helpers/sanitize`, `/helpers/generate-manifest`, `/helpers/manifest-resolver`, the `slothletInstanceImports()` vite plugin). So does a package the host installed, imported by a module: a file of another package is the host's code, whoever imports it.
+
+Where slothlet cannot tell who is loading a file, it leaves the load to the host:
+
+- **Under vite's module runner**, the plugin sees an import a module's file makes as it resolves it, and an `import()` or `import.meta.resolve()` a module makes by a name only known as it runs is checked as it runs. A function that resolves a specifier the module handed it (`import.meta.resolve` read into a variable and called later) is not seen; the import that follows is.
+- **In the browser** the generated importmap maps slothlet's own specifiers only for slothlet's own files (see [BROWSER.md](BROWSER.md#generatebrowserassetsapidir-options)), so a page script or an api file resolving one of them by its specifier fails. A browser loads any served file by its URL, so a file imported by its URL cannot be held there (see [PERMISSIONS.md](PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary)).
 
 ---
 

@@ -38,9 +38,16 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
-import { installInstanceImportHooks, requireInInstance, HELPERS_PARAM, HELPERS_PER_MODULE } from "@cldmv/slothlet/helpers/instance-imports";
+import {
+	installInstanceImportHooks,
+	requireInInstance,
+	setImportRefusal,
+	noteModuleFile,
+	HELPERS_PARAM,
+	HELPERS_PER_MODULE
+} from "@cldmv/slothlet/helpers/instance-imports";
 import { createModuleLoad } from "#handlers/frame-placement";
 import { Objects, Arrays, JSON, Map, Set, Promise, URL } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -330,6 +337,11 @@ function runtime_encodeQueryValue(value) {
  */
 function ensureInstanceImportHooks() {
 	if (instanceImportHooksInstalled) return;
+	// A module's import of one of slothlet's own files is refused with slothlet's own error.
+	setImportRefusal(
+		({ specifier, file, allowed }) =>
+			new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }, null, { validationError: true })
+	);
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
 }
 
@@ -645,6 +657,9 @@ export class Loader extends ComponentBase {
 			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 			byMount.set(moduleID ?? "", String(moduleUrl));
 			this.#importedLocationList = null;
+			// What the file imports is a module's, whichever loader evaluates it and however a require names it.
+			noteModuleFile(filePath);
+			noteModuleFile(String(moduleUrl));
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {

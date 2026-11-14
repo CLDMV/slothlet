@@ -124,6 +124,7 @@ The permission system is an **enforced boundary under the async runtime** and a 
 **Under the async runtime** (the default, and Node-only) the boundary has teeth:
 
 - slothlet's engine internals (`context-async`'s `getContext()`, the permission manager, the wrappers) live under the package's private `#handlers/*` / `#factories/*` `imports`, which Node resolves **only from slothlet's own modules** — external code cannot import them, and `@cldmv/slothlet/handlers/*` / `/factories/*` are not in `exports` at all (they throw `ERR_PACKAGE_PATH_NOT_EXPORTED`).
+- A module's own files reach slothlet only through `@cldmv/slothlet` and its runtime (`/runtime`, `/runtime/async`, `/runtime/live`). Every other file of slothlet's (`/helpers/*`, `/processors/*`, `/builders/*`, `/modes/*`, `/errors`, `/i18n`, the internals above), named by its specifier, its URL or its path, imported or required, is refused to them with `MODULE_INTERNAL_NOT_IMPORTABLE`, under Node's loader and through the `slothletInstanceImports()` vite plugin alike. The host's own imports of those files are unchanged. See [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet).
 - Per-request context is isolated with **AsyncLocalStorage**, and enforcement fails closed on an absent/forged caller.
 
 So a dependency loaded into a Node process has no supported path to the raw instance and cannot step around the gate.
