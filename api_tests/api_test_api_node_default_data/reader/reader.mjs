@@ -210,3 +210,35 @@ export const listingsAt = (path) => {
 		entries: answer(() => Object.entries(node).map(([member]) => member))
 	};
 };
+
+/**
+ * What another module's map or set answers through `self`: its iteration, its own methods, `size` and `instanceof`.
+ * @param {string} module - The module's api name.
+ * @param {string} key - The node's key.
+ * @returns {object} The answers.
+ */
+export const collection = (module, key) => {
+	const node = self[module][key];
+	return {
+		spread: answer(() => JSON.stringify([...node])),
+		forOf: answer(() => {
+			const seen = [];
+			for (const entry of node) seen.push(entry);
+			return JSON.stringify(seen);
+		}),
+		entries: answer(() => JSON.stringify([...node.entries()])),
+		keys: answer(() => JSON.stringify([...node.keys()])),
+		values: answer(() => JSON.stringify([...node.values()])),
+		forEach: answer(() => {
+			const seen = [];
+			node.forEach((value, member) => seen.push([member, value]));
+			return JSON.stringify(seen);
+		}),
+		size: answer(() => node.size),
+		get: answer(() => (typeof node.get === "function" ? JSON.stringify(node.get("one")) : null)),
+		has: answer(() => node.has("one")),
+		isMap: answer(() => node instanceof Map),
+		isSet: answer(() => node instanceof Set),
+		ownKeys: answer(() => Object.keys(node))
+	};
+};

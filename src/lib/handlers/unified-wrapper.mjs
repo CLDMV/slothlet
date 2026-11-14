@@ -1306,7 +1306,6 @@ const NODE_MEMBER = Symbol("slothlet.nodeMember");
  * @param {object} reader - Who reads it.
  * @param {object} slothlet - The instance.
  * @param {string|symbol} prop - The member read.
- * @param {*} read - What the node answered for it.
  * @returns {*} The member, or {@link NODE_MEMBER} when the node's own answer stands.
  * @private
  *
@@ -1314,22 +1313,58 @@ const NODE_MEMBER = Symbol("slothlet.nodeMember");
  * // single/dmap.mjs: export default new Map([["one", { n: 1 }]]);
  * self.single.dmap.get("one").n = 5; // LOOSE_SET_NOT_OWNED, as self.owner.dmap.get("one").n = 5 is
  */
-function runtime_selfDataMember(inner, reader, slothlet, prop, read) {
+function runtime_selfDataMember(inner, reader, slothlet, prop) {
 	if (inner === null || reader === HOST_READER || prop === "constructor") return NODE_MEMBER;
 	const impl = inner.____slothletInternal.impl;
-	if (impl === null || typeof impl !== "object") return NODE_MEMBER;
-	// Decided once per value: what a value is does not change, and every read through `self` asks.
-	let isData = SELF_DATA_VALUES.get(impl);
-	if (isData === undefined) {
-		isData = runtime_dataKind(impl) !== null;
-		SELF_DATA_VALUES.set(impl, isData);
-	}
-	if (!isData || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	if (!runtime_holdsDataKind(impl) || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
 	const view = runtime_selfDataView(impl, reader, slothlet, runtime_apiPathParts(inner));
-	if (view !== impl) return Reflect.get(view, prop, view);
-	// A member the node has no answer for (its iterator) runs on the object, as on the object itself.
-	const member = read === undefined ? Reflect.get(impl, prop, impl) : undefined;
-	if (typeof member !== "function") return NODE_MEMBER;
+	// A reader handed the object itself gets the node's answer, the object's own member (see runtime_frontedDataMember).
+	return view !== impl ? Reflect.get(view, prop, view) : NODE_MEMBER;
+}
+
+/**
+ * Whether `value` is a built-in data object, decided once per value: what a value is does not change, and every read
+ * of a node holding one asks.
+ * @param {*} value - The value a node holds.
+ * @returns {boolean} Whether it is one.
+ * @private
+ */
+function runtime_holdsDataKind(value) {
+	if (value === null || typeof value !== "object") return false;
+	let isData = SELF_DATA_VALUES.get(value);
+	if (isData === undefined) {
+		isData = runtime_dataKind(value) !== null;
+		SELF_DATA_VALUES.set(value, isData);
+	}
+	return isData;
+}
+
+/**
+ * The member a node of a built-in data object (a file's default export that is a `Map`, a `Set`, a `Date`, …) answers
+ * from the object, as the object does: the node fronts the value as data, so a member its kind defines (`get`, `size`,
+ * `entries`, `Symbol.iterator`, a date's `getTime`) is the object's, read on it and, for a method, run on it, never an
+ * api child with a path of its own. What `Object.prototype` holds keeps the node's answers (see
+ * runtime_inheritedEngineMember), and so do `constructor` and `then`. A reader through `self` that may not change the
+ * object gets the view's member instead ({@link runtime_selfDataMember}).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @returns {*} The member, or {@link NODE_MEMBER} when the node answers it another way.
+ * @private
+ *
+ * @example
+ * // single/dmap.mjs: export default new Map([["one", { n: 1 }]]);
+ * [...api.single.dmap]; // [["one", { n: 1 }]]
+ * api.single.dmap.get("one"); // { n: 1 }, run on the map: `single.dmap.get` is no api path
+ */
+function runtime_frontedDataMember(wrapper, prop) {
+	if (prop === "then" || prop === "constructor") return NODE_MEMBER;
+	const impl = wrapper.____slothletInternal.impl;
+	if (!runtime_holdsDataKind(impl)) return NODE_MEMBER;
+	let holder = impl;
+	while (holder !== null && !hasOwn(holder, prop)) holder = Reflect.getPrototypeOf(holder);
+	if (holder === null || holder === impl || holder === Objects.prototype || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
+	const member = Reflect.get(impl, prop, impl);
+	if (typeof member !== "function") return member;
 	let byObject = SELF_DATA_METHODS.get(impl);
 	if (!byObject) {
 		byObject = new Map();
@@ -1351,7 +1386,7 @@ function runtime_selfDataMember(inner, reader, slothlet, prop, read) {
 const SELF_DATA_VALUES = new WeakMap();
 
 /**
- * The methods {@link runtime_selfDataMember} made to run on a data object itself, per object and key.
+ * The methods {@link runtime_frontedDataMember} made to run on a data object itself, per object and key.
  * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
  * @private
  */
@@ -1808,7 +1843,7 @@ export function runtime_selfView(node, reader, from = null, access = null) {
 		const value = runtime_readWithAccess(access, node, node, prop, node);
 		// The language's own member of the data object the node holds is handed out as the object's view hands it, once
 		// the node's own read of it has been made (and checked).
-		const dataMember = runtime_selfDataMember(inner, reader, slothlet, prop, value);
+		const dataMember = runtime_selfDataMember(inner, reader, slothlet, prop);
 		if (dataMember !== NODE_MEMBER) return dataMember;
 		// A class instance's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
 		if (prop === "__proto__" && typeof node !== "function" && value !== null && typeof value === "object" && !hasOwn(node, prop)) {
@@ -15355,6 +15390,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// member → fall through to the child-wrapping path below, with the value just read.
 				}
 			}
+			// A node of a built-in data object answers what its kind defines from the object, as the object does.
+			const fronted = runtime_frontedDataMember(wrapper, prop);
+			if (fronted !== NODE_MEMBER) return fronted;
 			// #475 / #571: a member whose name collides with a property this trap otherwise answers
 			// itself (`name`, `length`, `toString`, …) — a module export, or a folder entry such as
 			// `session/name/` — takes the ordinary child path below: reachable, and read-gated like any
@@ -17525,6 +17563,8 @@ export class UnifiedWrapper extends ComponentBase {
 			const internal = wrapper.____slothletInternal;
 			const impl = internal.impl;
 			if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(impl);
+			// A node of a built-in data object fronts it as data, so `instanceof Map` holds of it as of the object.
+			if (runtime_holdsDataKind(impl)) return Reflect.getPrototypeOf(impl);
 			// A node fronting a module's own object holds that object's prototype, one set on it since included (#757).
 			const moduleObject = runtime_moduleObjectOf(wrapper);
 			if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
