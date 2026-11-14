@@ -3606,6 +3606,18 @@ function runtime_leavesAtLocation(path, line, running = null) {
  */
 export function frameDefiner(running = null) {
 	const frames = runtime_captureFrames(24);
+	return runtime_holdDetachedJob(runtime_definerAt(frames, running), frames);
+}
+
+/**
+ * The definer of the code doing an access while no call runs, read from frames already captured (see
+ * {@link frameDefiner}).
+ * @param {Iterable<object> & {truncated: boolean}} frames - The frames.
+ * @param {string|null} running - The instance whose flow is running, when something names one.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The definer.
+ * @private
+ */
+function runtime_definerAt(frames, running) {
 	let index = -1;
 	// The helper file of an instance the innermost code runs in, while the walk looks for the leaf that called it.
 	let helper = null;
@@ -3642,6 +3654,101 @@ export function frameDefiner(running = null) {
 		return narrowed.length === 1 ? { wrapper: narrowed[0], callers } : { leaves: narrowed, callers };
 	}
 	return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
+}
+
+/**
+ * Hold code that picked up after an `await` with no call of its own to the rules of every module of its instance, in a
+ * runtime that cannot tell which call started it (the live runtime). A module's call can start an async function and
+ * return without awaiting it: the async runtime's store carries that call into the function's flow, so its rules hold
+ * the code however long it runs. The live runtime reads who is calling from the calls in flight, and once the call
+ * that started the flow has returned no frame says which module that was. Unless the flow is the host's own (the host's
+ * code is what awaits it), any module could have started it, so every one of them has to allow what the code does,
+ * along with its definer: with nothing denied the code runs as before, and it is refused where one of them would be.
+ * Code the host or a package calls synchronously, and a callback Node runs (a timer's, an event's), have their caller's
+ * frames below and are left as they are.
+ * @param {object|null} definer - The definer {@link runtime_definerAt} read.
+ * @param {Iterable<object> & {truncated: boolean}} frames - The frames it read.
+ * @returns {object|null} The definer, with every module of its instance among its callers when it is held to them.
+ * @private
+ */
+function runtime_holdDetachedJob(definer, frames) {
+	if (!definer?.callers) return definer;
+	const slothlet = (definer.wrapper ?? definer.leaves[0]).slothlet;
+	// Only a runtime that says it cannot carry a call into a flow it started (the live runtime) needs it.
+	if (slothlet?.contextManager?.carriesFlowCaller !== false || !runtime_checksPermissions(slothlet)) return definer;
+	if (!runtime_jobLetGo(frames, slothlet)) return definer;
+	return { ...definer, callers: [...new Set([...definer.callers, ...runtime_instanceLeaves(slothlet)])] };
+}
+
+/**
+ * Whether the job running is code of an instance's own that picked up after an `await` (or as a promise reaction) in a
+ * flow that may be a module's: the outermost frame of its synchronous part is a module's or a helper file's, with
+ * nothing below it but the engine's microtask runner (not slothlet's own code, which began a job it runs), and the
+ * innermost flow awaiting it, if any, is no code of the host's own. A frame of the host's or a package's below it, or Node's own code that ran it (a timer, an emitter), says
+ * it was called; the host's code awaiting it says the flow is the host's. Read further out when the frames read were
+ * cut off first, and taken to be a module's flow when even that is cut off.
+ * @param {Iterable<object> & {truncated: boolean}} frames - The frames.
+ * @param {object} slothlet - The instance the code belongs to.
+ * @returns {boolean} True when it may be a module's flow.
+ * @private
+ */
+function runtime_jobLetGo(frames, slothlet) {
+	// Whether a frame is code of the instance's own, or code no one can be named for.
+	const instanceCode = (frame) =>
+		frame.evaluated ||
+		isForeignScript(frame) ||
+		runtime_isInstanceFile(frame.path) ||
+		runtime_leavesAtLocation(frame.path, frame.line) !== null ||
+		runtime_helperOwner(frame) !== null;
+	const read = (list) => {
+		// Whether the outermost frame of the synchronous part read so far is the instance's own code.
+		let outermostOwn = false;
+		let syncEnded = false;
+		for (const frame of list) {
+			if (!syncEnded) {
+				// Slothlet's own code running the instance's (a trap it reads while it builds or settles something) began
+				// the job: it is no flow a module let go of.
+				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+					if (!frame.async) {
+						outermostOwn = false;
+						continue;
+					}
+				}
+				if (frame.async || isRunnerFrame(frame)) {
+					// A timer's callback is called by Node's timers; a resumed function and a reaction by the microtask runner.
+					if (!outermostOwn || frame.path === "node:internal/timers") return false;
+					syncEnded = true;
+				} else {
+					outermostOwn = !frame.path.startsWith("node:") && instanceCode(frame);
+					continue;
+				}
+			}
+			// The flows awaiting it: the innermost one that is someone's code says whose flow this is.
+			if (!frame.async || !frame.path || frame.path.startsWith("node:") || frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (instanceCode(frame)) return true;
+			// A package a module loaded awaits it for that module; any other file's code is the host's.
+			return runtime_packageImportingLeaves(slothlet, frame.path).size > 0;
+		}
+		return list.truncated ? undefined : syncEnded || outermostOwn;
+	};
+	return read(frames) ?? read(runtime_captureFrames(FAR_FRAMES)) ?? true;
+}
+
+/**
+ * Every leaf of an instance its frames could name: the leaves built from its files and still in its tree.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>} The leaves.
+ * @private
+ */
+function runtime_instanceLeaves(slothlet) {
+	const leaves = new Set();
+	for (const held of LEAF_FILES.get(slothlet)?.values() ?? []) {
+		for (const reference of held) {
+			const wrapper = reference.deref();
+			if (wrapper && !runtime_isGone(wrapper)) leaves.add(wrapper);
+		}
+	}
+	return [...leaves];
 }
 
 /**

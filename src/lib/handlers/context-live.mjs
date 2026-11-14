@@ -424,6 +424,17 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Whether a flow a call starts carries that call however long it runs: not here. Once the call that started an
+	 * async function has returned, nothing says which call that was when the function picks up again (see
+	 * frameDefiner in frame-placement).
+	 * @type {boolean}
+	 * @internal
+	 */
+	get carriesFlowCaller() {
+		return false;
+	}
+
+	/**
 	 * How many stores have a call suspended right now, across every instance.
 	 * @type {number}
 	 * @internal
