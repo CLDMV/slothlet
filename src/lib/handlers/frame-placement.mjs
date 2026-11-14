@@ -1976,9 +1976,11 @@ function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = 
 
 /**
  * Who is doing an access made from something a file started while it loaded (a timer, a listener, a queue): the file's
- * module is the caller, and the code nearest the access that is not slothlet's or Node's own decides whose code it is.
- * Code outside every export of the module's file, a helper file it imports, the host's and a package's run as the
- * module. Code written inside an export (of this file or another module's) runs as that leaf, its definer, under the
+ * module is the caller, and the code nearest the access that is not slothlet's, Node's, a package's or the host's own
+ * decides whose code it is: a package's code and the host's act for the code that called them, as inside a call, and
+ * past 1024 frames of such code the access is refused. Code outside every export of the module's file and a
+ * helper file it imports run as the module, and so do a package's and the host's when nothing else called them. Code
+ * written inside an export (of this file or another module's) runs as that leaf, its definer, under the
  * module: both have to be allowed, so a closure another module made, or one of the file's own leaves, gains nothing
  * from being run by the module's timer, and lends the module nothing. Code that cannot be placed is refused.
  * @param {{wrapper: object, ceiling?: object|null, file?: string, moduleID?: string|null}} record - The load's record.
@@ -2005,6 +2007,8 @@ function runtime_topLevelRunning(record) {
 		record
 	};
 	const { place } = createFramePlacer([entry]);
+	// The nodes built from the module's file, read when a package's frame is met.
+	let ownLeaves = null;
 	// A helper file's own code running in the flow with no code of a leaf's file calling it (what the helper started when
 	// it loaded): the module's, and, where other api files import the helper too, theirs as well. The helper is loaded
 	// once, inside whichever load imported it first, so the flow carries that load's module alone; every module importing
@@ -2067,7 +2071,16 @@ function runtime_topLevelRunning(record) {
 				if (helper) continue;
 				return null;
 			}
-			if (!placement) return isNode ? runtime_packageAnswer(record, frame, false) : null;
+			// A package's code, or the host's, acts for the code that called it, as inside a call: the next frame out decides
+			// (see runtime_foreignCodeRunning). A browser cannot tell such a frame from any other, and reads past it too.
+			if (!placement) {
+				// A package the file loads is the module's own, whichever of the file's nodes stands for the load (a lazy tree's
+				// module node is the folder's, the file's leaves are the file's).
+				ownLeaves ??= runtime_loadedFileLeaves(slothlet, record.file ?? filePath, entry.moduleID);
+				const answer = isNode ? runtime_packageAnswer(record, frame, false, ownLeaves) : null;
+				if (answer === null) continue;
+				return answer;
+			}
 			// Code of the instance the module does not import. A helper file's own code is the code of the api files that
 			// import it, under this flow's module too: a helper waiting on a module with a top-level await is evaluated when
 			// that module is ready, in the flow of the file that started loading it, so the flow a helper's timer carries is
@@ -2077,7 +2090,30 @@ function runtime_topLevelRunning(record) {
 		if (frames.truncated) return undefined;
 		return helper ? helperFlow(helper) : null;
 	};
-	return decide(runtime_captureFrames(48)) ?? null;
+	const answer = decide(runtime_captureFrames(48));
+	if (answer !== undefined) return answer;
+	// Cut off with the stack going on: read further out, and when that still reaches no one's code (a package recursing
+	// past it, say) nothing says whose access it is. The flow is the module's, so it is refused as the module's flow,
+	// not left for a node the module read to settle as code no call accounts for.
+	const far = decide(runtime_captureFrames(FAR_FRAMES));
+	return far === undefined ? REFUSED_SUPPLIER : far;
+}
+
+/**
+ * The nodes built from the file a load is for (see {@link runtime_topLevelRunning}).
+ * @param {object} slothlet - The instance.
+ * @param {string|null} filePath - The file.
+ * @param {string|null} moduleID - The mount it is loaded for.
+ * @returns {Array<object>} The nodes, none without a file.
+ * @private
+ */
+function runtime_loadedFileLeaves(slothlet, filePath, moduleID) {
+	if (!filePath) return [];
+	const leaves = runtime_leavesAtFile(slothlet, toComparablePath(filePath), null, moduleID || null);
+	const real = runtime_realComparablePath(filePath);
+	return real && real !== toComparablePath(filePath)
+		? [...leaves, ...runtime_leavesAtFile(slothlet, real, null, moduleID || null)]
+		: leaves;
 }
 
 /**
@@ -2375,10 +2411,12 @@ function runtime_packageImportingLeaves(slothlet, path) {
  * @param {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}} record - The call.
  * @param {{path: string, line: string}} frame - The package code's frame.
  * @param {boolean} fileless - Whether the leaf is one the host added as an object (see {@link runtime_isHostObjectLeaf}).
+ * @param {Iterable<object>|null} [own=null] - Further wrappers whose loading the file counts as the call's own: a
+ *   file's load, whose module node is not always one of the leaves its file was built from.
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The answer.
  * @private
  */
-function runtime_packageAnswer(record, frame, fileless) {
+function runtime_packageAnswer(record, frame, fileless, own = null) {
 	const leaf = record.wrapper;
 	// A leaf with no file is its own entity: a package's code inside it is the leaf's, whoever else imports it, and a file
 	// a module loaded is that module's (#717).
@@ -2397,6 +2435,7 @@ function runtime_packageAnswer(record, frame, fileless) {
 	}
 	if (importers.has(leaf)) return null;
 	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
+	if (own) for (const wrapper of own) if (importers.has(wrapper)) return null;
 	const [first, ...rest] = importers;
 	return { wrapper: first, ceiling: combineCeilings(leaf, record.ceiling, supplierChainCeiling(record), ...rest) };
 }

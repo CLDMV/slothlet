@@ -927,7 +927,10 @@ export class LiveContextManager {
 				// Code a caller handed the entered call registers as that caller, under the call's ceiling (#597).
 				const identity = this.#recordIdentity(entered[index], null, null);
 				if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
-				return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight };
+				// The file's own code in a flow its load started registers for that load again, as the async runtime's store
+				// for the load carries on (see runModuleLoad).
+				const loading = entered[index].topLevel && identity.currentWrapper === entered[index].wrapper ? entered[index].loading : null;
+				return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight, loading };
 			}
 		}
 		if (suspended.size === 0) {
@@ -1213,7 +1216,8 @@ export class LiveContextManager {
 				if (loading !== null) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
 			}
 			if (!store) return listeners;
-			const { wrapper, ceiling, inFlight, ambiguous } = registration;
+			const { wrapper, ceiling, inFlight, ambiguous, loading } = registration;
+			if (loading) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
 			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
 			// alone. Unattributable module code: not handed the host's standing either.
 			if (ambiguous || (!wrapper && !inFlight)) return listeners;
@@ -1278,7 +1282,22 @@ export class LiveContextManager {
 				if (loading && (instanceID === null || !manager.instances.has(instanceID))) return listener.apply(this, args);
 				const record = loading ? loading.record() : null;
 				if (!record) return manager.#runAsNoOne(instanceID, listener, this, args);
-				return manager.runInContext(instanceID, listener, this, args, record.wrapper, true, false, null, null, false, false, false, record);
+				return manager.runInContext(
+					instanceID,
+					listener,
+					this,
+					args,
+					record.wrapper,
+					true,
+					false,
+					null,
+					null,
+					false,
+					false,
+					false,
+					record,
+					loading
+				);
 			};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
@@ -1620,6 +1639,8 @@ export class LiveContextManager {
 	 *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
 	 * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
 	 *   file registered while it loaded (#726).
+	 * @param {object|null} [loading=null] - The load itself, with `load`: what the file's own code registers in the
+	 *   callback is pinned to it again.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -1636,7 +1657,8 @@ export class LiveContextManager {
 		attribute = false,
 		madeCode = false,
 		follow = true,
-		load = null
+		load = null,
+		loading = null
 	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
@@ -1693,6 +1715,7 @@ export class LiveContextManager {
 			record.file = load.file;
 			record.moduleID = load.moduleID;
 			record.parent = null;
+			record.loading = loading;
 		}
 
 		this.#activeID = targetInstanceID;
