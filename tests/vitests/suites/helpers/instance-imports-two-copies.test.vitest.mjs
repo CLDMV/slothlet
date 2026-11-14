@@ -146,18 +146,15 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 
 describe("Helpers > instance-imports > an instance ID something else holds", () => {
 	it("refuses to load an instance's files under it", async () => {
-		const api = await slothlet({ base: DIR, silent: true });
+		// The instance's clock is fixed, so the ID a full reload gives it (made from the old one and the time) is known.
+		const api = await slothlet({ base: DIR, silent: true, clock: { now: () => 1790000000000 } });
 		const instanceID = api.slothlet.instanceID;
-		// A full reload gives the instance a new ID, made from the old one and the time: claimed here first, for every
-		// millisecond of the next minute (slothlet reads the time with the Date.now it loaded with, so it cannot be faked).
-		const start = Date.now();
-		const taken = [];
-		for (let time = start; time < start + 60000; time++) taken.push(first.claimInstanceScope(`${instanceID}_reload_${time}`));
+		const taken = first.claimInstanceScope(`${instanceID}_reload_1790000000000`);
 		try {
-			expect(taken.every((handle) => handle !== null)).toBe(true);
+			expect(taken).not.toBe(null);
 			await expect(api.slothlet.reload()).rejects.toMatchObject({ code: "INSTANCE_ID_IN_USE" });
 		} finally {
-			for (const handle of taken) handle?.release();
+			taken?.release();
 			await api.shutdown().catch(() => {});
 		}
 	});

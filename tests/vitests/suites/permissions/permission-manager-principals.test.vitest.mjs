@@ -24,6 +24,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { PermissionManager } from "#handlers/permission-manager";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
 
 const CALLER = "client.app.files";
 const TARGET = "project.files.list";
@@ -32,15 +33,17 @@ const TARGET = "project.files.list";
  * Build a standalone manager with the given rules.
  * @param {object[]} rules - Config rules.
  * @param {object} [extra] - Extra permission config.
+ * @param {object} [clock] - The instance's clock, as an instance holds it; omitted, the manager reads the clock slothlet loaded with.
  * @returns {{ manager: PermissionManager, debug: import("vitest").Mock }} The manager and its debug spy.
  */
-const makeManager = (rules = [], extra = {}) => {
+const makeManager = (rules = [], extra = {}, clock = undefined) => {
 	const debug = vi.fn();
 	const manager = new PermissionManager({
 		config: { permissions: { enabled: true, defaultPolicy: "deny", rules, ...extra } },
 		handlers: {},
 		debug,
-		SlothletError
+		SlothletError,
+		clock
 	});
 	return { manager, debug };
 };
@@ -198,28 +201,37 @@ describe("PermissionManager > principals (#459)", () => {
 	});
 
 	it("maxAge expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
-		// Real time: the manager reads the clock with the Date.now slothlet loaded with, which fake timers do not replace.
-		({ manager } = makeManager([REQUIRES_ROLES]));
-		manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 1000 });
-		await manager.resolvePrincipals([{ name: "roles", identityKey: "u1" }]);
-		expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(true);
-		await new Promise((resolve) => setTimeout(resolve, 1001));
-		expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
-		expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" }, null, { principalGrace: true })).toBe(true);
-		// Grace ends with the enforcement that asked for it.
-		expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
+		vi.useFakeTimers();
+		try {
+			// The manager reads the clock it is given, as an instance's clock hands it the (fake) Date.now.
+			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 1000 });
+			await manager.resolvePrincipals([{ name: "roles", identityKey: "u1" }]);
+			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(true);
+			vi.advanceTimersByTime(1001);
+			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
+			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" }, null, { principalGrace: true })).toBe(true);
+			// Grace ends with the enforcement that asked for it.
+			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("expired identities are pruned once a maxAge principal's cache grows past the threshold", async () => {
-		// Real time, as above, so maxAge is long enough for the fresh identity to be checked inside it on a loaded machine.
-		({ manager } = makeManager([REQUIRES_ROLES]));
-		manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 500 });
-		await manager.resolvePrincipals(Array.from({ length: 1025 }, (_, i) => ({ name: "roles", identityKey: `u${i}` })));
-		await new Promise((resolve) => setTimeout(resolve, 600));
-		await manager.resolvePrincipals([{ name: "roles", identityKey: "fresh" }]);
-		// The old identities were swept, so they are stale; the fresh one survives the sweep.
-		expect(manager.stalePrincipals(CALLER, TARGET, null, null, { user: "u0" })).toHaveLength(1);
-		expect(manager.checkAccess(CALLER, TARGET, null, null, { user: "fresh" })).toBe(true);
+		vi.useFakeTimers();
+		try {
+			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 10 });
+			await manager.resolvePrincipals(Array.from({ length: 1025 }, (_, i) => ({ name: "roles", identityKey: `u${i}` })));
+			vi.advanceTimersByTime(20);
+			await manager.resolvePrincipals([{ name: "roles", identityKey: "fresh" }]);
+			// The old identities were swept, so they are stale; the fresh one survives the sweep.
+			expect(manager.stalePrincipals(CALLER, TARGET, null, null, { user: "u0" })).toHaveLength(1);
+			expect(manager.checkAccess(CALLER, TARGET, null, null, { user: "fresh" })).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("principal views are read-only at every depth, keep identity, and pass frozen values through", async () => {
