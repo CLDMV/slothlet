@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:06-08:00 (1794431646)
+ *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,6 +38,19 @@
  * - `NativeObject` is the `Object` function itself, for `NativeObject(value)`; its static functions are on `Objects`.
  * - `Functions` holds the data members of `Function` (`Functions.prototype`) like `Objects` and `Arrays`.
  * - `URL` and `URLSearchParams` are those constructors themselves, shadowing the globals like `Map`.
+ * - The other built-ins slothlet uses, under their own names, shadowing the globals like `Map`: `String`, `Boolean`,
+ *   `Number`, `BigInt`, `Date`, `RegExp`, `Error` and the other error constructors, `ArrayBuffer`,
+ *   `SharedArrayBuffer`, `DataView`, the typed arrays, `FinalizationRegistry`, `Iterator`, `Intl` (a frozen copy, like
+ *   `JSON`), `TextDecoder`, `TextEncoder`, `Blob`, `EventTarget`, `MessageChannel`, `CryptoKey`,
+ *   `queueMicrotask`, `structuredClone`, `setTimeout`, `setImmediate`, `decodeURIComponent`, `encodeURIComponent`, `parseInt`, `isNaN`,
+ *   `Buffer` and `navigator`. Their static functions are on `Strings`, `Numbers`, `Dates`, `Errors`, `ArrayBuffers`,
+ *   `Iterators` and `Buffers`.
+ * - `NativeProcess` is the host's `process` object, and `Processes` the functions of it slothlet calls, bound to it.
+ *
+ * This is the one file of slothlet that reads the globals, each as `globalThis.X` when it is evaluated; the lint rule
+ * `slothlet/captured-intrinsics` (tools/ci) reports any other read of a built-in in `src/`. Code elsewhere that has to
+ * reach the current global on purpose (to patch it, or to write where the host points `console`) writes
+ * `globalThis.X`.
  *
  * Methods a value inherits (`array.map`, `map.get`) are not covered here: they are looked up on the value when called.
  *
@@ -54,7 +67,7 @@
  * import { NativeObject } from "@cldmv/slothlet/helpers/intrinsics";
  * NativeObject(value) === value; // whether value is an object
  */
-export const NativeObject = Object;
+export const NativeObject = globalThis.Object;
 
 const NativeReflect = globalThis.Reflect;
 const NativePromise = globalThis.Promise;
@@ -106,7 +119,7 @@ export const Objects = staticsOf(NativeObject);
  * import { Arrays } from "@cldmv/slothlet/helpers/intrinsics";
  * Arrays.isArray(value);
  */
-export const Arrays = staticsOf(Array);
+export const Arrays = staticsOf(globalThis.Array);
 
 /**
  * The data members of `Function` (its `prototype`), as they were when slothlet loaded.
@@ -116,10 +129,10 @@ export const Arrays = staticsOf(Array);
  * import { Functions } from "@cldmv/slothlet/helpers/intrinsics";
  * Reflect.getPrototypeOf(value) === Functions.prototype;
  */
-export const Functions = staticsOf(Function);
+export const Functions = staticsOf(globalThis.Function);
 
-const NativeJSON = staticsOf(JSON);
-const NativeMath = staticsOf(Math);
+const NativeJSON = staticsOf(globalThis.JSON);
+const NativeMath = staticsOf(globalThis.Math);
 
 /**
  * The function under every `toString` wrapper a copy of slothlet installed (see helpers/function-source-context): each
@@ -148,7 +161,7 @@ function unwrapToString(fn) {
  * @example
  * value === functionToString; // whether a member read is the language's own `toString`
  */
-export const functionToString = unwrapToString(Function.prototype.toString);
+export const functionToString = unwrapToString(globalThis.Function.prototype.toString);
 
 /**
  * The source text of a function, by the language's own `Function.prototype.toString` as it was when slothlet loaded.
@@ -170,7 +183,7 @@ export function functionSource(fn) {
  * import { NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
  * const view = new NativeProxy(shadow, handler);
  */
-export const NativeProxy = Proxy;
+export const NativeProxy = globalThis.Proxy;
 
 /**
  * The `Map` constructor, as it was when slothlet loaded.
@@ -244,17 +257,34 @@ export const Promise = NativePromise;
 export const Symbol = NativeSymbol;
 
 /**
- * Bind the named static functions of a constructor to it, on a frozen object with no prototype.
- * @param {Function} constructor - The constructor.
- * @param {string[]} names - The static functions to take.
+ * Bind the named functions of a built-in to it, on a frozen object with no prototype. A name the built-in does not hold
+ * as a function (a host without it) is left out.
+ * @param {Function|object|undefined} holder - The built-in, or undefined where the host has none.
+ * @param {string[]} names - The functions to take.
  * @returns {object} The bound functions, by name.
  * @private
  */
-function boundStaticsOf(constructor, names) {
+function boundStaticsOf(holder, names) {
 	const copy = create(null);
 	for (const name of names) {
-		const fn = constructor[name];
-		copy[name] = (...args) => apply(fn, constructor, args);
+		const fn = holder?.[name];
+		if (typeof fn === "function") copy[name] = (...args) => apply(fn, holder, args);
+	}
+	return freeze(copy);
+}
+
+/**
+ * The named data members of a built-in, on a frozen object with no prototype, as {@link staticsOf} takes all of them.
+ * @param {Function|object} source - The built-in.
+ * @param {string[]} names - The members to take.
+ * @returns {object} Its members, by name.
+ * @private
+ */
+function pickedStaticsOf(source, names) {
+	const copy = create(null);
+	for (const name of names) {
+		const descriptor = getOwnPropertyDescriptor(source, name);
+		if (descriptor && "value" in descriptor) copy[name] = descriptor.value;
 	}
 	return freeze(copy);
 }
@@ -297,5 +327,507 @@ export const URL = globalThis.URL;
  * new URLSearchParams(query).get("slothlet_instance");
  */
 export const URLSearchParams = globalThis.URLSearchParams;
+
+/**
+ * The `String` function, as it was when slothlet loaded. Its static functions are on `Strings`.
+ * @internal
+ * @example
+ * String(value); // the language's own conversion
+ */
+export const String = globalThis.String;
+
+/**
+ * The static functions of `String` (`fromCharCode`, `fromCodePoint`, `raw`), as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Strings } from "@cldmv/slothlet/helpers/intrinsics";
+ * Strings.fromCharCode(0x41); // "A"
+ */
+export const Strings = staticsOf(globalThis.String);
+
+/**
+ * The `Boolean` function, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * Boolean(value);
+ */
+export const Boolean = globalThis.Boolean;
+
+/**
+ * The `Number` function, as it was when slothlet loaded. Its static functions and constants are on `Numbers`.
+ * @internal
+ * @example
+ * Number(value);
+ */
+export const Number = globalThis.Number;
+
+/**
+ * The static functions and constants of `Number`, as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Numbers } from "@cldmv/slothlet/helpers/intrinsics";
+ * Numbers.isFinite(value);
+ */
+export const Numbers = staticsOf(globalThis.Number);
+
+/**
+ * The `BigInt` function, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * BigInt(1);
+ */
+export const BigInt = globalThis.BigInt;
+
+/**
+ * The `Date` constructor, as it was when slothlet loaded. `Date.now` and the other static functions are on `Dates`.
+ * @internal
+ * @example
+ * new Date(time);
+ */
+export const Date = globalThis.Date;
+
+/**
+ * The static functions of `Date` (`now`, `parse`, `UTC`), as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Dates } from "@cldmv/slothlet/helpers/intrinsics";
+ * const started = Dates.now();
+ */
+export const Dates = staticsOf(globalThis.Date);
+
+/**
+ * The `RegExp` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new RegExp(pattern, "u");
+ */
+export const RegExp = globalThis.RegExp;
+
+/**
+ * The `Error` constructor, as it was when slothlet loaded: the realm's own, which the engine reads `stackTraceLimit` and
+ * `prepareStackTrace` from. `class SlothletError extends Error` extends this one. `Error.captureStackTrace` and
+ * `Error.isError` are on `Errors`.
+ * @internal
+ * @example
+ * import { Error } from "@cldmv/slothlet/helpers/intrinsics";
+ * throw new Error("message");
+ */
+export const Error = globalThis.Error;
+
+/**
+ * `Error.captureStackTrace` and `Error.isError` (where the engine has them), as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Errors } from "@cldmv/slothlet/helpers/intrinsics";
+ * Errors.captureStackTrace(error, constructorOpt);
+ */
+export const Errors = pickedStaticsOf(globalThis.Error, ["captureStackTrace", "isError"]);
+
+/**
+ * The `EvalError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new EvalError("message");
+ */
+export const EvalError = globalThis.EvalError;
+
+/**
+ * The `RangeError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new RangeError("message");
+ */
+export const RangeError = globalThis.RangeError;
+
+/**
+ * The `ReferenceError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new ReferenceError("message");
+ */
+export const ReferenceError = globalThis.ReferenceError;
+
+/**
+ * The `SyntaxError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new SyntaxError("message");
+ */
+export const SyntaxError = globalThis.SyntaxError;
+
+/**
+ * The `TypeError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new TypeError("message");
+ */
+export const TypeError = globalThis.TypeError;
+
+/**
+ * The `URIError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new URIError("message");
+ */
+export const URIError = globalThis.URIError;
+
+/**
+ * The `AggregateError` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new AggregateError("message");
+ */
+export const AggregateError = globalThis.AggregateError;
+
+/**
+ * The `ArrayBuffer` constructor, as it was when slothlet loaded. `ArrayBuffer.isView` is on `ArrayBuffers`.
+ * @internal
+ * @example
+ * new ArrayBuffer(8);
+ */
+export const ArrayBuffer = globalThis.ArrayBuffer;
+
+/**
+ * The static functions of `ArrayBuffer` (`isView`), as they were when slothlet loaded.
+ * @type {object}
+ * @internal
+ * @example
+ * import { ArrayBuffers } from "@cldmv/slothlet/helpers/intrinsics";
+ * ArrayBuffers.isView(value);
+ */
+export const ArrayBuffers = staticsOf(globalThis.ArrayBuffer);
+
+/**
+ * The `SharedArrayBuffer` constructor, or undefined where the host has none (a browser page that is not cross-origin isolated), as it was when slothlet loaded.
+ * @internal
+ * @example
+ * typeof SharedArrayBuffer === "function";
+ */
+export const SharedArrayBuffer = globalThis.SharedArrayBuffer;
+
+/**
+ * The `DataView` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new DataView(buffer);
+ */
+export const DataView = globalThis.DataView;
+
+/**
+ * The `Int8Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Int8Array(8);
+ */
+export const Int8Array = globalThis.Int8Array;
+
+/**
+ * The `Uint8Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Uint8Array(8);
+ */
+export const Uint8Array = globalThis.Uint8Array;
+
+/**
+ * The `Uint8ClampedArray` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Uint8ClampedArray(8);
+ */
+export const Uint8ClampedArray = globalThis.Uint8ClampedArray;
+
+/**
+ * The `Int16Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Int16Array(8);
+ */
+export const Int16Array = globalThis.Int16Array;
+
+/**
+ * The `Uint16Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Uint16Array(8);
+ */
+export const Uint16Array = globalThis.Uint16Array;
+
+/**
+ * The `Int32Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Int32Array(8);
+ */
+export const Int32Array = globalThis.Int32Array;
+
+/**
+ * The `Uint32Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Uint32Array(8);
+ */
+export const Uint32Array = globalThis.Uint32Array;
+
+/**
+ * The `Float32Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Float32Array(8);
+ */
+export const Float32Array = globalThis.Float32Array;
+
+/**
+ * The `Float64Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Float64Array(8);
+ */
+export const Float64Array = globalThis.Float64Array;
+
+/**
+ * The `BigInt64Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new BigInt64Array(8);
+ */
+export const BigInt64Array = globalThis.BigInt64Array;
+
+/**
+ * The `BigUint64Array` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new BigUint64Array(8);
+ */
+export const BigUint64Array = globalThis.BigUint64Array;
+
+/**
+ * The `Float16Array` constructor, or undefined where the engine has none, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * typeof Float16Array === "function";
+ */
+export const Float16Array = globalThis.Float16Array;
+
+/**
+ * The `FinalizationRegistry` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new FinalizationRegistry(cleanup);
+ */
+export const FinalizationRegistry = globalThis.FinalizationRegistry;
+
+/**
+ * The `Iterator` constructor, or undefined where the engine has none, as it was when slothlet loaded. `Iterator.from` is on `Iterators`.
+ * @internal
+ * @example
+ * Iterator.prototype;
+ */
+export const Iterator = globalThis.Iterator;
+
+/**
+ * The static functions of `Iterator` (`from`), as they were when slothlet loaded; empty where the engine has no
+ * `Iterator`.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Iterators } from "@cldmv/slothlet/helpers/intrinsics";
+ * Iterators.from(iterable);
+ */
+export const Iterators = globalThis.Iterator ? staticsOf(globalThis.Iterator) : freeze(create(null));
+
+/**
+ * The members of `Intl` (its constructors, `Intl.Segmenter` among them), as they were when slothlet loaded, shadowing
+ * the global like `JSON`.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Intl } from "@cldmv/slothlet/helpers/intrinsics";
+ * new Intl.Segmenter();
+ */
+export const Intl = staticsOf(globalThis.Intl);
+
+/**
+ * The `TextDecoder` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new TextDecoder().decode(bytes);
+ */
+export const TextDecoder = globalThis.TextDecoder;
+
+/**
+ * The `TextEncoder` constructor, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new TextEncoder().encode(text);
+ */
+export const TextEncoder = globalThis.TextEncoder;
+
+/**
+ * The `Blob` constructor, or undefined where the host has none, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new Blob([text]);
+ */
+export const Blob = globalThis.Blob;
+
+/**
+ * The `EventTarget` constructor, or undefined where the host has none, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * EventTarget.prototype.addEventListener;
+ */
+export const EventTarget = globalThis.EventTarget;
+
+/**
+ * The `MessageChannel` constructor, or undefined where the host has none, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * new MessageChannel();
+ */
+export const MessageChannel = globalThis.MessageChannel;
+
+/**
+ * The Web Crypto `CryptoKey` constructor, as it was when slothlet loaded, or undefined where the host has none.
+ * @internal
+ * @example
+ * import { CryptoKey } from "@cldmv/slothlet/helpers/intrinsics";
+ * typeof CryptoKey === "function";
+ */
+export const CryptoKey = globalThis.CryptoKey;
+
+/**
+ * `queueMicrotask`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
+ * @internal
+ * @example
+ * import { queueMicrotask } from "@cldmv/slothlet/helpers/intrinsics";
+ * queueMicrotask(() => settle());
+ */
+export const queueMicrotask = globalThis.queueMicrotask;
+
+/**
+ * `structuredClone`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
+ * @internal
+ * @example
+ * import { structuredClone } from "@cldmv/slothlet/helpers/intrinsics";
+ * structuredClone({ a: 1 });
+ */
+export const structuredClone = globalThis.structuredClone;
+
+/**
+ * `setTimeout`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
+ * @internal
+ * @example
+ * import { setTimeout } from "@cldmv/slothlet/helpers/intrinsics";
+ * setTimeout(run, 0);
+ */
+export const setTimeout = globalThis.setTimeout;
+
+/**
+ * `setImmediate`, as it was when slothlet loaded, or undefined where the host has none (a browser).
+ * @internal
+ * @example
+ * import { setImmediate } from "@cldmv/slothlet/helpers/intrinsics";
+ * setImmediate?.(run);
+ */
+export const setImmediate = globalThis.setImmediate;
+
+/**
+ * `decodeURIComponent`, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * decodeURIComponent("%20"); // " "
+ */
+export const decodeURIComponent = globalThis.decodeURIComponent;
+
+/**
+ * `encodeURIComponent`, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * encodeURIComponent(" "); // "%20"
+ */
+export const encodeURIComponent = globalThis.encodeURIComponent;
+
+/**
+ * `parseInt`, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * parseInt("ff", 16); // 255
+ */
+export const parseInt = globalThis.parseInt;
+
+/**
+ * `isNaN`, as it was when slothlet loaded.
+ * @internal
+ * @example
+ * isNaN(value);
+ */
+export const isNaN = globalThis.isNaN;
+
+/**
+ * The host's `process` object, as it was when slothlet loaded, or undefined where there is none (a browser). Its data
+ * members (`env`, `pid`, `argv`, `versions`, `platform`) are read off it where they are used; the functions slothlet
+ * calls are on `Processes`.
+ * @internal
+ * @example
+ * import { NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+ * NativeProcess?.env.SLOTHLET_DEBUG;
+ */
+export const NativeProcess = globalThis.process;
+
+/**
+ * The functions of `process` slothlet calls (`cwd`, `getBuiltinModule`, `nextTick`, `binding`, `kill`, `getuid`,
+ * `exit`, `send`), as they were when slothlet loaded, each called on that `process`. A function the host lacks is
+ * absent: in a browser the object is empty.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Processes } from "@cldmv/slothlet/helpers/intrinsics";
+ * const fs = Processes.getBuiltinModule?.("node:fs");
+ */
+export const Processes = boundStaticsOf(globalThis.process, [
+	"cwd",
+	"getBuiltinModule",
+	"nextTick",
+	"binding",
+	"kill",
+	"getuid",
+	"exit",
+	"send"
+]);
+
+/**
+ * Node's `Buffer` constructor, as it was when slothlet loaded, or undefined where there is none (a browser).
+ * `Buffer.from` is on `Buffers`.
+ * @internal
+ * @example
+ * import { Buffer } from "@cldmv/slothlet/helpers/intrinsics";
+ * value instanceof Buffer;
+ */
+export const Buffer = globalThis.Buffer;
+
+/**
+ * `Buffer.from`, as it was when slothlet loaded, called on that `Buffer`; empty where there is none.
+ * @type {object}
+ * @internal
+ * @example
+ * import { Buffers } from "@cldmv/slothlet/helpers/intrinsics";
+ * Buffers.from(text, "utf8");
+ */
+export const Buffers = boundStaticsOf(globalThis.Buffer, ["from"]);
+
+/**
+ * The host's `navigator` object, as it was when slothlet loaded, or undefined where there is none. Its `language` and
+ * `languages` are read off it where they are used.
+ * @internal
+ * @example
+ * import { navigator } from "@cldmv/slothlet/helpers/intrinsics";
+ * navigator?.languages;
+ */
+export const navigator = globalThis.navigator;
 
 export { NativeJSON as JSON, NativeMath as Math };
