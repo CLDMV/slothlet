@@ -469,6 +469,22 @@ The async runtime carries the module in the store the file loads in. The live ru
 
 **What a helper file starts while it loads** is held to every api file that imports the helper. A helper file is loaded once per instance, inside the load of whichever api file imports it first, so its timer or queue would otherwise carry that one file's module and nothing of the others'. When the helper's own flow runs code (the helper's own code with no code of an importing file calling it, or a job put on its queue), the module path of **every** api file importing the helper, directly or through other helper files, has to be allowed, in both runtimes; the code doing the access is still read as its definer. With one importing api file that is that file's module, as for the file's own timers. A file that waits on a module with a top-level `await` is evaluated when that module is ready, in the flow of whichever file started loading the module first. A helper waiting on such a module another api file started can so be evaluated inside the load of an api file that does not import it; its flow then carries that file's module, which is held to as well, beside the importers. Slothlet's own runtime (`@cldmv/slothlet/runtime`) waits at its top level too, and is loaded by slothlet before the first api file, so no api file ever waits on it.
 
+The same holds for an api file's own timers. When two api files import a module that has a top-level `await`, and file A starts loading it first, a timer file B starts at its top level while it waits on that module is held to A's module (in the async runtime), not B's:
+
+```javascript
+// shared.mjs
+await somethingSlow();
+
+// api/a.mjs  (loads first)
+import "../shared.mjs";
+
+// api/b.mjs
+import "../shared.mjs";
+setTimeout(() => self.x.y(), 0); // runs as "a", not "b"
+```
+
+This only refuses more than it should (B is held to A's rules); it never allows more. Tracked in [#762](https://github.com/CLDMV/slothlet/issues/762).
+
 ```javascript
 // lib/queue.mjs (imported by api/alpha.mjs and api/beta.mjs)
 const jobs = [];
