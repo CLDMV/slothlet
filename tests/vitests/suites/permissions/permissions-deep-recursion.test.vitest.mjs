@@ -132,8 +132,9 @@ describe.each(matrix)(
 
 			it("past the depth the live runtime reads to, the access is refused for anyone while a call is waiting", async () => {
 				await open();
-				// The async runtime reads no stack to know the call: it answers as at any other depth.
-				expect(await api.sup.viaPackage(TOO_DEEP)).toBe(runtime === "live" ? DENIED : sup);
+				// A package acts for the code that called it: past the frames read nothing says whose code that is, in
+				// either runtime, so the package's access is refused (the async runtime still knows the call, not the code).
+				expect(await api.sup.viaPackage(TOO_DEEP)).toBe(DENIED);
 				let release;
 				const waiting = api.sup.wait(new Promise((resolve) => (release = resolve)));
 				try {

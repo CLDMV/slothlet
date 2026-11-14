@@ -64,7 +64,19 @@
  */
 
 import { commonJSExportNames } from "./cjs-export-names.mjs";
-import { Objects, Arrays, JSON, Map, Set, WeakMap, Symbol, Symbols, URL, URLSearchParams } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Objects,
+	Arrays,
+	JSON,
+	Map,
+	Set,
+	WeakMap,
+	Symbol,
+	Symbols,
+	URL,
+	URLSearchParams,
+	Reflect
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -707,7 +719,7 @@ function nodeBuiltin(id) {
  * hook runs in the importing thread, so reading `process.getBuiltinModule`, `fs.readFileSync` or `JSON.parse` at
  * resolve time would let code that replaced one change which files an instance shares. Null where no Node builtins
  * are available (a browser bundle).
- * @type {{readFile: Function, exists: Function, dirname: Function, join: Function, basename: Function, compileFunction: Function, parseJSON: Function}|null}
+ * @type {{randomUUID: Function, sha256: Function, decode: Function, readFile: Function, exists: Function, dirname: Function, join: Function, basename: Function, compileFunction: Function, parseJSON: Function}|null}
  * @private
  */
 const HOST = (() => {
@@ -717,8 +729,22 @@ const HOST = (() => {
 	const path = getBuiltinModule("node:path");
 	const vm = getBuiltinModule("node:vm");
 	const crypto = getBuiltinModule("node:crypto");
+	const createHash = crypto.createHash;
+	const hashPrototype = Objects.getPrototypeOf(Reflect.apply(createHash, crypto, ["sha256"]));
+	const update = hashPrototype.update;
+	const digest = hashPrototype.digest;
+	const Decoder = globalThis.TextDecoder;
+	const decode = Decoder.prototype.decode;
 	return Objects.freeze({
 		randomUUID: crypto.randomUUID.bind(crypto),
+		// What a loaded script is recorded under (see recordLoadedSource): the hash and the decoding are the ones in place
+		// when slothlet loaded, as frame placement's are, so replacing `crypto` or `TextDecoder` later changes neither.
+		sha256: (text) => {
+			const hash = Reflect.apply(createHash, crypto, ["sha256"]);
+			Reflect.apply(update, hash, [text, "utf8"]);
+			return Reflect.apply(digest, hash, ["hex"]);
+		},
+		decode: (bytes) => Reflect.apply(decode, new Decoder(), [bytes]),
 		readFile: fs.readFileSync.bind(fs),
 		exists: fs.existsSync.bind(fs),
 		dirname: path.dirname.bind(path),
@@ -2275,7 +2301,7 @@ function recordLoadedSource(url, result) {
 	if (source === undefined || source === null) return;
 	let text;
 	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
-	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = new TextDecoder().decode(source);
+	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = HOST.decode(source);
 	else return;
 	if (isTypeScriptLoad(result)) {
 		const strip = nodeBuiltin("node:module").stripTypeScriptTypes;
@@ -2290,7 +2316,7 @@ function recordLoadedSource(url, result) {
 			globalThis.process.emitWarning = emitWarning;
 		}
 	}
-	const hash = nodeBuiltin("node:crypto").createHash("sha256").update(text, "utf8").digest("hex");
+	const hash = HOST.sha256(text);
 	const key = scriptKeyOf(url);
 	let hashes = LOADED_SCRIPTS.get(key);
 	if (!hashes) LOADED_SCRIPTS.set(key, (hashes = []));

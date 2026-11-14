@@ -4220,9 +4220,17 @@ function runtime_foreignCodeRunning(record, capture = null) {
 			const placement = cached.place(frame);
 			if (placement?.matches.length) return null;
 			if (!whole) return undefined;
-			// Code of no module's folder and no instance: a file some module loaded is that module's, the host's own runs as
-			// the leaf.
-			if (!placement) return isNode ? runtime_packageAnswer(record, frame, fileless) : null;
+			// Code of no module's folder and no instance: a file some module loaded is that module's. A package the call's
+			// own code loads, and the host's own code, act for the code that called them, as Node's own code does: the next
+			// frame out decides, so a function another module handed in that has a package call a node is told as that
+			// module's code, with or without the package between, and the call's own code calling a package is the call's.
+			// A browser cannot tell a package's frame from any other, and reads past it too. Frames of it past what is read
+			// leave whose access it is unknown. Inside a leaf with no file such code is the leaf's own (#717).
+			if (!placement) {
+				const answer = isNode ? runtime_packageAnswer(record, frame, fileless) : null;
+				if (answer === null && !fileless) continue;
+				return answer;
+			}
 			return runtime_authorAnswer(record, frame, runtime_framesAfter(frames, index)) ?? UNACCOUNTED_SUPPLIER;
 		}
 		// The whole stack read without code of anyone's or a call of slothlet's: when a builtin began it, the engine's and
