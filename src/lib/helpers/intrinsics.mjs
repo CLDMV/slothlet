@@ -606,10 +606,18 @@ export const BigInt64Array = globalThis.BigInt64Array;
 export const BigUint64Array = globalThis.BigUint64Array;
 
 /**
+ * The shape of the `Float16Array` constructor, which the declaration build's library does not know: the same members
+ * as `Float32ArrayConstructor` (its instances are typed arrays over numbers).
+ * @typedef {Float32ArrayConstructor} Float16ArrayConstructor
+ * @internal
+ */
+
+/**
  * The `Float16Array` constructor, or undefined where the engine has none, as it was when slothlet loaded.
  * @internal
  * @example
  * typeof Float16Array === "function";
+ * @type {Float16ArrayConstructor|undefined}
  */
 export const Float16Array = globalThis.Float16Array;
 
@@ -622,10 +630,20 @@ export const Float16Array = globalThis.Float16Array;
 export const FinalizationRegistry = globalThis.FinalizationRegistry;
 
 /**
+ * The shape of the `Iterator` constructor, which the declaration build's library does not know: the members slothlet
+ * reads (`Iterator.prototype`, `Iterator.from`).
+ * @typedef {object} IteratorConstructor
+ * @property {object} prototype - `Iterator.prototype`.
+ * @property {function(object): object} from - `Iterator.from`.
+ * @internal
+ */
+
+/**
  * The `Iterator` constructor, or undefined where the engine has none, as it was when slothlet loaded. `Iterator.from` is on `Iterators`.
  * @internal
  * @example
  * Iterator.prototype;
+ * @type {IteratorConstructor|undefined}
  */
 export const Iterator = globalThis.Iterator;
 
@@ -728,11 +746,19 @@ export const structuredClone = globalThis.structuredClone;
 export const setTimeout = globalThis.setTimeout;
 
 /**
+ * The shape of `setImmediate`, which the declaration build's library does not know: it takes a callback and the
+ * arguments to hand it, and answers the handle.
+ * @typedef {function(function(...unknown): void, ...unknown): unknown} ImmediateScheduler
+ * @internal
+ */
+
+/**
  * `setImmediate`, as it was when slothlet loaded, or undefined where the host has none (a browser).
  * @internal
  * @example
  * import { setImmediate } from "@cldmv/slothlet/helpers/intrinsics";
  * setImmediate?.(run);
+ * @type {ImmediateScheduler|undefined}
  */
 export const setImmediate = globalThis.setImmediate;
 
@@ -769,6 +795,17 @@ export const parseInt = globalThis.parseInt;
 export const isNaN = globalThis.isNaN;
 
 /**
+ * The members of the host's `process` object that slothlet reads where they are used.
+ * @typedef {object} HostProcess
+ * @property {Object<string, string|undefined>} env - The environment.
+ * @property {string[]} argv - The command line.
+ * @property {Object<string, string|undefined>} versions - The versions of the runtime and its parts.
+ * @property {string} platform - The platform.
+ * @property {number} pid - The process ID.
+ * @internal
+ */
+
+/**
  * The host's `process` object, as it was when slothlet loaded, or undefined where there is none (a browser). Its data
  * members (`env`, `pid`, `argv`, `versions`, `platform`) are read off it where they are used; the functions slothlet
  * calls are on `Processes`.
@@ -776,6 +813,7 @@ export const isNaN = globalThis.isNaN;
  * @example
  * import { NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
  * NativeProcess?.env.SLOTHLET_DEBUG;
+ * @type {HostProcess|undefined}
  */
 export const NativeProcess = globalThis.process;
 
@@ -801,12 +839,22 @@ export const Processes = boundStaticsOf(globalThis.process, [
 ]);
 
 /**
+ * The members of Node's `Buffer` constructor that slothlet reads (`instanceof Buffer`, `Buffer.from`).
+ * @typedef {object} HostBufferConstructor
+ * @property {Uint8Array} prototype - `Buffer.prototype`.
+ * @property {function((string|ArrayBuffer|ArrayLike<number>), string=): Uint8Array} from - `Buffer.from`.
+ * @property {function(unknown): boolean} isBuffer - `Buffer.isBuffer`.
+ * @internal
+ */
+
+/**
  * Node's `Buffer` constructor, as it was when slothlet loaded, or undefined where there is none (a browser).
  * `Buffer.from` is on `Buffers`.
  * @internal
  * @example
  * import { Buffer } from "@cldmv/slothlet/helpers/intrinsics";
  * value instanceof Buffer;
+ * @type {HostBufferConstructor|undefined}
  */
 export const Buffer = globalThis.Buffer;
 
