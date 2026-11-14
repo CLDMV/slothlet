@@ -2736,7 +2736,12 @@ export class ModesProcessor extends ComponentBase {
 					) {
 						return exports.default;
 					}
-					if (categoryDecision.shouldFlatten) {
+					// A self-named or generically named file (`index`, `main`, ...) whose default export is a function is built
+					// by processFiles below, as eager mode builds it and as a folder's only default-export file of another name
+					// is (F05): the folder's node and its members are then built from the file, so code written in the file is
+					// placed at the file.
+					const modes_callableFileModule = fileName !== "addapi" && typeof exports.default === "function";
+					if (categoryDecision.shouldFlatten && !modes_callableFileModule) {
 						let implToWrap;
 
 						// Rule 11 (F06) - C24: AddApi Special File Pattern

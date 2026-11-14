@@ -1350,8 +1350,11 @@ function createFramePlacer(candidates) {
  * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
  * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
  * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
- * `processImmediate`) below the runner's.
- * @param {{path: string, head: string}} frame - A frame.
+ * `processImmediate`) below the runner's. While async hooks are enabled (on Node 22 by any `AsyncLocalStorage` in use,
+ * slothlet's own included; on any version by `async_hooks.createHook()`), Node calls those queues through
+ * `callbackTrampoline` as well, which is one more of Node's own frames below them. That frame counts only when its
+ * script hashes as Node's own.
+ * @param {{path: string, head: string, hash?: string|null}} frame - A frame.
  * @returns {boolean} True for a runner frame.
  * @internal
  */
@@ -1359,7 +1362,8 @@ export function isRunnerFrame(frame) {
 	return (
 		frame.path.startsWith("node:internal/process/task_queues") ||
 		frame.path === "node:internal/timers" ||
-		/\b(?:processTicksAndRejections|runMicrotasks)\b/.test(frame.head)
+		/\b(?:processTicksAndRejections|runMicrotasks)\b/.test(frame.head) ||
+		(frame.path === "node:internal/async_hooks" && /\bcallbackTrampoline\b/.test(frame.head) && runtime_isNodeScript(frame))
 	);
 }
 
