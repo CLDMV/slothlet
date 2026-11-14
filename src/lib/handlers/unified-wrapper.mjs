@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T06:59:15-08:00 (1794495555)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,8 +100,45 @@ import {
 	Functions,
 	NativeObject,
 	URL,
-	URLSearchParams
+	URLSearchParams,
+	Boolean,
+	Date,
+	Dates,
+	Errors,
+	Error,
+	Number,
+	RegExp,
+	String,
+	TypeError,
+	ArrayBuffers,
+	ArrayBuffer,
+	DataView,
+	Float32Array,
+	Float64Array,
+	Int16Array,
+	Int32Array,
+	Int8Array,
+	Intl,
+	Uint16Array,
+	Uint32Array,
+	Uint8Array,
+	Uint8ClampedArray,
+	SharedArrayBuffer,
+	BigInt64Array,
+	BigUint64Array,
+	Float16Array,
+	Iterator,
+	Iterators,
+	Blob,
+	EventTarget,
+	MessageChannel,
+	queueMicrotask,
+	TextDecoder,
+	TextEncoder,
+	NativeProcess,
+	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
 const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
@@ -617,7 +654,11 @@ const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
 const WEAKREF_DEREF = typeof WeakRef === "function" ? WeakRef.prototype.deref : null;
 /** @private */
 const ERROR_BRAND =
-	typeof Error.isError === "function" ? Error.isError : typeof util?.types?.isNativeError === "function" ? util.types.isNativeError : null;
+	typeof Errors.isError === "function"
+		? Errors.isError
+		: typeof util?.types?.isNativeError === "function"
+			? util.types.isNativeError
+			: null;
 /** @private */
 const IS_PROXY = typeof util?.types?.isProxy === "function" ? util.types.isProxy : null;
 
@@ -687,7 +728,7 @@ const DATA_KINDS = (() => {
 			"typedarray",
 			typeof types.isTypedArray === "function"
 				? (value) => types.isTypedArray(value)
-				: (value) => ArrayBuffer.isView(value) && !runtime_inherits(value, DataView)
+				: (value) => ArrayBuffers.isView(value) && !runtime_inherits(value, DataView)
 		],
 		["sharedarraybuffer", brand("isSharedArrayBuffer", typeof SharedArrayBuffer === "function" ? SharedArrayBuffer : null)],
 		["arraybuffer", brand("isArrayBuffer", ArrayBuffer)],
@@ -1116,7 +1157,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 			(resolved) => held(resolved),
 			(reason) => Promises.reject(held(reason))
 		));
-	const sharedBuffer = ArrayBuffer.isView(raw) ? raw.buffer : null;
+	const sharedBuffer = ArrayBuffers.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
 		const target = typeof prop === "string" ? [...parts, prop] : parts;
 		const writer = runtime_selfRootWriter(slothlet, reader, target);
@@ -1202,7 +1243,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		}
 		if (holdsValues) return held(returned);
 		// Memory it shares is held to the rule too; a copy it made is the caller's own.
-		if (sharedBuffer !== null && (returned === sharedBuffer || (ArrayBuffer.isView(returned) && returned.buffer === sharedBuffer))) {
+		if (sharedBuffer !== null && (returned === sharedBuffer || (ArrayBuffers.isView(returned) && returned.buffer === sharedBuffer))) {
 			return held(returned);
 		}
 		return returned;
@@ -4544,7 +4585,7 @@ const SHARED_BUILTINS = [
 	"zlib"
 ];
 
-if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(globalThis.process.getBuiltinModule(`node:${id}`));
+if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(Processes.getBuiltinModule(`node:${id}`));
 
 /**
  * The prototypes of Node's data classes (`URL`, `Blob`, `TextDecoder` …) and of what Node keeps inside the objects
@@ -4566,7 +4607,7 @@ const NODE_DATA_PROTOTYPES = new WeakSet();
  * @private
  */
 function runtime_recordNodeObjectPrototypes() {
-	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const crypto = Processes.getBuiltinModule("node:crypto");
 	const samples = [crypto.createSecretKey(new Uint8Array(16))];
 	const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 	samples.push(publicKey, privateKey);
@@ -4579,8 +4620,8 @@ function runtime_recordNodeObjectPrototypes() {
 		channel.port2.close();
 	}
 	// Node's data classes: what they do is on their prototypes, what they hold is data, none holds code of its own.
-	const util = globalThis.process.getBuiltinModule("node:util");
-	const net = globalThis.process.getBuiltinModule("node:net");
+	const util = Processes.getBuiltinModule("node:util");
+	const net = Processes.getBuiltinModule("node:net");
 	const data = [new URL("https://localhost/"), new URLSearchParams(), new TextDecoder(), new TextEncoder()];
 	if (typeof Blob === "function") data.push(new Blob([]));
 	if (typeof util.MIMEType === "function") data.push(new util.MIMEType("text/plain"));
@@ -4623,10 +4664,10 @@ const NODE_STREAM_STATE_PROTOTYPES = new WeakSet();
  * @private
  */
 function runtime_recordNodeStreamState() {
-	const stream = globalThis.process.getBuiltinModule("node:stream");
-	const zlib = globalThis.process.getBuiltinModule("node:zlib");
-	const net = globalThis.process.getBuiltinModule("node:net");
-	const crypto = globalThis.process.getBuiltinModule("node:crypto");
+	const stream = Processes.getBuiltinModule("node:stream");
+	const zlib = Processes.getBuiltinModule("node:zlib");
+	const net = Processes.getBuiltinModule("node:net");
+	const crypto = Processes.getBuiltinModule("node:crypto");
 	const gzip = zlib.createGzip();
 	const socket = new net.Socket();
 	socket.on("error", () => {});
@@ -5229,7 +5270,7 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
 		() => [][Symbol.iterator](),
 		() => /a/g[Symbol.matchAll](""),
 		() => [].values().map((value) => value),
-		() => Iterator.from({ next: () => ({ done: true, value: undefined }) }),
+		() => Iterators.from({ next: () => ({ done: true, value: undefined }) }),
 		() => new Intl.Segmenter().segment("")[Symbol.iterator]()
 	];
 	for (const sample of samples) {
@@ -5260,7 +5301,7 @@ function runtime_isNativeIterator(value) {
  * @type {Function|null}
  * @private
  */
-const VM_SCRIPT = isNode ? globalThis.process.getBuiltinModule("node:vm").Script : null;
+const VM_SCRIPT = isNode ? Processes.getBuiltinModule("node:vm").Script : null;
 
 /**
  * The native class `vm.Script` extends, whose instances hold compiled code the same way (#708): one made directly is a
@@ -10314,7 +10355,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) => failureSource({ type: "function", timestamp: Date.now() }, runtime_readTargetFailure(wrapper, error));
+	const functionSource = (error) => failureSource({ type: "function", timestamp: Dates.now() }, runtime_readTargetFailure(wrapper, error));
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
@@ -10423,7 +10464,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
 			// its `then` delivers them (see HookManager#observeThenable).
 			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-				onUnobserved({ type: "function", timestamp: Date.now() })
+				onUnobserved({ type: "function", timestamp: Dates.now() })
 			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
@@ -10479,10 +10520,10 @@ function unwrapError(error) {
 
 const wrapperDebugEnabled =
 	isNode &&
-	(process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
-		process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
-		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
-		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
+	(NativeProcess.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
+		NativeProcess.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
+		NativeProcess.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+		NativeProcess.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
  * Framework metadata that rides on a module implementation but is not an api member.
@@ -14105,7 +14146,8 @@ export class UnifiedWrapper extends ComponentBase {
 					if (wrapper.____slothletInternal.state.materialized) {
 						const queued = runtime_captureChange(wrapper, change);
 						const generation = wrapper.____slothletInternal.changeGeneration;
-						queueMicrotask(() => runtime_makeQueuedChange(wrapper, queued, generation));
+						// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+						queueMicrotask(pinToCurrentCaller(() => runtime_makeQueuedChange(wrapper, queued, generation)));
 					} else runtime_queueStandInChange(wrapper, change);
 				}
 				// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
@@ -16255,7 +16297,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!isHookProcessed(error)) {
-								const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, failure);
+								const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, failure);
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -16502,7 +16544,7 @@ export class UnifiedWrapper extends ComponentBase {
 								if (hasHooks) {
 									// A hook's failure, read from its record (see HookManager#failureOf), never in the caller's flow (#599).
 									const originalError = unwrapError(error);
-									const sourceInfo = failureSource({ type: "after", timestamp: Date.now() }, hookManager.failureOf(error));
+									const sourceInfo = failureSource({ type: "after", timestamp: Dates.now() }, hookManager.failureOf(error));
 									// The after chain reports its own hook's failure; this reports only what it did not.
 									if (!hookReported && !isHookProcessed(error)) {
 										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
@@ -16525,7 +16567,7 @@ export class UnifiedWrapper extends ComponentBase {
 								const failure = runtime_readTargetFailure(wrapper, error);
 								const originalError = failure.originalError();
 								if (!isHookProcessed(error)) {
-									const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, failure);
+									const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, failure);
 									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 								}
 								// Always hooks execute for rejected promises
@@ -16562,7 +16604,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// always hooks then take the unwrapped error from what was read.
 				const targetFailure = hasHooks && !hookReported ? runtime_readTargetFailure(wrapper, error) : null;
 				if (targetFailure && !isHookProcessed(error)) {
-					const sourceInfo = failureSource({ type: "function", timestamp: Date.now() }, targetFailure);
+					const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, targetFailure);
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
 				}
 

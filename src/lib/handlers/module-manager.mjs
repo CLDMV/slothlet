@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { ComponentBase } from "#factories/component-base";
 import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
-import { Arrays, Math, Map, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Math, Map, Promises, Dates, Number, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`
@@ -498,7 +498,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = rulePlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
-			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Dates.now() });
 		});
 		manifestEvents.forEach((rule, i) => {
 			const placed = eventPlacements[i].writer
@@ -506,7 +506,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = eventPlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
-			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Dates.now() });
 		});
 
 		const result = {
@@ -739,8 +739,8 @@ function pickHighestSemver(versions) {
 		String(v)
 			.split(/[.\-+]/)
 			.map((p) => {
-				const n = Number.parseInt(p, 10);
-				return Number.isFinite(n) ? n : 0;
+				const n = Numbers.parseInt(p, 10);
+				return Numbers.isFinite(n) ? n : 0;
 			});
 	let best = versions[0];
 	let bestSegs = segs(best);

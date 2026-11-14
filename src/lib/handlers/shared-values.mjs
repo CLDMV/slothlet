@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:45-07:00 (1793426625)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,9 +29,9 @@
  * @type {function(*): boolean}
  * @private
  */
-import { Reflect, Objects, Arrays, Functions, Set, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Functions, Set, WeakSet, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
-const IS_PROXY = globalThis.process?.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
+const IS_PROXY = Processes.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
 
 /**
  * How many own properties, across everything a value reaches, are read when it is recorded; past that the rest is not

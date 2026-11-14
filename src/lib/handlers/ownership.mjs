@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T06:53:40-07:00 (1792418020)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean, Dates } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"
@@ -721,7 +721,7 @@ export class OwnershipManager extends ComponentBase {
 		if (existingEntry) {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
-			existingEntry.timestamp = Date.now();
+			existingEntry.timestamp = Dates.now();
 			// Do not downgrade a known value to `undefined`: the same path is registered more than
 			// once for a leaf (a namespace/marker registration omits the value while the leaf's own
 			// registration carries the callable), and under lazy the value-less one can arrive last.
@@ -852,7 +852,7 @@ export class OwnershipManager extends ComponentBase {
 		const entry = {
 			moduleID,
 			source,
-			timestamp: Date.now(),
+			timestamp: Dates.now(),
 			value,
 			filePath,
 			exportPath,

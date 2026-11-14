@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T21:05:55-08:00 (1794287155)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,21 @@ import {
 } from "@cldmv/slothlet/helpers/reserved-keys";
 import { runtime_selfModuleCeilings, runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, WeakMap, Symbol, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	Symbol,
+	Promises,
+	Boolean,
+	Dates,
+	Numbers,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -819,7 +833,7 @@ export class PermissionManager extends ComponentBase {
 			ownerModuleID: ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Date.now(),
+			registeredAt: Dates.now(),
 			registrationSeq: ++ruleRegistrationSeq
 		};
 
@@ -924,7 +938,7 @@ export class PermissionManager extends ComponentBase {
 			ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Date.now(),
+			registeredAt: Dates.now(),
 			registrationSeq: ++ruleRegistrationSeq
 		};
 
@@ -1380,7 +1394,7 @@ export class PermissionManager extends ComponentBase {
 				// answer predates the change, so it must not be cached as current.
 				const invalidatedAt = record.keyInvalidations.get(identityKey) ?? 0;
 				if (this.#principals.get(name) !== record || record.epoch !== epoch || invalidatedAt > startSeq) return;
-				const now = Date.now();
+				const now = Dates.now();
 				record.cache.set(identityKey, { value, view: this.#principalView(record, value), epoch, resolvedAt: now });
 				this.#prunePrincipalCache(record, now);
 			} catch (error) {
@@ -1487,7 +1501,7 @@ export class PermissionManager extends ComponentBase {
 	#isPrincipalCurrent(record, hit, grace) {
 		if (hit.epoch !== record.epoch) return false;
 		if (grace || record.maxAge === null) return true;
-		return Date.now() - hit.resolvedAt <= record.maxAge;
+		return Dates.now() - hit.resolvedAt <= record.maxAge;
 	}
 
 	/**
@@ -1655,7 +1669,7 @@ export class PermissionManager extends ComponentBase {
 		if (typeof definition.key !== "function") fail("definition.key", "function", typeof definition.key);
 		if (typeof definition.resolve !== "function") fail("definition.resolve", "function", typeof definition.resolve);
 		const { maxAge } = definition;
-		if (maxAge !== undefined && maxAge !== null && !(typeof maxAge === "number" && Number.isFinite(maxAge) && maxAge >= 0)) {
+		if (maxAge !== undefined && maxAge !== null && !(typeof maxAge === "number" && Numbers.isFinite(maxAge) && maxAge >= 0)) {
 			fail("definition.maxAge", "finite number >= 0", typeof maxAge);
 		}
 	}
@@ -3528,7 +3542,7 @@ export class PermissionManager extends ComponentBase {
 
 		const lifecycle = this.slothlet.handlers?.lifecycle;
 		if (lifecycle) {
-			lifecycle.emit(event, { ...payload, timestamp: Date.now() });
+			lifecycle.emit(event, { ...payload, timestamp: Dates.now() });
 		}
 	}
 

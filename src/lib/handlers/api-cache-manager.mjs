@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:40-07:00 (1791821800)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { Objects, Arrays, Map, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Map, WeakSet, Dates } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -379,7 +379,7 @@ export class ApiCacheManager extends ComponentBase {
 			hidden: entry.hidden ?? null,
 			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "api",
-			cacheBust: Date.now(),
+			cacheBust: Dates.now(),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
 			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors
 			// the add-time intermediate key (last endpoint segment) so the flatten matches the add.
@@ -396,7 +396,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_CACHE_REBUILT_SUCCESSFULLY",
 			moduleID,
-			timestamp: Date.now()
+			timestamp: Dates.now()
 		});
 
 		return freshApi;

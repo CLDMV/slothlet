@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:08:48-07:00 (1792303728)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing

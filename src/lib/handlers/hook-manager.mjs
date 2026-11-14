@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T07:40:23-08:00 (1793720423)
+ *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,22 @@ import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, WeakMap, WeakSet, Promise, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	Promise,
+	Symbol,
+	Boolean,
+	Dates,
+	Date,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -1295,7 +1310,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1371,7 +1386,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1437,7 +1452,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1496,7 +1511,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1654,7 +1669,7 @@ export class HookManager extends ComponentBase {
 			errorSink(
 				error,
 				failureSource(
-					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				)
 			);
@@ -1670,7 +1685,7 @@ export class HookManager extends ComponentBase {
 				(value) => value,
 				(error) => sinkAround(hook, error),
 				() =>
-					onUnobserved({ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now(), stack: undefined })
+					onUnobserved({ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now(), stack: undefined })
 			);
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
@@ -1766,7 +1781,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for always hook failure
 				const sourceInfo = failureSource(
-					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Date.now() },
+					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
 					this.failureOf(error)
 				);
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);

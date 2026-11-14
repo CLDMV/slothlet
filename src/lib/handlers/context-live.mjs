@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:00:19-08:00 (1794556819)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
+import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore, combineCeilings } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
@@ -47,7 +47,22 @@ import {
 	supplierChainCeiling,
 	toComparablePath
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, Math, Map, Set, WeakMap, WeakRef, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	Map,
+	Set,
+	WeakMap,
+	WeakRef,
+	Symbol,
+	Boolean,
+	Dates,
+	FinalizationRegistry,
+	queueMicrotask,
+	Processes
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };
@@ -113,7 +128,7 @@ const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapp
  */
 const PROMISE_HOOKS = (() => {
 	try {
-		return globalThis.process?.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
+		return Processes.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
 	} catch {
 		// A platform without the builtin follows promises by reacting to them instead.
 		return null;
@@ -156,7 +171,8 @@ const FOLLOWED_COLLECTED =
 		? new FinalizationRegistry(({ families, ref, follows }) => {
 				runtime_forgetRef(families, ref);
 				runtime_unfollowed();
-				for (const { onSettled } of follows) queueMicrotask(onSettled);
+				// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+				for (const { onSettled } of follows) queueMicrotask(pinToCurrentCaller(onSettled));
 			})
 		: null;
 
@@ -307,7 +323,8 @@ function runtime_promiseState(promise) {
 function runtime_followSettled(promise, onSettled, family = null) {
 	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
 	if (runtime_promiseState(promise) === "settled") {
-		queueMicrotask(onSettled);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		queueMicrotask(pinToCurrentCaller(onSettled));
 		return true;
 	}
 	let follows = FOLLOWED.get(promise);
@@ -332,7 +349,8 @@ function runtime_followSettled(promise, onSettled, family = null) {
 		FOLLOWED_COLLECTED?.unregister(done);
 		runtime_forgetRef(done.families, done.ref);
 		runtime_unfollowed();
-		for (const { onSettled: callback } of done) queueMicrotask(callback);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		for (const { onSettled: callback } of done) queueMicrotask(pinToCurrentCaller(callback));
 	});
 	return true;
 }
@@ -1551,7 +1569,7 @@ export class LiveContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Date.now()
+			createdAt: Dates.now()
 		};
 
 		this.instances.set(instanceID, store);

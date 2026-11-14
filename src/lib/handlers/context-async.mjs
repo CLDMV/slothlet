@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ import {
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, WeakMap, Promise, Dates } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -92,7 +92,7 @@ export class AsyncContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Date.now()
+			createdAt: Dates.now()
 		};
 
 		this.instances.set(instanceID, store);

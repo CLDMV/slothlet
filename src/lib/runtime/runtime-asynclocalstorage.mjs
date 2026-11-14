@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T14:25:47-08:00 (1794435947)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeObject, NativeProxy, Set, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, NativeObject, NativeProxy, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Safely retrieve the current ALS context without throwing.

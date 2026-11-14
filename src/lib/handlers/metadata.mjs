@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
-import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet, Dates } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
@@ -55,7 +55,7 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		this._instanceId = `metadata_${Dates.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 
 	// Secure WeakMap storage for immutable system metadata
@@ -279,7 +279,7 @@ export class Metadata extends ComponentBase {
 			moduleID: fullModuleID,
 			// Raw owning-module id, verbatim — the colon-safe source for base recovery (#303).
 			baseModuleID: systemData.moduleID,
-			taggedAt: Date.now()
+			taggedAt: Dates.now()
 		});
 
 		this.#secureMetadata.set(target, frozenSystem);

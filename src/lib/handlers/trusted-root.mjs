@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,19 @@
 
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, Arrays, Math, NativeProxy, Map, WeakMap, WeakSet, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	NativeProxy,
+	Map,
+	WeakMap,
+	WeakSet,
+	Symbol,
+	Dates,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
@@ -432,7 +444,7 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		});
 	}
 	const childStore = {
-		instanceID: `${instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+		instanceID: `${instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`,
 		context: captured.context,
 		self: baseStore.self,
 		config: baseStore.config,

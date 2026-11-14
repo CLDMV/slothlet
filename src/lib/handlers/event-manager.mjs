@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:41:16-08:00 (1794184876)
+ *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { runtime_eventPayloadFor } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Map, Set, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Map, Set, WeakMap, Promise, Dates, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
 const NativePromise = Promise;
@@ -204,7 +204,7 @@ export class EventManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "listener", expected: "a function", received: typeof listener });
 		}
 		const key = options.key;
-		if (key !== undefined && !((typeof key === "string" && key !== "") || (typeof key === "number" && Number.isFinite(key)))) {
+		if (key !== undefined && !((typeof key === "string" && key !== "") || (typeof key === "number" && Numbers.isFinite(key)))) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options.key",
 				expected: "a non-empty string or a finite number",
@@ -347,7 +347,7 @@ export class EventManager extends ComponentBase {
 		}
 		if (!set || set.size === 0) return;
 
-		const meta = { event, at: Date.now(), instanceID: this.instanceID };
+		const meta = { event, at: Dates.now(), instanceID: this.instanceID };
 		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
 		await this.#dispatch(event, payload, meta, [...set], emitter);
@@ -444,7 +444,7 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	async #emitThroughStrategy(strategy, event, payload, subs) {
-		const meta = { event, at: Date.now(), instanceID: this.instanceID };
+		const meta = { event, at: Dates.now(), instanceID: this.instanceID };
 		const cm = this.slothlet.contextManager;
 		// The emitter's flow — its user context, caller identity and trust — so a deferred delivery runs
 		// in it, exactly as the immediate one would have. Also the emitter identity for the envelope.

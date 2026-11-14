@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T02:42:12-07:00 (1792834932)
+ *	@Last modified time: 2026-11-13T21:48:00-08:00 (1794635280)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,10 @@ import {
 	Set,
 	Symbol,
 	Promises,
-	Symbols
+	Symbols,
+	Dates,
+	isNaN,
+	parseInt
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
@@ -221,7 +224,7 @@ export class VersionManager extends ComponentBase {
 			isDefault: isDefault ?? false,
 			/* v8 ignore next */
 			versionMeta: versionMeta ?? {},
-			registeredAt: Date.now()
+			registeredAt: Dates.now()
 		};
 
 		entry.versions.set(versionTag, versionEntry);

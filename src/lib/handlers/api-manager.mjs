@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T17:24:28-08:00 (1794619468)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,20 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	Map,
+	Set,
+	WeakSet,
+	Symbol,
+	Promises,
+	Boolean,
+	Dates,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -3742,7 +3755,7 @@ export class ApiManager extends ComponentBase {
 				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
-				timestamp: Date.now()
+				timestamp: Dates.now()
 			});
 		}
 
@@ -4993,7 +5006,7 @@ export class ApiManager extends ComponentBase {
 		cacheManager.set(moduleID, {
 			...oldEntry,
 			api: freshApi,
-			timestamp: Date.now()
+			timestamp: Dates.now()
 		});
 
 		// DEBUG: Log freshApi keys before restore

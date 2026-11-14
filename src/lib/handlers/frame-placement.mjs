@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T19:32:54-08:00 (1794367974)
+ *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,14 @@ import {
 	Symbols,
 	Math,
 	URL,
-	URLSearchParams
+	URLSearchParams,
+	Boolean,
+	decodeURIComponent,
+	Error,
+	RegExp,
+	String,
+	TextDecoder,
+	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
@@ -81,8 +88,8 @@ const PristineError = Error;
  * attributed as.
  * @private
  */
-const NODE_FS = isNode ? globalThis.process.getBuiltinModule("node:fs") : null;
-const NODE_CRYPTO = isNode ? globalThis.process.getBuiltinModule("node:crypto") : null;
+const NODE_FS = isNode ? Processes.getBuiltinModule("node:fs") : null;
+const NODE_CRYPTO = isNode ? Processes.getBuiltinModule("node:crypto") : null;
 const FS_READ_FILE = NODE_FS?.readFileSync;
 const FS_STAT = NODE_FS?.statSync;
 const FS_EXISTS = NODE_FS?.existsSync;
@@ -4366,7 +4373,7 @@ const NODE_SOURCE_HASHES = new Map();
 
 if (isNode) {
 	try {
-		for (const [id, source] of Objects.entries(globalThis.process.binding("natives"))) {
+		for (const [id, source] of Objects.entries(Processes.binding("natives"))) {
 			if (typeof source === "string") NODE_SOURCES.set(id, source);
 		}
 	} catch {
@@ -4413,7 +4420,7 @@ function runtime_sampleNodeScripts() {
 if (isNode) {
 	// Sampled through each way Node's own code calls back into code it was handed: reading a getter (`util.inspect`),
 	// running a store (`AsyncLocalStorage`), emitting (`EventEmitter`), and its timer and tick queues.
-	const builtin = (id) => globalThis.process.getBuiltinModule(id);
+	const builtin = (id) => Processes.getBuiltinModule(id);
 	for (const sample of [
 		() =>
 			builtin("node:util").inspect(
@@ -4436,7 +4443,7 @@ if (isNode) {
 			emitter.emit("sample");
 		},
 		() => builtin("node:timers").setTimeout(runtime_sampleNodeScripts, 0).unref(),
-		() => globalThis.process.nextTick(runtime_sampleNodeScripts)
+		() => Processes.nextTick(runtime_sampleNodeScripts)
 	]) {
 		try {
 			sample();
