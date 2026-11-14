@@ -3730,8 +3730,16 @@ function runtime_holdDetachedJob(definer, frames) {
 	const slothlet = (definer.wrapper ?? definer.leaves[0]).slothlet;
 	// Only a runtime that says it cannot carry a call into a flow it started (the live runtime) needs it.
 	if (slothlet?.contextManager?.carriesFlowCaller !== false || !runtime_checksPermissions(slothlet)) return definer;
-	if (!runtime_jobLetGo(frames, slothlet)) return definer;
-	return { ...definer, callers: [...new Set([...definer.callers, ...runtime_instanceLeaves(slothlet)])] };
+	// The module call that started the flow, where the runtime could record it (Node's promise hooks): it holds the
+	// flow whoever awaits it, as the async runtime's store does.
+	const starter = slothlet.contextManager.runningFlowStarter?.() ?? null;
+	const started =
+		starter && trustedRootOwn.genuineWrappers.has(starter.wrapper) && starter.wrapper.slothlet === slothlet
+			? [starter.wrapper, ...ceilingMembers(starter.ceiling ?? null)]
+			: [];
+	const letGo = runtime_jobLetGo(frames, slothlet);
+	if (!letGo && !started.length) return definer;
+	return { ...definer, callers: [...new Set([...definer.callers, ...started, ...(letGo ? runtime_instanceLeaves(slothlet) : [])])] };
 }
 
 /**

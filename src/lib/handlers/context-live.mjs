@@ -124,6 +124,14 @@ const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
 const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
 
 /**
+ * The call each promise was created in, while it ran synchronously or in a flow such a promise's reaction ran: the
+ * flow's starter. Keyed weakly by the promise.
+ * @type {WeakMap<Promise<*>, object>}
+ * @private
+ */
+const FLOW_STARTERS = new WeakMap();
+
+/**
  * The identity of code running as no module: none, and not the host's either, so enforcement fails closed (#597).
  * @type {Readonly<{currentWrapper: null, callerWrapper: null, unresolved: true}>}
  * @private
@@ -145,6 +153,14 @@ const PROMISE_HOOKS = (() => {
 		return null;
 	}
 })();
+
+/**
+ * The `createHook` of {@link PROMISE_HOOKS}, read once at load: what records which call a flow was started in once that
+ * call has returned (see {@link LiveContextManager#runningFlowStarter}). Null where there is none (a browser).
+ * @type {Function|null}
+ * @private
+ */
+const CREATE_PROMISE_HOOK = typeof PROMISE_HOOKS?.createHook === "function" ? PROMISE_HOOKS.createHook : null;
 
 /**
  * The promises being followed (see {@link runtime_followSettled}), with what to run once each settles and the instance
@@ -448,6 +464,25 @@ export class LiveContextManager {
 	 */
 	#busyStores = new Set();
 
+	/**
+	 * The live instances with permissions on: while there are any, the promise hooks that record who started a flow
+	 * are installed.
+	 * @type {number}
+	 */
+	#flowStarterInstances = 0;
+
+	/**
+	 * Removes the promise hooks, while they are installed.
+	 * @type {Function|null}
+	 */
+	#stopFlowStarterHooks = null;
+
+	/**
+	 * The starter of the flow whose promise reaction is running.
+	 * @type {object|null}
+	 */
+	#runningStarter = null;
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -461,6 +496,64 @@ export class LiveContextManager {
 	 */
 	get carriesFlowCaller() {
 		return false;
+	}
+
+	/**
+	 * The call that started the flow running now, once that call has returned: the module call the promise whose
+	 * reaction is running was created in, directly or in a flow it started. Null for a flow the host started, and where
+	 * Node's promise hooks are not available (a browser), or no live instance has permissions on.
+	 * @returns {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}|null} The starting call's record.
+	 * @internal
+	 */
+	runningFlowStarter() {
+		return this.#runningStarter;
+	}
+
+	/**
+	 * Count a live instance with permissions on, installing the promise hooks for the first.
+	 * @returns {void}
+	 * @private
+	 */
+	#holdFlowStarters() {
+		this.#flowStarterInstances++;
+		if (this.#stopFlowStarterHooks || !CREATE_PROMISE_HOOK) return;
+		const manager = this;
+		this.#stopFlowStarterHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
+			{
+				// A promise made while a module's call runs synchronously is that call's; one made in a reaction of a
+				// flow a call started is that flow's. Anything else (the host's own, with no call running) is left alone.
+				init(promise) {
+					let starter = manager.#runningStarter;
+					if (manager.#syncDepth > 0) {
+						const entered = manager.instances.get(manager.#activeID)?.__enteredCalls;
+						const top = entered?.[entered.length - 1];
+						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
+						else if (top?.wrapper) starter = top;
+					}
+					if (starter) FLOW_STARTERS.set(promise, starter);
+				},
+				// Reactions run one at a time from the microtask queue, never inside one another.
+				before(promise) {
+					manager.#runningStarter = FLOW_STARTERS.get(promise) ?? null;
+				},
+				after() {
+					manager.#runningStarter = null;
+				}
+			}
+		]);
+	}
+
+	/**
+	 * Uncount a live instance with permissions on, removing the promise hooks after the last.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseFlowStarters() {
+		if (--this.#flowStarterInstances > 0 || !this.#stopFlowStarterHooks) return;
+		const stop = this.#stopFlowStarterHooks;
+		this.#stopFlowStarterHooks = null;
+		this.#runningStarter = null;
+		stop();
 	}
 
 	/**
@@ -865,7 +958,28 @@ export class LiveContextManager {
 		if (entry.unattributed) return UNATTRIBUTED_IDENTITY;
 		// A host-pinned call carries no record: it runs as the host.
 		if (!entry.record) return { currentWrapper: entry.currentWrapper, callerWrapper: entry.callerWrapper };
-		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling, capture);
+		return this.#heldToStarter(this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling, capture), entry.record);
+	}
+
+	/**
+	 * A suspended call's identity, held as well to the call that started the flow running now when that is another
+	 * call (see {@link LiveContextManager#runningFlowStarter}): a flow a module started and let go of, which another
+	 * module's waiting call awaits, stays the starting module's, as the async runtime's store has it.
+	 * @param {object} identity - The suspended call's identity.
+	 * @param {object} record - The suspended call's record.
+	 * @returns {object} The identity, with the starter among its ceiling when it is held to it.
+	 * @private
+	 */
+	#heldToStarter(identity, record) {
+		const starter = this.#runningStarter;
+		if (!starter || !identity.currentWrapper || identity.unresolved) return identity;
+		const wrapper = starter.wrapper;
+		if (wrapper === identity.currentWrapper || wrapper?.slothlet !== identity.currentWrapper.slothlet) return identity;
+		if (!trustedRootOwn.genuineWrappers.has(wrapper)) return identity;
+		// The starter is the call itself or a call it runs under: already held to.
+		for (let current = record, depth = 0; current && depth < 64; current = current.parent, depth++)
+			if (current === starter || current.wrapper === wrapper) return identity;
+		return { ...identity, ceiling: combineCeilings(identity.ceiling ?? null, wrapper, starter.ceiling ?? null) };
 	}
 
 	/**
@@ -1604,6 +1718,12 @@ export class LiveContextManager {
 		};
 
 		this.instances.set(instanceID, store);
+		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
+		const permissions = config?.permissions;
+		if (permissions && (permissions.mode ? permissions.mode === "on" : permissions.enabled !== false)) {
+			store.__recordsFlowStarters = true;
+			this.#holdFlowStarters();
+		}
 
 		// In live mode, automatically set as current if it's the first/only instance
 		if (!this.#activeID) {
@@ -2179,6 +2299,10 @@ export class LiveContextManager {
 
 		// Remove from instances map
 		this.instances.delete(instanceID);
+		if (store.__recordsFlowStarters) {
+			store.__recordsFlowStarters = false;
+			this.#releaseFlowStarters();
+		}
 		// A promise followed for one of its callbacks that never settles would keep the settle hook installed (#597).
 		runtime_unfollowInstance(store.parentInstanceID ?? instanceID);
 		// A call still suspended when its instance shut down never settles here: its store would otherwise
