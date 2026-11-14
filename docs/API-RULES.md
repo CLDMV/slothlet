@@ -647,7 +647,7 @@ await api.slothlet.api.add("config", "./new-config", {
 
 **Purpose**: When `api.slothlet.api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exports up to `api.config.*`.
 
-**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value's `filePath` has its parent directory equal to `resolvedFolderPath/lastPart` (direct child check), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key.
+**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value comes from a direct child of the mounted folder (a file at its root, or a file of its subfolder named `lastPart`), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key. The subfolder named `lastPart` is the one [Rule 22](#rule-22-same-named-folder-deduplication) leaves standing: when `folder/config/` holds nothing but `config/`, the inner folder is that direct child.
 
 **Verified Example**:
 
@@ -668,16 +668,41 @@ api.config.setNestedConfig(); // ✅
 api.config.main.getRootInfo(); // ✅ other files unaffected
 ```
 
-**Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
+**Guard - `isDirectChild`**: Rule 13 hoists one level, once. Only the direct child is hoisted; a folder named `lastPart` inside it is a nested namespace and stays:
 
 ```javascript
-// Should NOT hoist (services/services/services.mjs):
-// api.add("services", folder)  →  newApi has key "services"
-// but filePath = .../services/services/services.mjs
-//     dirname  = .../services/services   ≠ resolvedFolderPath/services
-// → Rule 13 does NOT fire
-// → api.services.services.getNestedService remains properly nested ✅
+// Folder structure: api_smart_flatten_nested/
+//   root.mjs
+//   services/
+//     api.mjs
+//     services/
+//       services.mjs   ← exports getNestedService
+
+await api.slothlet.api.add("services", "./api_smart_flatten_nested", {});
+
+api.services.api.getApiService(); // ✅ the direct child services/ is hoisted
+api.services.services.getNestedService(); // ✅ services/services/ inside it stays nested
+api.services.root.getRootFunction(); // ✅ other files unaffected
 ```
+
+The same holds when the inner folder has no self-named file (`c/z.mjs` + `c/c/x.mjs` mounted at `c` is `api.c.z` and `api.c.c.x`).
+
+**Combined with Rule 22**: a direct child that holds nothing but a same-named folder is one level, so it is hoisted as the folder it stands for would be. The mount builds what the base load builds for the same folder:
+
+```javascript
+// Folder structure: addfolder/
+//   e/
+//     e/
+//       e.mjs      ← exports a, b
+
+await api.slothlet.api.add("e", "./addfolder", {});
+
+api.e.a(); // ✅ as addfolder/e/e.mjs builds it (not api.e.e.a)
+```
+
+The direct child is composed by the same rules in eager and lazy mode before it is hoisted: a folder of one generic file (`e/main.mjs` or `e/e/main.mjs`, [Rule 10](#rule-10-generic-filename-parent-level-promotion)) mounted at `e` is `api.e.a`, a callable self-named file with a sibling (`e/e.mjs` default + `e/y.mjs`) is `api.e()` and `api.e.y`.
+
+Every node records the path it is placed at, after the hoist: `api.e.a.__metadata.apiPath === "e.a"`, and permission rules and hooks name `e.a`.
 
 **Childless leaf case**: When the matching key's value has no children of its own — a single self-named file such as `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)` — there is nothing to spread up from it. The value itself is what belongs at the mount path, so Rule 13 uses it directly rather than hoisting an empty set of children:
 
@@ -690,7 +715,7 @@ await api.slothlet.api.add("thing", "./addfolder", {});
 api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 ```
 
-**Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
+**Implementation**: `src/lib/builders/modes-processor.mjs` decides which entry is the direct child as it places it (`hoistedOntoMount`) and records the mount path on it; `src/lib/handlers/api-manager.mjs` hoists that node, immediately after the `buildAPI` call, before `setValueAtPath`
 
 ---
 

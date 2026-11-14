@@ -672,21 +672,22 @@ api.tool.side(); // "tool.side"
 **Flattening Guide**: [F08: AddApi Path Deduplication Flattening](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)
 **Status**: ✅ Active (New in v3)
 
-**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value originated from a **direct subfolder** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
+**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value comes from a **direct child** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
 
 **Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.slothlet.api.add("config", folder)` should produce `api.config.*`, not `api.config.config.*`.
 
 **Function**: `addApiComponent()`
 **Source**: `src/lib/handlers/api-manager.mjs` - immediately after single-file unwrap block
 
-**Guard - `isDirectChild`**:
+**Guard - `isDirectChild`**: the value is a file at the mounted directory's root (`config.mjs`), or a file directly inside its subfolder named like the mount (`config/config.mjs`). That subfolder is the one [C26](#c26-same-named-folder-deduplication) leaves standing: when `config/` holds nothing but `config/`, the inner folder is the direct child. A folder is never the hoisted value: the subfolder named like the mount is poured into the mount's level, and a folder of that name inside it is a nested namespace.
+
+The builder decides this as it places the entry (`hoistedOntoMount` in `modes-processor.mjs`) and records the mount path itself on the node; `addApiComponent` hoists the node that records it:
 
 ```javascript
-// Ensures the matching key came from mountDir/lastPart/, not a deeper nested folder
-const isDirectChild = dirname(filePath) === path.join(resolvedFolderPath, lastPart);
+const isDirectChild = resolveWrapper(newApi[lastPart])?.____slothletInternal?.apiPath === effectivePath;
 ```
 
-This guard prevents incorrect hoisting when a deeply nested folder happens to share the mount path's last segment name.
+So the path a node records is the path it is reached at after the hoist.
 
 **Condition Check**:
 
@@ -719,11 +720,14 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **`isDirectChild` examples**:
 
-| Mount path   | Folder structure               | `isDirectChild` | Action      |
-| ------------ | ------------------------------ | --------------- | ----------- |
-| `"config"`   | `folder/config/config.mjs`     | `true`          | Hoist ✅    |
-| `"services"` | `folder/services/services.mjs` | `true`          | Hoist ✅    |
-| `"api"`      | `folder/api/nested/api.mjs`    | `false`         | No hoist ✅ |
+| Mount path   | Folder structure                                   | `isDirectChild`                   | Result                                           |
+| ------------ | -------------------------------------------------- | --------------------------------- | ------------------------------------------------ |
+| `"config"`   | `folder/config/config.mjs`                         | `true`                            | `api.config.*` ✅                                |
+| `"config"`   | `folder/config.mjs`                                | `true`                            | `api.config.*` ✅                                |
+| `"e"`        | `folder/e/e/e.mjs` (`e/` holds only `e/`)          | `true`                            | `api.e.*` ✅ (C26, then C25)                     |
+| `"services"` | `folder/services/{api.mjs, services/services.mjs}` | `false` for the inner `services/` | `api.services.api`, `api.services.services.*` ✅ |
+| `"c"`        | `folder/c/{z.mjs, c/x.mjs}`                        | `false` for the inner `c/`        | `api.c.z`, `api.c.c.x` ✅                        |
+| `"api"`      | `folder/api/nested/api.mjs`                        | `false` for `nested/api.mjs`      | `api.nested.api.*` ✅                            |
 
 ---
 

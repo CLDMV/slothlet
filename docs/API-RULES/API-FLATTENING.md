@@ -319,7 +319,7 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // NOT: api.config.config.getNestedConfig() ❌
 ```
 
-**Guard - Direct Child Only:** Rule only applies when the matching subfolder is a **direct child** of the mounted folder. Deeper nesting (e.g. `folder/config/config/config.mjs`) is intentional and not flattened.
+**Guard - Direct Child Only:** Rule only applies to the **direct child** of the mounted folder, and hoists it once. A folder of the same name inside it is intentional nesting and stays: `folder/config/{server.mjs, config/x.mjs}` mounted at `config` is `api.config.server` and `api.config.config.x`. A direct child that holds nothing but a same-named folder is one level ([F09](#f09-same-named-folder-deduplication)), so `folder/config/config/config.mjs` mounted at `config` is `api.config.*`, as `folder/config/config.mjs` is.
 
 **Why:** When you mount a folder at a path named `config`, a direct `config/config.mjs` inside it would create redundant `api.config.config.*` nesting.
 
@@ -354,6 +354,8 @@ api.deep.part.where(); // ✅ one level
 api.c.c.x.where(); // ✅ both levels: the outer folder holds something else too
 // NOT: api.e.e.x.where() ❌
 ```
+
+**Under a mount:** mounted at the folder's own name, the folder is one level before [F08](#f08-addapi-path-deduplication-flattening) hoists it, so the mount builds what the base load builds: `e/e/e.mjs` added at `e` is `api.e.a`, never `api.e.e.a`.
 
 **Guard - Only Entry:** The outer folder must hold nothing but the same-named folder. A file or another folder beside it keeps both levels, and a FILE named after its folder is F01's case, not this one. The rule repeats while it holds (`t/t/t/x.mjs` → `api.t.x`), applies at every depth, in eager and lazy mode, at initial load and under `api.slothlet.api.add()`.
 
