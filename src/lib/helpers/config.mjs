@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:19:09-08:00 (1794194349)
+ *	@Last modified time: 2026-11-13T21:48:03-08:00 (1794635283)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/def
 // Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
 // rather than silently matching nothing forever (see normalizeRoutines()).
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { Objects, Arrays, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
 const VALID_ROUTINE_MODES = new Set(["manual", "startup", "shutdown", "destroy"]);
@@ -1494,7 +1494,7 @@ export class Config extends ComponentBase {
 		// of its own under string keys (`bytes.item = …`), which means listing its keys, every index among them. `false`
 		// (the default) never lists; `true` always does; a whole number lists arrays of up to that many kilobytes.
 		const typedArrayMembers = permissions.typedArrayMembers === undefined ? false : permissions.typedArrayMembers;
-		if (typeof typedArrayMembers !== "boolean" && !(Number.isSafeInteger(typedArrayMembers) && typedArrayMembers >= 0)) {
+		if (typeof typedArrayMembers !== "boolean" && !(Numbers.isSafeInteger(typedArrayMembers) && typedArrayMembers >= 0)) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
 				{

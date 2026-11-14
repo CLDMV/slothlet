@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T12:56:02-07:00 (1792353362)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,7 @@ import { ComponentBase } from "#factories/component-base";
 // fs/path/url resolved in the platform module (#123); all null in a browser — the filesystem
 // walking + stack-trace path resolution methods here are Node-only.
 import { fs, path, url } from "@cldmv/slothlet/helpers/platform";
+import { Boolean, Error, Errors, String, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.
@@ -72,7 +73,7 @@ export class Resolver extends ComponentBase {
 		try {
 			Error.prepareStackTrace = (_, s) => s; // V8 CallSite[]
 			const e = new Error("Stack trace");
-			if (skipFn) Error.captureStackTrace(e, skipFn);
+			if (skipFn) Errors.captureStackTrace(e, skipFn);
 			return e.stack;
 		} finally {
 			Error.prepareStackTrace = orig;
@@ -242,7 +243,7 @@ export class Resolver extends ComponentBase {
 		/* v8 ignore next */
 		if (!callerFile) {
 			// Fallback: resolve from current working directory
-			return path.resolve(process.cwd(), rel);
+			return path.resolve(Processes.cwd(), rel);
 		}
 
 		// Resolve relative to caller's directory
@@ -255,7 +256,7 @@ export class Resolver extends ComponentBase {
 		}
 
 		// Fallback: try from cwd
-		const cwdResolved = path.resolve(process.cwd(), rel);
+		const cwdResolved = path.resolve(Processes.cwd(), rel);
 		if (fs.existsSync(cwdResolved)) {
 			return cwdResolved;
 		}

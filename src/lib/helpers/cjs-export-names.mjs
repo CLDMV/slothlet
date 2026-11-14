@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-11-13T21:48:01-08:00 (1794635281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@
  * while a missing one would turn an import that links natively into a SyntaxError.
  */
 
-import { Objects, Math, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Math, Set, parseInt, RegExp, Strings, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Characters after which a `/` starts a regular-expression literal rather than a division.
@@ -228,17 +228,17 @@ function decodeStringBody(body) {
 		const next = body[++i];
 		if (next in SIMPLE_ESCAPES) out += SIMPLE_ESCAPES[next];
 		else if (next === "x" && /^[\da-f]{2}$/i.test(body.slice(i + 1, i + 3))) {
-			out += String.fromCharCode(parseInt(body.slice(i + 1, i + 3), 16));
+			out += Strings.fromCharCode(parseInt(body.slice(i + 1, i + 3), 16));
 			i += 2;
 		} else if (next === "u" && body[i + 1] === "{") {
 			const close = body.indexOf("}", i + 2);
 			const codePoint = parseInt(body.slice(i + 2, close), 16);
 			// An out-of-range code point is a syntax error in JavaScript: keep the raw body.
 			if (codePoint > 0x10ffff) return body;
-			out += String.fromCodePoint(codePoint);
+			out += Strings.fromCodePoint(codePoint);
 			i = close;
 		} else if (next === "u" && /^[\da-f]{4}$/i.test(body.slice(i + 1, i + 5))) {
-			out += String.fromCharCode(parseInt(body.slice(i + 1, i + 5), 16));
+			out += Strings.fromCharCode(parseInt(body.slice(i + 1, i + 5), 16));
 			i += 4;
 		} else if (next !== "\n" && next !== "\u2028" && next !== "\u2029") out += next; // else a line continuation
 	}
@@ -390,12 +390,12 @@ export function scanCommonJSExports(source) {
 
 	// exports.x = / exports["x"] = / module.exports.x = (not `==`/`===`, not `foo.exports`).
 	const assign = new RegExp(
-		String.raw`(?<![\w$.])(?:module\s*\.\s*)?exports\s*(?:\.\s*([A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*)|\[\s*${str(2)}\s*\])\s*=(?!=)`,
+		Strings.raw`(?<![\w$.])(?:module\s*\.\s*)?exports\s*(?:\.\s*([A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*)|\[\s*${str(2)}\s*\])\s*=(?!=)`,
 		"g"
 	);
 	for (const m of src.matchAll(assign)) names.add(m[1] ?? decodeStringBody(m[3]));
 
-	const define = new RegExp(String.raw`Object\s*\.\s*defineProperty\s*\(\s*(?:module\s*\.\s*)?exports\s*,\s*${str(1)}`, "g");
+	const define = new RegExp(Strings.raw`Object\s*\.\s*defineProperty\s*\(\s*(?:module\s*\.\s*)?exports\s*,\s*${str(1)}`, "g");
 	for (const m of src.matchAll(define)) names.add(decodeStringBody(m[2]));
 
 	// module.exports = { … } / module.exports = require("x").
@@ -410,14 +410,14 @@ export function scanCommonJSExports(source) {
 	}
 
 	// TypeScript / Babel star re-exports.
-	const star = new RegExp(String.raw`__export(?:Star)?\s*\(\s*require\s*\(\s*${str(1)}\s*\)`, "g");
+	const star = new RegExp(Strings.raw`__export(?:Star)?\s*\(\s*require\s*\(\s*${str(1)}\s*\)`, "g");
 	for (const m of src.matchAll(star)) reexports.push(decodeStringBody(m[2]));
 
 	// Babel's star re-export: `var _x = require("x"); Object.keys(_x).forEach(function (key) { … exports[key] … })`.
 	const forEachKeys = /Object\s*\.\s*keys\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\.\s*forEach\s*\(/g;
 	for (const m of src.matchAll(forEachKeys)) {
 		const binding = new RegExp(
-			String.raw`(?<![\w$.])${escapeRegExp(m[1])}\s*=\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?require\s*\(\s*${str(1)}\s*\)`
+			Strings.raw`(?<![\w$.])${escapeRegExp(m[1])}\s*=\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?require\s*\(\s*${str(1)}\s*\)`
 		).exec(src);
 		if (binding) reexports.push(decodeStringBody(binding[2]));
 	}

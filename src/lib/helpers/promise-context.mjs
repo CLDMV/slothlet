@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T23:03:14-08:00 (1793775794)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@
 import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Objects, WeakSet, Promise, Promises, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, WeakSet, Promise, Promises, Symbols, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of

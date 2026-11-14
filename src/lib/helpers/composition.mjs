@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:57:08-08:00 (1794185828)
+ *	@Last modified time: 2026-11-13T21:48:02-08:00 (1794635282)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@
  * write to the value would.
  */
 import { util } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Functions, NativeProxy, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Functions, NativeProxy, Map, Set, WeakMap, Number } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a property key is an array index, the keys an array's `length` follows.

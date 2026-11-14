@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  * require(esm), which rejects any module graph containing top-level await.
  */
 
-import { Objects, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Set, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Property names reserved by the slothlet wrapper machinery — served as

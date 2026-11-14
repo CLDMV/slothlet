@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:28:40-08:00 (1794374920)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,12 +66,30 @@ import {
 	Promise,
 	Symbol,
 	Promises,
-	Symbols
+	Symbols,
+	Boolean,
+	Date,
+	Errors,
+	Error,
+	Number,
+	RegExp,
+	String,
+	ArrayBuffer,
+	ArrayBuffers,
+	DataView,
+	SharedArrayBuffer,
+	BigInt,
+	setTimeout,
+	NativeProcess,
+	CryptoKey,
+	setImmediate,
+	MessageChannel
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
 // Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
 // browser run exercises that arm (the node run cannot — `process` is always present there).
-const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
+const isNode = typeof NativeProcess !== "undefined" && Boolean(NativeProcess?.versions?.node);
 
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
@@ -205,18 +223,18 @@ if (isNode) {
 			isArrayBuffer: IS_ARRAY_BUFFER,
 			isSharedArrayBuffer: IS_SHARED_ARRAY_BUFFER,
 			isAnyArrayBuffer: (value) => IS_ARRAY_BUFFER(value) || IS_SHARED_ARRAY_BUFFER(value),
-			isArrayBufferView: (value) => ArrayBuffer.isView(value),
+			isArrayBufferView: (value) => ArrayBuffers.isView(value),
 			isDataView: IS_DATA_VIEW,
-			isTypedArray: (value) => ArrayBuffer.isView(value) && !IS_DATA_VIEW(value),
+			isTypedArray: (value) => ArrayBuffers.isView(value) && !IS_DATA_VIEW(value),
 			isBoxedPrimitive: (value) => value !== null && typeof value === "object" && BOXED_BRANDS.some((is) => is(value)),
 			// `Error.isError` where the engine has it; the prototype chain otherwise, which an object merely inheriting
 			// from `Error.prototype` passes too.
-			isNativeError: typeof Error.isError === "function" ? (value) => Error.isError(value) : (value) => inheritsFrom(value, Error),
+			isNativeError: typeof Errors.isError === "function" ? (value) => Errors.isError(value) : (value) => inheritsFrom(value, Error),
 			isMapIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
 			isSetIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(SET_ITERATOR, value),
 			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
 			isKeyObject: () => false,
-			isCryptoKey: (value) => typeof globalThis.CryptoKey === "function" && inheritsFrom(value, globalThis.CryptoKey)
+			isCryptoKey: (value) => typeof CryptoKey === "function" && inheritsFrom(value, CryptoKey)
 		}
 	};
 }
@@ -292,35 +310,45 @@ async function loadJsonBrowser(ref) {
 }
 
 /**
+ * The macrotask schedulers of this host, as they were when slothlet loaded.
+ * @type {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}}
+ * @private
+ */
+const MACROTASK_HOSTS = Objects.freeze({ setImmediate, MessageChannel, setTimeout });
+
+/**
  * Run `fn` on a later macrotask, in any host.
  *
  * @description
  * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
  * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
  * macrotask primitive the host offers, in order:
- * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
- *   installed by `helpers/scheduler-context` is the one used;
+ * - `setImmediate` (Node);
  * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
  * - `setTimeout(fn, 0)` as the last resort.
  *
- * All three run `fn` only after the current call stack and every queued microtask have drained,
- * which is the guarantee callers rely on.
+ * The schedulers are the host's as they were when slothlet loaded, and `fn` is pinned to its caller as the
+ * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
+ * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
  *
  * @param {Function} fn - Callback to run.
+ * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
+ *   schedulers to pick from: the host's own unless a test hands in others.
  * @returns {void}
  * @internal
  *
  * @example
  * scheduleMacrotask(() => patchAfterAssignment());
  */
-function scheduleMacrotask(fn) {
-	const immediate = globalThis.setImmediate;
+function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS) {
+	// Called detached: a browser's schedulers refuse any receiver but the global object.
+	const { setImmediate: immediate, MessageChannel: Channel, setTimeout: timeout } = hosts;
 	if (typeof immediate === "function") {
-		immediate(fn);
+		immediate(pinToCurrentCaller(fn));
 		return;
 	}
-	if (typeof globalThis.MessageChannel === "function") {
-		const channel = new globalThis.MessageChannel();
+	if (typeof Channel === "function") {
+		const channel = new Channel();
 		channel.port1.onmessage = () => {
 			// Closing the port releases it; in Node an open port would keep the event loop alive.
 			channel.port1.close();
@@ -329,7 +357,7 @@ function scheduleMacrotask(fn) {
 		channel.port2.postMessage(null);
 		return;
 	}
-	setTimeout(fn, 0);
+	timeout(pinToCurrentCaller(fn), 0);
 }
 
 /**

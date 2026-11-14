@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:10-08:00 (1794207550)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { RegExp } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Compile a glob pattern into a matcher function.

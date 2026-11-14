@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:05-08:00 (1794431645)
+ *	@Last modified time: 2026-11-13T21:48:02-08:00 (1794635282)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,46 @@
  */
 import { isNode } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Objects, Arrays, Map, Set, Symbol, Symbols, NativeObject } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Map,
+	Set,
+	Symbol,
+	Symbols,
+	NativeObject,
+	Boolean,
+	Date,
+	Error,
+	Number,
+	RegExp,
+	String,
+	ArrayBuffer,
+	DataView,
+	Uint8Array,
+	SharedArrayBuffer,
+	BigInt,
+	Processes,
+	Int8Array,
+	Uint8ClampedArray,
+	Int16Array,
+	Uint16Array,
+	Int32Array,
+	Uint32Array,
+	Float16Array,
+	Float32Array,
+	Float64Array,
+	BigInt64Array,
+	BigUint64Array,
+	EvalError,
+	RangeError,
+	ReferenceError,
+	SyntaxError,
+	TypeError,
+	URIError,
+	structuredClone
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The key a clone wrapper holds the function it wraps under: the watermark of this patch.
@@ -116,26 +155,30 @@ const viewByteLength = getterOf(DataView.prototype, "byteLength");
 /** The typed array classes, by the name each instance's tag gives. */
 const TYPED_ARRAYS = new NativeMap(
 	[
-		"Int8Array",
-		"Uint8Array",
-		"Uint8ClampedArray",
-		"Int16Array",
-		"Uint16Array",
-		"Int32Array",
-		"Uint32Array",
-		"Float16Array",
-		"Float32Array",
-		"Float64Array",
-		"BigInt64Array",
-		"BigUint64Array"
-	]
-		.filter((name) => typeof globalThis[name] === "function")
-		.map((name) => [name, globalThis[name]])
+		["Int8Array", Int8Array],
+		["Uint8Array", Uint8Array],
+		["Uint8ClampedArray", Uint8ClampedArray],
+		["Int16Array", Int16Array],
+		["Uint16Array", Uint16Array],
+		["Int32Array", Int32Array],
+		["Uint32Array", Uint32Array],
+		["Float16Array", Float16Array],
+		["Float32Array", Float32Array],
+		["Float64Array", Float64Array],
+		["BigInt64Array", BigInt64Array],
+		["BigUint64Array", BigUint64Array]
+	].filter(([, kind]) => typeof kind === "function")
 );
 /** The error classes the structured clone algorithm keeps, by name; any other error is copied as an `Error`. */
-const ERROR_CLASSES = new NativeMap(
-	["Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"].map((name) => [name, globalThis[name]])
-);
+const ERROR_CLASSES = new NativeMap([
+	["Error", Error],
+	["EvalError", EvalError],
+	["RangeError", RangeError],
+	["ReferenceError", ReferenceError],
+	["SyntaxError", SyntaxError],
+	["TypeError", TypeError],
+	["URIError", URIError]
+]);
 /** The `valueOf` of each boxed primitive's prototype: the engine's brand check for that box. */
 const BOXED_VALUE_OF = [Number, String, Boolean, typeof BigInt === "function" ? BigInt : null, Symbol]
 	.filter((kind) => kind !== null)
@@ -229,7 +272,7 @@ function runtime_cloneSites() {
 	add(globalThis.BroadcastChannel?.prototype, "postMessage");
 	add(globalThis.Worker?.prototype, "postMessage");
 	if (isNode) {
-		const builtin = globalThis.process?.getBuiltinModule;
+		const builtin = Processes.getBuiltinModule;
 		if (typeof builtin === "function") {
 			add(builtin("node:v8"), "serialize");
 			add(builtin("node:worker_threads")?.Worker?.prototype, "postMessage");
@@ -623,6 +666,33 @@ export function enableClonePatching() {
 		}
 		markLayer(wrapper, layer);
 		installed.push({ host, key, layer, wrapper, descriptor });
+	}
+}
+
+/**
+ * `structuredClone` as the platform had it when slothlet loaded, taking slothlet's views of another module's data as
+ * the installed wrapper does: slothlet's own copies of data go through this, whatever `globalThis.structuredClone`
+ * holds by then.
+ * @param {*} value - The value to copy.
+ * @returns {*} The copy.
+ * @throws {Error} The platform's refusal, where the value holds something it cannot copy and no view of slothlet's.
+ * @internal
+ * @example
+ * const copy = cloneTakingViews({ table: self.vault.table });
+ */
+export function cloneTakingViews(value) {
+	try {
+		return structuredClone(value);
+	} catch (error) {
+		let revealed;
+		try {
+			revealed = runtime_reveal(value);
+		} catch {
+			// Whatever reading the value threw is not the caller's to see: the platform's refusal stands.
+			throw error;
+		}
+		if (!revealed.found) throw error;
+		return structuredClone(revealed.value);
 	}
 }
 

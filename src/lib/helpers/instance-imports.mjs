@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:58:04-08:00 (1794185884)
+ *	@Last modified time: 2026-11-13T21:48:05-08:00 (1794635285)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,7 +75,16 @@ import {
 	Symbols,
 	URL,
 	URLSearchParams,
-	Reflect
+	Reflect,
+	Boolean,
+	decodeURIComponent,
+	Error,
+	String,
+	TypeError,
+	ArrayBuffers,
+	ArrayBuffer,
+	TextDecoder,
+	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -711,7 +720,7 @@ function isKeeper() {
  * @private
  */
 function nodeBuiltin(id) {
-	return globalThis.process.getBuiltinModule(id);
+	return Processes.getBuiltinModule(id);
 }
 
 /**
@@ -723,7 +732,7 @@ function nodeBuiltin(id) {
  * @private
  */
 const HOST = (() => {
-	const getBuiltinModule = globalThis.process?.getBuiltinModule;
+	const getBuiltinModule = Processes.getBuiltinModule;
 	if (typeof getBuiltinModule !== "function") return null;
 	const fs = getBuiltinModule("node:fs");
 	const path = getBuiltinModule("node:path");
@@ -733,7 +742,7 @@ const HOST = (() => {
 	const hashPrototype = Objects.getPrototypeOf(Reflect.apply(createHash, crypto, ["sha256"]));
 	const update = hashPrototype.update;
 	const digest = hashPrototype.digest;
-	const Decoder = globalThis.TextDecoder;
+	const Decoder = TextDecoder;
 	const decode = Decoder.prototype.decode;
 	return Objects.freeze({
 		randomUUID: crypto.randomUUID.bind(crypto),
@@ -761,7 +770,15 @@ const HOST = (() => {
  * @type {object|null}
  * @private
  */
-const NODE_MODULE = typeof globalThis.process?.getBuiltinModule === "function" ? globalThis.process.getBuiltinModule("node:module") : null;
+const NODE_MODULE = typeof Processes.getBuiltinModule === "function" ? Processes.getBuiltinModule("node:module") : null;
+
+/**
+ * `module.stripTypeScriptTypes`, as it was when slothlet loaded (undefined on a Node without it): what a TypeScript
+ * file's source is recorded as (see {@link recordLoadedSource}), so replacing it later does not change the record.
+ * @type {Function|undefined}
+ * @private
+ */
+const STRIP_TYPESCRIPT_TYPES = NODE_MODULE?.stripTypeScriptTypes;
 
 /**
  * Slothlet's own files, as forward-slash paths: the `lib/` tree (`src/lib/` or `dist/lib/`) and the
@@ -2301,11 +2318,12 @@ function recordLoadedSource(url, result) {
 	if (source === undefined || source === null) return;
 	let text;
 	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
-	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = HOST.decode(source);
+	else if (ArrayBuffers.isView(source) || source instanceof ArrayBuffer) text = HOST.decode(source);
 	else return;
 	if (isTypeScriptLoad(result)) {
-		const strip = nodeBuiltin("node:module").stripTypeScriptTypes;
-		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use.
+		const strip = STRIP_TYPESCRIPT_TYPES;
+		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
+		// notice goes through the current `process.emitWarning`, so that is the one silenced here.
 		const emitWarning = globalThis.process.emitWarning;
 		globalThis.process.emitWarning = () => {};
 		try {

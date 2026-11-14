@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T16:02:57-07:00 (1791846177)
+ *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { recordSharedExports } from "../handlers/shared-values.mjs";
-import { Arrays, Map, Set, WeakMap, WeakRef } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Map, Set, WeakMap, WeakRef, FinalizationRegistry } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Callback to check if we're currently in a slothlet API context

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,7 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // filesystem-walking module discovery has no meaning in browser mode.
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Arrays, JSON, Map, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, JSON, Map, Set, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
 // Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
@@ -260,7 +260,7 @@ async function resolveScanRoots(opt) {
  * @private
  */
 async function defaultScanRoot() {
-	let current = process.cwd();
+	let current = Processes.cwd();
 	for (let i = 0; i < UPWARD_WALK_CAP; i++) {
 		try {
 			const stat = await fsp.stat(path.join(current, "node_modules"));
@@ -272,7 +272,7 @@ async function defaultScanRoot() {
 		if (parent === current) break; // reached filesystem root
 		current = parent;
 	}
-	return process.cwd();
+	return Processes.cwd();
 }
 
 /**

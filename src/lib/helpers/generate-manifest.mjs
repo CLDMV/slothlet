@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-13T21:48:05-08:00 (1794635285)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,7 +79,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { Objects, Arrays, JSON, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, JSON, Map, Set, Promises, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and

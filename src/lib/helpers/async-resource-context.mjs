@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T01:59:45-08:00 (1794477585)
+ *	@Last modified time: 2026-11-13T21:48:00-08:00 (1794635280)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Functions, WeakMap, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Functions, WeakMap, Symbol, Processes } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * What is patched: the host object, the key, the wrapper installed and its layer.
@@ -102,7 +102,7 @@ function runtime_pinNow() {
  */
 function runtime_builtin(id) {
 	try {
-		return globalThis.process?.getBuiltinModule?.(id) ?? null;
+		return Processes.getBuiltinModule?.(id) ?? null;
 	} catch {
 		// A platform that refuses the lookup has no such builtin to patch.
 		/* v8 ignore next */

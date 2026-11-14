@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Observer constructors patched by name.
@@ -102,6 +102,7 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchObserverConstructor(name) {
+	// The current global: the patch installs over whatever the host has there now.
 	const installed = globalThis[name];
 	// Absent in this host: all but `PerformanceObserver` are browser-only. Exercised by the vitest node compose.
 	if (typeof installed !== "function") return;

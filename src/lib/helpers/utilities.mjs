@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,8 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { Objects, Arrays, Math } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Math, Date, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import { cloneTakingViews } from "@cldmv/slothlet/helpers/clone-context";
 
 /**
  * General utility functions
@@ -101,7 +102,8 @@ export class Utilities extends ComponentBase {
 	 */
 	deepClone(obj) {
 		try {
-			return structuredClone(obj);
+			// Copied as the platform's `structuredClone` copies it, taking slothlet's views as the installed wrapper does.
+			return cloneTakingViews(obj);
 		} catch {
 			// Fallback for Proxy / function / symbol values that structuredClone rejects.
 			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
@@ -134,6 +136,6 @@ export class Utilities extends ComponentBase {
 	 * @public
 	 */
 	generateId() {
-		return `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		return `slothlet_${Dates.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 }

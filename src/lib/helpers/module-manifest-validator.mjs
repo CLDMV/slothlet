@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
+ *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ import { t } from "@cldmv/slothlet/i18n";
 // path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
 // filesystem manifest validation.
 import { path } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Arrays, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Reserved mountPath root segments. Mirror of the list in
@@ -314,7 +314,7 @@ export function validateModuleManifest(manifest, packageContext) {
 	}
 
 	// priority: optional, number, defaults to 0
-	if (manifest.priority !== undefined && (typeof manifest.priority !== "number" || !Number.isFinite(manifest.priority))) {
+	if (manifest.priority !== undefined && (typeof manifest.priority !== "number" || !Numbers.isFinite(manifest.priority))) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,7 +53,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Objects, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, WeakMap, WeakSet, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -241,7 +241,7 @@ function runtime_ownHandlerNames(target) {
  * @private
  */
 function runtime_patchDiscoveredHandlers() {
-	const EventTargetCtor = globalThis.EventTarget;
+	const EventTargetCtor = EventTarget;
 	// A host without EventTarget has no DOM-style handlers to discover; the named list still applies.
 	if (typeof EventTargetCtor !== "function") return;
 	const base = EventTargetCtor.prototype;

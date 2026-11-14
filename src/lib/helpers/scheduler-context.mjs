@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -130,6 +130,7 @@ function runtime_patchScheduler(host, name) {
 export function enableSchedulerPatching() {
 	if (isPatchingEnabled) return;
 
+	// The current globals: the patch installs over whatever the host has there now, and restores it.
 	runtime_patchScheduler(globalThis, "setTimeout");
 	runtime_patchScheduler(globalThis, "setInterval");
 	runtime_patchScheduler(globalThis, "setImmediate");

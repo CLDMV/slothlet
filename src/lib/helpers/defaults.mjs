@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-11-13T21:48:03-08:00 (1794635283)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
 // (the wrapper classes reach `helpers/platform`, which uses it).
 import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, Objects, NativeProxy, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, NativeProxy, Set, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
