@@ -3523,9 +3523,74 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
 		callerFilePath,
 		targetFilePath,
 		/* v8 ignore next */
-		ctx.context ?? null
+		ctx.context ?? null,
+		null,
+		runtime_dataReadOptions(wrapper.slothlet)
 	);
 	return { allowed, caller: callerPath };
+}
+
+/**
+ * The enforcement options of a read of data, per instance: they tell the permission manager which paths above the
+ * target are object members of a module's data, so a deny naming one of them exactly covers what it holds.
+ * @type {WeakMap<object, {dataMember: function(string): boolean}>}
+ * @private
+ */
+const DATA_READ_OPTIONS = new WeakMap();
+
+/**
+ * The enforcement options of a read of data for an instance (see {@link DATA_READ_OPTIONS}).
+ * @param {object} slothlet - The instance.
+ * @returns {{dataMember: function(string): boolean}} The options.
+ * @private
+ */
+function runtime_dataReadOptions(slothlet) {
+	let options = DATA_READ_OPTIONS.get(slothlet);
+	if (options === undefined) {
+		options = Objects.freeze({ dataMember: (apiPath) => runtime_isDataMemberNode(runtime_nodeAtPath(slothlet, apiPath)) });
+		DATA_READ_OPTIONS.set(slothlet, options);
+	}
+	return options;
+}
+
+/**
+ * Whether each node holds an object member of a module's data, by the value it held when asked.
+ * @type {WeakMap<object, {impl: *, member: boolean}>}
+ * @private
+ */
+const DATA_MEMBER_NODES = new WeakMap();
+
+/**
+ * Whether a node stands for an object member of a module's data: a plain object or array a file exports by name, or
+ * one such a value holds, or one a file's default export holds. A folder, a file's own node (its default export
+ * included), a function, a built-in data value and a value no file exported are not. A rule naming such a member's
+ * path exactly is about the member, so it covers what the member holds, as reading the member itself is traversal.
+ * Decided once per value the node holds.
+ * @param {object|null} wrapper - The node's wrapper, or null when no node is there.
+ * @returns {boolean} Whether it is one.
+ * @private
+ *
+ * @example
+ * // owner.mjs: export const config = { nested: { a: 1 } };
+ * runtime_isDataMemberNode(nodeOf("owner.config.nested")); // true
+ * runtime_isDataMemberNode(nodeOf("owner")); // false
+ */
+function runtime_isDataMemberNode(wrapper) {
+	if (wrapper === null) return false;
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	const known = DATA_MEMBER_NODES.get(wrapper);
+	if (known !== undefined && known.impl === impl) return known.member;
+	const exportPath = internal.exportPath;
+	const member =
+		!internal.isCallable &&
+		impl !== null &&
+		typeof impl === "object" &&
+		!runtime_isTerminalData(impl) &&
+		Arrays.isArray(exportPath) &&
+		exportPath.length > (exportPath[0] === "default" ? 1 : 0);
+	DATA_MEMBER_NODES.set(wrapper, { impl, member });
+	return member;
 }
 
 /**
@@ -8786,51 +8851,12 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 const ANY_MEMBER_SEGMENT = "\u0000member";
 
 /**
- * Whether each node holds an object member of a module's data, by the value it held when asked.
- * @type {WeakMap<object, {impl: *, member: boolean}>}
- * @private
- */
-const DATA_MEMBER_NODES = new WeakMap();
-
-/**
- * Whether a node stands for an object member of a module's data: a plain object or array a file exports by name, or
- * one such a value holds, or one a file's default export holds. A folder, a file's own node (its default export
- * included), a function, a built-in data value and a value no file exported are not. A rule naming such a member's
- * path exactly is about the member, so it covers what the member holds, as reading the member itself is traversal.
- * Decided once per value the node holds.
- * @param {object|null} wrapper - The node's wrapper, or null when no node is there.
- * @returns {boolean} Whether it is one.
- * @private
- *
- * @example
- * // owner.mjs: export const config = { nested: { a: 1 } };
- * runtime_isDataMemberNode(nodeOf("owner.config.nested")); // true
- * runtime_isDataMemberNode(nodeOf("owner")); // false
- */
-function runtime_isDataMemberNode(wrapper) {
-	if (wrapper === null) return false;
-	const internal = wrapper.____slothletInternal;
-	const impl = internal.impl;
-	const known = DATA_MEMBER_NODES.get(wrapper);
-	if (known !== undefined && known.impl === impl) return known.member;
-	const exportPath = internal.exportPath;
-	const member =
-		!internal.isCallable &&
-		impl !== null &&
-		typeof impl === "object" &&
-		!runtime_isTerminalData(impl) &&
-		Arrays.isArray(exportPath) &&
-		exportPath.length > (exportPath[0] === "default" ? 1 : 0);
-	DATA_MEMBER_NODES.set(wrapper, { impl, member });
-	return member;
-}
-
-/**
  * Whether the rules leave a reader nothing to read at the path of an object member of a module's data (see
  * {@link runtime_isDataMemberNode}): a read there is refused, and so is a
- * read of any member beneath it (`config.nested.**`). Such a member is no data the reader may see, and is left out of
- * what lists or serializes the object holding it, as a member holding a value the reader may not read is. A rule on the
- * path alone (`config.nested`) leaves what is beneath it readable, and the member listed.
+ * read of any member beneath it (`config.nested.**`, or a deny on `config.nested` alone, which covers what a member of a
+ * module's data holds). Such a member is no data the reader may see, and is left out of what lists or serializes the
+ * object holding it, as a member holding a value the reader may not read is. A more specific allow beneath it
+ * (`config.nested.public`) leaves the member listed, holding what that allow lets through.
  * @param {object} wrapper - The node whose member it is.
  * @param {string} targetPath - The member's api path.
  * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
@@ -8848,7 +8874,11 @@ function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept =
 	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
 	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say.
 	if (!runtime_isDataMemberNode(runtime_nodeAtPath(wrapper.slothlet, targetPath))) return false;
-	return !runtime_readGateDecision(wrapper, `${targetPath}.${ANY_MEMBER_SEGMENT}`, callerOverride, kept, access).allowed;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept, access);
+	if (beneath.allowed) return false;
+	// A more specific allow beneath the member lets what it names through, so the member is listed with just that.
+	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**

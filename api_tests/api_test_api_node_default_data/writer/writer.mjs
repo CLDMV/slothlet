@@ -168,3 +168,45 @@ export const listings = (module, key) => {
 		entries: answer(() => Object.entries(node).map(([member]) => member))
 	};
 };
+
+/**
+ * The node at a dotted api path, read through `self` one member at a time.
+ * @param {string} path - The path.
+ * @returns {*} What `self` holds there.
+ */
+const nodeAt = (path) => path.split(".").reduce((node, member) => node[member], self);
+
+/**
+ * Read a dotted api path through `self`: an object as its JSON, anything else as is.
+ * @param {string} path - The path.
+ * @returns {*} The answer, or `{ threw }`.
+ */
+export const readAt = (path) =>
+	answer(() => {
+		const value = nodeAt(path);
+		return value !== null && typeof value === "object" ? { object: JSON.stringify(value) } : value;
+	});
+
+/**
+ * Whether the node at a dotted api path holds a member, as `in` answers it.
+ * @param {string} path - The path.
+ * @param {string} member - The member.
+ * @returns {*} The answer, or `{ threw }`.
+ */
+export const hasAt = (path, member) => answer(() => member in nodeAt(path));
+
+/**
+ * How the node at a dotted api path is listed and serialized.
+ * @param {string} path - The path.
+ * @returns {object} The answers.
+ */
+export const listingsAt = (path) => {
+	const node = nodeAt(path);
+	return {
+		keys: answer(() => Object.keys(node)),
+		spread: answer(() => Object.keys({ ...node })),
+		json: answer(() => JSON.stringify(node)),
+		clone: answer(() => JSON.stringify(structuredClone(node))),
+		entries: answer(() => Object.entries(node).map(([member]) => member))
+	};
+};

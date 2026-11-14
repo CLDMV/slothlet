@@ -1121,6 +1121,24 @@ permissions: { defaultPolicy: "deny", readGating: false, rules: [ /* … */ ] }
 
 A file whose default export is one of these built-ins (`export default new Map()`, `export default new RangeError(…)`) is an api node standing for that value at its path. A rule denying a read of that path refuses every member read through the node — an error's `name`, `message`, `stack` and `cause`, a map's `size` and its methods — as a read of the same value exported by name is refused. A plain object a file exports by default is a namespace: a rule on its path alone leaves its members readable, each gated at its own path.
 
+An object member of a module's data (a plain object or array a file exports by name, or one held inside such a value or inside a file's default export) is hidden by a deny on its exact path. The rule covers the member and everything it holds, as a rule on `path.**` would, so a reader the rule names cannot read what the member holds, and the member is left out of `Object.keys()`, a spread, `JSON.stringify`, `structuredClone`, `v8.serialize` and `postMessage`, as a primitive member it may not read is. A more specific allow beneath the member still lets what it names through: the member is then listed, holding only that.
+
+```javascript
+// owner.mjs
+export const config = { nested: { public: 1, hidden: 2 }, prim: 3 };
+
+// rules: { caller: "reader.**", target: "owner.config.nested", effect: "deny" }
+self.owner.config.nested.hidden; // PERMISSION_DENIED
+Object.keys(self.owner.config); // ["prim"]
+JSON.stringify(self.owner.config); // '{"prim":3}'
+
+// adding { caller: "reader.**", target: "owner.config.nested.public", effect: "allow" }
+self.owner.config.nested.public; // 1
+JSON.stringify(self.owner.config); // '{"nested":{"public":1},"prim":3}'
+```
+
+Reading the member itself stays traversal: `self.owner.config.nested` is an object with nothing the reader may read, and `"nested" in self.owner.config` is true, as it is for a primitive member the reader may not read. Within the rule's coverage it ranks as a rule on `path.**` does, so a rule naming a path beneath the member more specifically decides that path. The rule covers reads of data only: calling a function the member holds is decided by the call rules on the function's own path. A deny on the exact path of a folder, a file (its default export included) or a function is unchanged: it does not cover what is beneath it.
+
 **What is NOT gated:**
 
 - **Namespace traversal** — walking `self.admin` → `.manage` → `.deleteUser` returns child wrappers, not data values, so a `defaultPolicy: "deny"` configuration does **not** need an allow rule for every intermediate path segment.
@@ -1141,7 +1159,7 @@ A frozen or sealed node has these limits, which the language imposes:
 - **A frozen member is checked against whoever reads it.** Elsewhere, a member a module reads keeps that module's identity, so a copy it calls later, from a callback slothlet does not patch, is still checked against that module. A frozen member, like the inspect hook a sealed node holds, must be read as the node holds it, so it is checked against the live caller instead.
 - **A reload gives it a new node.** A sealed or frozen node's keys and values are fixed, so it cannot take what a reload builds. The reloaded module's value gets a new node at the same path; a reference still held to the old one keeps the object it was, as a reference to a replaced object does in plain JavaScript.
 
-Elements of an array member are gated like any other member, including when the array is serialized through its parent: `JSON.stringify(self.secrets)` reads each element of an array it contains through the api, once, as plain JavaScript reads it. It throws `PERMISSION_DENIED` for an element the caller may not read, and leaves out the denied leaves of an object element, as it does for an object member. `util.inspect` of a node reads its members through the api the same way: a member the caller may not read is left out, as `Object.keys()` leaves it out. An object member of a module's data (not a folder, a file or a function) that the rules leave the caller nothing of (a deny on `secrets.config.**`, which covers the member's own path and everything beneath it) is left out of `Object.keys()`, a spread, `JSON.stringify`, `structuredClone`, `v8.serialize` and `postMessage` alike, as a primitive member the caller may not read is, rather than listed and copied as an empty object. A rule on the member's path alone (`secrets.config`) leaves what it holds readable, and the member listed.
+Elements of an array member are gated like any other member, including when the array is serialized through its parent: `JSON.stringify(self.secrets)` reads each element of an array it contains through the api, once, as plain JavaScript reads it. It throws `PERMISSION_DENIED` for an element the caller may not read, and leaves out the denied leaves of an object element, as it does for an object member. `util.inspect` of a node reads its members through the api the same way: a member the caller may not read is left out, as `Object.keys()` leaves it out. An object member of a module's data (not a folder, a file or a function) that the rules leave the caller nothing of (a deny on `secrets.config.**`, which covers the member's own path and everything beneath it) is left out of `Object.keys()`, a spread, `JSON.stringify`, `structuredClone`, `v8.serialize` and `postMessage` alike, as a primitive member the caller may not read is, rather than listed and copied as an empty object. A deny on the member's exact path (`secrets.config`) covers what it holds the same way (see [Read-Level Gating](#read-level-gating)); a more specific allow beneath it leaves the member listed, holding what that allow lets through.
 
 A key the module puts on an array member itself, such as `list.toJSON = () => list[0]` or `list.meta = { … }`, is a member of the array, the same as a member of an object: `secrets.list.toJSON` is call-gated, and `secrets.list.meta`'s leaves are read-gated. `JSON.stringify(list)` therefore throws `PERMISSION_DENIED` for a caller denied that path, rather than letting the function hand over an element the caller may not read. A symbol-keyed member of an array or an object (`node[Symbol.for("tag")]`) is read as in plain JavaScript and gated like its other members. An array's `length` and what it inherits (its methods, `Symbol.iterator`) are read from the array itself.
 

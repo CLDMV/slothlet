@@ -54,6 +54,12 @@ export const derr = new RangeError("out of range", { cause: { code: 7 } });
 export const config = { nested: { a: 1 }, prim: 2, open: { b: 3 } };
 
 /**
+ * Data with an object member holding a primitive, another object and a second primitive, for rules on a member's path.
+ * @type {object}
+ */
+export const ruled = { nested: { public: 1, kept: { deep: 2 }, hidden: 3 }, prim: 4 };
+
+/**
  * What the owner's own objects hold, as the owner reads them.
  * @returns {number[]} The `n` of the object each of its collections holds.
  */

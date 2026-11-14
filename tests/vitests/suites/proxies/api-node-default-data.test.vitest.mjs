@@ -364,9 +364,9 @@ describe.each(guarded)(
 				// A module the rule does not name sees every member, as in plain JavaScript.
 				expect(await api.writer.listings(module, key)).toEqual(listed(plain, []));
 				await api.shutdown();
-				// A rule on the member's path alone leaves what it holds readable, and the member listed.
+				// A rule on the member's path alone covers what a member of a module's data holds, so it is left out too.
 				api = await build([{ caller: "reader.**", target: `${module}.${key}.${member}`, effect: "deny" }]);
-				expect(await api.reader.listings(module, key)).toEqual(listed(plain, []));
+				expect(await api.reader.listings(module, key)).toEqual(listed(plain, [member]));
 			}
 		);
 	}

@@ -254,6 +254,20 @@ function runtime_moduleIDList(moduleIDs) {
 }
 
 /**
+ * No paths: the answer when no rule names a path above a target exactly.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const NO_PREFIXES = Objects.freeze([]);
+
+/**
+ * How many paths the per-epoch records of exact deny rules above a path keep before starting over.
+ * @type {number}
+ * @private
+ */
+const PREFIX_CACHE_LIMIT = 1024;
+
+/**
  * The matcher of one segment of a write pattern, kept per segment.
  * @type {Map<string, function(string): boolean>}
  * @private
@@ -279,19 +293,21 @@ function runtime_segmentMatches(segment, name) {
  * (`!pattern`) reaches everything.
  * @param {string} pattern - The write pattern, without `:write`.
  * @param {string[]} target - The path's segments.
+ * @param {boolean} [beneath=false] - Whether only a path strictly beneath `target` counts.
  * @returns {boolean} Whether it can.
  * @private
  * @example
  * runtime_patternReaches("owner.Foo.prototype.hi", ["owner", "Foo", "prototype"]); // true
+ * runtime_patternReaches("owner.Foo.prototype", ["owner", "Foo", "prototype"], true); // false
  */
-function runtime_patternReaches(pattern, target) {
+function runtime_patternReaches(pattern, target, beneath = false) {
 	if (pattern.startsWith("!") && !pattern.startsWith("!(")) return true;
 	for (const alternative of expandBraces(pattern)) {
 		const segments = alternative.split(".");
 		const seen = new Set();
 		const reaches = (i, j) => {
 			// The whole path matched: what is left of the pattern matches the path itself, or something beneath it.
-			if (j === target.length) return true;
+			if (j === target.length) return !beneath || i < segments.length;
 			if (i === segments.length) return false;
 			const key = i * (target.length + 1) + j;
 			if (seen.has(key)) return false;
@@ -503,6 +519,29 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#sealed = false;
+
+	/**
+	 * The paths a deny call rule names exactly (no glob), kept for the rule epoch: an exact deny on an object member a
+	 * module's data holds covers what the member holds (see {@link enforceAccess}'s `dataMember` option). Null until
+	 * asked for in the current epoch.
+	 * @type {Set<string>|null}
+	 * @private
+	 */
+	#exactDenyTargets = null;
+
+	/**
+	 * The paths above an api path that a deny call rule names exactly, by the path, for the rule epoch.
+	 * @type {Map<string, string[]>}
+	 * @private
+	 */
+	#exactDenyPrefixes = new Map();
+
+	/**
+	 * Whether an allow call rule for a caller can name something beneath a path, by `caller::path`, for the rule epoch.
+	 * @type {Map<string, boolean>}
+	 * @private
+	 */
+	#allowsBeneath = new Map();
 
 	/**
 	 * Cache of resolved caller::target decision records.
@@ -1715,6 +1754,10 @@ export class PermissionManager extends ComponentBase {
 	 *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
 	 * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
 	 *   audit consumer can tell a query from the gate of a real call.
+	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
+	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
+	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
+	 *   allows it.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -1746,7 +1789,8 @@ export class PermissionManager extends ComponentBase {
 				runtimeContext,
 				true,
 				callMeta,
-				options?.moduleCaller === true
+				options?.moduleCaller === true,
+				options?.dataMember ?? null
 			);
 		} finally {
 			this.#principalGrace = priorGrace;
@@ -2929,10 +2973,22 @@ export class PermissionManager extends ComponentBase {
 	 * @param {boolean} [moduleCaller=false] - The caller is a module with no known source file (#508), so a
 	 *   module-private target is denied instead of judged by the host policy. Decided before the cache,
 	 *   so it never affects caching either.
+	 * @param {function(string): boolean|null} [dataMember=null] - For a read of data, whether a path above the target is
+	 *   an object member of a module's data (see {@link enforceAccess}).
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
-	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta, moduleCaller = false) {
+	#resolveAccess(
+		callerPath,
+		targetPath,
+		callerFilePath,
+		targetFilePath,
+		runtimeContext,
+		useCache,
+		callMeta,
+		moduleCaller = false,
+		dataMember = null
+	) {
 		// Global toggle: when off, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation while the system is off
 		// (not disabled), so the built-in deny rule protects the toggle surface.
@@ -2992,14 +3048,21 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
+		// The object members above a data target that a deny rule names exactly: the rule covers what they hold.
+		let inherited = NO_PREFIXES;
+		if (dataMember !== null) {
+			const prefixes = this.#exactDenyPrefixesOf(targetPath);
+			if (prefixes.length !== 0) inherited = prefixes.filter((prefix) => dataMember(prefix));
+		}
+
 		// Check resolved cache
-		const cacheKey = `${callerPath}::${targetPath}`;
+		const cacheKey = inherited.length === 0 ? `${callerPath}::${targetPath}` : `${callerPath}::${targetPath}::${inherited.join("::")}`;
 		let entry;
 		if (useCache && this.#resolvedCache.has(cacheKey)) {
 			entry = this.#resolvedCache.get(cacheKey);
 		} else {
 			// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
-			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta);
+			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta, inherited);
 			// Do NOT cache when any matching rule has a condition — results vary by runtime context
 			if (useCache && !entry.hasConditionalRules) {
 				this.#resolvedCache.set(cacheKey, entry);
@@ -3060,10 +3123,12 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
 	 *   conditions; `null` off the call/construct path.
+	 * @param {string[]} [inherited] - Object members above the target whose exact deny rules cover it, each taken as a
+	 *   rule on `member.**`.
 	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta) {
+	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta, inherited = NO_PREFIXES) {
 		// Collect all path-matching rules
 		const matches = [];
 
@@ -3077,6 +3142,9 @@ export class PermissionManager extends ComponentBase {
 
 			if (callerMatcher(callerPath) && targetMatcher(targetPath)) {
 				matches.push(entry);
+			} else if (inherited.length !== 0 && entry.effect === "deny" && inherited.includes(entry.target) && callerMatcher(callerPath)) {
+				// A deny naming an object member exactly covers what the member holds, ranked as a rule on `member.**`.
+				matches.push({ ...entry, target: `${entry.target}.**`, coveredBy: entry });
 			}
 		}
 
@@ -3117,7 +3185,7 @@ export class PermissionManager extends ComponentBase {
 			payload: {
 				caller: callerPath,
 				target: targetPath,
-				rule: this.#serializeRule(winner),
+				rule: this.#serializeRule(winner.coveredBy ?? winner),
 				conditionMatched: winner.condition != null
 			},
 			hasConditionalRules
@@ -3310,6 +3378,73 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * The paths above `targetPath` that a deny call rule names exactly, deepest first, for the rule epoch.
+	 * @param {string} targetPath - The api path.
+	 * @returns {string[]} The paths.
+	 * @private
+	 */
+	#exactDenyPrefixesOf(targetPath) {
+		let targets = this.#exactDenyTargets;
+		if (targets === null) {
+			targets = new Set();
+			for (const entry of this.#callRules.values()) {
+				if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+				if (entry.effect === "deny" && !/[*?{!]/.test(entry.target)) targets.add(entry.target);
+			}
+			this.#exactDenyTargets = targets;
+		}
+		if (targets.size === 0) return NO_PREFIXES;
+		let prefixes = this.#exactDenyPrefixes.get(targetPath);
+		if (prefixes !== undefined) return prefixes;
+		prefixes = [];
+		for (let end = targetPath.lastIndexOf("."); end > 0; end = targetPath.lastIndexOf(".", end - 1)) {
+			const prefix = targetPath.slice(0, end);
+			if (targets.has(prefix)) prefixes.push(prefix);
+		}
+		if (prefixes.length === 0) prefixes = NO_PREFIXES;
+		// Paths a module's data holds are many; the record is a cache, so it starts over rather than grow without bound.
+		if (this.#exactDenyPrefixes.size >= PREFIX_CACHE_LIMIT) this.#exactDenyPrefixes.clear();
+		this.#exactDenyPrefixes.set(targetPath, prefixes);
+		return prefixes;
+	}
+
+	/**
+	 * Whether an allow rule for `callerPath` names something beneath `path` that a rule on `probePath`, a member of
+	 * `path` no rule names, does not stand for: a more specific allow, which lets what it names through though the rules
+	 * deny the caller the member's path and what it holds otherwise. It answers for what the rules could allow, so it
+	 * errs toward yes: a condition is taken to match. Kept for the rule epoch.
+	 * @param {string|null} callerPath - The caller's api path; null for a caller with none, which nothing allows.
+	 * @param {string} path - The member's api path.
+	 * @param {string} probePath - The path of a member of it no rule names.
+	 * @returns {boolean} Whether such a rule exists.
+	 * @internal
+	 *
+	 * @example
+	 * // rules: deny reader.** → owner.config.nested, allow reader.** → owner.config.nested.public
+	 * pm.allowsBeneath("reader", "owner.config.nested", probe); // true
+	 */
+	allowsBeneath(callerPath, path, probePath) {
+		if (callerPath == null) return false;
+		const key = `${callerPath}::${path}`;
+		let allows = this.#allowsBeneath.get(key);
+		if (allows !== undefined) return allows;
+		allows = false;
+		const segments = path.split(".");
+		for (const entry of this.#callRules.values()) {
+			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+			if (entry.effect !== "allow" || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (this.#getCompiledPattern(entry.target)(probePath)) continue;
+			if (runtime_patternReaches(entry.target, segments, true)) {
+				allows = true;
+				break;
+			}
+		}
+		if (this.#allowsBeneath.size >= PREFIX_CACHE_LIMIT) this.#allowsBeneath.clear();
+		this.#allowsBeneath.set(key, allows);
+		return allows;
+	}
+
+	/**
 	 * Clear the resolved result cache. Called when rules or topology change.
 	 *
 	 * @returns {void}
@@ -3317,6 +3452,9 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#clearCache() {
 		this.#resolvedCache.clear();
+		this.#exactDenyTargets = null;
+		this.#exactDenyPrefixes.clear();
+		this.#allowsBeneath.clear();
 		this.#writeCache.clear();
 		this.#subtreeCache.clear();
 		this.#ruleEpoch++;
