@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,20 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { JSON, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	JSON,
+	Map,
+	Set,
+	Promises,
+	Dates,
+	encodeURIComponent,
+	Number,
+	RegExp,
+	Uint8Array,
+	Buffers,
+	NativeProcess,
+	Processes
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -150,7 +163,7 @@ export async function transformTypeScript(filePath, options = {}) {
 export function createDataUrl(code) {
 	// Use proper JavaScript MIME type
 	const encoded = encodeURIComponent(code);
-	const timestamp = Date.now();
+	const timestamp = Dates.now();
 	return `data:text/javascript;charset=utf-8,${encoded}#t=${timestamp}`;
 }
 
@@ -200,7 +213,7 @@ function findPackageRoot(startPath) {
  */
 function isProcessAlive(pid) {
 	try {
-		process.kill(pid, 0);
+		Processes.kill(pid, 0);
 		return true;
 	} catch (err) {
 		// Fail-safe: only a confirmed ESRCH means dead; anything else → alive.
@@ -263,7 +276,7 @@ const LEGACY_FALLBACK_MIN_AGE_MS = 24 * 60 * 60 * 1000;
  * @private
  */
 function getSecureFallbackRoot() {
-	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${process.pid}-`)));
+	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${NativeProcess.pid}-`)));
 }
 
 /**
@@ -274,7 +287,7 @@ function getSecureFallbackRoot() {
  * @private
  */
 function ownedByCurrentUser(stats) {
-	return typeof process.getuid !== "function" || stats.uid === process.getuid();
+	return typeof Processes.getuid !== "function" || stats.uid === Processes.getuid();
 }
 
 /**
@@ -298,7 +311,7 @@ export async function sweepStaleFallbackRoots() {
 	} catch {
 		return;
 	}
-	const now = Date.now();
+	const now = Dates.now();
 	await Promises.allSettled(
 		entries.map(async (entry) => {
 			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
@@ -311,7 +324,7 @@ export async function sweepStaleFallbackRoots() {
 			if (!stats.isDirectory() || !ownedByCurrentUser(stats)) return;
 			if (owned) {
 				const pid = Number(owned[1]);
-				if (pid === process.pid || isProcessAlive(pid)) return;
+				if (pid === NativeProcess.pid || isProcessAlive(pid)) return;
 			} else {
 				if (now - stats.mtimeMs < LEGACY_FALLBACK_MIN_AGE_MS) return;
 				let caches = [];
@@ -378,7 +391,7 @@ function sweepStaleSlothletCache(projectRoot) {
 		} catch {
 			return;
 		}
-		const currentPid = process.pid;
+		const currentPid = NativeProcess.pid;
 		await Promises.allSettled(
 			entries.map(async (entry) => {
 				if (!entry.isDirectory()) return;
@@ -763,7 +776,7 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const projectRoot = packageRoot ?? getSecureFallbackRoot();
 		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
 		await sweepStaleSlothletCache(projectRoot);
-		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${instanceID}`);
 		await mkdir(cacheDir, { recursive: true });
 		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
 	} finally {
@@ -1000,7 +1013,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  */
 function convertCompilerOptions(ts, compilerOptions) {
 	if (!compilerOptions) return {};
-	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, process.cwd());
+	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, Processes.cwd());
 	if (errors.length > 0) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
@@ -1030,10 +1043,10 @@ function convertCompilerOptions(ts, compilerOptions) {
 function withAbsoluteMapSource(code, absolutePath) {
 	const marker = "//# sourceMappingURL=data:application/json;base64,";
 	const index = code.lastIndexOf(marker);
-	const map = JSON.parse(Buffer.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
+	const map = JSON.parse(Buffers.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
 	map.sources = [absolutePath];
 	delete map.sourceRoot;
-	return code.slice(0, index) + marker + Buffer.from(JSON.stringify(map), "utf8").toString("base64");
+	return code.slice(0, index) + marker + Buffers.from(JSON.stringify(map), "utf8").toString("base64");
 }
 
 /**

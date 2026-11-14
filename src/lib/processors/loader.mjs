@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T15:32:47-07:00 (1791844367)
+ *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,18 @@ import {
 	HELPERS_PER_MODULE
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { createModuleLoad } from "#handlers/frame-placement";
-import { Objects, Arrays, JSON, Map, Set, Promise, URL } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Objects,
+	Arrays,
+	JSON,
+	Map,
+	Set,
+	Promise,
+	URL,
+	encodeURIComponent,
+	String,
+	NativeProcess
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
@@ -131,7 +142,7 @@ export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vi
  * `NODE_V8_COVERAGE`, which Node itself honours to write coverage (and each loaded module's source
  * map) for the process.
  */
-export function isCoverageRun({ worker = globalThis.__vitest_worker__, env = globalThis.process?.env } = {}) {
+export function isCoverageRun({ worker = globalThis.__vitest_worker__, env = NativeProcess?.env } = {}) {
 	if (worker?.config?.coverage?.enabled === true) return true;
 	return typeof env?.NODE_V8_COVERAGE === "string" && env.NODE_V8_COVERAGE.length > 0;
 }
@@ -515,7 +526,7 @@ export class Loader extends ComponentBase {
 						await new Promise((resolve, reject) => {
 							const child = fork(scriptPath, [], {
 								stdio: ["pipe", "pipe", "pipe", "ipc"],
-								env: { ...process.env, SLOTHLET_CONFIG: childConfig }
+								env: { ...NativeProcess.env, SLOTHLET_CONFIG: childConfig }
 							});
 
 							let errorOutput = "";

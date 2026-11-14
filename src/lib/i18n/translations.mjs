@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // browser static graph (#123). The default (en-us) is bundled via the JSON import above; additional
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Set, Boolean, RegExp, String, navigator, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Get current directory path
@@ -199,7 +199,7 @@ function i18n_detectLanguage() {
 		return navLang ? i18n_normalizeEnvLanguage(navLang) : "en-us";
 	}
 	// Try environment variables
-	const envLang = process.env.LANG || process.env.LANGUAGE || process.env.LC_ALL;
+	const envLang = NativeProcess.env.LANG || NativeProcess.env.LANGUAGE || NativeProcess.env.LC_ALL;
 	if (envLang) {
 		return i18n_normalizeEnvLanguage(envLang);
 	}
@@ -257,7 +257,8 @@ export function setLanguage(lang) {
 		currentLanguage = lang;
 	} else {
 		// If language load failed, warn and use English
-		console.warn(`Failed to load language '${lang}', falling back to English.`);
+		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+		globalThis.console.warn(`Failed to load language '${lang}', falling back to English.`);
 		currentLanguage = "en-us";
 	}
 }
@@ -299,7 +300,8 @@ export async function setLanguageAsync(lang) {
 		currentTranslations = { ...currentTranslations, ...langData.translations };
 		currentLanguage = lang;
 	} else {
-		console.warn(`Failed to load language '${lang}', falling back to English.`);
+		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+		globalThis.console.warn(`Failed to load language '${lang}', falling back to English.`);
 		currentLanguage = "en-us";
 	}
 }
@@ -361,7 +363,8 @@ export function initI18n(options = {}) {
 		setLanguage(lang);
 	} catch (___error) {
 		// Silently fall back to en-us if initialization fails
-		console.warn("i18n initialization failed, using English:", ___error.message);
+		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+		globalThis.console.warn("i18n initialization failed, using English:", ___error.message);
 		currentLanguage = "en-us";
 		currentTranslations = defaultTranslations.translations;
 	}

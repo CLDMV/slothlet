@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T21:05:50-08:00 (1794287150)
+ *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,9 @@ import {
 	Set,
 	WeakMap,
 	WeakSet,
-	URL
+	URL,
+	Dates,
+	String
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -3193,7 +3195,7 @@ export class ApiBuilder extends ComponentBase {
 									ownerModuleID,
 									ruleId,
 									layer: ruleLayer,
-									timestamp: Date.now()
+									timestamp: Dates.now()
 								});
 							}
 							return ruleId;
@@ -3227,7 +3229,7 @@ export class ApiBuilder extends ComponentBase {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
-									timestamp: Date.now()
+									timestamp: Dates.now()
 								});
 							}
 							return result;
@@ -3433,7 +3435,7 @@ export class ApiBuilder extends ComponentBase {
 							ownerModuleID,
 							ruleId,
 							layer,
-							timestamp: Date.now()
+							timestamp: Dates.now()
 						});
 					}
 
@@ -3484,7 +3486,7 @@ export class ApiBuilder extends ComponentBase {
 							type: "removePermissionRule",
 							ruleId,
 							callerModuleID,
-							timestamp: Date.now()
+							timestamp: Dates.now()
 						});
 					}
 
@@ -3559,7 +3561,7 @@ export class ApiBuilder extends ComponentBase {
 								name,
 								definition,
 								ownerModuleID,
-								timestamp: Date.now()
+								timestamp: Dates.now()
 							});
 						}
 					},
@@ -3598,7 +3600,7 @@ export class ApiBuilder extends ComponentBase {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
-								timestamp: Date.now()
+								timestamp: Dates.now()
 							});
 						}
 						return result;
@@ -4538,7 +4540,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4640,7 +4642,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,

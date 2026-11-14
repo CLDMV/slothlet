@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import path from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { Objects, Arrays, JSON, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, JSON, Set, Boolean, Date } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.

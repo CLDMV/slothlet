@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:53-07:00 (1791424193)
+ *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
-import { Objects, JSON, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, JSON, Symbols, Error, Errors, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -136,7 +136,7 @@ export class SlothletError extends Error {
 			writable: false
 		});
 
-		Error.captureStackTrace(this, SlothletError);
+		Errors.captureStackTrace(this, SlothletError);
 	}
 
 	/**
@@ -230,15 +230,16 @@ export class SlothletWarning {
 
 		// Emit warning to console unless suppressed
 		if (!SlothletWarning.suppressConsole) {
-			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
 			// Show context if provided (exclude synthetic 'key' field from display)
 			if (Objects.keys(contextData).length > 0) {
-				console.warn("Context:", contextData);
+				globalThis.console.warn("Context:", contextData);
 			}
 
 			if (hasCause) {
-				console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
+				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
@@ -326,19 +327,20 @@ export class SlothletDebug {
 		// Format label
 		const label = `[DEBUG:${code.toUpperCase()}]`;
 
+		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 		if (hasTranslation) {
-			console.log(`${label} ${translatedMessage}`);
+			globalThis.console.log(`${label} ${translatedMessage}`);
 		} else if (message) {
 			// Backwards compat: raw message string (no key provided, no category key found)
-			console.log(`${label} ${message}`);
+			globalThis.console.log(`${label} ${message}`);
 		} else {
 			// No message or translation - dump raw context
-			console.log(label, contextParams);
+			globalThis.console.log(label, contextParams);
 		}
 
 		// Show interpolation params / extra context if present (never show 'key' or 'message')
 		if ((hasTranslation || message) && Objects.keys(contextParams).length > 0) {
-			console.log(`${label} Context:`, contextParams);
+			globalThis.console.log(`${label} Context:`, contextParams);
 		}
 	}
 

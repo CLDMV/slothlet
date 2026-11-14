@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T14:53:02-07:00 (1792360382)
+ *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey, runtime_frameworkWrite } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, markFrameworkInternal } from "#handlers/framework-internals";
-import { Objects, Map, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Map, Set, Error, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Manages unified API assignment logic

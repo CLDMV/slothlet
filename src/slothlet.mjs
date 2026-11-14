@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:23:07-08:00 (1794183787)
+ *	@Last modified time: 2026-11-13T21:48:11-08:00 (1794635291)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,7 +117,7 @@ import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defa
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, Dates, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -849,7 +849,7 @@ class Slothlet {
 				if (this.handlers?.lifecycle) {
 					this.handlers.lifecycle.emit("materialized:complete", {
 						total: this._totalLazyCount,
-						timestamp: Date.now()
+						timestamp: Dates.now()
 					});
 				}
 			}
@@ -886,12 +886,12 @@ class Slothlet {
 		const useAllowlist = include !== null && include.length > 0;
 		const raw = useAllowlist
 			? include.reduce((acc, key) => {
-					if (Objects.prototype.hasOwnProperty.call(process.env, key)) {
-						acc[key] = process.env[key];
+					if (Objects.prototype.hasOwnProperty.call(NativeProcess.env, key)) {
+						acc[key] = NativeProcess.env[key];
 					}
 					return acc;
 				}, Objects.create(null))
-			: { ...process.env };
+			: { ...NativeProcess.env };
 		return Objects.freeze(raw);
 	}
 
@@ -1140,7 +1140,7 @@ class Slothlet {
 				/* v8 ignore next */
 				collisionMode: this.config.collision?.initial || "merge",
 				config: { ...this.config },
-				timestamp: Date.now()
+				timestamp: Dates.now()
 			});
 		}
 
@@ -1306,7 +1306,7 @@ class Slothlet {
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
-			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+			this.instanceID = `${oldInstanceID}_reload_${Dates.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			forgetInstanceScripts(oldInstanceID);
 			this.#releaseImportScope();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:30:56-08:00 (1794555056)
+ *	@Last modified time: 2026-11-13T21:49:22-08:00 (1794635362)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  *
  * @module tests/vitests/suites/helpers/instance-imports-two-copies
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -148,15 +148,16 @@ describe("Helpers > instance-imports > an instance ID something else holds", () 
 	it("refuses to load an instance's files under it", async () => {
 		const api = await slothlet({ base: DIR, silent: true });
 		const instanceID = api.slothlet.instanceID;
-		// A full reload gives the instance a new ID, made from the old one and the time: claimed here first.
-		const now = vi.spyOn(Date, "now").mockReturnValue(1790000000000);
-		const taken = first.claimInstanceScope(`${instanceID}_reload_1790000000000`);
+		// A full reload gives the instance a new ID, made from the old one and the time: claimed here first, for every
+		// millisecond of the next minute (slothlet reads the time with the Date.now it loaded with, so it cannot be faked).
+		const start = Date.now();
+		const taken = [];
+		for (let time = start; time < start + 60000; time++) taken.push(first.claimInstanceScope(`${instanceID}_reload_${time}`));
 		try {
-			expect(taken).not.toBe(null);
+			expect(taken.every((handle) => handle !== null)).toBe(true);
 			await expect(api.slothlet.reload()).rejects.toMatchObject({ code: "INSTANCE_ID_IN_USE" });
 		} finally {
-			now.mockRestore();
-			taken?.release();
+			for (const handle of taken) handle?.release();
 			await api.shutdown().catch(() => {});
 		}
 	});
