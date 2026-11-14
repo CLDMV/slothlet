@@ -110,6 +110,13 @@ import {
 	RegExp,
 	String,
 	TypeError,
+	EvalError,
+	RangeError,
+	ReferenceError,
+	SyntaxError,
+	URIError,
+	AggregateError,
+	BigInt,
 	ArrayBuffers,
 	ArrayBuffer,
 	DataView,
@@ -733,13 +740,17 @@ const DATA_KINDS = (() => {
 		["sharedarraybuffer", brand("isSharedArrayBuffer", typeof SharedArrayBuffer === "function" ? SharedArrayBuffer : null)],
 		["arraybuffer", brand("isArrayBuffer", ArrayBuffer)],
 		// No brand check exists for a WeakRef, and reading its tag would run a proxy's traps: this realm's only.
-		["weakref", (value) => runtime_isWeakRef(value)]
+		["weakref", (value) => runtime_isWeakRef(value)],
+		["error", brand("isNativeError", Error)],
+		// A `String`, `Number`, `Boolean`, `BigInt` or `Symbol` object. A realm without the brand check has no way to ask.
+		["boxed", typeof types.isBoxedPrimitive === "function" ? (value) => types.isBoxedPrimitive(value) : () => false]
 	];
 })();
 
 /**
  * Which kind of data object `value` is (#625): `"map"`, `"set"`, `"weakmap"`, `"weakset"`, `"date"`, `"regexp"`,
- * `"promise"`, `"dataview"`, `"typedarray"`, `"sharedarraybuffer"`, `"arraybuffer"`, `"weakref"` — or null for none.
+ * `"promise"`, `"dataview"`, `"typedarray"`, `"sharedarraybuffer"`, `"arraybuffer"`, `"weakref"`, `"error"`, `"boxed"` (a
+ * `String`, `Number`, `Boolean`, `BigInt` or `Symbol` object) — or null for none.
  * @param {*} value - A value.
  * @returns {string|null} Its kind.
  * @private
@@ -911,6 +922,19 @@ const ENGINE_DATA_PROTOTYPES = new Set(
 		DataView.prototype,
 		Promise.prototype,
 		typeof WeakRef === "function" ? WeakRef.prototype : null,
+		Error.prototype,
+		EvalError.prototype,
+		RangeError.prototype,
+		ReferenceError.prototype,
+		SyntaxError.prototype,
+		TypeError.prototype,
+		URIError.prototype,
+		typeof AggregateError === "function" ? AggregateError.prototype : null,
+		String.prototype,
+		Number.prototype,
+		Boolean.prototype,
+		typeof BigInt === "function" ? BigInt.prototype : null,
+		Symbol.prototype,
 		Reflect.getPrototypeOf(Uint8Array.prototype),
 		...[
 			Int8Array,
@@ -1069,6 +1093,8 @@ function runtime_isDataReader(value, name) {
 		return name === Symbol.toPrimitive || (typeof name === "string" && (name.startsWith("get") || name.startsWith("to")));
 	if (kind === "dataview") return typeof name === "string" && name.startsWith("get");
 	if (kind === "typedarray") return TYPED_ARRAY_READERS.has(name);
+	// A boxed primitive never changes: every method of its kind reads it.
+	if (kind === "boxed") return true;
 	return DATA_READERS.get(kind)?.has(name) ?? false;
 }
 
@@ -16038,6 +16064,17 @@ export class UnifiedWrapper extends ComponentBase {
 			if (currentImpl !== null && typeof currentImpl === "object") {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
+				// A built-in data object keeps what it holds out of its own listing as plain JavaScript does: a member it holds
+				// non-enumerable (an error's `cause`, an aggregate error's `errors`) is read from it as data, not made a child
+				// node, which `Object.keys()` would then list.
+				if (
+					runtime_holdsDataKind(currentImpl) &&
+					hasOwn(currentImpl, prop) &&
+					!Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)
+				) {
+					runtime_enforceCodeMember(wrapper, value, kept);
+					return value;
+				}
 			}
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
