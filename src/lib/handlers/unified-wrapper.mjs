@@ -8779,6 +8779,79 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 }
 
 /**
+ * A segment no api path holds, standing for every member beneath a path in {@link runtime_readsNothingBeneath}.
+ * @type {string}
+ * @private
+ */
+const ANY_MEMBER_SEGMENT = "\u0000member";
+
+/**
+ * Whether each node holds an object member of a module's data, by the value it held when asked.
+ * @type {WeakMap<object, {impl: *, member: boolean}>}
+ * @private
+ */
+const DATA_MEMBER_NODES = new WeakMap();
+
+/**
+ * Whether a node stands for an object member of a module's data: a plain object or array a file exports by name, or
+ * one such a value holds, or one a file's default export holds. A folder, a file's own node (its default export
+ * included), a function, a built-in data value and a value no file exported are not. A rule naming such a member's
+ * path exactly is about the member, so it covers what the member holds, as reading the member itself is traversal.
+ * Decided once per value the node holds.
+ * @param {object|null} wrapper - The node's wrapper, or null when no node is there.
+ * @returns {boolean} Whether it is one.
+ * @private
+ *
+ * @example
+ * // owner.mjs: export const config = { nested: { a: 1 } };
+ * runtime_isDataMemberNode(nodeOf("owner.config.nested")); // true
+ * runtime_isDataMemberNode(nodeOf("owner")); // false
+ */
+function runtime_isDataMemberNode(wrapper) {
+	if (wrapper === null) return false;
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	const known = DATA_MEMBER_NODES.get(wrapper);
+	if (known !== undefined && known.impl === impl) return known.member;
+	const exportPath = internal.exportPath;
+	const member =
+		!internal.isCallable &&
+		impl !== null &&
+		typeof impl === "object" &&
+		!runtime_isTerminalData(impl) &&
+		Arrays.isArray(exportPath) &&
+		exportPath.length > (exportPath[0] === "default" ? 1 : 0);
+	DATA_MEMBER_NODES.set(wrapper, { impl, member });
+	return member;
+}
+
+/**
+ * Whether the rules leave a reader nothing to read at the path of an object member of a module's data (see
+ * {@link runtime_isDataMemberNode}): a read there is refused, and so is a
+ * read of any member beneath it (`config.nested.**`). Such a member is no data the reader may see, and is left out of
+ * what lists or serializes the object holding it, as a member holding a value the reader may not read is. A rule on the
+ * path alone (`config.nested`) leaves what is beneath it readable, and the member listed.
+ * @param {object} wrapper - The node whose member it is.
+ * @param {string} targetPath - The member's api path.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+ * @param {object|null} [access] - The read of `self` this is part of, when it was resolved already.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ *
+ * @example
+ * // rule: deny reader.** → owner.config.nested.**
+ * Object.keys(self.owner.config); // ["prim", "open"], as for a denied primitive member
+ */
+function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null) {
+	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
+	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say.
+	if (!runtime_isDataMemberNode(runtime_nodeAtPath(wrapper.slothlet, targetPath))) return false;
+	return !runtime_readGateDecision(wrapper, `${targetPath}.${ANY_MEMBER_SEGMENT}`, callerOverride, kept, access).allowed;
+}
+
+/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -8821,8 +8894,14 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	// it, and a read of it is refused to a caller the rules deny, so `Object.keys` and a spread leave it out as
 	// `JSON.stringify` and `toJSON` do. Its description is still given, and running the getter it holds is refused.
 	const isAccessor = listing && !("value" in desc) && typeof desc.get === "function";
-	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	// An object member the rules leave the reader nothing of is listed no more than a value it may not read is.
+	if (listing && "value" in desc && typeof prop === "string") {
+		const member = runtime_unwrapLeafValue(desc.value);
+		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member))
+			return runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access);
+	}
+	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
 	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
 }
 
@@ -8993,6 +9072,9 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
 			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
+		} else if (value !== null && typeof value === "object" && runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
+			// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
+			delete own()[key];
 		} else if (Arrays.isArray(value)) {
 			own()[key] = node[key];
 		} else {

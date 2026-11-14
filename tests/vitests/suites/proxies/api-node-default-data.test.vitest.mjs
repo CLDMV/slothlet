@@ -316,3 +316,58 @@ describe.each(answering)(
 		});
 	}
 );
+
+describe.each(guarded)(
+	"an object member a reader may read nothing of > $mode / $runtime / $attribution",
+	({ mode, runtime, attribution }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+		});
+
+		const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+
+		/**
+		 * How plain JavaScript lists and serializes an object with some members left out.
+		 * @param {object} value - The object.
+		 * @param {string[]} left - The members left out.
+		 * @returns {object} The listings, as the fixture's `listings` gives them.
+		 */
+		const listed = (value, left) => {
+			const kept = Object.fromEntries(Object.entries(value).filter(([member]) => !left.includes(member)));
+			return {
+				keys: Object.keys(kept),
+				spread: Object.keys({ ...kept }),
+				json: JSON.stringify(kept),
+				clone: JSON.stringify(structuredClone(kept)),
+				entries: Object.keys(kept)
+			};
+		};
+
+		it.each([
+			{ module: "owner", key: "config", member: "nested", primitive: "prim" },
+			{ module: "single", key: "dconfig", member: "one", primitive: "level" }
+		])(
+			"is left out of listings and serialization, as a primitive member it may not read is: $module / $key",
+			async ({ module, key, member, primitive }) => {
+				const plain =
+					module === "owner"
+						? (await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin-listed`)).config
+						: (await import(`${pathToFileURL(join(FIXTURE, "single", "dconfig.mjs")).href}?plain-twin-listed`)).default;
+				api = await build([{ caller: "reader.**", target: `${module}.${key}.${primitive}`, effect: "deny" }]);
+				expect(await api.reader.listings(module, key)).toEqual(listed(plain, [primitive]));
+				await api.shutdown();
+				api = await build([{ caller: "reader.**", target: `${module}.${key}.${member}.**`, effect: "deny" }]);
+				expect(await api.reader.listings(module, key)).toEqual(listed(plain, [member]));
+				// A module the rule does not name sees every member, as in plain JavaScript.
+				expect(await api.writer.listings(module, key)).toEqual(listed(plain, []));
+				await api.shutdown();
+				// A rule on the member's path alone leaves what it holds readable, and the member listed.
+				api = await build([{ caller: "reader.**", target: `${module}.${key}.${member}`, effect: "deny" }]);
+				expect(await api.reader.listings(module, key)).toEqual(listed(plain, []));
+			}
+		);
+	}
+);
