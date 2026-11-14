@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:04:39-07:00 (1791835479)
+ *	@Last modified time: 2026-11-13T17:24:28-08:00 (1794619468)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -576,28 +576,50 @@ export class ModesProcessor extends ComponentBase {
 		const atMountLevel = (isRoot && !populateDirectly) || (populateDirectly && transparent);
 		const levelPath = atMountLevel ? apiPathPrefix : (ownPath ?? (apiPathPrefix ? `${apiPathPrefix}.${categoryName}` : categoryName));
 
+		// The folder the mount's direct child named like the mount's last segment is built from, Rule 22 applied: the
+		// transparent folder itself when this call pours it in, or found among the mount root's folders.
+		let mountChildFolder = null;
+		if (apiPathPrefix && populateDirectly && transparent) {
+			mountChildFolder = directory.path;
+		} else if (apiPathPrefix && isRoot && !populateDirectly) {
+			const sanitize = this.slothlet.helpers.sanitize;
+			const mountLeaf = sanitize.sanitizePropertyName(apiPathPrefix.split(".").pop());
+			const sameNamed = directory.children.directories.find((scanned) => sanitize.sanitizePropertyName(scanned.name) === mountLeaf);
+			mountChildFolder = sameNamed ? this.#collapseSameNamedFolder(sameNamed).path : null;
+		}
+
 		/**
 		 * Whether `addApiComponent` hoists an entry placed on the mount's level under the mount's last segment onto
 		 * the mount itself (Rule 13, F08/C25). It does when the entry comes from a direct child of the mounted folder:
-		 * a file at its root, or a file or folder directly inside its subfolder of that name. The test is the one
-		 * `addApiComponent` applies to the entry's file path, so the path recorded here is the path it ends up at.
+		 * a file at its root, or a file directly inside its subfolder of that name, which is the folder Rule 22 leaves
+		 * standing for it (`e/e/e.mjs` mounted at `e` is `e.a`, as `e/e.mjs` is). A folder is never hoisted: the one
+		 * named like the mount at its root is poured in as it is (never placed under the key), and one of that name
+		 * inside it is a nested namespace (`c/z.mjs` + `c/c/x.mjs` mounted at `c` is `c.z` and `c.c.x`). The node
+		 * placed for the hoist records the mount path, and `addApiComponent` hoists exactly the node that does, so the
+		 * path recorded here is the path it ends up at.
 		 * @param {string|null|undefined} filePath - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
 		 * @returns {boolean} Whether it is hoisted.
 		 */
-		const hoistedOntoMount = (filePath) => {
+		const hoistedOntoMount = (filePath, isFolder = false) => {
+			if (isFolder) return false;
 			if (typeof filePath !== "string" || typeof sourceFolder !== "string") return true;
-			const entryDir = filePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
-			const mountFolder = sourceFolder.replace(/\\/g, "/").replace(/\/$/, "");
-			return entryDir === mountFolder || entryDir === `${mountFolder}/${apiPathPrefix.split(".").pop()}`;
+			const normalize = (value) => value.replace(/\\/g, "/").replace(/\/$/, "");
+			const entryDir = normalize(filePath).split("/").slice(0, -1).join("/");
+			const mountFolder = normalize(sourceFolder);
+			const childFolder =
+				typeof mountChildFolder === "string" ? normalize(mountChildFolder) : `${mountFolder}/${apiPathPrefix.split(".").pop()}`;
+			return entryDir === mountFolder || entryDir === childFolder;
 		};
 
 		/**
 		 * The path of an entry placed on the mount's level under `key`.
 		 * @param {string} key - The key the entry is assigned under.
 		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
 		 * @returns {string} Its api path.
 		 */
-		const rootKeyPath = (key, filePath = null) => {
+		const rootKeyPath = (key, filePath = null, isFolder = false) => {
 			if (!apiPathPrefix) return key;
 			// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly at the mount
 			// path, so the level named after the file is never on the api and contributes no segment.
@@ -607,7 +629,7 @@ export class ModesProcessor extends ComponentBase {
 			// `exts.alpha.op`, never `exts.alpha.alpha.op`. That level does not exist on the api and contributes no
 			// segment; leaving it in produced a path no caller could reach (#243). An entry it leaves in place
 			// (one from deeper in the folder) keeps its segment.
-			if (key === apiPathPrefix.split(".").pop() && hoistedOntoMount(filePath)) return apiPathPrefix;
+			if (key === apiPathPrefix.split(".").pop() && hoistedOntoMount(filePath, isFolder)) return apiPathPrefix;
 			return `${apiPathPrefix}.${key}`;
 		};
 
@@ -615,9 +637,10 @@ export class ModesProcessor extends ComponentBase {
 		 * The path of an entry this directory places on its level under `key`.
 		 * @param {string} key - The key the entry is assigned under.
 		 * @param {string|null} [filePath=null] - The file or folder the entry's node is built from.
+		 * @param {boolean} [isFolder=false] - Whether the entry is a folder.
 		 * @returns {string} Its api path.
 		 */
-		const memberPath = (key, filePath = null) => {
+		const memberPath = (key, filePath = null, isFolder = false) => {
 			if (atMountLevel) {
 				// A transparent folder's self-named file is a node of its own on the mount's level; what the folder
 				// places after it goes on that node, beneath its path.
@@ -626,7 +649,7 @@ export class ModesProcessor extends ComponentBase {
 				// An entry merged into a node already at the key sits where that node does.
 				const existing = modes_effectiveCollisionMode === "replace" ? null : resolveWrapper(readApiMember(api, key));
 				if (existing && typeof existing.____slothletInternal.apiPath === "string") return existing.____slothletInternal.apiPath;
-				return rootKeyPath(key, filePath);
+				return rootKeyPath(key, filePath, isFolder);
 			}
 			return levelPath ? `${levelPath}.${key}` : key;
 		};
@@ -2297,7 +2320,7 @@ export class ModesProcessor extends ComponentBase {
 						collisionModeOverride,
 						false, // rootUnwrap
 						false, // transparent
-						memberPath(subDirName, subDir.path) // the level this subdirectory is placed at
+						memberPath(subDirName, subDir.path, true) // the level this subdirectory is placed at
 					);
 				}
 			} else {
@@ -2343,7 +2366,7 @@ export class ModesProcessor extends ComponentBase {
 					// prefix whenever a categoryName was present (truncating nested lazy folders) and,
 					// at a mount root, appended the mount leaf a second time — producing the phantom
 					// `config.config.*` that the Rule 13 hoist then removed from the surface (#243).
-					const apiPath = memberPath(subDirName, subDir.path);
+					const apiPath = memberPath(subDirName, subDir.path, true);
 					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",

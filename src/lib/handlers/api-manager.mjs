@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T01:51:32-08:00 (1793785892)
+ *	@Last modified time: 2026-11-13T17:24:28-08:00 (1794619468)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3274,10 +3274,14 @@ export class ApiManager extends ComponentBase {
 		//   1. normalizedPath is non-empty (not a root-level add)
 		//   2. newApi contains a key equal to the last segment of normalizedPath
 		//   3. The value at that key is an object or function (a real namespace, not a primitive)
-		//   4. The matching value originates from a direct child of the mounted directory:
-		//      a) A FILE at the root of the mounted folder (config.mjs → dupFileDir === resolvedFolderPath)
-		//      b) A DIRECT subfolder of the mounted directory (config/ → dupFileDir === resolvedFolderPath/lastPart)
-		//      Deeper paths (e.g. services/services/services.mjs) match neither and are correctly rejected.
+		//   4. The matching value comes from a direct child of the mounted directory: a FILE at its root
+		//      (config.mjs), or a file of its subfolder of that name (config/config.mjs), that subfolder being the one
+		//      Rule 22 leaves standing for it (config/config/config.mjs when config/ holds nothing else). A FOLDER of
+		//      that name inside the hoisted one is a nested namespace and stays (config/z.mjs + config/config/x.mjs is
+		//      config.z and config.config.x).
+		//   The builder decides (4) as it places the entry and records the mount path itself on a node this hoists
+		//   (modes-processor's `hoistedOntoMount`); the node's recorded path is read here, so the tree and the recorded
+		//   path cannot disagree (#743).
 		if (!isFile && normalizedPath) {
 			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
 			if (lastPart && Objects.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
@@ -3286,25 +3290,12 @@ export class ApiManager extends ComponentBase {
 				// dupValue from buildAPI is always a wrapper proxy (object/function); null and non-object arms unreachable.
 				/* v8 ignore next */
 				if (dupValue !== null && (dupType === "object" || dupType === "function")) {
-					// Verify the value came from a direct subfolder of the mounted directory.
-					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
-					// This prevents hoisting deeper subfolders that share the mount-path name
-					// (e.g. services/services/ inside a "services" mount).
+					// The builder recorded the mount path itself on a node it places for this hoist; any other node at
+					// the key keeps its own segment (a folder nested in the hoisted one, an entry from deeper down).
 					const dupWrapper = resolveWrapper(dupValue);
-					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
-					// dupFilePath is always set on a wrapper proxy from buildAPI; null fallback is unreachable.
+					// dupValue from buildAPI is always a wrapper proxy; the optional arms are defensive.
 					/* v8 ignore next */
-					const dupFileDir = dupFilePath ? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : null;
-					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
-					const expectedDir = normalizedFolderPath + "/" + lastPart;
-					// Accept two cases:
-					// 1. dupFileDir === expectedDir: the value came from a direct subfolder
-					//    (e.g. config/config.mjs inside a "config" mount)
-					// 2. dupFileDir === normalizedFolderPath: the value came from a file at the
-					//    root of the mounted folder (e.g. config.mjs inside a "config" mount)
-					// Deeper paths (e.g. services/services/services.mjs) match neither and are
-					// correctly rejected.
-					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
+					const isDirectChild = dupWrapper?.____slothletInternal?.apiPath === effectivePath;
 
 					if (isDirectChild) {
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
