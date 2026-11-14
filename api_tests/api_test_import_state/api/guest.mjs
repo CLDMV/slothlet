@@ -52,6 +52,32 @@ async function reaches(attempt) {
 }
 
 /**
+ * Slothlet's own module that keeps the record, or null where slothlet refuses this file's import of it (slothlet's
+ * own files are slothlet's): the attempts through its functions then reach nothing, and those through the shared
+ * object are still made.
+ * @returns {Promise<object|null>} The module, or null.
+ */
+async function recordModule() {
+	try {
+		return await import("@cldmv/slothlet/helpers/instance-imports");
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * A record of importers as text, read through whatever it offers a reader.
+ * @param {*} graph - The record, or nothing.
+ * @returns {string|null} The record, as text, or null for none.
+ */
+function recordText(graph) {
+	if (!graph || typeof graph.keys !== "function") return null;
+	const edges = [];
+	for (const file of graph.keys()) edges.push([file, [...(graph.get?.(file) ?? [])].sort()]);
+	return JSON.stringify(edges.sort());
+}
+
+/**
  * What the record says about this instance, as slothlet's own module reports it.
  * @param {object} lib - Slothlet's module that keeps the record.
  * @returns {string} The record, as text.
@@ -64,6 +90,16 @@ function snapshot(lib) {
 }
 
 /**
+ * Whether this file may import slothlet's own module that keeps the record.
+ * @function importable
+ * @memberof module:api_test_import_state.guest
+ * @returns {Promise<boolean>} True when the import loads.
+ * @example
+ * await api.guest.importable(); // false
+ */
+export const importable = async () => (await recordModule()) !== null;
+
+/**
  * Try every way this module has to change what slothlet keeps about the instance's files.
  * @function reach
  * @memberof module:api_test_import_state.guest
@@ -73,8 +109,8 @@ function snapshot(lib) {
  */
 export const reach = async () => {
 	const reached = [];
-	const lib = await import("@cldmv/slothlet/helpers/instance-imports");
-	const before = snapshot(lib);
+	const lib = await recordModule();
+	const before = lib === null ? null : snapshot(lib);
 	const helperFiles = [slashPath("../helpers/reader.mjs"), slashPath("../helpers/reader.cjs"), filePath("../helpers/reader.cjs")];
 	const attempts = {};
 	for (const state of sharedObjects()) {
@@ -107,6 +143,8 @@ export const reach = async () => {
 		// The record of which files import a helper.
 		attempts["state.graphs"] = () => {
 			const importers = [state.graphs?.get?.(INSTANCE), state.imports?.of?.(INSTANCE)];
+			const recorded = () => importers.map((graph) => recordText(graph));
+			const was = JSON.stringify(recorded());
 			let found = false;
 			for (const graph of importers) {
 				for (const file of helperFiles) {
@@ -119,7 +157,8 @@ export const reach = async () => {
 				graph?.delete?.(helperFiles[0]);
 				found ||= Boolean(graph);
 			}
-			return found && snapshot(lib) !== before;
+			// Read back through what was found, and through slothlet's module where this file may import it.
+			return found && (JSON.stringify(recorded()) !== was || (lib !== null && snapshot(lib) !== before));
 		};
 		attempts["state.claim"] = () => Boolean(state.claim?.(INSTANCE));
 	}
@@ -205,7 +244,8 @@ export const peek = (kind) => HELPERS[kind].last();
  * await api.guest.relabel(); // true
  */
 export const relabel = async () => {
-	const lib = await import("@cldmv/slothlet/helpers/instance-imports");
+	const lib = await recordModule();
+	if (lib === null) return false;
 	const graph = lib.instanceImporters(INSTANCE);
 	const importers = graph?.get?.(slashPath("../helpers/reader.mjs"));
 	if (!importers) return false;

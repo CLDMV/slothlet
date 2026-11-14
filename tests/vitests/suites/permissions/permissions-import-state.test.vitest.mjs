@@ -37,7 +37,9 @@
  * module that keeps the record (reading the record and writing to what it hands out, loading a file as the
  * instance's, claiming and releasing the instance's ID). It reports each attempt that got hold of something it could
  * change: none does. `guest.relabel()` rewrites the importers of the ES module helper, as read through slothlet's own
- * module, to name `trusted.mjs`.
+ * module, to name `trusted.mjs`. That module is one of slothlet's own files, which slothlet refuses to a module's import
+ * (`guest.importable()` is false), so the attempts through its functions are made only where the import loads; the
+ * answers must stay the same either way.
  *
  * Each config runs in a Node process of its own, under Node's own loader, whose hooks keep the record.
  *
@@ -95,6 +97,7 @@ function runCases(config) {
 		out.denied = await runHelpers(api);
 		await api.slothlet.shutdown();
 		api = await build(true);
+		out.importable = await api.guest.importable();
 		out.reached = await api.guest.reach();
 		out.afterReach = await runHelpers(api);
 		// The instance still loads and shuts down as before.
@@ -129,6 +132,10 @@ describe.each(matrix)("what slothlet keeps about an instance's files ($mode, $ru
 
 	it("refuses a helper what its importing module is denied", () => {
 		expect(results().denied).toEqual(answers(DENIED));
+	}, 120000);
+
+	it("refuses the module's import of slothlet's own module that keeps the record", () => {
+		expect(results().importable).toBe(false);
 	}, 120000);
 
 	it("hands a module nothing it can change", () => {
