@@ -154,10 +154,10 @@ describe.each([
 
 /**
  * Build one instance of the fixture `api_test_helper_copies` in a process of its own and read the vault from the
- * queue its shared helper started when it loaded, through each of the two api files importing it. The first instance
- * of a process loads slothlet's runtime while the api files load; a file's imports can then be evaluated inside the
- * load of another file (here a CommonJS api file that does not import the helper), whose module the helper's timer
- * then carries.
+ * queue its shared helper started when it loaded, through each of the two api files importing it. A process of its own
+ * keeps every other test's imports out of the run. The cause these rows were written for (slothlet's own `runtime.mjs`,
+ * which waits at its top level, being loaded while the first api file loads, so a file's imports were evaluated inside
+ * the load of another file) is gone: slothlet loads it before the first api file, so the rows no longer exercise that guard.
  * @param {Array<object>} list - The permission rules.
  * @returns {string[]} What `one.viaQueue()` and `two.viaQueue()` gave.
  */

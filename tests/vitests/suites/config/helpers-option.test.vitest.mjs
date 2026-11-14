@@ -211,8 +211,9 @@ describe.each(MODES)("Config > helpers > a CommonJS helper's own code > $name", 
 
 /**
  * Build one instance in a process of its own and read the vault from the queue the ES module helper started when it
- * loaded, through `one` and through `two`. The first instance of a process loads slothlet's runtime while the api
- * files load, and a file's imports can then be evaluated inside another file's load.
+ * loaded, through `one` and through `two`. A process of its own keeps every other test's imports out of the run. The
+ * cause these rows were written for (slothlet's own `runtime.mjs`, which waits at its top level, being loaded while the
+ * first api file loads) is gone: slothlet loads it before the first api file, so the rows no longer exercise that guard.
  * @param {string} helpers - The `helpers` option.
  * @param {Array<object>} list - The permission rules.
  * @returns {{queued: string[], mislabelled: string}} What `one.viaQueue()` and `two.viaQueue()` gave, and what running
