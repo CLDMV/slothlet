@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:31:20-08:00 (1794558680)
+ *	@Last modified time: 2026-11-14T09:11:39-08:00 (1794676299)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ const BASE = path.join(FIXTURES, "__base");
 const CASES = {
 	f01_self_named_file: [
 		{ at: ["base", "zz", "zz.s"], tree: ["e", "e.a -> e/e/e.mjs:a", "e.b -> e/e/e.mjs:b"] },
-		{ at: ["e@lazy", "zz.e@lazy"], tree: ["a -> e/e/e.mjs:a", "b -> e/e/e.mjs:b"] }
+		{ at: ["e", "zz.e"], tree: ["a -> e/e/e.mjs:a", "b -> e/e/e.mjs:b"] }
 	],
 	f02_single_file: [
 		{ at: ["base", "zz", "zz.s"], tree: ["e", "e.x", "e.x.a -> e/e/x.mjs:a", "e.x.b -> e/e/x.mjs:b"] },
@@ -73,7 +73,7 @@ const CASES = {
 	],
 	f10_quad_self_named: [
 		{ at: ["base", "zz", "zz.s"], tree: ["x", "x.a -> x/x/x/x.mjs:a"] },
-		{ at: ["x@lazy", "zz.x@lazy"], tree: ["a -> x/x/x/x.mjs:a"] }
+		{ at: ["x", "zz.x"], tree: ["a -> x/x/x/x.mjs:a"] }
 	],
 	f11_triple_other_file: [
 		{ at: ["base", "zz", "zz.s"], tree: ["x", "x.y", "x.y.a -> x/x/x/y.mjs:a"] },
@@ -105,7 +105,7 @@ const CASES = {
 	],
 	f25_triple_self_named_file: [
 		{ at: ["base", "zz", "zz.s"], tree: ["e", "e.a -> e/e/e/e.mjs:a"] },
-		{ at: ["e@lazy", "zz.e@lazy"], tree: ["a -> e/e/e/e.mjs:a"] }
+		{ at: ["e", "zz.e"], tree: ["a -> e/e/e/e.mjs:a"] }
 	],
 	f26_self_file_plus_folder: [
 		{ at: ["base", "zz", "zz.s"], tree: ["e", "e.a -> e/e/e.mjs:a", "e.k", "e.k.x", "e.k.x.b -> e/e/k/x.mjs:b"] },
