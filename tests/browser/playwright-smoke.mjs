@@ -36,10 +36,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname, join, extname } from "node:path";
 import { chromium } from "playwright";
-import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateBrowserAssets, generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_REL = "api_tests/api_test_browser";
+const HELD_REL = "api_tests/api_test_browser_internal";
 const PORT = 8123;
 
 const MIME = {
@@ -61,13 +62,14 @@ const MIME = {
  * @param {object} manifest
  * @returns {string}
  */
-function smokeHtml(importmap, manifest) {
+function smokeHtml(importmap, manifest, heldManifest) {
 	const base = `http://localhost:${PORT}/${FIXTURE_REL}/`;
+	const heldBase = `http://localhost:${PORT}/${HELD_REL}/`;
 	return `<!doctype html><meta charset="utf-8"><title>slothlet browser smoke</title>
 <script type="importmap">${JSON.stringify(importmap)}</script>
-<script>window.__MANIFEST__ = ${JSON.stringify(manifest)};</script>
+<script>window.__MANIFEST__ = ${JSON.stringify(manifest)}; window.__HELD_MANIFEST__ = ${JSON.stringify(heldManifest)};</script>
 <script type="module">
-const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, error: null };
+const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, exports: null, hostExports: null, error: null };
 const BASE = ${JSON.stringify(base)};
 const cfg = (extra) => ({ platform: "browser", base: BASE, manifest: window.__MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href, mode: "eager", ...extra });
 // calc may smart-flatten to a function or to an object exposing addViaSelf — handle both.
@@ -139,6 +141,16 @@ try {
 	}
 	out.internal = tried.join(",");
 	out.runtime = typeof (await import("@cldmv/slothlet/runtime")).self;
+
+	// A file served is importable by its URL, but slothlet's internal exports answer only slothlet's own files and the
+	// page's own code: an api leaf importing them by URL is refused every use, and the page's script is answered.
+	const lib = new URL("/src/lib/", location.href).href;
+	const api3 = await slothlet(cfg({ base: ${JSON.stringify(heldBase)}, manifest: window.__HELD_MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, ${JSON.stringify(heldBase)}).href }));
+	out.exports = await api3.held.tryInternals(lib);
+	const hostWrapper = await import(new URL("handlers/unified-wrapper.mjs", lib).href);
+	const hostContext = await import(new URL("factories/context.mjs", lib).href);
+	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instanceID)].join(",");
+	await api3.shutdown();
 } catch (e) {
 	out.error = String((e && e.stack) || e);
 }
@@ -152,7 +164,8 @@ async function main() {
 	// slothletBase ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
 	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
 	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
-	const html = smokeHtml(importmap, manifest);
+	const heldManifest = await generateManifest(join(REPO, HELD_REL));
+	const html = smokeHtml(importmap, manifest, heldManifest);
 
 	const server = createServer(async (req, res) => {
 		try {
@@ -222,6 +235,8 @@ async function main() {
 		"perm=denied": smoke?.perm === "denied",
 		"internal=refused": smoke?.internal === "refused,refused,refused",
 		"runtime=loaded": smoke?.runtime === "function" || smoke?.runtime === "object",
+		"exports=refused": smoke?.exports === Array(8).fill("MODULE_INTERNAL_NOT_IMPORTABLE").join(","),
+		"host exports=answered": smoke?.hostExports === "true,true",
 		"0 errors": errors.length === 0
 	};
 	const pass = Object.values(checks).every(Boolean);

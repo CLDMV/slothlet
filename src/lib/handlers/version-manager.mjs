@@ -26,7 +26,7 @@
 
 import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { markFrameworkInternal, registerVersionDispatcher } from "#handlers/framework-internals";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
 import {
 	Reflect,
@@ -42,6 +42,7 @@ import {
 	isNaN,
 	parseInt
 } from "@cldmv/slothlet/helpers/intrinsics";
+const { markFrameworkInternal, registerVersionDispatcher } = frameworkInternalsInternals("lib/handlers/version-manager");
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).

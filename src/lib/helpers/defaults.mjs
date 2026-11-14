@@ -29,9 +29,11 @@
 // statically to attach `slothlet.defaults`, and index.cjs loads index.mjs through Node's
 // synchronous require(esm), so this module's import graph must stay free of top-level await
 // (the wrapper classes reach `helpers/platform`, which uses it).
-import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
-import { markSlothletProxy } from "#handlers/framework-internals";
+import { internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { Reflect, Objects, NativeProxy, Set, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+const reservedKeysOwn = reservedKeysInternals("lib/helpers/defaults");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults");
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
@@ -111,4 +113,4 @@ function freezeSet(set) {
  * every other consumer in the same process sees) despite it claiming to be frozen.
  * @type {ReadonlySet<string>}
  */
-export const RESERVED_EXPORTS = freezeSet(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+export const RESERVED_EXPORTS = freezeSet(new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]));

@@ -32,25 +32,12 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import {
-	TYPE_STATES,
-	resolveWrapper,
-	isCallableValue,
-	runtime_selfModuleCeilings,
-	runtime_selfModuleReader,
-	runtime_selfRootView,
-	runtime_selfView,
-	runtime_markCallerLocked,
-	runtime_registerFrameworkMember,
-	runtime_registerFrameworkMemberCopy,
-	runtime_selfFrameworkView,
-	runtime_frameworkViewCaller
-} from "#handlers/unified-wrapper";
+import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { runtime_codeWritersOnStack } from "#handlers/frame-placement";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
-import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
+import { getLanguage, t, translate, internals as translationsInternals } from "@cldmv/slothlet/i18n";
 import {
 	Reflect,
 	Objects,
@@ -65,6 +52,22 @@ import {
 	URL,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
+const {
+	resolveWrapper,
+	runtime_selfModuleCeilings,
+	runtime_selfModuleReader,
+	runtime_selfRootView,
+	runtime_selfView,
+	runtime_markCallerLocked,
+	runtime_registerFrameworkMember,
+	runtime_registerFrameworkMemberCopy,
+	runtime_selfFrameworkView,
+	runtime_frameworkViewCaller
+} = unifiedWrapperInternals("lib/builders/api_builder");
+const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
+const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
+const { initI18n, setLanguage, setLanguageAsync } = translationsInternals("lib/builders/api_builder");
 
 /**
  * Root members the framework itself serves on the api, handed to module code as they are (#625).
@@ -618,7 +621,7 @@ export class ApiBuilder extends ComponentBase {
 				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
 				/* v8 ignore stop */
 				if (
-					!genuineWrappers.has(ceiling) ||
+					!trustedRootOwn.genuineWrappers.has(ceiling) ||
 					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
 				) {
 					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
@@ -4478,7 +4481,7 @@ export class ApiBuilder extends ComponentBase {
 						if (child === base) child = base ? Objects.assign(Objects.create(null), base) : Objects.create(null);
 						child[key] = owner;
 					};
-					if (Arrays.isArray(protect)) for (const k of protect) claim(k, PROTECT_SENTINEL);
+					if (Arrays.isArray(protect)) for (const k of protect) claim(k, trustedRootOwn.PROTECT_SENTINEL);
 					if (owners && typeof owners === "object") for (const [k, o] of Objects.entries(owners)) claim(k, o);
 					return child;
 				};
@@ -4573,8 +4576,8 @@ export class ApiBuilder extends ComponentBase {
 					// is the trusted base store and which carries no module caller) stays trusted. A
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
-					if (currentStore[TRUSTED_ROOT] === true) {
-						Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 					}
 
 					// Register child instance
@@ -4675,8 +4678,8 @@ export class ApiBuilder extends ComponentBase {
 					// is the trusted base store and which carries no module caller) stays trusted. A
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
-					if (currentStore[TRUSTED_ROOT] === true) {
-						Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 					}
 
 					// Register child instance

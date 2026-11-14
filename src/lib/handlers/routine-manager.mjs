@@ -26,12 +26,13 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { resolveWrapper, runtime_frameworkWrite } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
 import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, String } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing

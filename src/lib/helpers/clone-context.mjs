@@ -43,7 +43,7 @@
  * slothlet in the realm, and this copy installs its wrappers once however many instances ask.
  */
 import { isNode } from "@cldmv/slothlet/helpers/platform";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import {
 	Reflect,
 	Objects,
@@ -84,6 +84,7 @@ import {
 	URIError,
 	structuredClone
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * The key a clone wrapper holds the function it wraps under: the watermark of this patch.
@@ -307,7 +308,7 @@ let viewed = () => undefined;
  * @example
  * setCloneViewReader((value) => (isView(value) ? valueBehind(value) : undefined));
  */
-export function setCloneViewReader(behind) {
+function setCloneViewReader(behind) {
 	viewed = behind;
 }
 
@@ -331,7 +332,7 @@ let nodeData = () => undefined;
  * @example
  * setCloneNodeReader((value) => (isLoadedNode(value) ? { list: Array.isArray(valueOf(value)) } : undefined));
  */
-export function setCloneNodeReader(shape) {
+function setCloneNodeReader(shape) {
 	nodeData = shape;
 }
 
@@ -618,7 +619,7 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
  * @example
  * enableClonePatching();
  */
-export function enableClonePatching() {
+function enableClonePatching() {
 	if (installed) return;
 	installed = [];
 	for (const { host, key, native } of CLONE_SITES) {
@@ -703,7 +704,7 @@ export function cloneTakingViews(value) {
  * @example
  * disableClonePatching();
  */
-export function disableClonePatching() {
+function disableClonePatching() {
 	if (!installed) return;
 	for (const { host, key, layer, wrapper } of installed) {
 		const restore = closeLayer(layer, runtime_descriptorValue);
@@ -727,3 +728,60 @@ export function disableClonePatching() {
 export function isClonePatched(fn) {
 	return typeof fn === "function" && typeof fn[ORIGINAL_CLONE] === "function";
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/handlers/unified-wrapper", "slothlet"]))
+		throw ownBindingsRefusal("lib/helpers/clone-context", import.meta.url);
+	return { disableClonePatching, enableClonePatching, setCloneNodeReader, setCloneViewReader };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setCloneViewReader} */
+const guarded_setCloneViewReader = guardInternal(setCloneViewReader, "setCloneViewReader", import.meta.url);
+/** @type {typeof setCloneNodeReader} */
+const guarded_setCloneNodeReader = guardInternal(setCloneNodeReader, "setCloneNodeReader", import.meta.url);
+/** @type {typeof enableClonePatching} */
+const guarded_enableClonePatching = guardInternal(enableClonePatching, "enableClonePatching", import.meta.url);
+/** @type {typeof disableClonePatching} */
+const guarded_disableClonePatching = guardInternal(disableClonePatching, "disableClonePatching", import.meta.url);
+export {
+	guarded_setCloneViewReader as setCloneViewReader,
+	guarded_setCloneNodeReader as setCloneNodeReader,
+	guarded_enableClonePatching as enableClonePatching,
+	guarded_disableClonePatching as disableClonePatching
+};

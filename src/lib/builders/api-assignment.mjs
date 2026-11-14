@@ -26,9 +26,12 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey, runtime_frameworkWrite } from "#handlers/unified-wrapper";
-import { isFrameworkInternal, markFrameworkInternal } from "#handlers/framework-internals";
+import { isFrameworkReservedKey, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { Objects, Map, Set, Error, String } from "@cldmv/slothlet/helpers/intrinsics";
+const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/api-assignment");
+const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperOwn;
+const { markFrameworkInternal } = frameworkInternalsInternals("lib/builders/api-assignment");
 
 /**
  * Manages unified API assignment logic
@@ -104,7 +107,7 @@ export class ApiAssignment extends ComponentBase {
 			if (isFrameworkReservedKey(childKey)) continue;
 			folderChildren.set(childKey, offSlotFolder[childKey]);
 		}
-		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
+		const folderProduct = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(offSlotFolder);
 		// The off-slot folder is a materialized DIRECTORY wrapper, so extraction yields an object or a
 		// callable — every collision shape the suite composes returns one of those. The guard covers a
 		// primitive/nullish product, which no directory can produce, rather than a state to reproduce.
@@ -484,7 +487,7 @@ export class ApiAssignment extends ComponentBase {
 							// + `services.mjs`'s `getVersion`) where eager kept them (#583). Same descriptor shape as
 							// the opposite case below.
 							// A getter stays a getter (#585 review).
-							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
+							unifiedWrapperOwn.UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 							// Under merge-replace the incoming file wins a conflict, so the folder's own member must
 							// not replace this one when it loads; under merge the folder (first loaded) wins, and
 							// adoption overwrites the copy as it should.
@@ -578,7 +581,7 @@ export class ApiAssignment extends ComponentBase {
 									valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 								});
 								// A getter stays a getter, running on the folder's node (#585 review).
-								UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key);
+								unifiedWrapperOwn.UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key);
 								// Mark this key as collision-merged
 								valueWrapper.____slothletInternal.collisionMergedKeys.add(key);
 								// Store filePath mapping so child wrappers can inherit correct filePath
@@ -677,7 +680,7 @@ export class ApiAssignment extends ComponentBase {
 								delete valueWrapper[key2];
 							}
 							// A getter stays a getter, running on the node that holds the slot (#585 review).
-							UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key2);
+							unifiedWrapperOwn.UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key2);
 						}
 						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
 						// without anyone performing the assignment.
@@ -701,7 +704,7 @@ export class ApiAssignment extends ComponentBase {
 
 						if (!keyExists) {
 							// A getter stays a getter, running on the node that holds the slot (#585 review).
-							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
+							unifiedWrapperOwn.UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 						} else if (isMergeReplace) {
 							const descriptor = Objects.getOwnPropertyDescriptor(existingWrapper, key);
 							// All child wrapper properties are defined as configurable:true by defineProperty above.
@@ -711,7 +714,7 @@ export class ApiAssignment extends ComponentBase {
 							if (descriptor?.configurable) {
 								delete existingWrapper[key];
 							}
-							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
+							unifiedWrapperOwn.UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 						} else {
 							const child = valueWrapper[key];
 							// Merge mode, key exists - recursive merge for nested wrappers
@@ -735,7 +738,7 @@ export class ApiAssignment extends ComponentBase {
 									// childKeyExists is always false during initial merge (keys are new).
 									/* v8 ignore next */
 									if (!childKeyExists) {
-										UnifiedWrapper._copyMember(newChildWrapper, existingChildWrapper, childKey);
+										unifiedWrapperOwn.UnifiedWrapper._copyMember(newChildWrapper, existingChildWrapper, childKey);
 									}
 								}
 							}

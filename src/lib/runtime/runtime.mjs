@@ -36,13 +36,17 @@
  */
 
 // Import context managers
-import { asyncRuntime, liveRuntime } from "#factories/context";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { recordSharedExports } from "#handlers/shared-values";
+import { internals as contextInternals } from "#factories/context";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { internals as sharedValuesInternals } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
 import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
-import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime");
+const { recordSharedExports } = sharedValuesInternals("lib/runtime/runtime");
+const { registerOwnModule } = instanceImportsInternals("lib/runtime/runtime");
+const { asyncRuntime, liveRuntime } = contextInternals("lib/runtime/runtime");
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");

@@ -606,7 +606,24 @@ The host's own imports are unchanged: the host, its tools and its tests import a
 Where slothlet cannot tell who is loading a file, it leaves the load to the host:
 
 - **Under vite's module runner**, the plugin sees an import a module's file makes as it resolves it, and an `import()` or `import.meta.resolve()` a module makes by a name only known as it runs is checked as it runs. A function that resolves a specifier the module handed it (`import.meta.resolve` read into a variable and called later) is not seen; the import that follows is.
-- **In the browser** the generated importmap maps slothlet's own specifiers only for slothlet's own files (see [BROWSER.md](BROWSER.md#generatebrowserassetsapidir-options)), so a page script or an api file resolving one of them by its specifier fails. A browser loads any served file by its URL, so a file imported by its URL cannot be held there (see [PERMISSIONS.md](PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary)).
+- **In the browser** the generated importmap maps slothlet's own specifiers only for slothlet's own files (see [BROWSER.md](BROWSER.md#generatebrowserassetsapidir-options)), so a page script or an api file resolving one of them by its specifier fails. A browser loads any served file by its URL, so a file imported by its URL still loads there; what it exports is held as described next.
+
+### Using what slothlet's own files export
+
+Every export of slothlet's own files that hands out a live part of slothlet (a context manager, the wrapper behind an api node, a registry, a frame reader) or changes slothlet's state (a setter, a patch switch, anything acting on an instance ID) answers only slothlet's own files and the host. Code of a module that comes to hold one anyway (an import by URL in a browser, a value the host left on `globalThis` or passed in as an argument) is refused every use of it with `MODULE_INTERNAL_NOT_IMPORTABLE`: calling it, constructing it, reading or changing it.
+
+```js
+// api/report.mjs, in a browser: the file loads by its URL
+const { resolveWrapper } = await import("/node_modules/@cldmv/slothlet/dist/lib/handlers/unified-wrapper.mjs");
+resolveWrapper(self.report); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+
+// the page's own script, or the host under Node
+resolveWrapper(api.report); // the wrapper, as before
+```
+
+Who is using it is read from the stack, from the frame that called it outward. slothlet's own frames, built-in functions (a callback of `Array.prototype.map`), Node's own frames and files of packages pass the answer to the frame further out, so a module handing the export to slothlet (`self.slothlet.context.run({}, held)`), to a built-in or to a library to call is still the module. The first frame of a module's code refuses (code it compiled with `eval` or `new Function` counts as the file that compiled it); the first frame of the host's answers; code that cannot be placed (a promise job with no frame of its own, a function handed to a scheduler) is refused. slothlet's own files do not go through this check: each takes the other files' bindings once, as it loads, through a channel that answers nobody afterwards, so the check costs slothlet's own calls nothing.
+
+In a browser, a frame tells a module's file only by the instance query on its URL; a helper file a leaf imports carries none, and is placed as the page's code (see [PERMISSIONS.md](PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary)).
 
 ---
 

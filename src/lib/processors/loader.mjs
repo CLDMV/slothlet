@@ -40,15 +40,8 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
-import {
-	installInstanceImportHooks,
-	requireInInstance,
-	setImportRefusal,
-	noteModuleFile,
-	HELPERS_PARAM,
-	HELPERS_PER_MODULE
-} from "@cldmv/slothlet/helpers/instance-imports";
-import { createModuleLoad } from "#handlers/frame-placement";
+import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	Objects,
 	Arrays,
@@ -61,6 +54,9 @@ import {
 	String,
 	NativeProcess
 } from "@cldmv/slothlet/helpers/intrinsics";
+const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile } =
+	instanceImportsInternals("lib/processors/loader");
+const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
 
 /**
  * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`

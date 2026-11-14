@@ -37,10 +37,11 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
 import { Arrays, Math, Map, Promises, Number, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`

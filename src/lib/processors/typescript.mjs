@@ -41,6 +41,7 @@ import {
 	NativeProcess,
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -304,7 +305,7 @@ function ownedByCurrentUser(stats) {
  * @returns {Promise<void>}
  * @public
  */
-export async function sweepStaleFallbackRoots() {
+async function sweepStaleFallbackRoots() {
 	let entries;
 	try {
 		entries = await readdir(tmpdir(), { withFileTypes: true });
@@ -353,7 +354,7 @@ export async function sweepStaleFallbackRoots() {
  * @returns {Promise<boolean>} True when the root was removed.
  * @public
  */
-export async function releaseSecureFallbackRoot() {
+async function releaseSecureFallbackRoot() {
 	const root = secureFallbackRoot;
 	if (!root || pendingFallbackWrites > 0) return false;
 	let remaining = [];
@@ -1067,3 +1068,50 @@ export function formatDiagnostics(diagnostics, ts) {
 		return message;
 	});
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/processors/typescript", import.meta.url);
+	return { releaseSecureFallbackRoot };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof sweepStaleFallbackRoots} */
+const guarded_sweepStaleFallbackRoots = guardInternal(sweepStaleFallbackRoots, "sweepStaleFallbackRoots", import.meta.url);
+/** @type {typeof releaseSecureFallbackRoot} */
+const guarded_releaseSecureFallbackRoot = guardInternal(releaseSecureFallbackRoot, "releaseSecureFallbackRoot", import.meta.url);
+export { guarded_sweepStaleFallbackRoots as sweepStaleFallbackRoots, guarded_releaseSecureFallbackRoot as releaseSecureFallbackRoot };

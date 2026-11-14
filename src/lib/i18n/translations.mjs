@@ -26,6 +26,7 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { Objects, Set, Boolean, RegExp, String, navigator, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Get current directory path
@@ -233,7 +234,7 @@ function i18n_loadLanguageSync(lang) {
  * @param {string} lang - Language code
  * @public
  */
-export function setLanguage(lang) {
+function setLanguage(lang) {
 	// Always start with default English translations as base
 	currentTranslations = { ...defaultTranslations.translations };
 
@@ -275,7 +276,7 @@ export function setLanguage(lang) {
  * @returns {Promise<void>}
  * @public
  */
-export async function setLanguageAsync(lang) {
+async function setLanguageAsync(lang) {
 	// Always start from the bundled English base.
 	currentTranslations = { ...defaultTranslations.translations };
 	if (lang === "en-us") {
@@ -352,7 +353,7 @@ export function translate(errorCode, params = {}) {
  * @param {string} [options.language] - Language code (auto-detect if not provided)
  * @public
  */
-export function initI18n(options = {}) {
+function initI18n(options = {}) {
 	try {
 		const lang = options.language || i18n_detectLanguage();
 		if (!isNode) {
@@ -378,3 +379,53 @@ initI18n();
  * @public
  */
 export const t = translate;
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/builders/api_builder", "slothlet"]))
+		throw ownBindingsRefusal("lib/i18n/translations", import.meta.url);
+	return { initI18n, setLanguage, setLanguageAsync };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setLanguage} */
+const guarded_setLanguage = guardInternal(setLanguage, "setLanguage", import.meta.url);
+/** @type {typeof setLanguageAsync} */
+const guarded_setLanguageAsync = guardInternal(setLanguageAsync, "setLanguageAsync", import.meta.url);
+/** @type {typeof initI18n} */
+const guarded_initI18n = guardInternal(initI18n, "initI18n", import.meta.url);
+export { guarded_setLanguage as setLanguage, guarded_setLanguageAsync as setLanguageAsync, guarded_initI18n as initI18n };

@@ -88,38 +88,55 @@
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { getContextManager } from "#factories/context";
+import { internals as contextInternals } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue, releaseModuleMakers, releaseStandInChanges } from "#handlers/unified-wrapper";
-import { isFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
-import { TRUSTED_ROOT } from "#handlers/trusted-root";
-import { initI18n } from "@cldmv/slothlet/i18n";
-import {
-	enableEventEmitterPatching,
-	disableEventEmitterPatching,
-	cleanupEventEmitterResources,
-	setApiContextChecker
-} from "@cldmv/slothlet/helpers/eventemitter-context";
-import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
-import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
-import {
-	enableEventTargetPropertyPatching,
-	disableEventTargetPropertyPatching
-} from "@cldmv/slothlet/helpers/eventtarget-property-context";
-import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
-import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
-import { enableClonePatching, disableClonePatching } from "@cldmv/slothlet/helpers/clone-context";
-import { enableAsyncResourcePatching, disableAsyncResourcePatching } from "@cldmv/slothlet/helpers/async-resource-context";
-import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cldmv/slothlet/helpers/function-source-context";
+import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { internals as trustedRootInternals } from "#handlers/trusted-root";
+import { internals as translationsInternals } from "@cldmv/slothlet/i18n";
+import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { internals as schedulerContextInternals } from "@cldmv/slothlet/helpers/scheduler-context";
+import { internals as eventtargetContextInternals } from "@cldmv/slothlet/helpers/eventtarget-context";
+import { internals as eventtargetPropertyContextInternals } from "@cldmv/slothlet/helpers/eventtarget-property-context";
+import { internals as observerContextInternals } from "@cldmv/slothlet/helpers/observer-context";
+import { internals as promiseContextInternals } from "@cldmv/slothlet/helpers/promise-context";
+import { internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
+import { internals as asyncResourceContextInternals } from "@cldmv/slothlet/helpers/async-resource-context";
+import { internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { isGuardedInternal, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
 import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
-import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper, releaseModuleMakers, releaseStandInChanges } = unifiedWrapperInternals("slothlet");
+const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
+const trustedRootOwn = trustedRootInternals("slothlet");
+const { initI18n } = translationsInternals("slothlet");
+const { enableEventEmitterPatching, disableEventEmitterPatching, cleanupEventEmitterResources, setApiContextChecker } =
+	eventemitterContextInternals("slothlet");
+const { enableSchedulerPatching, disableSchedulerPatching } = schedulerContextInternals("slothlet");
+const { enableEventTargetPatching, disableEventTargetPatching } = eventtargetContextInternals("slothlet");
+const { enableEventTargetPropertyPatching, disableEventTargetPropertyPatching } = eventtargetPropertyContextInternals("slothlet");
+const { enableObserverPatching, disableObserverPatching } = observerContextInternals("slothlet");
+const { enablePromisePatching, disablePromisePatching } = promiseContextInternals("slothlet");
+const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
+const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
+const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
+const { claimInstanceScope } = instanceImportsInternals("slothlet");
+const { forgetInstanceScripts, recordInstanceOwner } = framePlacementInternals("slothlet");
+const { getContextManager } = contextInternals("slothlet");
+
+/**
+ * The TypeScript processor's internal bindings, taken once, the first time an instance's shutdown needs them (the
+ * processor is Node-only, so it is not imported where slothlet's own files load).
+ * @type {Promise<{releaseSecureFallbackRoot: function(): Promise<void>}>|null}
+ * @private
+ */
+let typescriptInternals = null;
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -386,7 +403,10 @@ class Slothlet {
 					const module = await import(url.pathToFileURL(filePath).href);
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
-					const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+					// A guarded internal export is no component, and is passed over without being used (it answers only the host).
+					const classExports = Objects.values(module).filter(
+						(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
+					);
 
 					for (const ClassExport of classExports) {
 						const propName = ClassExport.slothletProperty;
@@ -475,7 +495,10 @@ class Slothlet {
 			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
-			const classExports = Objects.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+			// A guarded internal export is no component, and is passed over without being used (it answers only the host).
+			const classExports = Objects.values(module).filter(
+				(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
+			);
 
 			for (const ClassExport of classExports) {
 				const propName = ClassExport.slothletProperty;
@@ -1078,7 +1101,7 @@ class Slothlet {
 		// resolved context carries this marker — the basis for failing closed on absent caller.
 		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
 		// only the genuine base store and scope stores explicitly descended from it are trusted.
-		Objects.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -1919,8 +1942,8 @@ class Slothlet {
 			this._typescriptCacheDirs.clear();
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
-			const { releaseSecureFallbackRoot } = await import("@cldmv/slothlet/processors/typescript");
-			await releaseSecureFallbackRoot();
+			typescriptInternals ??= import("@cldmv/slothlet/processors/typescript").then((typescript) => typescript.internals("slothlet"));
+			await (await typescriptInternals).releaseSecureFallbackRoot();
 		}
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains

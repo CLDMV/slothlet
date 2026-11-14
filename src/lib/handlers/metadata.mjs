@@ -21,9 +21,10 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
 import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key

@@ -23,9 +23,9 @@ import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
-import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
-import { markFrameworkInternal, markSlothletProxy } from "#handlers/framework-internals";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
 	Reflect,
 	Objects,
@@ -41,6 +41,8 @@ import {
 	Date,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
+const { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } = unifiedWrapperInternals("lib/handlers/hook-manager");
+const { markFrameworkInternal, markSlothletProxy } = frameworkInternalsInternals("lib/handlers/hook-manager");
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every

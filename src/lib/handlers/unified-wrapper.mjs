@@ -27,45 +27,26 @@ import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "@cl
 import {
 	copyForComposition,
 	copySourceOf,
-	setApiNodeCheck,
 	isCompositionLayer,
 	layerForwards,
 	layerHeldKeys,
 	layerMethodOriginal,
 	layerUnderlying,
 	layerOnto,
-	holdMember
+	holdMember,
+	internals as compositionInternals
 } from "@cldmv/slothlet/helpers/composition";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { ComponentBase } from "#factories/component-base";
-import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import {
-	runtime_isWrappedClassInstance,
-	runtime_unwrapClassInstance,
-	runtime_classInstanceCreator,
-	setModuleInstanceCheck
-} from "@cldmv/slothlet/helpers/class-instance-wrapper";
-import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings, implWrappers } from "#handlers/trusted-root";
-import {
-	handedLeafFunctions,
-	handsOutAsModule,
-	registerLeafFile,
-	setModuleNodeResolver,
-	setHostPrototypeCheck,
-	frameDefiner,
-	isLeafFileFunction,
-	outerCallerCeiling,
-	setApiValueCheck,
-	setHandedOutCheck,
-	setInboundOriginal,
-	setResultAttributor
-} from "#handlers/frame-placement";
+import { isFrameworkReservedKey, internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
+import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
+import { handsOutAsModule, internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	isFrameworkInternal,
 	isFrameworkMarkerKey,
 	isSlothletProxy,
-	markFrameworkInternal,
-	versionDispatcherRecord
+	internals as frameworkInternalsInternals
 } from "#handlers/framework-internals";
 import {
 	settleThenable,
@@ -76,10 +57,10 @@ import {
 	rememberedFailure,
 	unwrapThrown
 } from "#handlers/hook-manager";
-import { isSharedExport, recordSharedExports } from "#handlers/shared-values";
+import { isSharedExport, internals as sharedValuesInternals } from "#handlers/shared-values";
 import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
-import { setCloneViewReader, setCloneNodeReader, isBoxedPrimitive } from "@cldmv/slothlet/helpers/clone-context";
-import { setFunctionSourceReader, isFunctionSourcePatch } from "@cldmv/slothlet/helpers/function-source-context";
+import { isBoxedPrimitive, internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
+import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
 import {
 	Reflect,
 	Objects,
@@ -145,6 +126,29 @@ import {
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
+const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
+const { runtime_unwrapClassInstance, runtime_classInstanceCreator, setModuleInstanceCheck } =
+	classInstanceWrapperInternals("lib/handlers/unified-wrapper");
+const trustedRootOwn = trustedRootInternals("lib/handlers/unified-wrapper");
+const {
+	handedLeafFunctions,
+	registerLeafFile,
+	setModuleNodeResolver,
+	setHostPrototypeCheck,
+	frameDefiner,
+	isLeafFileFunction,
+	outerCallerCeiling,
+	setApiValueCheck,
+	setHandedOutCheck,
+	setInboundOriginal,
+	setResultAttributor
+} = framePlacementInternals("lib/handlers/unified-wrapper");
+const { markFrameworkInternal, versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/unified-wrapper");
+const { recordSharedExports } = sharedValuesInternals("lib/handlers/unified-wrapper");
+const { setCloneViewReader, setCloneNodeReader } = cloneContextInternals("lib/handlers/unified-wrapper");
+const { setFunctionSourceReader } = functionSourceContextInternals("lib/handlers/unified-wrapper");
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
 const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
@@ -187,7 +191,7 @@ const FRAMEWORK_WRITES = new Map();
  * @example
  * runtime_frameworkWrite(parent, () => { parent[key] = value; });
  */
-export function runtime_frameworkWrite(node, write) {
+function runtime_frameworkWrite(node, write) {
 	const wrapper = resolveWrapper(node);
 	if (!wrapper) return write();
 	FRAMEWORK_WRITES.set(wrapper, (FRAMEWORK_WRITES.get(wrapper) ?? 0) + 1);
@@ -362,7 +366,7 @@ const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
  * @example
  * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
  */
-export function runtime_unwrapSelfView(value) {
+function runtime_unwrapSelfView(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (GUARD_VIEWS.has(value)) return capturedViewTargets.get(value);
 	return SELF_VIEW_NODES.get(value) ?? SELF_MEMBER_VIEWS.get(value)?.value ?? value;
@@ -396,7 +400,7 @@ function runtime_selfReader(slothlet, access = null) {
  * const reader = runtime_selfModuleReader(slothlet);
  * return reader ? runtime_selfRootView(slothlet, reader) : slothlet.api;
  */
-export function runtime_selfModuleReader(slothlet) {
+function runtime_selfModuleReader(slothlet) {
 	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	return identity?.unresolved ? UNATTRIBUTED_READER : null;
@@ -416,7 +420,7 @@ export function runtime_selfModuleReader(slothlet) {
  * @example
  * for (const call of [writer, ...runtime_selfModuleCeilings(slothlet, writer)]) apiManager.assertOwnedWrite(parts, call);
  */
-export function runtime_selfModuleCeilings(slothlet, writer) {
+function runtime_selfModuleCeilings(slothlet, writer) {
 	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (!identity?.currentWrapper || (writer !== undefined && identity.currentWrapper !== writer)) return [];
 	return identityCeilings(identity);
@@ -437,7 +441,7 @@ function runtime_selfWriteHasStanding(slothlet) {
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) return true;
 	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
-	return Boolean(store?.parentInstanceID) && store[TRUSTED_ROOT] === true;
+	return Boolean(store?.parentInstanceID) && store[trustedRootOwn.TRUSTED_ROOT] === true;
 }
 
 /**
@@ -1731,7 +1735,7 @@ function runtime_selfHasInstance(prototype, instance) {
  * const ops = self.callee.ops; // a view of api.callee.ops
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
-export function runtime_selfView(node, reader, from = null, access = null) {
+function runtime_selfView(node, reader, from = null, access = null) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
 	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
@@ -1866,7 +1870,9 @@ export function runtime_selfView(node, reader, from = null, access = null) {
 		// calling a function the module left behind), each read and call through it has to be the module's to make as
 		// well as whoever runs it (#597).
 		const holds =
-			reader !== UNATTRIBUTED_READER && genuineWrappers.has(reader) && slothlet.handlers?.permissionManager?.isCaptureEnabled?.() !== false;
+			reader !== UNATTRIBUTED_READER &&
+			trustedRootOwn.genuineWrappers.has(reader) &&
+			slothlet.handlers?.permissionManager?.isCaptureEnabled?.() !== false;
 		node = runtime_capturedView(node, reader, holds && "held");
 	}
 	// The prototype an instance of a class of the module's reports (#667) is that class's, read as the reader reads the
@@ -1974,7 +1980,7 @@ export function runtime_selfView(node, reader, from = null, access = null) {
 		},
 		construct(_, args, newTarget) {
 			// A class the reader constructs for is its own: what it makes the instance's prototype comes back as it is.
-			if (newTarget !== view && genuineWrappers.has(reader)) {
+			if (newTarget !== view && trustedRootOwn.genuineWrappers.has(reader)) {
 				runtime_recordOrigin(newTarget, reader);
 				const prototype = typeof newTarget === "function" ? Reflect.getOwnPropertyDescriptor(newTarget, "prototype")?.value : null;
 				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, reader);
@@ -2076,7 +2082,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * @example
  * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
  */
-export function runtime_registerFrameworkMemberCopy(copy, member) {
+function runtime_registerFrameworkMemberCopy(copy, member) {
 	const slothlet = FRAMEWORK_MEMBERS.get(member);
 	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, FRAMEWORK_MEMBER_NAMES.get(member));
 	return copy;
@@ -2095,7 +2101,7 @@ export function runtime_registerFrameworkMemberCopy(copy, member) {
  * @example
  * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-export function runtime_registerFrameworkMember(member, slothlet, name) {
+function runtime_registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
 		FRAMEWORK_MEMBERS.set(member, slothlet);
 		FRAMEWORK_MEMBER_NAMES.set(member, name);
@@ -2129,7 +2135,7 @@ export function runtime_registerFrameworkMember(member, slothlet, name) {
  * @example
  * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
  */
-export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_MEMBERS.get(member)) {
+function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_MEMBERS.get(member)) {
 	if (!slothlet || member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (reader === undefined) reader = runtime_selfReader(slothlet);
 	if (reader === HOST_READER) return member;
@@ -2153,7 +2159,7 @@ export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_M
  * @example
  * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
  */
-export function runtime_assertFrameworkRootChange(slothlet, prop) {
+function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
 	if (slothlet.handlers.apiManager.frameworkProtected()) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
@@ -2193,7 +2199,7 @@ export function runtime_assertFrameworkRootChange(slothlet, prop) {
  * @example
  * return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
  */
-export function runtime_selfChangeTarget(ctx, prop) {
+function runtime_selfChangeTarget(ctx, prop) {
 	// A store holding `self` holds its instance too: both are set together when the instance loads.
 	const slothlet = ctx.slothlet;
 	const parts = typeof prop === "string" ? [prop] : [];
@@ -2381,7 +2387,7 @@ function runtime_asViewReader(reader, use) {
  * @example
  * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
  */
-export function runtime_frameworkViewCaller(slothlet) {
+function runtime_frameworkViewCaller(slothlet) {
 	if (VIEW_READER_RUNS.length === 0) return null;
 	const reader = VIEW_READER_RUNS[VIEW_READER_RUNS.length - 1];
 	// Only while the reader is what executes: a callback pinned to the host that the use runs is the host.
@@ -2463,7 +2469,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
  * const api = runtime_selfRootView(slothlet, moduleWrapper);
  * api.callee.ops; // the module's view of api.callee.ops
  */
-export function runtime_selfRootView(slothlet, reader) {
+function runtime_selfRootView(slothlet, reader) {
 	const root = slothlet.boundApi;
 	let byReader = SELF_ROOT_VIEWS.get(root);
 	if (!byReader) {
@@ -2546,7 +2552,7 @@ const CALLER_LOCKED = new WeakSet();
  * @example
  * return runtime_markCallerLocked(locked);
  */
-export function runtime_markCallerLocked(fn) {
+function runtime_markCallerLocked(fn) {
 	CALLER_LOCKED.add(fn);
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
 	if (hasOwn(fn, "_slothletOriginal")) {
@@ -2570,7 +2576,7 @@ export function runtime_markCallerLocked(fn) {
  * @example
  * if (runtime_isCallerLocked(handler)) return handler;
  */
-export function runtime_isCallerLocked(fn) {
+function runtime_isCallerLocked(fn) {
 	return typeof fn === "function" && CALLER_LOCKED.has(fn);
 }
 
@@ -2601,7 +2607,7 @@ const SELF_HOOK_VIEWED = new WeakSet();
  * @example
  * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
  */
-export function runtime_selfHookHandler(handler, slothlet, reader) {
+function runtime_selfHookHandler(handler, slothlet, reader) {
 	if (SELF_HOOK_VIEWED.has(handler)) return handler;
 	const viewed = function slothlet_viewedHook(payload, ...rest) {
 		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, [payload, ...rest]);
@@ -2804,7 +2810,7 @@ const PENDING_CHANGES = new WeakMap();
  * @example
  * await settleStandInChanges(slothlet);
  */
-export async function settleStandInChanges(slothlet, scope = null) {
+async function settleStandInChanges(slothlet, scope = null) {
 	const pending = PENDING_CHANGES.get(slothlet);
 	if (!pending) return;
 	const whole = !scope || scope === ".";
@@ -2832,7 +2838,7 @@ export async function settleStandInChanges(slothlet, scope = null) {
  * @example
  * releaseStandInChanges(slothlet);
  */
-export function releaseStandInChanges(slothlet) {
+function releaseStandInChanges(slothlet) {
 	for (const holder of PENDING_CHANGES.get(slothlet) ?? []) holder.____slothletInternal.pendingChanges = null;
 	PENDING_CHANGES.delete(slothlet);
 	REFUSED_CHANGES.delete(slothlet);
@@ -3078,7 +3084,7 @@ function runtime_dropRefusedChanges(wrapper) {
  * @example
  * refusedChangeCount(slothlet); // 0
  */
-export function refusedChangeCount(slothlet) {
+function refusedChangeCount(slothlet) {
 	return REFUSED_CHANGES.get(slothlet)?.length ?? 0;
 }
 
@@ -3330,7 +3336,7 @@ function runtime_accessEntry(access, wrapper) {
  * @example
  * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
  */
-export function runtime_resolvedAccess(contextManager, store, identity) {
+function runtime_resolvedAccess(contextManager, store, identity) {
 	return { filled: true, done: false, manager: contextManager, store, identity };
 }
 
@@ -3459,17 +3465,17 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		// `ctx` is the live/scope store in live mode or inside a run(); when there is no active context
 		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
 		const store = ctx ?? wrapper.slothlet.contextManager?.instances?.get(wrapper.slothlet.instanceID);
-		if (store && store[TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
+		if (store && store[trustedRootOwn.TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
 		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow", identity, ctx };
 		return { verdict: "deny", identity, ctx };
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
-	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny", identity, ctx };
+	if (!trustedRootOwn.genuineWrappers.has(callerWrapper)) return { verdict: "deny", identity, ctx };
 	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
 	// the access too, as does every call of its ceiling (#597). A ceiling that is not a genuine wrapper is forged
 	// like a caller would be.
 	const ceilings = identityCeilings(identity);
-	for (const ceiling of ceilings) if (!genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
+	for (const ceiling of ceilings) if (!trustedRootOwn.genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
 	return { verdict: "enforce", callerWrapper, ceilings, ctx, identity };
 }
 
@@ -4815,7 +4821,7 @@ function runtime_isSlothletValue(value) {
 		capturedViewSet.has(value) ||
 		STAND_IN_RECORDS.has(value) ||
 		INBOUND_VIEWS.has(value) ||
-		genuineWrappers.has(value) ||
+		trustedRootOwn.genuineWrappers.has(value) ||
 		isSlothletProxy(value) ||
 		runtime_isWrappedClassInstance(value) ||
 		CROSSINGS.has(value)
@@ -4926,7 +4932,7 @@ function runtime_makerOf(wrapper) {
  * @example
  * releaseModuleMakers(slothlet, "plugins-core");
  */
-export function releaseModuleMakers(slothlet, moduleID) {
+function releaseModuleMakers(slothlet, moduleID) {
 	if (!slothlet) return;
 	if (moduleID === undefined) {
 		MAKERS.delete(slothlet);
@@ -4945,7 +4951,7 @@ export function releaseModuleMakers(slothlet, moduleID) {
  * @example
  * moduleMakerCount(slothlet); // 3
  */
-export function moduleMakerCount(slothlet) {
+function moduleMakerCount(slothlet) {
 	return MAKERS.get(slothlet)?.byID.size ?? 0;
 }
 
@@ -4989,7 +4995,7 @@ const RUNTIME_SELVES = new Map();
  * @returns {void}
  * @internal
  */
-export function registerRuntimeSelf(contextManager, selfProxy) {
+function registerRuntimeSelf(contextManager, selfProxy) {
 	RUNTIME_SELVES.set(contextManager, selfProxy);
 }
 
@@ -5011,7 +5017,7 @@ export function registerRuntimeSelf(contextManager, selfProxy) {
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-export function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null) {
+function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null) {
 	const definer = frameDefiner(loadingInstanceID ?? hostFlowInstanceID);
 	if (definer === null) return null;
 	// In a flow the host opened, code whose definer the frames cannot tell for want of a file (evaluated code) is
@@ -5526,10 +5532,11 @@ function runtime_handOut(maker, owner, value) {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
 			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
 			// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
-			const leaf = implWrappers.get(value);
+			const leaf = trustedRootOwn.implWrappers.get(value);
 			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
 			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
-			const node = leaf && genuineWrappers.has(leaf) && leaf.slothlet === owner.slothlet ? leaf.____slothletInternal.proxy : null;
+			const node =
+				leaf && trustedRootOwn.genuineWrappers.has(leaf) && leaf.slothlet === owner.slothlet ? leaf.____slothletInternal.proxy : null;
 			if (node && typeof node === "function") return node;
 			const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
 			if (leafMaker !== maker && leafMaker.made.has(value)) return leafMaker.made.get(value);
@@ -5571,7 +5578,7 @@ function runtime_handOut(maker, owner, value) {
  * @private
  */
 function runtime_ownStandIns(maker, owner, value, made) {
-	if (typeof value !== "function" || util.types.isProxy(value) || implWrappers.has(value)) return null;
+	if (typeof value !== "function" || util.types.isProxy(value) || trustedRootOwn.implWrappers.has(value)) return null;
 	const record = STAND_IN_RECORDS.get(made);
 	if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
 	if (isLeafFileFunction(value, [record.owner, owner])) return null;
@@ -5923,7 +5930,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 function runtime_runningLeafOf(maker, fallback) {
 	const slothlet = fallback?.slothlet;
 	const current = slothlet?.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
-	return current && genuineWrappers.has(current) && runtime_makerOf(current) === maker ? current : fallback;
+	return current && trustedRootOwn.genuineWrappers.has(current) && runtime_makerOf(current) === maker ? current : fallback;
 }
 
 /**
@@ -6265,8 +6272,8 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
-	const leaf = implWrappers.get(original);
-	if (leaf) implWrappers.set(standIn, leaf);
+	const leaf = trustedRootOwn.implWrappers.get(original);
+	if (leaf) trustedRootOwn.implWrappers.set(standIn, leaf);
 	return standIn;
 }
 
@@ -6326,8 +6333,8 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	if (!Reflect.getOwnPropertyDescriptor(original, "name")) Reflect.deleteProperty(standIn, "name");
 	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
-	const leaf = implWrappers.get(original);
-	if (leaf) implWrappers.set(standIn, leaf);
+	const leaf = trustedRootOwn.implWrappers.get(original);
+	if (leaf) trustedRootOwn.implWrappers.set(standIn, leaf);
 	return standIn;
 }
 
@@ -6469,7 +6476,7 @@ function runtime_markWritten(wrapper, value) {
 	const maker = runtime_makerOf(wrapper);
 	if (maker.made.has(value)) return;
 	const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
-	if (writer && genuineWrappers.has(writer) && runtime_makerOf(writer) === maker) return;
+	if (writer && trustedRootOwn.genuineWrappers.has(writer) && runtime_makerOf(writer) === maker) return;
 	maker.handedIn.add(value);
 }
 
@@ -6497,7 +6504,7 @@ function runtime_crossArguments(wrapper, args) {
  */
 function runtime_callingModule(slothlet) {
 	const current = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
-	return current?.____slothletInternal && genuineWrappers.has(current) ? current : null;
+	return current?.____slothletInternal && trustedRootOwn.genuineWrappers.has(current) ? current : null;
 }
 
 /**
@@ -6575,7 +6582,7 @@ function runtime_ownInstances(wrapper, args) {
  * @example
  * if (!ctx) return runtime_contextReadAsDefiner(context, prop);
  */
-export function runtime_contextReadAsDefiner(contextProxy, prop) {
+function runtime_contextReadAsDefiner(contextProxy, prop) {
 	const definer = frameDefiner();
 	if (definer === null || definer.unplaced) return undefined;
 	const leaf = definer.wrapper ?? definer.leaves[0];
@@ -6607,7 +6614,7 @@ const RUNTIME_CONTEXTS = new Map();
  * @example
  * registerRuntimeContext(asyncRuntime, context);
  */
-export function registerRuntimeContext(contextManager, contextProxy) {
+function registerRuntimeContext(contextManager, contextProxy) {
 	RUNTIME_CONTEXTS.set(contextManager, contextProxy);
 }
 
@@ -6648,10 +6655,10 @@ const CONTEXT_HOST_VALUES = new WeakSet();
  * runtime_contextWritten(ctx, value);
  * ctx.context[prop] = value;
  */
-export function runtime_contextWritten(ctx, value) {
+function runtime_contextWritten(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	const writer = ctx?.currentWrapper;
-	if (!writer?.____slothletInternal || !genuineWrappers.has(writer)) return;
+	if (!writer?.____slothletInternal || !trustedRootOwn.genuineWrappers.has(writer)) return;
 	// A view keeps where its value came from; slothlet's own values are handed out their own way.
 	if (CROSSINGS.has(value) || runtime_isSlothletValue(value)) return;
 	if (CONTEXT_HOST_VALUES.has(value) || CONTEXT_WRITERS.has(value)) return;
@@ -6671,10 +6678,10 @@ export function runtime_contextWritten(ctx, value) {
  * @example
  * return runtime_contextRead(ctx, ctx.context[prop]);
  */
-export function runtime_contextRead(ctx, value) {
+function runtime_contextRead(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const reader = ctx?.currentWrapper;
-	const isModule = Boolean(reader?.____slothletInternal) && genuineWrappers.has(reader);
+	const isModule = Boolean(reader?.____slothletInternal) && trustedRootOwn.genuineWrappers.has(reader);
 	if (CROSSINGS.has(value)) return isModule ? runtime_crossTo(value, reader, reader.slothlet, null) : runtime_uncross(value);
 	if (!isModule) return value;
 	const writer = CONTEXT_WRITERS.get(value);
@@ -7089,7 +7096,7 @@ function runtime_carryTo(value, reader, slothlet) {
  * @returns {*} What the listener is handed.
  * @public
  */
-export function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
+function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
 	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
 	const caller = emitter?.____slothletInternal ? emitter : null;
 	if (caller !== null && runtime_makerOf(caller) === runtime_makerOf(listener)) return payload;
@@ -9492,12 +9499,12 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
  */
 function runtime_registerLeafFunction(wrapper, impl) {
 	if (typeof impl === "function") {
-		implWrappers.set(impl, wrapper);
+		trustedRootOwn.implWrappers.set(impl, wrapper);
 		return;
 	}
 	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
 	const fallback = Objects.getOwnPropertyDescriptor(impl, "default")?.value;
-	if (typeof fallback === "function") implWrappers.set(fallback, wrapper);
+	if (typeof fallback === "function") trustedRootOwn.implWrappers.set(fallback, wrapper);
 }
 
 /**
@@ -10561,7 +10568,7 @@ const wrapperDebugEnabled =
  * @type {Set<string>}
  * @public
  */
-export { IMPL_METADATA_KEYS };
+export { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * See {@link module:@cldmv/slothlet/helpers/reserved-keys.isFrameworkReservedKey}: the one check for
@@ -11604,7 +11611,7 @@ function runtime_defineProxyInspect(wrapper, target) {
  * @extends ComponentBase
  * @public
  */
-export class UnifiedWrapper extends ComponentBase {
+class UnifiedWrapper extends ComponentBase {
 	/**
 	 * @private
 	 * @description
@@ -14028,7 +14035,7 @@ export class UnifiedWrapper extends ComponentBase {
 						currentWrapper: __readGateIdentity?.currentWrapper ?? null,
 						ceiling: __readGateIdentity?.ceiling ?? null,
 						context: __readGateStore?.context ?? null,
-						[TRUSTED_ROOT]: !__heldRead && __readGateStore?.[TRUSTED_ROOT] === true
+						[trustedRootOwn.TRUSTED_ROOT]: !__heldRead && __readGateStore?.[trustedRootOwn.TRUSTED_ROOT] === true
 					}
 				: null;
 
@@ -17018,7 +17025,7 @@ export class UnifiedWrapper extends ComponentBase {
 			for (const key of implKeys) {
 				// A function impl's own `prototype` is listed as on the function itself; the bound-function
 				// proxy target has none whose invariants it could break (see createNamedProxyTarget).
-				if (!IMPL_METADATA_KEYS.has(key)) {
+				if (!reservedKeysOwn.IMPL_METADATA_KEYS.has(key)) {
 					keys.add(key);
 				}
 			}
@@ -17989,7 +17996,7 @@ export class UnifiedWrapper extends ComponentBase {
 		runtime_recordFunctionNode(wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real
 		// caller identity (`ctx.currentWrapper`) from a forged object and fail closed on the latter.
-		genuineWrappers.add(wrapper);
+		trustedRootOwn.genuineWrappers.add(wrapper);
 		// Indexed by its file, so code running from that file elsewhere is known to be this leaf's (#597).
 		registerLeafFile(wrapper);
 		return wrapper.____slothletInternal.proxy;
@@ -18040,7 +18047,7 @@ export function isClassInstance(value) {
  * const wrapper = resolveWrapper(someProxy);
  * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
  */
-export function resolveWrapper(value) {
+function resolveWrapper(value) {
 	if (!value) return null;
 	// Check registry first - handles all proxies created by createProxy().
 	// A Proxy wrapping a UnifiedWrapper target passes instanceof UnifiedWrapper (via prototype
@@ -18078,7 +18085,7 @@ export function isWrapperAnsweredName(key) {
  * @example
  * runtime_nodeBehind(heldReference) === api.victim.v; // true for a view of victim.v
  */
-export function runtime_nodeBehind(value) {
+function runtime_nodeBehind(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	return capturedViewTargets.get(value) ?? value;
 }
@@ -18174,3 +18181,204 @@ export async function isCallableValue(value) {
 	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper._materialize();
 	return internal.isCallable === true;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api-assignment",
+			"lib/builders/api_builder",
+			"lib/builders/modes-processor",
+			"lib/handlers/api-manager",
+			"lib/handlers/event-manager",
+			"lib/handlers/hook-manager",
+			"lib/handlers/lifecycle",
+			"lib/handlers/metadata",
+			"lib/handlers/module-manager",
+			"lib/handlers/ownership",
+			"lib/handlers/permission-manager",
+			"lib/handlers/routine-manager",
+			"lib/processors/type-generator",
+			"lib/runtime/runtime-asynclocalstorage",
+			"lib/runtime/runtime-livebindings",
+			"slothlet"
+		])
+	)
+		throw ownBindingsRefusal("lib/handlers/unified-wrapper", import.meta.url);
+	return {
+		get UnifiedWrapper() {
+			return UnifiedWrapper;
+		},
+		registerRuntimeContext,
+		registerRuntimeSelf,
+		releaseModuleMakers,
+		releaseStandInChanges,
+		resolveWrapper,
+		runtime_assertFrameworkRootChange,
+		runtime_contextRead,
+		runtime_contextReadAsDefiner,
+		runtime_contextWritten,
+		runtime_eventPayloadFor,
+		runtime_frameworkViewCaller,
+		runtime_frameworkWrite,
+		runtime_isCallerLocked,
+		runtime_markCallerLocked,
+		runtime_nodeBehind,
+		runtime_registerFrameworkMember,
+		runtime_registerFrameworkMemberCopy,
+		runtime_resolvedAccess,
+		runtime_selfChangeTarget,
+		runtime_selfFrameworkView,
+		runtime_selfHookHandler,
+		runtime_selfModuleCeilings,
+		runtime_selfModuleReader,
+		runtime_selfReadAsDefiner,
+		runtime_selfRootView,
+		runtime_selfView,
+		runtime_unwrapSelfView,
+		settleStandInChanges
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof runtime_frameworkWrite} */
+const guarded_runtime_frameworkWrite = guardInternal(runtime_frameworkWrite, "runtime_frameworkWrite", import.meta.url);
+/** @type {typeof runtime_unwrapSelfView} */
+const guarded_runtime_unwrapSelfView = guardInternal(runtime_unwrapSelfView, "runtime_unwrapSelfView", import.meta.url);
+/** @type {typeof runtime_selfModuleReader} */
+const guarded_runtime_selfModuleReader = guardInternal(runtime_selfModuleReader, "runtime_selfModuleReader", import.meta.url);
+/** @type {typeof runtime_selfModuleCeilings} */
+const guarded_runtime_selfModuleCeilings = guardInternal(runtime_selfModuleCeilings, "runtime_selfModuleCeilings", import.meta.url);
+/** @type {typeof runtime_selfView} */
+const guarded_runtime_selfView = guardInternal(runtime_selfView, "runtime_selfView", import.meta.url);
+/** @type {typeof runtime_registerFrameworkMemberCopy} */
+const guarded_runtime_registerFrameworkMemberCopy = guardInternal(
+	runtime_registerFrameworkMemberCopy,
+	"runtime_registerFrameworkMemberCopy",
+	import.meta.url
+);
+/** @type {typeof runtime_registerFrameworkMember} */
+const guarded_runtime_registerFrameworkMember = guardInternal(
+	runtime_registerFrameworkMember,
+	"runtime_registerFrameworkMember",
+	import.meta.url
+);
+/** @type {typeof runtime_selfFrameworkView} */
+const guarded_runtime_selfFrameworkView = guardInternal(runtime_selfFrameworkView, "runtime_selfFrameworkView", import.meta.url);
+/** @type {typeof runtime_assertFrameworkRootChange} */
+const guarded_runtime_assertFrameworkRootChange = guardInternal(
+	runtime_assertFrameworkRootChange,
+	"runtime_assertFrameworkRootChange",
+	import.meta.url
+);
+/** @type {typeof runtime_selfChangeTarget} */
+const guarded_runtime_selfChangeTarget = guardInternal(runtime_selfChangeTarget, "runtime_selfChangeTarget", import.meta.url);
+/** @type {typeof runtime_frameworkViewCaller} */
+const guarded_runtime_frameworkViewCaller = guardInternal(runtime_frameworkViewCaller, "runtime_frameworkViewCaller", import.meta.url);
+/** @type {typeof runtime_selfRootView} */
+const guarded_runtime_selfRootView = guardInternal(runtime_selfRootView, "runtime_selfRootView", import.meta.url);
+/** @type {typeof runtime_markCallerLocked} */
+const guarded_runtime_markCallerLocked = guardInternal(runtime_markCallerLocked, "runtime_markCallerLocked", import.meta.url);
+/** @type {typeof runtime_isCallerLocked} */
+const guarded_runtime_isCallerLocked = guardInternal(runtime_isCallerLocked, "runtime_isCallerLocked", import.meta.url);
+/** @type {typeof runtime_selfHookHandler} */
+const guarded_runtime_selfHookHandler = guardInternal(runtime_selfHookHandler, "runtime_selfHookHandler", import.meta.url);
+/** @type {typeof settleStandInChanges} */
+const guarded_settleStandInChanges = guardInternal(settleStandInChanges, "settleStandInChanges", import.meta.url);
+/** @type {typeof releaseStandInChanges} */
+const guarded_releaseStandInChanges = guardInternal(releaseStandInChanges, "releaseStandInChanges", import.meta.url);
+/** @type {typeof refusedChangeCount} */
+const guarded_refusedChangeCount = guardInternal(refusedChangeCount, "refusedChangeCount", import.meta.url);
+/** @type {typeof runtime_resolvedAccess} */
+const guarded_runtime_resolvedAccess = guardInternal(runtime_resolvedAccess, "runtime_resolvedAccess", import.meta.url);
+/** @type {typeof releaseModuleMakers} */
+const guarded_releaseModuleMakers = guardInternal(releaseModuleMakers, "releaseModuleMakers", import.meta.url);
+/** @type {typeof moduleMakerCount} */
+const guarded_moduleMakerCount = guardInternal(moduleMakerCount, "moduleMakerCount", import.meta.url);
+/** @type {typeof registerRuntimeSelf} */
+const guarded_registerRuntimeSelf = guardInternal(registerRuntimeSelf, "registerRuntimeSelf", import.meta.url);
+/** @type {typeof runtime_selfReadAsDefiner} */
+const guarded_runtime_selfReadAsDefiner = guardInternal(runtime_selfReadAsDefiner, "runtime_selfReadAsDefiner", import.meta.url);
+/** @type {typeof runtime_contextReadAsDefiner} */
+const guarded_runtime_contextReadAsDefiner = guardInternal(runtime_contextReadAsDefiner, "runtime_contextReadAsDefiner", import.meta.url);
+/** @type {typeof registerRuntimeContext} */
+const guarded_registerRuntimeContext = guardInternal(registerRuntimeContext, "registerRuntimeContext", import.meta.url);
+/** @type {typeof runtime_contextWritten} */
+const guarded_runtime_contextWritten = guardInternal(runtime_contextWritten, "runtime_contextWritten", import.meta.url);
+/** @type {typeof runtime_contextRead} */
+const guarded_runtime_contextRead = guardInternal(runtime_contextRead, "runtime_contextRead", import.meta.url);
+/** @type {typeof runtime_eventPayloadFor} */
+const guarded_runtime_eventPayloadFor = guardInternal(runtime_eventPayloadFor, "runtime_eventPayloadFor", import.meta.url);
+/** @type {typeof UnifiedWrapper} */
+const guarded_UnifiedWrapper = guardInternal(UnifiedWrapper, "UnifiedWrapper", import.meta.url);
+/** @type {typeof resolveWrapper} */
+const guarded_resolveWrapper = guardInternal(resolveWrapper, "resolveWrapper", import.meta.url);
+/** @type {typeof runtime_nodeBehind} */
+const guarded_runtime_nodeBehind = guardInternal(runtime_nodeBehind, "runtime_nodeBehind", import.meta.url);
+export {
+	guarded_runtime_frameworkWrite as runtime_frameworkWrite,
+	guarded_runtime_unwrapSelfView as runtime_unwrapSelfView,
+	guarded_runtime_selfModuleReader as runtime_selfModuleReader,
+	guarded_runtime_selfModuleCeilings as runtime_selfModuleCeilings,
+	guarded_runtime_selfView as runtime_selfView,
+	guarded_runtime_registerFrameworkMemberCopy as runtime_registerFrameworkMemberCopy,
+	guarded_runtime_registerFrameworkMember as runtime_registerFrameworkMember,
+	guarded_runtime_selfFrameworkView as runtime_selfFrameworkView,
+	guarded_runtime_assertFrameworkRootChange as runtime_assertFrameworkRootChange,
+	guarded_runtime_selfChangeTarget as runtime_selfChangeTarget,
+	guarded_runtime_frameworkViewCaller as runtime_frameworkViewCaller,
+	guarded_runtime_selfRootView as runtime_selfRootView,
+	guarded_runtime_markCallerLocked as runtime_markCallerLocked,
+	guarded_runtime_isCallerLocked as runtime_isCallerLocked,
+	guarded_runtime_selfHookHandler as runtime_selfHookHandler,
+	guarded_settleStandInChanges as settleStandInChanges,
+	guarded_releaseStandInChanges as releaseStandInChanges,
+	guarded_refusedChangeCount as refusedChangeCount,
+	guarded_runtime_resolvedAccess as runtime_resolvedAccess,
+	guarded_releaseModuleMakers as releaseModuleMakers,
+	guarded_moduleMakerCount as moduleMakerCount,
+	guarded_registerRuntimeSelf as registerRuntimeSelf,
+	guarded_runtime_selfReadAsDefiner as runtime_selfReadAsDefiner,
+	guarded_runtime_contextReadAsDefiner as runtime_contextReadAsDefiner,
+	guarded_registerRuntimeContext as registerRuntimeContext,
+	guarded_runtime_contextWritten as runtime_contextWritten,
+	guarded_runtime_contextRead as runtime_contextRead,
+	guarded_runtime_eventPayloadFor as runtime_eventPayloadFor,
+	guarded_UnifiedWrapper as UnifiedWrapper,
+	guarded_resolveWrapper as resolveWrapper,
+	guarded_runtime_nodeBehind as runtime_nodeBehind
+};

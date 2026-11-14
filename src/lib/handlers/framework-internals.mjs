@@ -38,6 +38,7 @@
  */
 
 import { Functions, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Objects slothlet created and stamped with a framework-internal marker key. Weak so a branded
@@ -93,7 +94,7 @@ export function isFrameworkMarkerKey(key) {
  * @example
  * const dispatcher = markFrameworkInternal(new Proxy(target, handlers));
  */
-export function markFrameworkInternal(obj) {
+function markFrameworkInternal(obj) {
 	if (obj !== null && (typeof obj === "object" || typeof obj === "function")) FRAMEWORK_INTERNAL.add(obj);
 	return obj;
 }
@@ -131,7 +132,7 @@ const VERSION_DISPATCHERS = new WeakMap();
  * @example
  * registerVersionDispatcher(proxy, { slothlet, resolve: resolveVersionedWrapper });
  */
-export function registerVersionDispatcher(dispatcher, record) {
+function registerVersionDispatcher(dispatcher, record) {
 	VERSION_DISPATCHERS.set(dispatcher, record);
 	return dispatcher;
 }
@@ -145,7 +146,7 @@ export function registerVersionDispatcher(dispatcher, record) {
  * @example
  * const dispatch = versionDispatcherRecord(node);
  */
-export function versionDispatcherRecord(obj) {
+function versionDispatcherRecord(obj) {
 	if (obj === null || (typeof obj !== "object" && typeof obj !== "function")) return null;
 	return VERSION_DISPATCHERS.get(obj) ?? null;
 }
@@ -167,7 +168,7 @@ const SLOTHLET_PROXIES = new WeakSet();
  * @example
  * const view = markSlothletProxy(new Proxy(value, handler));
  */
-export function markSlothletProxy(proxy) {
+function markSlothletProxy(proxy) {
 	if (proxy !== null && (typeof proxy === "object" || typeof proxy === "function")) SLOTHLET_PROXIES.add(proxy);
 	return proxy;
 }
@@ -184,3 +185,76 @@ export function markSlothletProxy(proxy) {
 export function isSlothletProxy(value) {
 	return value !== null && (typeof value === "object" || typeof value === "function") && weakSetHas(SLOTHLET_PROXIES, value);
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api-assignment",
+			"lib/builders/api_builder",
+			"lib/handlers/api-manager",
+			"lib/handlers/hook-manager",
+			"lib/handlers/permission-manager",
+			"lib/handlers/trusted-root",
+			"lib/handlers/unified-wrapper",
+			"lib/handlers/version-manager",
+			"lib/helpers/defaults",
+			"lib/runtime/runtime",
+			"lib/runtime/runtime-asynclocalstorage",
+			"lib/runtime/runtime-livebindings",
+			"slothlet"
+		])
+	)
+		throw ownBindingsRefusal("lib/handlers/framework-internals", import.meta.url);
+	return { markFrameworkInternal, markSlothletProxy, registerVersionDispatcher, versionDispatcherRecord };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof markFrameworkInternal} */
+const guarded_markFrameworkInternal = guardInternal(markFrameworkInternal, "markFrameworkInternal", import.meta.url);
+/** @type {typeof registerVersionDispatcher} */
+const guarded_registerVersionDispatcher = guardInternal(registerVersionDispatcher, "registerVersionDispatcher", import.meta.url);
+/** @type {typeof versionDispatcherRecord} */
+const guarded_versionDispatcherRecord = guardInternal(versionDispatcherRecord, "versionDispatcherRecord", import.meta.url);
+/** @type {typeof markSlothletProxy} */
+const guarded_markSlothletProxy = guardInternal(markSlothletProxy, "markSlothletProxy", import.meta.url);
+export {
+	guarded_markFrameworkInternal as markFrameworkInternal,
+	guarded_registerVersionDispatcher as registerVersionDispatcher,
+	guarded_versionDispatcherRecord as versionDispatcherRecord,
+	guarded_markSlothletProxy as markSlothletProxy
+};

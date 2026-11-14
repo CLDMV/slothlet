@@ -28,7 +28,7 @@
 // browser static graph (#123).
 import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { outerCallerCeiling } from "#handlers/frame-placement";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	Reflect,
 	Objects,
@@ -50,6 +50,8 @@ import {
 	DataView,
 	Uint8Array
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { outerCallerCeiling } = framePlacementInternals("lib/helpers/class-instance-wrapper");
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -113,7 +115,7 @@ let isModuleInstance = () => true;
  * @example
  * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
  */
-export function setModuleInstanceCheck(check) {
+function setModuleInstanceCheck(check) {
 	isModuleInstance = check;
 }
 
@@ -125,7 +127,7 @@ export function setModuleInstanceCheck(check) {
  * @example
  * runtime_classInstanceCreator(wrappedInstance); // the wrapper of the leaf that returned it
  */
-export function runtime_classInstanceCreator(value) {
+function runtime_classInstanceCreator(value) {
 	if (value === null || typeof value !== "object") return null;
 	return WRAPPED_CREATORS.get(value) ?? null;
 }
@@ -263,7 +265,7 @@ export function runtime_isClassInstance(val) {
  * // Wrap a class instance to preserve context
  * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, creatingWrapper);
  */
-export function runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, capturedWrapper) {
+function runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, capturedWrapper) {
 	// Idempotent: a value we already wrapped carries the sentinel (readable through the Proxy
 	// get trap below). Re-wrapping would nest a fresh Proxy per call and, on chainable instances,
 	// double the wrap count on every method call (#124). Return the already-wrapped value as-is.
@@ -378,7 +380,64 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
  * @example
  * runtime_unwrapClassInstance(runtime_wrapClassInstance(instance, manager, id, new WeakMap())) === instance; // true
  */
-export function runtime_unwrapClassInstance(value) {
+function runtime_unwrapClassInstance(value) {
 	if (value === null || typeof value !== "object") return value;
 	return WRAPPED_INSTANCES.get(value) ?? value;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/handlers/context-async", "lib/handlers/context-live", "lib/handlers/unified-wrapper"]))
+		throw ownBindingsRefusal("lib/helpers/class-instance-wrapper", import.meta.url);
+	return { runtime_classInstanceCreator, runtime_unwrapClassInstance, runtime_wrapClassInstance, setModuleInstanceCheck };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setModuleInstanceCheck} */
+const guarded_setModuleInstanceCheck = guardInternal(setModuleInstanceCheck, "setModuleInstanceCheck", import.meta.url);
+/** @type {typeof runtime_classInstanceCreator} */
+const guarded_runtime_classInstanceCreator = guardInternal(runtime_classInstanceCreator, "runtime_classInstanceCreator", import.meta.url);
+/** @type {typeof runtime_wrapClassInstance} */
+const guarded_runtime_wrapClassInstance = guardInternal(runtime_wrapClassInstance, "runtime_wrapClassInstance", import.meta.url);
+/** @type {typeof runtime_unwrapClassInstance} */
+const guarded_runtime_unwrapClassInstance = guardInternal(runtime_unwrapClassInstance, "runtime_unwrapClassInstance", import.meta.url);
+export {
+	guarded_setModuleInstanceCheck as setModuleInstanceCheck,
+	guarded_runtime_classInstanceCreator as runtime_classInstanceCreator,
+	guarded_runtime_wrapClassInstance as runtime_wrapClassInstance,
+	guarded_runtime_unwrapClassInstance as runtime_unwrapClassInstance
+};

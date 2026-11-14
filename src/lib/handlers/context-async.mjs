@@ -24,21 +24,25 @@ import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platfor
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
-import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
-import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import {
-	attributeResult,
 	carriesCallerCode,
-	enterCall,
 	handsOutAsModule,
 	attributesResults,
 	isHandedOut,
 	isHostPrototype,
-	resolveSupplier,
-	resolvesSupplier
+	resolvesSupplier,
+	internals as framePlacementInternals
 } from "#handlers/frame-placement";
 import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
+const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
+const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
+const { buildCapturedFlowStore } = trustedRootOwn;
+const { attributeResult, enterCall, resolveSupplier } = framePlacementInternals("lib/handlers/context-async");
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -176,7 +180,7 @@ export class AsyncContextManager {
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
-			Objects.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
+			Objects.defineProperty(executionStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 		} else if (currentWrapper) {
 			const parent = executionStore.record;
 			// The caller is the call executing in this flow — or, when that call was handed code and the code is
@@ -623,7 +627,7 @@ export class AsyncContextManager {
 			ceiling: identity.ceiling ?? null,
 			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
-			trusted: store[TRUSTED_ROOT] === true
+			trusted: store[trustedRootOwn.TRUSTED_ROOT] === true
 		};
 	}
 
@@ -718,4 +722,53 @@ export class AsyncContextManager {
  * Singleton async context manager
  * @public
  */
-export const asyncContextManager = new AsyncContextManager();
+const asyncContextManager = new AsyncContextManager();
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/factories/context"])) throw ownBindingsRefusal("lib/handlers/context-async", import.meta.url);
+	return {
+		get asyncContextManager() {
+			return asyncContextManager;
+		}
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof asyncContextManager} */
+const guarded_asyncContextManager = guardInternal(asyncContextManager, "asyncContextManager", import.meta.url);
+export { guarded_asyncContextManager as asyncContextManager };

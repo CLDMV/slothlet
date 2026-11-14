@@ -22,9 +22,10 @@
 import fs from "fs";
 import path from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { Objects, Arrays, JSON, Set, Boolean, Date } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.

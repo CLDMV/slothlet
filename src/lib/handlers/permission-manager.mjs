@@ -29,13 +29,12 @@ import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
 import {
-	WRAPPER_INTERNAL_KEYS,
-	IMPL_METADATA_KEYS,
 	isFrameworkWriteTarget,
-	writeTargetLiteralPrefix
+	writeTargetLiteralPrefix,
+	internals as reservedKeysInternals
 } from "@cldmv/slothlet/helpers/reserved-keys";
-import { runtime_selfModuleCeilings, runtime_selfModuleReader } from "#handlers/unified-wrapper";
-import { markSlothletProxy } from "#handlers/framework-internals";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
 	Reflect,
 	Objects,
@@ -50,6 +49,9 @@ import {
 	Numbers,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
+const reservedKeysOwn = reservedKeysInternals("lib/handlers/permission-manager");
+const { runtime_selfModuleCeilings, runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/permission-manager");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permission-manager");
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -186,7 +188,7 @@ const FRAMEWORK_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_KEYS = new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]);
+const FRAMEWORK_WRITE_KEYS = new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]);
 
 /**
  * Whether two source files belong to the same module — the same directory of files (#260).
@@ -794,7 +796,7 @@ export class PermissionManager extends ComponentBase {
 			this.addRule({ caller: "**", target: `${root}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 			this.addRule({ caller: "**", target: `${root}.**${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 		}
-		for (const key of [...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]) {
+		for (const key of [...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]) {
 			this.#nodeKeyRuleIds.add(this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__"));
 			this.#nodeKeyRuleIds.add(this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__"));
 		}

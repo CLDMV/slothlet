@@ -39,8 +39,9 @@
  * The wrapper carries the function it wraps under a `Symbol.for` key, so a patch is recognisable from any copy of
  * slothlet in the realm, and this copy installs its wrapper once however many instances ask.
  */
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { Reflect, Functions, functionToString, WeakSet, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * The key the wrapper holds the function it wraps under: the watermark of this patch.
@@ -68,7 +69,7 @@ let standsFor = () => undefined;
  * @example
  * setFunctionSourceReader((value) => (isNode(value) ? functionBehind(value) : undefined));
  */
-export function setFunctionSourceReader(behind) {
+function setFunctionSourceReader(behind) {
 	standsFor = behind;
 }
 
@@ -95,7 +96,7 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
  * @example
  * enableFunctionSourcePatching();
  */
-export function enableFunctionSourcePatching() {
+function enableFunctionSourcePatching() {
 	if (installed) return;
 	let descriptor;
 	try {
@@ -143,7 +144,7 @@ export function enableFunctionSourcePatching() {
  * @example
  * disableFunctionSourcePatching();
  */
-export function disableFunctionSourcePatching() {
+function disableFunctionSourcePatching() {
 	if (!installed) return;
 	const { layer, wrapper } = installed;
 	const restore = closeLayer(layer, runtime_descriptorValue);
@@ -181,3 +182,61 @@ export function isFunctionSourcePatch(fn) {
 export function isFunctionSourcePatched(fn) {
 	return typeof fn === "function" && typeof fn[ORIGINAL_TO_STRING] === "function";
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/handlers/unified-wrapper", "slothlet"]))
+		throw ownBindingsRefusal("lib/helpers/function-source-context", import.meta.url);
+	return { disableFunctionSourcePatching, enableFunctionSourcePatching, setFunctionSourceReader };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setFunctionSourceReader} */
+const guarded_setFunctionSourceReader = guardInternal(setFunctionSourceReader, "setFunctionSourceReader", import.meta.url);
+/** @type {typeof enableFunctionSourcePatching} */
+const guarded_enableFunctionSourcePatching = guardInternal(enableFunctionSourcePatching, "enableFunctionSourcePatching", import.meta.url);
+/** @type {typeof disableFunctionSourcePatching} */
+const guarded_disableFunctionSourcePatching = guardInternal(
+	disableFunctionSourcePatching,
+	"disableFunctionSourcePatching",
+	import.meta.url
+);
+export {
+	guarded_setFunctionSourceReader as setFunctionSourceReader,
+	guarded_enableFunctionSourcePatching as enableFunctionSourcePatching,
+	guarded_disableFunctionSourcePatching as disableFunctionSourcePatching
+};

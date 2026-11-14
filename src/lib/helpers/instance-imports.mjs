@@ -84,7 +84,9 @@ import {
 	ArrayBuffers,
 	ArrayBuffer,
 	TextDecoder,
-	Processes
+	Processes,
+	NativeProxy,
+	WeakSet
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { readStack, stackText } from "@cldmv/slothlet/helpers/stack-read";
 
@@ -851,7 +853,7 @@ const OWN_MODULE_PREFIX = "slothlet-own:";
  * @example
  * registerOwnModule(import.meta.url, runtimeNamespace);
  */
-export function registerOwnModule(url, namespace) {
+function registerOwnModule(url, namespace) {
 	if (!SINGLE_COPY_FILES.includes(url) || OWN_MODULES.has(url)) return;
 	OWN_MODULES.set(url, namespace);
 }
@@ -1234,7 +1236,7 @@ const MODULE_FILES = new Set();
  * @returns {void}
  * @internal
  */
-export function noteModuleFile(ref) {
+function noteModuleFile(ref) {
 	if (typeof ref === "string" && ref !== "") MODULE_FILES.add(packageKey(ref));
 }
 
@@ -1348,7 +1350,7 @@ let IMPORT_REFUSAL = null;
  * @returns {void}
  * @internal
  */
-export function setImportRefusal(make) {
+function setImportRefusal(make) {
 	if (isKeeper() && IMPORT_REFUSAL === null && typeof make === "function") IMPORT_REFUSAL = make;
 }
 
@@ -1436,6 +1438,362 @@ function refuseInternalImport(specifier, context, result) {
 	}
 	if (!isSlothletInternal(url)) return;
 	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
+}
+
+/**
+ * Where slothlet's own code is in this copy: its code folder (`src/` or `dist/`) and the package's entry files, as
+ * {@link toSlashPath} gives them. Read from this file's own URL, so it holds wherever slothlet is served from (a
+ * browser's `http:` URL as well as a `file:` URL), and stays the same when a module changes anything after load.
+ * @type {string[]}
+ * @private
+ */
+const OWN_CODE = [
+	new URL("../../", import.meta.url),
+	new URL("../../../index.mjs", import.meta.url),
+	new URL("../../../index.cjs", import.meta.url)
+].map((u) => toSlashPath(u.href));
+
+/**
+ * A stack line of a built-in function, which has no location of its own (`Array.map`, `new Promise`, `Promise.all`):
+ * it runs code on behalf of the frame further out, which decides.
+ * @type {RegExp}
+ * @private
+ */
+const BUILT_IN_FRAME = /\((?:<anonymous>|native|index \d+)\)\s*$/;
+
+/**
+ * The location a stack line names, in the formats of V8 (`at fn (where:1:2)`, `at where:1:2`) and of the other engines
+ * (`fn@where:1:2`), or null when it names none a file can be told from (a built-in). Code compiled from text (`eval`,
+ * `new Function`) is placed where it was compiled: the file whose code compiled it, which the engine names in the line
+ * (`eval at f (where:1:2)`, `where line 1 > eval`); a line naming no such file is null.
+ * @param {string} line - One line of a stack.
+ * @returns {string|null} The location.
+ * @private
+ */
+function stackLineLocation(line) {
+	if (/\beval at /.test(line)) return /\(([^()]+?):\d+:\d+\)/.exec(line)?.[1] ?? null;
+	const compiled = /^[^@\s]*@(.+?) line \d+ > (?:eval|Function)\b/.exec(line);
+	if (compiled !== null) return compiled[1];
+	const match =
+		/\(([^()]+):\d+:\d+\)\s*$/.exec(line) ??
+		/^\s*at (?:async )?([^()]+?):\d+:\d+\s*$/.exec(line) ??
+		/^[^@\s]*@(.+?):\d+:\d+\s*$/.exec(line);
+	return match === null ? null : match[1];
+}
+
+/**
+ * Whether a location is one of slothlet's own files: in this copy's code (see {@link OWN_CODE}), or, under Node, in any
+ * copy of slothlet's (see {@link slothletCodePath}).
+ * @param {string} location - A frame's location.
+ * @returns {boolean} True for slothlet's own code.
+ * @private
+ */
+function isOwnCodeLocation(location) {
+	const path = toSlashPath(location);
+	if (path.startsWith(OWN_CODE[0]) || path === OWN_CODE[1] || path === OWN_CODE[2]) return true;
+	return slothletCodePath(location) !== null;
+}
+
+/**
+ * Whether a location is a module's code (as {@link isModuleImport} tells an importer): an instance's copy of a file, a
+ * module an instance's file imported by a URL that is no file's, or a file of a module's that no instance tags.
+ * @param {string} location - A frame's location.
+ * @returns {boolean} True for a module's code.
+ * @private
+ */
+function isModuleCodeLocation(location) {
+	return location.includes(MARKER) || MODULE_URLS.has(location) || isUntaggedModuleFile(location);
+}
+
+/**
+ * The most frames {@link mayUseInternal} reads. Past them, code is the host's only when a frame it read was a
+ * package's, as attribution's own limit has it.
+ * @type {number}
+ * @private
+ */
+const USE_FRAME_LIMIT = 1024;
+
+/**
+ * Whether the code using one of slothlet's internal exports now may: the frame that called it, read past slothlet's
+ * own frames, built-in functions, Node's own frames and files of packages, is the host's code. Code of a module is
+ * refused (code it compiled with `eval` or `new Function` included), and so is code that cannot be placed (no frame at
+ * all: a function handed to a scheduler).
+ * A package's frame passes the answer outward, to the frame that called the package, so a module handing an export to
+ * a library to call is still the module; a package's code with nothing further out (its own top level) is the host's.
+ *
+ * Slothlet's own files reach each other's internal bindings through their files' `internals` (see
+ * {@link claimOwnBindings}), so a frame of slothlet's own that calls an export is slothlet calling code it was handed:
+ * the answer is the frame further out.
+ * @returns {boolean} True when the code using it is the host's.
+ * @private
+ */
+function mayUseInternal() {
+	let stack;
+	try {
+		stack = ownStackText(USE_FRAME_LIMIT);
+	} catch {
+		// The stack could not be read with slothlet's own formatter: who is using the export cannot be told.
+		return false;
+	}
+	let packageSeen = false;
+	for (const line of stack.split("\n")) {
+		if (!/\S/.test(line) || /^\s*Error\s*$/.test(line)) continue;
+		const location = stackLineLocation(line);
+		if (location === null) {
+			if (BUILT_IN_FRAME.test(line)) continue;
+			return false;
+		}
+		if (location.startsWith("node:") || isOwnCodeLocation(location)) continue;
+		if (isModuleCodeLocation(location)) return false;
+		if (/\/node_modules\//.test(toSlashPath(location))) {
+			packageSeen = true;
+			continue;
+		}
+		return true;
+	}
+	return packageSeen;
+}
+
+/**
+ * The error for a module's use of one of slothlet's internal exports: the error of a refused import (see
+ * {@link importRefusal}), naming the export and its file.
+ * @param {string} name - The export's name.
+ * @param {string} file - Its file's URL.
+ * @returns {Error} The error.
+ * @private
+ */
+function useRefusal(name, file) {
+	return importRefusal(name, file);
+}
+
+/**
+ * The guarded stand-in of each internal export (see {@link guardInternal}), by the value it stands for, and of each
+ * method a guarded object hands out, by the method and then the object.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const GUARDED = new WeakMap();
+
+/**
+ * Every guarded stand-in {@link guardInternal} made, so slothlet's own code can tell one apart without touching it.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const GUARD_PROXIES = new WeakSet();
+
+/**
+ * Whether a value is one of the guarded stand-ins of slothlet's internal exports (see {@link guardInternal}), told
+ * without using it: for slothlet's own code that walks a file's exports (a component scan), which must pass over them
+ * whoever is calling it.
+ * @param {*} value - A value.
+ * @returns {boolean} True for a guarded stand-in.
+ * @internal
+ */
+export function isGuardedInternal(value) {
+	return (typeof value === "function" || (typeof value === "object" && value !== null)) && GUARD_PROXIES.has(value);
+}
+
+/**
+ * See {@link GUARDED}: a method a guarded object hands out, bound to the object it was read from.
+ * @type {WeakMap<Function, WeakMap<object, Function>>}
+ * @private
+ */
+const GUARDED_METHODS = new WeakMap();
+
+/**
+ * The traps of a guarded stand-in, each checking who uses it before doing what the value itself does.
+ * @type {string[]}
+ * @private
+ */
+const GUARD_TRAPS = [
+	"apply",
+	"construct",
+	"defineProperty",
+	"deleteProperty",
+	"get",
+	"getOwnPropertyDescriptor",
+	"getPrototypeOf",
+	"has",
+	"isExtensible",
+	"ownKeys",
+	"preventExtensions",
+	"set",
+	"setPrototypeOf"
+];
+
+/**
+ * Keep one of slothlet's internal exports to slothlet's own files and the host: the stand-in a file exports in its
+ * place. Using it (calling it, constructing it, reading or changing it) answers only the host's code (see
+ * {@link mayUseInternal}); a module's code is refused with `MODULE_INTERNAL_NOT_IMPORTABLE`, whichever way it came to
+ * hold it. Slothlet's own files use the export itself, through their files' `internals`.
+ *
+ * A function stays a function and a class a class (`instanceof` and `extends` work as before). An object's methods are
+ * handed out bound to the object, each guarded the same way, so a context manager is used as before. A primitive is
+ * returned as it is.
+ * @template T
+ * @param {T} value - The export.
+ * @param {string} name - Its name.
+ * @param {string} file - Its file's `import.meta.url`.
+ * @returns {T} The guarded stand-in.
+ * @internal
+ * @example
+ * const guarded = guardInternal(enterCall, "enterCall", import.meta.url);
+ * export { guarded as enterCall };
+ */
+export function guardInternal(value, name, file) {
+	if (typeof value !== "function" && (typeof value !== "object" || value === null)) return value;
+	const known = GUARDED.get(value);
+	if (known !== undefined) return known;
+	const check = () => {
+		if (!mayUseInternal()) throw useRefusal(name, file);
+	};
+	const handler = { __proto__: null };
+	for (const trap of GUARD_TRAPS) {
+		handler[trap] = (...args) => {
+			check();
+			return Reflect[trap](...args);
+		};
+	}
+	let guarded;
+	handler.construct = (target, args, newTarget) => {
+		check();
+		return Reflect.construct(target, args, newTarget === guarded ? target : newTarget);
+	};
+	if (typeof value !== "function") {
+		// An object: its members are read and written on the object itself, and its methods are bound to it.
+		handler.get = (target, key) => {
+			check();
+			const member = Reflect.get(target, key, target);
+			return typeof member === "function" ? guardedMethod(member, target, `${name}.${String(key)}`, file) : member;
+		};
+		handler.set = (target, key, member) => {
+			check();
+			return Reflect.set(target, key, member, target);
+		};
+	}
+	guarded = new NativeProxy(value, handler);
+	GUARDED.set(value, guarded);
+	GUARD_PROXIES.add(guarded);
+	return guarded;
+}
+
+/**
+ * A method a guarded object hands out (see {@link guardInternal}): the method, run on the object it was read from,
+ * guarded as the object is. One per method and object, so reading it twice gives the same function.
+ * @param {Function} method - The method.
+ * @param {object} target - The object it was read from.
+ * @param {string} name - What it is called, for the refusal.
+ * @param {string} file - Its file's URL.
+ * @returns {Function} The guarded method.
+ * @private
+ */
+function guardedMethod(method, target, name, file) {
+	let byTarget = GUARDED_METHODS.get(method);
+	if (byTarget === undefined) GUARDED_METHODS.set(method, (byTarget = new WeakMap()));
+	let guarded = byTarget.get(target);
+	if (guarded === undefined) {
+		guarded = new NativeProxy(method, {
+			apply(fn, _thisArg, args) {
+				if (!mayUseInternal()) throw useRefusal(name, file);
+				return Reflect.apply(fn, target, args);
+			}
+		});
+		byTarget.set(target, guarded);
+		GUARD_PROXIES.add(guarded);
+	}
+	return guarded;
+}
+
+/**
+ * The error for a request for one of slothlet's files' internal bindings that is not one of slothlet's own (see the
+ * `internals` function of each such file).
+ *
+ * Slothlet's own files reach each other's internal bindings through a private channel: every file with internal exports
+ * has an `internals(consumer)` function that hands its bindings to the files of slothlet's that use them, each named
+ * in a list the file keeps, and each once, as it loads. Slothlet's files are evaluated before any module's code can run,
+ * and every file of the list takes its bindings as it is evaluated, so whoever asks later (code holding a file's
+ * `internals` by any route) is refused. No stack is read: it holds where slothlet's files are bundled into one, and costs
+ * nothing per call. What the files export besides is guarded (see {@link guardInternal}).
+ * @param {string} file - The file asked (`lib/handlers/frame-placement`).
+ * @param {string} url - Its `import.meta.url`.
+ * @returns {Error} MODULE_INTERNAL_NOT_IMPORTABLE.
+ * @internal
+ * @example
+ * export function internals(consumer) {
+ * 	if (!mayTakeInternals(consumer, ["lib/handlers/context-live"])) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+ * 	return { enterCall };
+ * }
+ */
+export function ownBindingsRefusal(file, url) {
+	return importRefusal(`${file} internals`, url);
+}
+
+/**
+ * Whether the code asking for a file's internal bindings a second time under a consumer's name is that consumer's own
+ * file being evaluated again, at its top level, by a module loader: a second copy of the file in the process (a loader
+ * evaluating it under another URL) that shares this copy's other files. Read from the stack: the frame below slothlet's
+ * own frames is the consumer's file in this copy's code, with no function of its own (its top level), and the frame
+ * that runs it is a module loader's (Node's, or vite's module runner). Anything else (another frame, a function of the
+ * file, a listener a loader-free caller runs) is refused; so is every engine without such frames (a browser).
+ * @param {string} consumer - The consumer, as its file's path in slothlet's code folder without its extension.
+ * @returns {boolean} True for the file's own top level, run by a loader.
+ * @internal
+ */
+export function isOwnTopLevelOf(consumer) {
+	if (typeof consumer !== "string") return false;
+	const file = `${OWN_CODE[0]}${consumer}.mjs`;
+	let stack;
+	try {
+		stack = ownStackText(64);
+	} catch {
+		return false;
+	}
+	const lines = stack.split("\n").filter((line) => /^\s*at /.test(line));
+	let i = 0;
+	while (i < lines.length) {
+		const location = stackLineLocation(lines[i]);
+		if (location === null) return false;
+		if (toSlashPath(location) === file) break;
+		if (!isOwnCodeLocation(location)) return false;
+		i++;
+	}
+	// The file's own top level: a frame with a location and no function name.
+	if (i >= lines.length || !/^\s*at (?:async )?[^()]+?:\d+:\d+\s*$/.test(lines[i])) return false;
+	let next = i + 1;
+	// Vite's runner evaluates a module after an await, so the microtask runner's frame sits between.
+	if (next < lines.length && /node:internal\/process\/task_queues/.test(lines[next])) next++;
+	return (
+		next < lines.length &&
+		/node:internal\/modules\/|\/node_modules\/(?:vite|vitest)\/dist\/[^\s()]*module-(?:runner|evaluator)/.test(lines[next])
+	);
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
 }
 
 /**
@@ -1707,7 +2065,7 @@ function recordImport(instanceID, parent, child) {
  * @example
  * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
  */
-export function instanceImporters(instanceID) {
+function instanceImporters(instanceID) {
 	return sharedState().imports.of(instanceID);
 }
 
@@ -1721,7 +2079,7 @@ export function instanceImporters(instanceID) {
  * @example
  * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
  */
-export function instanceCommonJSFiles(instanceID) {
+function instanceCommonJSFiles(instanceID) {
 	return sharedState().commonJS.files(instanceID);
 }
 
@@ -1735,7 +2093,7 @@ export function instanceCommonJSFiles(instanceID) {
  * @example
  * instanceCommonJSVersion("inst-a"); // { key: {}, count: 3 }
  */
-export function instanceCommonJSVersion(instanceID) {
+function instanceCommonJSVersion(instanceID) {
 	return sharedState().commonJS.version(instanceID);
 }
 
@@ -1807,7 +2165,7 @@ function claimHere(instanceID) {
  * scope.require("/app/api/counter.cjs", { fresh: true });
  * scope.release();
  */
-export function claimInstanceScope(instanceID) {
+function claimInstanceScope(instanceID) {
 	const handle = sharedState().claim(instanceID) ?? null;
 	// Claimed by this copy's own slothlet: its files are given this copy's runtime (see isOtherCopysFile).
 	if (handle && isKeeper()) OWN_CLAIMS.add(instanceID);
@@ -1846,7 +2204,7 @@ function unheldScope(instanceID) {
  * @example
  * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
  */
-export function requireInInstance(filePath, instanceID, options) {
+function requireInInstance(filePath, instanceID, options) {
 	return unheldScope(instanceID).require(filePath, options);
 }
 
@@ -1860,7 +2218,7 @@ export function requireInInstance(filePath, instanceID, options) {
  * @example
  * releaseInstanceScope("inst-a");
  */
-export function releaseInstanceScope(instanceID) {
+function releaseInstanceScope(instanceID) {
 	if (instanceID == null) return;
 	const handle = UNHELD.get(instanceID);
 	if (handle) {
@@ -1973,7 +2331,7 @@ function redeemTicket(ticket) {
  * @returns {void}
  * @internal
  */
-export function setCallerCheck(check) {
+function setCallerCheck(check) {
 	if (isKeeper() && CALLER_CHECK === null && typeof check === "function") CALLER_CHECK = check;
 }
 
@@ -2278,7 +2636,7 @@ function scriptKeyOf(url) {
  * @returns {void}
  * @internal
  */
-export function setScriptKey(keyOf) {
+function setScriptKey(keyOf) {
 	// Taken once, by the copy that keeps the record: a key that could be swapped would let every location share the
 	// sources of one.
 	if (isKeeper() && SCRIPT_KEY_OF === null && typeof keyOf === "function") SCRIPT_KEY_OF = keyOf;
@@ -2339,7 +2697,7 @@ function recordLoadedSource(url, result) {
  * @returns {{known: boolean, has: boolean}} The answer.
  * @internal
  */
-export function loadedScriptLookup(key, hash) {
+function loadedScriptLookup(key, hash) {
 	return sharedState().scripts.lookup(key, hash);
 }
 
@@ -2354,7 +2712,7 @@ export function loadedScriptLookup(key, hash) {
  * @example
  * loadedScriptText(key, frame.hash); // "export const a = () => 1;\n"
  */
-export function loadedScriptText(key, hash) {
+function loadedScriptText(key, hash) {
 	return sharedState().scripts.text(key, hash);
 }
 
@@ -2364,7 +2722,7 @@ export function loadedScriptText(key, hash) {
  * @returns {Array<string>} The importers' URLs.
  * @internal
  */
-export function packageImporters(path) {
+function packageImporters(path) {
 	return sharedState().scripts.packageImporters(path);
 }
 
@@ -2376,7 +2734,7 @@ export function packageImporters(path) {
  * @example
  * recordedScriptHashes("file:///app/api/x.mjs?slothlet_instance=a"); // ["…"]
  */
-export function recordedScriptHashes(url) {
+function recordedScriptHashes(url) {
 	return sharedState().scripts.hashes(scriptKeyOf(url));
 }
 
@@ -2397,7 +2755,7 @@ export function recordedScriptCount() {
  * @returns {string|null} The instance ID.
  * @internal
  */
-export function scriptKeyInstance(key) {
+function scriptKeyInstance(key) {
 	return key.split("\u0000")[1] || null;
 }
 
@@ -2478,7 +2836,7 @@ function applyToResult(specifier, context, result) {
  * @example
  * installInstanceImportHooks(await import("node:module"));
  */
-export function installInstanceImportHooks(nodeModule, registry = globalThis) {
+function installInstanceImportHooks(nodeModule, registry = globalThis) {
 	if (registry !== globalThis) {
 		// A registry of the caller's own: this copy's hooks, registered once per registry.
 		if (registry[INSTALLED]) return true;
@@ -3017,3 +3375,96 @@ export function slothletInstanceImports() {
 		}
 	};
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/handlers/frame-placement",
+			"lib/processors/loader",
+			"lib/runtime/runtime",
+			"lib/runtime/runtime-asynclocalstorage",
+			"lib/runtime/runtime-livebindings",
+			"slothlet"
+		])
+	)
+		throw ownBindingsRefusal("lib/helpers/instance-imports", import.meta.url);
+	return {
+		claimInstanceScope,
+		installInstanceImportHooks,
+		instanceCommonJSFiles,
+		instanceCommonJSVersion,
+		instanceImporters,
+		loadedScriptLookup,
+		loadedScriptText,
+		noteModuleFile,
+		packageImporters,
+		registerOwnModule,
+		requireInInstance,
+		scriptKeyInstance,
+		setCallerCheck,
+		setImportRefusal,
+		setScriptKey
+	};
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof registerOwnModule} */
+const guarded_registerOwnModule = guardInternal(registerOwnModule, "registerOwnModule", import.meta.url);
+/** @type {typeof noteModuleFile} */
+const guarded_noteModuleFile = guardInternal(noteModuleFile, "noteModuleFile", import.meta.url);
+/** @type {typeof setImportRefusal} */
+const guarded_setImportRefusal = guardInternal(setImportRefusal, "setImportRefusal", import.meta.url);
+/** @type {typeof instanceImporters} */
+const guarded_instanceImporters = guardInternal(instanceImporters, "instanceImporters", import.meta.url);
+/** @type {typeof instanceCommonJSFiles} */
+const guarded_instanceCommonJSFiles = guardInternal(instanceCommonJSFiles, "instanceCommonJSFiles", import.meta.url);
+/** @type {typeof instanceCommonJSVersion} */
+const guarded_instanceCommonJSVersion = guardInternal(instanceCommonJSVersion, "instanceCommonJSVersion", import.meta.url);
+/** @type {typeof claimInstanceScope} */
+const guarded_claimInstanceScope = guardInternal(claimInstanceScope, "claimInstanceScope", import.meta.url);
+/** @type {typeof requireInInstance} */
+const guarded_requireInInstance = guardInternal(requireInInstance, "requireInInstance", import.meta.url);
+/** @type {typeof releaseInstanceScope} */
+const guarded_releaseInstanceScope = guardInternal(releaseInstanceScope, "releaseInstanceScope", import.meta.url);
+/** @type {typeof setCallerCheck} */
+const guarded_setCallerCheck = guardInternal(setCallerCheck, "setCallerCheck", import.meta.url);
+/** @type {typeof setScriptKey} */
+const guarded_setScriptKey = guardInternal(setScriptKey, "setScriptKey", import.meta.url);
+/** @type {typeof loadedScriptLookup} */
+const guarded_loadedScriptLookup = guardInternal(loadedScriptLookup, "loadedScriptLookup", import.meta.url);
+/** @type {typeof loadedScriptText} */
+const guarded_loadedScriptText = guardInternal(loadedScriptText, "loadedScriptText", import.meta.url);
+/** @type {typeof packageImporters} */
+const guarded_packageImporters = guardInternal(packageImporters, "packageImporters", import.meta.url);
+/** @type {typeof recordedScriptHashes} */
+const guarded_recordedScriptHashes = guardInternal(recordedScriptHashes, "recordedScriptHashes", import.meta.url);
+/** @type {typeof scriptKeyInstance} */
+const guarded_scriptKeyInstance = guardInternal(scriptKeyInstance, "scriptKeyInstance", import.meta.url);
+/** @type {typeof installInstanceImportHooks} */
+const guarded_installInstanceImportHooks = guardInternal(installInstanceImportHooks, "installInstanceImportHooks", import.meta.url);
+export {
+	guarded_registerOwnModule as registerOwnModule,
+	guarded_noteModuleFile as noteModuleFile,
+	guarded_setImportRefusal as setImportRefusal,
+	guarded_instanceImporters as instanceImporters,
+	guarded_instanceCommonJSFiles as instanceCommonJSFiles,
+	guarded_instanceCommonJSVersion as instanceCommonJSVersion,
+	guarded_claimInstanceScope as claimInstanceScope,
+	guarded_requireInInstance as requireInInstance,
+	guarded_releaseInstanceScope as releaseInstanceScope,
+	guarded_setCallerCheck as setCallerCheck,
+	guarded_setScriptKey as setScriptKey,
+	guarded_loadedScriptLookup as loadedScriptLookup,
+	guarded_loadedScriptText as loadedScriptText,
+	guarded_packageImporters as packageImporters,
+	guarded_recordedScriptHashes as recordedScriptHashes,
+	guarded_scriptKeyInstance as scriptKeyInstance,
+	guarded_installInstanceImportHooks as installInstanceImportHooks
+};

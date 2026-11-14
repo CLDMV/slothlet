@@ -20,33 +20,25 @@
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
-import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { TRUSTED_ROOT, buildCapturedFlowStore, combineCeilings } from "#handlers/trusted-root";
+import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { pinToCurrentCaller, internals as callerPinningInternals } from "@cldmv/slothlet/helpers/caller-pinning";
+import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
-import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
-	attributeResult,
 	carriesCallerCode,
-	enterCall,
-	createFramePlacer,
 	handsOutAsModule,
 	attributesResults,
-	describeCall,
 	isForeignScript,
 	isHandedOut,
 	isRunnerFrame,
 	parseStackFrame,
-	resolveSupplier,
-	loadOnStack,
 	resolvesSupplier,
-	runtime_captureFrames,
 	runtime_namesEntry,
-	stackHoldsInstanceCode,
-	supplierChainCeiling,
-	toComparablePath
+	toComparablePath,
+	internals as framePlacementInternals
 } from "#handlers/frame-placement";
 import {
 	Reflect,
@@ -63,6 +55,23 @@ import {
 	queueMicrotask,
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-live");
+const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
+const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
+const { buildCapturedFlowStore } = trustedRootOwn;
+const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-live");
+const {
+	attributeResult,
+	enterCall,
+	createFramePlacer,
+	describeCall,
+	resolveSupplier,
+	loadOnStack,
+	runtime_captureFrames,
+	stackHoldsInstanceCode,
+	supplierChainCeiling
+} = framePlacementInternals("lib/handlers/context-live");
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };
@@ -2067,7 +2076,7 @@ export class LiveContextManager {
 			ceiling: identity.ceiling ?? null,
 			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
-			trusted: store[TRUSTED_ROOT] === true
+			trusted: store[trustedRootOwn.TRUSTED_ROOT] === true
 		};
 	}
 
@@ -2183,4 +2192,53 @@ export class LiveContextManager {
  * Singleton live context manager
  * @public
  */
-export const liveContextManager = new LiveContextManager();
+const liveContextManager = new LiveContextManager();
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/factories/context"])) throw ownBindingsRefusal("lib/handlers/context-live", import.meta.url);
+	return {
+		get liveContextManager() {
+			return liveContextManager;
+		}
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof liveContextManager} */
+const guarded_liveContextManager = guardInternal(liveContextManager, "liveContextManager", import.meta.url);
+export { guarded_liveContextManager as liveContextManager };

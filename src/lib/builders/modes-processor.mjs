@@ -29,17 +29,18 @@
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
 import {
-	UnifiedWrapper,
-	resolveWrapper,
 	readApiMember,
 	isThenableModuleValue,
 	thenableExportError,
 	isClassInstance,
-	isFrameworkReservedKey
+	isFrameworkReservedKey,
+	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
 import { Reflect, Objects, Arrays, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/modes-processor");
+const { resolveWrapper } = unifiedWrapperOwn;
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -327,8 +328,10 @@ export class ModesProcessor extends ComponentBase {
 	 * const accessor = this.#accessorToCarry(existingWrapper, "total");
 	 */
 	#accessorToCarry(source, key) {
-		const sourceWrapper = source instanceof UnifiedWrapper ? source : resolveWrapper(source);
-		const descriptor = sourceWrapper ? UnifiedWrapper._memberDescriptor(sourceWrapper, key) : Objects.getOwnPropertyDescriptor(source, key);
+		const sourceWrapper = source instanceof unifiedWrapperOwn.UnifiedWrapper ? source : resolveWrapper(source);
+		const descriptor = sourceWrapper
+			? unifiedWrapperOwn.UnifiedWrapper._memberDescriptor(sourceWrapper, key)
+			: Objects.getOwnPropertyDescriptor(source, key);
 		return descriptor && !("value" in descriptor)
 			? { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true }
 			: null;
@@ -387,7 +390,7 @@ export class ModesProcessor extends ComponentBase {
 		}
 		const copy = copyForComposition(composed, { addsMembers: true });
 		for (const key of Objects.keys(moduleWrapper)) {
-			if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(composed, key)) continue;
+			if (unifiedWrapperOwn.UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(composed, key)) continue;
 			const accessor = this.#accessorToCarry(moduleWrapper, key);
 			if (accessor) Objects.defineProperty(copy, key, accessor);
 			else holdMember(copy, key, moduleWrapper[key]);
@@ -699,7 +702,7 @@ export class ModesProcessor extends ComponentBase {
 						apiPath: levelPath
 					});
 				}
-				const wrapper = new UnifiedWrapper(this.slothlet, {
+				const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 					mode: effectiveMode,
 					apiPath: levelPath,
 					initialImpl,
@@ -996,7 +999,7 @@ export class ModesProcessor extends ComponentBase {
 								// An array node serves its members through its array, so when sibling files will attach, the
 								// array gets a layer to hold them beside its elements, as a self-named array default does; the
 								// module's own array is never written to (#585 review).
-								const wrapper = new UnifiedWrapper(this.slothlet, {
+								const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
 									apiPath: levelPath,
 									initialImpl:
@@ -1038,7 +1041,7 @@ export class ModesProcessor extends ComponentBase {
 										}
 										// Carried as described, so an accessor stays live on this module's node (#585 review).
 										if (modes_case1ExistingW && this.#accessorToCarry(modes_case1ExistingW, existingKey)) {
-											UnifiedWrapper._copyMember(modes_case1ExistingW, wrapper, existingKey);
+											unifiedWrapperOwn.UnifiedWrapper._copyMember(modes_case1ExistingW, wrapper, existingKey);
 										} else {
 											modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
 										}
@@ -1204,7 +1207,7 @@ export class ModesProcessor extends ComponentBase {
 						// shouldWrap is always true in tests (effectiveMode=lazy only with populateDirectly=true, and populateDirectly=true never uses lazy mode).
 						/* v8 ignore next */
 						if (shouldWrap) {
-							const wrapper = new UnifiedWrapper(this.slothlet, {
+							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
 								apiPath: levelPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
@@ -1262,7 +1265,7 @@ export class ModesProcessor extends ComponentBase {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 										/* v8 ignore next */
 										if (shouldWrap) {
-											const namedWrapper = new UnifiedWrapper(this.slothlet, {
+											const namedWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
 												apiPath: modes_namedApiPath,
 												initialImpl: mod[key],
@@ -1354,7 +1357,7 @@ export class ModesProcessor extends ComponentBase {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 										/* v8 ignore next */
 										if (shouldWrap) {
-											const wrapper = new UnifiedWrapper(this.slothlet, {
+											const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
 												apiPath: modes_hybridApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
@@ -1407,7 +1410,7 @@ export class ModesProcessor extends ComponentBase {
 											// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 											/* v8 ignore next */
 											if (shouldWrap) {
-												const wrapper = new UnifiedWrapper(this.slothlet, {
+												const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 													mode: effectiveMode,
 													apiPath: modes_hybridOtherApiPath,
 													initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
@@ -1480,7 +1483,7 @@ export class ModesProcessor extends ComponentBase {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 										/* v8 ignore next */
 										if (shouldWrap) {
-											const wrapper = new UnifiedWrapper(this.slothlet, {
+											const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
 												apiPath: modes_multiApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
@@ -1568,7 +1571,7 @@ export class ModesProcessor extends ComponentBase {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
-										const wrapper = new UnifiedWrapper(this.slothlet, {
+										const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 											mode: effectiveMode,
 											apiPath: modes_preferredApiPath,
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
@@ -1637,7 +1640,7 @@ export class ModesProcessor extends ComponentBase {
 							modes_hoistedModuleID,
 							(registerWrapper) => {
 								if (shouldWrap && typeof value === "function") {
-									const wrapper = new UnifiedWrapper(this.slothlet, {
+									const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
 										apiPath: modes_hoistedApiPath,
 										initialImpl: value,
@@ -1730,7 +1733,7 @@ export class ModesProcessor extends ComponentBase {
 								modes_addapiModuleID,
 								(registerWrapper) => {
 									if (shouldWrap && typeof value === "function") {
-										const wrapper = new UnifiedWrapper(this.slothlet, {
+										const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 											mode: effectiveMode,
 											apiPath: modes_addapiApiPath,
 											initialImpl: value,
@@ -1792,7 +1795,7 @@ export class ModesProcessor extends ComponentBase {
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
 								if (shouldWrap) {
-									const wrapper = new UnifiedWrapper(this.slothlet, {
+									const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
 										apiPath: modes_categoryApiPath,
 										initialImpl: moduleContent,
@@ -1857,7 +1860,7 @@ export class ModesProcessor extends ComponentBase {
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
 						if (shouldWrap) {
-							const wrapper = new UnifiedWrapper(this.slothlet, {
+							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
 								apiPath: modes_propertyApiPath,
 								initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
@@ -2222,7 +2225,11 @@ export class ModesProcessor extends ComponentBase {
 										const modes_existingChildKeys = Objects.keys(modes_existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 										for (const ck of modes_existingChildKeys) {
 											if (typeof implToWrap === "object" && implToWrap !== null && !(ck in implToWrap)) {
-												Objects.defineProperty(implToWrap, ck, UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck));
+												Objects.defineProperty(
+													implToWrap,
+													ck,
+													unifiedWrapperOwn.UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck)
+												);
 											} else if (typeof implToWrap === "function" && implToWrap[ck] === undefined) {
 												implToWrap[ck] = modes_existingWrapper[ck];
 											}
@@ -2246,7 +2253,7 @@ export class ModesProcessor extends ComponentBase {
 									modes_subDirApiPath,
 									modes_subDirModuleID,
 									(registerWrapper) => {
-										const wrapper = new UnifiedWrapper(this.slothlet, {
+										const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 											mode: effectiveMode,
 											apiPath: modes_subDirApiPath,
 											initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
@@ -2441,7 +2448,11 @@ export class ModesProcessor extends ComponentBase {
 							// modes_fileFolderImpl never contains ck at this point; IF FALSE unreachable.
 							/* v8 ignore next */
 							if (!(ck in modes_fileFolderImpl)) {
-								Objects.defineProperty(modes_fileFolderImpl, ck, UnifiedWrapper._memberDescriptor(modes_lazyExistingW, ck));
+								Objects.defineProperty(
+									modes_fileFolderImpl,
+									ck,
+									unifiedWrapperOwn.UnifiedWrapper._memberDescriptor(modes_lazyExistingW, ck)
+								);
 							}
 						}
 					}
@@ -2561,7 +2572,7 @@ export class ModesProcessor extends ComponentBase {
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
 						if (shouldWrap) {
-							const wrapper = new UnifiedWrapper(this.slothlet, {
+							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
 								apiPath: modes_rootApiPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
@@ -2965,7 +2976,7 @@ export class ModesProcessor extends ComponentBase {
 				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
 				// rather than throwing on one.
 				/* v8 ignore next */
-				const extractedImpl = mainValueW ? UnifiedWrapper._extractFullImpl(mainValueW) : null;
+				const extractedImpl = mainValueW ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(mainValueW) : null;
 				const lazy_fromComposed = this.#fromComposedModule(materialized[categoryName], mainValueW, extractedImpl);
 				if (lazy_fromComposed !== null) {
 					mainValue = lazy_fromComposed;
@@ -3058,7 +3069,7 @@ export class ModesProcessor extends ComponentBase {
 					if (typeof nestedImplFn === "function" && lazy_owner) {
 						const builtinNamedMembers = this.#builtinNamedMembers(nestedW);
 						if (builtinNamedMembers.size > 0) {
-							const composed = UnifiedWrapper._extractFullImpl(nestedW);
+							const composed = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(nestedW);
 							// Every other member adopted onto the module's wrapper comes along too, as in the
 							// multi-file branch above; only the built-in-named ones go on the folder's wrapper.
 							this.#carryWrapperChildren(nestedW, composed);
@@ -3087,9 +3098,13 @@ export class ModesProcessor extends ComponentBase {
 					// An object's layer (over a Proxy, say) is handed on the same way, and a plain object is taken again
 					// from the value its file composed (see #fromComposedModule).
 					if (Arrays.isArray(nestedImpl) || (typeof nestedImpl === "object" && isCompositionLayer(nestedImpl))) {
-						return UnifiedWrapper._extractFullImpl(nestedW);
+						return unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(nestedW);
 					}
-					const lazy_nestedComposed = this.#fromComposedModule(nestedValue, nestedW, UnifiedWrapper._extractFullImpl(nestedW));
+					const lazy_nestedComposed = this.#fromComposedModule(
+						nestedValue,
+						nestedW,
+						unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(nestedW)
+					);
 					if (lazy_nestedComposed !== null) return lazy_nestedComposed;
 					// A callable file module with a sibling attached beside it (`e/e.mjs` + `e/y.mjs`): the folder is the
 					// composed function with the sibling's members on it, as the single-file hoist above composes it. The
@@ -3097,7 +3112,7 @@ export class ModesProcessor extends ComponentBase {
 					// inside itself, and one call would run the hooks of both. The same holds for a folder's only file composed
 					// as its self-named file (F05) with no other export: the folder is the function itself.
 					if ((attachedKeys.length > 0 || _fileNames.length === 1) && typeof nestedImpl === "function") {
-						const composed = UnifiedWrapper._extractFullImpl(nestedW);
+						const composed = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(nestedW);
 						this.#carryWrapperChildren(nestedW, composed);
 						this.#refuseThenableValue(composed, apiPath);
 						return composed;
@@ -3121,7 +3136,7 @@ export class ModesProcessor extends ComponentBase {
 			return this.#refuseThenableValue(materialized, apiPath);
 		});
 		// Create unified wrapper in lazy mode
-		const wrapper = new UnifiedWrapper(this.slothlet, {
+		const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,

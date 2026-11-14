@@ -40,8 +40,9 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { Reflect, Objects, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Observer constructors patched by name.
@@ -146,7 +147,7 @@ function runtime_patchObserverConstructor(name) {
  * @returns {void}
  * @public
  */
-export function enableObserverPatching() {
+function enableObserverPatching() {
 	if (isPatchingEnabled) return;
 
 	for (const name of PATCHED_CONSTRUCTORS) runtime_patchObserverConstructor(name);
@@ -164,7 +165,7 @@ export function enableObserverPatching() {
  * @returns {void}
  * @public
  */
-export function disableObserverPatching() {
+function disableObserverPatching() {
 	if (!isPatchingEnabled) return;
 
 	for (const { name, layer, wrapper } of patched) {
@@ -175,3 +176,50 @@ export function disableObserverPatching() {
 	patched.length = 0;
 	isPatchingEnabled = false;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/observer-context", import.meta.url);
+	return { disableObserverPatching, enableObserverPatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enableObserverPatching} */
+const guarded_enableObserverPatching = guardInternal(enableObserverPatching, "enableObserverPatching", import.meta.url);
+/** @type {typeof disableObserverPatching} */
+const guarded_disableObserverPatching = guardInternal(disableObserverPatching, "disableObserverPatching", import.meta.url);
+export { guarded_enableObserverPatching as enableObserverPatching, guarded_disableObserverPatching as disableObserverPatching };

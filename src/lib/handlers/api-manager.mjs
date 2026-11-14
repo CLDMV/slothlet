@@ -48,22 +48,14 @@
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
-	UnifiedWrapper,
-	resolveWrapper,
 	readApiMember,
-	runtime_nodeBehind,
 	loadApiMember,
 	isWrapperAnsweredName,
 	isLazyStandIn,
-	settleStandInChanges,
 	isFrameworkReservedKey,
-	runtime_frameworkWrite,
-	runtime_selfModuleCeilings,
-	runtime_selfModuleReader,
-	runtime_unwrapSelfView,
-	releaseModuleMakers
+	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
-import { isFrameworkInternal, versionDispatcherRecord } from "#handlers/framework-internals";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -75,6 +67,18 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
 import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises, Boolean, String } from "@cldmv/slothlet/helpers/intrinsics";
+const unifiedWrapperOwn = unifiedWrapperInternals("lib/handlers/api-manager");
+const {
+	resolveWrapper,
+	runtime_nodeBehind,
+	settleStandInChanges,
+	runtime_frameworkWrite,
+	runtime_selfModuleCeilings,
+	runtime_selfModuleReader,
+	runtime_unwrapSelfView,
+	releaseModuleMakers
+} = unifiedWrapperOwn;
+const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/api-manager");
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -484,7 +488,7 @@ export class ApiManager extends ComponentBase {
 			if (next === undefined) {
 				// Create a UnifiedWrapper for the container instead of plain object
 				const containerPath = parts.slice(0, i + 1).join(".");
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+				const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 					mode: this.____config.mode,
 					apiPath: containerPath,
 					moduleID: moduleID,
@@ -621,7 +625,7 @@ export class ApiManager extends ComponentBase {
 		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
 		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
 		if (isWrappable) {
-			const wrapper = new UnifiedWrapper(this.slothlet, {
+			const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 				mode: this.____config.mode,
 				apiPath: parts.join("."),
 				moduleID: callerModuleID,
@@ -3471,7 +3475,7 @@ export class ApiManager extends ComponentBase {
 					// This supports patterns like: api.logger() callable + api.logger.utils.debug()
 					const isCallableNamespace = typeof apiToMerge === "function";
 
-					const containerWrapper = new UnifiedWrapper(this.slothlet, {
+					const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 						apiPath: effectivePath,
 						mode: this.____config.mode,
 						isCallable: isCallableNamespace, // Preserve callable nature
@@ -4013,7 +4017,8 @@ export class ApiManager extends ComponentBase {
 			const live = resolveWrapper(this.getValueAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
 			if (!live) continue;
 			const impl = live.____slothletInternal.impl;
-			if (UnifiedWrapper._isCallableImpl(impl)) this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
+			if (unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl))
+				this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
 			callable.push([apiPath, live]);
 		}
 		return callable;
@@ -4041,7 +4046,7 @@ export class ApiManager extends ComponentBase {
 			if (entry.isMergeLoss) continue;
 			const raw = resolveWrapper(entry.value);
 			const impl = raw ? raw.____slothletInternal.impl : entry.value;
-			if (!UnifiedWrapper._isCallableImpl(impl)) continue;
+			if (!unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl)) continue;
 			if (fn === null || ownership.getPlacementMode(entry.moduleID, apiPath) !== null) fn = impl;
 		}
 		if (fn !== null) live.___adoptCallableImpl(fn, true);
@@ -5413,7 +5418,7 @@ export class ApiManager extends ComponentBase {
 				if (resolveWrapper(val) !== null) {
 					const childWrapper = resolveWrapper(val);
 					if (childWrapper.____slothletInternal.state.materialized) {
-						implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
+						implForReload[key] = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(childWrapper);
 						// The unwrapped impl no longer says which file it came from (a lazy build does not tag it), so
 						// the adopting wrapper would give the child its own folder; the child keeps its file here.
 						const childFile = childWrapper.____slothletInternal.filePath;
@@ -5572,7 +5577,7 @@ export class ApiManager extends ComponentBase {
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
-					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
+					child.___setImpl(freshWrapper ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
 					child.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
 				// Still hidden: the wrappers the refresh gave it count no more than the ones it replaced.
@@ -5828,7 +5833,7 @@ export class ApiManager extends ComponentBase {
 						// When the if is TRUE, freshWrapper is always set so the ternary FALSE arm never fires.
 						/* v8 ignore next 2 */
 						if (freshValue && resolveWrapper(freshValue) !== null) {
-							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
+							implForReload = freshWrapper ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
 							// freshValue is falsy or has no wrapper — use it as-is (e.g., a plain null/undefined
 							// impl). In practice every root key from buildAPI is a wrapper, so this arm is
@@ -5937,7 +5942,7 @@ export class ApiManager extends ComponentBase {
 				/* v8 ignore next */
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
-					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
+					implForReload = freshWrapper ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else {
 					// freshApi is a plain object (named exports) or a function. A default-export leaf (a
 					// file's default, or a synthetic #117 function leaf) flattens to the build root, so
@@ -6022,7 +6027,7 @@ export class ApiManager extends ComponentBase {
 						implForContainer[key] = freshApi[key];
 					}
 				}
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+				const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 					apiPath: endpoint,
 					mode: this.____config.mode,
 					moduleID: moduleID,

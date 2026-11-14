@@ -40,12 +40,17 @@
  * };
  */
 
-import { liveRuntime } from "#factories/context";
-import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+import { internals as contextInternals } from "#factories/context";
+import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 // This module's own namespace, registered below as the one copy of this file.
 import * as ownNamespace from "./runtime-livebindings.mjs";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import {
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { internals as trustedRootInternals } from "#handlers/trusted-root";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { Reflect, NativeProxy, NativeObject, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+const { registerOwnModule } = instanceImportsInternals("lib/runtime/runtime-livebindings");
+const {
 	runtime_assertFrameworkRootChange,
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
@@ -58,10 +63,11 @@ import {
 	runtime_contextReadAsDefiner,
 	registerRuntimeContext,
 	registerRuntimeSelf
-} from "#handlers/unified-wrapper";
-import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeProxy, NativeObject, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+} = unifiedWrapperInternals("lib/runtime/runtime-livebindings");
+const trustedRootOwn = trustedRootInternals("lib/runtime/runtime-livebindings");
+const { enforceContextKeyWrite, readProtectedContextValue, writersOf } = trustedRootOwn;
+const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-livebindings");
+const { liveRuntime } = contextInternals("lib/runtime/runtime-livebindings");
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -113,7 +119,7 @@ function runtime_resolveExecutingContext(resolved = null) {
 	// one the host opened from one a module opened (a module's scope inherits the module as the caller
 	// and is admitted above). This grants nothing extra: reaching `run()` at all means already holding
 	// the `api` object, which carries the host's standing anyway.
-	if (ctx.parentInstanceID && ctx[TRUSTED_ROOT] === true) return ctx;
+	if (ctx.parentInstanceID && ctx[trustedRootOwn.TRUSTED_ROOT] === true) return ctx;
 
 	return null;
 }

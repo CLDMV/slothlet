@@ -42,12 +42,17 @@
  * };
  */
 
-import { asyncRuntime } from "#factories/context";
-import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+import { internals as contextInternals } from "#factories/context";
+import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 // This module's own namespace, registered below as the one copy of this file.
 import * as ownNamespace from "./runtime-asynclocalstorage.mjs";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import {
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { internals as trustedRootInternals } from "#handlers/trusted-root";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { Reflect, NativeObject, NativeProxy, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+const { registerOwnModule } = instanceImportsInternals("lib/runtime/runtime-asynclocalstorage");
+const {
 	runtime_assertFrameworkRootChange,
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
@@ -59,10 +64,10 @@ import {
 	runtime_contextReadAsDefiner,
 	registerRuntimeContext,
 	registerRuntimeSelf
-} from "#handlers/unified-wrapper";
-import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { Reflect, NativeObject, NativeProxy, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+} = unifiedWrapperInternals("lib/runtime/runtime-asynclocalstorage");
+const { enforceContextKeyWrite, readProtectedContextValue, writersOf } = trustedRootInternals("lib/runtime/runtime-asynclocalstorage");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-asynclocalstorage");
+const { asyncRuntime } = contextInternals("lib/runtime/runtime-asynclocalstorage");
 
 /**
  * Safely retrieve the current ALS context without throwing.

@@ -23,8 +23,9 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
-import { runtime_selfModuleReader, runtime_selfView } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
 
 /**
  * Lifecycle event manager for impl changes

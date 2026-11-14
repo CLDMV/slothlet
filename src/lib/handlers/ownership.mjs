@@ -19,8 +19,9 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/ownership");
 
 /**
  * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"

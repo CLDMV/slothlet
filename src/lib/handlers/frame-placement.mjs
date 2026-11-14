@@ -27,21 +27,13 @@
  */
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import {
-	instanceCommonJSFiles,
-	instanceCommonJSVersion,
-	instanceImporters,
-	loadedScriptLookup,
-	loadedScriptText,
-	packageImporters,
 	rememberNewest,
-	scriptKeyInstance,
-	setScriptKey,
-	setCallerCheck,
 	LOADED_BY_SPECIFIER,
 	VITE_HOST_SCRIPTS,
-	VITE_LOADED_BY
+	VITE_LOADED_BY,
+	internals as instanceImportsInternals
 } from "@cldmv/slothlet/helpers/instance-imports";
-import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
+import { ceilingMembers, combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import {
 	Reflect,
 	Objects,
@@ -68,6 +60,19 @@ import {
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { readStack } from "@cldmv/slothlet/helpers/stack-read";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const {
+	instanceCommonJSFiles,
+	instanceCommonJSVersion,
+	instanceImporters,
+	loadedScriptLookup,
+	loadedScriptText,
+	packageImporters,
+	scriptKeyInstance,
+	setScriptKey,
+	setCallerCheck
+} = instanceImportsInternals("lib/handlers/frame-placement");
+const trustedRootOwn = trustedRootInternals("lib/handlers/frame-placement");
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -237,7 +242,7 @@ export function toComparablePath(value) {
  * @returns {Set<string>|null} Comparable locations, or null when none were recorded.
  * @private
  */
-export function runtime_importedLocations(wrapper, filePath) {
+function runtime_importedLocations(wrapper, filePath) {
 	if (!filePath) return null;
 	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath, wrapper?.____slothletInternal?.moduleID);
 	if (!recorded?.size) return null;
@@ -263,7 +268,7 @@ const REAL_PATHS = new Map();
  * @returns {string|null} The real path's comparable form, or null when it is the same or unknown.
  * @private
  */
-export function runtime_realComparablePath(filePath) {
+function runtime_realComparablePath(filePath) {
 	if (!filePath) return null;
 	let real = REAL_PATHS.get(filePath);
 	if (real === undefined) {
@@ -286,7 +291,7 @@ export function runtime_realComparablePath(filePath) {
  * @returns {string[]} Its api key, and the function's own name when that is another.
  * @private
  */
-export function runtime_entryNames(apiPath, currentWrapper) {
+function runtime_entryNames(apiPath, currentWrapper) {
 	const names = new Set([apiPath.slice(apiPath.lastIndexOf(".") + 1)]);
 	const impl = currentWrapper?.____slothletInternal?.impl;
 	if (typeof impl === "function" && typeof impl.name === "string" && impl.name && impl.name !== "anonymous") names.add(impl.name);
@@ -537,7 +542,7 @@ function runtime_frameImporterTag(line) {
  * @throws {SlothletError} PERMISSION_DENIED when the stack cannot be read with slothlet's own formatter.
  * @private
  */
-export function runtime_captureFrames(limit) {
+function runtime_captureFrames(limit) {
 	const read = readStack(runtime_structuredFrames, { limit });
 	// The global `Error` or its stack settings were changed so that slothlet's own formatter could not be the one that
 	// ran: the frames are not the engine's, and what they would have decided is refused.
@@ -787,7 +792,7 @@ const RETIRED_COMMONJS = new Set();
  * @example
  * forgetInstanceScripts(instanceID);
  */
-export function forgetInstanceScripts(instanceID) {
+function forgetInstanceScripts(instanceID) {
 	if (instanceID == null) return;
 	for (const key of SCRIPT_HASHES.keys()) if (scriptKeyInstance(key) === String(instanceID)) SCRIPT_HASHES.delete(key);
 	for (const location of runtime_commonJSLocations(instanceID)) RETIRED_COMMONJS.add(location);
@@ -960,7 +965,7 @@ function runtime_entryKind(name) {
  * @returns {*} What it returned.
  * @internal
  */
-export function enterCall(wrapper, fn, thisArg, args) {
+function enterCall(wrapper, fn, thisArg, args) {
 	const impl = wrapper.____slothletInternal?.impl;
 	if (fn === impl || fn === runtime_ownDefault(impl)) return slothlet_enterLeaf(wrapper, fn, thisArg, args);
 	return slothlet_enterCall(fn, thisArg, args);
@@ -1146,7 +1151,7 @@ const DESCRIPTIONS = new WeakMap();
  * @returns {{filePath: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string, fnNames: string[]}} The description.
  * @internal
  */
-export function describeCall(wrapper) {
+function describeCall(wrapper) {
 	// A live wrapper always carries its internals, file and api path; the fallbacks describe a partial one
 	// (a direct caller's stand-in) as having no file.
 	/* v8 ignore start */
@@ -1226,7 +1231,7 @@ function runtime_moduleRootsFor(candidates) {
  *   function name may pin one of several. `families` are the instances the calls belong to.
  * @internal
  */
-export function createFramePlacer(candidates) {
+function createFramePlacer(candidates) {
 	const roots = runtime_moduleRootsFor(candidates);
 	const families = new Set(candidates.map((entry) => entry.family).filter(Boolean));
 
@@ -1401,7 +1406,7 @@ function runtime_rootSpellings(root) {
  * @returns {boolean} True when a frame is code of one of them.
  * @internal
  */
-export function stackHoldsInstanceCode(sources) {
+function stackHoldsInstanceCode(sources) {
 	const families = new Set(sources.map(({ family }) => family));
 	const locations = [];
 	const roots = [];
@@ -1448,7 +1453,7 @@ let isApiValue = () => false;
  * @returns {void}
  * @internal
  */
-export function setApiValueCheck(check, harborsCode = null) {
+function setApiValueCheck(check, harborsCode = null) {
 	isApiValue = check;
 	if (harborsCode) apiValueHarborsCode = harborsCode;
 }
@@ -1468,7 +1473,7 @@ let resultAttributor = (_wrapper, value) => value;
  * @returns {void}
  * @internal
  */
-export function setResultAttributor(attributor) {
+function setResultAttributor(attributor) {
 	resultAttributor = attributor;
 }
 
@@ -1482,7 +1487,7 @@ export function setResultAttributor(attributor) {
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper, value, callerIsHost = false, caller = null) {
+function attributeResult(wrapper, value, callerIsHost = false, caller = null) {
 	return resultAttributor(wrapper, value, callerIsHost, caller);
 }
 
@@ -1500,7 +1505,7 @@ let hostPrototypeCheck = () => false;
  * @returns {void}
  * @internal
  */
-export function setHostPrototypeCheck(check) {
+function setHostPrototypeCheck(check) {
 	hostPrototypeCheck = check;
 }
 
@@ -1529,7 +1534,7 @@ let handedOutCheck = () => false;
  * @returns {void}
  * @internal
  */
-export function setHandedOutCheck(check) {
+function setHandedOutCheck(check) {
 	handedOutCheck = check;
 }
 
@@ -1556,7 +1561,7 @@ let inboundOriginal = (value) => value;
  * @returns {void}
  * @internal
  */
-export function setInboundOriginal(unwrap) {
+function setInboundOriginal(unwrap) {
 	inboundOriginal = unwrap;
 }
 
@@ -1611,7 +1616,7 @@ const PLAIN_DATA_PROPERTIES = 256;
  */
 function runtime_isPlainData(value, depth, budget) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-	if (genuineWrappers.has(value)) return true;
+	if (trustedRootOwn.genuineWrappers.has(value)) return true;
 	if (isApiValue(value)) return !apiValueHarborsCode(value);
 	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
 	try {
@@ -1648,7 +1653,7 @@ const carriesCode = (raw, budget) => {
 	return (
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
-		!genuineWrappers.has(value) &&
+		!trustedRootOwn.genuineWrappers.has(value) &&
 		!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget)
 	);
 };
@@ -1688,7 +1693,7 @@ export function carriesCallerCode(thisArg, args) {
  * @returns {Array<object>|null} The wrappers, or null when there are none.
  * @internal
  */
-export function handedLeafFunctions(thisArg, args) {
+function handedLeafFunctions(thisArg, args) {
 	let found = null;
 	const budget = { remaining: PLAIN_DATA_PROPERTIES };
 	const visit = (value, depth) => {
@@ -1696,11 +1701,18 @@ export function handedLeafFunctions(thisArg, args) {
 		// A module's view of a caller's value holds what the caller handed: that is what is looked into.
 		value = inboundOriginal(value);
 		if (typeof value === "function") {
-			const wrapper = implWrappers.get(value);
+			const wrapper = trustedRootOwn.implWrappers.get(value);
 			if (wrapper) (found ??= []).push(wrapper);
 			return;
 		}
-		if (depth <= 0 || budget.remaining <= 0 || genuineWrappers.has(value) || isApiValue(value) || !isNode || util.types.isProxy(value))
+		if (
+			depth <= 0 ||
+			budget.remaining <= 0 ||
+			trustedRootOwn.genuineWrappers.has(value) ||
+			isApiValue(value) ||
+			!isNode ||
+			util.types.isProxy(value)
+		)
 			return;
 		try {
 			const prototype = Objects.getPrototypeOf(value);
@@ -1743,10 +1755,10 @@ const MAX_CHAIN = 64;
  * @example
  * combineCeilings(leaf, supplierChainCeiling(record));
  */
-export function supplierChainCeiling(record) {
+function supplierChainCeiling(record) {
 	const parts = [];
 	for (let current = record, depth = 0; current?.flagged && current.parent && depth < MAX_CHAIN; current = current.parent, depth++) {
-		if (current.parent.wrapper && genuineWrappers.has(current.parent.wrapper)) parts.push(current.parent.wrapper);
+		if (current.parent.wrapper && trustedRootOwn.genuineWrappers.has(current.parent.wrapper)) parts.push(current.parent.wrapper);
 		if (current.parent.ceiling) parts.push(current.parent.ceiling);
 	}
 	return parts.length ? combineCeilings(...parts) : null;
@@ -1786,20 +1798,22 @@ export function supplierChainCeiling(record) {
  *   otherwise null (the leaf's own code is running).
  * @internal
  */
-export function resolveSupplier(record, capture = null) {
+function resolveSupplier(record, capture = null) {
 	// Code a file started while it loaded: its module is the caller, and the code doing the access is told by its frames.
 	if (record?.topLevel)
-		return genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record) ? runtime_topLevelRunning(record) : null;
+		return trustedRootOwn.genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record) ? runtime_topLevelRunning(record) : null;
 	// Code a module handed out, run through the stand-in recording its definer: the stack names the definer wherever it
 	// can, and the record stands only where it cannot (#726).
-	if (record?.made && genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record)) {
+	if (record?.made && trustedRootOwn.genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record)) {
 		const told = runtime_madeCodeDefiner(record);
 		if (told !== undefined) return told;
 	}
 	if (!record?.flagged)
-		return runtime_guardsForeignCode(record) && genuineWrappers.has(record.wrapper) ? runtime_foreignCodeRunning(record, capture) : null;
+		return runtime_guardsForeignCode(record) && trustedRootOwn.genuineWrappers.has(record.wrapper)
+			? runtime_foreignCodeRunning(record, capture)
+			: null;
 	const leaf = record.wrapper;
-	if (!genuineWrappers.has(leaf)) return null;
+	if (!trustedRootOwn.genuineWrappers.has(leaf)) return null;
 	if (!record.parent?.wrapper) {
 		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
 		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record, capture) : null;
@@ -1818,7 +1832,7 @@ export function resolveSupplier(record, capture = null) {
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
-		if (!wrapper || seen.has(wrapper) || !genuineWrappers.has(wrapper)) continue;
+		if (!wrapper || seen.has(wrapper) || !trustedRootOwn.genuineWrappers.has(wrapper)) continue;
 		seen.add(wrapper);
 		fallback ??= { currentWrapper: wrapper, record: current };
 		const description = describeCall(wrapper);
@@ -2444,7 +2458,7 @@ function runtime_packageRootOf(path) {
  * @example
  * recordInstanceOwner(instance);
  */
-export function recordInstanceOwner(slothlet) {
+function recordInstanceOwner(slothlet) {
 	if (!isNode) return;
 	for (const frame of runtime_captureFrames(32)) {
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:") || PACKAGE_ENTRIES.has(frame.path)) continue;
@@ -2465,7 +2479,7 @@ export function recordInstanceOwner(slothlet) {
  * @example
  * isInstanceOwnerFile(instance, "/app/node_modules/host/lib/context.mjs"); // true when host created the instance
  */
-export function isInstanceOwnerFile(slothlet, path) {
+function isInstanceOwnerFile(slothlet, path) {
 	const owner = OWNER_PACKAGES.get(slothlet);
 	return owner !== undefined && runtime_packageRootOf(path) === owner;
 }
@@ -2584,7 +2598,7 @@ const VITE_HOST_REGISTRY = isNode ? installViteHostRegistry(globalThis) : null;
  * @example
  * installViteHostRegistry(globalThis).registered(frame.key, frame.hash);
  */
-export function installViteHostRegistry(target) {
+function installViteHostRegistry(target) {
 	const key = Symbols.for(VITE_HOST_SCRIPTS);
 	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
@@ -2685,7 +2699,7 @@ function runtime_loadedRecord(entry) {
  * @example
  * installViteLoadedRegistry(globalThis).importersOf("/app/exts/x/extension.mjs"); // [] when only the host loaded it
  */
-export function installViteLoadedRegistry(target) {
+function installViteLoadedRegistry(target) {
 	const key = Symbols.for(VITE_LOADED_BY);
 	const current = Objects.getOwnPropertyDescriptor(target, key);
 	// Fixed by another copy of slothlet already: its reader answers for every copy.
@@ -2856,7 +2870,7 @@ function runtime_leafCallAnswer(leaf, running) {
 	const runners = new Set();
 	for (const part of running) for (const member of ceilingMembers(part)) if (member && member !== leaf) runners.add(member);
 	for (const runner of runners) {
-		if (!genuineWrappers.has(runner)) return REFUSED_SUPPLIER;
+		if (!trustedRootOwn.genuineWrappers.has(runner)) return REFUSED_SUPPLIER;
 		const caller = String(runner.____slothletInternal.apiPath ?? "");
 		const allowed = permissionManager?.enforceAccess?.(
 			caller,
@@ -3158,7 +3172,7 @@ let moduleNodeResolver = () => null;
  * @returns {void}
  * @internal
  */
-export function setModuleNodeResolver(resolver) {
+function setModuleNodeResolver(resolver) {
 	moduleNodeResolver = resolver;
 }
 
@@ -3290,7 +3304,7 @@ function runtime_fileModuleOf(leaves) {
 	const modulePath = runtime_moduleRootPath(leaves);
 	if (modulePath === null || !paths.every((path) => path.startsWith(modulePath + "."))) return leaves;
 	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
-	const standing = node && genuineWrappers.has(node) && node.slothlet === leaves[0].slothlet;
+	const standing = node && trustedRootOwn.genuineWrappers.has(node) && node.slothlet === leaves[0].slothlet;
 	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
 }
 
@@ -3310,7 +3324,7 @@ function runtime_fileModuleOf(leaves) {
  * const loading = createModuleLoad(slothlet, "/app/api/sync.mjs", null);
  * loading.wrapper(); // null while the file loads, then the node at `sync`
  */
-export function createModuleLoad(slothlet, filePath, moduleID) {
+function createModuleLoad(slothlet, filePath, moduleID) {
 	let record = null;
 	const loading = {
 		slothlet,
@@ -3359,7 +3373,7 @@ export function createModuleLoad(slothlet, filePath, moduleID) {
  * @example
  * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
  */
-export function loadOnStack(loads) {
+function loadOnStack(loads) {
 	for (const frame of runtime_captureFrames(32)) {
 		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
 			// A call slothlet entered is running: its code is the call's, not a load's.
@@ -3444,7 +3458,7 @@ function runtime_checksPermissions(slothlet) {
  * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
-export function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
+function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
 	const identity = contextManager?.getCallerIdentity?.(instanceID);
 	if (!identity?.currentWrapper) {
 		// Who runs it cannot be told (several calls are waiting and the stack names more than one, or none): it is no
@@ -3601,7 +3615,7 @@ function runtime_leavesAtLocation(path, line, running = null) {
  *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
  * @internal
  */
-export function frameDefiner(running = null) {
+function frameDefiner(running = null) {
 	const frames = runtime_captureFrames(24);
 	return runtime_holdDetachedJob(runtime_definerAt(frames, running), frames);
 }
@@ -3863,7 +3877,7 @@ function runtime_importsHelper(helper, leaves) {
  * @example
  * isLeafFileFunction(fn, [first, owner]); // false for a function written in a helper file
  */
-export function isLeafFileFunction(fn, leaves) {
+function isLeafFileFunction(fn, leaves) {
 	let own;
 	try {
 		own = functionSource(fn);
@@ -4030,7 +4044,7 @@ const LEAF_FILES = new WeakMap();
  * @returns {void}
  * @internal
  */
-export function registerLeafFile(wrapper) {
+function registerLeafFile(wrapper) {
 	const filePath = wrapper?.____slothletInternal?.filePath;
 	const slothlet = wrapper?.slothlet;
 	if (!filePath || !slothlet || typeof WeakRef !== "function") return;
@@ -4105,7 +4119,7 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
  * @returns {Array<object>|null} The leaves whose code it is, empty for the host's, or null for code no one accounts for.
  * @internal
  */
-export function runtime_codeWritersOnStack(slothlet) {
+function runtime_codeWritersOnStack(slothlet) {
 	const family = slothlet.instanceID;
 	const sources = [{ family, slothlet, roots: [] }];
 	for (const frame of runtime_captureFrames(48)) {
@@ -4176,7 +4190,7 @@ function runtime_foreignCodeRunning(record, capture = null) {
 	// A pinned call (a slothlet function a module read, run by another) carries the calls it runs under as its ceiling:
 	// their code calling it is accounted for, held to them already.
 	const ceilings = ceilingMembers(record.ceiling).filter(
-		(wrapper) => wrapper && wrapper !== leaf && genuineWrappers.has(wrapper) && describeCall(wrapper).filePath
+		(wrapper) => wrapper && wrapper !== leaf && trustedRootOwn.genuineWrappers.has(wrapper) && describeCall(wrapper).filePath
 	);
 	let cached = ceilings.length ? null : SINGLE_PLACERS.get(leaf);
 	if (!cached || cached.description !== description) {
@@ -4442,3 +4456,173 @@ if (isNode) {
 		}
 	}
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
+			"lib/handlers/context-async",
+			"lib/handlers/context-live",
+			"lib/handlers/unified-wrapper",
+			"lib/helpers/class-instance-wrapper",
+			"lib/processors/loader",
+			"slothlet"
+		])
+	)
+		throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	return {
+		attributeResult,
+		createFramePlacer,
+		createModuleLoad,
+		describeCall,
+		enterCall,
+		forgetInstanceScripts,
+		frameDefiner,
+		handedLeafFunctions,
+		isLeafFileFunction,
+		loadOnStack,
+		outerCallerCeiling,
+		recordInstanceOwner,
+		registerLeafFile,
+		resolveSupplier,
+		runtime_captureFrames,
+		runtime_codeWritersOnStack,
+		setApiValueCheck,
+		setHandedOutCheck,
+		setHostPrototypeCheck,
+		setInboundOriginal,
+		setModuleNodeResolver,
+		setResultAttributor,
+		stackHoldsInstanceCode,
+		supplierChainCeiling
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof runtime_importedLocations} */
+const guarded_runtime_importedLocations = guardInternal(runtime_importedLocations, "runtime_importedLocations", import.meta.url);
+/** @type {typeof runtime_realComparablePath} */
+const guarded_runtime_realComparablePath = guardInternal(runtime_realComparablePath, "runtime_realComparablePath", import.meta.url);
+/** @type {typeof runtime_entryNames} */
+const guarded_runtime_entryNames = guardInternal(runtime_entryNames, "runtime_entryNames", import.meta.url);
+/** @type {typeof runtime_captureFrames} */
+const guarded_runtime_captureFrames = guardInternal(runtime_captureFrames, "runtime_captureFrames", import.meta.url);
+/** @type {typeof forgetInstanceScripts} */
+const guarded_forgetInstanceScripts = guardInternal(forgetInstanceScripts, "forgetInstanceScripts", import.meta.url);
+/** @type {typeof enterCall} */
+const guarded_enterCall = guardInternal(enterCall, "enterCall", import.meta.url);
+/** @type {typeof describeCall} */
+const guarded_describeCall = guardInternal(describeCall, "describeCall", import.meta.url);
+/** @type {typeof createFramePlacer} */
+const guarded_createFramePlacer = guardInternal(createFramePlacer, "createFramePlacer", import.meta.url);
+/** @type {typeof stackHoldsInstanceCode} */
+const guarded_stackHoldsInstanceCode = guardInternal(stackHoldsInstanceCode, "stackHoldsInstanceCode", import.meta.url);
+/** @type {typeof setApiValueCheck} */
+const guarded_setApiValueCheck = guardInternal(setApiValueCheck, "setApiValueCheck", import.meta.url);
+/** @type {typeof setResultAttributor} */
+const guarded_setResultAttributor = guardInternal(setResultAttributor, "setResultAttributor", import.meta.url);
+/** @type {typeof attributeResult} */
+const guarded_attributeResult = guardInternal(attributeResult, "attributeResult", import.meta.url);
+/** @type {typeof setHostPrototypeCheck} */
+const guarded_setHostPrototypeCheck = guardInternal(setHostPrototypeCheck, "setHostPrototypeCheck", import.meta.url);
+/** @type {typeof setHandedOutCheck} */
+const guarded_setHandedOutCheck = guardInternal(setHandedOutCheck, "setHandedOutCheck", import.meta.url);
+/** @type {typeof setInboundOriginal} */
+const guarded_setInboundOriginal = guardInternal(setInboundOriginal, "setInboundOriginal", import.meta.url);
+/** @type {typeof handedLeafFunctions} */
+const guarded_handedLeafFunctions = guardInternal(handedLeafFunctions, "handedLeafFunctions", import.meta.url);
+/** @type {typeof supplierChainCeiling} */
+const guarded_supplierChainCeiling = guardInternal(supplierChainCeiling, "supplierChainCeiling", import.meta.url);
+/** @type {typeof resolveSupplier} */
+const guarded_resolveSupplier = guardInternal(resolveSupplier, "resolveSupplier", import.meta.url);
+/** @type {typeof recordInstanceOwner} */
+const guarded_recordInstanceOwner = guardInternal(recordInstanceOwner, "recordInstanceOwner", import.meta.url);
+/** @type {typeof isInstanceOwnerFile} */
+const guarded_isInstanceOwnerFile = guardInternal(isInstanceOwnerFile, "isInstanceOwnerFile", import.meta.url);
+/** @type {typeof installViteHostRegistry} */
+const guarded_installViteHostRegistry = guardInternal(installViteHostRegistry, "installViteHostRegistry", import.meta.url);
+/** @type {typeof installViteLoadedRegistry} */
+const guarded_installViteLoadedRegistry = guardInternal(installViteLoadedRegistry, "installViteLoadedRegistry", import.meta.url);
+/** @type {typeof setModuleNodeResolver} */
+const guarded_setModuleNodeResolver = guardInternal(setModuleNodeResolver, "setModuleNodeResolver", import.meta.url);
+/** @type {typeof createModuleLoad} */
+const guarded_createModuleLoad = guardInternal(createModuleLoad, "createModuleLoad", import.meta.url);
+/** @type {typeof loadOnStack} */
+const guarded_loadOnStack = guardInternal(loadOnStack, "loadOnStack", import.meta.url);
+/** @type {typeof outerCallerCeiling} */
+const guarded_outerCallerCeiling = guardInternal(outerCallerCeiling, "outerCallerCeiling", import.meta.url);
+/** @type {typeof frameDefiner} */
+const guarded_frameDefiner = guardInternal(frameDefiner, "frameDefiner", import.meta.url);
+/** @type {typeof isLeafFileFunction} */
+const guarded_isLeafFileFunction = guardInternal(isLeafFileFunction, "isLeafFileFunction", import.meta.url);
+/** @type {typeof registerLeafFile} */
+const guarded_registerLeafFile = guardInternal(registerLeafFile, "registerLeafFile", import.meta.url);
+/** @type {typeof runtime_codeWritersOnStack} */
+const guarded_runtime_codeWritersOnStack = guardInternal(runtime_codeWritersOnStack, "runtime_codeWritersOnStack", import.meta.url);
+export {
+	guarded_runtime_importedLocations as runtime_importedLocations,
+	guarded_runtime_realComparablePath as runtime_realComparablePath,
+	guarded_runtime_entryNames as runtime_entryNames,
+	guarded_runtime_captureFrames as runtime_captureFrames,
+	guarded_forgetInstanceScripts as forgetInstanceScripts,
+	guarded_enterCall as enterCall,
+	guarded_describeCall as describeCall,
+	guarded_createFramePlacer as createFramePlacer,
+	guarded_stackHoldsInstanceCode as stackHoldsInstanceCode,
+	guarded_setApiValueCheck as setApiValueCheck,
+	guarded_setResultAttributor as setResultAttributor,
+	guarded_attributeResult as attributeResult,
+	guarded_setHostPrototypeCheck as setHostPrototypeCheck,
+	guarded_setHandedOutCheck as setHandedOutCheck,
+	guarded_setInboundOriginal as setInboundOriginal,
+	guarded_handedLeafFunctions as handedLeafFunctions,
+	guarded_supplierChainCeiling as supplierChainCeiling,
+	guarded_resolveSupplier as resolveSupplier,
+	guarded_recordInstanceOwner as recordInstanceOwner,
+	guarded_isInstanceOwnerFile as isInstanceOwnerFile,
+	guarded_installViteHostRegistry as installViteHostRegistry,
+	guarded_installViteLoadedRegistry as installViteLoadedRegistry,
+	guarded_setModuleNodeResolver as setModuleNodeResolver,
+	guarded_createModuleLoad as createModuleLoad,
+	guarded_loadOnStack as loadOnStack,
+	guarded_outerCallerCeiling as outerCallerCeiling,
+	guarded_frameDefiner as frameDefiner,
+	guarded_isLeafFileFunction as isLeafFileFunction,
+	guarded_registerLeafFile as registerLeafFile,
+	guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack
+};
