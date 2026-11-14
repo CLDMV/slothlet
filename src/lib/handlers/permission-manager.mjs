@@ -97,8 +97,8 @@ const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
- * Most-specific-wins is always the primary rule; only among equally-specific rules does the
- * higher layer win, so the composing host (instance config / gated runtime) overrides a module's
+ * Most-specific-wins is always the primary rule (a pattern's kind, then its literal segments); only among
+ * equally-specific rules does the higher layer win, so the composing host (instance config / gated runtime) overrides a module's
  * manifest, which overrides the framework built-in default. Within a single layer, last-registered
  * wins. Higher number = higher precedence.
  *
@@ -1023,21 +1023,12 @@ export class PermissionManager extends ComponentBase {
 		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) return this.#eventDefault;
 
-		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered. A pattern's
-		// specificity is its kind, then its literal segments (`guest.zz.**` over `guest.**` over `**`), so the
-		// narrower rule wins whichever was registered last; order only breaks a tie between equally specific rules.
-		const specificity = (entry) => [
-			this.#patternSpecificity(entry.caller, subscriberPath) + this.#patternSpecificity(entry.event, eventName),
-			this.#literalSegments(entry.caller) + this.#literalSegments(entry.event)
-		];
-		conditioned.sort((a, b) => {
-			const [kindA, literalA] = specificity(a);
-			const [kindB, literalB] = specificity(b);
-			if (kindA !== kindB) return kindB - kindA;
-			if (literalA !== literalB) return literalB - literalA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered (see #sortBySpecificity).
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#patternSpecificity(entry.caller, subscriberPath) + this.#patternSpecificity(entry.event, eventName),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.event)
+		);
 		return conditioned[0].effect;
 	}
 
@@ -2166,13 +2157,11 @@ export class PermissionManager extends ComponentBase {
 			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
 			if (this.#conditionMatches(entry, runtimeContext, null)) conditioned.push(entry);
 		}
-		conditioned.sort((a, b) => {
-			const specA = this.#computeSpecificity(a, callerPath, targetPath);
-			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.target)
+		);
 		// The built-in default always matches, so there is a winner.
 		return conditioned[0];
 	}
@@ -2180,7 +2169,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * The write rule that decides a module's write, with no audit.
 	 *
-	 * Most-specific-wins, then the higher layer, then the last registered, as for call rules. A rule module code
+	 * Most-specific-wins (kind, then literal segments), then the higher layer, then the last registered, as for call rules. A rule module code
 	 * added for its own subtree never lifts a built-in rule, so where a built-in deny matches, such allows are
 	 * left out; the host, a manifest, and a module the host or its manifest let manage rules may lift one.
 	 *
@@ -2221,15 +2210,11 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#pickWrite(conditioned, builtinDenied, callerPath, targetPath) {
 		if (builtinDenied) conditioned = conditioned.filter((entry) => entry.effect !== "allow" || entry.layer !== "module");
-		const spec = (entry) =>
-			this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath);
-		conditioned.sort((a, b) => {
-			const specA = spec(a);
-			const specB = spec(b);
-			if (specA !== specB) return specB - specA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.writePathPattern)
+		);
 		return conditioned[0];
 	}
 
@@ -3138,7 +3123,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Evaluate all rules for a caller→target pair.
-	 * Most-specific-wins; tiebreak: last-registered wins.
+	 * Most-specific-wins (kind, then literal segments); tiebreak: higher layer, then last-registered.
 	 * An optional runtimeContext filters rules by their condition field.
 	 *
 	 * @param {string} callerPath - Caller API path.
@@ -3190,15 +3175,13 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Most-specific-wins (primary). Equal specificity → higher precedence layer wins
+		// Most-specific-wins (primary: kind, then literal segments). Equal specificity → higher precedence layer wins
 		// (runtime > instance > manifest > builtin); within a layer → last-registered wins.
-		conditioned.sort((a, b) => {
-			const specA = this.#computeSpecificity(a, callerPath, targetPath);
-			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA; // higher specificity first
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
-			return b.registrationSeq - a.registrationSeq; // later first → last-registered wins (within a layer)
-		});
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.target)
+		);
 		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
@@ -3248,8 +3231,8 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins, with a
-	 * specific type outranking the any-type `hook`; equal specificity → higher layer, then
+	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins (a
+	 * specific type outranks the any-type `hook`, then literal segments); equal specificity → higher layer, then
 	 * last-registered. Returns `matched: false`
 	 * when no hook-target rule applies (the caller then falls back to the call decision).
 	 *
@@ -3278,24 +3261,15 @@ export class PermissionManager extends ComponentBase {
 			return { matched: false, allowed: false, event: null, payload: null };
 		}
 
-		// Specificity: caller + path-pattern specificity, plus a point for a specific type over `hook`.
-		const spec = (e) =>
-			this.#patternSpecificity(e.caller, callerPath) +
-			this.#patternSpecificity(e.hookPathPattern, hookPath) +
-			(e.hookType === "hook" ? 0 : 1);
-		conditioned.sort((a, b) => {
-			const specA = spec(a);
-			const specB = spec(b);
-			if (specA !== specB) return specB - specA;
-			// Different-layer tiebreak: two equal-specificity HOOK rules at distinct precedence layers
-			// matching the same registration. The hook-rule layer sources that could so collide do not
-			// co-occur on an arbitrary hook path via the public API (built-in rules gate only the
-			// `slothlet.hook.*` control surface; manifest rules are module-scoped), so this arm is not
-			// reachable here; the identical layer tiebreak is exercised by the event-rule comparator.
-			/* v8 ignore next */
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
-			return b.registrationSeq - a.registrationSeq; // last-registered wins (within a layer)
-		});
+		// Specificity: caller + path-pattern kind, plus a point for a specific type over `hook`; then literal segments.
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) =>
+				this.#patternSpecificity(entry.caller, callerPath) +
+				this.#patternSpecificity(entry.hookPathPattern, hookPath) +
+				(entry.hookType === "hook" ? 0 : 1),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.hookPathPattern)
+		);
 		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
@@ -3383,8 +3357,37 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Count a pattern's literal segments: those with no glob character. Event rules rank patterns of the same
-	 * kind by this, so `guest.zz.**` (2) is more specific than `guest.**` (1), and that than `**` (0).
+	 * Order the rules that match one decision, the one that decides first: the more specific rule (a higher `kind`
+	 * score), then among equal kinds the one with more literal segments (`db.write.**` over `db.**` over `**`), then
+	 * the higher layer (runtime over instance over manifest over built-in), then the last registered. The same order
+	 * decides call, write, hook and event rules, so the narrower rule wins whichever was registered last and layer and
+	 * order only break a tie between equally specific rules.
+	 *
+	 * @param {object[]} rules - The matching rules; sorted in place.
+	 * @param {function(object): number} kind - A rule's kind score: its patterns' kinds summed (exact 3, single-segment glob 2, `**` 1).
+	 * @param {function(object): number} literal - A rule's literal segments: its patterns' counts summed.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * this.#sortBySpecificity(matches, (rule) => this.#computeSpecificity(rule, caller, target), (rule) => this.#literalSegments(rule.target));
+	 */
+	#sortBySpecificity(rules, kind, literal) {
+		rules.sort((a, b) => {
+			const kindA = kind(a);
+			const kindB = kind(b);
+			if (kindA !== kindB) return kindB - kindA;
+			const literalA = literal(a);
+			const literalB = literal(b);
+			if (literalA !== literalB) return literalB - literalA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+	}
+
+	/**
+	 * Count a pattern's literal segments: those with no glob character. Rules of the same kind are ranked by this
+	 * (see #sortBySpecificity), so `guest.zz.**` (2) is more specific than `guest.**` (1), and that than `**` (0).
 	 *
 	 * @param {string} pattern - Glob pattern.
 	 * @returns {number} The number of `.`-separated segments with no `*`, `?`, `{` or `}`.

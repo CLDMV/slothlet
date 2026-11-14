@@ -987,7 +987,8 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Single-segment glob (`*`, `?`, `{a,b}`) = 2 points
    - Multi-segment glob (`**`) = 1 point
    - Combined score = caller specificity + target specificity (range: 2–6)
-5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > module rules (a module's own `slothlet.module.json` rules, and the rules its code adds) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
+   - Among rules with the same score, the one naming more **literal segments** (segments with no glob character, caller and target counted together) is more specific: `db.write.**` over `db.**` over `**`. A hook rule (`pattern:type`) also gets one extra point for a specific hook type over `hook`, before literal segments are compared.
+5. **Tiebreak**: Among rules that are equally specific, the higher precedence **layer** wins — `runtime` > `instance` (config) > module rules (a module's own `slothlet.module.json` rules, and the rules its code adds) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in. A narrower rule wins over a broader one of a higher layer.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
 7. **Owner grant** (only with `owner: true`): if the default policy just denied, and the caller leaf and the target are currently owned by the same module, allow instead. An explicit rule — allow or deny — that matched in steps 3–5 has already decided, so it is never overridden. See [Owner Grant](#owner-grant).
 
@@ -1007,6 +1008,16 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
 ```
 
 If a deny rule at score 4 and an allow rule at score 6 both match, the allow rule wins because it is more specific.
+
+Rules of the same score are told apart by their literal segments, so the order they were added in does not matter:
+
+```javascript
+rules.addRule({ caller: "**", target: "db.**", effect: "allow" });
+rules.addRule({ caller: "**", target: "db.write.**", effect: "deny" });
+// db.write.insert is denied and db.read.query is allowed; the same in the other order
+```
+
+Call, write (`pattern:write`), hook (`pattern:type`) and [event](#event-rules) rules all compare the same way. Order and layer decide only between rules that are equally specific.
 
 ---
 
