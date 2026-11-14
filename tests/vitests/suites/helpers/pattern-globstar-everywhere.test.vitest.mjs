@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:27-08:00 (1794477627)
+ *	@Last modified time: 2026-11-14T09:09:44-08:00 (1794676184)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,20 +85,20 @@ describe.each([
 		}
 	});
 
-	it("a root-anchored routine ^work.job.** runs work.job and work.job.step", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "^work.job.**", mode: "manual" }] });
+	it("a root-anchored routine ^work.** runs work and work.step", async () => {
+		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "^work.**", mode: "manual" }] });
 		try {
-			await api["^work.job.**"]();
+			await api["^work.**"]();
 			expect([...globalThis.__slothletGlobstarLog].sort()).toEqual(["work.job", "work.job.step"]);
 		} finally {
 			await api.slothlet.shutdown();
 		}
 	});
 
-	it("a mount-relative routine work.job.** runs work.job and work.job.step", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "work.job.**", mode: "manual" }] });
+	it("a mount-relative routine work.** runs work and work.step", async () => {
+		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "work.**", mode: "manual" }] });
 		try {
-			await api["work.job.**"]();
+			await api["work.**"]();
 			expect([...globalThis.__slothletGlobstarLog].sort()).toEqual(["work.job", "work.job.step"]);
 		} finally {
 			await api.slothlet.shutdown();

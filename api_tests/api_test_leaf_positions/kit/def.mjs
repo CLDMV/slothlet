@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T01:56:54-08:00 (1794477414)
+ *	@Last modified time: 2026-11-14T09:06:19-08:00 (1794675979)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * The default export: hands out a function that reads the vault.
  * @returns {function(): string} The function.
  * @example
- * (await api.kit.def())(); // "SECRET"
+ * (await api.kit())(); // "SECRET"
  */
 export default () => () => self.vault.get();
 
@@ -34,6 +34,6 @@ export default () => () => self.vault.get();
  * @memberof module:api_test_leaf_positions.kit.def
  * @returns {function(): string} The function.
  * @example
- * (await api.kit.def.hidden())(); // "PERMISSION_DENIED" when the rules deny `def.hidden`
+ * (await api.kit.hidden())(); // "PERMISSION_DENIED" when the rules deny `kit.hidden`
  */
 export const hidden = () => () => self.vault.get();

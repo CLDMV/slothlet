@@ -193,9 +193,9 @@ api.logger.utils.debug("x"); // utils.mjs still accessible
 
 ### F05: Single File with Root-Level Default
 
-**When:** A folder has one file with a default export (filenames need not match)
-**Result:** Default export promoted to folder name as a clean callable entry point
-**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)
+**When:** A folder has one file and nothing else, and the file's default export is a function (filenames need not match, and neither does the function's name; a generic name such as `index.mjs` counts too)
+**Result:** Default export promoted to folder name as a clean callable entry point; the file's other exports attach to it as members
+**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening) | **Technical**: [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)
 
 **Example:**
 
@@ -215,6 +215,20 @@ export default function processor(input) {
 api.processor("hello"); // ✅ "HELLO"
 // NOT: api.processor.process("hello") ❌
 ```
+
+```javascript
+// File: e/x.mjs (the folder's only file)
+export default function run() {}
+export function helper() {}
+
+api.e(); // ✅ runs `run`
+api.e.helper(); // ✅ the other exports are members of the folder's function
+// NOT: api.e.x() / api.e.x.helper() ❌
+```
+
+This holds in eager and lazy mode, at every depth, at initial load and under `api.slothlet.api.add()`. Permission rules, hook patterns and `__metadata.apiPath` name the folder's path (`e`, `e.helper`).
+
+**Not promoted:** a default export that is not a function (an object, a `Map`, a `Date`, a primitive) keeps the file's level (`e/x.mjs` exporting `default { a }` is `api.e.x.a`), as does a single file with no default export (`e/x.mjs` exporting `function x` is `api.e.x()`; see [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)). A folder holding a second file or a subfolder keeps every file at its own level.
 
 **Why:** When a folder's entire purpose is captured by a single default export, the folder name becomes the semantic identifier.
 
@@ -385,20 +399,15 @@ flowchart TD
     D -->|Yes| E[✓ Flatten: F04\nDefault in matching file]
     D -->|No| F[✓ Flatten: F01\nFolder/file name match]
 
-    C -->|No| G{Is file named 'index'\nor other generic name?}
-    G -->|Yes| H[✓ Flatten: F02\nIndex/generic file pattern]
-    G -->|No| I{Single named export?}
-
-    I -->|Yes| J{Export name matches folder?}
-    J -->|Yes| K[✓ Flatten: F03\nNamed export match]
-    J -->|No| L{Has default export?}
-
+    C -->|No| L{Default export\nis a function?}
     L -->|Yes| M[✓ Flatten: F05\nSingle file default]
-    L -->|No| Z
+    L -->|No| G{Is file named 'index'\nor other generic name?}
 
-    I -->|No| N{Has default export?}
-    N -->|Yes| M
-    N -->|No| Z
+    G -->|Yes| H[✓ Flatten: F02\nIndex/generic file pattern]
+    G -->|No| I{Single named export\nmatching folder?}
+
+    I -->|Yes| K[✓ Flatten: F03\nNamed export match]
+    I -->|No| Z
 ```
 
 **Decision Tree Logic:**
@@ -407,10 +416,10 @@ flowchart TD
 2. **F08 Check**: AddApi path deduplication (direct subfolder match)
 3. **F09**: A folder holding only a same-named folder is one level (applied before the folder's files are looked at)
 4. **F01 & F04**: Folder/file name matching (with and without default export)
-5. **F02**: Index / generic filename transparency
-6. **F03**: Single named export matching folder
-7. **F05**: Single file default export promotion
-8. **Default**: No flattening when no rules match
+5. **F05**: Single file default export promotion (the default export is a function; any file name)
+6. **F02**: Index / generic filename transparency
+7. **F03**: Single named export matching folder
+8. **Default**: No flattening when no rules match: the file keeps its own level
 
 ---
 

@@ -169,7 +169,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **User Guide**: [F01](API-RULES/API-FLATTENING.md#f01)
 **Technical**: [C07, C10, C13, C20, C21](API-RULES/API-RULES-CONDITIONS.md#c10)
 
-**Condition**: A folder contains a single file whose exported function matches the folder/flatten anchor. When no single-function match applies, the default fallback (C07) preserves each file as its own namespace.
+**Condition**: A folder contains a single file whose exported function matches the folder/flatten anchor. A folder's only file whose default export is a function is the folder whatever the file or function is called ([Rule 8](#rule-8-object--namespace-default-flattening), [F05](API-RULES/API-FLATTENING.md#f05)). When neither applies, the default fallback (C07) preserves each file as its own namespace: every file of a multi-file folder, and a single file with no default-export function (`e/x.mjs` exporting `function x` is `api.e.x()`).
 **Behavior**: The matching single-function file's export is promoted to the folder level; otherwise namespaces are preserved.
 
 **Verified Examples**:
@@ -360,7 +360,7 @@ api.config.port; // 3000
 **User Guide**: [F04](API-RULES/API-FLATTENING.md#f04), [F05](API-RULES/API-FLATTENING.md#f05)
 **Technical**: [C11, C17, C23](API-RULES/API-RULES-CONDITIONS.md#c11)
 
-**Condition**: A module's default export is an object or function that becomes the namespace itself (e.g. a folder-name-matching file with a default export)
+**Condition**: A module's default export is an object or function that becomes the namespace itself (e.g. a folder-name-matching file with a default export). A folder's only file whose default export is a function becomes the folder whatever the file or function is called ([F05](API-RULES/API-FLATTENING.md#f05)); its other exports are the folder's members
 **Source Files**: `api_tests/api_test/logger.mjs`
 **Implementation**: `getFlatteningDecision()` → single module default export promotion
 
@@ -388,6 +388,17 @@ api.logger.utils.debug("x"); // other files remain as namespace properties
 ```
 
 This pattern applies consistently at root level and category level.
+
+**Single-File Folder Pattern** ([F05](API-RULES/API-FLATTENING.md#f05)): a folder holding one file and nothing else is that file's default-export function, whatever either is called:
+
+```javascript
+// File: e/x.mjs → export default function run(); export function helper()
+api.e(); // calls run
+api.e.helper(); // the file's other exports are members of the folder's function
+// not api.e.x() / api.e.x.helper()
+```
+
+A default export that is not a function (an object, a `Map`, a primitive) keeps the file's level (`api.e.x`).
 
 **Technical Implementation**:
 

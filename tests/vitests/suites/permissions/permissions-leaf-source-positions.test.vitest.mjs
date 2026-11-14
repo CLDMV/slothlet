@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:02-08:00 (1794477662)
+ *	@Last modified time: 2026-11-14T09:10:46-08:00 (1794676246)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../../../..");
 const FIXTURE = path.join(REPO_ROOT, "api_tests/api_test_leaf_positions");
 
-const FILES = ["dup", "renamed", "kit.def", "mini", "cjsdup", "cjsobj", "tsdup"];
+const FILES = ["dup", "renamed", "kit", "mini", "cjsdup", "cjsobj", "tsdup"];
 const EXPECTED = { hostShown: "SECRET", hostHidden: "PERMISSION_DENIED", moduleShown: "SECRET", moduleHidden: "PERMISSION_DENIED" };
 
 const CONFIGS = ["eager", "lazy"].flatMap((mode) =>
@@ -82,15 +82,15 @@ function childScript(copyDir) {
 		const rulesFor = (files) => files.flatMap((file) => [
 			{ caller: file + ".hidden", target: "vault.**", effect: "deny" },
 			// A default export is its file's module node, so the module path is the export the rules allow.
-			...(file === "kit.def" ? [] : [{ caller: file, target: "vault.**", effect: "deny" }])
+			...(file === "kit" ? [] : [{ caller: file, target: "vault.**", effect: "deny" }])
 		]);
 		const read = async (api, file) => {
 			const node = at(api, file);
-			const shown = file === "kit.def" ? () => node() : () => node.shown();
+			const shown = file === "kit" ? () => node() : () => node.shown();
 			return {
 				hostShown: await attempt(async () => (await shown())()),
 				hostHidden: await attempt(async () => (await node.hidden())()),
-				moduleShown: await api.runner.run(file, file === "kit.def" ? undefined : "shown"),
+				moduleShown: await api.runner.run(file, file === "kit" ? undefined : "shown"),
 				moduleHidden: await api.runner.run(file, "hidden")
 			};
 		};

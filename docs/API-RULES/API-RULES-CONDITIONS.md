@@ -178,7 +178,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Related Rule**: All rules (fallback)
 **Status**: ✅ Active
 
-**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default.
+**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default. In a folder it keeps every file of a multi-file folder at its own level, and a single file with no default-export function; a folder's only file whose default export is a function is the folder instead ([F05](API-FLATTENING.md#f05), composed in `processFiles()` of `src/lib/builders/modes-processor.mjs` as the folder's self-named file).
 
 **Function**: `getFlatteningDecision()`
 **Source**: `src/lib/processors/flatten.mjs` ~L174
@@ -488,6 +488,7 @@ if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__s
 ```
 
 **Triggers**: Module is an anonymous/unnamed function or explicit default + nested context
+**Note**: a named default function that is a folder's only file is promoted too, by [F05](API-FLATTENING.md#f05) (the file composes as the folder's self-named file), whatever its name.
 **Used By**: [API-RULES Rule 4](../API-RULES.md#rule-4-default-export-promotion)
 
 ---

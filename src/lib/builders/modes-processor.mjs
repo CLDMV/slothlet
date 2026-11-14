@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T17:24:28-08:00 (1794619468)
+ *	@Last modified time: 2026-11-14T09:08:20-08:00 (1794676100)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -825,6 +825,23 @@ export class ModesProcessor extends ComponentBase {
 				entry.moduleName = modes_addapiSelfName;
 				entry.file = { ...entry.file, name: modes_addapiSelfName, fullName: `${modes_addapiSelfName}${extension}` };
 			}
+		}
+		// F05 (Rule 8): a folder whose only entry is a file with a default-export function is that function, whatever
+		// the file or the function is called, so the file composes as the folder's self-named file (F04): `e/x.mjs`
+		// with `export default function run` and `export function helper` is `api.e()` and `api.e.helper()`. Only a
+		// folder level (the mount root has no folder of its own), a disk file, and nothing else in the folder.
+		if (
+			categoryName &&
+			loadedModules.length === 1 &&
+			(directory?.children?.directories?.length ?? 0) === 0 &&
+			!loadedModules[0].file.synthetic &&
+			loadedModules[0].moduleName !== categoryName &&
+			typeof loadedModules[0].mod.default === "function"
+		) {
+			const entry = loadedModules[0];
+			const extension = entry.file.fullName ? entry.file.fullName.slice(entry.file.fullName.lastIndexOf(".")) : "";
+			entry.moduleName = categoryName;
+			entry.file = { ...entry.file, name: categoryName, fullName: `${categoryName}${extension}` };
 		}
 		// Calculate if there are multiple default exports in this directory
 		const hasMultipleDefaults = loadedModules.filter((m) => m.analysis.hasDefault).length > 1;
@@ -2914,7 +2931,12 @@ export class ModesProcessor extends ComponentBase {
 			// An `addapi` file in a folder with no self-named file is that folder's self-named file (Rule 11
 			// with F01; see processFiles), so it counts as one here too.
 			const _fileNames = dir.children.files.map((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name));
-			const _hasCategoryFile = _fileNames.includes(categoryName) || _fileNames.includes("addapi");
+			// So is a folder's only entry when processFiles composed it as the folder's file module (F05: a default-export
+			// function, whatever the file is called).
+			const _hasCategoryFile =
+				_fileNames.includes(categoryName) ||
+				_fileNames.includes("addapi") ||
+				(_fileNames.length === 1 && subDirs.length === 0 && this.#folderModuleValues.has(materialized[categoryName]));
 			// The hoist turns the folder into the self-named FILE's module (Rule 8: a default export becomes
 			// the folder, the other files its properties; a single named object export likewise). The value
 			// under the folder's own name can also be a NAMED export of that file that shares the name (Rule 1
@@ -3072,8 +3094,9 @@ export class ModesProcessor extends ComponentBase {
 					// A callable file module with a sibling attached beside it (`e/e.mjs` + `e/y.mjs`): the folder is the
 					// composed function with the sibling's members on it, as the single-file hoist above composes it. The
 					// module's own wrapper is not handed on as the folder's value: the folder's node would hold that node
-					// inside itself, and one call would run the hooks of both.
-					if (attachedKeys.length > 0 && typeof nestedImpl === "function") {
+					// inside itself, and one call would run the hooks of both. The same holds for a folder's only file composed
+					// as its self-named file (F05) with no other export: the folder is the function itself.
+					if ((attachedKeys.length > 0 || _fileNames.length === 1) && typeof nestedImpl === "function") {
 						const composed = UnifiedWrapper._extractFullImpl(nestedW);
 						this.#carryWrapperChildren(nestedW, composed);
 						this.#refuseThenableValue(composed, apiPath);
