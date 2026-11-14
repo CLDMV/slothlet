@@ -2083,7 +2083,7 @@ export default slothlet;
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
  *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
- * @property {object} [permissions] - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+ * @property {object|"on"|"off"|"disabled"|boolean} [permissions] - Permission system configuration. Omit it and the system is off entirely. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`, `true` and `false` mean `"on"` and `"off"`; any other string or non-object value throws `INVALID_CONFIG`. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
  * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
  * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
  * @property {"default"|"verbose"|boolean} [permissions.audit="default"] - Audit level; `true`/`false` normalize to `"default"`.

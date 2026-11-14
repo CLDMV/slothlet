@@ -59,6 +59,8 @@ The permission system runs in one of three modes:
 
 [Event rules](#event-rules) are evaluated under `"on"` only: under `"off"` and `"disabled"` every event subscription is delivered at `allow`.
 
+`permissions` also takes a bare mode as shorthand for `{ mode }`: `permissions: "on"`, `permissions: "off"` and `permissions: "disabled"` are the same as `permissions: { mode: "on" }` and so on, `true` is `"on"`, and `false` is no `permissions` config (off). Any other string, number, or non-object value is an `INVALID_CONFIG`; a bare string never reads as a mode other than the one it names.
+
 `api.slothlet.permissions.control.mode` reports the mode. From `"disabled"`, `control.enable()` and `control.disable()` move to `"on"` and `"off"`.
 
 ## Configuration

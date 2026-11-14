@@ -112,6 +112,42 @@ export function normalizeHookConfig(hook) {
 }
 
 /**
+ * Expand the `permissions` shorthand forms to the object form.
+ *
+ * `"on"`, `"off"` and `"disabled"` mean `{ mode }`; `true` means `"on"`; `false` and any other falsy value mean no `permissions` config (off). An object, `null`
+ * and `undefined` come back as they are. Any other string, and any other value that is not an object, comes back as
+ * `undefined` with `valid: false`, so a bare value never quietly reads as a different mode than it names.
+ *
+ * Exported as a standalone function because the PermissionManager is constructed during `_initializeComponents`,
+ * before `transformConfig` runs, and must read the same shorthand from the raw config. It does not throw: the
+ * config normalizer reports the invalid value as `INVALID_CONFIG` right after.
+ *
+ * @param {*} permissions - Raw `permissions` option.
+ * @returns {{value: (object|null|undefined), valid: boolean}} The object form (or the absent value), and whether the input was a form `permissions` accepts.
+ * @public
+ *
+ * @example
+ * expandPermissionsShorthand("disabled"); // => { value: { mode: "disabled" }, valid: true }
+ * expandPermissionsShorthand("nope"); // => { value: undefined, valid: false }
+ */
+export function expandPermissionsShorthand(permissions) {
+	if (permissions === undefined || permissions === null || typeof permissions === "object") {
+		return { value: permissions, valid: true };
+	}
+	if (!permissions) {
+		// `false` (and any other falsy value) is no `permissions` config at all: the system is off.
+		return { value: null, valid: true };
+	}
+	if (permissions === true) {
+		return { value: { mode: "on" }, valid: true };
+	}
+	if (permissions === "on" || permissions === "off" || permissions === "disabled") {
+		return { value: { mode: permissions }, valid: true };
+	}
+	return { value: undefined, valid: false };
+}
+
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -1209,7 +1245,7 @@ export class Config extends ComponentBase {
 	/**
 	 * Normalize permissions configuration.
 	 *
-	 * @param {object|null} [permissions] - Raw permissions config from user.
+	 * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
 	 * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
 	 * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
 	 *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
@@ -1253,6 +1289,21 @@ export class Config extends ComponentBase {
 	 * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
 	 */
 	normalizePermissions(permissions) {
+		const expanded = expandPermissionsShorthand(permissions);
+		if (!expanded.valid) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions",
+					value: typeof permissions === "string" ? `"${permissions}"` : String(permissions),
+					expected: 'an object, "on", "off", "disabled", or a boolean',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		permissions = expanded.value;
 		if (!permissions || typeof permissions !== "object") {
 			return null;
 		}
