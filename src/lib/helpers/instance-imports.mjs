@@ -407,7 +407,7 @@ const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
 
 /**
  * Whether the resolution the resolve hook is answering is a `require()` loading the file, made by an instance's code:
- * Node's CommonJS loader (`Module._load`) is reached on the stack before the `require` function Node hands each module
+ * Node's CommonJS loader (`Module._load`, `Function._load` on Node 22) is reached on the stack before the `require` function Node hands each module
  * (a `require.resolve()` reaches that function first), and the `require` is made from an instance copy's URL or while
  * such a copy's code runs.
  * @param {string} parentURL - The requiring file's URL.
@@ -430,7 +430,8 @@ function isInstanceRequireLoad(parentURL) {
 	let at = -1;
 	for (let i = 0; i < lines.length && at === -1; i++) {
 		if (lines[i].includes("(node:internal/modules/helpers:")) return false;
-		if (/^\s*at Module\._load \(node:/.test(lines[i])) at = i;
+		// Node 22 names the loader's frame `Function._load`, later versions `Module._load`.
+		if (/^\s*at (?:Module|Function)\._load \(node:/.test(lines[i])) at = i;
 	}
 	if (at === -1) return false;
 	return parentURL.includes(MARKER) || lines.slice(at + 1).some((line) => INSTANCE_FRAME.test(line));
@@ -2508,7 +2509,53 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 	if (typeof nodeModule?.registerHooks !== "function") return false;
 	nodeModule.registerHooks(HOOKS);
 	HOOKED = true;
+	holdRequireResolve(nodeModule);
 	return true;
+}
+
+/**
+ * The path a probe `require.resolve()` names while {@link holdRequireResolve} checks whether Node asks the resolve hook
+ * for one, and whether the hook was asked.
+ * @type {{path: ?string, seen: boolean}}
+ * @private
+ */
+const RESOLVE_PROBE = { path: null, seen: false };
+
+/**
+ * Hold a `require.resolve()` to the rule of {@link refuseInternalImport} where Node does not ask the resolve hook for
+ * one: Node 22 runs the hooks `module.registerHooks()` registers for a `require()` alone, later versions for a
+ * `require.resolve()` too. There, Node's own CommonJS resolution (`Module._resolveFilename`, which every
+ * `require.resolve()` reaches) is wrapped: a module's code naming one of slothlet's own files is refused, as the hook
+ * refuses it elsewhere. A resolution the hook is answering is left to the hook, and one Node already asks the hook for
+ * is not wrapped at all.
+ * @param {object} nodeModule - The `node:module` namespace.
+ * @returns {void}
+ * @private
+ */
+function holdRequireResolve(nodeModule) {
+	const Module = nodeModule?.Module;
+	const original = Module?._resolveFilename;
+	/* v8 ignore next -- defensive: every Node with `registerHooks()` has both; a stand-in `node:module` may not. */
+	if (typeof original !== "function" || typeof nodeModule.createRequire !== "function") return;
+	const { fileURLToPath, pathToFileURL } = nodeBuiltin("node:url");
+	const own = fileURLToPath(import.meta.url);
+	RESOLVE_PROBE.path = own;
+	try {
+		nodeModule.createRequire(import.meta.url).resolve(own);
+	} finally {
+		RESOLVE_PROBE.path = null;
+	}
+	if (RESOLVE_PROBE.seen) return;
+	/* v8 ignore start -- runs on Node 22 only, whose hooks are not asked for a `require.resolve()`; the coverage run uses a later Node (the Node 22 CI leg runs it through isolation/internal-imports). */
+	Module._resolveFilename = function _resolveFilename(request, parent) {
+		const filename = Reflect.apply(original, this, arguments);
+		if (typeof filename === "string" && isSlothletInternal(filename)) {
+			const parentURL = typeof parent?.filename === "string" ? pathToFileURL(parent.filename).href : undefined;
+			if (isModuleImport(parentURL, ["require"])) throw importRefusal(request, filename);
+		}
+		return filename;
+	};
+	/* v8 ignore stop */
 }
 
 /**
@@ -2518,6 +2565,7 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
  */
 const HOOKS = Objects.freeze({
 	resolve: (specifier, context, nextResolve) => {
+		if (RESOLVE_PROBE.path !== null && specifier === RESOLVE_PROBE.path) RESOLVE_PROBE.seen = true;
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
 		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX) || specifier.startsWith(OWN_MODULE_PREFIX)) {
 			return { url: specifier, format: "module", shortCircuit: true };
