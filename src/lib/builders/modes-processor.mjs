@@ -3069,6 +3069,16 @@ export class ModesProcessor extends ComponentBase {
 					}
 					const lazy_nestedComposed = this.#fromComposedModule(nestedValue, nestedW, UnifiedWrapper._extractFullImpl(nestedW));
 					if (lazy_nestedComposed !== null) return lazy_nestedComposed;
+					// A callable file module with a sibling attached beside it (`e/e.mjs` + `e/y.mjs`): the folder is the
+					// composed function with the sibling's members on it, as the single-file hoist above composes it. The
+					// module's own wrapper is not handed on as the folder's value: the folder's node would hold that node
+					// inside itself, and one call would run the hooks of both.
+					if (attachedKeys.length > 0 && typeof nestedImpl === "function") {
+						const composed = UnifiedWrapper._extractFullImpl(nestedW);
+						this.#carryWrapperChildren(nestedW, composed);
+						this.#refuseThenableValue(composed, apiPath);
+						return composed;
+					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {
