@@ -1008,11 +1008,18 @@ export class PermissionManager extends ComponentBase {
 		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) return this.#eventDefault;
 
-		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered.
+		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered. A pattern's
+		// specificity is its kind, then its literal segments (`guest.zz.**` over `guest.**` over `**`), so the
+		// narrower rule wins whichever was registered last; order only breaks a tie between equally specific rules.
+		const specificity = (entry) => [
+			this.#patternSpecificity(entry.caller, subscriberPath) + this.#patternSpecificity(entry.event, eventName),
+			this.#literalSegments(entry.caller) + this.#literalSegments(entry.event)
+		];
 		conditioned.sort((a, b) => {
-			const specA = this.#patternSpecificity(a.caller, subscriberPath) + this.#patternSpecificity(a.event, eventName);
-			const specB = this.#patternSpecificity(b.caller, subscriberPath) + this.#patternSpecificity(b.event, eventName);
-			if (specA !== specB) return specB - specA;
+			const [kindA, literalA] = specificity(a);
+			const [kindB, literalB] = specificity(b);
+			if (kindA !== kindB) return kindB - kindA;
+			if (literalA !== literalB) return literalB - literalA;
 			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
 			return b.registrationSeq - a.registrationSeq;
 		});
@@ -3358,6 +3365,22 @@ export class PermissionManager extends ComponentBase {
 		}
 		// Single-segment glob (*, ?, {a,b})
 		return 2;
+	}
+
+	/**
+	 * Count a pattern's literal segments: those with no glob character. Event rules rank patterns of the same
+	 * kind by this, so `guest.zz.**` (2) is more specific than `guest.**` (1), and that than `**` (0).
+	 *
+	 * @param {string} pattern - Glob pattern.
+	 * @returns {number} The number of `.`-separated segments with no `*`, `?`, `{` or `}`.
+	 * @private
+	 */
+	#literalSegments(pattern) {
+		let count = 0;
+		for (const segment of pattern.split(".")) {
+			if (!segment.includes("*") && !segment.includes("?") && !segment.includes("{") && !segment.includes("}")) count++;
+		}
+		return count;
 	}
 
 	/**

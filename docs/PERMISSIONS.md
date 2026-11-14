@@ -1270,7 +1270,7 @@ Module code the host invokes inside its own `context.run()` / `scope()` — a fu
 
 ## Event Rules
 
-The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order), and control what each subscriber receives:
+The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order) (event patterns of one kind are also ranked by their literal segments, so `guest.zz.**` beats `guest.**` whichever was registered last; see [Precedence](./EVENTS.md#precedence)), and control what each subscriber receives:
 
 ```javascript
 const api = await slothlet({

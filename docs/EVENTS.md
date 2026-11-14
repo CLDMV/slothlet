@@ -133,7 +133,15 @@ const api = await slothlet({
 
 ## Precedence
 
-Event rules resolve **most-specific-wins**, exactly like call rules. When two matching rules have **equal** specificity, the higher precedence **layer** wins; within a layer, the last-registered rule wins. Layers, lowest to highest:
+Event rules resolve **most-specific-wins**. A pattern's specificity is its kind first (an exact name, then a single-segment glob such as `orders.*`, then a multi-segment glob such as `orders.**`) and, between patterns of one kind, the number of literal segments it names: `guest.zz.**` is more specific than `guest.**`, which is more specific than `**`. A rule's specificity is its `caller` pattern's plus its `event` pattern's. The more specific rule wins whichever was registered last:
+
+```js
+rules.add({ caller: "**", event: "guest.zz.**", effect: "deny" });
+rules.add({ caller: "**", event: "guest.**", effect: "allow" });
+// guest.zz.a → deny (the narrower rule), guest.b → allow; the same in the other order
+```
+
+Order matters only between rules that are equally specific. When two matching rules have **equal** specificity, the higher precedence **layer** wins; within a layer, the last-registered rule wins. Layers, lowest to highest:
 
 1. **built-in default** — the framework baseline (`notify`).
 2. **manifest** — a module's own `slothlet.module.json` event rules.
