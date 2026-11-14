@@ -2329,10 +2329,14 @@ export class ModesProcessor extends ComponentBase {
 					const subDir = this.#collapseSameNamedFolder(scannedDir);
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
 
-					// Folder Transparency: if subfolder name matches current category, process its contents
-					// directly into targetApi instead of creating a nested namespace.
-					// Example: api.add('config', './path') where path/config/ exists → config/server.mjs becomes api.config.server
-					// Use eager mode so files at this level become objects (same as root-level file behavior).
+					// Folder Transparency at the mount root (Rule 13): the subfolder named like the mount's last segment
+					// is the mount's own level. Example: api.add('config', './path') where path/config/ exists →
+					// config/server.mjs becomes api.config.server.
+					// It is built as eager mode builds it, by the eager branch of a root call holding just this folder:
+					// that branch also composes a folder of one self-named or generic file (`e/main.mjs` is `e.a`,
+					// Rule 10) before Rule 13 hoists it, which pouring the folder's files in directly skipped, so lazy
+					// mode built `e.main.a` there (#743). The mount's files at this level become objects, as root-level
+					// files do.
 					// IMPORTANT: Only fire at root-level registration boundary (populateDirectly=false).
 					// When populateDirectly=true we are inside a lazy wrapper materialization -
 					// e.g. services/ materialising finds services/services/ whose name matches,
@@ -2342,13 +2346,13 @@ export class ModesProcessor extends ComponentBase {
 					if (subDirName === lazy_currentCategoryName && lazy_currentCategoryName !== null && !populateDirectly) {
 						await this.processFiles(
 							targetApi,
-							subDir.children.files,
-							subDir,
-							currentDepth + 1,
+							[], // the mount root's own files were placed above
+							{ ...directory, children: { files: [], directories: [subDir] } },
+							currentDepth,
 							"eager",
-							false,
+							true, // the mount root
 							true, // recursive = true to process nested subdirs too
-							true, // populateDirectly
+							false, // populateDirectly
 							apiPathPrefix,
 							collisionContext,
 							moduleID,
@@ -2357,7 +2361,7 @@ export class ModesProcessor extends ComponentBase {
 							// See the two eager-mode recursive calls above — same override-threading fix.
 							collisionModeOverride,
 							false, // rootUnwrap
-							true // transparent: the folder adds no path segment
+							false // transparent
 						);
 						continue;
 					}

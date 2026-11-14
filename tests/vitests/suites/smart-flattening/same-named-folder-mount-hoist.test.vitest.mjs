@@ -71,6 +71,8 @@ const CASES = {
 		tree: ["e -> e/e/e.mjs:default", "e.y", "e.y.b -> e/e/y.mjs:b"],
 		wrong: ["e.e", "e.e.y.b"]
 	},
+	r4_generic_main: { top: "e", tree: ["e", "e.a -> e/e/main.mjs:a"], wrong: ["e.e.a", "e.main.a"] },
+	r4_generic_main_uncollapsed: { top: "e", tree: ["e", "e.a -> e/main.mjs:a"], wrong: ["e.main.a"] },
 	r5_not_collapsed: {
 		top: "c",
 		tree: ["c", "c.c", "c.c.x", "c.c.x.b -> c/c/x.mjs:b", "c.z", "c.z.a -> c/z.mjs:a"],
