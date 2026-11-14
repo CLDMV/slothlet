@@ -243,7 +243,7 @@ function runFirstInstance(helpers, list) {
 	return JSON.parse(line.slice("RESULT ".length));
 }
 
-describe("Config > helpers > the first instance of a process", () => {
+describe("Config > helpers > in a process of its own", () => {
 	const denyOne = [{ caller: "one", target: "vault.**", effect: "deny" }];
 	const denyTwo = [{ caller: "two", target: "vault.**", effect: "deny" }];
 

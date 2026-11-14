@@ -183,7 +183,7 @@ function runFirstInstance(list) {
 	return JSON.parse(line.slice("RESULT ".length));
 }
 
-describe("Permissions > what a helper file starts when it loads > the first instance of a process", () => {
+describe("Permissions > what a helper file starts when it loads > in a process of its own", () => {
 	it("is not refused when nothing is denied, whichever file's load the helper was evaluated in", () => {
 		expect(runFirstInstance([])).toEqual([SECRET, SECRET]);
 	}, 120000);
