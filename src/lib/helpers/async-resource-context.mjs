@@ -112,6 +112,23 @@ function runtime_builtin(id) {
 }
 
 /**
+ * `node:async_hooks`, as slothlet loaded: the module whose `AsyncResource` and `AsyncLocalStorage` the patch layers
+ * onto. Those two are read when the patch is turned on, as they are then (the patch covers what is in place), and the
+ * module object itself is taken now. Null where the platform has no such builtin.
+ * @type {object|null}
+ * @private
+ */
+const ASYNC_HOOKS = runtime_builtin("node:async_hooks");
+
+/**
+ * `module.syncBuiltinESMExports`, taken as slothlet loads, so code that replaces it later does not run inside the patch.
+ * Undefined where the platform has no such builtin.
+ * @type {Function|undefined}
+ * @private
+ */
+const SYNC_BUILTIN_ESM_EXPORTS = runtime_builtin("node:module")?.syncBuiltinESMExports;
+
+/**
  * Install a wrapper over `host[name]` and remember it for removal.
  * @param {object} host - The object carrying the function.
  * @param {string} name - Its key.
@@ -157,7 +174,7 @@ function runtime_install(host, name, make) {
 function enableAsyncResourcePatching() {
 	if (isPatchingEnabled) return;
 	isPatchingEnabled = true;
-	const hooks = runtime_builtin("node:async_hooks");
+	const hooks = ASYNC_HOOKS;
 	if (!hooks) return;
 
 	const Storage = hooks.AsyncLocalStorage;
@@ -242,7 +259,7 @@ function enableAsyncResourcePatching() {
 		return AsyncResource;
 	});
 	// ES modules read a builtin's exports through bindings Node refreshes on request.
-	if (hooks.AsyncResource !== Original) runtime_builtin("node:module")?.syncBuiltinESMExports?.();
+	if (hooks.AsyncResource !== Original) SYNC_BUILTIN_ESM_EXPORTS?.();
 }
 
 /**
@@ -265,7 +282,7 @@ function disableAsyncResourcePatching() {
 	}
 	patched.length = 0;
 	isPatchingEnabled = false;
-	if (restored) runtime_builtin("node:module")?.syncBuiltinESMExports?.();
+	if (restored) SYNC_BUILTIN_ESM_EXPORTS?.();
 }
 
 /**

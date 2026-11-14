@@ -105,6 +105,85 @@ describe("slothlet/captured-intrinsics", () => {
 		]);
 	});
 
+	const NODE_MEMBER = "reads a member of a Node built-in module after slothlet loaded";
+	const NODE_BINDING = "is a live binding of a Node built-in module";
+	const PROCESSES = 'import { Processes, Objects } from "@cldmv/slothlet/helpers/intrinsics";\n';
+
+	it.each([
+		[
+			"off what process.getBuiltinModule returns",
+			'const fs = Processes.getBuiltinModule("node:fs");\nexport function read(file) {\n\treturn fs.readFileSync(file);\n}\n',
+			4
+		],
+		[
+			"off what a helper around it returns",
+			'function nodeBuiltin(id) {\n\treturn Processes.getBuiltinModule(id);\n}\nexport function req(file) {\n\treturn nodeBuiltin("node:module").createRequire(file);\n}\n',
+			6
+		],
+		[
+			"through a destructuring",
+			'export function req(file) {\n\tconst { createRequire } = Processes.getBuiltinModule("node:module");\n\treturn createRequire(file);\n}\n',
+			3
+		],
+		["off an import()", 'export async function run() {\n\tconst { fork } = await import("child_process");\n\treturn fork;\n}\n', 3],
+		[
+			'off createRequire(…)("node:…")',
+			'import { createRequire } from "x";\nexport function hooks() {\n\treturn createRequire(import.meta.url)("node:module").registerHooks;\n}\n',
+			4
+		],
+		["off a default import", 'import fs from "node:fs";\nexport function read(file) {\n\treturn fs.readFileSync(file);\n}\n', 4],
+		["off a namespace import", 'import * as nodePath from "path";\nexport const join = (a, b) => nodePath.join(a, b);\n', 3],
+		[
+			"off an object a built-in holds",
+			'const util = Processes.getBuiltinModule("node:util");\nexport const isProxy = (value) => util.types.isProxy(value);\n',
+			3
+		],
+		[
+			"in a function also called after load",
+			'const fs = Processes.getBuiltinModule("node:fs");\nfunction read(file) {\n\treturn fs.readFileSync(file);\n}\nread("a");\nexport const later = () => read("b");\n',
+			4
+		],
+		[
+			"in an exported function, even one the file calls at its top level",
+			'const fs = Processes.getBuiltinModule("node:fs");\nexport function read(file) {\n\treturn fs.readFileSync(file);\n}\nread("a");\n',
+			4
+		],
+		[
+			"in an async function run on the spot",
+			'const fs = Processes.getBuiltinModule("node:fs");\n(async () => {\n\tawait 0;\n\tfs.readFileSync("a");\n})();\n',
+			5
+		]
+	])("reports a member of a Node built-in read %s", (_what, code, line) => {
+		const messages = lint(PROCESSES + code);
+		expect(messages.length).toBe(1);
+		expect(messages[0]).toContain(NODE_MEMBER);
+		expect(messages[0].startsWith(`${line}:`)).toBe(true);
+	});
+
+	it("reports a named import of a built-in used after load", () => {
+		const messages = lint('import { readFileSync } from "node:fs";\nexport function read(file) {\n\treturn readFileSync(file);\n}\n');
+		expect(messages).toEqual([
+			`3: \`readFileSync\` ${NODE_BINDING}, which \`module.syncBuiltinESMExports()\` changes. Take it when the file loads (at its top level) and call that copy.`
+		]);
+	});
+
+	it("leaves the reads made as the file loads, and the loader state slothlet patches on purpose, alone", () => {
+		expect(
+			lint(
+				PROCESSES +
+					'import * as nodeFs from "node:fs";\nimport { readFileSync as readNow } from "node:fs";\nimport { createRequire } from "x";\n' +
+					"const copy = Objects.freeze({ ...nodeFs });\nconst text = readNow;\n" +
+					'const { readFileSync } = Processes.getBuiltinModule("node:fs");\n' +
+					'const HOST = (() => {\n\tconst fs = Processes.getBuiltinModule("node:fs");\n\treturn { exists: fs.existsSync };\n})();\n' +
+					'function sample() {\n\treturn Processes.getBuiltinModule("node:util").inspect({});\n}\nsample();\n' +
+					'const nodeModule = createRequire(import.meta.url)("node:module");\nconst load = nodeModule.Module;\n' +
+					'const hooks = Processes.getBuiltinModule("node:async_hooks");\n' +
+					"export function patchTargets() {\n\treturn [hooks.AsyncResource, hooks.AsyncLocalStorage, load._load, load._resolveFilename, load._cache];\n}\n" +
+					"export const use = () => [copy.readFileSync, text, readFileSync, HOST.exists];\n"
+			)
+		).toEqual([]);
+	});
+
 	it("reports a comment that turns the rule off", () => {
 		const off = "slothlet/captured-intrinsics has no exemptions: import the captured copy, or read the current global as `globalThis.X`.";
 		expect(lint("// eslint-disable-next-line slothlet/captured-intrinsics -- the current one\nglobalThis.x = 1;\n")).toEqual([`1: ${off}`]);

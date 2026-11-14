@@ -75,11 +75,17 @@
  * @public
  */
 
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import * as nodeFsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
+import * as nodeUrl from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { Objects, Arrays, JSON, Map, Set, Promises, String } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFsPromises });
+const path = Objects.freeze({ ...nodePath });
+const { fileURLToPath } = nodeUrl;
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and

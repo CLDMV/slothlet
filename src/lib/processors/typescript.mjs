@@ -20,12 +20,12 @@
  */
 
 // NO static imports of esbuild/typescript - only dynamic imports when needed
-import fs from "fs";
-import path from "path";
-import { writeFile, mkdir, readdir, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
+import * as nodeFs from "fs";
+import * as nodePath from "path";
+import * as nodeFsPromises from "node:fs/promises";
+import * as nodeCrypto from "node:crypto";
+import * as nodeOs from "node:os";
+import * as nodeUrl from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
 	JSON,
@@ -39,9 +39,24 @@ import {
 	Uint8Array,
 	Buffers,
 	NativeProcess,
-	Processes
+	Processes,
+	Objects,
+	Reflect
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFs });
+const path = Objects.freeze({ ...nodePath });
+const { writeFile, mkdir, readdir, rm } = nodeFsPromises;
+const { createHash } = nodeCrypto;
+const { tmpdir } = nodeOs;
+const { pathToFileURL } = nodeUrl;
+// The methods of the hash objects `createHash` makes, from one made now.
+const HASH_PROTOTYPE = Objects.getPrototypeOf(createHash("sha256"));
+const HASH_UPDATE = HASH_PROTOTYPE.update;
+const HASH_DIGEST = HASH_PROTOTYPE.digest;
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -852,12 +867,17 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	 */
 	const cacheName = (file) => {
 		const hash = createHash("sha256");
+		const update = (part) => Reflect.apply(HASH_UPDATE, hash, [part]);
 		// The NUL separators prevent path/code boundary collisions.
 		for (const member of [...closureOf(file)].sort()) {
-			hash.update(member).update("\0").update(transformed.get(member)).update("\0");
+			update(member);
+			update("\0");
+			update(transformed.get(member));
+			update("\0");
 		}
-		hash.update("entry\0").update(file);
-		return `${hash.digest("hex").slice(0, 16)}.mjs`;
+		update("entry\0");
+		update(file);
+		return `${Reflect.apply(HASH_DIGEST, hash, ["hex"]).slice(0, 16)}.mjs`;
 	};
 
 	// Phase 3 — rewrite each file's specifiers and write it to its cache file (the caller already

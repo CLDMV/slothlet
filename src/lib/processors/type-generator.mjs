@@ -19,12 +19,17 @@
  * @internal
  */
 
-import fs from "fs";
-import path from "path";
+import * as nodeFs from "fs";
+import * as nodePath from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { Objects, Arrays, JSON, Set, Boolean, Date } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFs });
+const path = Objects.freeze({ ...nodePath });
 const { resolveWrapper } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**

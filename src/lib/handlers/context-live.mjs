@@ -137,7 +137,9 @@ const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapp
  */
 const PROMISE_HOOKS = (() => {
 	try {
-		return Processes.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
+		const hooks = Processes.getBuiltinModule?.("node:v8")?.promiseHooks;
+		// Its function taken now: `promiseHooks` is an object of Node's that code can change later.
+		return hooks ? Objects.freeze({ onSettled: hooks.onSettled }) : null;
 	} catch {
 		// A platform without the builtin follows promises by reacting to them instead.
 		return null;

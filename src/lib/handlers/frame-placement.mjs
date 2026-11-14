@@ -4464,9 +4464,14 @@ if (isNode) {
 	// Sampled through each way Node's own code calls back into code it was handed: reading a getter (`util.inspect`),
 	// running a store (`AsyncLocalStorage`), emitting (`EventEmitter`), and its timer and tick queues.
 	const builtin = (id) => Processes.getBuiltinModule(id);
+	// Taken here, as slothlet loads; the samples below run now.
+	const { inspect } = builtin("node:util");
+	const { AsyncLocalStorage } = builtin("node:async_hooks");
+	const { EventEmitter } = builtin("node:events");
+	const nodeSetTimeout = builtin("node:timers").setTimeout;
 	for (const sample of [
 		() =>
-			builtin("node:util").inspect(
+			inspect(
 				{
 					get value() {
 						runtime_sampleNodeScripts();
@@ -4476,16 +4481,16 @@ if (isNode) {
 				{ getters: true }
 			),
 		() => {
-			const storage = new (builtin("node:async_hooks").AsyncLocalStorage)();
+			const storage = new AsyncLocalStorage();
 			storage.run({}, runtime_sampleNodeScripts);
 			storage.run({}, () => storage.exit(runtime_sampleNodeScripts));
 		},
 		() => {
-			const emitter = new (builtin("node:events").EventEmitter)();
+			const emitter = new EventEmitter();
 			emitter.on("sample", runtime_sampleNodeScripts);
 			emitter.emit("sample");
 		},
-		() => builtin("node:timers").setTimeout(runtime_sampleNodeScripts, 0).unref(),
+		() => nodeSetTimeout(runtime_sampleNodeScripts, 0).unref(),
 		() => Processes.nextTick(runtime_sampleNodeScripts)
 	]) {
 		try {

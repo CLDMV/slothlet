@@ -52,7 +52,8 @@ import {
 	URL,
 	encodeURIComponent,
 	String,
-	NativeProcess
+	NativeProcess,
+	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile } =
 	instanceImportsInternals("lib/processors/loader");
@@ -92,6 +93,23 @@ function isHiddenEntryName(name) {
 // Rule 15 (G14): CJS interop export shaping — ~L368 / ~L807 / ~L826
 
 const RUNTIME_EXTERNALIZED = !("env" in import.meta);
+
+/**
+ * `vm.compileFunction`, taken as slothlet loads, for telling a CommonJS file by whether its source compiles as a
+ * function body: code that replaces it on Node's `vm` later does not run inside the loader. Undefined where the
+ * platform has no Node builtins (a browser, which loads no file by path).
+ * @type {Function|undefined}
+ * @private
+ */
+const VM_COMPILE_FUNCTION = Processes.getBuiltinModule?.("node:vm")?.compileFunction;
+
+/**
+ * `child_process.fork`, taken as slothlet loads, for the type-generation worker of strict TypeScript mode. Undefined
+ * where the platform has no Node builtins.
+ * @type {Function|undefined}
+ * @private
+ */
+const CHILD_PROCESS_FORK = Processes.getBuiltinModule?.("node:child_process")?.fork;
 
 /**
  * Warns when a coverage run will silently misattribute the consumer's leaf coverage (#235).
@@ -501,7 +519,7 @@ export class Loader extends ComponentBase {
 
 					// Generate types if not already generated for this instance
 					if (!this.slothlet._typesGenerated) {
-						const { fork } = await import("child_process");
+						const fork = CHILD_PROCESS_FORK;
 
 						// The worker ships next to this file (src/lib/processors → dist/lib/processors).
 						const scriptPath = typeGenerationWorkerPath();
@@ -863,7 +881,7 @@ export class Loader extends ComponentBase {
 		const type = await this.#packageScopeType(path.dirname(filePath));
 		if (type === "commonjs") return true;
 		if (type !== "none") return false;
-		const { compileFunction } = await import("node:vm");
+		const compileFunction = VM_COMPILE_FUNCTION;
 		// A leading hashbang is valid in a CommonJS file (Node strips it) but not in a function body.
 		const source = (await fsp.readFile(filePath, "utf8")).replace(/^#!.*/, "");
 		try {

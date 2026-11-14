@@ -506,13 +506,13 @@ function sharedRequireStub(context, resolved) {
  * @private
  */
 function requireShared(url, stub) {
-	const requireFn = nodeBuiltin("node:module").createRequire(import.meta.url);
+	const requireFn = NODE.module.createRequire(import.meta.url);
 	const cache = requireFn.cache;
 	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
 	const outer = SERVING;
 	SERVING = url;
 	try {
-		return requireFn(nodeBuiltin("node:url").fileURLToPath(url));
+		return requireFn(NODE.url.fileURLToPath(url));
 	} finally {
 		SERVING = outer;
 	}
@@ -738,14 +738,38 @@ function isKeeper() {
 }
 
 /**
- * A Node builtin, read through `process.getBuiltinModule()` so this module has no static `node:`
- * import (it is also loaded by browser bundles and by vite configs).
- * @param {string} id - The builtin's id (`"node:module"`, …).
- * @returns {object} The builtin module.
+ * The members of Node's built-in modules this file calls after it has loaded, taken when it loads (before any api
+ * file runs) and kept in frozen holders, so code that replaces `fs.readFileSync`, `module.createRequire` or
+ * `url.fileURLToPath` later does not run inside slothlet's loading. Read through `process.getBuiltinModule()`, so this
+ * module has no static `node:` import (it is also loaded by browser bundles and by vite configs). Null where no Node
+ * builtins are available (a browser bundle), where none of the code calling them runs.
+ * @type {{module: {createRequire: Function, registerHooks: Function|undefined, Module: Function}, url: {fileURLToPath: Function, pathToFileURL: Function}, fs: {readFileSync: Function}, nodeModule: object}|null}
  * @private
  */
-function nodeBuiltin(id) {
-	return Processes.getBuiltinModule(id);
+const NODE = (() => {
+	const getBuiltinModule = Processes.getBuiltinModule;
+	if (typeof getBuiltinModule !== "function") return null;
+	const nodeModule = getBuiltinModule("node:module");
+	const url = getBuiltinModule("node:url");
+	const fs = getBuiltinModule("node:fs");
+	return Objects.freeze({
+		module: Objects.freeze({ createRequire: nodeModule.createRequire, registerHooks: nodeModule.registerHooks, Module: nodeModule.Module }),
+		url: Objects.freeze({ fileURLToPath: url.fileURLToPath, pathToFileURL: url.pathToFileURL }),
+		fs: Objects.freeze({ readFileSync: fs.readFileSync }),
+		nodeModule
+	});
+})();
+
+/**
+ * The members of a `node:module` this file calls when it registers its hooks: the ones taken at load (see
+ * {@link NODE}) when it is the process's own, else the object's own (a caller's stand-in, under test).
+ * @param {object} nodeModule - The `node:module` namespace or a stand-in.
+ * @returns {{createRequire: Function, registerHooks: Function|undefined, Module: Function}} Its members.
+ * @private
+ */
+function moduleMembers(nodeModule) {
+	if (NODE !== null && nodeModule === NODE.nodeModule) return NODE.module;
+	return { createRequire: nodeModule?.createRequire, registerHooks: nodeModule?.registerHooks, Module: nodeModule?.Module };
 }
 
 /**
@@ -1963,7 +1987,7 @@ function splitQuery(ref) {
  * @private
  */
 function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null } = {}) {
-	const requireFn = nodeBuiltin("node:module").createRequire(filePath);
+	const requireFn = NODE.module.createRequire(filePath);
 	const resolved = requireFn.resolve(filePath);
 	const cache = requireFn.cache;
 	const outer = ACTIVE;
@@ -2267,7 +2291,7 @@ function releaseInstanceScope(instanceID) {
  * @private
  */
 function requireESM(url) {
-	const requireFn = nodeBuiltin("node:module").createRequire(import.meta.url);
+	const requireFn = NODE.module.createRequire(import.meta.url);
 	/**
 	 * Synchronously load one virtual module, without leaving it in `require.cache`.
 	 * @param {string} id - The virtual module id.
@@ -2299,13 +2323,12 @@ function requireESM(url) {
  * @private
  */
 function requireFromModule(url, format, stub) {
-	const { createRequire } = nodeBuiltin("node:module");
-	const cache = createRequire(import.meta.url).cache;
+	const cache = NODE.module.createRequire(import.meta.url).cache;
 	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
 	if (format === "module") return requireESM(url);
 	const [base, query = ""] = splitQuery(url);
 	const params = new URLSearchParams(query);
-	return scopeRequire(nodeBuiltin("node:url").fileURLToPath(base), params.get("slothlet_instance"), {
+	return scopeRequire(NODE.url.fileURLToPath(base), params.get("slothlet_instance"), {
 		importer: helperCopyImporter(params),
 		mount: params.get(HELPERS_MOUNT_PARAM)
 	});
@@ -2474,12 +2497,12 @@ export function commonJSWrapperSource(filePath, instanceID, source, importer = n
  * @private
  */
 function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
-	const fs = nodeBuiltin("node:fs");
-	const { createRequire } = nodeBuiltin("node:module");
-	const text = source == null ? fs.readFileSync(filePath, "utf8") : typeof source === "string" ? source : new TextDecoder().decode(source);
+	const { readFileSync } = NODE.fs;
+	const { createRequire } = NODE.module;
+	const text = source == null ? readFileSync(filePath, "utf8") : typeof source === "string" ? source : new TextDecoder().decode(source);
 	const names = new Set(
 		commonJSExportNames(filePath, text, {
-			readFile: (file) => fs.readFileSync(file, "utf8"),
+			readFile: (file) => readFileSync(file, "utf8"),
 			resolve: (specifier, fromFile) => createRequire(fromFile).resolve(specifier)
 		})
 	);
@@ -2573,7 +2596,7 @@ function loadInstanceModule(url, context, nextLoad) {
 	const instanceID = params.get("slothlet_instance");
 	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) recordLoadedSource(url, result);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
-	const filePath = nodeBuiltin("node:url").fileURLToPath(base);
+	const filePath = NODE.url.fileURLToPath(base);
 	const importer = helperCopyImporter(params);
 	const mount = params.get(HELPERS_MOUNT_PARAM);
 	const ticket = mintTicket(instanceID, () => scopeRequire(filePath, instanceID, { importer, mount }));
@@ -2867,16 +2890,18 @@ function installInstanceImportHooks(nodeModule, registry = globalThis) {
 	if (registry !== globalThis) {
 		// A registry of the caller's own: this copy's hooks, registered once per registry.
 		if (registry[INSTALLED]) return true;
-		if (typeof nodeModule?.registerHooks !== "function") return false;
-		nodeModule.registerHooks(HOOKS);
+		const { registerHooks } = moduleMembers(nodeModule);
+		if (typeof registerHooks !== "function") return false;
+		Reflect.apply(registerHooks, nodeModule, [HOOKS]);
 		Objects.defineProperty(registry, INSTALLED, { value: true, enumerable: false });
 		return true;
 	}
 	// The hooks read what slothlet keeps about each instance's files, so they are the keeping copy's.
 	if (!isKeeper()) return sharedState().hooks() === true;
 	if (HOOKED) return true;
-	if (typeof nodeModule?.registerHooks !== "function") return false;
-	nodeModule.registerHooks(HOOKS);
+	const { registerHooks } = moduleMembers(nodeModule);
+	if (typeof registerHooks !== "function") return false;
+	Reflect.apply(registerHooks, nodeModule, [HOOKS]);
 	HOOKED = true;
 	holdRequireResolve(nodeModule);
 	return true;
@@ -2902,15 +2927,16 @@ const RESOLVE_PROBE = { path: null, seen: false };
  * @private
  */
 function holdRequireResolve(nodeModule) {
-	const Module = nodeModule?.Module;
+	const { Module, createRequire } = moduleMembers(nodeModule);
+	// Node's loader state, patched on purpose: read as it is now.
 	const original = Module?._resolveFilename;
 	/* v8 ignore next -- defensive: every Node with `registerHooks()` has both; a stand-in `node:module` may not. */
-	if (typeof original !== "function" || typeof nodeModule.createRequire !== "function") return;
-	const { fileURLToPath, pathToFileURL } = nodeBuiltin("node:url");
+	if (typeof original !== "function" || typeof createRequire !== "function") return;
+	const { fileURLToPath, pathToFileURL } = NODE.url;
 	const own = fileURLToPath(import.meta.url);
 	RESOLVE_PROBE.path = own;
 	try {
-		nodeModule.createRequire(import.meta.url).resolve(own);
+		createRequire(import.meta.url).resolve(own);
 	} finally {
 		RESOLVE_PROBE.path = null;
 	}
@@ -3395,7 +3421,7 @@ export function slothletInstanceImports() {
 			// A JSON file a leaf imports carries the instance query, as under Node; vite loads no JSON file under a query of
 			// its own, so it is loaded here, as Node loads a JSON module: its value as the default export (#714).
 			if (/\.json$/i.test(toSlashPath(base)))
-				return { code: `export default ${JSON.stringify(JSON.parse(nodeBuiltin("node:fs").readFileSync(base, "utf8")))};\n`, map: null };
+				return { code: `export default ${JSON.stringify(JSON.parse(NODE.fs.readFileSync(base, "utf8")))};\n`, map: null };
 			if (!isCommonJSFile(base)) return null;
 			const params = new URLSearchParams(query);
 			return { code: commonJSWrapperSource(base, instanceID, null, helperCopyImporter(params), params.get(HELPERS_MOUNT_PARAM)) };

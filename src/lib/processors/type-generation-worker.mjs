@@ -30,12 +30,17 @@
  * Importing the module does nothing; only running it as the process's entry script starts a build.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import * as nodeUrl from "node:url";
+import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { JSON, NativeProcess, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const { fileURLToPath } = nodeUrl;
+const { resolve } = nodePath;
 
 /**
  * IPC sender to the parent process (`process.send` in the fork).

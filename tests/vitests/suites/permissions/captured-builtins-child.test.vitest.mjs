@@ -37,6 +37,15 @@
  * `Promise.all` and the other combinators read off the constructor themselves; the static functions of `Buffer`, which
  * Node's own `fs` and streams read off it (`Buffer.allocUnsafe`, `Buffer.from`); and `Error.prepareStackTrace` where
  * something set one, which the engine calls to format a stack.
+ *
+ * A second replacement replaces, after the warm-up instance, the functions of the Node built-in modules slothlet calls
+ * (`fs`, `fs/promises`, `path`, `url`, `util` with `util.types`, `module`, `crypto`, `vm`, `v8` with
+ * `v8.promiseHooks`, `timers`, `child_process`, `os`, `events`, `async_hooks`) on Node's module objects, and refreshes the
+ * ES module namespaces with `module.syncBuiltinESMExports()`. Each stand-in throws, and is listed, when slothlet's own
+ * code calls it; Node's own code and the probe's still get the original. Every step answers as with nothing replaced,
+ * and no stand-in is called by slothlet. Left in place there: the classes those modules export (named with a capital:
+ * `Module`, whose `_load`, `_resolveFilename` and `_cache` slothlet patches or reads as they are on purpose, and the
+ * `AsyncResource` and `AsyncLocalStorage` the boundary patch layers onto), and `util.inspect.custom`, a symbol.
  */
 
 import path from "node:path";
@@ -124,6 +133,43 @@ beforeAll(() => {
 		"\t\trestores.push(() => defineProperty(globalThis, 'navigator', navigator));",
 		"\t}",
 		"}",
+		"// The functions of Node's built-in modules slothlet calls, replaced on the modules themselves.",
+		"const NODE_IDS = ['fs', 'fs/promises', 'path', 'url', 'util', 'module', 'crypto', 'vm', 'v8', 'timers', 'child_process', 'os', 'events', 'async_hooks'];",
+		"const OWN_SOURCE = process.cwd() + '/src/';",
+		"const nodeHits = new Set();",
+		"const { apply } = Reflect;",
+		"const syncBuiltinESMExports = process.getBuiltinModule('node:module').syncBuiltinESMExports;",
+		"// The frame that called the stand-in: slothlet's own source, by its path or its file URL.",
+		"const calledBySlothlet = () => {",
+		"\tconst caller = String(new ProbeError().stack).split('\\n')[3] ?? '';",
+		"\treturn caller.includes(OWN_SOURCE);",
+		"};",
+		"function replaceNode() {",
+		"\tconst holders = [];",
+		"\tfor (const id of NODE_IDS) {",
+		"\t\tconst mod = process.getBuiltinModule('node:' + id);",
+		"\t\tholders.push([id, mod]);",
+		"\t\tif (id === 'util') holders.push(['util.types', mod.types]);",
+		"\t\tif (id === 'v8' && mod.promiseHooks) holders.push(['v8.promiseHooks', mod.promiseHooks]);",
+		"\t}",
+		"\tfor (const [id, holder] of holders) {",
+		"\t\tfor (const name of Object.getOwnPropertyNames(holder)) {",
+		"\t\t\tconst d = Object.getOwnPropertyDescriptor(holder, name);",
+		"\t\t\tif (typeof d.value !== 'function' || !d.writable || /^[A-Z]/.test(name)) continue;",
+		"\t\t\tconst original = d.value;",
+		"\t\t\tsaved.push([holder, name, original]);",
+		"\t\t\tholder[name] = function (...args) {",
+		"\t\t\t\tif (calledBySlothlet()) {",
+		"\t\t\t\t\tnodeHits.add(id + '.' + name);",
+		"\t\t\t\t\tthrow new ProbeError('replaced ' + id + '.' + name);",
+		"\t\t\t\t}",
+		"\t\t\t\treturn apply(original, this, args);",
+		"\t\t\t};",
+		"\t\t}",
+		"\t}",
+		"\tsyncBuiltinESMExports();",
+		"\trestores.push(() => syncBuiltinESMExports());",
+		"}",
 		"function restoreAll() {",
 		"\tfor (let i = saved.length - 1; i >= 0; i--) saved[i][0][saved[i][1]] = saved[i][2];",
 		"\tfor (const restore of restores) restore();",
@@ -140,6 +186,7 @@ beforeAll(() => {
 		"const warm = await slothlet({ dir: EXTRA, mode, runtime });",
 		"await warm.shutdown();",
 		"if (replace === 'yes') replaceAll();",
+		"if (replace === 'node') replaceNode();",
 		"let api = null;",
 		"out.built = await step(async () => {",
 		"\tapi = await slothlet({",
@@ -176,6 +223,7 @@ beforeAll(() => {
 		"}",
 		"out.refusedConfig = await step(() => slothlet({ dir: API + 'missing' }));",
 		"restoreAll();",
+		"if (replace === 'node') out.nodeHits = [...nodeHits];",
 		"process.stdout.write(JSON.stringify(out) + '\\n');",
 		"exit(0);"
 	]);
@@ -226,5 +274,12 @@ describe.each(CONFIGS)("built-ins replaced after slothlet loaded ($mode, $runtim
 			refusedConfig: "INVALID_DIRECTORY"
 		});
 		expect(probe([mode, runtime, attribution, "yes"])).toEqual(plain);
+	});
+
+	it("answers every step as with nothing replaced when the functions of Node's built-in modules are replaced, calling none of them", () => {
+		const plain = probe([mode, runtime, attribution, "no"]);
+		const { nodeHits, ...answers } = probe([mode, runtime, attribution, "node"]);
+		expect(nodeHits).toEqual([]);
+		expect(answers).toEqual(plain);
 	});
 });

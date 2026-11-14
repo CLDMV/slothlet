@@ -133,11 +133,22 @@ if (isNode) {
 		import("node:async_hooks"),
 		import("node:module")
 	]);
-	fs = fsMod;
-	fsp = fspMod;
-	path = pathMod;
-	url = urlMod;
-	util = utilMod;
+	// Frozen copies of the namespaces, taken now: slothlet's files read their members when they run, and code that
+	// replaces `fs.readFileSync` or `path.join` on Node's module object later (and refreshes the namespaces with
+	// `module.syncBuiltinESMExports()`) does not reach them.
+	fs = Objects.freeze({ ...fsMod });
+	fsp = Objects.freeze({ ...fspMod });
+	path = Objects.freeze({ ...pathMod });
+	url = Objects.freeze({ ...urlMod });
+	// `util.types` is an object of its own on Node's module, and `util.inspect.custom` a member of the function: both
+	// taken now too. The `inspect` here calls Node's own. The copy of `util.types` is slothlet's own object, which only
+	// slothlet's files reach (tests stand in a browser's answers on it), so it is not frozen.
+	const nodeInspect = utilMod.inspect;
+	const inspect = function inspect(...args) {
+		return Reflect.apply(nodeInspect, undefined, args);
+	};
+	Objects.defineProperty(inspect, "custom", { value: nodeInspect.custom, enumerable: true });
+	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
 	({ createRequire } = moduleMod);
