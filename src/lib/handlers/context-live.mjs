@@ -479,12 +479,29 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The store a value of the active-instance field stands for. Flows restore the field in the order they settle, so
+	 * once `run()` / `scope()` flows interleave it can be left naming the store of a flow that has already returned and
+	 * been removed (#763): no flow of it runs any more, so the field stands for the instance's own store, as nothing
+	 * opened over it is active. A `run()` / `scope()` store's id is its instance's id followed by `__run_`.
+	 * @param {string|null} id - The field's value.
+	 * @returns {string|null} The id, or its instance's when it names a removed `run()` / `scope()` store of a live instance.
+	 * @private
+	 */
+	#removedRunBase(id) {
+		if (id === null || this.instances.has(id)) return id;
+		const cut = id.lastIndexOf("__run_");
+		if (cut <= 0) return id;
+		const base = id.slice(0, cut);
+		return this.instances.has(base) ? base : id;
+	}
+
+	/**
 	 * Resolve the executing instance — see {@link LiveContextManager#currentInstanceID}.
 	 * @returns {string|null} The executing instance's store id, or the field when nothing better is known.
 	 * @private
 	 */
 	#resolveActiveID() {
-		const raw = this.#activeID;
+		const raw = this.#removedRunBase(this.#activeID);
 		if (this.#syncDepth > 0 || this.#busyStores.size === 0) return raw;
 		const rawFamily = raw === null ? null : this.#familyOf(raw);
 		const families = new Set();
