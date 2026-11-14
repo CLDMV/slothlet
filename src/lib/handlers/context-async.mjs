@@ -23,6 +23,7 @@
 import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
@@ -37,7 +38,7 @@ import {
 	resolveSupplier,
 	resolvesSupplier
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, Map, WeakMap, Promise, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -79,10 +80,11 @@ export class AsyncContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
+	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceID, config = {}) {
+	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (this.instances.has(instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
@@ -92,7 +94,7 @@ export class AsyncContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Dates.now()
+			createdAt: clock.now()
 		};
 
 		this.instances.set(instanceID, store);

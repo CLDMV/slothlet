@@ -38,7 +38,6 @@ import {
 	Promise,
 	Symbol,
 	Boolean,
-	Dates,
 	Date,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
@@ -1310,7 +1309,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1386,7 +1385,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1452,7 +1451,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1511,7 +1510,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1669,7 +1668,7 @@ export class HookManager extends ComponentBase {
 			errorSink(
 				error,
 				failureSource(
-					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				)
 			);
@@ -1685,7 +1684,14 @@ export class HookManager extends ComponentBase {
 				(value) => value,
 				(error) => sinkAround(hook, error),
 				() =>
-					onUnobserved({ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now(), stack: undefined })
+					onUnobserved({
+						type: "around",
+						subset: hook.subset,
+						hookTag: hook.id,
+						hookId: hook.id,
+						timestamp: this.clock.now(),
+						stack: undefined
+					})
 			);
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
@@ -1781,7 +1787,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for always hook failure
 				const sourceInfo = failureSource(
-					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: Dates.now() },
+					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
 					this.failureOf(error)
 				);
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
@@ -1834,7 +1840,7 @@ export class HookManager extends ComponentBase {
 					error,
 					errorType,
 					source,
-					timestamp: new Date(),
+					timestamp: new Date(this.clock.now()),
 					api,
 					ctx,
 					version: hook.version

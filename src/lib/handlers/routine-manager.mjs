@@ -447,14 +447,18 @@ export class RoutineManager extends ComponentBase {
 		// no-ops while a build is in progress (it checks `____buildDepth` at execution time), so the
 		// flood of events during an initial load / `add()` / `reload()` schedules cheap callbacks that
 		// immediately return — the operation's own terminal rebuildStacks() does the real work.
-		scheduleMacrotask(() => {
-			// Unreachable: #reactivelyPatchStack's only awaited operation (#resolveContainer) returns
-			// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
-			// property write are individually try/caught, so the method never rejects — this .catch()
-			// defends a would-be unexpected rejection that no code path actually produces.
-			/* v8 ignore next */
-			this.#reactivelyPatchStack(entry).catch(() => {});
-		});
+		scheduleMacrotask(
+			() => {
+				// Unreachable: #reactivelyPatchStack's only awaited operation (#resolveContainer) returns
+				// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
+				// property write are individually try/caught, so the method never rejects — this .catch()
+				// defends a would-be unexpected rejection that no code path actually produces.
+				/* v8 ignore next */
+				this.#reactivelyPatchStack(entry).catch(() => {});
+			},
+			undefined,
+			this.clock
+		);
 	}
 
 	/**

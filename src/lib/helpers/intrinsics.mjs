@@ -42,7 +42,7 @@
  *   `Number`, `BigInt`, `Date`, `RegExp`, `Error` and the other error constructors, `ArrayBuffer`,
  *   `SharedArrayBuffer`, `DataView`, the typed arrays, `FinalizationRegistry`, `Iterator`, `Intl` (a frozen copy, like
  *   `JSON`), `TextDecoder`, `TextEncoder`, `Blob`, `EventTarget`, `MessageChannel`, `CryptoKey`,
- *   `queueMicrotask`, `structuredClone`, `setTimeout`, `setImmediate`, `decodeURIComponent`, `encodeURIComponent`, `parseInt`, `isNaN`,
+ *   `queueMicrotask`, `structuredClone`, `setTimeout`, `clearTimeout`, `setImmediate`, `decodeURIComponent`, `encodeURIComponent`, `parseInt`, `isNaN`,
  *   `Buffer` and `navigator`. Their static functions are on `Strings`, `Numbers`, `Dates`, `Errors`, `ArrayBuffers`,
  *   `Iterators` and `Buffers`.
  * - `NativeProcess` is the host's `process` object, and `Processes` the functions of it slothlet calls, bound to it.
@@ -744,6 +744,15 @@ export const structuredClone = globalThis.structuredClone;
  * setTimeout(run, 0);
  */
 export const setTimeout = globalThis.setTimeout;
+
+/**
+ * `clearTimeout`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
+ * @internal
+ * @example
+ * import { setTimeout, clearTimeout } from "@cldmv/slothlet/helpers/intrinsics";
+ * clearTimeout(setTimeout(run, 1000));
+ */
+export const clearTimeout = globalThis.clearTimeout;
 
 /**
  * The shape of `setImmediate`, which the declaration build's library does not know: it takes a callback and the

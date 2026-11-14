@@ -103,7 +103,6 @@ import {
 	URLSearchParams,
 	Boolean,
 	Date,
-	Dates,
 	Errors,
 	Error,
 	Number,
@@ -10381,7 +10380,8 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) => failureSource({ type: "function", timestamp: Dates.now() }, runtime_readTargetFailure(wrapper, error));
+	const functionSource = (error) =>
+		failureSource({ type: "function", timestamp: wrapper.clock.now() }, runtime_readTargetFailure(wrapper, error));
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
@@ -10490,7 +10490,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
 			// its `then` delivers them (see HookManager#observeThenable).
 			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-				onUnobserved({ type: "function", timestamp: Dates.now() })
+				onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
 			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
@@ -11933,21 +11933,25 @@ export class UnifiedWrapper extends ComponentBase {
 			if (slothlet.config.tracking?.materialization) {
 				// Defer to next tick to ensure wrapper and proxy are fully constructed
 				// Fire-and-forget: don't await, let it materialize in background
-				scheduleMacrotask(() => {
-					this._materialize().catch((err) => {
-						// Silently catch errors - background materialization is best-effort
-						// The FALSE branch (debug off, error silently dropped) requires inducing a background
-						// materialization failure without debug.materialize enabled — not testable deterministically.
-						/* v8 ignore next */
-						if (slothlet.config?.debug?.materialize) {
-							slothlet.debug("materialize", {
-								key: "DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR",
-								apiPath: this.____slothletInternal?.apiPath,
-								error: err.message
-							});
-						}
-					});
-				});
+				scheduleMacrotask(
+					() => {
+						this._materialize().catch((err) => {
+							// Silently catch errors - background materialization is best-effort
+							// The FALSE branch (debug off, error silently dropped) requires inducing a background
+							// materialization failure without debug.materialize enabled — not testable deterministically.
+							/* v8 ignore next */
+							if (slothlet.config?.debug?.materialize) {
+								slothlet.debug("materialize", {
+									key: "DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR",
+									apiPath: this.____slothletInternal?.apiPath,
+									error: err.message
+								});
+							}
+						});
+					},
+					undefined,
+					this.clock
+				);
 			}
 		}
 	}
@@ -14932,7 +14936,7 @@ export class UnifiedWrapper extends ComponentBase {
 										{ validationError: true }
 									);
 								}
-								await new Promise((resolve) => scheduleMacrotask(resolve));
+								await new Promise((resolve) => scheduleMacrotask(resolve, undefined, wrapper.clock));
 							}
 							/* v8 ignore stop */
 						}
@@ -16334,7 +16338,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!isHookProcessed(error)) {
-								const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, failure);
+								const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -16498,7 +16502,7 @@ export class UnifiedWrapper extends ComponentBase {
 								return;
 								/* v8 ignore stop */
 							}
-							scheduleMacrotask(checkMaterialized);
+							scheduleMacrotask(checkMaterialized, undefined, wrapper.clock);
 						};
 						checkMaterialized();
 					});
@@ -16581,7 +16585,7 @@ export class UnifiedWrapper extends ComponentBase {
 								if (hasHooks) {
 									// A hook's failure, read from its record (see HookManager#failureOf), never in the caller's flow (#599).
 									const originalError = unwrapError(error);
-									const sourceInfo = failureSource({ type: "after", timestamp: Dates.now() }, hookManager.failureOf(error));
+									const sourceInfo = failureSource({ type: "after", timestamp: wrapper.clock.now() }, hookManager.failureOf(error));
 									// The after chain reports its own hook's failure; this reports only what it did not.
 									if (!hookReported && !isHookProcessed(error)) {
 										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
@@ -16604,7 +16608,7 @@ export class UnifiedWrapper extends ComponentBase {
 								const failure = runtime_readTargetFailure(wrapper, error);
 								const originalError = failure.originalError();
 								if (!isHookProcessed(error)) {
-									const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, failure);
+									const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
 									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 								}
 								// Always hooks execute for rejected promises
@@ -16641,7 +16645,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// always hooks then take the unwrapped error from what was read.
 				const targetFailure = hasHooks && !hookReported ? runtime_readTargetFailure(wrapper, error) : null;
 				if (targetFailure && !isHookProcessed(error)) {
-					const sourceInfo = failureSource({ type: "function", timestamp: Dates.now() }, targetFailure);
+					const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, targetFailure);
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
 				}
 

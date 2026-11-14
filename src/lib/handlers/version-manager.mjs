@@ -39,7 +39,6 @@ import {
 	Symbol,
 	Promises,
 	Symbols,
-	Dates,
 	isNaN,
 	parseInt
 } from "@cldmv/slothlet/helpers/intrinsics";
@@ -224,7 +223,7 @@ export class VersionManager extends ComponentBase {
 			isDefault: isDefault ?? false,
 			/* v8 ignore next */
 			versionMeta: versionMeta ?? {},
-			registeredAt: Dates.now()
+			registeredAt: this.clock.now()
 		};
 
 		entry.versions.set(versionTag, versionEntry);

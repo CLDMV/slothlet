@@ -74,20 +74,7 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
-import {
-	Reflect,
-	Objects,
-	Arrays,
-	Math,
-	Map,
-	Set,
-	WeakSet,
-	Symbol,
-	Promises,
-	Boolean,
-	Dates,
-	String
-} from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises, Boolean, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -3755,7 +3742,7 @@ export class ApiManager extends ComponentBase {
 				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
-				timestamp: Dates.now()
+				timestamp: this.clock.now()
 			});
 		}
 
@@ -5006,7 +4993,7 @@ export class ApiManager extends ComponentBase {
 		cacheManager.set(moduleID, {
 			...oldEntry,
 			api: freshApi,
-			timestamp: Dates.now()
+			timestamp: this.clock.now()
 		});
 
 		// DEBUG: Log freshApi keys before restore

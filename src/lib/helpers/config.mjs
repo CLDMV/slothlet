@@ -33,6 +33,7 @@ import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/def
 // rather than silently matching nothing forever (see normalizeRoutines()).
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { createClock } from "@cldmv/slothlet/helpers/clock";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
 const VALID_ROUTINE_MODES = new Set(["manual", "startup", "shutdown", "destroy"]);
@@ -109,6 +110,43 @@ export function normalizeHookConfig(hook) {
 		hookConfig.pin = hook.pin !== false;
 	}
 	return hookConfig;
+}
+
+/**
+ * Build an instance's clock from the host's `clock` option.
+ * The option is read once, when the instance is created, and kept by the instance alone: it is never part of the
+ * normalised config an instance hands out, so only the host that creates the instance can supply it.
+ * @param {{now?: Function, setTimeout?: Function, clearTimeout?: Function}} [clock] - The option as given. Each member is optional and must be
+ *   a function; one left out is the copy slothlet took when it loaded. Absent means no `clock` option at all.
+ * @returns {object} The frozen clock `{ now, setTimeout, clearTimeout, hostTimers }`.
+ * @throws {SlothletError} INVALID_CONFIG when it is not an object whose given members are functions.
+ * @public
+ * @example
+ * normalizeClockConfig({ now: () => 1000 }).now(); // => 1000
+ */
+export function normalizeClockConfig(clock) {
+	const built = createClock(clock);
+	if (built === null) {
+		throw new SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: "clock",
+				value:
+					clock === null
+						? "null"
+						: Arrays.isArray(clock)
+							? "an array"
+							: typeof clock === "object"
+								? "an object with a member that is not a function"
+								: typeof clock,
+				expected: "an object whose now, setTimeout and clearTimeout members are functions",
+				hint: "HINT_INVALID_CONFIG"
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+	return built;
 }
 
 /**

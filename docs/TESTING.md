@@ -162,6 +162,10 @@ A module's helper outside its api folder, which vite loads when the module loads
 
 vitest 5 keeps transformed modules on disk between runs (`fsModuleCache`), keyed by each file's content and the configured plugins' names, so a transform cached under an earlier slothlet version is reused after an upgrade; clear `node_modules/.vitest-cache` after upgrading slothlet.
 
+## Fake timers and the instance's clock
+
+slothlet reads `Date.now` and the timers from the copies it took when it loaded, so `vi.useFakeTimers()` after an instance exists does not move it: a principal's `maxAge` still runs on real time, and the timestamps it records are real. To drive an instance's time from a test, give it the `clock` option ([CONFIGURATION.md](CONFIGURATION.md#clock)): `clock: { now: () => time }` for a time you set yourself, or, with fake timers installed before the instance is created, `clock: { now: Date.now, setTimeout, clearTimeout }`.
+
 ## Scope
 
 The `.mjs` artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else. The TypeScript requirements (source maps and the cache directory in `include`) apply in every setup, including inlined slothlet and slothlet's own repo.

@@ -47,6 +47,9 @@ const api = await slothlet({
 	tracking: false,
 	backgroundMaterialize: false,
 
+	// Time (host only) — see the `clock` section
+	clock: undefined, // { now, setTimeout, clearTimeout } — each member optional
+
 	// i18n (dev-facing; process-global)
 	i18n: { language: "en-us" },
 
@@ -648,6 +651,47 @@ const api = await slothlet({
 ```
 
 See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
+
+---
+
+### `clock`
+
+**Type**: `{ now?: () => number, setTimeout?: Function, clearTimeout?: Function }`
+**Default**: none (the functions slothlet loaded with)
+
+The functions an instance reads the time with and starts its deferred work with. Every member is optional, and a member you leave out is the copy slothlet took when it loaded. Anything that is not an object whose given members are functions throws `INVALID_CONFIG`.
+
+slothlet takes `Date.now` and the timers when it loads, so a script (or a test runner) that replaces them afterwards does not move an instance. That is deliberate: a principal's `maxAge` is measured on that clock, and a module that replaced `Date.now` must not be able to stretch it. `clock` is how a host that wants to control time, a test above all, hands an instance its own:
+
+- **`now`** is the time in milliseconds. It stamps the principal cache behind `maxAge` (a value older than `maxAge`, or resolved at a time later than `now()` reports, is stale), the ID a `reload()` gives the instance, the ID of a context run, and every time slothlet records: the `timestamp` of lifecycle events and hook failure sources, the `at` of event metadata, the time a rule or an ownership entry was registered.
+- **`setTimeout`** and **`clearTimeout`**: when you give `setTimeout`, slothlet's own deferred work (the background step of `backgroundMaterialize` and `tracking.materialization`, and the patch of a stack after an api change) runs through it with a delay of `0` instead of on the host's immediate queue, so a host that fakes timers moves it with its own clock. slothlet never cancels a timer it started, so `clearTimeout` is only kept for the host's use of the instance's clock.
+
+The option is read once, when the instance is created, and kept by the instance alone: it is not part of the config the instance reports (`api.slothlet.diag.inspect().config`), a module's manifest, the options of `api.slothlet.api.add()` and `context` cannot supply or replace it, and it carries across `reload()` and `restart()`. Two instances have two clocks.
+
+A clock whose `now` throws makes the call that read it throw. A `now` that answers something that is not a finite number, or that goes backwards, never keeps a principal alive past its `maxAge`: the value is stale.
+
+```javascript
+// Test a principal's maxAge without waiting for it
+let time = 1_000;
+const api = await slothlet({
+	base: "./api",
+	permissions: { defaultPolicy: "deny", rules },
+	clock: { now: () => time }
+});
+api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, maxAge: 10 });
+// ...resolve it, then
+time += 11; // the cached value is now stale, with no real wait
+```
+
+With a test runner's fake timers, install them before creating the instance and hand it the (now fake) functions:
+
+```javascript
+vi.useFakeTimers();
+const api = await slothlet({ base: "./api", clock: { now: Date.now, setTimeout, clearTimeout } });
+await vi.advanceTimersByTimeAsync(10); // moves the instance's clock and its deferred work
+```
+
+Process-wide work that belongs to no instance keeps the functions slothlet loaded with: the TypeScript processor's sweep of old transform folders, frame placement's sampling of the host's scripts, the `@generated` stamp of generated type files, and the cache-busting token of a module import.
 
 ---
 

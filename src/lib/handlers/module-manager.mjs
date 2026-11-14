@@ -40,7 +40,7 @@ import { ComponentBase } from "#factories/component-base";
 import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
-import { Arrays, Math, Map, Promises, Dates, Number, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Math, Map, Promises, Number, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`
@@ -498,7 +498,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = rulePlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
-			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Dates.now() });
+			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: this.clock.now() });
 		});
 		manifestEvents.forEach((rule, i) => {
 			const placed = eventPlacements[i].writer
@@ -506,7 +506,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = eventPlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
-			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Dates.now() });
+			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: this.clock.now() });
 		});
 
 		const result = {

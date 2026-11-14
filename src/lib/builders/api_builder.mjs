@@ -63,7 +63,6 @@ import {
 	WeakMap,
 	WeakSet,
 	URL,
-	Dates,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -3195,7 +3194,7 @@ export class ApiBuilder extends ComponentBase {
 									ownerModuleID,
 									ruleId,
 									layer: ruleLayer,
-									timestamp: Dates.now()
+									timestamp: slothlet.clock.now()
 								});
 							}
 							return ruleId;
@@ -3229,7 +3228,7 @@ export class ApiBuilder extends ComponentBase {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
-									timestamp: Dates.now()
+									timestamp: slothlet.clock.now()
 								});
 							}
 							return result;
@@ -3435,7 +3434,7 @@ export class ApiBuilder extends ComponentBase {
 							ownerModuleID,
 							ruleId,
 							layer,
-							timestamp: Dates.now()
+							timestamp: slothlet.clock.now()
 						});
 					}
 
@@ -3486,7 +3485,7 @@ export class ApiBuilder extends ComponentBase {
 							type: "removePermissionRule",
 							ruleId,
 							callerModuleID,
-							timestamp: Dates.now()
+							timestamp: slothlet.clock.now()
 						});
 					}
 
@@ -3561,7 +3560,7 @@ export class ApiBuilder extends ComponentBase {
 								name,
 								definition,
 								ownerModuleID,
-								timestamp: Dates.now()
+								timestamp: slothlet.clock.now()
 							});
 						}
 					},
@@ -3600,7 +3599,7 @@ export class ApiBuilder extends ComponentBase {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
-								timestamp: Dates.now()
+								timestamp: slothlet.clock.now()
 							});
 						}
 						return result;
@@ -4540,7 +4539,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4642,7 +4641,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,

@@ -769,7 +769,7 @@ self.slothlet.permissions.principal.register("roles", {
 
 - **`key(ctx)`** maps the per-request context to this principal's identity key. It must be synchronous. A `null`/`undefined` key means "no identity" — rules requiring the principal do not match for that call. Like `resolve`, a module's `key` runs as the module that registered it.
 - **`resolve(identityKey)`** returns the facts. It may be async. It runs **as the module that registered it**, so anything it calls through `self` is attributed to that module — not to whichever caller's call triggered the resolve. (A host-registered resolver is invoked directly, in the flow of the call that needed it.)
-- **`maxAge`** (ms) is optional. Without it, a resolved value stays current until it is invalidated.
+- **`maxAge`** (ms) is optional. Without it, a resolved value stays current until it is invalidated. It is measured on the instance's clock, which is `Date.now` as slothlet loaded unless the host gave the instance a `clock` ([CONFIGURATION.md](CONFIGURATION.md#clock)); a clock that goes backwards, or answers something that is not a finite number, leaves the value stale.
 
 Registering is **host-only by default**: a built-in rule denies modules access to the principal management surface, exactly like `control.**`. The host grants it to the modules that should define principals:
 

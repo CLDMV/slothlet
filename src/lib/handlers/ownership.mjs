@@ -20,7 +20,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"
@@ -721,7 +721,7 @@ export class OwnershipManager extends ComponentBase {
 		if (existingEntry) {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
-			existingEntry.timestamp = Dates.now();
+			existingEntry.timestamp = this.clock.now();
 			// Do not downgrade a known value to `undefined`: the same path is registered more than
 			// once for a leaf (a namespace/marker registration omits the value while the leaf's own
 			// registration carries the callable), and under lazy the value-less one can arrive last.
@@ -852,7 +852,7 @@ export class OwnershipManager extends ComponentBase {
 		const entry = {
 			moduleID,
 			source,
-			timestamp: Dates.now(),
+			timestamp: this.clock.now(),
 			value,
 			filePath,
 			exportPath,

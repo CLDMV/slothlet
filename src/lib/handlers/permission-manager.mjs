@@ -47,7 +47,6 @@ import {
 	Symbol,
 	Promises,
 	Boolean,
-	Dates,
 	Numbers,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
@@ -223,6 +222,20 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
  * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
  * @property {string|null} target - Concrete (post-glob) target api path of the gated call.
  */
+
+/**
+ * Whether a principal's cached value is still inside its `maxAge`, given how long ago it was resolved on the
+ * instance's clock. A clock that went backwards (a negative age) or answered something that is not a number is not
+ * evidence the value is fresh, so it is not current: it fails closed.
+ *
+ * @param {number} age - Milliseconds since the value was resolved.
+ * @param {number} maxAge - The principal's `maxAge`.
+ * @returns {boolean} True when the value is current.
+ * @private
+ */
+function runtime_withinMaxAge(age, maxAge) {
+	return typeof age === "number" && age >= 0 && age <= maxAge;
+}
 
 /**
  * Whether a value is a thenable — the shape an async function or a Promise-returning condition
@@ -834,7 +847,7 @@ export class PermissionManager extends ComponentBase {
 			ownerModuleID: ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Dates.now(),
+			registeredAt: this.clock.now(),
 			registrationSeq: ++ruleRegistrationSeq
 		};
 
@@ -939,7 +952,7 @@ export class PermissionManager extends ComponentBase {
 			ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Dates.now(),
+			registeredAt: this.clock.now(),
 			registrationSeq: ++ruleRegistrationSeq
 		};
 
@@ -1386,7 +1399,7 @@ export class PermissionManager extends ComponentBase {
 				// answer predates the change, so it must not be cached as current.
 				const invalidatedAt = record.keyInvalidations.get(identityKey) ?? 0;
 				if (this.#principals.get(name) !== record || record.epoch !== epoch || invalidatedAt > startSeq) return;
-				const now = Dates.now();
+				const now = this.clock.now();
 				record.cache.set(identityKey, { value, view: this.#principalView(record, value), epoch, resolvedAt: now });
 				this.#prunePrincipalCache(record, now);
 			} catch (error) {
@@ -1493,7 +1506,7 @@ export class PermissionManager extends ComponentBase {
 	#isPrincipalCurrent(record, hit, grace) {
 		if (hit.epoch !== record.epoch) return false;
 		if (grace || record.maxAge === null) return true;
-		return Dates.now() - hit.resolvedAt <= record.maxAge;
+		return runtime_withinMaxAge(this.clock.now() - hit.resolvedAt, record.maxAge);
 	}
 
 	/**
@@ -1565,7 +1578,7 @@ export class PermissionManager extends ComponentBase {
 	#prunePrincipalCache(record, now) {
 		if (record.maxAge === null || record.cache.size <= PRINCIPAL_PRUNE_THRESHOLD) return;
 		for (const [identityKey, hit] of record.cache) {
-			if (now - hit.resolvedAt > record.maxAge) record.cache.delete(identityKey);
+			if (!runtime_withinMaxAge(now - hit.resolvedAt, record.maxAge)) record.cache.delete(identityKey);
 		}
 	}
 
@@ -3546,7 +3559,7 @@ export class PermissionManager extends ComponentBase {
 
 		const lifecycle = this.slothlet.handlers?.lifecycle;
 		if (lifecycle) {
-			lifecycle.emit(event, { ...payload, timestamp: Dates.now() });
+			lifecycle.emit(event, { ...payload, timestamp: this.clock.now() });
 		}
 	}
 

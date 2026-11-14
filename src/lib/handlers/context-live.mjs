@@ -19,6 +19,7 @@
  * @internal
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore, combineCeilings } from "#handlers/trusted-root";
@@ -58,7 +59,6 @@ import {
 	WeakRef,
 	Symbol,
 	Boolean,
-	Dates,
 	FinalizationRegistry,
 	queueMicrotask,
 	Processes
@@ -1556,10 +1556,11 @@ export class LiveContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
+	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceID, config = {}) {
+	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (this.instances.has(instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
@@ -1569,7 +1570,7 @@ export class LiveContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Dates.now()
+			createdAt: clock.now()
 		};
 
 		this.instances.set(instanceID, store);

@@ -116,9 +116,10 @@ import { enableFunctionSourcePatching, disableFunctionSourcePatching } from "@cl
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { claimInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
-import { normalizePermissionsConfig } from "@cldmv/slothlet/helpers/config";
+import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { forgetInstanceScripts, recordInstanceOwner } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, Dates, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -234,6 +235,24 @@ class Slothlet {
 	 * @type {{instanceID: string, require: function(string, object=): *, release: function(): void}|null}
 	 */
 	#importScope = null;
+
+	/**
+	 * The clock this instance reads the time and schedules its deferred work with (the `clock` option): held here alone,
+	 * never part of the config the instance hands out, so only the host that created the instance can supply it.
+	 * @type {import("@cldmv/slothlet/helpers/clock").Clock}
+	 */
+	#clock = DEFAULT_CLOCK;
+
+	/**
+	 * The instance's clock: the functions the host gave in the `clock` option, or the ones slothlet loaded with.
+	 * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The frozen clock.
+	 * @internal
+	 * @example
+	 * slothlet.clock.now();
+	 */
+	get clock() {
+		return this.#clock;
+	}
 
 	/**
 	 * Claim the instance's ID for its files, before any of them load. An ID this instance already holds stays held;
@@ -850,7 +869,7 @@ class Slothlet {
 				if (this.handlers?.lifecycle) {
 					this.handlers.lifecycle.emit("materialized:complete", {
 						total: this._totalLazyCount,
-						timestamp: Dates.now()
+						timestamp: this.#clock.now()
 					});
 				}
 			}
@@ -915,6 +934,14 @@ class Slothlet {
 	 * });
 	 */
 	async load(config = {}, preservedInstanceID = null) {
+		// The host's clock is read once and kept on the instance, never in the config the instance hands out. A reload
+		// passes the normalised config back in, which has none: the instance keeps the clock it has.
+		if (config.clock !== undefined) {
+			this.#clock = normalizeClockConfig(config.clock);
+			const { clock: _, ...rest } = config;
+			config = rest;
+		}
+
 		// Store raw config for components to access if needed
 		this.config = config;
 
@@ -1040,10 +1067,10 @@ class Slothlet {
 		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
 			// Reload: DONT reuse store, delete old and create fresh
 			this.contextManager.cleanup(preservedInstanceID);
-			store = this.contextManager.initialize(this.instanceID, this.config);
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		} else {
 			// Fresh load: initialize new store
-			store = this.contextManager.initialize(this.instanceID, this.config);
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		}
 		// Mark this base store as the trusted root immediately, before any internal tree walk
 		// (ownership registration, materialization) reads through the permission read-gate. A
@@ -1154,7 +1181,7 @@ class Slothlet {
 				/* v8 ignore next */
 				collisionMode: this.config.collision?.initial || "merge",
 				config: { ...this.config },
-				timestamp: Dates.now()
+				timestamp: this.#clock.now()
 			});
 		}
 
@@ -1320,7 +1347,7 @@ class Slothlet {
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
-			this.instanceID = `${oldInstanceID}_reload_${Dates.now()}`;
+			this.instanceID = `${oldInstanceID}_reload_${this.#clock.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			forgetInstanceScripts(oldInstanceID);
 			this.#releaseImportScope();
@@ -2138,6 +2165,10 @@ export default slothlet;
  * @property {boolean} [stackRoutines=false] - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+ * @property {object} [clock] - Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See [CONFIGURATION.md](docs/CONFIGURATION.md#clock).
+ * @property {function(): number} [clock.now] - The time in milliseconds: `maxAge` of principals, reload and run IDs, and every recorded timestamp.
+ * @property {Function} [clock.setTimeout] - Schedules the instance's deferred work (called with a delay of `0`); a host that fakes timers moves it with its own clock.
+ * @property {Function} [clock.clearTimeout] - Cancels a timer `clock.setTimeout` made.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
  * @property {"browser"|"node"} [platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).

@@ -21,7 +21,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { Objects, Arrays, Math, Date, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Math, Date } from "@cldmv/slothlet/helpers/intrinsics";
 import { cloneTakingViews } from "@cldmv/slothlet/helpers/clone-context";
 
 /**
@@ -136,6 +136,6 @@ export class Utilities extends ComponentBase {
 	 * @public
 	 */
 	generateId() {
-		return `slothlet_${Dates.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		return `slothlet_${this.clock.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 }

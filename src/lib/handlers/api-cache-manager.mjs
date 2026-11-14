@@ -396,7 +396,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_CACHE_REBUILT_SUCCESSFULLY",
 			moduleID,
-			timestamp: Dates.now()
+			timestamp: this.clock.now()
 		});
 
 		return freshApi;

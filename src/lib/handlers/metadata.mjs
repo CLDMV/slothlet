@@ -23,7 +23,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
-import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
@@ -55,7 +55,7 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		this._instanceId = `metadata_${Dates.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		this._instanceId = `metadata_${this.clock.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 
 	// Secure WeakMap storage for immutable system metadata
@@ -279,7 +279,7 @@ export class Metadata extends ComponentBase {
 			moduleID: fullModuleID,
 			// Raw owning-module id, verbatim — the colon-safe source for base recovery (#303).
 			baseModuleID: systemData.moduleID,
-			taggedAt: Dates.now()
+			taggedAt: this.clock.now()
 		});
 
 		this.#secureMetadata.set(target, frozenSystem);

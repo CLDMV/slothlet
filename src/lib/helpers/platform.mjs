@@ -331,16 +331,24 @@ const MACROTASK_HOSTS = Objects.freeze({ setImmediate, MessageChannel, setTimeou
  * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
  * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
  *
+ * An instance whose host gave it a `setTimeout` in the `clock` option (see `helpers/clock`) runs its deferred work on
+ * that timer instead, so a host faking timers drives it with its own clock.
+ *
  * @param {Function} fn - Callback to run.
  * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
  *   schedulers to pick from: the host's own unless a test hands in others.
+ * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock.
  * @returns {void}
  * @internal
  *
  * @example
- * scheduleMacrotask(() => patchAfterAssignment());
+ * scheduleMacrotask(() => patchAfterAssignment(), undefined, this.clock);
  */
-function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS) {
+function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS, clock = undefined) {
+	if (clock?.hostTimers) {
+		clock.setTimeout(pinToCurrentCaller(fn), 0);
+		return;
+	}
 	// Called detached: a browser's schedulers refuse any receiver but the global object.
 	const { setImmediate: immediate, MessageChannel: Channel, setTimeout: timeout } = hosts;
 	if (typeof immediate === "function") {
