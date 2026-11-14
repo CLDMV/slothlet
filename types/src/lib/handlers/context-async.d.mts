@@ -7,6 +7,13 @@ export class AsyncContextManager {
     als: any;
     instances: Map<any, any>;
     /**
+     * Whether a flow a call starts carries that call however long it runs: an async function a module started and let
+     * go of runs in the store of the call that started it.
+     * @type {boolean}
+     * @internal
+     */
+    get carriesFlowCaller(): boolean;
+    /**
      * Register the EventEmitter context checker
      * Must be called AFTER EventEmitter patching is enabled
      * @public

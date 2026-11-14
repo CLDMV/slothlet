@@ -47,6 +47,18 @@ export function setCloneNodeReader(shape: (arg0: any) => ({
  */
 export function enableClonePatching(): void;
 /**
+ * `structuredClone` as the platform had it when slothlet loaded, taking slothlet's views of another module's data as
+ * the installed wrapper does: slothlet's own copies of data go through this, whatever `globalThis.structuredClone`
+ * holds by then.
+ * @param {*} value - The value to copy.
+ * @returns {*} The copy.
+ * @throws {Error} The platform's refusal, where the value holds something it cannot copy and no view of slothlet's.
+ * @internal
+ * @example
+ * const copy = cloneTakingViews({ table: self.vault.table });
+ */
+export function cloneTakingViews(value: any): any;
+/**
  * Remove this copy's wrappers, putting back what each wrapped where it is still the one installed. Idempotent.
  * @returns {void}
  * @internal

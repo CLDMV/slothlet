@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/events/event-rule-specificity.test.vitest.mjs
- *	@Date: 2026-11-13T09:30:00-08:00 (1794583800)
+ *	@Date: 2026-11-13T09:30:00-08:00 (1794591000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T09:30:00-08:00 (1794583800)
+ *	@Last modified time: 2026-11-13T23:20:21-08:00 (1794640821)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

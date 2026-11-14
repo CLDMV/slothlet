@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/proxies/api-node-member-deny.test.vitest.mjs
+ *	@Date: 2026-11-13T17:28:41-08:00 (1794619721)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-13T23:21:07-08:00 (1794640867)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview A rule denying a module the exact path of an object member of another module's data hides that member
  * from it, as a rule on the path and everything beneath it does; a more specific allow still lets what it names through.
  *

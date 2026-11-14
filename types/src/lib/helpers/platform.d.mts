@@ -63,22 +63,28 @@ export function loadJson(ref: string): object | null | Promise<object | null>;
  * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
  * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
  * macrotask primitive the host offers, in order:
- * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
- *   installed by `helpers/scheduler-context` is the one used;
+ * - `setImmediate` (Node);
  * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
  * - `setTimeout(fn, 0)` as the last resort.
  *
- * All three run `fn` only after the current call stack and every queued microtask have drained,
- * which is the guarantee callers rely on.
+ * The schedulers are the host's as they were when slothlet loaded, and `fn` is pinned to its caller as the
+ * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
+ * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
  *
  * @param {Function} fn - Callback to run.
+ * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
+ *   schedulers to pick from: the host's own unless a test hands in others.
  * @returns {void}
  * @internal
  *
  * @example
  * scheduleMacrotask(() => patchAfterAssignment());
  */
-export function scheduleMacrotask(fn: Function): void;
+export function scheduleMacrotask(fn: Function, hosts?: {
+    setImmediate: Function | undefined;
+    MessageChannel: Function | undefined;
+    setTimeout: Function;
+}): void;
 /**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
  * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run

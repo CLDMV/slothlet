@@ -142,81 +142,80 @@ export type SlothletOptions = {
      */
     hook?: string | boolean | object | undefined;
     /**
-     * - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+     * - Permission system configuration. Omit it and the system is off entirely. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`, `true` and `false` mean `"on"` and `"off"`; any other string or non-object value throws `INVALID_CONFIG`. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
      */
-    permissions?: {
-        /**
-         * - Fallback when no rule matches.
-         */
-        defaultPolicy?: "deny" | "allow" | undefined;
-        /**
-         * - Global enforcement toggle.
-         */
-        enabled?: boolean | undefined;
-        /**
-         * - Audit level; `true`/`false` normalize to `"default"`.
-         */
-        audit?: boolean | "verbose" | "default" | undefined;
-        /**
-         * - Gate terminal data-value reads the same way calls are gated.
-         */
-        readGating?: boolean | undefined;
-        /**
-         * - Restore the legacy fail-open treatment of calls with no resolvable caller.
-         */
-        failOpenOnAbsentCaller?: boolean | undefined;
-        /**
-         * - Owner grant (#509): a caller leaf may access any target leaf currently owned
-         * by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
-         * wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
-         * gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
-         */
-        owner?: boolean | undefined;
-        /**
-         * - Code a caller hands to a leaf runs as that caller, under the
-         * leaf it is running inside as its ceiling (#597); `"chain"` keeps every leaf the code was handed through as its ceiling
-         * instead. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
-         */
-        ceiling?: "leaf" | "chain" | undefined;
-        /**
-         * - A module's function reached by a route slothlet does not see — a
-         * callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
-         * the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
-         * call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
-         * returned data keeps its definer.
-         */
-        provenance?: boolean | undefined;
-        /**
-         * - How the definer of code a module hands out is known
-         * (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
-         * `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
-         * it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
-         */
-        attribution?: "fast" | "precise" | undefined;
-        /**
-         * - Whether a typed array or `Buffer` one module hands
-         * another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
-         * `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
-         * a member is handed over as a view.
-         */
-        typedArrayMembers?: number | boolean | undefined;
-        /**
-         * - Options for api functions held as references (`{ capture?: boolean }`).
-         */
-        references?: object | undefined;
-        /**
-         * - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
-         */
-        private?: object | undefined;
-        /**
-         * - Initial `{ caller, target, effect, condition?, requires? }` rules.
-         */
-        rules?: object[] | undefined;
-        /**
-         * - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
-         */
-        events?: object | undefined;
-    } | undefined;
+    permissions?: boolean | object | "off" | "on" | "disabled" | undefined;
+    /**
+     * - Fallback when no rule matches.
+     */
+    defaultPolicy?: "deny" | "allow" | undefined;
+    /**
+     * - Global enforcement toggle.
+     */
+    enabled?: boolean | undefined;
+    /**
+     * - Audit level; `true`/`false` normalize to `"default"`.
+     */
+    audit?: boolean | "verbose" | "default" | undefined;
+    /**
+     * - Gate terminal data-value reads the same way calls are gated.
+     */
+    readGating?: boolean | undefined;
+    /**
+     * - Restore the legacy fail-open treatment of calls with no resolvable caller.
+     */
+    failOpenOnAbsentCaller?: boolean | undefined;
+    /**
+     * - Owner grant (#509): a caller leaf may access any target leaf currently owned
+     * by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
+     * wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+     * gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+     */
+    owner?: boolean | undefined;
+    /**
+     * - Code a caller hands to a leaf runs as that caller, under the
+     * leaf it is running inside as its ceiling (#597); `"chain"` keeps every leaf the code was handed through as its ceiling
+     * instead. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
+     */
+    ceiling?: "leaf" | "chain" | undefined;
+    /**
+     * - A module's function reached by a route slothlet does not see — a
+     * callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
+     * the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
+     * call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
+     * returned data keeps its definer.
+     */
+    provenance?: boolean | undefined;
+    /**
+     * - How the definer of code a module hands out is known
+     * (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
+     * `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
+     * it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
+     */
+    attribution?: "fast" | "precise" | undefined;
+    /**
+     * - Whether a typed array or `Buffer` one module hands
+     * another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
+     * `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
+     * a member is handed over as a view.
+     */
+    typedArrayMembers?: number | boolean | undefined;
+    /**
+     * - Options for api functions held as references (`{ capture?: boolean }`).
+     */
+    references?: object | undefined;
+    /**
+     * - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+     */
+    private?: object | undefined;
+    /**
+     * - Initial `{ caller, target, effect, condition?, requires? }` rules.
+     */
+    rules?: object[] | undefined;
+    /**
+     * - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
+     */
+    events?: object | undefined;
     /**
      * - Enable verbose internal logging. `true` enables all categories.
      * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.

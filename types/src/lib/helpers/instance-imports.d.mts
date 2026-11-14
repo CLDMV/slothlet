@@ -59,6 +59,33 @@ export function isInstanceScopedFile(child: string, parent: string): boolean;
  */
 export function isOwnPackageImport(child: string, parent: string): boolean;
 /**
+ * Whether a file is one of slothlet's own files a module's files may not import: any file of slothlet's code but the
+ * runtime's entry files (see {@link MODULE_IMPORTABLE}).
+ * @param {string} ref - The file's URL, path or vite id.
+ * @returns {boolean} True when only slothlet's own files may import it.
+ * @internal
+ * @example
+ * isSlothletInternal("file:///app/node_modules/@cldmv/slothlet/dist/lib/helpers/config.mjs"); // true
+ * isSlothletInternal("file:///app/node_modules/@cldmv/slothlet/dist/lib/runtime/runtime.mjs"); // false
+ */
+export function isSlothletInternal(ref: string): boolean;
+/**
+ * Record that slothlet loads an api file: its path, so the file's own code is told to be a module's wherever it runs
+ * under its path alone (a loader evaluating the copy under another name, a `require` made from the file's plain path).
+ * @param {string} ref - The api file's path or URL.
+ * @returns {void}
+ * @internal
+ */
+export function noteModuleFile(ref: string): void;
+/**
+ * Register how a refused import is reported: a function given `{ specifier, file, allowed }` that returns the error to
+ * throw. Taken once, by the copy that keeps the shared object.
+ * @param {function(object): Error} make - Builds the error.
+ * @returns {void}
+ * @internal
+ */
+export function setImportRefusal(make: (arg0: object) => Error): void;
+/**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
  * on vite ids (absolute paths with an optional query) alike. When the parent carries {@link HELPERS_PARAM}
@@ -455,6 +482,11 @@ export type InstanceImportState = {
      * - Entry point of the code the load hook generates (see mintTicket).
      */
     redeem: (ticket: string) => object;
+    /**
+     * - Holds an import or `import.meta.resolve` an instance
+     * module vite loaded makes by a specifier only known as it runs (see checkModuleImport).
+     */
+    checkImport: (specifier: any, importer: string) => any;
     /**
      * - Entry point of the wrapper the vite plugin
      * generates for a CommonJS helper (see requireCJSFromRunner).

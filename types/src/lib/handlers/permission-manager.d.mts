@@ -312,6 +312,10 @@ export class PermissionManager extends ComponentBase {
      *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
      * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
      *   audit consumer can tell a query from the gate of a real call.
+     * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
+     *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
+     *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
+     *   allows it.
      * @returns {boolean} True if access is allowed.
      * @example
      * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -751,6 +755,22 @@ export class PermissionManager extends ComponentBase {
      * await pm.shutdown();
      */
     shutdown(): Promise<void>;
+    /**
+     * Whether an allow rule for `callerPath` names something beneath `path` that a rule on `probePath`, a member of
+     * `path` no rule names, does not stand for: a more specific allow, which lets what it names through though the rules
+     * deny the caller the member's path and what it holds otherwise. It answers for what the rules could allow, so it
+     * errs toward yes: a condition is taken to match. Kept for the rule epoch.
+     * @param {string|null} callerPath - The caller's api path; null for a caller with none, which nothing allows.
+     * @param {string} path - The member's api path.
+     * @param {string} probePath - The path of a member of it no rule names.
+     * @returns {boolean} Whether such a rule exists.
+     * @internal
+     *
+     * @example
+     * // rules: deny reader.** → owner.config.nested, allow reader.** → owner.config.nested.public
+     * pm.allowsBeneath("reader", "owner.config.nested", probe); // true
+     */
+    allowsBeneath(callerPath: string | null, path: string, probePath: string): boolean;
     /**
      * A number that changes whenever the outcome of a rule may have changed: a rule added or removed, the system
      * switched on or off, a module's rules dropped. What was decided from the rules and kept beside a value (whether
