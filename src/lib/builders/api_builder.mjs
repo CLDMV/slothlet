@@ -1170,8 +1170,30 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.preventExtensions(target);
 				},
 
+				// The members listed are the ones the reader is given, as `Object.keys` of a plain object lists what reading it
+				// gives: a member whose read or description would be refused is left out, so listing the namespace, spreading it
+				// or taking its entries never throws. A member the target fixes (non-configurable, or any of a closed target) is
+				// listed whatever the reader may, as a Proxy has to.
 				ownKeys(target) {
-					return Reflect.ownKeys(target);
+					const keys = Reflect.ownKeys(target);
+					if (!Reflect.isExtensible(target)) return keys;
+					return keys.filter((prop) => {
+						if (isMetaProperty(prop)) return true;
+						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+						if (!descriptor?.configurable) return true;
+						if (typeof prop !== "string") return true;
+						const childRoutePath = `${routePath}.${prop}`;
+						try {
+							enforceInternalPermission(childRoutePath);
+							return true;
+						} catch (error) {
+							if (error?.code !== "PERMISSION_DENIED") throw error;
+						}
+						// Denied, yet reached through it: a namespace an allow rule on a member below it opens, which the `get` and
+						// `getOwnPropertyDescriptor` traps both hand out.
+						const value = "value" in descriptor ? descriptor.value : undefined;
+						return value !== null && typeof value === "object" && canTraverseInternalNamespace(childRoutePath);
+					});
 				},
 
 				apply(target, thisArg, argArray) {
