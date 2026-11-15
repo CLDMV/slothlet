@@ -120,6 +120,7 @@ const {
 	runtime_defineRootInspect,
 	runtime_frameworkWrite,
 	runtime_registerRoot,
+	runtime_rootCall,
 	runtime_rootCallCheck,
 	runtime_rootClose,
 	runtime_rootDefine,
@@ -1313,12 +1314,12 @@ class Slothlet {
 						apply: (target, thisArg, args) => {
 							if (!this.api) return undefined;
 							runtime_rootCallCheck(this, args);
-							return Reflect.apply(this.api, thisArg, args);
+							return runtime_rootCall(this, thisArg, args);
 						},
 						construct: (target, args) => {
 							if (!this.api) return {};
 							runtime_rootCallCheck(this, args);
-							return Reflect.construct(this.api, args);
+							return runtime_rootCall(this, undefined, args, true);
 						},
 						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
 						getPrototypeOf: (target) =>

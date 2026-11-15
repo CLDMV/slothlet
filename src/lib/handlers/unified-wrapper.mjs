@@ -9504,6 +9504,116 @@ function runtime_rootCallCheck(slothlet, args) {
 }
 
 /**
+ * The api root file of each instance's base load, when its default export is a function (see
+ * {@link runtime_noteRootFile}).
+ * @type {WeakMap<object, {filePath: string, moduleID: string|null}>}
+ * @private
+ */
+const ROOT_FILES = new WeakMap();
+
+/**
+ * The leaf the api root's function runs as, per instance (see {@link runtime_rootLeaf}).
+ * @type {WeakMap<object, UnifiedWrapper>}
+ * @private
+ */
+const ROOT_LEAVES = new WeakMap();
+
+/**
+ * Record the file whose default function is the api root of an instance's base load, and the module it was loaded
+ * for: the root's leaf is built from them.
+ * @param {object} slothlet - The instance.
+ * @param {string} filePath - The root file.
+ * @param {string|null} moduleID - The base module.
+ * @returns {void}
+ * @internal
+ */
+function runtime_noteRootFile(slothlet, filePath, moduleID) {
+	ROOT_FILES.set(slothlet, { filePath, moduleID: moduleID ?? null });
+	ROOT_LEAVES.delete(slothlet);
+}
+
+/**
+ * The leaf the api root's function runs as: a node of the base module at the root's path (`""`), built from the root
+ * file, so a call of the root enters it as a call of a function node enters the node. The root's own code then runs
+ * as the root (rules whose caller pattern matches `""`, `**` among them, and `defaultPolicy`), whoever called it. It
+ * has no Proxy of its own and is reached only as the identity of the root's calls. Null when the api root is no
+ * function.
+ * @param {object} slothlet - The instance.
+ * @returns {UnifiedWrapper|null} The leaf.
+ * @private
+ */
+function runtime_rootLeaf(slothlet) {
+	const root = slothlet.api;
+	if (typeof root !== "function") return null;
+	const fn = layerUnderlying(root);
+	const held = ROOT_LEAVES.get(slothlet);
+	if (held !== undefined && held.____slothletInternal.impl === fn) return held;
+	const source = ROOT_FILES.get(slothlet) ?? null;
+	const leaf = new UnifiedWrapper(slothlet, {
+		mode: "eager",
+		apiPath: "",
+		initialImpl: fn,
+		isCallable: true,
+		deferChildAdopt: true,
+		exportPath: ["default"],
+		moduleID: source?.moduleID ?? null
+	});
+	// The file is recorded after construction, so building the leaf announces no node of the tree; its code is indexed
+	// as this leaf's, as a node's is.
+	leaf.____slothletInternal.filePath = source?.filePath ?? null;
+	trustedRootOwn.genuineWrappers.add(leaf);
+	if (source?.filePath) registerLeafFile(leaf);
+	ROOT_LEAVES.set(slothlet, leaf);
+	return leaf;
+}
+
+/**
+ * Run the api root's function, its call checked already (see {@link runtime_rootCallCheck}), as a call of the root's
+ * leaf ({@link runtime_rootLeaf}): its own `self` reads are the root's, whoever called it. What it returns is handed out
+ * as a function node's result is. A construction runs the same way.
+ * @param {object} slothlet - The instance.
+ * @param {*} thisArg - The call's receiver.
+ * @param {Array<*>} args - The call's arguments.
+ * @param {boolean} [construct=false] - Whether the root is constructed.
+ * @returns {*} What the root returned.
+ * @internal
+ */
+function runtime_rootCall(slothlet, thisArg, args, construct = false) {
+	const root = slothlet.api;
+	const contextManager = slothlet.contextManager;
+	const leaf = contextManager?.runInContext && slothlet.instanceID ? runtime_rootLeaf(slothlet) : null;
+	if (leaf === null) return construct ? Reflect.construct(root, args) : Reflect.apply(root, thisArg, args);
+	const fn = leaf.____slothletInternal.impl;
+	if (construct) {
+		const instanceID = runtime_makerInstanceID(slothlet) ?? slothlet.instanceID;
+		return contextManager.runInContext(
+			instanceID,
+			(...made) => Reflect.construct(fn, made),
+			undefined,
+			args,
+			leaf,
+			true,
+			false,
+			null,
+			null,
+			true
+		);
+	}
+	return contextManager.runInContext(
+		runtime_makerInstanceID(slothlet) ?? slothlet.instanceID,
+		fn,
+		thisArg,
+		args,
+		leaf,
+		true,
+		false,
+		null,
+		null,
+		true
+	);
+}
+
+/**
  * `Function.prototype.call`, `apply` and `bind` as they were when slothlet loaded, by name.
  * @type {Readonly<Record<string, Function>>}
  * @private
@@ -19257,6 +19367,8 @@ export function internals(consumer) {
 		runtime_resolvedAccess,
 		runtime_assertRootChange,
 		runtime_registerRoot,
+		runtime_noteRootFile,
+		runtime_rootCall,
 		runtime_rootCallCheck,
 		runtime_rootClose,
 		runtime_rootDefine,
