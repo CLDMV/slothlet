@@ -84,6 +84,8 @@ await api.slothlet.api.add("", "./extra-root");
 await api.slothlet.api.add(null, "./extra-root");
 ```
 
+An `add()` of a module that was removed before loads its files from disk again, so edits made in between are picked up (see [ESM / CJS Cache Busting](#esm--cjs-cache-busting)).
+
 ### Synthetic / in-memory leaves (no filesystem)
 
 `add()` also accepts inline content in place of a path — useful in browser mode, tests, or when composing behavior programmatically. The value flows through the same flatten + wrap pipeline a file would, so `self` / `context` / hooks / permissions apply identically, in both eager and lazy mode.
@@ -196,6 +198,8 @@ await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api
 The scoped `remove(moduleID, apiPath)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `apiPath` with `INVALID_ARGUMENT`.
 
 Removing a module emits `impl:removed` lifecycle events for each affected path, triggers metadata cleanup for those paths, and cleans up the wrapper state.
+
+Adding the module again after a removal loads its files from disk afresh, edits included, and their top level runs again (see [ESM / CJS Cache Busting](#esm--cjs-cache-busting)).
 
 ---
 
@@ -346,6 +350,8 @@ Slothlet forces fresh module loading on every rebuild rather than serving cached
 **ESM**: A reload timestamp (`&_reload=…`) is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file. Bare package imports are not reloaded.
 
 **Helpers** (relative / `file:` modules a leaf imports or requires) are one copy per instance, not per reload. A partial reload — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)`, or a reload by moduleID — re-imports the reloaded leaves against the instance's existing helper copy, so helper state is preserved and reloaded leaves keep sharing it with the rest of the instance. A full reload, `api.slothlet.reload()`, rotates the instance ID and gives every leaf one fresh helper copy. **Edits to helper code need a full reload** (a changed TypeScript helper is the exception: it is re-transpiled to a new cache file). See [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
+
+**Adding a removed module again** works the same way. An `add()` under a moduleID that was added before and has since been removed (no mount of it is left) imports its files with a reload stamp, so it runs the code on disk now and each file's top level runs again; without it Node's cache would serve the import of the removed module. A first `add()` is a plain import, and an `add()` under a moduleID that still has a live mount (the same module mounted at a second path) is not imported again, so a live module never gets a second copy. The same rules as a partial reload apply to helpers: the instance's helper copy is kept. A path added again under a new moduleID is imported under that moduleID's own URL, so it is fresh as well.
 
 This means `reload()` is suitable as a real hot-reload trigger in development workflows - simply editing a source file and calling `reload()` is sufficient.
 

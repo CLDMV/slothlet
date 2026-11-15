@@ -66,7 +66,20 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, Symbol, Promises, Boolean, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	Map,
+	Set,
+	WeakSet,
+	Symbol,
+	Promises,
+	Boolean,
+	String,
+	Dates
+} from "@cldmv/slothlet/helpers/intrinsics";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/handlers/api-manager");
 const {
 	resolveWrapper,
@@ -175,6 +188,52 @@ export class ApiManager extends ComponentBase {
 		 * @type {Map<string, string|null>}
 		 */
 		this.mountedBy = new Map();
+	}
+
+	/**
+	 * The ids of the modules this instance has built with `api.add` (#793), for the instance ID they were imported
+	 * under. Node caches an imported file by its URL, which names the instance and the moduleID; a new instance ID
+	 * (a full reload or a restart) imports under new URLs, so the record starts over with it.
+	 * @type {{ instanceID: string|null, ids: Set<string> }}
+	 * @private
+	 */
+	#builtModules = { instanceID: null, ids: new Set() };
+
+	/**
+	 * The last stamp a re-add was given, so two re-adds within one millisecond still differ.
+	 * @type {number}
+	 * @private
+	 */
+	#lastReAddStamp = 0;
+
+	/**
+	 * The ids of the modules built under the current instance ID.
+	 * @returns {Set<string>} The ids.
+	 * @private
+	 */
+	#builtModuleIDs() {
+		const instanceID = this.slothlet.instanceID ?? null;
+		if (this.#builtModules.instanceID !== instanceID) this.#builtModules = { instanceID, ids: new Set() };
+		return this.#builtModules.ids;
+	}
+
+	/**
+	 * The reload stamp an `api.add` imports its files with (#793). A module built before under this id and since
+	 * removed (no mount of it is live) is imported fresh, the way `api.slothlet.api.reload()` re-imports a module, so
+	 * the add runs the code on disk now and its files' top level runs again: the import Node cached for the removed
+	 * module is not served. A first add, and an add under an id that still has a live mount, use no stamp, so a live
+	 * module's files are never imported a second time.
+	 * @param {string} moduleID - The id the add mounts under.
+	 * @returns {number|null} The stamp, or null for a plain import.
+	 * @private
+	 */
+	#reAddCacheBust(moduleID) {
+		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		if (!this.#builtModuleIDs().has(id)) return null;
+		if (this.slothlet.handlers.ownership.getModuleMounts(moduleID).length > 0) return null;
+		const now = Dates.now();
+		this.#lastReAddStamp = now > this.#lastReAddStamp ? now : this.#lastReAddStamp + 1;
+		return this.#lastReAddStamp;
 	}
 
 	/**
@@ -3147,6 +3206,8 @@ export class ApiManager extends ComponentBase {
 			fileFilter = (file) => file === fileName;
 		}
 
+		// Decided before this add records its mount: a removed module mounted again is imported fresh (#793).
+		const cacheBust = isSynthetic ? null : this.#reAddCacheBust(moduleID);
 		// A module mounted under an id no live module has is a new one (#625): its code, built from here on, stands for
 		// this mount, and code of an earlier module under the id does not. A replay rebuilds the mounts that are there.
 		if (restOptions.recordHistory !== false) this.#beginIncarnation(moduleID);
@@ -3219,6 +3280,7 @@ export class ApiManager extends ComponentBase {
 				// (the intermediate filename key is unwrapped below), so the builder must not path that
 				// level either — otherwise every leaf keeps a filename segment the api never exposes.
 				rootUnwrap: isFile || isSynthetic,
+				cacheBust,
 				hidden: restOptions.hidden ?? null,
 				scanHiddenFolders,
 				// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
@@ -3233,6 +3295,9 @@ export class ApiManager extends ComponentBase {
 		} catch (err) {
 			revertSpeculativeState();
 			throw err;
+		} finally {
+			// Whatever the build imported is in Node's cache under this id now, whether or not the add goes live.
+			if (!isSynthetic) this.#builtModuleIDs().add(String(moduleID).split(MODULE_ID_SEPARATOR)[0]);
 		}
 
 		this.slothlet.debug("api", {
