@@ -12371,12 +12371,35 @@ function runtime_inspectMembers(wrapper) {
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
-			shown[key] = node[key];
+			// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
+			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
+			shown[key] = descriptor && !("value" in descriptor) ? runtime_accessorLabel(descriptor) : node[key];
 		} catch (error) {
 			if (error?.code !== "PERMISSION_DENIED") throw error;
 		}
 	}
 	return shown;
+}
+
+/**
+ * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
+ * `[Getter/Setter]`, without running it.
+ * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
+ * @returns {object} A value `util.inspect` shows as that text.
+ * @private
+ */
+function runtime_accessorLabel(descriptor) {
+	return runtime_inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+}
+
+/**
+ * A value `util.inspect` shows as `text` itself, unquoted, as it shows a form such as `[Function: name]` inside an object.
+ * @param {string} text - The text.
+ * @returns {object} The label.
+ * @private
+ */
+function runtime_inspectLabel(text) {
+	return Objects.freeze(Objects.create(null, { [INSPECT_CUSTOM]: { value: () => text } }));
 }
 
 /**
