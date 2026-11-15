@@ -50,7 +50,8 @@ import {
 	WeakMap,
 	WeakSet,
 	URL,
-	String
+	String,
+	Symbols
 } from "@cldmv/slothlet/helpers/intrinsics";
 const {
 	resolveWrapper,
@@ -62,12 +63,22 @@ const {
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
-	runtime_frameworkViewCaller
+	runtime_frameworkViewCaller,
+	runtime_codeLabel
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
 const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
 const { initI18n, setLanguage, setLanguageAsync } = translationsInternals("lib/builders/api_builder");
+
+/** The key `util.inspect` reads a custom hook from (the platform shim gives the same one in a browser). */
+const INSPECT_KEY = Symbols.for("nodejs.util.inspect.custom");
+
+/**
+ * The inspect hooks the slothlet namespace put on its own objects.
+ * @type {WeakSet<Function>}
+ */
+const NAMESPACE_INSPECT_HOOKS = new WeakSet();
 
 /**
  * Root members the framework itself serves on the api, handed to module code as they are (#625).
@@ -1000,6 +1011,8 @@ export class ApiBuilder extends ComponentBase {
 				get(target, prop, receiver) {
 					if (typeof prop !== "string") {
 						const result = Reflect.get(target, prop, receiver);
+						// The namespace's own inspect hook, as it is: it shows whoever calls it only what that code may read.
+						if (prop === INSPECT_KEY && NAMESPACE_INSPECT_HOOKS.has(result)) return result;
 						return createInternalRouteProxy(result, routePath, seen);
 					}
 
@@ -1181,6 +1194,8 @@ export class ApiBuilder extends ComponentBase {
 						if (isMetaProperty(prop)) return true;
 						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 						if (!descriptor?.configurable) return true;
+						// The inspect hook is slothlet's, not a member of the namespace.
+						if (prop === INSPECT_KEY) return !NAMESPACE_INSPECT_HOOKS.has(descriptor.value);
 						if (typeof prop !== "string") return true;
 						const childRoutePath = `${routePath}.${prop}`;
 						try {
@@ -1210,6 +1225,133 @@ export class ApiBuilder extends ComponentBase {
 			routeCache.set(routePath, markSlothletProxy(proxy));
 			routeProxyTargets.set(proxy, value);
 			return proxy;
+		};
+
+		/**
+		 * The namespace as the route proxies hand it out, set once it is built: what an inspect hook reads through.
+		 * @type {object|null}
+		 */
+		let namespaceRoutes = null;
+
+		/**
+		 * Objects in the namespace that are not this namespace's own and never take its hook: the ones the host handed
+		 * slothlet (`reference`, `context`) and the one every instance shares (`types`). They are still shown inside it.
+		 * @type {Set<object>}
+		 */
+		const notHooked = new Set([slothlet.reference, slothlet.context, TYPE_STATES].filter((value) => value && typeof value === "object"));
+
+		/**
+		 * What `util.inspect` shows for a label: the text as it is, as it shows `[Function: name]` or `[Getter]`.
+		 * @param {string} text - The text.
+		 * @returns {object} The label.
+		 */
+		const inspectLabel = (text) => Objects.freeze(Objects.create(null, { [INSPECT_KEY]: { value: () => text } }));
+
+		/**
+		 * A namespace object as `util.inspect` shows it to the code inspecting it now: the members that code lists, each
+		 * read through the route proxy as it reads it, a function and an accessor by their form (nothing is run), and a
+		 * nested object the same way to the depth asked for. A plain copy, so `util.inspect` formats no route proxy and no
+		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 22/24 one level of it only).
+		 * @param {object} view - The route proxy over `raw`, as the reader reaches it.
+		 * @param {object} raw - The namespace object.
+		 * @param {string} routePath - Its route (`slothlet.env`).
+		 * @param {number|null} depth - Levels still to show; null for all.
+		 * @param {Map<object, object>} made - The copies made so far, so a cycle shows as one.
+		 * @returns {object} The copy.
+		 */
+		const namespaceShown = (view, raw, routePath, depth, made) => {
+			const shown = Reflect.getPrototypeOf(raw) === null ? Objects.create(null) : {};
+			made.set(raw, shown);
+			// A frozen object (the environment snapshot) lists every member, so listing it is refused once a rule denies one
+			// of them: its names are then taken from the object itself, and each is still read through the route proxy.
+			let keys;
+			try {
+				keys = Objects.keys(view);
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+				keys = Objects.keys(raw);
+			}
+			for (const key of keys) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
+				/* v8 ignore next -- a key the route proxy lists is one of the object's own */
+				if (!descriptor) continue;
+				const childRoutePath = `${routePath}.${key}`;
+				try {
+					if (!("value" in descriptor)) {
+						enforceInternalPermission(childRoutePath);
+						shown[key] = inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+						continue;
+					}
+					const value = view[key];
+					const held = descriptor.value;
+					if (typeof held === "function") shown[key] = inspectLabel(runtime_codeLabel(held));
+					else if (held === null || typeof held !== "object") shown[key] = value;
+					else if (made.has(held)) shown[key] = made.get(held);
+					else if (depth === null || depth > 0)
+						shown[key] = namespaceShown(value, held, childRoutePath, depth === null ? null : depth - 1, made);
+					else shown[key] = inspectLabel(Arrays.isArray(held) ? "[Array]" : "[Object]");
+				} catch (error) {
+					if (error?.code !== "PERMISSION_DENIED") throw error;
+				}
+			}
+			return shown;
+		};
+
+		/**
+		 * Give a namespace object the `util.inspect` hook that shows it as {@link namespaceShown} does, to whoever inspects
+		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 22/24), so
+		 * without it a module would be shown members it may not read, or Node 22/24 would list the next proxy itself.
+		 * @param {object} raw - The namespace object.
+		 * @param {string} routePath - Its route.
+		 * @returns {void}
+		 */
+		const defineNamespaceInspect = (raw, routePath) => {
+			const hook = function slothlet_namespaceInspect(depth) {
+				if (typeof depth === "number" && depth < 0) return inspectLabel("[Object]");
+				let view = namespaceRoutes;
+				try {
+					for (const key of routePath.split(".").slice(1)) view = view[key];
+				} catch (error) {
+					if (error?.code !== "PERMISSION_DENIED") throw error;
+					return {};
+				}
+				return namespaceShown(view, raw, routePath, typeof depth === "number" ? depth : null, new Map());
+			};
+			NAMESPACE_INSPECT_HOOKS.add(hook);
+			Reflect.defineProperty(raw, INSPECT_KEY, { value: hook, writable: false, enumerable: false, configurable: true });
+		};
+
+		/**
+		 * Give every object of slothlet's own in the namespace its inspect hook (see {@link defineNamespaceInspect}).
+		 * @param {object} raw - A namespace object.
+		 * @param {string} routePath - Its route.
+		 * @returns {void}
+		 */
+		const hookNamespace = (raw, routePath) => {
+			if (raw === null || typeof raw !== "object" || notHooked.has(raw) || !Reflect.isExtensible(raw)) return;
+			if (Reflect.getOwnPropertyDescriptor(raw, INSPECT_KEY)) return;
+			const prototype = Reflect.getPrototypeOf(raw);
+			if (prototype !== null && prototype !== Reflect.getPrototypeOf({})) return;
+			defineNamespaceInspect(raw, routePath);
+			for (const key of Reflect.ownKeys(raw)) {
+				if (typeof key !== "string") continue;
+				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
+				if ("value" in descriptor) hookNamespace(descriptor.value, `${routePath}.${key}`);
+			}
+		};
+
+		/**
+		 * The environment snapshot as the namespace holds it: a frozen copy carrying the inspect hook, which the frozen
+		 * snapshot cannot take.
+		 * @param {object|null} snapshot - The instance's snapshot.
+		 * @returns {object|null} The copy.
+		 */
+		const inspectableSnapshot = (snapshot) => {
+			if (!snapshot) return snapshot;
+			const copy = Objects.create(Reflect.getPrototypeOf(snapshot));
+			for (const key of Reflect.ownKeys(snapshot)) Reflect.defineProperty(copy, key, Reflect.getOwnPropertyDescriptor(snapshot, key));
+			defineNamespaceInspect(copy, "slothlet.env");
+			return Objects.freeze(copy);
 		};
 
 		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
@@ -3293,7 +3435,7 @@ export class ApiBuilder extends ComponentBase {
 			 * api.slothlet.env.NODE_ENV    // => "production"
 			 * api.slothlet.env.PORT        // => undefined (not captured)
 			 */
-			env: slothlet.envSnapshot,
+			env: inspectableSnapshot(slothlet.envSnapshot),
 
 			/**
 			 * Version management API for versioned API paths.
@@ -4311,7 +4453,9 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
-		return createInternalRouteProxy(namespace, "slothlet");
+		hookNamespace(namespace, "slothlet");
+		namespaceRoutes = createInternalRouteProxy(namespace, "slothlet");
+		return namespaceRoutes;
 	}
 
 	/**

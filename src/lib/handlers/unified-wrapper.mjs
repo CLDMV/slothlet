@@ -19352,6 +19352,7 @@ export function internals(consumer) {
 		releaseStandInChanges,
 		resolveWrapper,
 		runtime_assertFrameworkRootChange,
+		runtime_codeLabel,
 		runtime_contextRead,
 		runtime_contextReadAsDefiner,
 		runtime_contextWritten,

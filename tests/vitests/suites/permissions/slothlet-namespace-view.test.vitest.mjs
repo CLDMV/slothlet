@@ -14,17 +14,21 @@
  */
 
 /**
- * @fileoverview A module lists `self.slothlet` as a plain object: only the members it may read, without an error.
+ * @fileoverview A module lists and inspects `self.slothlet` as a plain object: only the members it may read, without
+ * an error, and `util.inspect` shows exactly those.
  *
  * @description
- * A `reader` module lists members of `self.slothlet` (`Object.keys`, `Object.entries`, a spread copy). Expected values
- * come from the module's own reads: a listing holds the members whose read the module is given.
+ * A `reader` module lists members of `self.slothlet` (`Object.keys`, `Object.entries`, a spread copy) and inspects
+ * them with `util.inspect` (depth, `showProxy`, `showHidden`). Expected values come from the module's own reads: a
+ * listing holds the members whose read the module is given, and `util.inspect` shows the names the listing holds and
+ * nothing the module may not read (an environment variable or `diag` a rule denies it). The host sees every member.
  * Permissions off, on with no rule, on with deny rules, and disabled; eager and lazy, the async and live runtime,
  * both attributions.
  * @module tests/vitests/suites/permissions/slothlet-namespace-view
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import util from "node:util";
 import { resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
@@ -55,6 +59,17 @@ const SETUPS = {
 };
 
 const PATHS = ["slothlet", "slothlet.env", "slothlet.api", "slothlet.permissions.control", "slothlet.materialize"];
+
+// `permissions.control` is listed above but not inspected here: Node 22 and 24 read its member `0` while inspecting a
+// view of it, which the rules refuse a module (PERMISSION_DENIED there, the filtered members on Node 26).
+const INSPECTED = PATHS.filter((path) => path !== "slothlet.permissions.control");
+
+/**
+ * The names `util.inspect` shows at the top level of a `compact: false` text.
+ * @param {string} text - The text.
+ * @returns {string[]} The names.
+ */
+const names = (text) => [...text.matchAll(/^ {2}(\w+):/gm)].map((match) => match[1]);
 
 /**
  * The host's member at a dotted path.
@@ -123,6 +138,35 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 			expect(spread).toEqual(readable);
 			if (path === "slothlet.env") expect(readable.includes(MARKER_NAME)).toBe(!setup.deniesMarker);
 			if (path === "slothlet") expect(readable.includes("diag")).toBe(!setup.deniesDiag);
+		});
+
+		it.each(INSPECTED)("shows %s through util.inspect as the members it lists, and nothing it may not read", async (path) => {
+			await build();
+			if (!api.reader.reaches(path)) return;
+			const listed = api.reader.list(path).keys;
+			// The frozen environment snapshot's listing is refused under a rule on one of its variables; it shows the rest.
+			const keys = Array.isArray(listed) ? listed : api.reader.readable(path, Object.keys(at(api, path)));
+			for (const options of [{ depth: 0 }, { depth: 3 }, { depth: 3, showProxy: true }, { depth: 3, showHidden: true }]) {
+				const text = api.reader.shown(path, { ...options, compact: false });
+				expect(text.startsWith("THROW"), `${JSON.stringify(options)}: ${text}`).toBe(false);
+				if (!options.showProxy) expect(names(text), JSON.stringify(options)).toEqual(keys);
+				if (setup.deniesMarker) expect(text).not.toContain(MARKER_VALUE);
+				if (setup.deniesDiag) expect(text).not.toContain("getAPI");
+			}
+		});
+
+		it("shows a module the environment variables it may read", async () => {
+			await build();
+			expect(api.reader.shown("slothlet.env", {}).includes(MARKER_VALUE)).toBe(!setup.deniesMarker);
+		});
+
+		it("shows the host every member", async () => {
+			await build();
+			for (const path of PATHS) {
+				expect(names(util.inspect(at(api, path), { depth: 0, compact: false })), path).toEqual(Object.keys(at(api, path)));
+			}
+			expect(util.inspect(api.slothlet.env)).toContain(MARKER_VALUE);
+			expect(util.inspect(api.slothlet.materialize)).toContain("materialized: [Getter]");
 		});
 	});
 });
