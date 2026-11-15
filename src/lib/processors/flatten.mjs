@@ -40,6 +40,26 @@ import { Reflect, Objects, Arrays, Functions, Set } from "@cldmv/slothlet/helper
 const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
+ * Whether `descriptor` is one the language gives every function of its kind for `key`: its `name` and
+ * `length` (read-only, not enumerable) and its `prototype` (not enumerable, not configurable). Those
+ * are the language's, like the members of `Function.prototype`, so a named export of that name is an
+ * ordinary member of the node and does not conflict with the default. A `static name()` method, a
+ * `name` getter or an enumerable `name` the module assigned is the module's own and still conflicts.
+ * @param {PropertyKey} key - The member's key.
+ * @param {PropertyDescriptor} descriptor - The function's own descriptor for it.
+ * @returns {boolean} True when the language gave it.
+ * @private
+ *
+ * @example
+ * isLanguageFunctionMember("name", Reflect.getOwnPropertyDescriptor(function calc() {}, "name")); // true
+ */
+function isLanguageFunctionMember(key, descriptor) {
+	if (!("value" in descriptor) || descriptor.enumerable) return false;
+	if (key === "name" || key === "length") return descriptor.writable === false;
+	return key === "prototype" && descriptor.configurable === false;
+}
+
+/**
  * Flattening decision processor
  * @class Flatten
  * @extends ComponentBase
@@ -304,7 +324,8 @@ export class Flatten extends ComponentBase {
 	 * with it. A member is an own property, enumerable or not, or one a prototype the module defines
 	 * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
 	 * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
-	 * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+	 * a named `toString` or `call` is not a conflict; nor is a function default's own `name`, `length` or
+	 * `prototype` as the language gave it, so a named `name` export is the node's `name`. Every path that combines a default with its named
 	 * exports asks this one question, so the outcome does not depend on the path.
 	 * @param {unknown} value - The module's default export.
 	 * @param {string} key - The named export's key.
@@ -325,7 +346,8 @@ export class Flatten extends ComponentBase {
 		) {
 			seen.add(node);
 			if (LANGUAGE_PROTOTYPES.has(node)) return false;
-			if (Reflect.getOwnPropertyDescriptor(node, key)) return true;
+			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
+			if (descriptor) return !(node === value && typeof value === "function" && isLanguageFunctionMember(key, descriptor));
 		}
 		return false;
 	}
