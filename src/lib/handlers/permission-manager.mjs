@@ -600,6 +600,14 @@ export class PermissionManager extends ComponentBase {
 	#subtreeCache = new Map();
 
 	/**
+	 * Whether a call or read rule could refuse a caller something at a path or beneath it ({@link readMayRefuseBeneath}),
+	 * keyed by caller path and the path. Cleared on every rule change.
+	 * @type {Map<string, boolean>}
+	 * @private
+	 */
+	#readSubtreeCache = new Map();
+
+	/**
 	 * Ids of the built-in rules keeping module code off the framework's own keys on api nodes (`**.<key>:write`). They
 	 * match a key at any depth, so {@link writeSubtree} leaves them out: they guard what an api node carries, and a
 	 * value beneath a node's path is no node.
@@ -2309,6 +2317,39 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether the call and read rules could refuse `callerPath` a call or read at `targetPath` or anywhere beneath it,
+	 * read from the rule set alone: a deny `defaultPolicy`, or a deny or conditional rule for the caller whose target
+	 * pattern can reach the subtree. A value held as itself takes no check of its own, so a reader is handed one that
+	 * reaches a node's own members only when no read of them could be refused. Hook-target rules decide no read.
+	 *
+	 * @param {string} callerPath - Api path of the module reading.
+	 * @param {string} targetPath - Api path of the subtree's root (`""` for the api root).
+	 * @returns {boolean} True when some read could be refused; false while the system is off.
+	 * @example
+	 * pm.readMayRefuseBeneath("reader.at", "zz"); // true under { caller: "reader.**", target: "zz.tag", effect: "deny" }
+	 */
+	readMayRefuseBeneath(callerPath, targetPath) {
+		if (!this.#enabled) return false;
+		if (this.#defaultPolicy !== "allow") return true;
+		const cacheKey = `${callerPath}\u0000${targetPath}`;
+		const cached = this.#readSubtreeCache.get(cacheKey);
+		if (cached !== undefined) return cached;
+		const target = targetPath.split(".").filter(Boolean);
+		let refuses = false;
+		for (const entry of this.#callRules.values()) {
+			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+			if (entry.effect !== "deny" && entry.condition == null && entry.requires == null) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (runtime_patternReaches(entry.target, target)) {
+				refuses = true;
+				break;
+			}
+		}
+		this.#readSubtreeCache.set(cacheKey, refuses);
+		return refuses;
+	}
+
+	/**
 	 * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
 	 * `"grant"`), with no audit.
 	 *
@@ -3514,6 +3555,7 @@ export class PermissionManager extends ComponentBase {
 		this.#allowsBeneath.clear();
 		this.#writeCache.clear();
 		this.#subtreeCache.clear();
+		this.#readSubtreeCache.clear();
 		this.#ruleEpoch++;
 	}
 

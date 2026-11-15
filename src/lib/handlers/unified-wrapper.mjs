@@ -815,6 +815,12 @@ function runtime_isPlainMember(value) {
  */
 function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	// A function of the module's an api node stands for is that node, read under its own rules (a prototype's
+	// `constructor`, say).
+	if (typeof value === "function") {
+		const fronted = runtime_frontedFunctionView(slothlet, value, reader);
+		if (fronted !== undefined) return fronted;
+	}
 	if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return value;
 	if (FRAMEWORK_MEMBERS.has(value)) return runtime_selfFrameworkView(value, reader);
 	if (through !== undefined) {
@@ -5810,6 +5816,10 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 		// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
 		// as a call of the node, as under `"precise"` (#726).
 		if (util.types.isProxy(value)) handed = runtime_makerOf(owner).made.get(value) ?? value;
+		// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
+		// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
+		else if (toModule && typeof value === "object" && runtime_instanceReadMayRefuse(owner.slothlet, caller, value))
+			handed = runtime_handOut(runtime_makerOf(owner), owner, value);
 	} else handed = runtime_handOut(runtime_makerOf(owner), owner, value);
 	// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
 	// guard.
@@ -6267,8 +6277,9 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
+				// One an api node stands for is that node, whose members are read under its own rules.
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
-					return runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
+					return runtime_frontingNodeNow(owner.slothlet, value) ?? runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
 				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
 					let source = SOURCES.get(original);
 					if (!source) {
@@ -6546,8 +6557,16 @@ function runtime_adoptedImpl(wrapper, impl) {
  * @private
  */
 function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper))
+	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext)
 		return Reflect.construct(constructor, args, newTarget);
+	if (!handsOutAsModule(wrapper)) {
+		const instance = Reflect.construct(constructor, args, newTarget);
+		// Under `"fast"` the instance is handed out as it is, unless its `constructor` would hand out a function whose
+		// members the rules could refuse the module: then it is the module's, as under `"precise"`. A subclass's
+		// `super()` (another `newTarget`) gets its own instance.
+		if (newTarget !== constructor || !runtime_instanceHoldsReads(wrapper)) return instance;
+		return runtime_handOut(runtime_makerOf(wrapper), wrapper, instance);
+	}
 	const maker = runtime_makerOf(wrapper);
 	// The class's prototype is what `api.x.Class.prototype` reads, so its instances report that very object.
 	runtime_exposePrototype(wrapper, Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value);
@@ -6563,6 +6582,56 @@ function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
 		runtime_handInAll(maker, args),
 		true,
 		true
+	);
+}
+
+/**
+ * Whether an instance a module constructs through a node is handed out as the node's module's, under `"fast"` as under
+ * `"precise"`: its `constructor` is the node's function, whose members the rules could refuse the module a read of
+ * (see {@link runtime_constructorReadMayRefuse}), so the instance has to hand back the node, not the function. The host
+ * constructing, and a module no read beneath the node could be refused to, get the instance itself.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when the instance is handed out as the module's.
+ * @private
+ */
+/**
+ * Whether an object's prototype chain holds a `constructor` that is a function an api node stands for whose members
+ * the rules could refuse `reader` a read of (see {@link runtime_constructorReadMayRefuse}). Found by descriptors alone.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} reader - The module the object reaches.
+ * @param {object} value - The object.
+ * @returns {boolean} True when a read could be refused.
+ * @private
+ */
+function runtime_instanceReadMayRefuse(slothlet, reader, value) {
+	if (!reader?.____slothletInternal) return false;
+	const readerPath = String(reader.____slothletInternal.apiPath ?? "");
+	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
+		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
+		if (util.types.isProxy(link)) return false;
+		if (runtime_constructorReadMayRefuse(slothlet, readerPath, link)) return true;
+		link = Reflect.getPrototypeOf(link);
+	}
+	return false;
+}
+
+/**
+ * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
+ * under `"precise"` (see {@link runtime_instanceHoldsReads}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when the instance is handed out as the module's.
+ * @private
+ */
+function runtime_instanceHoldsReads(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const permissionManager = slothlet.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled?.()) return false;
+	const reader = runtime_selfModuleReader(slothlet);
+	if (reader === null) return false;
+	if (!reader?.____slothletInternal) return true;
+	return permissionManager.readMayRefuseBeneath(
+		String(reader.____slothletInternal.apiPath ?? ""),
+		String(wrapper.____slothletInternal.apiPath ?? "")
 	);
 }
 
@@ -6846,6 +6915,9 @@ const FUNCTION_NODES = new WeakMap();
 function runtime_recordFunctionNode(wrapper) {
 	const { impl, proxy, filePath } = wrapper.____slothletInternal;
 	if (typeof impl !== "function" || !wrapper.slothlet) return;
+	// A function node built over a folder's or a mount's default function holds slothlet's layer over it: the function
+	// behind the layer is the one its `prototype.constructor` names, so it is fronted by this node too.
+	if (isCompositionLayer(impl)) runtime_recordLayerFront(wrapper.slothlet, layerUnderlying(impl), proxy);
 	// Only a function its file exports stands for it: a node built for one the module did not export (a class reached
 	// through an instance's members) is a member of that instance, not the class's own node.
 	if (!filePath || !wrapper.slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
@@ -6859,6 +6931,75 @@ function runtime_recordFunctionNode(wrapper) {
 	const live = (everyFunction.get(impl) ?? []).filter((ref) => ref.deref() !== undefined);
 	if (!live.some((ref) => ref.deref() === proxy)) live.push(new WeakRef(proxy));
 	everyFunction.set(impl, live);
+}
+
+/**
+ * The node fronting each function slothlet laid a layer over (a folder's or a mount's default function, see
+ * {@link runtime_recordFunctionNode}), per instance, held weakly as {@link FUNCTION_NODES} is.
+ * @type {WeakMap<object, WeakMap<Function, WeakRef<Function>>>}
+ * @private
+ */
+const LAYER_FRONTS = new WeakMap();
+
+/**
+ * Record `node` as the one fronting `fn` behind its layer, unless another live node of the instance already does.
+ * @param {object} slothlet - The instance.
+ * @param {*} fn - The function behind the layer.
+ * @param {Function} node - The node.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordLayerFront(slothlet, fn, node) {
+	if (typeof fn !== "function") return;
+	let byFunction = LAYER_FRONTS.get(slothlet);
+	if (!byFunction) LAYER_FRONTS.set(slothlet, (byFunction = new WeakMap()));
+	if (byFunction.get(fn)?.deref() === undefined) byFunction.set(fn, new WeakRef(node));
+}
+
+/**
+ * The api node a module's function stands for, as a reader reaching the function through a value of the module's (a
+ * prototype's `constructor`, an instance's) is handed it, so its members are read through the node's rules, as
+ * `fn.prototype.constructor === fn` reads them in plain JS: the api root for the root file's function, the node fronting
+ * it for any other, and `undefined` for a function no node of the instance fronts.
+ * @param {object} slothlet - The instance.
+ * @param {Function} fn - The function.
+ * @param {object} reader - Who reads it.
+ * @returns {Function|object|undefined} What the reader is handed, or `undefined`.
+ * @private
+ */
+function runtime_frontedFunctionView(slothlet, fn, reader) {
+	if (!slothlet || reader === HOST_READER) return undefined;
+	const node = runtime_frontingNodeNow(slothlet, fn);
+	return node === undefined || node === slothlet.boundApi ? node : runtime_selfView(node, reader);
+}
+
+/**
+ * {@link runtime_frontingNode}, bound to the module reading now as a read of that node is (see
+ * {@link runtime_functionNodeFor}).
+ * @param {object} slothlet - The instance.
+ * @param {Function} fn - The function.
+ * @returns {Function|undefined} The node.
+ * @private
+ */
+function runtime_frontingNodeNow(slothlet, fn) {
+	const node = runtime_frontingNode(slothlet, fn);
+	if (node === undefined || node === slothlet.boundApi) return node;
+	return runtime_functionNodeFor(resolveWrapper(node), fn) ?? node;
+}
+
+/**
+ * The api node standing for a module's function: the api root for the root file's function, the node fronting it for
+ * any other (see {@link FUNCTION_NODES} and {@link LAYER_FRONTS}), or `undefined` when no node of the instance does.
+ * @param {object} slothlet - The instance.
+ * @param {Function} fn - The function.
+ * @returns {Function|undefined} The node.
+ * @private
+ */
+function runtime_frontingNode(slothlet, fn) {
+	if (!slothlet) return undefined;
+	const root = slothlet.api;
+	if (typeof root === "function" && slothlet.boundApi && (root === fn || layerUnderlying(root) === fn)) return slothlet.boundApi;
+	return FUNCTION_NODES.get(slothlet)?.get(fn)?.deref() ?? LAYER_FRONTS.get(slothlet)?.get(fn)?.deref();
 }
 
 /**
@@ -8549,13 +8690,41 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName 
 		const readAt = parts.join(".");
 		for (const site of runtime_classPrototypeSites(slothlet, prototype)) if (site.key !== readAt && !owned(site.parts)) return false;
 	}
+	// The object's `constructor` is the function itself, whose own members a node reads under its rules: the object is
+	// held as itself only by a reader no read of them could be refused to.
+	if (runtime_constructorReadMayRefuse(slothlet, readerPath, prototype)) return false;
 	for (let link = Reflect.getPrototypeOf(prototype), depth = 0; link !== null && depth < 64; depth++) {
 		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
 		if (util.types.isProxy(link)) return false;
 		for (const site of runtime_classPrototypeSites(slothlet, link)) if (!owned(site.parts)) return false;
+		if (runtime_constructorReadMayRefuse(slothlet, readerPath, link)) return false;
 		link = Reflect.getPrototypeOf(link);
 	}
 	return true;
+}
+
+/**
+ * Whether a prototype's own `constructor` is a function an api node stands for (the api root's function, or one a node
+ * fronts) whose members the rules could refuse the reader a read of: held as itself, the prototype would hand the
+ * function out with no node's checks around it. Found by descriptors alone, so none of the module's code runs.
+ * @param {object} slothlet - The instance.
+ * @param {string} readerPath - The reader's api path.
+ * @param {object} prototype - The prototype.
+ * @returns {boolean} True when a read could be refused.
+ * @private
+ */
+function runtime_constructorReadMayRefuse(slothlet, readerPath, prototype) {
+	const constructor = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+	if (typeof constructor !== "function") return false;
+	const root = slothlet.api;
+	let path;
+	if (typeof root === "function" && (root === constructor || layerUnderlying(root) === constructor)) path = "";
+	else {
+		const node = FUNCTION_NODES.get(slothlet)?.get(constructor)?.deref() ?? LAYER_FRONTS.get(slothlet)?.get(constructor)?.deref();
+		if (node === undefined) return false;
+		path = String(resolveWrapper(node)?.____slothletInternal.apiPath ?? "");
+	}
+	return slothlet.handlers.permissionManager.readMayRefuseBeneath(readerPath, path);
 }
 
 /**
@@ -9408,6 +9577,8 @@ function runtime_rootMemberRead(slothlet, prop, value) {
 		if (prop === "name" || prop === "length") {
 			if (runtime_readsGated(slothlet)) runtime_enforceReadGate(gate, prop, value);
 		} else runtime_enforceCodeMember(gate, value);
+		// The `prototype` is handed out as a function node hands its own: its `constructor` is the root.
+		if (prop === "prototype") return runtime_prototypeForReader(gate, value, "prototype");
 		return value;
 	}
 	// The root function's `call`, `apply` and `bind` call the root through its check, as a function node's call the node.
@@ -9479,7 +9650,10 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 	// The root function's own `prototype` and `toString`, described only to a reader that may call the root, as a function
 	// node describes its own.
 	if (runtime_isRootFunctionAnswer(slothlet, prop) && prop !== "name" && prop !== "length") {
-		if (runtime_isCodeMemberWithheld(runtime_rootGate(slothlet), descriptor)) return undefined;
+		const gate = runtime_rootGate(slothlet);
+		if (runtime_isCodeMemberWithheld(gate, descriptor)) return undefined;
+		if (prop === "prototype" && "value" in descriptor)
+			return { ...descriptor, value: runtime_prototypeForReader(gate, descriptor.value, "prototype") };
 		return descriptor;
 	}
 	const value = descriptor.value;
