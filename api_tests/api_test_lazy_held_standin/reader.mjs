@@ -77,3 +77,17 @@ export function ask(key, fresh = false) {
 		})
 	};
 }
+
+/**
+ * The own keys of a member of `d` (or of `d` itself), and its descriptions of `length` and `name`.
+ * @param {string} [key] - The member's name; none for `d`.
+ * @returns {{keys: string[], length: object|undefined, name: object|undefined}} What it lists.
+ */
+export function own(key) {
+	const node = key ? self.d[key] : self.d;
+	const describe = (prop) => {
+		const descriptor = Reflect.getOwnPropertyDescriptor(node, prop);
+		return descriptor && { value: descriptor.value, enumerable: descriptor.enumerable };
+	};
+	return { keys: Reflect.ownKeys(node).map(String), length: describe("length"), name: describe("name") };
+}

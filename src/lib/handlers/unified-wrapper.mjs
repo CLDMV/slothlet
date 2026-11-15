@@ -9003,6 +9003,20 @@ function runtime_isUnloadedLazyNode(value) {
 }
 
 /**
+ * Whether a lazy node loaded as a namespace: its impl is a plain object, not a function, an array or a callable. Its
+ * proxy's function target stood in while it loaded, and its own `length` and `name` are no members of the node.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_loadedAsNamespace(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode !== "lazy" || !internal.state.materialized) return false;
+	const impl = internal.impl;
+	return impl !== null && typeof impl === "object" && !Arrays.isArray(impl) && !impl.__isCallable;
+}
+
+/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -17190,7 +17204,10 @@ class UnifiedWrapper extends ComponentBase {
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
-			const ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
+			let ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
+			// A lazy folder that loaded as a namespace has no `length` or `name` of a function, as the eager node has none:
+			// its function target's own only stood in while it loaded.
+			if (ownDesc?.configurable && (prop === "length" || prop === "name") && runtime_loadedAsNamespace(wrapper)) ownDesc = undefined;
 			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop, kept, access)) {
 				return undefined;
 			}
@@ -17311,8 +17328,9 @@ class UnifiedWrapper extends ComponentBase {
 				return Arrays.from(keys);
 			}
 
-			// A function target's own `length` / `name` come first, as on any function.
-			const uw_listsAsFunction = typeof target === "function" || (target && target.__isCallable);
+			// A function target's own `length` / `name` come first, as on any function. A lazy folder that loaded as a
+			// namespace lists none, as the eager node does: its function target only stood in while it loaded.
+			const uw_listsAsFunction = (typeof target === "function" || (target && target.__isCallable)) && !runtime_loadedAsNamespace(wrapper);
 			if (uw_listsAsFunction) {
 				keys.add("length");
 				keys.add("name");
