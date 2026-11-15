@@ -3315,7 +3315,11 @@ function* runtime_framesAfter(frames, index) {
  */
 function runtime_narrowToLeaf(leaves, frame, outer = []) {
 	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
-	const filePath = leaves.find((leaf) => leaf.____slothletInternal.filePath)?.____slothletInternal.filePath;
+	// The file the frame runs from: a lazy folder's node indexed at its only file has the folder as its own path.
+	const filePath = (
+		leaves.find((leaf) => leaf.____slothletInternal.filePath && toComparablePath(leaf.____slothletInternal.filePath) === frame.path) ??
+		leaves.find((leaf) => leaf.____slothletInternal.filePath)
+	)?.____slothletInternal.filePath;
 	const source = filePath ? runtime_sourceOf(filePath, frame) : null;
 	if (!source) return leaves;
 	let best = runtime_leafHolding(leaves, source, frame);
@@ -4092,11 +4096,13 @@ const LEAF_FILES = new WeakMap();
 /**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
  * @param {object} wrapper - A genuine wrapper.
+ * @param {string} [at] - The file to index it at, when it is not the wrapper's own `filePath`: a lazy folder whose only
+ *   file is its function is built with the folder as its path, while the function's code runs from the file.
  * @returns {void}
  * @internal
  */
-function registerLeafFile(wrapper) {
-	const filePath = wrapper?.____slothletInternal?.filePath;
+function registerLeafFile(wrapper, at = undefined) {
+	const filePath = at ?? wrapper?.____slothletInternal?.filePath;
 	const slothlet = wrapper?.slothlet;
 	if (!filePath || !slothlet || typeof WeakRef !== "function") return;
 	if (slothlet.instanceID && !LIVE_INSTANCES.get(slothlet.instanceID)?.deref())

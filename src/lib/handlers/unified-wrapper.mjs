@@ -12115,6 +12115,20 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Index a lazy folder's node at the file its function was written in: the folder's only file, self-named or of a
+	 * generic name, whose default export is a function. The node keeps the folder as its own path; code written in the
+	 * file is then placed at the file, as eager mode places it.
+	 * @param {object} wrapper - The folder's wrapper.
+	 * @param {string} filePath - The file.
+	 * @returns {void}
+	 * @static
+	 * @package
+	 */
+	static _recordSourceFile(wrapper, filePath) {
+		if (wrapper && typeof filePath === "string" && trustedRootOwn.genuineWrappers.has(wrapper)) registerLeafFile(wrapper, filePath);
+	}
+
+	/**
 	 * Reconstruct a full implementation object from a wrapper whose _impl may have
 	 * been depleted by ___adoptImplChildren.
 	 *

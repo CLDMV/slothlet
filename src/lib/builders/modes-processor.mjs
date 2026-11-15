@@ -2736,12 +2736,7 @@ export class ModesProcessor extends ComponentBase {
 					) {
 						return exports.default;
 					}
-					// A self-named or generically named file (`index`, `main`, ...) whose default export is a function is built
-					// by processFiles below, as eager mode builds it and as a folder's only default-export file of another name
-					// is (F05): the folder's node and its members are then built from the file, so code written in the file is
-					// placed at the file.
-					const modes_callableFileModule = fileName !== "addapi" && typeof exports.default === "function";
-					if (categoryDecision.shouldFlatten && !modes_callableFileModule) {
+					if (categoryDecision.shouldFlatten) {
 						let implToWrap;
 
 						// Rule 11 (F06) - C24: AddApi Special File Pattern
@@ -2845,8 +2840,13 @@ export class ModesProcessor extends ComponentBase {
 
 						// CRITICAL: Create __childFilePaths for ALL children in this folder
 						// Map each child to the file.path they came from. An array has no children: it is data, and the
-						// key would be listed among its elements.
-						if (implToWrap && typeof implToWrap === "object" && !Arrays.isArray(implToWrap)) {
+						// key would be listed among its elements. A default-export function with named exports beside it
+						// is slothlet's own callable layer (composeFunctionDefault), never the module's export, so its
+						// members are recorded at the file too: code written in the file is then placed at the file, as
+						// eager mode places it.
+						const modes_composedFunction =
+							typeof implToWrap === "function" && implToWrap !== exports.default && !moduleKeys.some((key) => exports[key] === implToWrap);
+						if (implToWrap && ((typeof implToWrap === "object" && !Arrays.isArray(implToWrap)) || modes_composedFunction)) {
 							// Initialize __childFilePaths with all children mapped to file.path
 							const childPaths = {};
 							for (const key of Objects.keys(implToWrap)) {
@@ -2888,6 +2888,9 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
+						// The folder's node is the file's function: indexed at the file, so the function's code is placed at
+						// the file, as eager mode builds the node from it. The node keeps the folder as its own path.
+						if (typeof implToWrap === "function") unifiedWrapperOwn.UnifiedWrapper._recordSourceFile(lazy_owner, file.path);
 						return this.#refuseThenableValue(implToWrap, apiPath);
 					}
 				}

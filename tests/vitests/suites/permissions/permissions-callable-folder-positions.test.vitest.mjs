@@ -40,10 +40,11 @@
  * @module tests/vitests/suites/permissions/permissions-callable-folder-positions
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import slothlet from "@cldmv/slothlet";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../../../..");
@@ -124,5 +125,64 @@ describe.each([
 		it.each(NODES)("%s: the module's and the host's reads answer as the export the function was written in", (node) => {
 			expect(result[name][node]).toEqual(EXPECTED);
 		});
+	});
+});
+
+// Indexing a callable folder's file must not change how the folder is built: the api a lazy instance builds is the one
+// eager mode builds, and a lazy callable folder's first call is the same call it was.
+describe("indexing a lazy callable folder's file leaves the folder as it was built", () => {
+	const INSPECT = path.join(REPO_ROOT, "tools/dev/inspect-api-structure.mjs");
+	// A root `calc.mjs` and a folder `calc/calc.mjs`, each `export { calc }; export default calc;`: the file's named
+	// export is the same function as its default.
+	const SHAPE = "smart_flatten/api_smart_flatten_fn_fn_folder";
+
+	/**
+	 * The callable paths the inspector lists for the fixture in one mode.
+	 * @param {"eager"|"lazy"} mode - The mode.
+	 * @param {string} runtime - The runtime.
+	 * @param {boolean} hooks - Whether hooks are on.
+	 * @returns {string[]} The paths, sorted.
+	 */
+	const callables = (mode, runtime, hooks) => {
+		const args = [INSPECT, SHAPE, `--${mode}`, "--runtime", runtime, ...(hooks ? ["--hooks"] : [])];
+		const child = spawnSync(process.execPath, args, { cwd: REPO_ROOT, encoding: "utf8", timeout: 120000 });
+		if (child.status !== 0) throw new Error(`inspector failed: ${child.stderr}`);
+		return [...new Set(String(child.stdout).match(/api\.[\w.$]+\(\)/g) ?? [])].sort();
+	};
+
+	it.each([
+		["async", false],
+		["async", true],
+		["live", false],
+		["live", true]
+	])(
+		"%s runtime, hooks %s: a lazy instance lists the callable paths an eager one lists",
+		(runtime, hooks) => {
+			const eager = callables("eager", runtime, hooks);
+			expect(eager.length).toBeGreaterThan(0);
+			expect(callables("lazy", runtime, hooks)).toEqual(eager);
+		},
+		300000
+	);
+
+	let api = null;
+	afterEach(async () => {
+		await api?.slothlet.shutdown();
+		api = null;
+	});
+
+	it("guards the cold first call of a lazy async callable folder behind an async before hook, then hands back a plain Promise", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		api = await slothlet({ mode: "lazy", base: path.join(REPO_ROOT, "api_tests/api_test_async_callable"), hook: { enabled: true } });
+		expect(resolveWrapper(api.funcasync).____slothletInternal.state.materialized).toBe(false);
+		api.slothlet.hook.on("funcasync:before", async () => {}, { id: "cold-async-folder" });
+
+		const first = api.funcasync("x");
+		expect(() => `${first}`).toThrow(/HOOK_PROMOTED_RESULT_NOT_AWAITED/);
+		expect(await first).toBe("Hello, x!");
+
+		const second = api.funcasync("y");
+		expect(`${second}`).toBe("[object Promise]");
+		expect(await second).toBe("Hello, y!");
 	});
 });
