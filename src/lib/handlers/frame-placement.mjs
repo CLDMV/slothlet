@@ -3221,7 +3221,9 @@ function setModuleNodeResolver(resolver) {
 
 /**
  * The api path of the module a file's leaves were built from: each leaf's path less its path inside the file's
- * exports, when they all agree (#726). Null when they do not, or when it is the root.
+ * exports, when they all agree (#726). Null when they do not, or when it is the root. A member of the file's default
+ * export (`module.exports` of a CommonJS file, or an ES module's default object) sits on the module's node, as the
+ * named exports do, so its path inside the exports is its path inside the default export.
  * @param {Array<object>} leaves - The leaves of one file.
  * @returns {string|null} The module path.
  * @private
@@ -3230,8 +3232,10 @@ function runtime_moduleRootPath(leaves) {
 	let root = null;
 	for (const leaf of leaves) {
 		const internal = leaf.____slothletInternal;
-		const exportPath = internal.exportPath;
-		if (!Arrays.isArray(exportPath) || !exportPath.length) continue;
+		const recorded = internal.exportPath;
+		if (!Arrays.isArray(recorded)) continue;
+		const exportPath = recorded[0] === "default" ? recorded.slice(1) : recorded;
+		if (!exportPath.length) continue;
 		const segments = String(internal.apiPath ?? "").split(".");
 		if (segments.length <= exportPath.length) return null;
 		const path = segments.slice(0, segments.length - exportPath.length).join(".");
