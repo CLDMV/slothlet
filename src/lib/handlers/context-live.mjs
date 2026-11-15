@@ -139,6 +139,25 @@ const FLOW_STARTERS = new WeakMap();
 const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
 
 /**
+ * How many settle hooks slothlet has installed on the engine (see {@link PROMISE_HOOKS}) and not yet stopped.
+ * @type {number}
+ * @private
+ */
+let settleHooks = 0;
+
+/**
+ * How many settle hooks slothlet has installed on the engine to follow promises and not yet stopped, for a test that
+ * checks a followed promise is let go.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * settleHookCount(); // 0 while no promise is followed
+ */
+export function settleHookCount() {
+	return settleHooks;
+}
+
+/**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
  * @type {{onSettled: function(function(Promise): void): function(): void}|null}
  * @private
@@ -146,8 +165,21 @@ const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapp
 const PROMISE_HOOKS = (() => {
 	try {
 		const hooks = Processes.getBuiltinModule?.("node:v8")?.promiseHooks;
+		if (!hooks) return null;
 		// Its function taken now: `promiseHooks` is an object of Node's that code can change later.
-		return hooks ? Objects.freeze({ onSettled: hooks.onSettled }) : null;
+		const onSettled = hooks.onSettled;
+		return Objects.freeze({
+			onSettled: (hook) => {
+				const stop = onSettled(hook);
+				settleHooks++;
+				let stopped = false;
+				return () => {
+					if (!stopped) settleHooks--;
+					stopped = true;
+					stop();
+				};
+			}
+		});
 	} catch {
 		// A platform without the builtin follows promises by reacting to them instead.
 		return null;

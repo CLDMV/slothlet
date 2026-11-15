@@ -29,6 +29,7 @@ import path from "node:path";
 import v8 from "node:v8";
 import vm from "node:vm";
 import slothlet from "@cldmv/slothlet";
+import { settleHookCount } from "#handlers/context-live";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7;
@@ -261,29 +262,18 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 	"Live runtime > a promise followed for a callback is let go (#597) > $name",
 	({ config }) => {
 		let api;
-		let original;
-		let active;
+		let base;
+		// The settle hooks slothlet installed since this test began and has not yet stopped. slothlet calls the
+		// `promiseHooks.onSettled` it took when it loaded, so it counts them itself.
+		const active = () => settleHookCount() - base;
 
 		beforeEach(() => {
-			original = v8.promiseHooks.onSettled;
-			active = 0;
-			// Count the settle hooks installed and not yet stopped.
-			v8.promiseHooks.onSettled = (hook) => {
-				active++;
-				const stop = original(hook);
-				let stopped = false;
-				return () => {
-					if (!stopped) active--;
-					stopped = true;
-					stop();
-				};
-			};
+			base = settleHookCount();
 		});
 
 		afterEach(async () => {
 			if (api) await api.shutdown();
 			api = null;
-			v8.promiseHooks.onSettled = original;
 		});
 
 		it("a callback's promise that never settles stops being followed when its instance shuts down", async () => {
@@ -291,10 +281,10 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 			await api.callee.adder.timerHangs();
 			await new Promise((resolve) => setTimeout(resolve, 20));
-			expect(active).toBe(1);
+			expect(active()).toBe(1);
 			await api.shutdown();
 			api = null;
-			expect(active).toBe(0);
+			expect(active()).toBe(0);
 		});
 
 		it("a callback's promise is followed without running an inspector of its own", async () => {
@@ -312,12 +302,12 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 			await api.callee.adder.timerHangs();
 			await new Promise((resolve) => setTimeout(resolve, 20));
-			expect(active).toBe(1);
-			for (let round = 0; round < 20 && active > 0; round++) {
+			expect(active()).toBe(1);
+			for (let round = 0; round < 20 && active() > 0; round++) {
 				gc();
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
-			expect(active).toBe(0);
+			expect(active()).toBe(0);
 		});
 	}
 );
