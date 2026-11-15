@@ -176,11 +176,11 @@ await api.slothlet.api.remove(pathOrModuleID);
 await api.slothlet.api.remove(moduleID, apiPath); // scoped: only this module's nodes under apiPath
 ```
 
-| Form               | Example                     | Behavior                                                                                                                                     |
-| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node                           |
-| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                       |
-| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched |
+| Form               | Example                     | Behavior                                                                                                                                                                                                                                                                                                              |
+| ------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node. When another module also holds the path itself (a later add replaced it), only the path's current owner comes off, as with `remove(moduleID, apiPath)`, and the path reverts to the earlier owner |
+| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                                                                                                                                                                                                |
+| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched                                                                                                                                                                          |
 
 ```javascript
 // Remove a namespace by path (whole subtree)

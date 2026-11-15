@@ -8,6 +8,10 @@
  * it (remove-if-sole, RELOAD.md): `extra` is not listed and reads `undefined`. Adding `em` again gives a working
  * `extra.ping()`. The same holds with a full `reload()` between the steps, which replays the removals.
  *
+ * When a later add replaced `extra` (`forceOverwrite`), `remove("extra")` removes that add's layer and reverts the
+ * path to the base's members (revert-if-shared): `ping` is the base's again and the add's own `pong` is gone. A
+ * second `remove("extra")` then takes the path off.
+ *
  * Each test writes its own copy of the files under `tmp/test-fixtures/`.
  * @module tests/vitests/suites/api-manager/api-manager-remove-path-then-readd
  */
@@ -113,6 +117,32 @@ describe.each(TEST_MATRIX)("remove(apiPath) of a base path, then an add there re
 			await api.slothlet.reload();
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
 			expect(await api.root.hello()).toBe("hi");
+		},
+		TIMEOUT
+	);
+
+	it(
+		"removing a path a later add replaced reverts it to the base's members, then a second removal takes it off",
+		async () => {
+			await build();
+			put(root, "em/extra.mjs", `export function ping() { return "em"; }\nexport function pong() { return "pong"; }\n`);
+			await api.slothlet.api.add("extra", path.join(root, "em/extra.mjs"), { moduleID: "em", forceOverwrite: true });
+			expect(await readExtra(api)).toEqual({ listed: true, ping: "em" });
+			expect(typeof api.extra.pong).toBe("function");
+
+			expect(await api.slothlet.api.remove("extra")).toBe(true);
+			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
+			expect(api.extra.pong).toBeUndefined();
+			expect(Object.keys(api.extra)).not.toContain("pong");
+
+			await api.slothlet.reload();
+			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
+			expect(api.extra.pong).toBeUndefined();
+
+			expect(await api.slothlet.api.remove("extra")).toBe(true);
+			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
+			await api.slothlet.reload();
+			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
 		},
 		TIMEOUT
 	);

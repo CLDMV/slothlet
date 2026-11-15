@@ -4446,121 +4446,64 @@ export class ApiManager extends ComponentBase {
 			// ownership always returns an array; the empty-array fallback is unreachable.
 			/* v8 ignore next */
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
-			// A path that is the module's mount point takes the module with it (#625): checked before the removal drops it.
-			const removesModule = this.slothlet.handlers.ownership.getModuleMounts(moduleIDKey).includes(normalizedPath);
-			// ownership always returns a result object; the fallback object is unreachable.
-			/* v8 ignore next 4 */
-			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || {
-				action: "none",
-				removedModuleId: null,
-				restoreModuleId: null
-			};
-			// Same reasoning as the scoped removal loop above (#372 review): a "restore" outcome here
-			// (a prior owner remains) never fires impl:removed for the just-removed module's own raw
-			// routine entry — its function stays live in RoutineManager.raw indefinitely, still
-			// invoked under stackRoutines: true, even though this exact call removed it. Harmless
-			// no-op when impl:removed already pruned it via a real "delete" below.
+			// A path another module also holds is reverted to it: the current owner's nodes at and under the path are
+			// detached as remove(moduleID, apiPath) detaches them, so its own members go and the shared ones show the
+			// earlier owner's values again. Reverting the path's own value alone left the removed layer's members live.
+			// The removal's write check ran above; the scoped form records the history entry.
+			if (history.some((entry) => entry.moduleID !== moduleIDKey)) {
+				return this.removeApiComponent(moduleIDKey, { ...options, scopedApiPath: normalizedPath, writer: null });
+			}
+			// moduleID is the path's only owner (a shared path took the scoped form above), so this drops the path's entry.
+			this.slothlet.handlers.ownership.removePath(normalizedPath, moduleIDKey);
+			// Harmless no-op when impl:removed prunes it on the delete below; kept as the scoped loop above keeps it (#372).
 			this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: normalizedPath, moduleID: moduleIDKey });
 			const pathParts = this.normalizeApiPath(apiPath).parts;
-			if (ownershipResult.action === "delete") {
-				// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
-				// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
-				// exact property deleted — never for descendants carried away with it. Prune those too,
-				// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
-				// its own subtree (#372/#373 review, suppressed finding).
-				this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
-				await this.deletePath(this.slothlet.api, pathParts);
-				await this.deletePath(this.slothlet.boundApi, pathParts);
-				// The subtree left the api whoever owned its nodes, so nothing below the path stays recorded: a later add
-				// there is then its only owner, and removing it removes its members instead of reverting them (#799).
-				this.slothlet.handlers.ownership.removeSubtree(normalizedPath);
-				// Clean up user metadata (use root segment only)
-				// metadata handler is always registered; FALSE never fires.
-				/* v8 ignore next */
-				if (this.slothlet.handlers.metadata) {
-					const rootSegment = normalizedPath.split(".")[0];
-					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
-				// Clean up VersionManager registration if this was a versioned module
-				// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
-				/* v8 ignore else */
-				if (this.slothlet.handlers.versionManager) {
-					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
-					if (versionKey) {
-						this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
-					}
-					// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
-					// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
-					// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
-					if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
-						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
-					}
-				}
-				// Every mount at or below the removed path is gone with it (#625); a module whose last mount it was goes too.
-				this.#releaseMountsUnder(normalizedPath, recordHistory);
-				// Invalidate the apiCacheManager entry for the removed module.
-				// The apiPath branch (unlike the moduleID branch) does not call
-				// ownership.unregister(), so the cache entry would otherwise be
-				// orphaned.
-				this.#sweepOrphanedCaches();
-				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
-				return true;
+			// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
+			// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
+			// exact property deleted — never for descendants carried away with it. Prune those too,
+			// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
+			// its own subtree (#372/#373 review, suppressed finding).
+			this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
+			await this.deletePath(this.slothlet.api, pathParts);
+			await this.deletePath(this.slothlet.boundApi, pathParts);
+			// The subtree left the api whoever owned its nodes, so nothing below the path stays recorded: a later add
+			// there is then its only owner, and removing it removes its members instead of reverting them (#799).
+			this.slothlet.handlers.ownership.removeSubtree(normalizedPath);
+			// Clean up user metadata (use root segment only)
+			// metadata handler is always registered; FALSE never fires.
+			/* v8 ignore next */
+			if (this.slothlet.handlers.metadata) {
+				const rootSegment = normalizedPath.split(".")[0];
+				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 			}
-			// In this branch moduleID is always the path's current owner (resolved from getCurrentOwner during
-			// detection), so removePath returns "delete" (single owner) or "restore" (a shadow remains) — never
-			// "none". The "delete" arm above and the "restore" primary below are both covered by the
-			// stacked-remove-by-apiPath tests; only the restore fallback and the none/return-false tail are
-			// unreachable defensive handlers, ignored precisely below. The action is always "restore" once
-			// "delete" is handled above and "none" is impossible here, so this if's else-arm never runs.
+			// Clean up VersionManager registration if this was a versioned module
+			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
 			/* v8 ignore else */
-			if (ownershipResult.action === "restore") {
-				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
-				// getCurrentValue always resolves a concrete value for a restored node (a remaining stack owner
-				// carrying a leaf callable or a container object), so the else — the restoreApiPath fallback —
-				// never runs. `v8 ignore else` drops only that dead arm while keeping the covered if-body counted.
-				/* v8 ignore else */
-				if (restoredValue !== undefined && restoredModuleId) {
-					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true,
-						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
-					});
-					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true,
-						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
-					});
-					// The module's rules, rule history, principals, and listeners go with its mount point (#625).
-					if (removesModule) this.#releaseMount(moduleIDKey, normalizedPath, recordHistory);
-					// Track in operation history for reload replay
-					this.state.operationHistory.push({
-						type: "remove",
-						apiPath: normalizedPath
-					});
-					return true;
-				} else {
-					await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
-					this.state.operationHistory.push({ type: "remove", apiPath: normalizedPath });
-					return true;
+			if (this.slothlet.handlers.versionManager) {
+				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+				if (versionKey) {
+					this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+				}
+				// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
+				// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
+				// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
+				if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
+					this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
 				}
 			}
-			// Unreachable tail: moduleID is the path's current owner (above), so removePath never yields
-			// "none" here and the function never falls through — both are defensive only.
-			/* v8 ignore start */
-			if (ownershipResult.action === "none" && history.length === 0) {
-				await this.deletePath(this.slothlet.api, pathParts);
-				await this.deletePath(this.slothlet.boundApi, pathParts);
-				return true;
-			}
-			return false;
-			/* v8 ignore stop */
+			// Every mount at or below the removed path is gone with it (#625); a module whose last mount it was goes too.
+			this.#releaseMountsUnder(normalizedPath, recordHistory);
+			// Invalidate the apiCacheManager entry for the removed module.
+			// The apiPath branch (unlike the moduleID branch) does not call
+			// ownership.unregister(), so the cache entry would otherwise be
+			// orphaned.
+			this.#sweepOrphanedCaches();
+			// Track in operation history for reload replay
+			this.state.operationHistory.push({
+				type: "remove",
+				apiPath: normalizedPath
+			});
+			return true;
 		}
 
 		if (moduleID) {
