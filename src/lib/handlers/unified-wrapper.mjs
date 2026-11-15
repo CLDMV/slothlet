@@ -12585,7 +12585,7 @@ function runtime_rootInspectShown(slothlet, args) {
 	const shown = {};
 	for (const key of Objects.keys(root)) {
 		try {
-			shown[key] = reader ? runtime_inspectSafe(root[key], args, true) : root[key];
+			shown[key] = reader ? runtime_rootMemberShown(root[key], args) : root[key];
 		} catch (error) {
 			if (error?.code !== "PERMISSION_DENIED") throw error;
 		}
@@ -12596,6 +12596,24 @@ function runtime_rootInspectShown(slothlet, args) {
 	if (Objects.keys(shown).length === 0) return label;
 	const [, options, inspect] = args;
 	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(shown, options)}`;
+}
+
+/**
+ * A member of the api root as its hook shows it to a module: the framework's namespace as its own hook shows it (only
+ * what the module may read), a function of the framework's by the form of the function behind the module's view of it,
+ * and anything else as {@link runtime_inspectSafe} shows it, a form shown unquoted as `util.inspect` shows one.
+ * @param {*} value - The member, read through the module's view of the root.
+ * @param {Array<*>} args - The hook's arguments.
+ * @returns {*} What is shown.
+ * @private
+ */
+function runtime_rootMemberShown(value, args) {
+	const behind =
+		value !== null && (typeof value === "object" || typeof value === "function") ? FRAMEWORK_VIEW_TARGETS.get(value) : undefined;
+	if (behind !== undefined && typeof value === "object") return value;
+	const safe = runtime_inspectSafe(value, args, true);
+	if (typeof safe !== "string" || safe === value) return safe;
+	return runtime_inspectLabel(typeof behind === "function" ? runtime_codeLabel(behind) : safe);
 }
 
 /**
