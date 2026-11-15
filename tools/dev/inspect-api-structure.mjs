@@ -155,6 +155,30 @@ function isWithheldDisplayPath(displayPath) {
 }
 
 /**
+ * The api as the tool prints it with `util.inspect`: the root's members as they are, each withheld path's contents
+ * replaced by a marker. `util.inspect(api)` shows the root's members (`slothlet.env` included) as the host reads them,
+ * so the printed api is built from them rather than the api itself.
+ * @param {object|Function} api - The api.
+ * @returns {object} What the tool prints.
+ * @internal
+ */
+function printableApi(api) {
+	const withheld = { [util.inspect.custom]: () => "[withheld]" };
+	const shown = { ...api };
+	for (const withheldPath of WITHHELD_PATHS) {
+		const parts = withheldPath.split(".");
+		let holder = shown;
+		for (const part of parts.slice(0, -1)) {
+			if (holder[part] === null || typeof holder[part] !== "object") break;
+			holder = holder[part] = { ...holder[part] };
+		}
+		const last = parts[parts.length - 1];
+		if (Object.hasOwn(holder, last)) holder[last] = withheld;
+	}
+	return shown;
+}
+
+/**
  * Display the structure of an object or function recursively.
  * @param {any} obj - Object to inspect
  * @param {string} [path=""] - Current path for display
@@ -378,7 +402,7 @@ async function inspectApi(apiName, options = {}) {
 			// console.log(api.utilities.helpers);
 			// process.exit(0);
 			const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-			console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+			console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
 			}
@@ -386,7 +410,7 @@ async function inspectApi(apiName, options = {}) {
 		}
 
 		const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-		console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+		console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 
 		// Display basic info
 		console.log(chalk.bold("API Type:"), typeof api);
