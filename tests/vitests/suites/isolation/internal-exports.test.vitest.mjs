@@ -128,7 +128,7 @@ describe.each(MATRIX)("Isolation > slothlet's internal exports answer slothlet a
 	it("refuses a module the static functions of the wrapper class, held or imported by package path or by file URL", async () => {
 		const key = "#handlers/unified-wrapper:UnifiedWrapper";
 		const fileURL = new URL("../../../../src/lib/handlers/unified-wrapper.mjs", import.meta.url).href;
-		for (const name of ["_recordSourceFile", "_extractFullImpl"]) {
+		for (const name of ["_recordSourceFile", "_extractFullImpl", "_memberNode", "_staysValue"]) {
 			// The host reaches the function; it is slothlet's own (the builders call it).
 			expect([name, typeof held[key][name]]).toEqual([name, "function"]);
 			expect([name, "held", await api.held.useStatic(key, name)]).toEqual([name, "held", REFUSED]);
