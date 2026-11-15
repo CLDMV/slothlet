@@ -38,11 +38,16 @@ const FIXTURE_DIR = resolve(REPO, "api_tests/api_test_browser");
 const FIXTURE_REL = "api_tests/api_test_browser";
 // A leaf whose helper files use slothlet's internal exports, inside and outside the module's folder.
 const HELPER_REL = "api_tests/api_test_browser_internal_helper/api";
+// A callable api root: its function's own members by every route, and its own code's reads.
+const ROUTES_REL = "api_tests/api_test_function_member_routes/base";
+const ROOT_LEAF_REL = "api_tests/api_test_root_own_leaf/plain";
 
 export default defineConfig(async () => {
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.
 	const { manifest, importmap } = await generateBrowserAssets(FIXTURE_DIR, { slothletBase: "/" });
 	const helperManifest = await generateManifest(resolve(REPO, HELPER_REL));
+	const routesManifest = await generateManifest(resolve(REPO, ROUTES_REL));
+	const rootLeafManifest = await generateManifest(resolve(REPO, ROOT_LEAF_REL));
 
 	// slothlet resolves internal modules at runtime via `import(<computed bare specifier>)`, which vite
 	// can't statically rewrite — so the browser needs an importmap for them. Point it at the vite-served
@@ -66,7 +71,9 @@ export default defineConfig(async () => {
 			if (id === "\0virtual:browser-fixture-manifest") {
 				return (
 					`export const manifest = ${JSON.stringify(manifest)};\nexport const fixtureRel = ${JSON.stringify(FIXTURE_REL)};\n` +
-					`export const helperManifest = ${JSON.stringify(helperManifest)};\nexport const helperRel = ${JSON.stringify(HELPER_REL)};\n`
+					`export const helperManifest = ${JSON.stringify(helperManifest)};\nexport const helperRel = ${JSON.stringify(HELPER_REL)};\n` +
+					`export const routesManifest = ${JSON.stringify(routesManifest)};\nexport const routesRel = ${JSON.stringify(ROUTES_REL)};\n` +
+					`export const rootLeafManifest = ${JSON.stringify(rootLeafManifest)};\nexport const rootLeafRel = ${JSON.stringify(ROOT_LEAF_REL)};\n`
 				);
 			}
 		},
