@@ -112,7 +112,14 @@ import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothle
 import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
-const { resolveWrapper, releaseModuleMakers, releaseStandInChanges } = unifiedWrapperInternals("slothlet");
+const {
+	resolveWrapper,
+	releaseModuleMakers,
+	releaseStandInChanges,
+	runtime_rootListing,
+	runtime_rootMemberDescriptor,
+	runtime_rootMemberRead
+} = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
 const { initI18n } = translationsInternals("slothlet");
@@ -1250,7 +1257,8 @@ class Slothlet {
 
 			this.boundApi = markSlothletProxy(
 				new NativeProxy(proxyTarget, {
-					get: (target, prop) => (this.api ? this.api[prop] : undefined),
+					// A member is read as a node reads its own: the same gate, at the member's name (see unified-wrapper.mjs).
+					get: (target, prop) => (this.api ? runtime_rootMemberRead(this, prop, this.api[prop]) : undefined),
 					set: (target, prop, value) => {
 						if (this.api) {
 							this.api[prop] = value;
@@ -1258,7 +1266,8 @@ class Slothlet {
 						return true;
 					},
 					has: (target, prop) => (this.api ? prop in this.api : false),
-					ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
+					// The root lists what a node lists of its own: a member the reader may not read is left out.
+					ownKeys: (target) => (this.api ? runtime_rootListing(this, target, Reflect.ownKeys(this.api)) : []),
 					deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
 					apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
 					construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
@@ -1267,8 +1276,9 @@ class Slothlet {
 					getOwnPropertyDescriptor: (target, prop) => {
 						if (this.api && prop in this.api) {
 							const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
-							if (desc) {
-								return { ...desc, configurable: true };
+							const described = desc ? runtime_rootMemberDescriptor(this, prop, desc) : undefined;
+							if (described) {
+								return { ...described, configurable: true };
 							}
 						}
 						return undefined;

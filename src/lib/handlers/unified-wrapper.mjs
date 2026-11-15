@@ -3513,7 +3513,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
 
-	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	const targetPath = runtime_memberPathOf(wrapper, prop);
 	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
@@ -9032,7 +9032,7 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	// it, and a read of it is refused to a caller the rules deny, so `Object.keys` and a spread leave it out as
 	// `JSON.stringify` and `toJSON` do. Its description is still given, and running the getter it holds is refused.
 	const isAccessor = listing && !("value" in desc) && typeof desc.get === "function";
-	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	const targetPath = runtime_memberPathOf(wrapper, prop);
 	// An object member the rules leave the reader nothing of is listed no more than a value it may not read is.
 	if (listing && "value" in desc && typeof prop === "string") {
 		const member = runtime_unwrapLeafValue(desc.value);
@@ -9041,6 +9041,163 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	}
 	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
 	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
+}
+
+/**
+ * The api path of a node's member: the member's own name at the api root, whose path is empty.
+ * @param {object} wrapper - The node's wrapper, or the api root's gate (see {@link runtime_rootGate}).
+ * @param {string|symbol} prop - The member's key.
+ * @returns {string} The member's path.
+ * @private
+ */
+function runtime_memberPathOf(wrapper, prop) {
+	const base = wrapper.____slothletInternal.apiPath;
+	return base ? base + "." + String(prop) : String(prop);
+}
+
+/**
+ * The api root as the read gate takes a node, per instance (see {@link runtime_rootGate}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const ROOT_GATES = new WeakMap();
+
+/**
+ * The api root as the read gate takes a node: its path is empty and what it holds is the instance's api. A member of
+ * the root is then decided by the same gate, at its own name, as a member of any node is at the node's path and its name.
+ * @param {object} slothlet - The instance.
+ * @returns {object} The root's stand-in for the gate.
+ * @private
+ */
+function runtime_rootGate(slothlet) {
+	let gate = ROOT_GATES.get(slothlet);
+	if (gate === undefined) {
+		gate = {
+			slothlet,
+			SlothletError: slothlet.SlothletError,
+			____slothletInternal: {
+				apiPath: "",
+				filePath: null,
+				get impl() {
+					return slothlet.api;
+				}
+			}
+		};
+		ROOT_GATES.set(slothlet, gate);
+	}
+	return gate;
+}
+
+/**
+ * Whether a node's impl is a primitive a node holding it answers in its place, as a file's primitive default export
+ * is: a number, a string, a boolean, a bigint or a symbol.
+ * @param {*} impl - The node's impl.
+ * @returns {boolean} True for such a primitive.
+ * @private
+ */
+function runtime_isHeldPrimitive(impl) {
+	const kind = typeof impl;
+	return kind === "string" || kind === "number" || kind === "boolean" || kind === "bigint" || kind === "symbol";
+}
+
+/**
+ * Whether the read gate is on for an instance.
+ * @param {object} slothlet - The instance.
+ * @returns {boolean} True when reads are gated.
+ * @private
+ */
+function runtime_readsGated(slothlet) {
+	const pm = slothlet.handlers?.permissionManager;
+	return !!pm && pm.isEnabled() && pm.isReadGatingEnabled();
+}
+
+/**
+ * A read of a member of the api root, answered as a node answers a read of its member: a file's primitive default
+ * export is its value, and a value the reader may not read is refused, by the same gate at the member's name.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - What the root holds under it.
+ * @returns {*} What the read answers.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not read the member.
+ * @internal
+ */
+function runtime_rootMemberRead(slothlet, prop, value) {
+	if (value !== null && (typeof value === "object" || typeof value === "function")) {
+		const node = resolveWrapper(value);
+		if (node !== null) {
+			// A node is traversal, as at any node; a file's primitive default export is its value, read through the gate.
+			const impl = node.____slothletInternal.impl;
+			if (!runtime_isHeldPrimitive(impl)) return value;
+			runtime_enforceReadGate(runtime_rootGate(slothlet), prop, impl);
+			return impl;
+		}
+	}
+	// Only data the root lists as a member is gated: a node read off the root is traversal, as at any node, and the
+	// root function's own `length` and `name` are the function's, as a node's are its target's.
+	if (typeof prop === "string" && runtime_isTerminalData(value) && runtime_readsGated(slothlet)) {
+		const descriptor = Objects.getOwnPropertyDescriptor(slothlet.api, prop);
+		if (descriptor !== undefined && descriptor.enumerable) runtime_enforceReadGate(runtime_rootGate(slothlet), prop, value);
+	}
+	return value;
+}
+
+/**
+ * Whether the read being made is the host's own: a read the gate allows whatever the rules say, but for a
+ * module-private member (see {@link runtime_readGateDecision}). The gate's answer for each member is then that one, and
+ * the root's listing and descriptions take it without deciding the member by its rules.
+ * @param {object} gate - The api root's stand-in for the gate (see {@link runtime_rootGate}).
+ * @returns {boolean} True for the host.
+ * @private
+ */
+function runtime_isHostRead(gate) {
+	return resolveEnforcedCaller(gate, undefined).verdict === "allow";
+}
+
+/**
+ * The keys of the api root a reader is given, as a node's listing gives its own: what the reader may not read is left
+ * out (see {@link runtime_isReadRedacted}). A key the root's target holds fixed stays, as the invariants require.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {Array<string|symbol>} keys - The keys the api root holds.
+ * @returns {Array<string|symbol>} The keys listed.
+ * @internal
+ */
+function runtime_rootListing(slothlet, target, keys) {
+	if (!runtime_readsGated(slothlet)) return keys;
+	const gate = runtime_rootGate(slothlet);
+	// The reader is the same for every key of one listing, so it is resolved once.
+	const host = runtime_isHostRead(gate);
+	const listed = [];
+	for (const key of keys) {
+		if (host && !slothlet.handlers.permissionManager.isPrivateTarget(String(key))) {
+			listed.push(key);
+			continue;
+		}
+		const fixed = Reflect.getOwnPropertyDescriptor(target, key);
+		if ((fixed && !fixed.configurable) || !runtime_isReadRedacted(gate, key, null, null, true)) listed.push(key);
+	}
+	return listed;
+}
+
+/**
+ * The api root's description of a member, as a node describes its own: none for a value the reader may not read, and a
+ * file's primitive default export described by its value.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member's key.
+ * @param {PropertyDescriptor} descriptor - The api root's own descriptor of it.
+ * @returns {PropertyDescriptor|undefined} The description.
+ * @internal
+ */
+function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
+	if (runtime_readsGated(slothlet)) {
+		const gate = runtime_rootGate(slothlet);
+		const decided = runtime_isHostRead(gate) && !slothlet.handlers.permissionManager.isPrivateTarget(String(prop));
+		if (!decided && runtime_isReadRedacted(gate, prop)) return undefined;
+	}
+	const value = descriptor.value;
+	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
+	const impl = resolveWrapper(value)?.____slothletInternal.impl;
+	return runtime_isHeldPrimitive(impl) ? { ...descriptor, value: impl } : descriptor;
 }
 
 /**
@@ -15451,22 +15608,9 @@ class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl === "object") {
 					return "object";
 				}
-				// Handle primitives
-				if (typeof impl === "string") {
-					return "string";
-				}
-				if (typeof impl === "number") {
-					return "number";
-				}
-				if (typeof impl === "boolean") {
-					return "boolean";
-				}
-				if (typeof impl === "symbol") {
-					return "symbol";
-				}
-				if (typeof impl === "bigint") {
-					return "bigint";
-				}
+				// A node holding a number, string, boolean, bigint or symbol is never handed out: whatever holds it
+				// answers its value instead (the api root and every node), so what is left here is a node of a file
+				// whose default export is `null` or `undefined`.
 				return "undefined";
 			}
 			if (prop === "_materialize") return wrapper._materialize.bind(wrapper);
@@ -18300,6 +18444,9 @@ export function internals(consumer) {
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,
 		runtime_resolvedAccess,
+		runtime_rootListing,
+		runtime_rootMemberDescriptor,
+		runtime_rootMemberRead,
 		runtime_selfChangeTarget,
 		runtime_selfFrameworkView,
 		runtime_selfHookHandler,

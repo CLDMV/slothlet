@@ -1171,6 +1171,8 @@ JSON.stringify(self.owner.config); // '{"nested":{"public":1},"prim":3}'
 
 Reading the member itself stays traversal: `self.owner.config.nested` is an object with nothing the reader may read, and `"nested" in self.owner.config` is true, as it is for a primitive member the reader may not read. Within the rule's coverage it ranks as a rule on `path.**` does, so a rule naming a path beneath the member more specifically decides that path. The rule covers reads of data only: calling a function the member holds is decided by the call rules on the function's own path. A deny on the exact path of a folder, a file (its default export included) or a function is unchanged: it does not cover what is beneath it.
 
+The api root is no exception. Its members follow these rules at their own names: `Object.keys(self)`, a spread, `JSON.stringify(self)` and `Object.getOwnPropertyDescriptor(self, …)` leave out a member the reader may not read, a read of one is refused, and a file at the root whose default export is a primitive reads as its value (`self.version` is `7` for `export default 7`), as it does one level down. The same holds for the `api` that `self.slothlet.diag.getAPI()` hands a module and for what `self.slothlet.diag.describe()` lists. The host's own listing of `api` stays whole.
+
 **What is NOT gated:**
 
 - **Namespace traversal** — walking `self.admin` → `.manage` → `.deleteUser` returns child wrappers, not data values, so a `defaultPolicy: "deny"` configuration does **not** need an allow rule for every intermediate path segment.

@@ -35,9 +35,6 @@
  *   2104–2105  __type → "function" (direct function impl)
  *   2106–2107  __type → "function" (impl.default is a function — CJS { default: fn } pattern)
  *   2109–2110  __type → "object"
- *   2112       __type → "string"
- *   2113–2115  __type → "number"
- *   2115–2117  __type → "boolean"
  *   2122       _materialize binding returned
  *   2133–2141  __metadata (handler exists)
  *   2143       __metadata fallback {}
@@ -66,6 +63,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { self } from "@cldmv/slothlet/runtime";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
@@ -87,26 +85,6 @@ async function makeLazy() {
 		api,
 		/**
 		 * Shut down the api instance.
-		 * @returns {Promise<void>}
-		 */
-		async teardown() {
-			if (api && typeof api.shutdown === "function") {
-				await api.shutdown().catch(() => {});
-			}
-		}
-	};
-}
-
-/**
- * Create a fresh lazy API against the primitives directory.
- * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
- */
-async function makeLazyPrimitives() {
-	const api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "lazy", silent: true });
-	return {
-		api,
-		/**
-		 * Shut down this instance.
 		 * @returns {Promise<void>}
 		 */
 		async teardown() {
@@ -225,42 +203,41 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		}
 	});
 
-	it("__type for string primitive wrapper returns 'string' (line 2112)", async () => {
-		// api_test_primitives/strval.mjs exports `export default 'hello'`.
-		// After materialization, impl === 'hello' (a string).
-		// Line 2112: `if (typeof impl === "string") return "string"`.
-		const { api, teardown } = await makeLazyPrimitives();
-		try {
-			await api.strval._materialize();
-			await new Promise((r) => setImmediate(r));
-			expect(api.strval.__type).toBe("string");
-		} finally {
-			await teardown();
-		}
-	});
+	// A file at the root whose default export is a primitive reads as its value, as one level down and in plain
+	// JavaScript, before and after a lazy load completes; a module the rules deny is refused, its await included.
+	describe.each(["eager", "lazy"])("a file's primitive default export at the root: %s", (mode) => {
+		const VALUES = { strval: "hello", numval: 42, boolval: true };
 
-	it("__type for number primitive wrapper returns 'number' (lines 2113–2115)", async () => {
-		// api_test_primitives/numval.mjs exports a number.
-		const { api, teardown } = await makeLazyPrimitives();
-		try {
-			await api.numval._materialize();
-			await new Promise((r) => setImmediate(r));
-			expect(api.numval.__type).toBe("number");
-		} finally {
-			await teardown();
-		}
-	});
+		it.each(Object.entries(VALUES))("%s reads as its value, read, awaited and read again", async (name, value) => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode, silent: true });
+			try {
+				expect(api[name]).toBe(value);
+				expect(await api[name]).toBe(value);
+				expect(api[name]).toBe(value);
+			} finally {
+				await api.shutdown();
+			}
+		});
 
-	it("__type for boolean primitive wrapper returns 'boolean' (lines 2115–2117)", async () => {
-		// api_test_primitives/boolval.mjs exports a boolean.
-		const { api, teardown } = await makeLazyPrimitives();
-		try {
-			await api.boolval._materialize();
-			await new Promise((r) => setImmediate(r));
-			expect(api.boolval.__type).toBe("boolean");
-		} finally {
-			await teardown();
-		}
+		it.each(Object.keys(VALUES))("%s is refused to a module the rules deny, its await included", async (name) => {
+			const api = await slothlet({
+				base: TEST_DIRS.API_TEST_PRIMITIVES,
+				mode,
+				silent: true,
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: name, effect: "deny" }] }
+			});
+			try {
+				await api.slothlet.api.add("probe", {
+					read: (key) => self[key],
+					settle: async (key) => await self[key]
+				});
+				expect(() => api.probe.read(name)).toThrow(expect.objectContaining({ code: "PERMISSION_DENIED" }));
+				await expect(api.probe.settle(name)).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				expect(api[name]).toBe(VALUES[name]);
+			} finally {
+				await api.shutdown();
+			}
+		});
 	});
 });
 

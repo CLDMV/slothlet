@@ -4030,14 +4030,17 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {Array|Object}
 				 */
 				describe: (showAll = false) => {
+					// Read through the bound api, as `self` reads the root: a member the reader may not read is left
+					// out and refused there, as at any node, and a file's primitive default export is its value.
+					const root = slothlet.boundApi ?? userApi;
 					if (showAll) {
 						// Return full API structure (like v2 eager mode). Module code gets its own views of the
 						// nodes, as it reads them through `self`, never the nodes themselves (#625).
 						const reader = runtime_selfModuleReader(slothlet);
-						if (!reader) return { ...userApi };
+						if (!reader) return { ...root };
 						const described = {};
-						for (const key of Reflect.ownKeys(userApi)) {
-							const value = userApi[key];
+						for (const key of Reflect.ownKeys(root)) {
+							const value = root[key];
 							if (typeof key !== "string") described[key] = value;
 							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
 							else described[key] = runtime_selfView(value, reader);
@@ -4045,7 +4048,7 @@ export class ApiBuilder extends ComponentBase {
 						return described;
 					}
 					// Return top-level keys (like v2)
-					return Reflect.ownKeys(userApi);
+					return Reflect.ownKeys(root);
 				},
 
 				/**
