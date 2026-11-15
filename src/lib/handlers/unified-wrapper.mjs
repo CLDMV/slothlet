@@ -14781,6 +14781,11 @@ class UnifiedWrapper extends ComponentBase {
 						(wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined)
 					) {
 						/* v8 ignore stop */
+						// Loaded: the kind of what the chain reads as now, a file's primitive default export by its value.
+						const node = runtime_standInNode(wrapper, propChain);
+						if (node !== STAND_IN_UNLOADED) {
+							return typeof node === "function" ? "function" : typeof node === "object" && node !== null ? "object" : typeof node;
+						}
 						// Wrapper has materialized - walk propChain to determine actual type
 						let current = wrapper.createProxy();
 						for (const chainProp of propChain) {
