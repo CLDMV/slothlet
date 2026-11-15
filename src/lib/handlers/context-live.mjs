@@ -158,8 +158,16 @@ export function settleHookCount() {
 }
 
 /**
+ * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
+ * @typedef {object} CapturedPromiseHooks
+ * @property {function(function(Promise): void): function(): void} onSettled - Installs a hook run when any promise settles; returns what stops it.
+ * @property {function(object): function(): void} [createHook] - Installs a set of promise hooks; returns what stops them. Absent where the engine has none.
+ * @private
+ */
+
+/**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
- * @type {{onSettled: function(function(Promise): void): function(): void, createHook: (function(object): function(): void)|undefined}|null}
+ * @type {CapturedPromiseHooks|null}
  * @private
  */
 const PROMISE_HOOKS = (() => {
