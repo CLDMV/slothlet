@@ -187,6 +187,18 @@ api.logger("Hello World"); // ✅ callable
 api.logger.utils.debug("x"); // utils.mjs still accessible
 ```
 
+The default is the folder's value even when the file also has a named export called like the folder: that export is a member, as it is in the module's namespace.
+
+```javascript
+// File: logger/logger.mjs
+export default function logger(message) {}
+function format(message) {}
+export { format as logger };
+
+api.logger("Hello"); // ✅ runs `logger`
+api.logger.logger("Hello"); // ✅ runs `format`
+```
+
 **Why:** When names match and there's a default export, the function becomes the namespace itself.
 
 ---

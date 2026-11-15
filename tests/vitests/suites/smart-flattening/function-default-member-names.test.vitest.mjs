@@ -1,5 +1,5 @@
 /**
- * @fileoverview A function default's named exports called `name`, `length` or `prototype` are
+ * @fileoverview A function default's named exports called `name`, `length`, `prototype` or the function's own name are
  * members of its node.
  *
  * @description
@@ -10,6 +10,9 @@
  *   `length` and `prototype`): a function's own `name`, `length` and `prototype` are the language's, so a named export
  *   of that name does not conflict with the default (MODULE-STRUCTURE.md). A member the module put on its function
  *   itself still conflicts and, under `merge`, keeps the function's.
+ * - `export { calc2 as calc }` beside `export default function calc` is the member `api.math.calc.calc`, and the node
+ *   still calls the default; in a self-named file (`solo/solo.mjs`) the default is the folder's callable (F04), with
+ *   the same-named export as its member.
  *
  * Every row runs eager and lazy, async and live, from files and from in-memory `api.slothlet.api.add`, and with the
  * permission system on under both `attribution` values.
@@ -82,7 +85,7 @@ const FILES = {
 /** The plain modules, imported as plain JavaScript imports them. */
 const plain = {};
 
-/** The in-memory export map that matches the `math/calc.mjs` file. */
+/** The in-memory export maps that match the `math/calc.mjs` and `solo/solo.mjs` files. */
 const memCalc = () => ({
 	default: function calc(a, b) {
 		return a + b;
@@ -95,6 +98,15 @@ const memCalc = () => ({
 	helper() {
 		return "helper";
 	}
+});
+const memSolo = () => ({
+	default: function memsolo(a, b) {
+		return a * b;
+	},
+	memsolo: function solo2() {
+		return "solo2";
+	},
+	name: "S"
 });
 
 beforeAll(async () => {
@@ -164,6 +176,26 @@ describe.each(getMatrixConfigs())("function default member names > $name", ({ co
 		expect(api.own.tag).toBe(ns.default.tag);
 	});
 
+	it("keeps a named export called like the default function as a member, and calls the default", async () => {
+		await build();
+		const ns = plain["math/calc.mjs"];
+		expect(api.math.calc(4, 5)).toBe(ns.default(4, 5));
+		expect(api.math.calc.calc()).toBe(ns.calc());
+	});
+
+	it("makes a self-named file's default the folder's callable and its same-named export a member", async () => {
+		await build();
+		const solo = plain["solo/solo.mjs"];
+		expect(api.solo(2, 3)).toBe(solo.default(2, 3));
+		expect(api.solo.solo()).toBe(solo.solo());
+		expect(api.solo.name).toBe(solo.name);
+		const pair = plain["pair/pair.mjs"];
+		expect(api.pair()).toBe(pair.default());
+		expect(api.pair.pair()).toBe(pair.pair());
+		expect(api.pair.length).toBe(pair.length);
+		expect(await api.pair.side()).toBe("side");
+	});
+
 	it("composes an in-memory add's name and length exports as the file's", async () => {
 		await build();
 		await api.slothlet.api.add("mem.calc", memCalc());
@@ -174,6 +206,22 @@ describe.each(getMatrixConfigs())("function default member names > $name", ({ co
 		expect(api.mem.calc.name).toBe(ns.name);
 		expect(api.mem.calc.length).toBe(ns.length);
 		expect(api.mem.calc.helper()).toBe(ns.helper());
+	});
+
+	it("composes an in-memory add's export called like its default as the file's", async () => {
+		await build();
+		await api.slothlet.api.add("mem.calc", memCalc());
+		await api.slothlet.api.add("memsolo", memSolo());
+		await api.mem;
+		await api.mem.calc;
+		await api.memsolo;
+		const ns = plain["math/calc.mjs"];
+		expect(api.mem.calc(2, 3)).toBe(ns.default(2, 3));
+		expect(api.mem.calc.calc()).toBe(ns.calc());
+		const solo = plain["solo/solo.mjs"];
+		expect(api.memsolo(2, 3)).toBe(solo.default(2, 3));
+		expect(api.memsolo.memsolo()).toBe(solo.solo());
+		expect(api.memsolo.name).toBe(solo.name);
 	});
 });
 
@@ -220,5 +268,12 @@ describe.each(
 		const listed = await api.reader.listKeys();
 		expect(listed).not.toContain("name");
 		expect(listed).toEqual(expect.arrayContaining(["length", "helper"]));
+	});
+
+	it("lets a module read the member called like the default function", async () => {
+		await build();
+		const ns = plain["math/calc.mjs"];
+		expect(await api.reader.readCalc()).toBe(ns.calc());
+		expect(await api.reader.listKeys()).toContain("calc");
 	});
 });

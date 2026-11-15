@@ -399,6 +399,25 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * Whether a self-named file's default export, not its export named after the folder, is the folder's
+	 * value: the module has a default and the same-named export is another value (F04: the default is the
+	 * folder's callable and the other exports, that one included, are its members). A same-named export
+	 * that is the default itself (`export { logger }` beside `export default function logger`) is the
+	 * same value either way.
+	 * @param {object} exports - The module's exports.
+	 * @param {string} name - The folder's (and file's) name.
+	 * @returns {boolean} True when the default is the folder's value.
+	 * @private
+	 *
+	 * @example
+	 * // calc/calc.mjs: export default function calc() {}; export { calc2 as calc };
+	 * this.#defaultOutranksSelfNamed(exports, "calc"); // true
+	 */
+	#defaultOutranksSelfNamed(exports, name) {
+		return Objects.prototype.hasOwnProperty.call(exports, "default") && exports[name] !== exports.default;
+	}
+
+	/**
 	 * The members named like a function's own built-in properties (`name`, `length`, `prototype`) that a
 	 * composed callable module's wrapper holds. They are kept off `Object.keys` of a callable wrapper and
 	 * belong on the folder's wrapper, where eager composes them (#571 review).
@@ -2051,7 +2070,11 @@ export class ModesProcessor extends ComponentBase {
 										}
 										this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 									}
-								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
+								} else if (
+									moduleName === subDirName &&
+									moduleKeys.includes(subDirName) &&
+									!this.#defaultOutranksSelfNamed(exports, subDirName)
+								) {
 									// Named export matches folder name - use that specific export
 									implToWrap = exports[subDirName];
 								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
@@ -2787,7 +2810,11 @@ export class ModesProcessor extends ComponentBase {
 								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
 								this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 							}
-						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
+						} else if (
+							moduleName === categoryName &&
+							moduleKeys.includes(categoryName) &&
+							!this.#defaultOutranksSelfNamed(exports, categoryName)
+						) {
 							implToWrap = exports[categoryName];
 						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.

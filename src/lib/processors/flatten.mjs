@@ -791,7 +791,9 @@ export class Flatten extends ComponentBase {
 	 * Decide whether a named export should be attached to a callable default export.
 	 *
 	 * Returns false when the named export is the same reference as the default (re-export
-	 * pattern), or when the export key matches the function name (self-referential export).
+	 * pattern: `export { calc }` beside `export default function calc`). A different value whose key
+	 * matches the default function's name (`export { calc2 as calc }`) is an ordinary member, as it is
+	 * in the module's namespace.
 	 *
 	 * @param {string} key - Named export key.
 	 * @param {unknown} value - Named export value.
@@ -804,15 +806,6 @@ export class Flatten extends ComponentBase {
 		if (!key || key === "default") {
 			return false;
 		}
-		if (value === defaultFunc || value === originalDefault) {
-			return false;
-		}
-		if (typeof defaultFunc === "function" && key === defaultFunc.name) {
-			return false;
-		}
-		if (typeof originalDefault === "function" && key === originalDefault.name) {
-			return false;
-		}
-		return true;
+		return value !== defaultFunc && value !== originalDefault;
 	}
 }
