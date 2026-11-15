@@ -843,6 +843,22 @@ export class ApiManager extends ComponentBase {
      */
     private _partitionNamespaceChildren;
     /**
+     * How a namespace at the api root takes a reload of the modules in `reloadGroup`, judged as
+     * {@link ApiManager#_partitionNamespaceChildren} judges a child of a namespace, without setting it aside: `"held"` when
+     * another module replaced it and still holds it, `"shared"` when another module contributes to it or is mounted inside
+     * it, and `"own"` when only the reloaded modules contribute.
+     * @param {object} wrapper - The raw wrapper at the root key.
+     * @param {string} key - The root key.
+     * @param {Set<string>} reloadGroup - moduleIDs being rebuilt in this cycle.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks from before
+     *   the rebuild.
+     * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced
+     *   what was there.
+     * @returns {"held"|"shared"|"own"} The answer.
+     * @private
+     */
+    private _rootKeyContribution;
+    /**
      * Every module a wrapper's materialized subtree carries, from each wrapper's own moduleID — the
      * contributors of a namespace when ownership tracking is off (#525). Walks raw wrappers only, so an
      * unmaterialized lazy subtree is never materialized by the walk.

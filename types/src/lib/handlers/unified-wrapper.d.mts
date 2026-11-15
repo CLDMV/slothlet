@@ -234,7 +234,8 @@ declare const guarded_runtime_nodeBehind: typeof runtime_nodeBehind;
  * operation was started from, often a module's. It is not that module's write, so the ownership rule
  * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
  *
- * @param {object} node - The node written: a wrapper proxy or wrapper. Anything else needs no exemption.
+ * @param {object} node - The node written: a wrapper proxy or wrapper, or an instance's api root. Anything else needs
+ *   no exemption.
  * @param {function(): *} write - The write; synchronous.
  * @returns {*} What `write` returns.
  * @internal
@@ -875,7 +876,7 @@ declare class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
