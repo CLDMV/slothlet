@@ -54,15 +54,28 @@ export function isFrameworkWriteTarget(pattern: string): boolean;
  */
 export function dataMemberOf(owner: object | Function, key: string | symbol): any;
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof WRAPPER_INTERNAL_KEYS} */
+declare const guarded_WRAPPER_INTERNAL_KEYS: typeof WRAPPER_INTERNAL_KEYS;
+/** @type {typeof IMPL_METADATA_KEYS} */
+declare const guarded_IMPL_METADATA_KEYS: typeof IMPL_METADATA_KEYS;
+/**
  * Property names reserved by the slothlet wrapper machinery — served as
  * `ComponentBase.INTERNAL_KEYS`; see that static for what each group is used for.
  * @type {Set<string>}
  */
-export const WRAPPER_INTERNAL_KEYS: Set<string>;
+declare const WRAPPER_INTERNAL_KEYS: Set<string>;
 /**
  * Framework metadata that rides on a module implementation but is not an api member — served as
  * `IMPL_METADATA_KEYS` from `#handlers/unified-wrapper`. Matched by exact name, never by prefix.
  * @type {Set<string>}
  */
-export const IMPL_METADATA_KEYS: Set<string>;
+declare const IMPL_METADATA_KEYS: Set<string>;
+export { guarded_WRAPPER_INTERNAL_KEYS as WRAPPER_INTERNAL_KEYS, guarded_IMPL_METADATA_KEYS as IMPL_METADATA_KEYS };
 //# sourceMappingURL=reserved-keys.d.mts.map

@@ -8,6 +8,43 @@
  */
 export function isBoxedPrimitive(value: object): boolean;
 /**
+ * `structuredClone` as the platform had it when slothlet loaded, taking slothlet's views of another module's data as
+ * the installed wrapper does: slothlet's own copies of data go through this, whatever `globalThis.structuredClone`
+ * holds by then.
+ * @param {*} value - The value to copy.
+ * @returns {*} The copy.
+ * @throws {Error} The platform's refusal, where the value holds something it cannot copy and no view of slothlet's.
+ * @internal
+ * @example
+ * const copy = cloneTakingViews({ table: self.vault.table });
+ */
+export function cloneTakingViews(value: any): any;
+/**
+ * Whether a function is a clone wrapper of any copy of slothlet's.
+ * @param {*} fn - A function.
+ * @returns {boolean} True for one.
+ * @internal
+ * @example
+ * isClonePatched(globalThis.structuredClone); // true while an instance with the patch is up
+ */
+export function isClonePatched(fn: any): boolean;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof setCloneViewReader} */
+declare const guarded_setCloneViewReader: typeof setCloneViewReader;
+/** @type {typeof setCloneNodeReader} */
+declare const guarded_setCloneNodeReader: typeof setCloneNodeReader;
+/** @type {typeof enableClonePatching} */
+declare const guarded_enableClonePatching: typeof enableClonePatching;
+/** @type {typeof disableClonePatching} */
+declare const guarded_disableClonePatching: typeof disableClonePatching;
+/**
  * Set how the value behind one of slothlet's views is told.
  * @param {function(*): *} behind - Answers the value a view stands over, or
  *   `undefined` for a value that is no view of slothlet's.
@@ -16,7 +53,7 @@ export function isBoxedPrimitive(value: object): boolean;
  * @example
  * setCloneViewReader((value) => (isView(value) ? valueBehind(value) : undefined));
  */
-export function setCloneViewReader(behind: (arg0: any) => any): void;
+declare function setCloneViewReader(behind: (arg0: any) => any): void;
 /**
  * Set how the data of one of slothlet's api nodes is told.
  * @param {function(*): ({value: *}|{list: boolean}|{slots: object, members: object}|undefined)} shape - Answers
@@ -30,7 +67,7 @@ export function setCloneViewReader(behind: (arg0: any) => any): void;
  * @example
  * setCloneNodeReader((value) => (isLoadedNode(value) ? { list: Array.isArray(valueOf(value)) } : undefined));
  */
-export function setCloneNodeReader(shape: (arg0: any) => ({
+declare function setCloneNodeReader(shape: (arg0: any) => ({
     value: any;
 } | {
     list: boolean;
@@ -45,19 +82,7 @@ export function setCloneNodeReader(shape: (arg0: any) => ({
  * @example
  * enableClonePatching();
  */
-export function enableClonePatching(): void;
-/**
- * `structuredClone` as the platform had it when slothlet loaded, taking slothlet's views of another module's data as
- * the installed wrapper does: slothlet's own copies of data go through this, whatever `globalThis.structuredClone`
- * holds by then.
- * @param {*} value - The value to copy.
- * @returns {*} The copy.
- * @throws {Error} The platform's refusal, where the value holds something it cannot copy and no view of slothlet's.
- * @internal
- * @example
- * const copy = cloneTakingViews({ table: self.vault.table });
- */
-export function cloneTakingViews(value: any): any;
+declare function enableClonePatching(): void;
 /**
  * Remove this copy's wrappers, putting back what each wrapped where it is still the one installed. Idempotent.
  * @returns {void}
@@ -65,14 +90,6 @@ export function cloneTakingViews(value: any): any;
  * @example
  * disableClonePatching();
  */
-export function disableClonePatching(): void;
-/**
- * Whether a function is a clone wrapper of any copy of slothlet's.
- * @param {*} fn - A function.
- * @returns {boolean} True for one.
- * @internal
- * @example
- * isClonePatched(globalThis.structuredClone); // true while an instance with the patch is up
- */
-export function isClonePatched(fn: any): boolean;
+declare function disableClonePatching(): void;
+export { guarded_setCloneViewReader as setCloneViewReader, guarded_setCloneNodeReader as setCloneNodeReader, guarded_enableClonePatching as enableClonePatching, guarded_disableClonePatching as disableClonePatching };
 //# sourceMappingURL=clone-context.d.mts.map

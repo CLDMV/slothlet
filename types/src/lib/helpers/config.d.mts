@@ -23,6 +23,23 @@ export function normalizeHookConfig(hook?: boolean | string | Object): {
     pin: boolean;
 };
 /**
+ * Build an instance's clock from the host's `clock` option.
+ * The option is read once, when the instance is created, and kept by the instance alone: it is never part of the
+ * normalised config an instance hands out, so only the host that creates the instance can supply it.
+ * @param {{now?: Function, setTimeout?: Function, clearTimeout?: Function}} [clock] - The option as given. Each member is optional and must be
+ *   a function; one left out is the copy slothlet took when it loaded. Absent means no `clock` option at all.
+ * @returns {object} The frozen clock `{ now, setTimeout, clearTimeout, hostTimers }`.
+ * @throws {SlothletError} INVALID_CONFIG when it is not an object whose given members are functions.
+ * @public
+ * @example
+ * normalizeClockConfig({ now: () => 1000 }).now(); // => 1000
+ */
+export function normalizeClockConfig(clock?: {
+    now?: Function;
+    setTimeout?: Function;
+    clearTimeout?: Function;
+}): object;
+/**
  * Expand the `permissions` shorthand forms to the object form.
  *
  * `"on"`, `"off"` and `"disabled"` mean `{ mode }`; `true` means `"on"`; `false` and any other falsy value mean no `permissions` config (off). An object, `null`
@@ -45,6 +62,54 @@ export function expandPermissionsShorthand(permissions: any): {
     value: (object | null | undefined);
     valid: boolean;
 };
+/**
+ * Normalize the `permissions` option to its full object form (or `null` for no permissions config).
+ *
+ * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
+ * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
+ * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
+ *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
+ *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
+ *   Takes precedence over `enabled`.
+ * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.
+ * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
+ *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+ * @param {object} [permissions.references] - Options governing api functions held as references.
+ * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
+ *   out of the api carries the identity of the module that read it, so it stays enforced as that module
+ *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
+ * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
+ *   and reads occurring inside an active context with no resolvable (or forged) caller identity
+ *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
+ *   marker. Set `true` to restore the legacy fail-open behaviour.
+ * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
+ *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
+ *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
+ * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
+ *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
+ *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
+ * @param {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
+ *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
+ *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
+ * @param {boolean} [permissions.provenance=true] - Code is told apart by where it was written: a module's function
+ *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
+ *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
+ *   call runs it.
+ * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
+ *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+ *   wraps nothing and tells every definer from the stack.
+ * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+ *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
+ *   a whole number lists arrays of up to that many kilobytes.
+ * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+ * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
+ * @public
+ *
+ * @example
+ * normalizePermissionsConfig({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+ * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
+ */
+export function normalizePermissionsConfig(permissions?: object | string | boolean | null): object | null;
 /**
  * Configuration normalization utilities
  * @class Config
@@ -328,50 +393,12 @@ export class Config extends ComponentBase {
         cascade: boolean;
     }>;
     /**
-     * Normalize permissions configuration.
+     * Normalize permissions configuration: see {@link normalizePermissionsConfig}.
      *
-     * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
-     * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
-     * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
-     *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
-     *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
-     *   Takes precedence over `enabled`.
-     * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.
-     * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
-     *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
-     * @param {object} [permissions.references] - Options governing api functions held as references.
-     * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
-     *   out of the api carries the identity of the module that read it, so it stays enforced as that module
-     *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
-     * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
-     *   and reads occurring inside an active context with no resolvable (or forged) caller identity
-     *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
-     *   marker. Set `true` to restore the legacy fail-open behaviour.
-     * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
-     *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
-     *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
-     * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
-     *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
-     *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
-     * @param {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
-     *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
-     *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
-     * @param {boolean} [permissions.provenance=true] - Code is told apart by where it was written: a module's function
-     *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
-     *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
-     *   call runs it.
-     * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
-     *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
-     *   wraps nothing and tells every definer from the stack.
-     * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
-     *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
-     *   a whole number lists arrays of up to that many kilobytes.
-     * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+     * @param {object|string|boolean|null} [permissions] - Raw permissions config from user.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
-     *
      * @example
-     * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
+     * config.normalizePermissions("disabled"); // => { mode: "disabled", enabled: false, ... }
      */
     normalizePermissions(permissions?: object | string | boolean | null): object | null;
     #private;

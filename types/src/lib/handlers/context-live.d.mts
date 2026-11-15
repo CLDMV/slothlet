@@ -1,4 +1,21 @@
 /**
+ * How many settle hooks slothlet has installed on the engine to follow promises and not yet stopped, for a test that
+ * checks a followed promise is let go.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * settleHookCount(); // 0 while no promise is followed
+ */
+export function settleHookCount(): number;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -22,6 +39,17 @@ export class LiveContextManager {
      * @internal
      */
     get carriesFlowCaller(): boolean;
+    /**
+     * The call that started the flow running now, once that call has returned: the module call the promise whose
+     * reaction is running was created in, directly or in a flow it started. Null for a flow the host started, and where
+     * Node's promise hooks are not available (a browser), or no live instance has permissions on.
+     * @returns {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}|null} The starting call's record.
+     * @internal
+     */
+    runningFlowStarter(): {
+        wrapper: object;
+        ceiling?: object | ReadonlyArray<object> | null;
+    } | null;
     /**
      * How many stores have a call suspended right now, across every instance.
      * @type {number}
@@ -186,10 +214,11 @@ export class LiveContextManager {
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
+     * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: Object): Object;
+    public initialize(instanceID: string, config?: Object, clock?: import("@cldmv/slothlet/helpers/clock").Clock): Object;
     /**
      * Run function with instance context active (live mode)
      * @param {string} instanceID - Instance to run in context of
@@ -218,13 +247,15 @@ export class LiveContextManager {
      *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
      * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
      *   file registered while it loaded (#726).
+     * @param {object|null} [loading=null] - The load itself, with `load`: what the file's own code registers in the
+     *   callback is pinned to it again.
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean, load?: object | null): any;
+    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean, load?: object | null, loading?: object | null): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *
@@ -357,11 +388,26 @@ export class LiveContextManager {
     #private;
 }
 /**
+ * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
+ */
+export type CapturedPromiseHooks = {
+    /**
+     * - Installs a hook run when any promise settles; returns what stops it.
+     */
+    onSettled: (arg0: (arg0: Promise<any>) => void) => () => void;
+    /**
+     * - Installs a set of promise hooks; returns what stops them. Absent where the engine has none.
+     */
+    createHook?: ((arg0: object) => () => void) | undefined;
+};
+import { parseStackFrame } from "#handlers/frame-placement";
+import { toComparablePath } from "#handlers/frame-placement";
+/** @type {typeof liveContextManager} */
+declare const guarded_liveContextManager: typeof liveContextManager;
+/**
  * Singleton live context manager
  * @public
  */
-export const liveContextManager: LiveContextManager;
-import { parseStackFrame } from "#handlers/frame-placement";
-import { toComparablePath } from "#handlers/frame-placement";
-export { parseStackFrame, toComparablePath };
+declare const liveContextManager: LiveContextManager;
+export { parseStackFrame, toComparablePath, guarded_liveContextManager as liveContextManager };
 //# sourceMappingURL=context-live.d.mts.map

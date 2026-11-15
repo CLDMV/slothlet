@@ -71,20 +71,24 @@ export function loadJson(ref: string): object | null | Promise<object | null>;
  * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
  * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
  *
+ * An instance whose host gave it a `setTimeout` in the `clock` option (see `helpers/clock`) runs its deferred work on
+ * that timer instead, so a host faking timers drives it with its own clock.
+ *
  * @param {Function} fn - Callback to run.
  * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
  *   schedulers to pick from: the host's own unless a test hands in others.
+ * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock.
  * @returns {void}
  * @internal
  *
  * @example
- * scheduleMacrotask(() => patchAfterAssignment());
+ * scheduleMacrotask(() => patchAfterAssignment(), undefined, this.clock);
  */
 export function scheduleMacrotask(fn: Function, hosts?: {
     setImmediate: Function | undefined;
     MessageChannel: Function | undefined;
     setTimeout: Function;
-}): void;
+}, clock?: import("@cldmv/slothlet/helpers/clock").Clock): void;
 /**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
  * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run

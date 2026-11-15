@@ -50,7 +50,7 @@ export function functionSource(fn: Function): string;
  *   `Number`, `BigInt`, `Date`, `RegExp`, `Error` and the other error constructors, `ArrayBuffer`,
  *   `SharedArrayBuffer`, `DataView`, the typed arrays, `FinalizationRegistry`, `Iterator`, `Intl` (a frozen copy, like
  *   `JSON`), `TextDecoder`, `TextEncoder`, `Blob`, `EventTarget`, `MessageChannel`, `CryptoKey`,
- *   `queueMicrotask`, `structuredClone`, `setTimeout`, `setImmediate`, `decodeURIComponent`, `encodeURIComponent`, `parseInt`, `isNaN`,
+ *   `queueMicrotask`, `structuredClone`, `setTimeout`, `clearTimeout`, `setImmediate`, `decodeURIComponent`, `encodeURIComponent`, `parseInt`, `isNaN`,
  *   `Buffer` and `navigator`. Their static functions are on `Strings`, `Numbers`, `Dates`, `Errors`, `ArrayBuffers`,
  *   `Iterators` and `Buffers`.
  * - `NativeProcess` is the host's `process` object, and `Processes` the functions of it slothlet calls, bound to it.
@@ -483,12 +483,19 @@ export const BigInt64Array: BigInt64ArrayConstructor;
  */
 export const BigUint64Array: BigUint64ArrayConstructor;
 /**
+ * The shape of the `Float16Array` constructor, which the declaration build's library does not know: the same members
+ * as `Float32ArrayConstructor` (its instances are typed arrays over numbers).
+ * @typedef {Float32ArrayConstructor} Float16ArrayConstructor
+ * @internal
+ */
+/**
  * The `Float16Array` constructor, or undefined where the engine has none, as it was when slothlet loaded.
  * @internal
  * @example
  * typeof Float16Array === "function";
+ * @type {Float16ArrayConstructor|undefined}
  */
-export const Float16Array: any;
+export const Float16Array: Float16ArrayConstructor | undefined;
 /**
  * The `FinalizationRegistry` constructor, as it was when slothlet loaded.
  * @internal
@@ -497,12 +504,21 @@ export const Float16Array: any;
  */
 export const FinalizationRegistry: FinalizationRegistryConstructor;
 /**
+ * The shape of the `Iterator` constructor, which the declaration build's library does not know: the members slothlet
+ * reads (`Iterator.prototype`, `Iterator.from`).
+ * @typedef {object} IteratorConstructor
+ * @property {object} prototype - `Iterator.prototype`.
+ * @property {function(object): object} from - `Iterator.from`.
+ * @internal
+ */
+/**
  * The `Iterator` constructor, or undefined where the engine has none, as it was when slothlet loaded. `Iterator.from` is on `Iterators`.
  * @internal
  * @example
  * Iterator.prototype;
+ * @type {IteratorConstructor|undefined}
  */
-export const Iterator: any;
+export const Iterator: IteratorConstructor | undefined;
 /**
  * The static functions of `Iterator` (`from`), as they were when slothlet loaded; empty where the engine has no
  * `Iterator`.
@@ -609,13 +625,28 @@ export const structuredClone: typeof globalThis.structuredClone;
  */
 export const setTimeout: typeof globalThis.setTimeout;
 /**
+ * `clearTimeout`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
+ * @internal
+ * @example
+ * import { setTimeout, clearTimeout } from "@cldmv/slothlet/helpers/intrinsics";
+ * clearTimeout(setTimeout(run, 1000));
+ */
+export const clearTimeout: typeof globalThis.clearTimeout;
+/**
+ * The shape of `setImmediate`, which the declaration build's library does not know: it takes a callback and the
+ * arguments to hand it, and answers the handle.
+ * @typedef {function(function(...unknown): void, ...unknown): unknown} ImmediateScheduler
+ * @internal
+ */
+/**
  * `setImmediate`, as it was when slothlet loaded, or undefined where the host has none (a browser).
  * @internal
  * @example
  * import { setImmediate } from "@cldmv/slothlet/helpers/intrinsics";
  * setImmediate?.(run);
+ * @type {ImmediateScheduler|undefined}
  */
-export const setImmediate: any;
+export const setImmediate: ImmediateScheduler | undefined;
 /**
  * `decodeURIComponent`, as it was when slothlet loaded.
  * @internal
@@ -645,6 +676,16 @@ export const parseInt: typeof globalThis.parseInt;
  */
 export const isNaN: typeof globalThis.isNaN;
 /**
+ * The members of the host's `process` object that slothlet reads where they are used.
+ * @typedef {object} HostProcess
+ * @property {Object<string, string|undefined>} env - The environment.
+ * @property {string[]} argv - The command line.
+ * @property {Object<string, string|undefined>} versions - The versions of the runtime and its parts.
+ * @property {string} platform - The platform.
+ * @property {number} pid - The process ID.
+ * @internal
+ */
+/**
  * The host's `process` object, as it was when slothlet loaded, or undefined where there is none (a browser). Its data
  * members (`env`, `pid`, `argv`, `versions`, `platform`) are read off it where they are used; the functions slothlet
  * calls are on `Processes`.
@@ -652,8 +693,9 @@ export const isNaN: typeof globalThis.isNaN;
  * @example
  * import { NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
  * NativeProcess?.env.SLOTHLET_DEBUG;
+ * @type {HostProcess|undefined}
  */
-export const NativeProcess: any;
+export const NativeProcess: HostProcess | undefined;
 /**
  * The functions of `process` slothlet calls (`cwd`, `getBuiltinModule`, `nextTick`, `binding`, `kill`, `getuid`,
  * `exit`, `send`), as they were when slothlet loaded, each called on that `process`. A function the host lacks is
@@ -666,14 +708,23 @@ export const NativeProcess: any;
  */
 export const Processes: object;
 /**
+ * The members of Node's `Buffer` constructor that slothlet reads (`instanceof Buffer`, `Buffer.from`).
+ * @typedef {object} HostBufferConstructor
+ * @property {Uint8Array} prototype - `Buffer.prototype`.
+ * @property {function((string|ArrayBuffer|ArrayLike<number>), string=): Uint8Array} from - `Buffer.from`.
+ * @property {function(unknown): boolean} isBuffer - `Buffer.isBuffer`.
+ * @internal
+ */
+/**
  * Node's `Buffer` constructor, as it was when slothlet loaded, or undefined where there is none (a browser).
  * `Buffer.from` is on `Buffers`.
  * @internal
  * @example
  * import { Buffer } from "@cldmv/slothlet/helpers/intrinsics";
  * value instanceof Buffer;
+ * @type {HostBufferConstructor|undefined}
  */
-export const Buffer: any;
+export const Buffer: HostBufferConstructor | undefined;
 /**
  * `Buffer.from`, as it was when slothlet loaded, called on that `Buffer`; empty where there is none.
  * @type {object}
@@ -692,6 +743,76 @@ export const Buffers: object;
  * navigator?.languages;
  */
 export const navigator: Navigator;
+/**
+ * The shape of the `Float16Array` constructor, which the declaration build's library does not know: the same members
+ * as `Float32ArrayConstructor` (its instances are typed arrays over numbers).
+ */
+export type Float16ArrayConstructor = Float32ArrayConstructor;
+/**
+ * The shape of the `Iterator` constructor, which the declaration build's library does not know: the members slothlet
+ * reads (`Iterator.prototype`, `Iterator.from`).
+ */
+export type IteratorConstructor = {
+    /**
+     * - `Iterator.prototype`.
+     */
+    prototype: object;
+    /**
+     * - `Iterator.from`.
+     */
+    from: (arg0: object) => object;
+};
+/**
+ * The shape of `setImmediate`, which the declaration build's library does not know: it takes a callback and the
+ * arguments to hand it, and answers the handle.
+ */
+export type ImmediateScheduler = (arg0: (...args: unknown[]) => void, ...args: unknown[]) => unknown;
+/**
+ * The members of the host's `process` object that slothlet reads where they are used.
+ */
+export type HostProcess = {
+    /**
+     * - The environment.
+     */
+    env: {
+        [x: string]: string | undefined;
+    };
+    /**
+     * - The command line.
+     */
+    argv: string[];
+    /**
+     * - The versions of the runtime and its parts.
+     */
+    versions: {
+        [x: string]: string | undefined;
+    };
+    /**
+     * - The platform.
+     */
+    platform: string;
+    /**
+     * - The process ID.
+     */
+    pid: number;
+};
+/**
+ * The members of Node's `Buffer` constructor that slothlet reads (`instanceof Buffer`, `Buffer.from`).
+ */
+export type HostBufferConstructor = {
+    /**
+     * - `Buffer.prototype`.
+     */
+    prototype: Uint8Array;
+    /**
+     * - `Buffer.from`.
+     */
+    from: (arg0: (string | ArrayBuffer | ArrayLike<number>), arg1: string | undefined) => Uint8Array;
+    /**
+     * - `Buffer.isBuffer`.
+     */
+    isBuffer: (arg0: unknown) => boolean;
+};
 declare const NativeJSON: object;
 declare const NativeMath: object;
 export { NativeJSON as JSON, NativeMath as Math };

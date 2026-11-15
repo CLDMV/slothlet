@@ -78,16 +78,6 @@ export function layerForwards(layer: object | Function, key: PropertyKey): boole
  */
 export function layerUnderlying(layer: object | Function): object | Function;
 /**
- * Register how to recognize an api node (see {@link isApiNode}).
- * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
- * @returns {void}
- * @package
- *
- * @example
- * setApiNodeCheck((value) => proxyRegistry.has(value));
- */
-export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
-/**
  * The version of a module's value the build may change, without the change reaching the module's
  * export (see the module description for the rule).
  * @param {unknown} value - The module's value.
@@ -141,4 +131,25 @@ export function layerOnto(layered: object, underlying: object | Function): objec
  * const instance = relayer(impl, [["sib", { value: sib }], ["extra", { value: extra }]]);
  */
 export function relayer(layered: object, members: Array<[PropertyKey, PropertyDescriptor]>): object;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+export { guarded_setApiNodeCheck as setApiNodeCheck };
+/** @type {typeof setApiNodeCheck} */
+declare const guarded_setApiNodeCheck: typeof setApiNodeCheck;
+/**
+ * Register how to recognize an api node (see {@link isApiNode}).
+ * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * setApiNodeCheck((value) => proxyRegistry.has(value));
+ */
+declare function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
 //# sourceMappingURL=composition.d.mts.map

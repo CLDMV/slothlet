@@ -174,6 +174,36 @@ await api.slothlet.shutdown();
 **Scope**: inner
 
 
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_clock-now"></a>
+
+#### api.clock.now()
+
+The time in milliseconds: <code>maxAge</code> of principals, reload and run IDs, and every recorded timestamp.
+
+**Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
+
+* * *
+
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_clock-setTimeout"></a>
+
+#### api.clock.setTimeout()
+
+Schedules the instance's deferred work (called with a delay of <code>0</code>); a host that fakes timers moves it with its own clock.
+
+**Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
+
+* * *
+
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_clock-clearTimeout"></a>
+
+#### api.clock.clearTimeout()
+
+Cancels a timer <code>clock.setTimeout</code> made.
+
+**Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
+
+* * *
+
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_resolveModuleSpecifier"></a>
 
 #### api.resolveModuleSpecifier()
@@ -259,6 +289,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_stackRoutines"></a>[stackRoutines] | <code>boolean</code> | <code>false</code> | Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See <a href="docs/LIFECYCLE.md#stackroutines">LIFECYCLE.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_tracking"></a>[tracking] | <code>boolean \| object</code> | <code>false</code> | Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_backgroundMaterialize"></a>[backgroundMaterialize] | <code>boolean</code> | <code>false</code> | When `mode: "lazy"`, immediately begins materializing all paths in the background after init. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_clock"></a>[clock] | <code>object</code> |  | Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See <a href="docs/CONFIGURATION.md#clock">CONFIGURATION.md</a>. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_i18n"></a>[i18n] | <code>object</code> |  | Internationalization settings (dev-facing, process-global). `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_platform"></a>[platform] | <code>"browser" \| "node"</code> |  | Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot). <ul> <li>`"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.</li> <li>`"node"` — explicit Node.js mode.</li> <li>Omitted — auto-detected: `"browser"` when a `manifest` is provided (or no Node `process` is present), `"node"` otherwise.</li> </ul> |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_env"></a>[env] | <code>object \| null</code> |  | `process.env` snapshot configuration (Node mode). Independent of `platform`. <ul> <li>`{ include: ["KEY"] }` — allowlist; only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.</li> <li>Omitted / `null` — the full `process.env` snapshot is captured.</li> </ul> |

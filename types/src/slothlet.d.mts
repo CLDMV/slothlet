@@ -266,6 +266,23 @@ export type SlothletOptions = {
      */
     backgroundMaterialize?: boolean | undefined;
     /**
+     * - Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See [CONFIGURATION.md](docs/CONFIGURATION.md#clock).
+     */
+    clock?: {
+        /**
+         * - The time in milliseconds: `maxAge` of principals, reload and run IDs, and every recorded timestamp.
+         */
+        now?: (() => number) | undefined;
+        /**
+         * - Schedules the instance's deferred work (called with a delay of `0`); a host that fakes timers moves it with its own clock.
+         */
+        setTimeout?: Function | undefined;
+        /**
+         * - Cancels a timer `clock.setTimeout` made.
+         */
+        clearTimeout?: Function | undefined;
+    } | undefined;
+    /**
      * - Internationalization settings (dev-facing, process-global).
      * `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
      */

@@ -1,21 +1,4 @@
 /**
- * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
- * those files as its last statement. A process can run two module loaders at once: under vitest, slothlet's source is
- * evaluated by vite's module runner, while a CommonJS file, or a file imported by its URL, is loaded by Node itself.
- * Asked for the runtime by such a file, Node would evaluate the runtime's file a second time, and that second copy
- * knows no instance. With the namespace recorded here, the resolve hook sends Node's import of the file to a module
- * that re-exports the namespace already made (see {@link ownModuleBridge}), so the importer gets the runtime slothlet
- * runs on. A second copy of slothlet that Node loaded itself keeps Node's own evaluation of the file, which is that
- * copy's runtime (see {@link isOtherCopysFile}). Only the runtime's entry files are taken, each once.
- * @param {string} url - The file's `import.meta.url`.
- * @param {object} namespace - Its module namespace.
- * @returns {void}
- * @internal
- * @example
- * registerOwnModule(import.meta.url, runtimeNamespace);
- */
-export function registerOwnModule(url: string, namespace: object): void;
-/**
  * Whether a specifier names a file relative to (or absolute from) its importer, as opposed to a
  * bare package/builtin/subpath-import specifier.
  * @param {string} specifier - The import/require specifier as written.
@@ -70,21 +53,67 @@ export function isOwnPackageImport(child: string, parent: string): boolean;
  */
 export function isSlothletInternal(ref: string): boolean;
 /**
- * Record that slothlet loads an api file: its path, so the file's own code is told to be a module's wherever it runs
- * under its path alone (a loader evaluating the copy under another name, a `require` made from the file's plain path).
- * @param {string} ref - The api file's path or URL.
- * @returns {void}
+ * Whether a value is one of the guarded stand-ins of slothlet's internal exports (see {@link guardInternal}), told
+ * without using it: for slothlet's own code that walks a file's exports (a component scan), which must pass over them
+ * whoever is calling it.
+ * @param {*} value - A value.
+ * @returns {boolean} True for a guarded stand-in.
  * @internal
  */
-export function noteModuleFile(ref: string): void;
+export function isGuardedInternal(value: any): boolean;
 /**
- * Register how a refused import is reported: a function given `{ specifier, file, allowed }` that returns the error to
- * throw. Taken once, by the copy that keeps the shared object.
- * @param {function(object): Error} make - Builds the error.
- * @returns {void}
+ * Keep one of slothlet's internal exports to slothlet's own files and the host: the stand-in a file exports in its
+ * place. Using it (calling it, constructing it, reading or changing it) answers only the host's code (see
+ * {@link mayUseInternal}); a module's code is refused with `MODULE_INTERNAL_NOT_IMPORTABLE`, whichever way it came to
+ * hold it. Slothlet's own files use the export itself, through their files' `internals`.
+ *
+ * A function stays a function and a class a class (`instanceof` and `extends` work as before). An object's methods are
+ * handed out bound to the object, each guarded the same way, so a context manager is used as before. A primitive is
+ * returned as it is.
+ * @template T
+ * @param {T} value - The export.
+ * @param {string} name - Its name.
+ * @param {string} file - Its file's `import.meta.url`.
+ * @returns {T} The guarded stand-in.
+ * @internal
+ * @example
+ * const guarded = guardInternal(enterCall, "enterCall", import.meta.url);
+ * export { guarded as enterCall };
+ */
+export function guardInternal<T>(value: T, name: string, file: string): T;
+/**
+ * The error for a request for one of slothlet's files' internal bindings that is not one of slothlet's own (see the
+ * `internals` function of each such file).
+ *
+ * Slothlet's own files reach each other's internal bindings through a private channel: every file with internal exports
+ * has an `internals(consumer)` function that hands its bindings to the files of slothlet's that use them, each named
+ * in a list the file keeps, and each once, as it loads. Slothlet's files are evaluated before any module's code can run,
+ * and every file of the list takes its bindings as it is evaluated, so whoever asks later (code holding a file's
+ * `internals` by any route) is refused. No stack is read: it holds where slothlet's files are bundled into one, and costs
+ * nothing per call. What the files export besides is guarded (see {@link guardInternal}).
+ * @param {string} file - The file asked (`lib/handlers/frame-placement`).
+ * @param {string} url - Its `import.meta.url`.
+ * @returns {Error} MODULE_INTERNAL_NOT_IMPORTABLE.
+ * @internal
+ * @example
+ * export function internals(consumer) {
+ * 	if (!mayTakeInternals(consumer, ["lib/handlers/context-live"])) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+ * 	return { enterCall };
+ * }
+ */
+export function ownBindingsRefusal(file: string, url: string): Error;
+/**
+ * Whether the code asking for a file's internal bindings a second time under a consumer's name is that consumer's own
+ * file being evaluated again, at its top level, by a module loader: a second copy of the file in the process (a loader
+ * evaluating it under another URL) that shares this copy's other files. Read from the stack: the frame below slothlet's
+ * own frames is the consumer's file in this copy's code, with no function of its own (its top level), and the frame
+ * that runs it is a module loader's (Node's, or vite's module runner). Anything else (another frame, a function of the
+ * file, a listener a loader-free caller runs) is refused; so is every engine without such frames (a browser).
+ * @param {string} consumer - The consumer, as its file's path in slothlet's code folder without its extension.
+ * @returns {boolean} True for the file's own top level, run by a loader.
  * @internal
  */
-export function setImportRefusal(make: (arg0: object) => Error): void;
+export function isOwnTopLevelOf(consumer: string): boolean;
 /**
  * Copy the slothlet instance query from `parent` onto `child` when the import belongs to the
  * leaf's per-instance graph; otherwise return `child` unchanged. Works on `file:` URLs (Node) and
@@ -100,99 +129,6 @@ export function setImportRefusal(make: (arg0: object) => Error): void;
  * // → "file:///app/lib/state.mjs?slothlet_instance=a"
  */
 export function propagateInstanceQuery(specifier: string, parent: string | undefined, child: string): string;
-/**
- * The import graph of an instance's own code: for each file a leaf of the instance reached through an
- * import or require that carries the instance (#601 review), the files that import it. The live runtime
- * walks it upwards to tell which leaves a stack frame's code belongs to.
- * What comes back is a read-only view (see graphView): it reads as a `Map` of importers by imported file does, hands
- * out each collection of importers as a copy, and is one object per instance for as long as its graph lives.
- * @param {string} instanceID - The instance ID.
- * @returns {object|null} Importers by imported file (forward-slash paths), or null.
- * @internal
- * @example
- * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
- */
-export function instanceImporters(instanceID: string): object | null;
-/**
- * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
- * They run under their plain path, with no import query, so the live runtime looks a stack frame up
- * here to tell the instance's code from the host's (#601 review).
- * @param {string} instanceID - The instance ID.
- * @returns {string[]} Absolute paths, as Node's require cache keys them.
- * @internal
- * @example
- * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
- */
-export function instanceCommonJSFiles(instanceID: string): string[];
-/**
- * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object standing for
- * the instance's CommonJS state, dropped by the instance's release, and how many files the instance has. Files are
- * only ever added while the instance lives, so an equal count means the same files. The object holds nothing.
- * @param {string} instanceID - The instance ID.
- * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
- * @internal
- * @example
- * instanceCommonJSVersion("inst-a"); // { key: {}, count: 3 }
- */
-export function instanceCommonJSVersion(instanceID: string): {
-    key: object;
-    count: number;
-} | null;
-/**
- * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
- * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
- * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
- * or drop what is recorded about it, whatever it can import or reach through the global object. With two copies of
- * slothlet in the process, the copy that loaded first keeps every instance's record, and this claims there.
- * @param {string} instanceID - The instance ID.
- * @returns {{instanceID: string, require: function(string, object=): *, release: function(): void}|null} The handle,
- *   or null when the ID is claimed already.
- * @internal
- * @example
- * const scope = claimInstanceScope(instanceID);
- * scope.require("/app/api/counter.cjs", { fresh: true });
- * scope.release();
- */
-export function claimInstanceScope(instanceID: string): {
-    instanceID: string;
-    require: (arg0: string, arg1: object | undefined) => any;
-    release: () => void;
-} | null;
-/**
- * Run a CommonJS file through the private CommonJS cache of an instance ID no instance has claimed (see
- * {@link scopeRequire} for what that does): for a caller that is not an instance, such as a test of the cache. An
- * instance loads its files through the handle it claimed ({@link claimInstanceScope}); for an ID an instance holds,
- * this throws.
- * @param {string} filePath - Absolute path of the CommonJS file.
- * @param {string} instanceID - The instance ID whose copies are served.
- * @param {object} [options] - Options, as {@link scopeRequire} takes them (`fresh`, `importer`, `mount`).
- * @returns {*} The file's `module.exports`.
- * @throws {TypeError} When the ID is claimed by an instance.
- * @internal
- * @example
- * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
- */
-export function requireInInstance(filePath: string, instanceID: string, options?: object): any;
-/**
- * Drop what is kept for an instance ID that {@link requireInInstance} claimed, or that no one claimed (what the hooks
- * recorded for a URL carrying it). An ID an instance holds is released by the instance's own handle, and is left as
- * it is here.
- * @param {string|null|undefined} instanceID - The instance ID.
- * @returns {void}
- * @internal
- * @example
- * releaseInstanceScope("inst-a");
- */
-export function releaseInstanceScope(instanceID: string | null | undefined): void;
-/**
- * Register frame placement's check of who is calling into slothlet: given an `Error` slothlet created on entry, the
- * location of the module whose own top-level code made the call, when vitest's or vite's module runner was evaluating
- * that module, else null. Taken once, by the copy that keeps the shared object.
- * @param {function(Error): (string|null)} check - The check.
- * @returns {void}
- * @internal
- */
-export function setCallerCheck(check: (arg0: Error) => (string | null)): void;
 /**
  * Source of the ES module that stands in for a CommonJS helper imported by an instance (#534): it
  * runs the file through the instance's private CommonJS cache and exports what Node's own
@@ -219,53 +155,6 @@ export function commonJSWrapperSource(filePath: string, instanceID: string, sour
  */
 export function rememberNewest(hashes: Array<string>, hash: string): void;
 /**
- * Register how a URL is reduced to the key its script hashes are kept under (see {@link scriptKeyOf}).
- * @param {function(string): string} keyOf - The URL's key.
- * @returns {void}
- * @internal
- */
-export function setScriptKey(keyOf: (arg0: string) => string): void;
-/**
- * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}).
- * @param {string} key - The script key.
- * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean}} The answer.
- * @internal
- */
-export function loadedScriptLookup(key: string, hash?: string): {
-    known: boolean;
-    has: boolean;
-};
-/**
- * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the
- * newest when no hash is given. Undefined when none is recorded (the hook did not load the file, or another slothlet
- * copy's hook did and keeps no text).
- * @param {string} key - The script key.
- * @param {string|null} [hash] - The script's hash.
- * @returns {string|undefined} The text.
- * @internal
- * @example
- * loadedScriptText(key, frame.hash); // "export const a = () => 1;\n"
- */
-export function loadedScriptText(key: string, hash?: string | null): string | undefined;
-/**
- * The URLs of the files that import a package file, as the resolve hook recorded them (#597).
- * @param {string} path - The package file's path.
- * @returns {Array<string>} The importers' URLs.
- * @internal
- */
-export function packageImporters(path: string): Array<string>;
-/**
- * The hashes recorded for the script a URL loads, oldest first.
- * @param {string} url - The URL.
- * @returns {Array<string>} The hashes.
- * @internal
- * @example
- * recordedScriptHashes("file:///app/api/x.mjs?slothlet_instance=a"); // ["…"]
- */
-export function recordedScriptHashes(url: string): Array<string>;
-/**
  * How many script keys have hashes recorded.
  * @returns {number} The count.
  * @internal
@@ -273,33 +162,6 @@ export function recordedScriptHashes(url: string): Array<string>;
  * recordedScriptCount(); // 12
  */
 export function recordedScriptCount(): number;
-/**
- * The instance a script key names, or null for code no instance tagged.
- * @param {string} key - A script key: path, instance tag and mount tag, NUL-separated.
- * @returns {string|null} The instance ID.
- * @internal
- */
-export function scriptKeyInstance(key: string): string | null;
-/**
- * Register the resolve and load hooks with Node, once per process: the hooks of the slothlet copy that keeps every
- * instance's record (the first to load), which another copy asks to register them.
- * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
- * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
- * (#534) and passes every unmarked URL straight through.
- * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, slothlet's engines
- * floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
- * trip to every import in the process and reorders module evaluation enough to break leaves that
- * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
- * @param {object} nodeModule - The `node:module` namespace.
- * @param {object} [registry=globalThis] - The global object in production. Any other object is a registry of the
- *   caller's own: this copy's hooks are then registered on `nodeModule` once per registry, whichever copy keeps the
- *   record.
- * @returns {boolean} True when a hook is (now or already) registered.
- * @internal
- * @example
- * installInstanceImportHooks(await import("node:module"));
- */
-export function installInstanceImportHooks(nodeModule: object, registry?: object): boolean;
 /**
  * Whether Node loads a file as CommonJS, decided the way Node decides it: `.cjs` always; `.js` by the
  * nearest `package.json` `type` (the first one found ends the walk), and with no `type` by syntax
@@ -335,6 +197,14 @@ export function isCommonJSFile(filePath: string): boolean;
  * export default defineConfig({ plugins: [slothletInstanceImports()] });
  */
 export function slothletInstanceImports(): object;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
  * (mount) and `_reload` (partial-reload stamp) parameters are deliberately NOT copied — a helper is
@@ -493,4 +363,239 @@ export type InstanceImportState = {
      */
     requireCJS: (filePath: string, instanceID: string) => any;
 };
+/** @type {typeof registerOwnModule} */
+declare const guarded_registerOwnModule: typeof registerOwnModule;
+/** @type {typeof noteModuleFile} */
+declare const guarded_noteModuleFile: typeof noteModuleFile;
+/** @type {typeof setImportRefusal} */
+declare const guarded_setImportRefusal: typeof setImportRefusal;
+/** @type {typeof instanceImporters} */
+declare const guarded_instanceImporters: typeof instanceImporters;
+/** @type {typeof instanceCommonJSFiles} */
+declare const guarded_instanceCommonJSFiles: typeof instanceCommonJSFiles;
+/** @type {typeof instanceCommonJSVersion} */
+declare const guarded_instanceCommonJSVersion: typeof instanceCommonJSVersion;
+/** @type {typeof claimInstanceScope} */
+declare const guarded_claimInstanceScope: typeof claimInstanceScope;
+/** @type {typeof requireInInstance} */
+declare const guarded_requireInInstance: typeof requireInInstance;
+/** @type {typeof releaseInstanceScope} */
+declare const guarded_releaseInstanceScope: typeof releaseInstanceScope;
+/** @type {typeof setCallerCheck} */
+declare const guarded_setCallerCheck: typeof setCallerCheck;
+/** @type {typeof setScriptKey} */
+declare const guarded_setScriptKey: typeof setScriptKey;
+/** @type {typeof loadedScriptLookup} */
+declare const guarded_loadedScriptLookup: typeof loadedScriptLookup;
+/** @type {typeof loadedScriptText} */
+declare const guarded_loadedScriptText: typeof loadedScriptText;
+/** @type {typeof packageImporters} */
+declare const guarded_packageImporters: typeof packageImporters;
+/** @type {typeof recordedScriptHashes} */
+declare const guarded_recordedScriptHashes: typeof recordedScriptHashes;
+/** @type {typeof scriptKeyInstance} */
+declare const guarded_scriptKeyInstance: typeof scriptKeyInstance;
+/** @type {typeof installInstanceImportHooks} */
+declare const guarded_installInstanceImportHooks: typeof installInstanceImportHooks;
+/**
+ * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
+ * those files as its last statement. A process can run two module loaders at once: under vitest, slothlet's source is
+ * evaluated by vite's module runner, while a CommonJS file, or a file imported by its URL, is loaded by Node itself.
+ * Asked for the runtime by such a file, Node would evaluate the runtime's file a second time, and that second copy
+ * knows no instance. With the namespace recorded here, the resolve hook sends Node's import of the file to a module
+ * that re-exports the namespace already made (see {@link ownModuleBridge}), so the importer gets the runtime slothlet
+ * runs on. A second copy of slothlet that Node loaded itself keeps Node's own evaluation of the file, which is that
+ * copy's runtime (see {@link isOtherCopysFile}). Only the runtime's entry files are taken, each once.
+ * @param {string} url - The file's `import.meta.url`.
+ * @param {object} namespace - Its module namespace.
+ * @returns {void}
+ * @internal
+ * @example
+ * registerOwnModule(import.meta.url, runtimeNamespace);
+ */
+declare function registerOwnModule(url: string, namespace: object): void;
+/**
+ * Record that slothlet loads an api file: its path, so the file's own code is told to be a module's wherever it runs
+ * under its path alone (a loader evaluating the copy under another name, a `require` made from the file's plain path).
+ * @param {string} ref - The api file's path or URL.
+ * @returns {void}
+ * @internal
+ */
+declare function noteModuleFile(ref: string): void;
+/**
+ * Register how a refused import is reported: a function given `{ specifier, file, allowed }` that returns the error to
+ * throw. Taken once, by the copy that keeps the shared object.
+ * @param {function(object): Error} make - Builds the error.
+ * @returns {void}
+ * @internal
+ */
+declare function setImportRefusal(make: (arg0: object) => Error): void;
+/**
+ * The import graph of an instance's own code: for each file a leaf of the instance reached through an
+ * import or require that carries the instance (#601 review), the files that import it. The live runtime
+ * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * What comes back is a read-only view (see graphView): it reads as a `Map` of importers by imported file does, hands
+ * out each collection of importers as a copy, and is one object per instance for as long as its graph lives.
+ * @param {string} instanceID - The instance ID.
+ * @returns {object|null} Importers by imported file (forward-slash paths), or null.
+ * @internal
+ * @example
+ * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
+ */
+declare function instanceImporters(instanceID: string): object | null;
+/**
+ * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
+ * They run under their plain path, with no import query, so the live runtime looks a stack frame up
+ * here to tell the instance's code from the host's (#601 review).
+ * @param {string} instanceID - The instance ID.
+ * @returns {string[]} Absolute paths, as Node's require cache keys them.
+ * @internal
+ * @example
+ * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
+ */
+declare function instanceCommonJSFiles(instanceID: string): string[];
+/**
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object standing for
+ * the instance's CommonJS state, dropped by the instance's release, and how many files the instance has. Files are
+ * only ever added while the instance lives, so an equal count means the same files. The object holds nothing.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
+ * @internal
+ * @example
+ * instanceCommonJSVersion("inst-a"); // { key: {}, count: 3 }
+ */
+declare function instanceCommonJSVersion(instanceID: string): {
+    key: object;
+    count: number;
+} | null;
+/**
+ * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
+ * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
+ * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
+ * or drop what is recorded about it, whatever it can import or reach through the global object. With two copies of
+ * slothlet in the process, the copy that loaded first keeps every instance's record, and this claims there.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{instanceID: string, require: function(string, object=): *, release: function(): void}|null} The handle,
+ *   or null when the ID is claimed already.
+ * @internal
+ * @example
+ * const scope = claimInstanceScope(instanceID);
+ * scope.require("/app/api/counter.cjs", { fresh: true });
+ * scope.release();
+ */
+declare function claimInstanceScope(instanceID: string): {
+    instanceID: string;
+    require: (arg0: string, arg1: object | undefined) => any;
+    release: () => void;
+} | null;
+/**
+ * Run a CommonJS file through the private CommonJS cache of an instance ID no instance has claimed (see
+ * {@link scopeRequire} for what that does): for a caller that is not an instance, such as a test of the cache. An
+ * instance loads its files through the handle it claimed ({@link claimInstanceScope}); for an ID an instance holds,
+ * this throws.
+ * @param {string} filePath - Absolute path of the CommonJS file.
+ * @param {string} instanceID - The instance ID whose copies are served.
+ * @param {object} [options] - Options, as {@link scopeRequire} takes them (`fresh`, `importer`, `mount`).
+ * @returns {*} The file's `module.exports`.
+ * @throws {TypeError} When the ID is claimed by an instance.
+ * @internal
+ * @example
+ * const exports = requireInInstance("/app/api/counter.cjs", "inst-a", { fresh: true });
+ */
+declare function requireInInstance(filePath: string, instanceID: string, options?: object): any;
+/**
+ * Drop what is kept for an instance ID that {@link requireInInstance} claimed, or that no one claimed (what the hooks
+ * recorded for a URL carrying it). An ID an instance holds is released by the instance's own handle, and is left as
+ * it is here.
+ * @param {string|null|undefined} instanceID - The instance ID.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseInstanceScope("inst-a");
+ */
+declare function releaseInstanceScope(instanceID: string | null | undefined): void;
+/**
+ * Register frame placement's check of who is calling into slothlet: given an `Error` slothlet created on entry, the
+ * location of the module whose own top-level code made the call, when vitest's or vite's module runner was evaluating
+ * that module, else null. Taken once, by the copy that keeps the shared object.
+ * @param {function(Error): (string|null)} check - The check.
+ * @returns {void}
+ * @internal
+ */
+declare function setCallerCheck(check: (arg0: Error) => (string | null)): void;
+/**
+ * Register how a URL is reduced to the key its script hashes are kept under (see {@link scriptKeyOf}).
+ * @param {function(string): string} keyOf - The URL's key.
+ * @returns {void}
+ * @internal
+ */
+declare function setScriptKey(keyOf: (arg0: string) => string): void;
+/**
+ * Whether sources are recorded for a script key, and whether a given one is among them (see
+ * {@link recordLoadedSource}).
+ * @param {string} key - The script key.
+ * @param {string} [hash] - A script's hash.
+ * @returns {{known: boolean, has: boolean}} The answer.
+ * @internal
+ */
+declare function loadedScriptLookup(key: string, hash?: string): {
+    known: boolean;
+    has: boolean;
+};
+/**
+ * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the
+ * newest when no hash is given. Undefined when none is recorded (the hook did not load the file, or another slothlet
+ * copy's hook did and keeps no text).
+ * @param {string} key - The script key.
+ * @param {string|null} [hash] - The script's hash.
+ * @returns {string|undefined} The text.
+ * @internal
+ * @example
+ * loadedScriptText(key, frame.hash); // "export const a = () => 1;\n"
+ */
+declare function loadedScriptText(key: string, hash?: string | null): string | undefined;
+/**
+ * The URLs of the files that import a package file, as the resolve hook recorded them (#597).
+ * @param {string} path - The package file's path.
+ * @returns {Array<string>} The importers' URLs.
+ * @internal
+ */
+declare function packageImporters(path: string): Array<string>;
+/**
+ * The hashes recorded for the script a URL loads, oldest first.
+ * @param {string} url - The URL.
+ * @returns {Array<string>} The hashes.
+ * @internal
+ * @example
+ * recordedScriptHashes("file:///app/api/x.mjs?slothlet_instance=a"); // ["…"]
+ */
+declare function recordedScriptHashes(url: string): Array<string>;
+/**
+ * The instance a script key names, or null for code no instance tagged.
+ * @param {string} key - A script key: path, instance tag and mount tag, NUL-separated.
+ * @returns {string|null} The instance ID.
+ * @internal
+ */
+declare function scriptKeyInstance(key: string): string | null;
+/**
+ * Register the resolve and load hooks with Node, once per process: the hooks of the slothlet copy that keeps every
+ * instance's record (the first to load), which another copy asks to register them.
+ * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
+ * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
+ * (#534) and passes every unmarked URL straight through.
+ * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, slothlet's engines
+ * floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
+ * trip to every import in the process and reorders module evaluation enough to break leaves that
+ * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
+ * @param {object} nodeModule - The `node:module` namespace.
+ * @param {object} [registry=globalThis] - The global object in production. Any other object is a registry of the
+ *   caller's own: this copy's hooks are then registered on `nodeModule` once per registry, whichever copy keeps the
+ *   record.
+ * @returns {boolean} True when a hook is (now or already) registered.
+ * @internal
+ * @example
+ * installInstanceImportHooks(await import("node:module"));
+ */
+declare function installInstanceImportHooks(nodeModule: object, registry?: object): boolean;
+export { guarded_registerOwnModule as registerOwnModule, guarded_noteModuleFile as noteModuleFile, guarded_setImportRefusal as setImportRefusal, guarded_instanceImporters as instanceImporters, guarded_instanceCommonJSFiles as instanceCommonJSFiles, guarded_instanceCommonJSVersion as instanceCommonJSVersion, guarded_claimInstanceScope as claimInstanceScope, guarded_requireInInstance as requireInInstance, guarded_releaseInstanceScope as releaseInstanceScope, guarded_setCallerCheck as setCallerCheck, guarded_setScriptKey as setScriptKey, guarded_loadedScriptLookup as loadedScriptLookup, guarded_loadedScriptText as loadedScriptText, guarded_packageImporters as packageImporters, guarded_recordedScriptHashes as recordedScriptHashes, guarded_scriptKeyInstance as scriptKeyInstance, guarded_installInstanceImportHooks as installInstanceImportHooks };
 //# sourceMappingURL=instance-imports.d.mts.map
