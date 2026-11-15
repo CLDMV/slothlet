@@ -125,6 +125,22 @@ describe.each(MATRIX)("Isolation > slothlet's internal exports answer slothlet a
 		expect(manager.instances.has(api.slothlet.instanceID)).toBe(true);
 	});
 
+	it("refuses a module the static functions of the wrapper class, held or imported by package path or by file URL", async () => {
+		const key = "#handlers/unified-wrapper:UnifiedWrapper";
+		const fileURL = new URL("../../../../src/lib/handlers/unified-wrapper.mjs", import.meta.url).href;
+		for (const name of ["_recordSourceFile", "_extractFullImpl"]) {
+			// The host reaches the function; it is slothlet's own (the builders call it).
+			expect([name, typeof held[key][name]]).toEqual([name, "function"]);
+			expect([name, "held", await api.held.useStatic(key, name)]).toEqual([name, "held", REFUSED]);
+			expect([name, "package path", await api.held.importStatic("#handlers/unified-wrapper", "UnifiedWrapper", name)]).toEqual([
+				name,
+				"package path",
+				REFUSED
+			]);
+			expect([name, "file URL", await api.held.importStatic(fileURL, "UnifiedWrapper", name)]).toEqual([name, "file URL", REFUSED]);
+		}
+	});
+
 	it("gives no file's internal bindings to anyone once slothlet's own files have taken them", () => {
 		for (const key of Object.keys(held).filter((key) => key.endsWith(":internals"))) {
 			let outcome;

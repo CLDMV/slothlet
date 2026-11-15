@@ -96,3 +96,32 @@ export async function use(key, shape = "direct") {
 export async function useArgument(value) {
 	return outcome(() => touch(value));
 }
+
+/**
+ * Call a static function of a held export (a class), as module code holding the export would.
+ * @function useStatic
+ * @memberof module:api_test_internal_exports.held
+ * @param {string} key - The held export's key.
+ * @param {string} name - The static function's name.
+ * @returns {Promise<string>} `"used"`, or the code the call failed with.
+ * @example
+ * await api.held.useStatic("#handlers/unified-wrapper:UnifiedWrapper", "_extractFullImpl"); // "MODULE_INTERNAL_NOT_IMPORTABLE"
+ */
+export async function useStatic(key, name) {
+	return outcome(() => globalThis[KEY][key][name]({}, "/nowhere/file.mjs"));
+}
+
+/**
+ * Import one of slothlet's own files from this api file and call a static function of a class it exports.
+ * @function importStatic
+ * @memberof module:api_test_internal_exports.held
+ * @param {string} specifier - The file: a package import, or a file URL.
+ * @param {string} exportName - The class's export name.
+ * @param {string} name - The static function's name.
+ * @returns {Promise<string>} `"used"`, or the code the import or the call failed with.
+ * @example
+ * await api.held.importStatic("#handlers/unified-wrapper", "UnifiedWrapper", "_recordSourceFile"); // "MODULE_INTERNAL_NOT_IMPORTABLE"
+ */
+export async function importStatic(specifier, exportName, name) {
+	return outcome(async () => (await import(specifier))[exportName][name]({}, "/nowhere/file.mjs"));
+}
