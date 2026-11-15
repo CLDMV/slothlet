@@ -41,7 +41,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { internals as sharedValuesInternals } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
-import { Reflect, NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+import { Reflect, NativeProxy, Objects, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime");
 const { recordSharedExports } = sharedValuesInternals("lib/runtime/runtime");
@@ -102,6 +102,28 @@ function getCurrentRuntime() {
 export class SlothletSelf {}
 
 /**
+ * The target behind `self`: an empty object holding only the hook Node's `util.inspect` reads, which shows a Proxy's
+ * target rather than what its traps report. The hook hands `util.inspect` the api `self` stands for in the running
+ * code's context, which shows what that code may read of it, as the api root shows (a member it may not read left
+ * out). Outside any context it shows an empty object.
+ * @returns {object} The target.
+ * @private
+ */
+function runtime_selfShell() {
+	const shell = {};
+	Objects.defineProperty(shell, Symbols.for("nodejs.util.inspect.custom"), {
+		value: function inspectSelf() {
+			const ctx = getCurrentRuntime() === liveRuntimeModule ? liveRuntime.tryGetContext() : asyncRuntime.tryGetContext();
+			return ctx?.self ?? {};
+		},
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+	return shell;
+}
+
+/**
  * Live binding to the current API instance. Resolves to the running Slothlet proxy,
  * giving API modules access to all other API methods without import cycles.
  * Typed as {@link SlothletSelf}, which generated api types extend.
@@ -113,55 +135,52 @@ export class SlothletSelf {}
  * // Inside an API function:
  * const result = await self.math.add(1, 2);
  */
-export const self = new NativeProxy(
-	{},
-	{
-		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.self[prop];
-		},
-		ownKeys() {
-			const runtime = getCurrentRuntime();
-			return Reflect.ownKeys(runtime.self);
-		},
-		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return prop in runtime.self;
-		},
-		getOwnPropertyDescriptor(_, prop) {
-			const runtime = getCurrentRuntime();
-			const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
-			// If the property exists, return a descriptor that's always configurable
-			// to avoid proxy invariant violations (since the proxy target is an empty object)
-			if (desc) {
-				return { ...desc, configurable: true };
-			}
-			return undefined;
-		},
-		// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
-		// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
-		deleteProperty(_, prop) {
-			return Reflect.deleteProperty(getCurrentRuntime().self, prop);
-		},
-		defineProperty(_, prop, descriptor) {
-			return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
-		},
-		setPrototypeOf(_, proto) {
-			return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
-		},
-		preventExtensions() {
-			return Reflect.preventExtensions(getCurrentRuntime().self);
-		},
-		set(_, prop, value) {
-			// Forward to the active per-runtime self proxy. Without this trap, JS
-			// defaults to setting on the empty `{}` target — silently lost since
-			// `get` reads from the live runtime self, not the target.
-			const runtime = getCurrentRuntime();
-			runtime.self[prop] = value;
-			return true;
+export const self = new NativeProxy(runtime_selfShell(), {
+	get(_, prop) {
+		const runtime = getCurrentRuntime();
+		return runtime.self[prop];
+	},
+	ownKeys() {
+		const runtime = getCurrentRuntime();
+		return Reflect.ownKeys(runtime.self);
+	},
+	has(_, prop) {
+		const runtime = getCurrentRuntime();
+		return prop in runtime.self;
+	},
+	getOwnPropertyDescriptor(_, prop) {
+		const runtime = getCurrentRuntime();
+		const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+		// If the property exists, return a descriptor that's always configurable
+		// to avoid proxy invariant violations (since the proxy target is an empty object)
+		if (desc) {
+			return { ...desc, configurable: true };
 		}
+		return undefined;
+	},
+	// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
+	// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
+	deleteProperty(_, prop) {
+		return Reflect.deleteProperty(getCurrentRuntime().self, prop);
+	},
+	defineProperty(_, prop, descriptor) {
+		return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
+	},
+	setPrototypeOf(_, proto) {
+		return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
+	},
+	preventExtensions() {
+		return Reflect.preventExtensions(getCurrentRuntime().self);
+	},
+	set(_, prop, value) {
+		// Forward to the active per-runtime self proxy. Without this trap, JS
+		// defaults to setting on the empty `{}` target — silently lost since
+		// `get` reads from the live runtime self, not the target.
+		const runtime = getCurrentRuntime();
+		runtime.self[prop] = value;
+		return true;
 	}
-);
+});
 
 /**
  * The current ambient context object. Seeded at instance startup via `config.context` and

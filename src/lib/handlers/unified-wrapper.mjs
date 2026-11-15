@@ -11893,11 +11893,14 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	/* v8 ignore next */
 	if (internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined))
 		return internal.proxy;
-	if (!forModule || !runtime_memberHoldsCode(internal.impl, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
+	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
+	// shown by its form and members, as to a module.
+	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
+	if (!layered && (!forModule || !runtime_memberHoldsCode(internal.impl, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })))
 		return internal.impl;
 	// The node's own members, read through it as the module reading them may.
 	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
-	const label = runtime_codeLabel(internal.impl);
+	const label = runtime_codeLabel(layered ? layerUnderlying(internal.impl) : internal.impl);
 	const members = runtime_inspectMembers(wrapper);
 	if (Objects.keys(members).length === 0) return label;
 	const [, options, inspect] = args;
@@ -12015,6 +12018,55 @@ function runtime_defineProxyInspect(wrapper, target) {
 			configurable: true
 		});
 	}
+}
+
+/**
+ * Give the api root proxy's target the `util.inspect` hook a node's target has (see {@link runtime_defineProxyInspect}):
+ * Node inspects a Proxy's target, not what its traps report, so without it the root shows as its empty stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @returns {void}
+ * @internal
+ */
+function runtime_defineRootInspect(slothlet, target) {
+	Objects.defineProperty(target, util.inspect.custom, {
+		value: runtime_registerInspectHook(function (...args) {
+			return runtime_rootInspectShown(slothlet, args);
+		}),
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+}
+
+/**
+ * What the api root shows to `util.inspect`, as a node shows its own: its members, read through the root as the reader
+ * may read them (a member it may not read left out; to a module, its code by its form), and for a function root its
+ * function's form beside them, a label that runs nothing.
+ * @param {object} slothlet - The instance.
+ * @param {Array<*>} args - The hook's arguments (`depth`, `options`, `inspect`).
+ * @returns {*} What is shown.
+ * @private
+ */
+function runtime_rootInspectShown(slothlet, args) {
+	// A module is shown the root as its own view of it reads it, and the module's code by its form (as a node shows it),
+	// so the hook, which a read of the root hands out, gives the module nothing it could not read.
+	const reader = runtime_selfModuleReader(slothlet);
+	const root = reader ? runtime_selfRootView(slothlet, reader) : slothlet.boundApi;
+	const shown = {};
+	for (const key of Objects.keys(root)) {
+		try {
+			shown[key] = reader ? runtime_inspectSafe(root[key], args, true) : root[key];
+		} catch (error) {
+			if (error?.code !== "PERMISSION_DENIED") throw error;
+		}
+	}
+	const api = slothlet.api;
+	if (typeof api !== "function") return shown;
+	const label = runtime_codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
+	if (Objects.keys(shown).length === 0) return label;
+	const [, options, inspect] = args;
+	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(shown, options)}`;
 }
 
 /**
@@ -18766,6 +18818,7 @@ export function internals(consumer) {
 		runtime_contextRead,
 		runtime_contextReadAsDefiner,
 		runtime_contextWritten,
+		runtime_defineRootInspect,
 		runtime_eventPayloadFor,
 		runtime_frameworkViewCaller,
 		runtime_frameworkWrite,

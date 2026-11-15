@@ -117,6 +117,7 @@ const {
 	releaseModuleMakers,
 	releaseStandInChanges,
 	runtime_assertRootChange,
+	runtime_defineRootInspect,
 	runtime_frameworkWrite,
 	runtime_registerRoot,
 	runtime_rootClose,
@@ -1262,6 +1263,8 @@ class Slothlet {
 			// `prototype` of its own, so the traps report the root's function as it is (an async function, an arrow, a
 			// bound function or a method has none) without breaking an invariant of the target's.
 			const proxyTarget = isCallable ? function () {}.bind() : {};
+			// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
+			runtime_defineRootInspect(this, proxyTarget);
 
 			this.boundApi = markSlothletProxy(
 				runtime_registerRoot(
@@ -1272,6 +1275,9 @@ class Slothlet {
 							if (!this.api) return undefined;
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 							if (fixed && !fixed.configurable) return runtime_rootFixedMember(this, prop, fixed, false);
+							// A key only the target holds (its inspect hook, which `util.inspect` reads through the proxy when the root
+							// is the target of another proxy) is the target's.
+							if (fixed && typeof prop === "symbol" && !(prop in this.api)) return fixed.value;
 							return runtime_rootMemberRead(this, prop, this.api[prop]);
 						},
 						// A change to the root is a change to the api, held to the rules the same change at a node is held to.
