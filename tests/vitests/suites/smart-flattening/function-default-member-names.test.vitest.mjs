@@ -1,6 +1,6 @@
 /**
  * @fileoverview A function default's named exports called `name`, `length`, `prototype` or the function's own name are
- * members of its node.
+ * members of its node, and the node lists its own keys in a function's order.
  *
  * @description
  * Plain JavaScript is the reference: each fixture is also imported as a plain module, and the node answers what the
@@ -13,6 +13,7 @@
  * - `export { calc2 as calc }` beside `export default function calc` is the member `api.math.calc.calc`, and the node
  *   still calls the default; in a self-named file (`solo/solo.mjs`) the default is the folder's callable (F04), with
  *   the same-named export as its member.
+ * - `Reflect.ownKeys(node)` lists `length`, `name`, `prototype`, then the members, as for a function with members added.
  *
  * Every row runs eager and lazy, async and live, from files and from in-memory `api.slothlet.api.add`, and with the
  * permission system on under both `attribution` values.
@@ -109,6 +110,19 @@ const memSolo = () => ({
 	name: "S"
 });
 
+/** The keys a function lists first, in its own order. */
+const FUNCTION_KEYS = Reflect.ownKeys(function twin() {});
+
+/**
+ * The keys a function with `node`'s members added lists, in a function's order.
+ * @param {Function} node - The api node.
+ * @returns {PropertyKey[]} `length`, `name`, `prototype` (when it has one), then its other members.
+ */
+function functionOrder(node) {
+	const first = FUNCTION_KEYS.filter((key) => key !== "prototype" || Reflect.getOwnPropertyDescriptor(node, "prototype"));
+	return [...first, ...Object.keys(node).filter((key) => !FUNCTION_KEYS.includes(key))];
+}
+
 beforeAll(async () => {
 	for (const [file, source] of Object.entries(FILES)) {
 		mkdirSync(path.dirname(path.join(BASE, file)), { recursive: true });
@@ -196,6 +210,18 @@ describe.each(getMatrixConfigs())("function default member names > $name", ({ co
 		expect(await api.pair.side()).toBe("side");
 	});
 
+	it("lists a function node's keys in a function's order", async () => {
+		await build();
+		for (const node of [api.math.calc, api.shape.proto, api.solo, api.pair, api.klass, api.own]) {
+			expect(Reflect.ownKeys(node).slice(0, 3)).toEqual(FUNCTION_KEYS);
+			expect(Reflect.ownKeys(node)).toEqual(functionOrder(node));
+		}
+		// An async function has no prototype, as in plain JavaScript.
+		const af = async function af() {};
+		af.extra = 1;
+		expect(Reflect.ownKeys(api.later.af)).toEqual(Reflect.ownKeys(af));
+	});
+
 	it("composes an in-memory add's name and length exports as the file's", async () => {
 		await build();
 		await api.slothlet.api.add("mem.calc", memCalc());
@@ -222,6 +248,17 @@ describe.each(getMatrixConfigs())("function default member names > $name", ({ co
 		expect(api.memsolo(2, 3)).toBe(solo.default(2, 3));
 		expect(api.memsolo.memsolo()).toBe(solo.solo());
 		expect(api.memsolo.name).toBe(solo.name);
+	});
+
+	it("lists an in-memory add's keys in a function's order", async () => {
+		await build();
+		await api.slothlet.api.add("mem.calc", memCalc());
+		await api.slothlet.api.add("memsolo", memSolo());
+		await api.mem;
+		await api.mem.calc;
+		await api.memsolo;
+		expect(Reflect.ownKeys(api.mem.calc)).toEqual(functionOrder(api.mem.calc));
+		expect(Reflect.ownKeys(api.memsolo)).toEqual(functionOrder(api.memsolo));
 	});
 });
 

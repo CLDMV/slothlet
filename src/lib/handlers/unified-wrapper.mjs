@@ -17208,7 +17208,8 @@ class UnifiedWrapper extends ComponentBase {
 			}
 
 			// A function target's own `length` / `name` come first, as on any function.
-			if (typeof target === "function" || (target && target.__isCallable)) {
+			const uw_listsAsFunction = typeof target === "function" || (target && target.__isCallable);
+			if (uw_listsAsFunction) {
 				keys.add("length");
 				keys.add("name");
 			}
@@ -17266,6 +17267,15 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// A function lists its `prototype` right after `length` and `name`, before the members added to
+			// it, as `Reflect.ownKeys(function f() {})` does; the members are gathered from the target, the
+			// wrapper and the impl, so it is put back in its place once every key is known.
+			if (uw_listsAsFunction && keys.has("prototype")) {
+				const uw_ordered = [];
+				for (const key of ["length", "name", "prototype"]) if (keys.has(key)) uw_ordered.push(key);
+				for (const key of keys) if (key !== "length" && key !== "name" && key !== "prototype") uw_ordered.push(key);
+				return uw_ordered;
+			}
 			return Arrays.from(keys);
 		};
 
