@@ -17866,8 +17866,14 @@ class UnifiedWrapper extends ComponentBase {
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
 			// A composed array node's own elements are the module's array's: deleting them from its layer only hides them.
+			// A function node's members are its function's (a layer over the module's function, which only hides them).
 			const deleteFrom = Arrays.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
-			if (deleteFrom && typeof deleteFrom === "object" && prop in deleteFrom && !Reflect.deleteProperty(deleteFrom, prop)) {
+			if (
+				deleteFrom &&
+				(typeof deleteFrom === "object" || typeof deleteFrom === "function") &&
+				prop in deleteFrom &&
+				!Reflect.deleteProperty(deleteFrom, prop)
+			) {
 				return false;
 			}
 			// A deleted key is no longer a user assignment to preserve across adoption (#543), nor one defined read-only.
