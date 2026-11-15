@@ -116,9 +116,17 @@ const {
 	resolveWrapper,
 	releaseModuleMakers,
 	releaseStandInChanges,
+	runtime_assertRootChange,
+	runtime_frameworkWrite,
+	runtime_registerRoot,
+	runtime_rootClose,
+	runtime_rootDefine,
+	runtime_rootFixedMember,
 	runtime_rootListing,
 	runtime_rootMemberDescriptor,
-	runtime_rootMemberRead
+	runtime_rootMemberRead,
+	runtime_rootTakesKey,
+	runtime_unwrapSelfView
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -1256,34 +1264,78 @@ class Slothlet {
 			const proxyTarget = isCallable ? function () {}.bind() : {};
 
 			this.boundApi = markSlothletProxy(
-				new NativeProxy(proxyTarget, {
-					// A member is read as a node reads its own: the same gate, at the member's name (see unified-wrapper.mjs).
-					get: (target, prop) => (this.api ? runtime_rootMemberRead(this, prop, this.api[prop]) : undefined),
-					set: (target, prop, value) => {
-						if (this.api) {
-							this.api[prop] = value;
-						}
-						return true;
-					},
-					has: (target, prop) => (this.api ? prop in this.api : false),
-					// The root lists what a node lists of its own: a member the reader may not read is left out.
-					ownKeys: (target) => (this.api ? runtime_rootListing(this, target, Reflect.ownKeys(this.api)) : []),
-					deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
-					apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
-					construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
-					// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
-					getPrototypeOf: (target) => (isCallable && this.api ? Reflect.getPrototypeOf(this.api) : Reflect.getPrototypeOf(target)),
-					getOwnPropertyDescriptor: (target, prop) => {
-						if (this.api && prop in this.api) {
-							const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
-							const described = desc ? runtime_rootMemberDescriptor(this, prop, desc) : undefined;
-							if (described) {
-								return { ...described, configurable: true };
+				runtime_registerRoot(
+					new NativeProxy(proxyTarget, {
+						// A member is read as a node reads its own: the same gate, at the member's name (see unified-wrapper.mjs).
+						// A member the target holds fixed is read as the target holds it (proxy invariant).
+						get: (target, prop) => {
+							if (!this.api) return undefined;
+							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+							if (fixed && !fixed.configurable) return runtime_rootFixedMember(this, prop, fixed, false);
+							return runtime_rootMemberRead(this, prop, this.api[prop]);
+						},
+						// A change to the root is a change to the api, held to the rules the same change at a node is held to.
+						set: (target, prop, value) => {
+							if (!this.api) return true;
+							runtime_assertRootChange(this, prop);
+							return runtime_rootTakesKey(target, prop) && Reflect.set(this.api, prop, runtime_unwrapSelfView(value));
+						},
+						has: (target, prop) => {
+							if (!this.api) return false;
+							if (prop in this.api) return true;
+							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+							return fixed !== undefined && (!fixed.configurable || !Reflect.isExtensible(target));
+						},
+						// The root lists what a node lists of its own: a member the reader may not read is left out. A closed root
+						// lists what it holds, to every reader (proxy invariant).
+						ownKeys: (target) => {
+							if (!this.api) return [];
+							if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+							return runtime_rootListing(this, target, Reflect.ownKeys(this.api));
+						},
+						defineProperty: (target, prop, descriptor) => (this.api ? runtime_rootDefine(this, target, prop, descriptor) : false),
+						deleteProperty: (target, prop) => {
+							if (!this.api) return true;
+							runtime_assertRootChange(this, prop);
+							const held = Objects.prototype.hasOwnProperty.call(this.api, prop);
+							if (!Reflect.deleteProperty(this.api, prop)) return false;
+							if (!held && Reflect.isExtensible(target)) return true;
+							return Reflect.deleteProperty(target, prop);
+						},
+						apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
+						construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
+						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
+						getPrototypeOf: (target) =>
+							isCallable && this.api && Reflect.isExtensible(target) ? Reflect.getPrototypeOf(this.api) : Reflect.getPrototypeOf(target),
+						// A prototype set on the root is set on the api, whose members inherit from it; an object root reports its
+						// target's, which takes it too.
+						setPrototypeOf: (target, proto) => {
+							if (!this.api) return Reflect.setPrototypeOf(target, proto);
+							runtime_assertRootChange(this, null);
+							proto = runtime_unwrapSelfView(proto);
+							if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+							if (!Reflect.setPrototypeOf(this.api, proto)) return false;
+							return isCallable || Reflect.setPrototypeOf(target, proto);
+						},
+						// Closing the root closes the api (see runtime_rootClose).
+						preventExtensions: (target) => (this.api ? runtime_rootClose(this, target, isCallable) : Reflect.preventExtensions(target)),
+						getOwnPropertyDescriptor: (target, prop) => {
+							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+							if (fixed && !fixed.configurable) return runtime_rootFixedMember(this, prop, fixed, true);
+							if (this.api && prop in this.api) {
+								const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
+								const described = desc ? runtime_rootMemberDescriptor(this, prop, desc) : undefined;
+								if (described) return { ...described, configurable: true };
 							}
+							// A closed root reports every member it holds (proxy invariant): one the reader may not read is refused.
+							if (fixed && !Reflect.isExtensible(target)) {
+								runtime_rootMemberRead(this, prop, this.api?.[prop]);
+								return fixed;
+							}
+							return undefined;
 						}
-						return undefined;
-					}
-				})
+					})
+				)
 			);
 			/* v8 ignore stop */
 		}
@@ -1298,7 +1350,7 @@ class Slothlet {
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
-			Objects.assign(this.boundApi, this.reference);
+			runtime_frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
 		}
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
@@ -1361,6 +1413,9 @@ class Slothlet {
 				validationError: true
 			});
 		}
+
+		// A closed api root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes.
+		this._assertRootOpen("reload");
 
 		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
 		// eager mode's changes go with those nodes too (#653).
@@ -1634,6 +1689,23 @@ class Slothlet {
 	}
 
 	/**
+	 * Refuse an operation that rebuilds the api root while the root is closed (`Object.preventExtensions`, `seal` or
+	 * `freeze` on the api): a closed root keeps the members it holds, so it cannot take the ones a rebuild makes.
+	 * @param {string} operation - The operation refused.
+	 * @returns {void}
+	 * @throws {SlothletError} API_ROOT_CLOSED when the root is closed.
+	 * @private
+	 *
+	 * @example
+	 * this._assertRootOpen("reload");
+	 */
+	_assertRootOpen(operation) {
+		if (this.boundApi && !Reflect.isExtensible(this.boundApi)) {
+			throw new SlothletError("API_ROOT_CLOSED", { operation, validationError: true });
+		}
+	}
+
+	/**
 	 * restart() body — see {@link Slothlet#restart}.
 	 * @returns {Promise<Object>} The same bound API reference.
 	 * @private
@@ -1648,6 +1720,8 @@ class Slothlet {
 				validationError: true
 			});
 		}
+
+		this._assertRootOpen("restart");
 
 		const previousInstanceID = this.instanceID;
 		let teardownError = null;

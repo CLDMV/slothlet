@@ -170,10 +170,17 @@ const hasOwn = (obj, key) => Objects.prototype.hasOwnProperty.call(obj, key);
  * Held only for the synchronous extent of one write (see {@link runtime_frameworkWrite}), never across an
  * `await`, so no module code that runs while a framework operation is suspended — the module that started
  * it, another call of the same leaf, or any other module — can find it set.
- * @type {Map<UnifiedWrapper, number>}
+ * @type {Map<UnifiedWrapper|object, number>}
  * @private
  */
 const FRAMEWORK_WRITES = new Map();
+
+/**
+ * The instances' api root proxies ({@link runtime_registerRoot}).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const ROOT_PROXIES = new WeakSet();
 
 /**
  * Make one write of the framework's own to a node: a mount, removal, or rebuild step of `api.add` /
@@ -183,7 +190,8 @@ const FRAMEWORK_WRITES = new Map();
  * operation was started from, often a module's. It is not that module's write, so the ownership rule
  * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
  *
- * @param {object} node - The node written: a wrapper proxy or wrapper. Anything else needs no exemption.
+ * @param {object} node - The node written: a wrapper proxy or wrapper, or an instance's api root. Anything else needs
+ *   no exemption.
  * @param {function(): *} write - The write; synchronous.
  * @returns {*} What `write` returns.
  * @internal
@@ -192,7 +200,8 @@ const FRAMEWORK_WRITES = new Map();
  * runtime_frameworkWrite(parent, () => { parent[key] = value; });
  */
 function runtime_frameworkWrite(node, write) {
-	const wrapper = resolveWrapper(node);
+	// The api root has no wrapper: its proxy stands for itself (see runtime_assertRootChange).
+	const wrapper = resolveWrapper(node) ?? (ROOT_PROXIES.has(node) ? node : null);
 	if (!wrapper) return write();
 	FRAMEWORK_WRITES.set(wrapper, (FRAMEWORK_WRITES.get(wrapper) ?? 0) + 1);
 	try {
@@ -2203,8 +2212,8 @@ function runtime_selfChangeTarget(ctx, prop) {
 	// A store holding `self` holds its instance too: both are set together when the instance loads.
 	const slothlet = ctx.slothlet;
 	const parts = typeof prop === "string" ? [prop] : [];
-	// The bound api forwards reads, writes, and deletions to the api, but a definition only to its own target.
-	const target = ctx.self === slothlet.boundApi ? slothlet.api : ctx.self;
+	// The bound api forwards every change to the api, its own target taking what the invariants bind there.
+	const target = ctx.self;
 	if (slothlet.handlers.apiManager.writeChecked(parts)) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		// Unreachable from the runtime traps, which are this function's callers: the live `self` refuses code it
@@ -9266,6 +9275,140 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
 	const node = resolveWrapper(value);
 	return node !== null && runtime_holdsValue(node) ? { ...descriptor, value: runtime_heldValue(node) } : descriptor;
+}
+
+/**
+ * Record an instance's api root proxy, so a write the framework makes to it is its own (see {@link runtime_frameworkWrite}).
+ * @param {object} root - The root proxy.
+ * @returns {object} `root`.
+ * @internal
+ */
+function runtime_registerRoot(root) {
+	ROOT_PROXIES.add(root);
+	return root;
+}
+
+/**
+ * Refuse a change module code makes to the api root that the same change at a node would be refused: a member
+ * assigned, defined or deleted is a write at its name, and a change to the root itself (its prototype, its
+ * extensibility) or under a symbol a write at the root's own path, which only who owns the whole tree may make. The
+ * framework's namespace and root functions are refused to module code, as an assignment through `self` is.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol|null} prop - The member changed, or null for the root itself.
+ * @returns {void}
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED`, `LOOSE_SET_UNATTRIBUTED` or `PERMISSION_DENIED`, as at a node.
+ * @internal
+ */
+function runtime_assertRootChange(slothlet, prop) {
+	if (slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(slothlet.boundApi)) return;
+	runtime_assertOwnedWriteAt(runtime_rootGate(slothlet), typeof prop === "string" ? [prop] : []);
+	if (!SELF_FRAMEWORK_ROOTS.has(prop)) return;
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper || identity?.unresolved) slothlet.handlers.apiManager.normalizeApiPath([prop]);
+}
+
+/**
+ * What the api root's target holds for a member once the invariants bind it there: a file's primitive default export
+ * as its value, as a read of it answers, and anything else as the root holds it.
+ * @param {PropertyDescriptor} descriptor - The api's own descriptor of the member.
+ * @returns {PropertyDescriptor} The descriptor the target holds.
+ * @private
+ */
+function runtime_rootShellDescriptor(descriptor) {
+	const value = descriptor.value;
+	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
+	const impl = resolveWrapper(value)?.____slothletInternal.impl;
+	return runtime_isHeldPrimitive(impl) ? { ...descriptor, value: impl } : descriptor;
+}
+
+/**
+ * Whether the api root takes a member under a key: any key while it is open, and once closed only one it holds, as a
+ * closed object takes. The target is what tells: a function root's api stays open (see {@link runtime_rootClose}).
+ * @param {object|Function} target - The root proxy's target.
+ * @param {string|symbol} prop - The key.
+ * @returns {boolean} Whether a member may be set or defined under it.
+ * @internal
+ */
+function runtime_rootTakesKey(target, prop) {
+	return Reflect.isExtensible(target) || hasOwn(target, prop);
+}
+
+/**
+ * Define a member of the api root, as a definition on the api object: on the api itself, and on the root proxy's target
+ * too where the invariants bind it (a member made non-configurable, and every member once the root is closed).
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {string|symbol} prop - The member's key.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {boolean} Whether it was defined.
+ * @throws {SlothletError} When module code may not change the member (see {@link runtime_assertRootChange}).
+ * @internal
+ */
+function runtime_rootDefine(slothlet, target, prop, descriptor) {
+	const api = slothlet.api;
+	// A definition that changes nothing (freezing a root already frozen) is no write, as on a node (#667).
+	if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;
+	runtime_assertRootChange(slothlet, prop);
+	if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+	// A key only the target holds (its inspect hook) is the target's own.
+	if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
+	if (!runtime_rootTakesKey(target, prop)) return false;
+	if (!Reflect.defineProperty(api, prop, descriptor)) return false;
+	const held = Reflect.getOwnPropertyDescriptor(api, prop);
+	if (held.configurable && Reflect.isExtensible(target)) return true;
+	return Reflect.defineProperty(target, prop, runtime_rootShellDescriptor(held));
+}
+
+/**
+ * Close the api root (`Object.preventExtensions`, and so `Object.seal` / `Object.freeze`), as closing the api object:
+ * the api itself is closed, and each member it holds is copied onto the root proxy's target, which is closed too, so the
+ * root lists, describes and reads them as the invariants then require. Only the root closes: its members, slothlet's
+ * namespace and every prototype stay as they are. Module code may not close it: closing it pins slothlet's own members.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {boolean} isCallable - Whether the root is a function, whose prototype the root reports as its own.
+ * @returns {boolean} Whether the root is closed.
+ * @throws {SlothletError} When module code may not change the root (see {@link runtime_assertRootChange}).
+ * @internal
+ */
+function runtime_rootClose(slothlet, target, isCallable) {
+	// Closing a root already closed changes nothing, as on a plain object.
+	if (!Reflect.isExtensible(target)) return true;
+	runtime_assertRootChange(slothlet, null);
+	const api = slothlet.api;
+	// The root holds slothlet's namespace and root functions, which closing it would pin with it: module code may not
+	// change them (the built-in write rules), so it may not close the root. Refused before anything closes.
+	for (const name of SELF_FRAMEWORK_ROOTS) if (hasOwn(api, name)) runtime_assertRootChange(slothlet, name);
+	// A function root's api is a layer over its module's function, kept open so the function is not changed: the target
+	// alone closes then, and from then on holds the keys the root has (see runtime_rootTakesKey).
+	if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
+	// A closed root reports its target's prototype (invariant): a function root's is its function's.
+	if (isCallable) Reflect.setPrototypeOf(target, Reflect.getPrototypeOf(api));
+	for (const key of Reflect.ownKeys(api))
+		Reflect.defineProperty(target, key, runtime_rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key)));
+	return Reflect.preventExtensions(target);
+}
+
+/**
+ * A member the api root's target holds fixed (non-configurable), as the invariants require it be reported, once the
+ * reader may read it: a read-only value is checked as a read of the member and handed as the target holds it, a
+ * writable one is the api's current value as a read answers it.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member's key.
+ * @param {PropertyDescriptor} fixed - The target's own descriptor.
+ * @param {boolean} described - Whether the descriptor is asked for (rather than the value read).
+ * @returns {*} The value read, or the descriptor.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not read the member.
+ * @internal
+ */
+function runtime_rootFixedMember(slothlet, prop, fixed, described) {
+	if (!("value" in fixed)) return described ? fixed : Reflect.get(slothlet.api, prop);
+	if (!fixed.writable) {
+		runtime_rootMemberRead(slothlet, prop, fixed.value);
+		return described ? fixed : fixed.value;
+	}
+	const value = runtime_rootMemberRead(slothlet, prop, slothlet.api[prop]);
+	return described ? { ...fixed, value } : value;
 }
 
 /**
@@ -18632,9 +18775,15 @@ export function internals(consumer) {
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,
 		runtime_resolvedAccess,
+		runtime_assertRootChange,
+		runtime_registerRoot,
+		runtime_rootClose,
+		runtime_rootDefine,
+		runtime_rootFixedMember,
 		runtime_rootListing,
 		runtime_rootMemberDescriptor,
 		runtime_rootMemberRead,
+		runtime_rootTakesKey,
 		runtime_selfChangeTarget,
 		runtime_selfFrameworkView,
 		runtime_selfHookHandler,

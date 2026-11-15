@@ -105,6 +105,8 @@
 		"HINT_OWNERSHIP_CONFLICT": "Path is already owned by another module. Options: (1) Use forceOverwrite: true in api.add() options, (2) Set collision config to 'merge' or 'replace', (3) Call api.slothlet.api.remove() first to clear the path.",
 		"LOOSE_SET_NOT_OWNED": "Module {callerApiPath} is not allowed to write to {apiPath}. A module may only write under its own apiPath; use api.slothlet.api.add() to register at a different path.",
 		"HINT_LOOSE_SET_NOT_OWNED": "A module owning apiPath \"P\" may write only under \"P.*\". To register code at a different namespace, call api.slothlet.api.add() instead.",
+		"API_ROOT_CLOSED": "The api root is sealed, frozen or closed to new members, so {operation} cannot rebuild it.",
+		"HINT_API_ROOT_CLOSED": "A closed api root keeps the members it holds, as a closed object does. Reload a member with api.slothlet.api.reload(), or close the members you want fixed instead of the root.",
 		"LOOSE_SET_UNATTRIBUTED": "A write to {apiPath} cannot be attributed to one module: the code running matches several suspended calls, so the write is refused.",
 		"HINT_LOOSE_SET_UNATTRIBUTED": "Under the live runtime, code that resumes in a file several in-flight calls share cannot be told apart. Await the call before writing, or keep the write in a file only one api path imports.",
 		"LOOSE_SET_RESERVED_KEY": "Cannot assign to reserved key segment '{segment}' in apiPath '{apiPath}'. Names like __proto__, prototype, and constructor are blocked to prevent prototype pollution of the API tree.",

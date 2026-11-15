@@ -2912,6 +2912,12 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		this.#assertSafeSegments(normalizedPath, parts, true);
+		// A closed api root takes no new member, as a closed object takes none: an add at the root, or under a key it does
+		// not hold, is refused before anything is mounted.
+		const root = this.slothlet.boundApi;
+		if (root && !Reflect.isExtensible(root) && (parts.length === 0 || !Reflect.ownKeys(root).includes(parts[0]))) {
+			throw new this.SlothletError("API_ROOT_CLOSED", { operation: "api.add", validationError: true });
+		}
 
 		// A rule module code mounts with is held to the module's own subtree unless an explicit allow lifts the
 		// built-in reach default, and sits at the module layer (#625): checked before anything is mounted. A replay

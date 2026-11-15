@@ -1175,6 +1175,8 @@ Reading the member itself stays traversal: `self.owner.config.nested` is an obje
 
 The api root is no exception. Its members follow these rules at their own names: `Object.keys(self)`, a spread, `JSON.stringify(self)` and `Object.getOwnPropertyDescriptor(self, …)` leave out a member the reader may not read, a read of one is refused, and a file at the root whose default export is a primitive, `null` or `undefined` reads as its value (`self.version` is `7` for `export default 7`), as it does one level down, and a read of it is refused to a reader the rules deny as any other value is. The same holds for the `api` that `self.slothlet.diag.getAPI()` hands a module and for what `self.slothlet.diag.describe()` lists. The host's own listing of `api` stays whole.
 
+Changes to the api root are held to the write rules as changes at a node are, however module code reached the root (through `self`, `self.slothlet.diag.getAPI()`, or an `api` the host handed it): assigning, defining or deleting a member is a write at the member's name, and setting the root's prototype or a symbol-keyed member is a write at the root itself, which only a module owning the whole tree may make. Module code never seals, freezes or closes the root to new members (`Object.seal`, `Object.freeze`, `Object.preventExtensions`): the root holds slothlet's namespace and root functions, which closing it would pin with it. The host may close the root; only the root closes, while its members, `api.slothlet` and every prototype stay open.
+
 **What is NOT gated:**
 
 - **Namespace traversal** — walking `self.admin` → `.manage` → `.deleteUser` returns child wrappers, not data values, so a `defaultPolicy: "deny"` configuration does **not** need an allow rule for every intermediate path segment.
