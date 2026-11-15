@@ -4040,6 +4040,9 @@ export class ApiBuilder extends ComponentBase {
 						if (!reader) return { ...root };
 						const described = {};
 						for (const key of Reflect.ownKeys(root)) {
+							// A key the root lists but does not describe to the reader (the root function's own `prototype`
+							// to a reader that may not call the root) is not handed over, as a read of it is refused.
+							if (Reflect.getOwnPropertyDescriptor(root, key) === undefined) continue;
 							const value = root[key];
 							if (typeof key !== "string") described[key] = value;
 							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);

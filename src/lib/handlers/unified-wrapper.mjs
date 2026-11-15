@@ -9300,6 +9300,85 @@ function runtime_readsGated(slothlet) {
 }
 
 /**
+ * The members a function node answers from its function rather than as api members (see the node's get trap), which
+ * the api root answers the same way when its file's default export is a function.
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const ROOT_FUNCTION_ANSWERS = new Set(["prototype", "toString", "name", "length"]);
+
+/**
+ * Whether a key of the api root is one its function answers itself (see {@link ROOT_FUNCTION_ANSWERS}): the root is a
+ * function, and holds no api member by that name (a member the root's file exports under it is an ordinary member).
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The key.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isRootFunctionAnswer(slothlet, prop) {
+	if (typeof slothlet.api !== "function" || !ROOT_FUNCTION_ANSWERS.has(prop)) return false;
+	return !Objects.getOwnPropertyDescriptor(slothlet.api, prop)?.enumerable;
+}
+
+/**
+ * A call or construction of the api root's function, checked as a call of a function node is: through the root
+ * itself, or through `call`, `apply`, `bind` or `Reflect.apply`, a reader the rules refuse a call of the root is refused.
+ * The host's own calls are allowed, as at any node.
+ * @param {object} slothlet - The instance.
+ * @param {Array<*>} args - The call's arguments.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the caller may not call the root.
+ * @internal
+ */
+function runtime_rootCallCheck(slothlet, args) {
+	enforcePermission(runtime_rootGate(slothlet), args);
+}
+
+/**
+ * `Function.prototype.call`, `apply` and `bind` as they were when slothlet loaded, by name.
+ * @type {Readonly<Record<string, Function>>}
+ * @private
+ */
+const FUNCTION_INVOKERS = Objects.freeze({
+	__proto__: null,
+	call: Functions.prototype.call,
+	apply: Functions.prototype.apply,
+	bind: Functions.prototype.bind
+});
+
+/**
+ * The `call`, `apply` and `bind` the api root hands out for its function, per instance, by name.
+ * @type {WeakMap<object, Map<string, Function>>}
+ * @private
+ */
+const ROOT_INVOKERS = new WeakMap();
+
+/**
+ * The api root's `call`, `apply` or `bind`, where its function inherits the language's: run on the api root, so the
+ * call goes through the root's call check (see {@link runtime_rootCallCheck}), as `call` on a function node calls the
+ * node. What the root's file layer hands out instead runs the module's function itself, past the check. Any other value
+ * (a member of the root's own by that name) is answered as it is.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The key read.
+ * @param {*} value - What the root answered for it.
+ * @returns {*} The value to hand out.
+ * @private
+ */
+function runtime_rootInvoker(slothlet, prop, value) {
+	if (typeof slothlet.api !== "function" || typeof prop !== "string" || !(prop in FUNCTION_INVOKERS)) return value;
+	const invoker = FUNCTION_INVOKERS[prop];
+	if ((layerMethodOriginal(value) ?? value) !== invoker) return value;
+	let made = ROOT_INVOKERS.get(slothlet);
+	if (made === undefined) ROOT_INVOKERS.set(slothlet, (made = new Map()));
+	let fn = made.get(prop);
+	if (fn === undefined) {
+		fn = { [prop]: (...args) => Reflect.apply(invoker, slothlet.boundApi, args) }[prop];
+		made.set(prop, fn);
+	}
+	return fn;
+}
+
+/**
  * A read of a member of the api root, answered as a node answers a read of its member: a file's primitive default
  * export is its value, and a value the reader may not read is refused, by the same gate at the member's name.
  * @param {object} slothlet - The instance.
@@ -9321,8 +9400,22 @@ function runtime_rootMemberRead(slothlet, prop, value) {
 			return held;
 		}
 	}
-	// Only data the root lists as a member is gated: a node read off the root is traversal, as at any node, and the
-	// root function's own `length` and `name` are the function's, as a node's are its target's.
+	// The root function's own answers, where the root holds no member by the name: its `prototype` and `toString` hold
+	// its code and are checked as a call of the root, and its `name` and `length` are read through the gate, as a
+	// function node answers each of them (see the node's get trap).
+	if (runtime_isRootFunctionAnswer(slothlet, prop)) {
+		const gate = runtime_rootGate(slothlet);
+		if (prop === "name" || prop === "length") {
+			if (runtime_readsGated(slothlet)) runtime_enforceReadGate(gate, prop, value);
+		} else runtime_enforceCodeMember(gate, value);
+		return value;
+	}
+	// The root function's `call`, `apply` and `bind` call the root through its check, as a function node's call the node.
+	if (typeof value === "function") {
+		const invoker = runtime_rootInvoker(slothlet, prop, value);
+		if (invoker !== value) return invoker;
+	}
+	// Only data the root lists as a member is gated: a node read off the root is traversal, as at any node.
 	if (typeof prop === "string" && runtime_isTerminalData(value) && runtime_readsGated(slothlet)) {
 		const descriptor = Objects.getOwnPropertyDescriptor(slothlet.api, prop);
 		if (descriptor !== undefined && descriptor.enumerable) runtime_enforceReadGate(runtime_rootGate(slothlet), prop, value);
@@ -9382,6 +9475,12 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 		const gate = runtime_rootGate(slothlet);
 		const decided = runtime_isHostRead(gate) && !slothlet.handlers.permissionManager.isPrivateTarget(String(prop));
 		if (!decided && runtime_isReadRedacted(gate, prop)) return undefined;
+	}
+	// The root function's own `prototype` and `toString`, described only to a reader that may call the root, as a function
+	// node describes its own.
+	if (runtime_isRootFunctionAnswer(slothlet, prop) && prop !== "name" && prop !== "length") {
+		if (runtime_isCodeMemberWithheld(runtime_rootGate(slothlet), descriptor)) return undefined;
+		return descriptor;
 	}
 	const value = descriptor.value;
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
@@ -18968,6 +19067,7 @@ export function internals(consumer) {
 		runtime_resolvedAccess,
 		runtime_assertRootChange,
 		runtime_registerRoot,
+		runtime_rootCallCheck,
 		runtime_rootClose,
 		runtime_rootDefine,
 		runtime_rootFixedMember,

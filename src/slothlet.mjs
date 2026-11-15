@@ -120,6 +120,7 @@ const {
 	runtime_defineRootInspect,
 	runtime_frameworkWrite,
 	runtime_registerRoot,
+	runtime_rootCallCheck,
 	runtime_rootClose,
 	runtime_rootDefine,
 	runtime_rootFixedMember,
@@ -1308,8 +1309,17 @@ class Slothlet {
 							if (!held && Reflect.isExtensible(target)) return true;
 							return Reflect.deleteProperty(target, prop);
 						},
-						apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
-						construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
+						// A call of the root's function is checked as a call of a function node is.
+						apply: (target, thisArg, args) => {
+							if (!this.api) return undefined;
+							runtime_rootCallCheck(this, args);
+							return Reflect.apply(this.api, thisArg, args);
+						},
+						construct: (target, args) => {
+							if (!this.api) return {};
+							runtime_rootCallCheck(this, args);
+							return Reflect.construct(this.api, args);
+						},
 						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
 						getPrototypeOf: (target) =>
 							isCallable && this.api && Reflect.isExtensible(target) ? Reflect.getPrototypeOf(this.api) : Reflect.getPrototypeOf(target),
