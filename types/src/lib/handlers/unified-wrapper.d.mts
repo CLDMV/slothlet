@@ -736,6 +736,39 @@ declare class UnifiedWrapper extends ComponentBase {
      */
     static _recordSourceFile(wrapper: object, filePath: string): void;
     /**
+     * Whether a member stays a value rather than becoming a node of its own, as a wrapper's member does: `null`,
+     * a primitive, a built-in that carries data (a `Map`, a `Date`, a typed array, …), or an error.
+     * @param {unknown} value - The member's value.
+     * @returns {boolean} True when the member is held as it is.
+     * @static
+     * @package
+     */
+    static _staysValue(value: unknown): boolean;
+    /**
+     * The node for one member of a file's export that no wrapper holds (the members of the function the api root is),
+     * built as a wrapper builds the node of one of its own members: an object is held through a copy, so the
+     * module's own object is never written to, and the node records the file and the export it came from.
+     * @param {object} slothlet - The instance.
+     * @param {object} options - Where the member is placed and where it came from.
+     * @param {string} options.key - The member's key in the export.
+     * @param {unknown} options.value - The member's value.
+     * @param {string} options.apiPath - The path it is placed at.
+     * @param {string} options.filePath - The file it was written in.
+     * @param {string} options.moduleID - The module it belongs to.
+     * @param {string|null} options.sourceFolder - The folder the file was scanned from.
+     * @returns {object|Function|null} The node's proxy, or null when the member stays a value.
+     * @static
+     * @package
+     */
+    static _memberNode(slothlet: object, { key, value, apiPath, filePath, moduleID, sourceFolder }: {
+        key: string;
+        value: unknown;
+        apiPath: string;
+        filePath: string;
+        moduleID: string;
+        sourceFolder: string | null;
+    }): object | Function | null;
+    /**
      * Reconstruct a full implementation object from a wrapper whose _impl may have
      * been depleted by ___adoptImplChildren.
      *
