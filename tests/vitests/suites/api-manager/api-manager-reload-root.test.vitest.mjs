@@ -165,7 +165,10 @@ describe("_findAffectedCaches bestMatch fallback — null ownership", () => {
 
 	it("bestMatch finds the parent cache for a primitive key with no ownership (eager)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "eager" });
-		const sl = getSlInstance(api, "numval");
+		// The fixture holds only primitives, which the api root answers with their values: the instance is reached
+		// through a node added beside them, which holds no cache endpoint of "numval".
+		await api.slothlet.api.add("probe", { ping: () => true });
+		const sl = getSlInstance(api, "probe");
 		const savedOwnership = sl.handlers.ownership;
 
 		sl.handlers.ownership = null;
