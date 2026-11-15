@@ -104,6 +104,13 @@ await api.tools.ping(); // "pong"
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
 await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
 
+// A default function with named exports → the function at the apiPath, the named exports as its members
+await api.slothlet.api.add("calc", {
+	exports: { default: (n) => n * 2, half: (n) => n / 2 }
+});
+await api.calc(4); // 8
+await api.calc.half(4); // 2
+
 // Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
 // (here a custom moduleID), exactly as if passed third. `exports` must be present.
 await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, moduleID: "svc-id" });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
+ *	@Last modified time: 2026-11-14T23:00:34-08:00 (1794726034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3264,8 +3264,11 @@ export class ApiManager extends ComponentBase {
 
 		// Special handling for single file loads:
 		// When loading a single file, buildAPI returns { filename: exports }
-		// We want to expose the exports directly at the target path, not nested under filename
-		if ((isFile || isSynthetic) && Objects.keys(newApi).length === 1) {
+		// We want to expose the exports directly at the target path, not nested under filename.
+		// A callable newApi is not that `{ filename: exports }` holder: it is the module's default
+		// function itself, already flattened to the build root, and its keys are the module's other
+		// exports (`{ default: fn, extra }` → fn with member `extra`), which stay its members.
+		if ((isFile || isSynthetic) && typeof newApi !== "function" && Objects.keys(newApi).length === 1) {
 			const fileName = Objects.keys(newApi)[0];
 			apiToMerge = newApi[fileName];
 		}
