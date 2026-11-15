@@ -15608,9 +15608,22 @@ class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl === "object") {
 					return "object";
 				}
-				// A node holding a number, string, boolean, bigint or symbol is never handed out: whatever holds it
-				// answers its value instead (the api root and every node), so what is left here is a node of a file
-				// whose default export is `null` or `undefined`.
+				// Handle primitives
+				if (typeof impl === "string") {
+					return "string";
+				}
+				if (typeof impl === "number") {
+					return "number";
+				}
+				if (typeof impl === "boolean") {
+					return "boolean";
+				}
+				if (typeof impl === "symbol") {
+					return "symbol";
+				}
+				if (typeof impl === "bigint") {
+					return "bigint";
+				}
 				return "undefined";
 			}
 			if (prop === "_materialize") return wrapper._materialize.bind(wrapper);
