@@ -20,8 +20,8 @@
  * @description
  * Every kind of primitive (number, string, boolean, bigint, symbol) one level down, and a number two levels down, in
  * eager and lazy mode, both runtimes and both attributions. The host reads the value; the `reader` module reads it
- * through `self`, and is refused it under a deny on its path. The expected value is the file's default export
- * imported plainly.
+ * through `self`, and is refused it under a deny on its path. The same holds at the api root (`top/top.mjs` gives
+ * `api.top`) and for a `null` or `undefined` default. The expected value is the file's default export imported plainly.
  * @module tests/vitests/suites/smart-flattening/nested-primitive-folder
  */
 
@@ -43,7 +43,10 @@ const MEMBERS = {
 	"zz.bool": "zz/bool/bool.mjs",
 	"zz.big": "zz/big/big.mjs",
 	"zz.sym": "zz/sym/sym.mjs",
-	"zz.yy.deep": "zz/yy/deep/deep.mjs"
+	"zz.yy.deep": "zz/yy/deep/deep.mjs",
+	"zz.nul": "zz/nul/nul.mjs",
+	"zz.und": "zz/und/und.mjs",
+	top: "top/top.mjs"
 };
 
 /**
