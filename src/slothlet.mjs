@@ -1070,6 +1070,8 @@ class Slothlet {
 		// Get appropriate context manager based on runtime
 		// Browser has no AsyncLocalStorage; force the live-binding context there.
 		this.contextManager = getContextManager(this.envTarget === "browser" ? "live" : this.config.runtime);
+		// The async runtime's store is made now, before any file of this instance loads; the live runtime has none.
+		if (typeof this.contextManager.openStore === "function") this.contextManager.openStore();
 
 		// Set up a generic fallback EventEmitter context checker. This callback body is
 		// dead code in practice: both AsyncContextManager and LiveContextManager define

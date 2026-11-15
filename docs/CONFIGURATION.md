@@ -121,6 +121,8 @@ Selects the context-propagation runtime.
 - **`"async"`** - Uses AsyncLocalStorage (Node.js built-in). Recommended for all production use.
 - **`"live"`** - Experimental live bindings mode. Has known limitations; do not use in production.
 
+The live runtime creates no `AsyncLocalStorage`: slothlet makes its store when the first instance on the async runtime is created. On Node 22, where a store that has run switches async hooks on for the whole process, a process whose instances all use the live runtime leaves async hooks off.
+
 Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` (aliases for `"async"`).
 
 ```javascript

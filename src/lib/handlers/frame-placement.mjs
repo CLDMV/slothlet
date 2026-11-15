@@ -4472,13 +4472,58 @@ function runtime_sampleNodeScripts() {
 	}
 }
 
+/**
+ * `AsyncLocalStorage` and its `run` and `exit`, taken as slothlet loads, for {@link sampleStoreScripts}: a store is
+ * sampled only once an instance selects the async runtime, by then module code may have replaced the class's methods,
+ * and these are what the sample runs. Null where the platform has no `node:async_hooks`.
+ * @type {{Storage: Function, run: Function, exit: Function}|null}
+ * @private
+ */
+let STORE_SAMPLE = null;
+
+/**
+ * Whether {@link sampleStoreScripts} has run.
+ * @type {boolean}
+ * @private
+ */
+let storeSampled = false;
+
+/**
+ * Record the scripts of Node's own code that run a store's callback (`AsyncLocalStorage#run` and `#exit`) as Node's own
+ * (see {@link NODE_SCRIPTS}). Not done as slothlet loads: on Node 22 a store that has run switches async hooks on for the
+ * whole process, and the live runtime runs no store. The async runtime's manager calls it once, as it makes its store,
+ * which happens when the first instance on the async runtime is being created, before any file of that instance loads.
+ * The class and its methods are the ones taken as slothlet loaded, run on a store of its own, so nothing a module
+ * changed since runs inside the sample.
+ * @returns {void}
+ * @private
+ */
+function sampleStoreScripts() {
+	if (storeSampled || !STORE_SAMPLE) return;
+	storeSampled = true;
+	const { Storage, run, exit } = STORE_SAMPLE;
+	try {
+		const storage = new Storage();
+		// Its own `run`: Node's `exit` can call `this.run`, which reads the prototype a module may have changed.
+		Objects.defineProperty(storage, "run", { value: run, writable: true, configurable: true });
+		Reflect.apply(run, storage, [{}, runtime_sampleNodeScripts]);
+		Reflect.apply(run, storage, [{}, () => Reflect.apply(exit, storage, [runtime_sampleNodeScripts])]);
+	} catch {
+		// A sample that fails leaves its scripts unrecorded: their frames are then refused, which fails closed.
+	}
+}
+
 if (isNode) {
 	// Sampled through each way Node's own code calls back into code it was handed: reading a getter (`util.inspect`),
-	// running a store (`AsyncLocalStorage`), emitting (`EventEmitter`), and its timer and tick queues.
+	// emitting (`EventEmitter`), and its timer and tick queues. Running a store (`AsyncLocalStorage`) is sampled when the
+	// async runtime makes its store ({@link sampleStoreScripts}).
 	const builtin = (id) => Processes.getBuiltinModule(id);
 	// Taken here, as slothlet loads; the samples below run now.
 	const { inspect } = builtin("node:util");
 	const { AsyncLocalStorage } = builtin("node:async_hooks");
+	if (typeof AsyncLocalStorage === "function") {
+		STORE_SAMPLE = { Storage: AsyncLocalStorage, run: AsyncLocalStorage.prototype.run, exit: AsyncLocalStorage.prototype.exit };
+	}
 	const { EventEmitter } = builtin("node:events");
 	const nodeSetTimeout = builtin("node:timers").setTimeout;
 	for (const sample of [
@@ -4492,11 +4537,6 @@ if (isNode) {
 				},
 				{ getters: true }
 			),
-		() => {
-			const storage = new AsyncLocalStorage();
-			storage.run({}, runtime_sampleNodeScripts);
-			storage.run({}, () => storage.exit(runtime_sampleNodeScripts));
-		},
 		() => {
 			const emitter = new EventEmitter();
 			emitter.on("sample", runtime_sampleNodeScripts);
@@ -4549,6 +4589,7 @@ export function internals(consumer) {
 		registerLeafFile,
 		resolveSupplier,
 		runtime_captureFrames,
+		sampleStoreScripts,
 		runtime_codeWritersOnStack,
 		setApiValueCheck,
 		setHandedOutCheck,

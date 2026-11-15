@@ -42,7 +42,63 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, resolveSupplier } = framePlacementInternals("lib/handlers/context-async");
+const { attributeResult, enterCall, resolveSupplier, sampleStoreScripts } = framePlacementInternals("lib/handlers/context-async");
+
+/**
+ * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
+ * run outside every store runs as it is, and running a store (`run`, `enterWith`) makes the real one first. Reading the
+ * manager on the live runtime (the runtime dispatcher asks it whether a store is active) therefore makes no store: on
+ * Node 22 one that has run switches async hooks on for the whole process.
+ * @private
+ */
+class DormantStore {
+	/**
+	 * @param {AsyncContextManager} manager - The manager it stands in for.
+	 */
+	constructor(manager) {
+		this.manager = manager;
+	}
+
+	/**
+	 * @returns {undefined} No store is active before one has been made.
+	 */
+	getStore() {
+		return undefined;
+	}
+
+	/**
+	 * @param {*} store - The store.
+	 * @param {Function} fn - The callback.
+	 * @param {...*} args - Its arguments.
+	 * @returns {*} What it returned.
+	 */
+	run(store, fn, ...args) {
+		return this.manager.openStore().run(store, fn, ...args);
+	}
+
+	/**
+	 * @param {*} store - The store.
+	 * @returns {void}
+	 */
+	enterWith(store) {
+		return this.manager.openStore().enterWith(store);
+	}
+
+	/**
+	 * @param {Function} fn - The callback.
+	 * @param {...*} args - Its arguments.
+	 * @returns {*} What it returned: no store is active, so it runs as it is.
+	 */
+	exit(fn, ...args) {
+		return Reflect.apply(fn, null, args);
+	}
+
+	/**
+	 * Nothing to switch off before a store has been made.
+	 * @returns {void}
+	 */
+	disable() {}
+}
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -51,11 +107,37 @@ const { attributeResult, enterCall, resolveSupplier } = framePlacementInternals(
  */
 export class AsyncContextManager {
 	constructor() {
-		// Null in a browser (AsyncLocalStorage gated out). A module-level singleton instantiates this
-		// manager in every host (even when live mode is the active runtime), so the `: null` arm is
-		// genuinely exercised by the vitest browser run rather than ignored.
-		this.als = AsyncLocalStorage ? new AsyncLocalStorage() : null;
+		// The store is made when an instance on the async runtime is created ({@link AsyncContextManager#openStore}), not
+		// here: a module-level singleton makes this manager in every host, also where only the live runtime is used.
+		this.store = null;
+		// Null in a browser (AsyncLocalStorage gated out), where `als` is null too.
+		this.dormant = AsyncLocalStorage ? new DormantStore(this) : null;
 		this.instances = new Map(); // instanceID → context data
+	}
+
+	/**
+	 * The manager's `AsyncLocalStorage`: the store once it has been made, a stand-in before that which answers that no
+	 * store is active and makes the store when one is run (see {@link AsyncContextManager#openStore}). Null in a browser.
+	 * @type {AsyncLocalStorage|DormantStore|null}
+	 * @public
+	 */
+	get als() {
+		return this.store ?? this.dormant;
+	}
+
+	/**
+	 * Make the manager's `AsyncLocalStorage`, once: called when an instance selects the async runtime, before any of its
+	 * files load. The scripts of Node's own that run a store's callback are sampled first (see `sampleStoreScripts` in
+	 * `handlers/frame-placement`), so they are known before slothlet's store runs anything.
+	 * @returns {AsyncLocalStorage|null} The store; null in a browser.
+	 * @internal
+	 */
+	openStore() {
+		if (this.store === null && AsyncLocalStorage) {
+			sampleStoreScripts();
+			this.store = new AsyncLocalStorage();
+		}
+		return this.store;
 	}
 
 	/**
