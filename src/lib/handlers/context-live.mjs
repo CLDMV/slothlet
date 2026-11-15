@@ -159,16 +159,18 @@ export function settleHookCount() {
 
 /**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
- * @type {{onSettled: function(function(Promise): void): function(): void}|null}
+ * @type {{onSettled: function(function(Promise): void): function(): void, createHook: (function(object): function(): void)|undefined}|null}
  * @private
  */
 const PROMISE_HOOKS = (() => {
 	try {
 		const hooks = Processes.getBuiltinModule?.("node:v8")?.promiseHooks;
 		if (!hooks) return null;
-		// Its function taken now: `promiseHooks` is an object of Node's that code can change later.
+		// Its functions taken now: `promiseHooks` is an object of Node's that code can change later.
 		const onSettled = hooks.onSettled;
+		const createHook = hooks.createHook;
 		return Objects.freeze({
+			createHook: typeof createHook === "function" ? (callbacks) => createHook(callbacks) : undefined,
 			onSettled: (hook) => {
 				const stop = onSettled(hook);
 				settleHooks++;
