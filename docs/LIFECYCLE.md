@@ -657,6 +657,18 @@ if (api.math.__type === UNMATERIALIZED) {
 }
 ```
 
+### A kept folder that loads as a primitive
+
+A folder whose only file is named like it and exports a primitive by default (`zz/count/count.mjs` with `export default 7`) reads as that value once loaded. A reference to the folder's node taken before it loaded is an object, and JavaScript cannot turn an object into a primitive, so that reference stays an object: `typeof kept` is `"function"` and `kept === 7` is false. Everything else answers as the value: `await kept` gives `7`, `kept.valueOf()`, `String(kept)`, `` `${kept}` ``, `kept + 1`, `kept == 7` and `JSON.stringify(kept)` give what they give for `7`, the value's own methods run on it (`kept.toFixed(1)`), and `kept.__type` is `"number"`. A fresh read, `api.zz.count`, is the plain `7`. A module the rules deny the folder is refused each of these, the `await` included.
+
+```javascript
+const kept = api.zz.count; // the folder has not loaded yet
+await kept; // 7
+`${kept}`; // "7"
+kept.__type; // "number"
+api.zz.count === 7; // true
+```
+
 ---
 
 ## Changes Before a Node Loads

@@ -3611,10 +3611,13 @@ function runtime_isTerminalData(value) {
  * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit caller context.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
  *   {@link resolveEnforcedCaller}).
+ * @param {object|null} [access] - The access the read is part of.
+ * @param {{store: object|null|undefined, identity: object|undefined}|null} [pinned] - The reader resolved earlier,
+ *   when the read is answered after the access that made it has ended (see {@link runtime_pinReader}).
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null) {
 	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -3631,7 +3634,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 		wrapper,
 		callerOverride,
 		kept,
-		callerOverride === undefined ? runtime_accessEntry(access, wrapper) : null
+		callerOverride === undefined ? (pinned ?? runtime_accessEntry(access, wrapper)) : null
 	);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
@@ -4375,6 +4378,11 @@ function runtime_gateDataNodeMember(wrapper, prop, kept, access) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
 	const impl = wrapper.____slothletInternal.impl;
+	// A primitive a loaded node holds (a lazy folder kept before it loaded as one) is data like a built-in (#797).
+	if (runtime_nodePrimitive(wrapper) !== NO_NODE_PRIMITIVE) {
+		runtime_gateNodeValue(wrapper, kept, access);
+		return;
+	}
 	if (impl === null || typeof impl !== "object") return;
 	let isData = DATA_NODE_IMPLS.get(impl);
 	if (isData === undefined) {
@@ -4382,10 +4390,68 @@ function runtime_gateDataNodeMember(wrapper, prop, kept, access) {
 		DATA_NODE_IMPLS.set(impl, isData);
 	}
 	if (!isData) return;
+	runtime_gateNodeValue(wrapper, kept, access);
+}
+
+/**
+ * Gate a read of the value a node stands for as a read of the node's own path.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @param {object|null} access - The access the read is part of.
+ * @param {object|null} [pinned] - The reader resolved earlier (see {@link runtime_pinReader}).
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
+ * @private
+ */
+function runtime_gateNodeValue(wrapper, kept, access, pinned = null) {
 	const targetPath = wrapper.____slothletInternal.apiPath;
-	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access);
+	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
+}
+
+/**
+ * What {@link runtime_nodePrimitive} answers for a node holding no primitive.
+ * @type {symbol}
+ * @private
+ */
+const NO_NODE_PRIMITIVE = Symbol("slothlet.noNodePrimitive");
+
+/**
+ * The primitive a loaded node holds as its impl: a number, a string, a boolean, a bigint or a symbol. A parent hands
+ * out such a value in the node's place, so only a node kept from before it loaded (a lazy folder whose only file,
+ * named like it, exports a primitive by default) is still read as one (#797).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {*} The primitive, or {@link NO_NODE_PRIMITIVE}.
+ * @private
+ */
+function runtime_nodePrimitive(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode === "lazy" && !internal.state.materialized) return NO_NODE_PRIMITIVE;
+	const impl = internal.impl;
+	const kind = typeof impl;
+	return kind === "string" || kind === "number" || kind === "boolean" || kind === "bigint" || kind === "symbol" ? impl : NO_NODE_PRIMITIVE;
+}
+
+/**
+ * The reader of an access, resolved now, for a read answered once the access has ended (an `await` of a lazy node,
+ * answered after the load). Null while permissions or read gating are off.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object|null} access - The access.
+ * @returns {{store: object|null|undefined, identity: object|undefined}|null} The reader.
+ * @private
+ */
+function runtime_pinReader(wrapper, access) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return null;
+	const entry = runtime_accessEntry(access, wrapper);
+	if (entry) return entry;
+	const contextManager = wrapper.slothlet.contextManager;
+	const instanceID = wrapper.slothlet.instanceID;
+	return {
+		store: contextManager?.tryGetContext?.(instanceID),
+		identity: contextManager?.getCallerIdentity?.(instanceID)
+	};
 }
 
 /**
@@ -16073,6 +16139,13 @@ class UnifiedWrapper extends ComponentBase {
 			// "__invalid" is not in allowedInternals so the filter above always short-circuits before this line.
 			/* v8 ignore next */
 			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
+			// A loaded node holding a primitive (kept from before its folder loaded as one) answers as the value: its
+			// members are the value's, run on the value, and it serializes as the value (#797). Gated above.
+			const heldPrimitive = runtime_nodePrimitive(wrapper);
+			if (heldPrimitive !== NO_NODE_PRIMITIVE && prop !== "then" && prop !== util.inspect.custom && !hasOwn(wrapper, prop)) {
+				if (prop === "toJSON") return () => heldPrimitive;
+				return runtime_standInMember(heldPrimitive, prop);
+			}
 			// Transparent array wrapper: when the impl is an array this proxy is array-targeted. Array
 			// INTRINSICS (length, Symbol.iterator, array methods, Symbol.toStringTag, constructor, …)
 			// delegate to the live array so the wrapper behaves exactly like an Array — isArray,
@@ -16136,10 +16209,18 @@ class UnifiedWrapper extends ComponentBase {
 				// answer with a partial surface. A materialized wrapper stays non-thenable, so awaits on
 				// settled values remain pass-throughs rather than re-entrant loads.
 				if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+					// A node that loads as a primitive resolves with the value, as an `await` of the value does, and is a
+					// read of the node for whoever awaits it (#797).
+					const pinned = runtime_pinReader(wrapper, access);
 					return (onFulfilled, onRejected) =>
 						wrapper
 							._materialize()
-							.then(() => onFulfilled(wrapper.____slothletInternal.proxy))
+							.then(() => {
+								const held = runtime_nodePrimitive(wrapper);
+								if (held === NO_NODE_PRIMITIVE) return onFulfilled(wrapper.____slothletInternal.proxy);
+								if (pinned) runtime_gateNodeValue(wrapper, kept, null, pinned);
+								return onFulfilled(held);
+							})
 							.catch(onRejected);
 				}
 				// A `then` holding data (a JSON Schema `if`/`then`/`else`) reads back as itself: it does not make
