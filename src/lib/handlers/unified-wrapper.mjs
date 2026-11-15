@@ -3489,6 +3489,53 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 }
 
 /**
+ * The api path of the node a view of `self` stands over: the node's own, or for a stand-in kept from before its folder
+ * loaded, its node's path and the chain read off it.
+ * @param {object} child - The view's child: a node or a stand-in.
+ * @param {object} inner - The child's wrapper.
+ * @returns {string} The api path.
+ * @private
+ *
+ * @example
+ * runtime_viewNodePath(standIn, wrapper); // "d.fn"
+ */
+function runtime_viewNodePath(child, inner) {
+	const chain = WAITING_CHAINS.get(child);
+	const base = inner.____slothletInternal.apiPath;
+	if (!chain || chain.length === 0) return base;
+	const tail = chain.map(String).join(".");
+	return base ? base + "." + tail : tail;
+}
+
+/**
+ * Gate a read of what a node reports about itself (its `__type`) as a read of the node's own path.
+ *
+ * @description
+ * The report is the framework's, not a member of the module, so it is checked against the node's path: a reader the
+ * rules let read the node is answered, and one they deny it is refused, the name of the report taking no part. Off
+ * while permissions or read gating are off, as every read gate is.
+ * @param {object} wrapper - The node's wrapper (for a stand-in, its node's wrapper).
+ * @param {string} nodePath - The node's api path.
+ * @param {{currentWrapper: object, ceiling: *, context: object|null}} callerOverride - The reader.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
+ * @private
+ *
+ * @example
+ * runtime_enforceNodeReportRead(inner, "d.fn", { currentWrapper: reader, ceiling: null, context });
+ */
+function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
+	const decision = runtime_readGateDecision(wrapper, nodePath, callerOverride);
+	if (decision.allowed) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		caller: decision.caller,
+		target: nodePath
+	});
+}
+
+/**
  * Enforce read-level permission gating for a property read off a module API path.
  *
  * Default-on whenever permissions are configured; opt out via `permissions.readGating: false`. Gates **terminal data values** — primitives
@@ -10242,6 +10289,17 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		// A view that gates nothing hands out what the child does, a node as a view of the same kind: a member handed
 		// out fixed reaches module code with no view of `self` over it, and so does every node read through that member.
 		if (!gated) return resolveWrapper(resolved) === null ? resolved : runtime_capturedView(resolved, capturedCaller, false, ceiling);
+		// A node's `__type` is what the node reports about itself, not a member of its module: it is decided as a read
+		// of the node's own path, so its name is never taken for a module-private member, and a reader the rules deny
+		// the node is refused it (#796).
+		if (prop === "__type") {
+			runtime_enforceNodeReportRead(inner, runtime_viewNodePath(child, inner), {
+				currentWrapper: capturedCaller,
+				ceiling,
+				context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null
+			});
+			return resolved;
+		}
 		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
 		// wrapper probes for properties that are not there — `then` above all — and every absent
 		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
@@ -15058,6 +15116,10 @@ class UnifiedWrapper extends ComponentBase {
 						// Loaded: the kind of what the chain reads as now, a file's primitive default export by its value.
 						const node = runtime_standInNode(wrapper, propChain);
 						if (node !== STAND_IN_UNLOADED) {
+							// A node (or a reader's view of one) reports its own kind: a lazy folder's proxy is a function to
+							// `typeof` whatever it loads as.
+							const behind = runtime_nodeBehind(node);
+							if (resolveWrapper(behind) !== null && !STAND_INS.has(behind)) return node.__type;
 							return typeof node === "function" ? "function" : typeof node === "object" && node !== null ? "object" : typeof node;
 						}
 						// Wrapper has materialized - walk propChain to determine actual type

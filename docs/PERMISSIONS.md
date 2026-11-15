@@ -1042,7 +1042,7 @@ const api = await slothlet({
 
 The guarantee is **absolute**: no user rule can grant a foreign module access to a private member, because privacy resolves before rule evaluation (the api path is a lossy projection of the module tree — no glob can encode "same module"). Sharing a private member means renaming it public; that is the contract, not a limitation.
 
-Privacy attaches to the **member name**, not the route: `mod.__rate` is private at any depth, while an underscore-prefixed _intermediate_ segment is just a public mount (`.`/`__`-prefixed files and folders are already excluded from the scan as [hidden entries](MODULE-STRUCTURE.md#hidden-entries)). Framework-reserved names (`_materialize`, `__impl`, …) never reach enforcement at all — a module file or export by those names is refused at load (`MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_EXPORT`).
+Privacy attaches to the **member name**, not the route: `mod.__rate` is private at any depth, while an underscore-prefixed _intermediate_ segment is just a public mount (`.`/`__`-prefixed files and folders are already excluded from the scan as [hidden entries](MODULE-STRUCTURE.md#hidden-entries)). Framework-reserved names (`_materialize`, `__impl`, …) never reach enforcement at all — a module file or export by those names is refused at load (`MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_EXPORT`). What a node reports about itself is not a private member either: a module reading `self.d.fn.__type` is answered as a read of `d.fn` is decided, in eager and lazy mode alike, so a rule (or a default deny) that refuses the reader `d.fn` refuses its `__type` too.
 
 Without a `permissions` block the system is disabled and underscore-prefixed exports remain fully public, as before.
 
