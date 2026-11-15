@@ -1240,10 +1240,13 @@ export class ModesProcessor extends ComponentBase {
 								sourceFolder
 							});
 							// Replace the empty object with the wrapped callable function
-							api[categoryName] = wrapper.createProxy();
-							this.#folderModuleValues.set(api[categoryName], callableModule);
+							// The node is kept from createProxy(), not read back from the slot: a parent node answers a
+							// child holding a primitive with the value, which is no node and no WeakMap key (#795).
+							const modes_case2Proxy = wrapper.createProxy();
+							api[categoryName] = modes_case2Proxy;
+							this.#folderModuleValues.set(modes_case2Proxy, callableModule);
 							// Update targetApi reference to point to the new function so other files can attach properties
-							targetApi = api[categoryName];
+							targetApi = modes_case2Proxy;
 						} else {
 							// shouldWrap=false requires (effectiveMode==="lazy" && populateDirectly===true).
 							// The only populateDirectly=true call-sites are:
