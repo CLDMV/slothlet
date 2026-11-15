@@ -75,7 +75,9 @@ const CONFIGS = [
 const READ_RULES = [
 	{ caller: "**", target: "victim.**", effect: "allow" },
 	{ caller: "**", target: "guest.**", effect: "allow" },
-	{ caller: "**", target: "root.**", effect: "allow" }
+	{ caller: "**", target: "root.**", effect: "allow" },
+	// The member `root.changeSelf` defines on the api root and reads back is data at the root, read under a rule for that leaf.
+	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" }
 ];
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
@@ -439,5 +441,101 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				preventExtensions: "TypeError"
 			});
 		});
+	});
+});
+
+/**
+ * A member a module defines or assigns on a folder (the api root, or a mount) is data at that folder's path. Reading it
+ * back is decided as any read of data is: by the rules for the reading leaf at the member's path. Having made the
+ * member gives a leaf no read of it. The mount `zz` is the same folder mounted again, and answers as the root does.
+ */
+const MADE = path.join(FIXTURE, "made");
+// Under `defaultPolicy: "deny"` these keep the leaves callable from each other; they say nothing about the made members.
+const MADE_BASE_RULES = [
+	{ caller: "**", target: "maker.**", effect: "allow" },
+	{ caller: "**", target: "other.**", effect: "allow" },
+	{ caller: "**", target: "zz.maker.**", effect: "allow" },
+	{ caller: "**", target: "zz.other.**", effect: "allow" }
+];
+const MADE_MEMBERS = [
+	{ how: "define", name: "baseDefined", value: 7 },
+	{ how: "assign", name: "baseAssigned", value: 8 }
+];
+// The folder a member is made on, the leaf prefix of the module making it there, and the member's path prefix.
+const MADE_PLACES = [
+	{ where: "root", leaf: "", at: "" },
+	{ where: "zz", leaf: "zz.", at: "zz." }
+];
+
+describe.each(CONFIGS)("reading back a member a module made on a folder — $mode / $runtime", ({ mode, runtime }) => {
+	const instances = [];
+
+	afterEach(async () => {
+		for (const api of instances.splice(0)) await api.slothlet.shutdown();
+	});
+
+	/**
+	 * Load the folder as the base and mount it again at `zz`, under `defaultPolicy: "deny"`.
+	 * @param {object[]} rules - Rules added to the base rules.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	async function load(rules) {
+		const api = await slothlet({
+			base: MADE,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { defaultPolicy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
+		});
+		instances.push(api);
+		await api.slothlet.api.add("zz", MADE, { moduleID: "zz" });
+		return api;
+	}
+
+	describe.each(MADE_PLACES)("on $where", ({ where, leaf, at }) => {
+		/**
+		 * The module that makes the member: the base module for the root, the mounted one for `zz`.
+		 * @param {object} api - The composed api.
+		 * @returns {object} That module's node.
+		 */
+		const maker = (api) => (where === "root" ? api : api.zz);
+		/**
+		 * The other module, which reaches the same folder through `self`.
+		 * @param {object} api - The composed api.
+		 * @returns {object} That module's node.
+		 */
+		const stranger = (api) => (where === "root" ? api.zz : api);
+
+		it.each(MADE_MEMBERS)(
+			"refuses the leaf that made a member by $how the read of it, and lists it none, with no rule for it",
+			async ({ how, name }) => {
+				const api = await load([]);
+				const report = await withSuppressedSlothletErrorOutputSync(() => maker(api).maker[how](where));
+				expect(report.change).toBe("done");
+				expect(report.read.code).toBe("PERMISSION_DENIED");
+				expect(report.read.message).toContain(`caller '${leaf}maker.${how}'`);
+				expect(report.read.message).toContain(`'${at}${name}'`);
+				expect(report.listed).toBe(false);
+			}
+		);
+
+		it.each(MADE_MEMBERS)(
+			"gives the leaf that made a member by $how its value and lists it under a rule for that leaf, and refuses every other leaf",
+			async ({ how, name, value }) => {
+				const api = await load([{ caller: `${leaf}maker.${how}`, target: `${at}${name}`, effect: "allow" }]);
+				expect(await maker(api).maker[how](where)).toEqual({ change: "done", read: value, listed: true });
+				// Another leaf of the same module, and a leaf of another module: the rule names neither.
+				for (const [module, prefix] of [
+					[maker(api), leaf],
+					[stranger(api), leaf === "" ? "zz." : ""]
+				]) {
+					const report = await withSuppressedSlothletErrorOutputSync(() => module.other.read(where, name));
+					expect(report.read.code).toBe("PERMISSION_DENIED");
+					expect(report.read.message).toContain(`caller '${prefix}other.read'`);
+					expect(report.read.message).toContain(`'${at}${name}'`);
+					expect(report.listed).toBe(false);
+				}
+			}
+		);
 	});
 });
