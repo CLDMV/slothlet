@@ -35,7 +35,7 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 // disk-scanning / CJS-loader methods are Node-only (browser mode uses #scanDirectoryBrowser /
 // #loadModuleBrowser over the manifest tree), so they reference the namespaces directly — null in a
 // browser, but those methods never run there, so no per-call guard is needed.
-import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
+import { isNode, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
@@ -53,7 +53,7 @@ import {
 	encodeURIComponent,
 	String,
 	NativeProcess,
-	Processes
+	Promises
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile } =
 	instanceImportsInternals("lib/processors/loader");
@@ -95,21 +95,30 @@ function isHiddenEntryName(name) {
 const RUNTIME_EXTERNALIZED = !("env" in import.meta);
 
 /**
- * `vm.compileFunction`, taken as slothlet loads, for telling a CommonJS file by whether its source compiles as a
- * function body: code that replaces it on Node's `vm` later does not run inside the loader. Undefined where the
+ * `node:vm` and `child_process` as slothlet loads, imported as the loader imported them when it used them (through the
+ * module graph, so a host's loader hooks and a test's module mocks apply as before), but once, now: code that replaces
+ * `vm.compileFunction` or `child_process.fork` on Node's modules later does not run inside the loader. Null where the
  * platform has no Node builtins (a browser, which loads no file by path).
+ * @type {Array<object|null>}
+ * @private
+ */
+const [NODE_VM, NODE_CHILD_PROCESS] = isNode ? await Promises.all([import("node:vm"), import("child_process")]) : [null, null];
+
+/**
+ * `vm.compileFunction`, taken as slothlet loads, for telling a CommonJS file by whether its source compiles as a
+ * function body. Undefined in a browser.
  * @type {Function|undefined}
  * @private
  */
-const VM_COMPILE_FUNCTION = Processes.getBuiltinModule?.("node:vm")?.compileFunction;
+const VM_COMPILE_FUNCTION = NODE_VM?.compileFunction;
 
 /**
  * `child_process.fork`, taken as slothlet loads, for the type-generation worker of strict TypeScript mode. Undefined
- * where the platform has no Node builtins.
+ * in a browser.
  * @type {Function|undefined}
  * @private
  */
-const CHILD_PROCESS_FORK = Processes.getBuiltinModule?.("node:child_process")?.fork;
+const CHILD_PROCESS_FORK = NODE_CHILD_PROCESS?.fork;
 
 /**
  * Warns when a coverage run will silently misattribute the consumer's leaf coverage (#235).
