@@ -3198,6 +3198,18 @@ function isRegisteredFile(id) {
 }
 
 /**
+ * Whether a module id is a file under `node_modules`, of an absolute path: a package's file, which vite does not
+ * transform (see {@link isRegisteredFile}), so the record of who loaded it is written into the importer instead.
+ * @param {string} id - The module id.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function isPackageFile(id) {
+	const path = toSlashPath(splitQuery(id)[0]);
+	return /^(?:\/|[a-z]:\/)/i.test(path) && path.includes("/node_modules/");
+}
+
+/**
  * The code of the virtual module that records who loaded a file (#714): one statement that creates an `Error`, freezes
  * it with the importers as its message, and pushes it. The plugin writes the code, from the imports it resolved, so no
  * file's code can say what it says; slothlet reads the file it is about from the frame of the `Error`, the virtual
@@ -3408,11 +3420,13 @@ export function slothletInstanceImports() {
 				// The files no instance tags that the module imports, of those the plugin registers: each gets a record of its
 				// own naming this module as a loader (#715). The record a file's own registration imports is written once, when
 				// vite first loads it, so a module importing the file after that would go unrecorded.
+				// A package's file gets that record too: vitest's runner imports a package under `node_modules` itself, so the
+				// resolve hook sees the runner, not this module, import it, and only this record names the module as its loader.
 				const shared = new Set();
 				const noteShared = (resolved) => {
 					if (!resolved || resolved.external || typeof resolved.id !== "string" || resolved.id.includes(MARKER)) return;
 					noteModuleImport(resolved, id);
-					if (isRegisteredFile(resolved.id)) shared.add(resolved.id);
+					if (isRegisteredFile(resolved.id) || isPackageFile(resolved.id)) shared.add(resolved.id);
 				};
 				const children = [];
 				for (const specifier of [...bare, ...specifiers]) {
