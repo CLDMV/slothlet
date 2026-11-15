@@ -4322,9 +4322,9 @@ function runtime_foreignCodeRunning(record, capture = null) {
 	// Cut off inside slothlet's and Node's own frames, with the stack going on: the code making the access was not
 	// reached (Node's own code recursing, say `util.inspect` deep in a value, calls an api function from the bottom of
 	// it). It is read further out, and when that still reaches no one's code nothing says whose access it is: it is
-	// refused, not taken to be the leaf's own.
+	// refused, not taken to be the leaf's own, and not settled by a node a module read and kept either.
 	const far = decide(runtime_captureFrames(FAR_FRAMES), true);
-	return far === undefined ? UNACCOUNTED_SUPPLIER : far;
+	return far === undefined ? REFUSED_SUPPLIER : far;
 }
 
 /**
