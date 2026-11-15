@@ -397,25 +397,23 @@ if (fileBaseName === categoryName && moduleKeys.length > 0) {
 **Flattening Guide**: [F02: Function Folder Matching](API-FLATTENING.md#f02-function-folder-matching)
 **Status**: ✅ Active
 
-**Pattern**: When a folder contains exactly one file, that file has a generic name (e.g. `index`, `main`, `helpers`), and there is nested depth, flatten the module's exports to the parent level to avoid pointless nesting.
+**Pattern**: When a folder below the api root contains exactly one file, that file has a generic name (`singlefile`, `index`, `main`, `default`), and it has exactly one named export, that export is flattened to the parent level to avoid pointless nesting. A generic file with more than one export keeps its own level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs` ~L653-L661
+**Source**: `src/lib/processors/flatten.mjs` ~L695-L706
 
 **Condition Check**:
 
 ```javascript
-if (
-  moduleFiles.length === 1 &&
-  currentDepth > 0 &&
-  /* ... various generic-name checks ... */ &&
-  isGenericFilename
-) {
-  // flatten to parent
+if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Arrays.isArray(mod)) {
+	const isGenericFilename = ["singlefile", "index", "main", "default"].includes(moduleName.toLowerCase());
+	if (moduleKeys.length === 1 && isGenericFilename) {
+		// flatten to parent
+	}
 }
 ```
 
-**Triggers**: Single file in folder + nested context + filename is generic
+**Triggers**: Single file in folder + nested context + filename is generic + a single named export
 **Used By**: [API-RULES Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion)
 
 ---

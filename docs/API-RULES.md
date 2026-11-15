@@ -464,26 +464,23 @@ export function parseJSON(data) {
 **Category**: Special Cases
 **Status**: ✅ Verified (`api_tests/api_test/nest4/singlefile.mjs`)
 **User Guide**: [API-RULES/API-FLATTENING.md - Index File Pattern](API-RULES/API-FLATTENING.md)
-**Technical**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17)
+**Technical**: [C14](API-RULES/API-RULES-CONDITIONS.md#c14-parent-level-flattening---generic-filenames)
 
-**Condition**: File has a generic name (`index`, `main`, `default`, etc.)
-**Behavior**: Generic filename becomes transparent; content is promoted to the meaningful parent name
+**Condition**: A folder below the api root holds a single file, the file has a generic name (`index`, `main`, `default`, `singlefile`), and it has exactly one named export
+**Behavior**: Generic filename becomes transparent; its one export is promoted to the folder. A generic file with more than one export keeps its own name, as any other file does.
 
 **Verified Examples**:
 
 ```javascript
-// File: database/main.mjs
+// File: database/main.mjs (the folder's only file)
 export function connect() {
-	/* ... */
-}
-export function query() {
 	/* ... */
 }
 
 // Without Rule 10: api.database.main.connect()  ❌ (generic 'main' adds no value)
 // With Rule 10:    api.database.connect()        ✅ (promoted to parent level)
 
-// File: auth/index.mjs
+// File: auth/index.mjs (the folder's only file), two exports
 export function login() {
 	/* ... */
 }
@@ -491,14 +488,13 @@ export function logout() {
 	/* ... */
 }
 
-// Without Rule 10: api.auth.index.login()  ❌ (generic 'index' is noise)
-// With Rule 10:    api.auth.login()        ✅ (clean parent-level promotion)
+// Not promoted:    api.auth.index.login(), api.auth.index.logout()
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17) - `isGenericFilename(fileName)`
-- **Promotion**: Content promoted to parent namespace; generic filename becomes invisible
+- **Detection**: [C14](API-RULES/API-RULES-CONDITIONS.md#c14-parent-level-flattening---generic-filenames) - the folder's only file, below the root, with a generic name and a single named export
+- **Promotion**: The export is promoted to the folder; the generic filename becomes invisible
 
 **Note**: Promotion is guarded against name collisions - checked against existing parent namespace properties before promoting.
 

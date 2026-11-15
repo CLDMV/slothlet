@@ -102,9 +102,9 @@ api.math.subtract(5, 2); // ✅ 3
 
 ### F02: Index File Pattern
 
-**When:** A folder contains only `index.mjs` (or common generic filenames such as `main`, `default`)
-**Result:** Index file becomes transparent; content promoted to folder level
-**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) / [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | **Technical**: [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten)
+**When:** A folder below the api root holds a single file with a generic name (`index`, `main`, `default`, `singlefile`), and that file has exactly one named export
+**Result:** The generic file becomes transparent; its export is promoted to the folder. A generic file with more than one export, or with sibling files, keeps its own name.
+**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) / [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | **Technical**: [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten), [C14](API-RULES-CONDITIONS.md#c14-parent-level-flattening---generic-filenames)
 
 **Example:**
 
@@ -114,7 +114,19 @@ utils/
 ```
 
 ```javascript
-// File: utils/index.mjs
+// File: utils/index.mjs (the folder's only file)
+export function format(str) {
+	return str.toUpperCase();
+}
+
+api.utils.format("hello"); // ✅ "HELLO"
+// NOT: api.utils.index.format("hello") ❌
+```
+
+With a second export the file keeps its name:
+
+```javascript
+// File: tools/index.mjs (the folder's only file)
 export function format(str) {
 	return str.toUpperCase();
 }
@@ -122,12 +134,11 @@ export function validate(data) {
 	return !!data;
 }
 
-api.utils.format("hello"); // ✅ "HELLO"
-api.utils.validate(true); // ✅ true
-// NOT: api.utils.index.format("hello") ❌
+api.tools.index.format("hello"); // ✅ "HELLO"
+api.tools.index.validate(true); // ✅ true
 ```
 
-**Why:** Index files are folder entry points - the `index` name should be transparent to API consumers. Same applies to other generic names like `main` and `default`.
+**Why:** A generic name says nothing about what a single export is, so a folder holding nothing else names it. A file of several exports is a namespace of its own, and stays one.
 
 ---
 
@@ -473,7 +484,7 @@ Auto-flattened objects (F03):
 config/settings.mjs → api.config.*   ← object spread to parent level
 
 Index transparency (F02):
-utils/index.mjs → api.utils.*        ← index name disappears
+utils/index.mjs → api.utils.format   ← the folder's only file, one export: index name disappears
 ```
 
 ### Plugin System Pattern
@@ -495,17 +506,17 @@ api.database.seed(); // ✅
 
 ### Multi-File Directory Handling
 
-When a folder has multiple files, only files that match specific patterns flatten. Others keep their namespace:
+When a folder has multiple files, only files that match specific patterns flatten. Others keep their namespace, a generic file among them (F02 applies only to a folder's only file):
 
 ```text
 authentication/
-├── index.mjs     [F02 - transparent]
+├── index.mjs     [keeps its name: it has siblings]
 ├── providers.mjs [standard namespace]
 └── tokens.mjs    [standard namespace]
 ```
 
 ```javascript
-api.authentication.login(); // From index.mjs (F02)
+api.authentication.index.login(); // From index.mjs
 api.authentication.providers.google(); // From providers.mjs
 api.authentication.tokens.validate(); // From tokens.mjs
 ```
