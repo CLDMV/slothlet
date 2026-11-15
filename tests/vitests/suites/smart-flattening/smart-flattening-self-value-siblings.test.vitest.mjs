@@ -74,10 +74,12 @@ describe.each(getMatrixConfigs())("self-named value default beside sibling files
 		expect(await api.rack.slot()).toBe("rack.slot");
 	});
 
-	it("gives a lone primitive default the same node in both modes once loaded", async () => {
+	it("gives a lone primitive default the same value in both modes once loaded", async () => {
 		api = await slothlet({ ...config, base: BASE });
 		await api.count;
-		expect(typeof api.count).toBe("object");
+		// A file at the api root whose default export is a primitive is that value, as at a mount and in plain JavaScript.
+		expect(typeof api.count).toBe("number");
+		expect(api.count).toBe(7);
 		expect(JSON.stringify(api.count)).toBe("7");
 	});
 
