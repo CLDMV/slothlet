@@ -85,6 +85,35 @@ export function readable(path, keys) {
 }
 
 /**
+ * What the module reads at a name the member does not hold.
+ * @param {string} path - The member's path.
+ * @param {string} name - The name.
+ * @returns {string} `undefined`, the type of what it read, or `THROW <code>`.
+ */
+export function absent(path, name) {
+	try {
+		const value = at(path)[name];
+		return value === undefined ? "undefined" : typeof value;
+	} catch (error) {
+		return `THROW ${error?.code ?? error?.name}`;
+	}
+}
+
+/**
+ * Whether the module reads a name the member inherits from `Object.prototype` as plain JS gives it.
+ * @param {string} path - The member's path.
+ * @param {string} name - The name (`constructor`, `toString`).
+ * @returns {boolean|string} True when it reads `Object.prototype[name]`, or `THROW <code>`.
+ */
+export function inherited(path, name) {
+	try {
+		return at(path)[name] === Object.prototype[name];
+	} catch (error) {
+		return `THROW ${error?.code ?? error?.name}`;
+	}
+}
+
+/**
  * What `util.inspect` shows the module of the member.
  * @param {string} path - The member's path.
  * @param {object} options - The inspect options.

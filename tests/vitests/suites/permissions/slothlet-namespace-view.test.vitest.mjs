@@ -58,11 +58,7 @@ const SETUPS = {
 	disabled: { permissions: { mode: "disabled" }, deniesMarker: false, deniesDiag: false }
 };
 
-const PATHS = ["slothlet", "slothlet.env", "slothlet.api", "slothlet.permissions.control", "slothlet.materialize"];
-
-// `permissions.control` is listed above but not inspected here: Node 22 and 24 read its member `0` while inspecting a
-// view of it, which the rules refuse a module (PERMISSION_DENIED there, the filtered members on Node 26).
-const INSPECTED = PATHS.filter((path) => path !== "slothlet.permissions.control");
+const PATHS = ["slothlet", "slothlet.env", "slothlet.api", "slothlet.hook", "slothlet.permissions.control", "slothlet.materialize"];
 
 /**
  * The names `util.inspect` shows at the top level of a `compact: false` text.
@@ -140,7 +136,7 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 			if (path === "slothlet") expect(readable.includes("diag")).toBe(!setup.deniesDiag);
 		});
 
-		it.each(INSPECTED)("shows %s through util.inspect as the members it lists, and nothing it may not read", async (path) => {
+		it.each(PATHS)("shows %s through util.inspect as the members it lists, and nothing it may not read", async (path) => {
 			await build();
 			if (!api.reader.reaches(path)) return;
 			const listed = api.reader.list(path).keys;
@@ -154,6 +150,22 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 				if (setup.deniesDiag) expect(text).not.toContain("getAPI");
 			}
 		});
+
+		it.each(PATHS)("reads a name %s does not hold as undefined, as at an api node", async (path) => {
+			await build();
+			if (!api.reader.reaches(path)) return;
+			// `$$typeof` and `0` are what serializers and Node 22/24's util.inspect probe an object for.
+			for (const name of ["$$typeof", "0", "notAMember"]) expect(api.reader.absent(path, name), name).toBe("undefined");
+		});
+
+		it.each(PATHS.filter((path) => path !== "slothlet.env"))(
+			"reads a name %s inherits from Object.prototype as plain JS does",
+			async (path) => {
+				await build();
+				if (!api.reader.reaches(path)) return;
+				for (const name of ["constructor", "toString", "hasOwnProperty"]) expect(api.reader.inherited(path, name), name).toBe(true);
+			}
+		);
 
 		it("shows a module the environment variables it may read", async () => {
 			await build();

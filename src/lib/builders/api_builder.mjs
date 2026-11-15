@@ -64,7 +64,8 @@ const {
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller,
-	runtime_codeLabel
+	runtime_codeLabel,
+	runtime_inheritsBuiltin
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
@@ -1014,6 +1015,14 @@ export class ApiBuilder extends ComponentBase {
 						// The namespace's own inspect hook, as it is: it shows whoever calls it only what that code may read.
 						if (prop === INSPECT_KEY && NAMESPACE_INSPECT_HOOKS.has(result)) return result;
 						return createInternalRouteProxy(result, routePath, seen);
+					}
+
+					// A name the object does not hold itself reads as in plain JS, as at an api node: undefined when nothing has it
+					// (serializers and Node 22/24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
+					// language's own prototypes give every object or function (`constructor`, `toString`) as it is.
+					if (!Reflect.getOwnPropertyDescriptor(target, prop)) {
+						if (!Reflect.has(target, prop)) return undefined;
+						if (runtime_inheritsBuiltin(target, prop)) return Reflect.get(target, prop, receiver);
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;

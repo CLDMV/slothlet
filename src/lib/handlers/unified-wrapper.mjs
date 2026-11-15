@@ -2242,6 +2242,32 @@ function runtime_selfChangeTarget(ctx, prop) {
 }
 
 /**
+ * The language's own prototypes an object or function inherits from.
+ * @type {Set<object>}
+ */
+const BUILTIN_PROTOTYPES = new Set([
+	Reflect.getPrototypeOf({}),
+	Reflect.getPrototypeOf(function () {}),
+	Reflect.getPrototypeOf(async function () {}),
+	Reflect.getPrototypeOf(function* () {}),
+	Reflect.getPrototypeOf(async function* () {})
+]);
+
+/**
+ * Whether a name an object does not hold itself is one it inherits from the language's own prototypes, not from one
+ * placed between them.
+ * @param {object|Function} target - The object.
+ * @param {string} prop - The name.
+ * @returns {boolean} True when the nearest holder of `prop` is one of the language's own prototypes.
+ * @internal
+ */
+function runtime_inheritsBuiltin(target, prop) {
+	let holder = Reflect.getPrototypeOf(target);
+	while (holder !== null && !Reflect.getOwnPropertyDescriptor(holder, prop)) holder = Reflect.getPrototypeOf(holder);
+	return holder !== null && BUILTIN_PROTOTYPES.has(holder);
+}
+
+/**
  * Build (or reuse) a reader's view of a member of the framework's namespace; see {@link runtime_selfFrameworkView}.
  *
  * @param {*} member - The member.
@@ -2311,6 +2337,9 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 				const value = Reflect.get(target, prop, view);
 				if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 				if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
+				// What the language's own prototypes give every object or function (`constructor`, `toString`) is no member of
+				// the namespace: it reads as it is, as at an api node.
+				if (runtime_inheritsBuiltin(target, prop)) return value;
 				return runtime_frameworkViewOf(value, slothlet, reader, childPath(prop));
 			});
 		},
@@ -19401,6 +19430,7 @@ export function internals(consumer) {
 		runtime_eventPayloadFor,
 		runtime_frameworkViewCaller,
 		runtime_frameworkWrite,
+		runtime_inheritsBuiltin,
 		runtime_isCallerLocked,
 		runtime_markCallerLocked,
 		runtime_nodeBehind,
