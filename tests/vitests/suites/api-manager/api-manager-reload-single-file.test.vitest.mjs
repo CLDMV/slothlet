@@ -242,3 +242,117 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 		);
 	}
 });
+
+/**
+ * The root-level adds: a single file and a folder, each added at the api root (`""` / `null`). `key` is the root key
+ * the add mounts (a root add keeps each file as a key of the root), `reloadPath` the path a reload by path names.
+ * @type {Array<{ name: string, at: string|null, src: string, id: string, key: string }>}
+ */
+const ROOT_ADDS = [
+	{ name: "a single file", at: "", src: "one.mjs", id: "one-mod", key: "one" },
+	{ name: "a folder", at: null, src: "fold", id: "fold-mod", key: "three" }
+];
+
+describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({ config }) => {
+	let api;
+	let root;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		if (root) fs.rmSync(root, { recursive: true, force: true });
+		root = null;
+	});
+
+	/**
+	 * Write the root-level sources at version `n`: `one.mjs`, the sibling `two.mjs`, and `fold/three.mjs`.
+	 * @param {number} n - Version written into every file.
+	 * @returns {void}
+	 */
+	function writeRootFixture(n) {
+		const leaf = (name) =>
+			`import { self } from "@cldmv/slothlet/runtime";\n` +
+			`export function ping() { return "${name}${n}"; }\n` +
+			`export function peek() { return self.secret.get(); }\n`;
+		fs.mkdirSync(path.join(root, "fold"), { recursive: true });
+		fs.writeFileSync(path.join(root, "one.mjs"), leaf("one"));
+		fs.writeFileSync(path.join(root, "fold", "three.mjs"), leaf("three"));
+		fs.writeFileSync(path.join(root, "two.mjs"), `export function ping() { return "two${n}"; }\n`);
+	}
+
+	/**
+	 * Build an instance over the scratch base and add `target` and the sibling root add `two.mjs`, at version 1. A host
+	 * rule keeps the target's code from calling `secret`.
+	 * @param {object} target - One of ROOT_ADDS.
+	 * @returns {Promise<object>} The api.
+	 */
+	async function setup(target) {
+		root = makeTestTmpDirSync("reload-root-add");
+		writeFixture(root, 1);
+		writeRootFixture(1);
+		api = await slothlet({
+			...config,
+			dir: path.join(root, "base"),
+			silent: true,
+			permissions: { rules: [{ caller: `${target.key}.**`, target: "secret.**", effect: "deny" }] }
+		});
+		await api.slothlet.api.add(target.at, path.join(root, target.src), { moduleID: target.id });
+		await api.slothlet.api.add("", path.join(root, "two.mjs"), { moduleID: "two-mod" });
+		return api;
+	}
+
+	for (const target of ROOT_ADDS) {
+		for (const by of ["moduleID", "path"]) {
+			it(
+				`re-reads ${target.name} added at the root when reloaded by its ${by}`,
+				async () => {
+					await setup(target);
+					const node = () => api[target.key];
+					expect(await node().ping()).toBe(`${target.key}1`);
+					const held = node();
+					const keys = Object.keys(api);
+					const metadata = node().ping.__metadata;
+					const seen = [];
+					if (config.hook?.enabled) {
+						api.slothlet.hook.on(`${target.key}.ping:before`, ({ path: p }) => void seen.push(p), { id: "reload-root-add" });
+					}
+
+					writeRootFixture(2);
+					await api.slothlet.api.reload(by === "moduleID" ? target.id : target.key);
+
+					expect(await node().ping()).toBe(`${target.key}2`);
+					expect(node()).toBe(held);
+					expect(Object.keys(api)).toEqual(keys);
+					expect("" in api).toBe(false);
+					// The sibling root add and the base were not reloaded.
+					expect(await api.two.ping()).toBe("two1");
+					expect(await api.root.hello()).toBe("hi");
+					expect([...api.slothlet.diag.owner.get(target.key)]).toContain(target.id);
+					expect(node().ping.__metadata.moduleID).toBe(metadata.moduleID);
+					expect(node().ping.__metadata.filePath).toBe(metadata.filePath);
+					if (config.hook?.enabled) expect(seen).toEqual([`${target.key}.ping`]);
+					await expect(Promise.resolve().then(() => node().peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				},
+				TIMEOUT
+			);
+		}
+
+		it(
+			`gives ${target.name} added at the root the same api as a full reload`,
+			async () => {
+				await setup(target);
+				writeRootFixture(2);
+				await api.slothlet.reload();
+				const full = { ping: await api[target.key].ping(), keys: Object.keys(api).sort() };
+				await api.shutdown();
+				fs.rmSync(root, { recursive: true, force: true });
+
+				await setup(target);
+				writeRootFixture(2);
+				await api.slothlet.api.reload(target.id);
+				expect({ ping: await api[target.key].ping(), keys: Object.keys(api).sort() }).toEqual(full);
+			},
+			TIMEOUT
+		);
+	}
+});

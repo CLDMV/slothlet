@@ -5764,8 +5764,8 @@ export class ApiManager extends ComponentBase {
 			return;
 		}
 
-		// Parse endpoint into parts array
-		const parts = endpoint === "." ? [] : endpoint.split(".");
+		// Parse endpoint into parts array. An add at the api root ("" / null) is mounted at the root like the base (".").
+		const parts = endpoint === "." || endpoint === "" ? [] : endpoint.split(".");
 
 		if (parts.length === 0) {
 			// Root level - update each existing wrapper's implementation directly
