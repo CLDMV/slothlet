@@ -1243,7 +1243,10 @@ class Slothlet {
 			/* v8 ignore start */
 			// Determine proxy target type based on this.api (like UnifiedWrapper does)
 			const isCallable = typeof this.api === "function" || (this.api && typeof this.api.default === "function");
-			const proxyTarget = isCallable ? function () {} : {};
+			// A bound function for a callable root, as an api node's own target is: callable and constructible, with no
+			// `prototype` of its own, so the traps report the root's function as it is (an async function, an arrow, a
+			// bound function or a method has none) without breaking an invariant of the target's.
+			const proxyTarget = isCallable ? function () {}.bind() : {};
 
 			this.boundApi = markSlothletProxy(
 				new NativeProxy(proxyTarget, {
@@ -1259,11 +1262,9 @@ class Slothlet {
 					deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
 					apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
 					construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
+					// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
+					getPrototypeOf: (target) => (isCallable && this.api ? Reflect.getPrototypeOf(this.api) : Reflect.getPrototypeOf(target)),
 					getOwnPropertyDescriptor: (target, prop) => {
-						// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
-						if (isCallable && prop === "prototype") {
-							return Objects.getOwnPropertyDescriptor(target, prop);
-						}
 						if (this.api && prop in this.api) {
 							const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
 							if (desc) {
