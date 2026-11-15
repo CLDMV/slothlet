@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
+ *	@Last modified time: 2026-11-15T13:43:32-08:00 (1794779012)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18800,9 +18800,25 @@ class UnifiedWrapper extends ComponentBase {
 					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 					return Reflect.setPrototypeOf(moduleObject, runtime_unwrapSelfView(proto));
 				}
-				if (!Arrays.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
-				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
+				if (Arrays.isArray(impl)) return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
+				// A node reports its impl's prototype and its members inherit through the impl, so the change goes there or
+				// nowhere: setting it on the shell answered true and changed nothing (#802). A value the module holds as it
+				// is (an emitter, a class instance) takes it, as setting it on that value does.
+				const internal = wrapper.____slothletInternal;
+				if (internal.mode === "lazy" && !internal.state.materialized) return false;
+				if (
+					impl !== null &&
+					typeof impl === "object" &&
+					!util.types.isProxy(impl) &&
+					hasOwn(internal, "sourceValue") &&
+					internal.sourceValue === impl
+				)
+					return Reflect.setPrototypeOf(impl, runtime_unwrapSelfView(proto));
+				// A function node never writes to the module's function (a member written through it stays the node's), so
+				// it keeps its function's prototype, as a function root does; a namespace slothlet composed keeps reporting
+				// none, as a module namespace object does. Either answers true only for the prototype it already has.
+				return runtime_unwrapSelfView(proto) === (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : heldPrototype());
 			},
 			getPrototypeOf: (target) => reportedPrototype(target, () => runtime_takeCapturedAccess(wrapper))
 		};
