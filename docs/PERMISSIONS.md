@@ -1155,6 +1155,8 @@ A file whose default export is one of these built-ins (`export default new Map()
 
 An object member of a module's data (a plain object or array a file exports by name, or one held inside such a value or inside a file's default export) is hidden by a deny on its exact path. The rule covers the member and everything it holds, as a rule on `path.**` would, so a reader the rule names cannot read what the member holds, and the member is left out of `Object.keys()`, a spread, `JSON.stringify`, `structuredClone`, `v8.serialize` and `postMessage`, as a primitive member it may not read is. A more specific allow beneath the member still lets what it names through: the member is then listed, holding only that.
 
+A folder is listed whatever the rules on its path say, in lazy mode before it has loaded as well as after. Before it loads nothing is known of what it holds, so a folder whose only file collapses onto it with a primitive default export (`count/count.mjs` exporting `export default 3`) is listed until it loads, and then left out like any primitive member the reader may not read. Its value is gated either way: a read of it is refused once the folder has loaded.
+
 ```javascript
 // owner.mjs
 export const config = { nested: { public: 1, hidden: 2 }, prim: 3 };

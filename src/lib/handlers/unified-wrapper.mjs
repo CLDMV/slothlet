@@ -8990,6 +8990,19 @@ function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept =
 }
 
 /**
+ * Whether `value` is a lazy node that has not loaded yet: a folder whose files are not read, so nothing is known of
+ * what it holds until it loads. A stand-in for a chain below one is not the node.
+ * @param {*} value - A member's value.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_isUnloadedLazyNode(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || WAITING_CHAINS.has(value)) return false;
+	const internal = resolveWrapper(value)?.____slothletInternal;
+	return !!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
+}
+
+/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -9032,6 +9045,9 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	// it, and a read of it is refused to a caller the rules deny, so `Object.keys` and a spread leave it out as
 	// `JSON.stringify` and `toJSON` do. Its description is still given, and running the getter it holds is refused.
 	const isAccessor = listing && !("value" in desc) && typeof desc.get === "function";
+	// A lazy folder that has not loaded holds nothing yet, and is no data: it is listed and described as the folder it
+	// is once loaded, whatever the rules on its path say. What it holds is gated when it is read.
+	if ("value" in desc && runtime_isUnloadedLazyNode(desc.value)) return false;
 	const targetPath = runtime_memberPathOf(wrapper, prop);
 	// An object member the rules leave the reader nothing of is listed no more than a value it may not read is.
 	if (listing && "value" in desc && typeof prop === "string") {
