@@ -5638,14 +5638,16 @@ export class ApiManager extends ComponentBase {
 			for (const shadow of shadows) {
 				const containerPath = shadow.container.____slothletInternal.apiPath;
 				const shadowPath = `${containerPath}.${shadow.key}`;
-				const inMount = endpoint === "." || shadowPath.startsWith(`${endpoint}.`);
+				// The base (".") and an add at the api root ("") are mounted over the whole api.
+				const wholeApi = endpoint === "." || endpoint === "";
+				const inMount = wholeApi || shadowPath.startsWith(`${endpoint}.`);
 				if (shadow.ownerModuleID !== moduleID || !inMount) {
 					kept.push(shadow);
 					continue;
 				}
 				// Find the rebuilt value at the shadowed member's path, relative to the mount.
 				let fresh = freshApi;
-				for (const part of (endpoint === "." ? shadowPath : shadowPath.slice(endpoint.length + 1)).split(".")) {
+				for (const part of (wholeApi ? shadowPath : shadowPath.slice(endpoint.length + 1)).split(".")) {
 					const node = await this._namespaceImplOf(fresh);
 					fresh = node === null || node === undefined ? undefined : node[part];
 					if (fresh === undefined) break;
@@ -5742,6 +5744,49 @@ export class ApiManager extends ComponentBase {
 			Reflect.deleteProperty(wrapper, key);
 		}
 		return { foreign, shared, keyOrder };
+	}
+
+	/**
+	 * How a namespace at the api root takes a reload of the modules in `reloadGroup`, judged as
+	 * {@link ApiManager#_partitionNamespaceChildren} judges a child of a namespace, without setting it aside: `"held"` when
+	 * another module replaced it and still holds it, `"shared"` when another module contributes to it or is mounted inside
+	 * it, and `"own"` when only the reloaded modules contribute.
+	 * @param {object} wrapper - The raw wrapper at the root key.
+	 * @param {string} key - The root key.
+	 * @param {Set<string>} reloadGroup - moduleIDs being rebuilt in this cycle.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks from before
+	 *   the rebuild.
+	 * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced
+	 *   what was there.
+	 * @returns {"held"|"shared"|"own"} The answer.
+	 * @private
+	 */
+	_rootKeyContribution(wrapper, key, reloadGroup, ownershipBefore, placement) {
+		if (wrapper.____slothletInternal.userAssigned) return "own";
+		if (placement?.held.has(key)) return "held";
+		const hostsForeignMount = placement?.mounts.some((mount) => mount.startsWith(`${key}.`)) ?? false;
+		if (hostsForeignMount) return "shared";
+		// Any member of the namespace another module contributes, at any depth, makes it shared.
+		const ownership = this.slothlet.handlers.ownership;
+		const contributorsOf = (path, node) => {
+			const prior = ownershipBefore?.get(path);
+			const history = prior ? prior.map(({ entry }) => entry) : (ownership?.getPathHistory(path) ?? []);
+			if (history.length > 0) return history.map((entry) => entry.moduleID);
+			return ownership ? [node.____slothletInternal.moduleID] : this._subtreeModuleIDs(node);
+		};
+		const pending = [[key, wrapper]];
+		const seen = new Set();
+		while (pending.length > 0) {
+			const [path, node] = pending.pop();
+			if (seen.has(node)) continue;
+			seen.add(node);
+			if (!contributorsOf(path, node).every((id) => reloadGroup.has(id))) return "shared";
+			for (const child of Objects.keys(node)) {
+				const childNode = resolveWrapper(Objects.getOwnPropertyDescriptor(node, child).value);
+				if (childNode && !childNode.____slothletInternal.userAssigned) pending.push([`${path}.${child}`, childNode]);
+			}
+		}
+		return "own";
 	}
 
 	/**
@@ -5854,6 +5899,35 @@ export class ApiManager extends ComponentBase {
 
 				const existingAtKey = this.slothlet.api[key];
 				const freshValue = freshApi[key];
+
+				// A root namespace another module also contributes to, or holds an add that replaced part of it, is rebuilt
+				// level by level as a shared namespace one level down is, so the other modules' members stay (#525, #530);
+				// one another module replaced whole keeps that module's content.
+				const contribution =
+					forceReplace && existingAtKey && resolveWrapper(existingAtKey) !== null
+						? this._rootKeyContribution(resolveWrapper(existingAtKey), key, reloadGroup, ownershipBefore, placement)
+						: "own";
+				if (contribution === "held") continue;
+				if (contribution === "shared") {
+					const wrapper = resolveWrapper(existingAtKey);
+					const freshChild = await this._namespaceImplOf(freshValue);
+					const customProps = this._collectCustomProperties(existingAtKey, freshChild);
+					const originalCollisionMode = wrapper.____slothletInternal.state.collisionMode;
+					wrapper.____slothletInternal.state.collisionMode = "replace";
+					try {
+						await this._applyScopedImpl(wrapper, key, freshChild, moduleID, {
+							forceReplace: true,
+							reloadGroup,
+							previousApi: typeof wrapper.____slothletInternal.impl === "function" ? previousApi?.[key] : undefined,
+							ownershipBefore,
+							placement
+						});
+					} finally {
+						wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
+					}
+					this._restoreCustomProperties(existingAtKey, customProps);
+					continue;
+				}
 
 				if (existingAtKey && resolveWrapper(existingAtKey) !== null) {
 					// Existing wrapper found - collect custom props before any modification
