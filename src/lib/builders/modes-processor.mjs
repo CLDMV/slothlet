@@ -1230,6 +1230,8 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: levelPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
+								// A folder's only file whose module value is null or undefined is the folder's value (#792).
+								nullishDefault: callableModule === null || callableModule === undefined ? { value: callableModule } : null,
 								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								// moduleID is always provided; || file.moduleID fallback is unreachable.
@@ -1884,6 +1886,8 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: modes_propertyApiPath,
 								initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
+								// A file whose module value is null or undefined reads as that value (#792).
+								nullishDefault: moduleContent === null || moduleContent === undefined ? { value: moduleContent } : null,
 								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: modes_propertyModuleID,
@@ -2281,6 +2285,8 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_subDirApiPath,
 											initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
+											// A self-named file whose module value is null or undefined is the folder's value (#792).
+											nullishDefault: implToWrap === null || implToWrap === undefined ? { value: implToWrap } : null,
 											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 											filePath: file.path,
 											moduleID: modes_subDirModuleID,

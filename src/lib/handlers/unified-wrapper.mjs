@@ -9131,6 +9131,43 @@ function runtime_isHeldPrimitive(impl) {
 }
 
 /**
+ * Whether a node stands for a file whose module value is `null` or `undefined` (#792): it was built or loaded from such
+ * a file, still holds nothing, and has no members of its own, so a read answers the value as the plain module's
+ * `default` does. A node a later contribution gave members stays the node it is.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_holdsNullish(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (!internal.nullish || internal.invalid || (internal.impl !== null && internal.impl !== undefined)) return false;
+	for (const key of Objects.keys(wrapper)) if (!isFrameworkReservedKey(key)) return false;
+	return true;
+}
+
+/**
+ * Whether a node answers a value in its place: a primitive it holds (see {@link runtime_isHeldPrimitive}), or a file's
+ * `null` or `undefined` (see {@link runtime_holdsNullish}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when a read of the node answers {@link runtime_heldValue}.
+ * @private
+ */
+function runtime_holdsValue(wrapper) {
+	return runtime_isHeldPrimitive(wrapper.____slothletInternal.impl) || runtime_holdsNullish(wrapper);
+}
+
+/**
+ * The value a node answers in its place (see {@link runtime_holdsValue}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {*} The value.
+ * @private
+ */
+function runtime_heldValue(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	return runtime_isHeldPrimitive(internal.impl) ? internal.impl : internal.nullish.value;
+}
+
+/**
  * Whether the read gate is on for an instance.
  * @param {object} slothlet - The instance.
  * @returns {boolean} True when reads are gated.
@@ -9155,11 +9192,12 @@ function runtime_rootMemberRead(slothlet, prop, value) {
 	if (value !== null && (typeof value === "object" || typeof value === "function")) {
 		const node = resolveWrapper(value);
 		if (node !== null) {
-			// A node is traversal, as at any node; a file's primitive default export is its value, read through the gate.
-			const impl = node.____slothletInternal.impl;
-			if (!runtime_isHeldPrimitive(impl)) return value;
-			runtime_enforceReadGate(runtime_rootGate(slothlet), prop, impl);
-			return impl;
+			// A node is traversal, as at any node; a file's primitive, null or undefined default export is its value,
+			// read through the gate.
+			if (!runtime_holdsValue(node)) return value;
+			const held = runtime_heldValue(node);
+			runtime_enforceReadGate(runtime_rootGate(slothlet), prop, held);
+			return held;
 		}
 	}
 	// Only data the root lists as a member is gated: a node read off the root is traversal, as at any node, and the
@@ -9226,8 +9264,8 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 	}
 	const value = descriptor.value;
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
-	const impl = resolveWrapper(value)?.____slothletInternal.impl;
-	return runtime_isHeldPrimitive(impl) ? { ...descriptor, value: impl } : descriptor;
+	const node = resolveWrapper(value);
+	return node !== null && runtime_holdsValue(node) ? { ...descriptor, value: runtime_heldValue(node) } : descriptor;
 }
 
 /**
@@ -11387,8 +11425,7 @@ function runtime_shellValue(wrapper, prop) {
 		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
 		// yet and is kept as the node it is.
 		const node = resolveWrapper(held().value);
-		const leaf = node?.____slothletInternal.impl;
-		raw = node && leaf !== null && leaf !== undefined && typeof leaf !== "object" && typeof leaf !== "function" ? leaf : held().value;
+		raw = node && runtime_holdsValue(node) ? runtime_heldValue(node) : held().value;
 	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = runtime_readImplMember(wrapper, prop);
 	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
@@ -11958,7 +11995,10 @@ class UnifiedWrapper extends ComponentBase {
 			// Set by ___createChildWrapper for a child whose path follows an array position (#603 review):
 			// `{ parent, key, byIndex, sourceValue }`, applied before the constructor adopts members, so the
 			// child's own members are built under the position-following path too.
-			__position = null
+			__position = null,
+			// `{ value }` for a node built from a file whose module value is `null` or `undefined` (#792): a read of
+			// the node answers that value (see runtime_holdsNullish). initialImpl alone cannot say which it was.
+			nullishDefault = null
 		}
 	) {
 		super(slothlet);
@@ -11994,6 +12034,7 @@ class UnifiedWrapper extends ComponentBase {
 		// Null otherwise: children then belong to this wrapper's own module (#525).
 		internal.adoptOwner = null;
 		internal.filePath = filePath;
+		internal.nullish = nullishDefault;
 		// Where initialImpl sits in filePath's module namespace (#484) — resolved before the clone below,
 		// against the value the module actually exported. Read by typegen through the ownership record.
 		// A primitive has no identity to look up; a module leaf built straight from one export (a folder
@@ -12599,6 +12640,9 @@ class UnifiedWrapper extends ComponentBase {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(runtime_adoptedImpl(this, newImpl));
+		// A value arriving replaces a file's null or undefined (#792); null itself also passes through here for a node
+		// being cleared, which keeps what it was built from.
+		if (newImpl !== null && newImpl !== undefined) this.____slothletInternal.nullish = null;
 		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 		// node that hands it its value (see ___adoptImplChildren).
 		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
@@ -12954,6 +12998,7 @@ class UnifiedWrapper extends ComponentBase {
 
 		// Clear implementation and reset state
 		this.____slothletInternal.impl = null;
+		this.____slothletInternal.nullish = null;
 		this.____slothletInternal.invalid = false;
 		this.____slothletInternal.state.materialized = false;
 		this.____slothletInternal.state.inFlight = false;
@@ -13075,8 +13120,11 @@ class UnifiedWrapper extends ComponentBase {
 					this.___reportLoadedContribution();
 					// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
 					// being cleared passes through it too.
-					if (result === null && this.____slothletInternal.impl === null && this.____slothletInternal.lazyProxyTraps) {
-						this.___settleLazyProxy();
+					// So does one whose value is undefined, and its read answers that null or undefined, as the plain
+					// module's `default` does (#792).
+					if ((result === null || result === undefined) && (this.____slothletInternal.impl ?? null) === null) {
+						if (this.____slothletInternal.lazyProxyTraps) this.___settleLazyProxy();
+						this.____slothletInternal.nullish = { value: result };
 					}
 
 					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
@@ -13339,6 +13387,7 @@ class UnifiedWrapper extends ComponentBase {
 		runtime_dropRefusedChanges(this);
 		this.____slothletInternal.invalid = true;
 		this.____slothletInternal.impl = null;
+		this.____slothletInternal.nullish = null;
 		// Clear all child properties from wrapper (filter internals)
 		for (const key of Reflect.ownKeys(this)) {
 			// All own properties on a wrapper are user-facing API names; internal state lives in #internal (private field), never in own keys.
@@ -16166,20 +16215,11 @@ class UnifiedWrapper extends ComponentBase {
 				// If it's a wrapper (proxy) with a primitive impl, return the unwrapped value
 				// This ensures live runtime gets the actual value, not the wrapper object
 				const _cachedWrapper = resolveWrapper(cached);
-				if (_cachedWrapper?.____slothletInternal?.impl !== null && _cachedWrapper?.____slothletInternal?.impl !== undefined) {
-					const cachedImpl = _cachedWrapper.____slothletInternal.impl;
-					// For primitives, return the unwrapped value
-					const cachedType = typeof cachedImpl;
-					if (
-						cachedType === "string" ||
-						cachedType === "number" ||
-						cachedType === "boolean" ||
-						cachedType === "bigint" ||
-						cachedType === "symbol"
-					) {
-						enforceReadGate(cachedImpl);
-						return cachedImpl;
-					}
+				// A node holding a primitive, or a file's null or undefined (#792), answers the value itself.
+				if (_cachedWrapper && runtime_holdsValue(_cachedWrapper)) {
+					const cachedValue = runtime_heldValue(_cachedWrapper);
+					enforceReadGate(cachedValue);
+					return cachedValue;
 				}
 				// If cached is a wrapper (proxy) in lazy mode that needs materialization, trigger it
 				if (_cachedWrapper) {
@@ -17245,13 +17285,10 @@ class UnifiedWrapper extends ComponentBase {
 					if (!("value" in described)) return described;
 					// A primitive member is held as a node of its own; its description holds the primitive, as a read of
 					// the member answers it.
-					const heldImpl = resolveWrapper(described.value)?.____slothletInternal.impl;
-					const heldType = typeof heldImpl;
-					const isPrimitive =
-						heldType === "string" || heldType === "number" || heldType === "boolean" || heldType === "bigint" || heldType === "symbol";
+					const heldNode = resolveWrapper(described.value);
 					return {
 						...described,
-						value: isPrimitive ? heldImpl : described.value,
+						value: heldNode && runtime_holdsValue(heldNode) ? runtime_heldValue(heldNode) : described.value,
 						writable: runtime_reportsWritable(wrapper, prop)
 					};
 				}

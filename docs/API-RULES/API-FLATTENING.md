@@ -242,6 +242,8 @@ This holds in eager and lazy mode, at every depth, at initial load and under `ap
 
 **Not promoted:** a default export that is not a function (an object, a `Map`, a `Date`, a primitive) keeps the file's level (`e/x.mjs` exporting `default { a }` is `api.e.x.a`), as does a single file with no default export (`e/x.mjs` exporting `function x` is `api.e.x()`; see [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)). A folder holding a second file or a subfolder keeps every file at its own level.
 
+**Null and undefined defaults:** a file whose module value is a primitive, `null` or `undefined` (a lone `export default null`) reads as that value at its node, at the root and in a mount alike: `e/x.mjs` exporting `default null` is `api.e.x === null`, and a folder whose only file is named for it and exports `default undefined` is `api.e === undefined`. The member stays listed and `in` finds it. A `null` default beside named exports keeps them all under the file's node, with the `null` under `default`.
+
 **Why:** When a folder's entire purpose is captured by a single default export, the folder name becomes the semantic identifier.
 
 ---

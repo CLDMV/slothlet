@@ -400,6 +400,8 @@ api.e.helper(); // the file's other exports are members of the folder's function
 
 A default export that is not a function (an object, a `Map`, a primitive) keeps the file's level (`api.e.x`).
 
+A file whose only export is a primitive default reads as that value, and so does one whose default export is `null` or `undefined`: `e/x.mjs` exporting `export default null` gives `api.e.x === null`, as the module's own `default` is. The member stays listed (`Object.keys(api.e)` holds `x`, and `"x" in api.e` is true), as a plain object's member holding `null` is. A file with a `null` default beside named exports keeps both under its node (`api.e.x.default === null`, `api.e.x.helper()`).
+
 **Technical Implementation**:
 
 - **Detection**: [C11](API-RULES/API-RULES-CONDITIONS.md#c11) - default export flattening
