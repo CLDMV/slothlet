@@ -3743,6 +3743,9 @@ export class ApiManager extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
 				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
 				syntheticExports: isSynthetic ? syntheticExports : null,
+				// A single-file add: the folder its build scans and the one file it loads there, so a reload builds
+				// it the way the add did, not by scanning the file's path as a folder.
+				file: isFile ? { dir: dirForBuild, name: path.basename(resolvedFolderPath) } : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
 				hidden: restOptions.hidden ?? null,
@@ -5014,10 +5017,18 @@ export class ApiManager extends ComponentBase {
 			freshApiKeys: Objects.keys(freshApi || {})
 		});
 
+		// A single-file add keeps its build as the add did, `{ <file>: exports }` (or the file's default function), and
+		// mounted the file's exports at the endpoint: restore those, as the add placed them. At the root the add mounts
+		// the build itself, the file a key of the root.
+		const atRoot = oldEntry.endpoint === "" || oldEntry.endpoint === ".";
+		const mounted = (built) =>
+			oldEntry.file && !atRoot && typeof built !== "function" && Objects.keys(built).length === 1 ? built[Objects.keys(built)[0]] : built;
+		const freshMounted = mounted(freshApi);
+
 		// Traverse fresh API and update/create wrappers
-		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
+		await this._restoreApiTree(freshMounted, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
 			reloadGroup: cycle,
-			previousApi: oldEntry.api,
+			previousApi: mounted(oldEntry.api),
 			ownershipBefore,
 			placement
 		});
@@ -5040,7 +5051,7 @@ export class ApiManager extends ComponentBase {
 		if (ownershipBefore) ownership.restoreStacks(ownershipBefore, cycle);
 		// A later remove of a module that replaced part of this one re-attaches this module's members it
 		// shadowed: give them this reload's code, not the code from before it (#530).
-		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshApi);
+		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshMounted);
 
 		// Principals (#459) this module owns: values resolved by the pre-reload code are stale now.
 		this.slothlet.handlers.permissionManager?.onModuleReloaded?.(moduleID);

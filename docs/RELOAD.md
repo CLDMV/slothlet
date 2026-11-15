@@ -213,6 +213,8 @@ await api.slothlet.api.reload(pathOrModuleID, options);
 | API path    | `"plugins"`                         | Reloads all caches that contribute to or include that path |
 | moduleID    | `"core-plugins"`                    | Reloads that single cache entry                            |
 
+An add of a single file reloads by its moduleID or its path like any other: the file is read again and its exports stay where the add mounted them.
+
 **Resolution order for path-based reload:**
 
 1. Exact cache endpoint match

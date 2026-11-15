@@ -367,8 +367,11 @@ export class ApiCacheManager extends ComponentBase {
 		// used by the live API, and applyRootContributor's Object.assign overwrites the live
 		// API's properties with fresh wrappers (destroying custom properties and proxy identity).
 		// The moduleID itself must remain unchanged for ownership/metadata consistency.
+		// A single-file add is rebuilt as the add built it: its folder, filtered to that one file, its exports at the
+		// mount path.
+		const file = entry.file ?? null;
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
-			dir: entry.folderPath,
+			dir: file ? file.dir : entry.folderPath,
 			// #471: the base entry of an instance with no base directory rebuilds to an empty root.
 			noBase: entry.folderPath === null,
 			mode: entry.mode,
@@ -380,6 +383,7 @@ export class ApiCacheManager extends ComponentBase {
 			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "api",
 			cacheBust: Dates.now(),
+			...(file ? { fileFilter: (fileName) => fileName === file.name, rootUnwrap: true } : {}),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
 			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors
 			// the add-time intermediate key (last endpoint segment) so the flatten matches the add.
