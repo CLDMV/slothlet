@@ -2520,6 +2520,27 @@ export class ModesProcessor extends ComponentBase {
 				// Single root contributor: make it the root callable (don't namespace)
 				const { moduleName, file, defaultFunc } = rootContributors[0];
 				rootDefaultFunction = defaultFunc;
+				// At the base load the root function is the api itself, and no wrapper holds it to make nodes of its
+				// members, as the wrapper of a mount path does: each member gets its node here, at the path it is
+				// reached at, so hooks, rules and metadata answer for it as for any other node. A member that stays a
+				// value there (data, an error, a primitive) stays one here, and an accessor stays an accessor.
+				if (!apiPathPrefix && shouldWrap) {
+					for (const key of Objects.keys(defaultFunc)) {
+						const descriptor = Reflect.getOwnPropertyDescriptor(defaultFunc, key);
+						if (!descriptor || !("value" in descriptor)) continue;
+						const node = unifiedWrapperOwn.UnifiedWrapper._memberNode(this.slothlet, {
+							key,
+							value: descriptor.value,
+							apiPath: memberPath(key, file.path),
+							filePath: file.path,
+							// moduleID always provided; fallback unreachable.
+							/* v8 ignore next */
+							moduleID: moduleID || file.moduleID,
+							sourceFolder
+						});
+						if (node) this.slothlet.processors.flatten.assignNamedExport(defaultFunc, key, node);
+					}
+				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						// defaultFunc always has a name; "anonymous" fallback unreachable.
