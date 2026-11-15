@@ -4429,8 +4429,7 @@ function runtime_nodePrimitive(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode === "lazy" && !internal.state.materialized) return NO_NODE_PRIMITIVE;
 	const impl = internal.impl;
-	const kind = typeof impl;
-	return kind === "string" || kind === "number" || kind === "boolean" || kind === "bigint" || kind === "symbol" ? impl : NO_NODE_PRIMITIVE;
+	return runtime_isHeldPrimitive(impl) ? impl : NO_NODE_PRIMITIVE;
 }
 
 /**
