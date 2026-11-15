@@ -1292,6 +1292,53 @@ function noteModuleFile(ref) {
 }
 
 /**
+ * The folders a browser loaded api files from (see {@link noteModuleRoot}), each as a URL path ending in `/`.
+ * @type {Set<string>}
+ * @private
+ */
+const MODULE_ROOTS = new Set();
+
+/**
+ * Record the folder a browser loaded an api file from, so a helper file a leaf imports from that folder (which carries
+ * no instance tag in a browser) is told to be a module's code, as its frames are placed for attribution. The folder is
+ * the URL the file was imported from without the file's path in its manifest; a URL that does not end in that path (a
+ * resolver's `blob:` or `data:` URL) names none. A folder at the root of its origin would hold the page's own files too,
+ * and so holds nothing, as a module mounted from `/` owns no frames.
+ * @param {string} url - The URL the api file was imported from.
+ * @param {string} filePath - The file's path in the manifest.
+ * @returns {void}
+ * @internal
+ */
+function noteModuleRoot(url, filePath) {
+	if (typeof url !== "string" || typeof filePath !== "string" || filePath === "") return;
+	const location = toSlashPath(url);
+	const suffix = "/" + filePath.replace(/^\.?\//, "");
+	if (!location.endsWith(suffix)) return;
+	const root = location.slice(0, location.length - suffix.length + 1);
+	let parsed;
+	try {
+		parsed = new URL(root);
+	} catch {
+		return;
+	}
+	if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.pathname === "/") return;
+	MODULE_ROOTS.add(root);
+}
+
+/**
+ * Whether a location is in a folder a browser loaded api files from (see {@link noteModuleRoot}), and not a package's.
+ * @param {string} location - A frame's location.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function isModuleRootLocation(location) {
+	if (MODULE_ROOTS.size === 0) return false;
+	const path = toSlashPath(location);
+	for (const root of MODULE_ROOTS) if (path.startsWith(root) && !("/" + path.slice(root.length)).includes("/node_modules/")) return true;
+	return false;
+}
+
+/**
  * Whether a file, of no instance's tag, is code of an instance's module: a CommonJS file of an instance (an api file,
  * or a helper the instance's CommonJS cache holds), one required while a CommonJS api file of the instance loads, or a
  * file of a module's own package (outside `node_modules`) that an instance's file loaded, directly or through other
@@ -1553,7 +1600,7 @@ function isOwnCodeLocation(location) {
  * @private
  */
 function isModuleCodeLocation(location) {
-	return location.includes(MARKER) || MODULE_URLS.has(location) || isUntaggedModuleFile(location);
+	return location.includes(MARKER) || MODULE_URLS.has(location) || isUntaggedModuleFile(location) || isModuleRootLocation(location);
 }
 
 /**
@@ -3457,6 +3504,7 @@ export function internals(consumer) {
 		loadedScriptLookup,
 		loadedScriptText,
 		noteModuleFile,
+		noteModuleRoot,
 		packageImporters,
 		registerOwnModule,
 		requireInInstance,

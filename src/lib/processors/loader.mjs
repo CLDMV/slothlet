@@ -55,7 +55,7 @@ import {
 	NativeProcess,
 	Promises
 } from "@cldmv/slothlet/helpers/intrinsics";
-const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile } =
+const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile, noteModuleRoot } =
 	instanceImportsInternals("lib/processors/loader");
 const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
 
@@ -1358,6 +1358,8 @@ export class Loader extends ComponentBase {
 		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 		byMount.set(moduleID ?? "", String(imported));
 		this.#importedLocationList = null;
+		// The helper files a leaf imports carry no tag in a browser: the folder the leaf came from tells them a module's.
+		noteModuleRoot(String(specifier), filePath);
 		const module = await import(imported);
 		return module;
 	}

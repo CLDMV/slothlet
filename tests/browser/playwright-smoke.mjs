@@ -41,6 +41,7 @@ import { generateBrowserAssets, generateManifest } from "@cldmv/slothlet/helpers
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_REL = "api_tests/api_test_browser";
 const HELD_REL = "api_tests/api_test_browser_internal";
+const HELPER_REL = "api_tests/api_test_browser_internal_helper/api";
 const PORT = 8123;
 
 const MIME = {
@@ -62,14 +63,15 @@ const MIME = {
  * @param {object} manifest
  * @returns {string}
  */
-function smokeHtml(importmap, manifest, heldManifest) {
+function smokeHtml(importmap, manifest, heldManifest, helperManifest) {
 	const base = `http://localhost:${PORT}/${FIXTURE_REL}/`;
 	const heldBase = `http://localhost:${PORT}/${HELD_REL}/`;
+	const helperBase = `http://localhost:${PORT}/${HELPER_REL}/`;
 	return `<!doctype html><meta charset="utf-8"><title>slothlet browser smoke</title>
 <script type="importmap">${JSON.stringify(importmap)}</script>
-<script>window.__MANIFEST__ = ${JSON.stringify(manifest)}; window.__HELD_MANIFEST__ = ${JSON.stringify(heldManifest)};</script>
+<script>window.__MANIFEST__ = ${JSON.stringify(manifest)}; window.__HELD_MANIFEST__ = ${JSON.stringify(heldManifest)}; window.__HELPER_MANIFEST__ = ${JSON.stringify(helperManifest)};</script>
 <script type="module">
-const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, exports: null, hostExports: null, error: null };
+const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, exports: null, hostExports: null, helperExports: null, error: null };
 const BASE = ${JSON.stringify(base)};
 const cfg = (extra) => ({ platform: "browser", base: BASE, manifest: window.__MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href, mode: "eager", ...extra });
 // calc may smart-flatten to a function or to an object exposing addViaSelf — handle both.
@@ -151,6 +153,12 @@ try {
 	const hostContext = await import(new URL("factories/context.mjs", lib).href);
 	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instanceID)].join(",");
 	await api3.shutdown();
+
+	// A helper file a leaf imports from the module's folder is the module's code too; one outside every module's folder
+	// cannot be told from the page's own code.
+	const api4 = await slothlet(cfg({ base: ${JSON.stringify(helperBase)}, manifest: window.__HELPER_MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, ${JSON.stringify(helperBase)}).href }));
+	out.helperExports = [await api4.porter.viaInside(lib), await api4.porter.viaOutside(lib)].join(",");
+	await api4.shutdown();
 } catch (e) {
 	out.error = String((e && e.stack) || e);
 }
@@ -165,7 +173,8 @@ async function main() {
 	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
 	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
 	const heldManifest = await generateManifest(join(REPO, HELD_REL));
-	const html = smokeHtml(importmap, manifest, heldManifest);
+	const helperManifest = await generateManifest(join(REPO, HELPER_REL));
+	const html = smokeHtml(importmap, manifest, heldManifest, helperManifest);
 
 	const server = createServer(async (req, res) => {
 		try {
@@ -236,6 +245,7 @@ async function main() {
 		"internal=refused": smoke?.internal === "refused,refused,refused",
 		"runtime=loaded": smoke?.runtime === "function" || smoke?.runtime === "object",
 		"exports=refused": smoke?.exports === Array(8).fill("MODULE_INTERNAL_NOT_IMPORTABLE").join(","),
+		"helper exports=refused in the module's folder": smoke?.helperExports === "MODULE_INTERNAL_NOT_IMPORTABLE,used",
 		"host exports=answered": smoke?.hostExports === "true,true",
 		"0 errors": errors.length === 0
 	};
