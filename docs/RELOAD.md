@@ -195,6 +195,8 @@ await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
 await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api.shop.b intact
 ```
 
+A path removed whole is gone for every module that held something under it: a later `add()` at that path is then its only owner, so removing that add removes the path again rather than bringing back what the first removal took.
+
 The scoped `remove(moduleID, apiPath)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `apiPath` with `INVALID_ARGUMENT`.
 
 Removing a module emits `impl:removed` lifecycle events for each affected path, triggers metadata cleanup for those paths, and cleans up the wrapper state.

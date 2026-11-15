@@ -4471,6 +4471,9 @@ export class ApiManager extends ComponentBase {
 				this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
+				// The subtree left the api whoever owned its nodes, so nothing below the path stays recorded: a later add
+				// there is then its only owner, and removing it removes its members instead of reverting them (#799).
+				this.slothlet.handlers.ownership.removeSubtree(normalizedPath);
 				// Clean up user metadata (use root segment only)
 				// metadata handler is always registered; FALSE never fires.
 				/* v8 ignore next */
