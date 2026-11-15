@@ -2540,13 +2540,17 @@ export class ModesProcessor extends ComponentBase {
 						});
 						if (node) this.slothlet.processors.flatten.assignNamedExport(defaultFunc, key, node);
 					}
-				} else if (apiPathPrefix) {
+				} else if (apiPathPrefix && !file.synthetic) {
 					// At a mount the mount's wrapper, built over the mounted folder, makes the members' nodes. The function
 					// is slothlet's own layer (composeFunctionDefault), so the file each member was written in is recorded
-					// on it, as on a folder's callable layer: code written in the file is then placed at the file.
-					const modes_rootChildPaths = {};
-					for (const key of Objects.keys(defaultFunc)) modes_rootChildPaths[key] = file.path;
-					defaultFunc.__childFilePaths = modes_rootChildPaths;
+					// on it, as on a folder's callable layer: code written in the file is then placed at the file. A
+					// function with no members gets no record, so it stays a bare function; an in-memory module has no file.
+					const modes_rootMemberKeys = Objects.keys(defaultFunc);
+					if (modes_rootMemberKeys.length > 0) {
+						const modes_rootChildPaths = {};
+						for (const key of modes_rootMemberKeys) modes_rootChildPaths[key] = file.path;
+						defaultFunc.__childFilePaths = modes_rootChildPaths;
+					}
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
