@@ -11519,6 +11519,56 @@ const RESTART_FORWARD_TRAPS = {
 };
 
 /**
+ * What a stand-in answers while the node it stands for has not loaded (see {@link runtime_standInNode}).
+ * @type {symbol}
+ * @private
+ */
+const STAND_IN_UNLOADED = Symbol("slothlet.standInUnloaded");
+
+/**
+ * The reads a stand-in answers itself, loaded or not: what it reports of its own state, and its own description.
+ * @type {Set<string|symbol>}
+ * @private
+ */
+const STAND_IN_OWN_READS = new Set(["then", "__type", "__metadata", "__slothletPath", util.inspect.custom]);
+
+/**
+ * What a stand-in for a chain below a lazy node stands for, once the node has loaded: the chain read off the node now,
+ * through each node's own traps, so the read is the one a read of the same path makes (the same reader, the same gates).
+ * @param {UnifiedWrapper} wrapper - The lazy node the chain starts at.
+ * @param {Array<string>} propChain - The chain below it.
+ * @returns {*} What the chain reads as, or {@link STAND_IN_UNLOADED} while the node has not loaded.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not read what the chain reaches.
+ * @private
+ */
+function runtime_standInNode(wrapper, propChain) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.invalid || !internal.state.materialized) return STAND_IN_UNLOADED;
+	let node = wrapper.createProxy();
+	for (const key of propChain) {
+		if (node === null || node === undefined) return undefined;
+		node = node[key];
+	}
+	return node;
+}
+
+/**
+ * A member of what a loaded stand-in stands for, as a read of the member there gives it. A primitive's method is handed
+ * out run on the primitive, since the stand-in it is called on cannot be one.
+ * @param {*} node - What the stand-in stands for (see {@link runtime_standInNode}).
+ * @param {string|symbol} prop - The member's key.
+ * @returns {*} The member.
+ * @private
+ */
+function runtime_standInMember(node, prop) {
+	const value = node[prop];
+	if (typeof value !== "function" || node === null || typeof node === "object" || typeof node === "function") return value;
+	return function standIn_primitiveMethod(...args) {
+		return Reflect.apply(value, node, args);
+	};
+}
+
+/**
  * Wrap a proxy handler so that, once restart() has replaced the wrapper's tree, every trap the
  * handler defines forwards to the live node at the wrapper's path instead (#504). Until then the
  * original traps run unchanged; the check is one epoch comparison per trap.
@@ -14417,12 +14467,24 @@ class UnifiedWrapper extends ComponentBase {
 			},
 			// A member the stand-in's reader assigned or defined through it, and has not deleted since, is there to that
 			// reader as it would be on the node (#653). What the module will export is not known until it loads.
+			// Once the node has loaded, what the stand-in stands for answers, within what the stand-in's own target fixes.
 			has(target, prop) {
+				const node = Reflect.isExtensible(target) ? runtime_standInNode(wrapper, propChain) : STAND_IN_UNLOADED;
+				if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) return RESTART_FORWARD_TRAPS.has(node, target, prop);
 				return queuedMember(prop) ? true : Reflect.has(target, prop);
 			},
 			getOwnPropertyDescriptor(target, prop) {
+				const node = Reflect.isExtensible(target) ? runtime_standInNode(wrapper, propChain) : STAND_IN_UNLOADED;
+				if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) {
+					return RESTART_FORWARD_TRAPS.getOwnPropertyDescriptor(node, target, prop);
+				}
 				const queued = Reflect.isExtensible(target) && !hasOwn(target, prop) ? queuedMember(prop) : null;
 				return queued ?? Reflect.getOwnPropertyDescriptor(target, prop);
+			},
+			ownKeys(target) {
+				const node = Reflect.isExtensible(target) ? runtime_standInNode(wrapper, propChain) : STAND_IN_UNLOADED;
+				if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) return RESTART_FORWARD_TRAPS.ownKeys(node, target);
+				return Reflect.ownKeys(target);
 			},
 			get(___target, prop) {
 				// A stand-in is no node of its own: a kept node's access offered to it is dropped, before any code its
@@ -14638,6 +14700,23 @@ class UnifiedWrapper extends ComponentBase {
 				if (prop === "__materialized") return wrapper.____slothletInternal.state.materialized;
 				if (prop === "__inFlight") return wrapper.____slothletInternal.state.inFlight;
 				// Note: __impl / _impl are NOT exposed through the waiting proxy - use resolveWrapper(proxy).__impl internally.
+
+				// Once the node has loaded, a stand-in kept from before answers as what it stands for answers a read of its
+				// path now: a default-export Map's methods, an object's members, a string's characters.
+				if (!STAND_IN_OWN_READS.has(prop)) {
+					const node = runtime_standInNode(wrapper, propChain);
+					if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) {
+						const end = kept ? resolveWrapper(node) : null;
+						if (!end) return runtime_standInMember(node, prop);
+						const previous = keptAccessorRead;
+						keptAccessorRead = { wrapper: end, reader: kept.reader };
+						try {
+							return runtime_standInMember(node, prop);
+						} finally {
+							keptAccessorRead = previous;
+						}
+					}
+				}
 
 				// Trigger materialization if needed (fire-and-forget)
 				// This ensures lazy wrappers start loading when accessed
@@ -15368,7 +15447,11 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
 			},
-			getPrototypeOf: () => null
+			getPrototypeOf(target) {
+				const node = Reflect.isExtensible(target) ? runtime_standInNode(wrapper, propChain) : STAND_IN_UNLOADED;
+				if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) return RESTART_FORWARD_TRAPS.getPrototypeOf(node, target);
+				return null;
+			}
 		};
 		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
 		const waitingProxy = new NativeProxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
