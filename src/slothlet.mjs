@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:15:17-08:00 (1794813317)
+ *	@Last modified time: 2026-11-16T01:13:57-08:00 (1794820437)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,6 +128,7 @@ const {
 	runtime_rootListing,
 	runtime_rootMemberDescriptor,
 	runtime_rootMemberRead,
+	runtime_rootWithheld,
 	runtime_rootPrototypeFor,
 	runtime_rootInheritedRead,
 	runtime_behindGivenView,
@@ -1421,8 +1422,10 @@ class Slothlet {
 								const described = desc ? runtime_rootMemberDescriptor(this, prop, desc) : undefined;
 								if (described) return { ...described, configurable: true };
 							}
-							// A closed root reports every member it holds (proxy invariant): one the reader may not read is refused.
+							// A closed root reports every member it holds (proxy invariant): one the reader may not read is described
+							// with its value withheld (#825).
 							if (fixed && !Reflect.isExtensible(target)) {
+								if (runtime_rootWithheld(this, prop)) return { ...fixed, value: undefined };
 								runtime_rootMemberRead(this, prop, this.api?.[prop]);
 								return fixed;
 							}

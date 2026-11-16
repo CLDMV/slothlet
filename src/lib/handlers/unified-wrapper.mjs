@@ -815,8 +815,9 @@ function runtime_isPlainMember(value) {
  */
 function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	// A reader's view of a prototype a node was given is handed on as it is: it checks each read and change itself.
-	if (GIVEN_VIEWS.has(value)) return value;
+	// A reader's view of a prototype a node was given, and a stand-in a closed node holds for its code, are handed on
+	// as they are: each checks every read and change itself.
+	if (GIVEN_VIEWS.has(value) || PINNED_CODE_MEMBERS.has(value)) return value;
 	// A function of the module's an api node stands for is that node, read under its own rules (a prototype's
 	// `constructor`, say).
 	if (typeof value === "function") {
@@ -4167,6 +4168,84 @@ function runtime_moduleInheritance(wrapper, prop) {
  * @private
  */
 const GIVEN_VIEWS = new WeakMap();
+
+/**
+ * The stand-ins a closed function node or function root holds fixed for a member holding the module's code (see
+ * {@link runtime_pinnedCodeMember}), each with the value it stands for.
+ * @type {WeakMap<object, object|Function>}
+ * @private
+ */
+const PINNED_CODE_MEMBERS = new WeakMap();
+
+/**
+ * What a frozen function node or function root holds fixed for a member holding the module's code (its `prototype`, a
+ * static method): a stand-in for the value, every use of which is checked as a call of the node, for whoever makes it.
+ * A frozen object must describe each member it holds as it holds it, to every reader, so `Object.keys`, `for…in` and
+ * `Object.isFrozen` hand the description of every member to whoever lists the node. Holding the value itself, that
+ * description had to be refused to a reader that may not call the node, and the listing with it. The stand-in can be
+ * described to anyone: the host and a module that may call the node use it as the value, and a module that may not is
+ * refused each read, call or change made through it, as it is refused reading the member.
+ * @param {object} gate - The node's wrapper, or the api root's stand-in for the gate (see {@link runtime_rootGate}).
+ * @param {object|Function} value - The member's value.
+ * @returns {object|Function} The stand-in.
+ * @private
+ *
+ * @example
+ * Object.freeze(api.math.Calc);
+ * Object.keys(self.math.Calc); // [] to a module that may not call it, no longer refused
+ * self.math.Calc.prototype; // still refused
+ */
+function runtime_pinnedCodeMember(gate, value) {
+	const checked =
+		(trap) =>
+		(...args) => {
+			runtime_enforceCodeMember(gate, value);
+			return Reflect[trap](...args);
+		};
+	const handler = {};
+	for (const trap of [
+		"get",
+		"set",
+		"has",
+		"ownKeys",
+		"getOwnPropertyDescriptor",
+		"defineProperty",
+		"deleteProperty",
+		"getPrototypeOf",
+		"setPrototypeOf",
+		"isExtensible",
+		"preventExtensions",
+		"apply",
+		"construct"
+	])
+		handler[trap] = checked(trap);
+	const standIn = new NativeProxy(value, handler);
+	PINNED_CODE_MEMBERS.set(standIn, value);
+	return standIn;
+}
+
+/**
+ * The value a stand-in {@link runtime_pinnedCodeMember} made stands for, or the value itself when it is none.
+ * @param {*} value - The value.
+ * @returns {*} What is behind it.
+ * @private
+ */
+function runtime_behindPinnedCode(value) {
+	return PINNED_CODE_MEMBERS.get(value) ?? value;
+}
+
+/**
+ * Whether a member a function node or function root is about to hold fixed holds the module's code, and so is held as a
+ * stand-in (see {@link runtime_pinnedCodeMember}): an object or function no api node stands for, holding code.
+ * @param {*} value - The member's value.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_pinsAsCode(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	if (PINNED_CODE_MEMBERS.has(value) || resolveWrapper(value) !== null || INTRINSICS.has(value)) return false;
+	return runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties });
+}
 
 /**
  * The object a view of a given prototype stands for ({@link runtime_givenView}), or the value itself when it is no
@@ -10474,6 +10553,21 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 }
 
 /**
+ * Whether the api root withholds a member from the reader's description: the root holds it, and describes it to the
+ * reader as it describes no member (see {@link runtime_rootMemberDescriptor}), which it does for a value the reader may
+ * not read and for the root function's own code a reader may not call. A closed root must still describe the key, so it
+ * is described with its value withheld.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member's key.
+ * @returns {boolean} True when the value is withheld.
+ * @internal
+ */
+function runtime_rootWithheld(slothlet, prop) {
+	const held = slothlet.api ? Objects.getOwnPropertyDescriptor(slothlet.api, prop) : undefined;
+	return held !== undefined && runtime_rootMemberDescriptor(slothlet, prop, held) === undefined;
+}
+
+/**
  * Record an instance's api root proxy, so a write the framework makes to it is its own (see {@link runtime_frameworkWrite}).
  * @param {object} root - The root proxy.
  * @returns {object} `root`.
@@ -10510,9 +10604,13 @@ function runtime_assertRootChange(slothlet, prop) {
  * @returns {PropertyDescriptor} The descriptor the target holds.
  * @private
  */
-function runtime_rootShellDescriptor(descriptor) {
+function runtime_rootShellDescriptor(descriptor, slothlet = null, prop = null) {
 	const value = descriptor.value;
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
+	// The root function's own `prototype` or `toString`, fixed read-only, is held as a stand-in every holder may be
+	// described (see runtime_pinnedCodeMember).
+	if (slothlet !== null && descriptor.writable === false && runtime_isRootFunctionAnswer(slothlet, prop) && runtime_pinsAsCode(value))
+		return { ...descriptor, value: runtime_pinnedCodeMember(runtime_rootGate(slothlet), value) };
 	const impl = resolveWrapper(value)?.____slothletInternal.impl;
 	return runtime_isHeldPrimitive(impl) ? { ...descriptor, value: impl } : descriptor;
 }
@@ -10552,7 +10650,7 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
 	if (!Reflect.defineProperty(api, prop, descriptor)) return false;
 	const held = Reflect.getOwnPropertyDescriptor(api, prop);
 	if (held.configurable && Reflect.isExtensible(target)) return true;
-	return Reflect.defineProperty(target, prop, runtime_rootShellDescriptor(held));
+	return Reflect.defineProperty(target, prop, runtime_rootShellDescriptor(held, slothlet, prop));
 }
 
 /**
@@ -10584,7 +10682,7 @@ function runtime_rootClose(slothlet, target, isCallable, prototype) {
 	// the closed root reads it through (see runtime_rootPrototypeFor).
 	if (isCallable || prototype !== undefined) Reflect.setPrototypeOf(target, prototype);
 	for (const key of Reflect.ownKeys(api))
-		Reflect.defineProperty(target, key, runtime_rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key)));
+		Reflect.defineProperty(target, key, runtime_rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key), slothlet, key));
 	return Reflect.preventExtensions(target);
 }
 
@@ -10603,9 +10701,13 @@ function runtime_rootClose(slothlet, target, isCallable, prototype) {
 function runtime_rootFixedMember(slothlet, prop, fixed, described) {
 	if (!("value" in fixed)) return described ? fixed : Reflect.get(slothlet.api, prop);
 	if (!fixed.writable) {
-		runtime_rootMemberRead(slothlet, prop, fixed.value);
+		// A stand-in for the root function's code is described to anyone: each use of it is checked.
+		if (described && PINNED_CODE_MEMBERS.has(fixed.value)) return fixed;
+		runtime_rootMemberRead(slothlet, prop, runtime_behindPinnedCode(fixed.value));
 		return described ? fixed : fixed.value;
 	}
+	// A writable member is described with the value the reader may not read withheld, as a node describes one (#825).
+	if (described && runtime_rootWithheld(slothlet, prop)) return { ...fixed, value: undefined };
 	const value = runtime_rootMemberRead(slothlet, prop, slothlet.api[prop]);
 	return described ? { ...fixed, value } : value;
 }
@@ -10630,7 +10732,7 @@ function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
 	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
 	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
-	if (runtime_functionOf(impl) !== null) runtime_enforceCodeMember(wrapper, value, kept);
+	if (runtime_functionOf(impl) !== null) runtime_enforceCodeMember(wrapper, runtime_behindPinnedCode(value), kept);
 }
 
 /**
@@ -10650,7 +10752,8 @@ function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
 function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null) {
 	// A view mirroring this member onto its shadow asks for it as it is held (see runtime_describeAsHeld).
 	if (asHeld) return descriptor;
-	if (descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable)
+	// A stand-in for the module's code is described to anyone: each use of it is checked (see runtime_pinnedCodeMember).
+	if (descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable && !PINNED_CODE_MEMBERS.has(descriptor.value))
 		runtime_gateFixedValue(wrapper, prop, descriptor.value, kept);
 	return descriptor;
 }
@@ -12837,6 +12940,10 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 		// module's value, not the shell's copy. The module's array keeps its own value, not the api node.
 		if (current.writable && descriptor.writable === false && !("value" in descriptor)) {
 			attributes.value = runtime_shellValue(wrapper, prop);
+			// A function node's own member holding the module's code is held as a stand-in every holder may be described
+			// (see runtime_pinnedCodeMember).
+			if (runtime_functionOf(impl) !== null && !hasOwn(wrapper, prop) && runtime_pinsAsCode(attributes.value))
+				attributes.value = runtime_pinnedCodeMember(wrapper, attributes.value);
 			if (mirrors) delete mirrored.value;
 		}
 		// The shell holds a module object's accessor as data (see sealShell): the object's accessor takes only the
@@ -18689,6 +18796,15 @@ class UnifiedWrapper extends ComponentBase {
 					// A value the caller may not read is withheld, as the invariants allow for a writable member: the key
 					// must still be described, and sealing or freezing the node needs only its attributes.
 					if (redact && runtime_isReadRedacted(wrapper, prop, kept, access)) return { ...sealed, value: undefined };
+					// So is a member of the function's own holding the module's code, to a caller that may not call the node
+					// (#825): an open node leaves it out of its description, which a sealed node may not.
+					// A view mirroring the member asks for it as held: a writable member's value is not pinned, so it is withheld
+					// there too.
+					if (redact && !hasOwn(wrapper, prop) && runtime_functionOf(wrapper.____slothletInternal.impl) !== null) {
+						const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Objects.getOwnPropertyDescriptor(impl, prop) : null));
+						if (implDescriptor !== null && runtime_isCodeMemberWithheld(wrapper, implDescriptor, kept))
+							return { ...sealed, value: undefined };
+					}
 					return { ...sealed, value: readNode() };
 				}
 				if (sealed && prop === "length" && Arrays.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
@@ -20189,6 +20305,7 @@ export function internals(consumer) {
 		runtime_rootListing,
 		runtime_rootMemberDescriptor,
 		runtime_rootMemberRead,
+		runtime_rootWithheld,
 		runtime_rootPrototypeFor,
 		runtime_rootInheritedRead,
 		runtime_behindGivenView,
