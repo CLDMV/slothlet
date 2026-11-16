@@ -68,6 +68,7 @@ const {
 	describeCall,
 	resolveSupplier,
 	loadOnStack,
+	ownReceiver,
 	runtime_captureFrames,
 	stackHoldsInstanceCode,
 	supplierChainCeiling
@@ -1939,11 +1940,13 @@ export class LiveContextManager {
 		const creator = asHost ? null : (currentWrapper ?? null);
 		// Who receives what the call returns: the host when the call was entered with no module executing (#667).
 		const callerIsHost = Boolean(entryIdentity) && !entryIdentity.unresolved && !entryCaller;
+		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
+		const receiver = ownReceiver(entryIdentity?.record, entryIdentity);
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) =>
 						this.#wrapClassInstanceResult(
-							attributeResult(currentWrapper, value, callerIsHost, entryCaller),
+							attributeResult(currentWrapper, value, callerIsHost, entryCaller, receiver),
 							targetInstanceID,
 							creator,
 							callerIsHost

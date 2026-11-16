@@ -5327,6 +5327,69 @@ const MAKERS = new WeakMap();
 const STAND_IN_RECORDS = new WeakMap();
 
 /**
+ * For each stand-in of a function made for what a call returned to a call's own code (see `ownReceiver`), that call,
+ * or {@link MOVED} once slothlet has seen the stand-in handed anywhere else: handed out again, handed in to a call,
+ * returned by a call. Read by {@link runtime_originOf}.
+ * @type {WeakMap<object, object|symbol>}
+ * @private
+ */
+const STAND_IN_ORIGINS = new WeakMap();
+
+/**
+ * What {@link STAND_IN_ORIGINS} holds for a stand-in seen handed somewhere other than the call it was made for.
+ * @type {symbol}
+ * @private
+ */
+const MOVED = Symbol("moved");
+
+/**
+ * The call whose own code receives what is being handed out right now (see {@link runtime_attributeResult}), or null.
+ * @type {object|null}
+ * @private
+ */
+let handOutReceiver = null;
+
+/**
+ * Record a function stand-in just made as handed to {@link handOutReceiver}, when there is one.
+ * @param {object} standIn - The stand-in.
+ * @returns {void}
+ * @private
+ */
+function runtime_recordStandInOrigin(standIn) {
+	if (handOutReceiver !== null) STAND_IN_ORIGINS.set(standIn, handOutReceiver);
+}
+
+/**
+ * Note that slothlet sees a value handed on: a stand-in recorded as handed to one call (see
+ * {@link runtime_recordStandInOrigin}) is no longer that call's alone, unless it is being handed out to that call again.
+ * A crossing view stands for the value behind it.
+ * @param {*} value - The value.
+ * @returns {void}
+ * @private
+ */
+function runtime_noteMoved(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+	const behind = CROSSINGS.get(value)?.original ?? value;
+	const origin = STAND_IN_ORIGINS.get(behind);
+	if (origin !== undefined && origin !== MOVED && origin !== handOutReceiver) STAND_IN_ORIGINS.set(behind, MOVED);
+}
+
+/**
+ * The call a stand-in was handed to alone (ID-D6): the call whose own code it was made for, while slothlet has seen it
+ * handed nowhere else. Run there by that call's own code it is code the call obtained itself, which no call above
+ * handed in (see `outerCallerCeiling`). Null for any other stand-in: wherever it runs inside a call that was handed
+ * code, it may be code a call above handed in, however it reached the call (bound, behind a getter or a Proxy, nested
+ * in data, kept from an earlier call).
+ * @param {object} standIn - The stand-in.
+ * @returns {object|null} The call, or null.
+ * @private
+ */
+function runtime_originOf(standIn) {
+	const origin = STAND_IN_ORIGINS.get(standIn);
+	return origin === undefined || origin === MOVED ? null : origin;
+}
+
+/**
  * The views a module is handed of a caller's plain array or object holding the module's own stand-ins (see
  * {@link runtime_inboundView}), with the caller's value behind each.
  * @type {WeakMap<object, {maker: object, original: object}>}
@@ -5780,12 +5843,13 @@ function moduleMakerCount(slothlet) {
  * @param {Array<*>} [args=[]] - Its arguments.
  * @param {boolean} [attribute=true] - Hand what it returns back as the module's too (see {@link runtime_attributeResult}).
  * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
+ * @param {object|null} [origin=null] - For a stand-in, the call it was handed to alone (see {@link runtime_originOf}).
  * @returns {*} What it returned.
  * @private
  */
-function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false) {
+function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false, origin = null) {
 	try {
-		return runtime_runAsMakerRaw(owner, fn, thisArg, args, attribute, asNode);
+		return runtime_runAsMakerRaw(owner, fn, thisArg, args, attribute, asNode, origin);
 	} catch (error) {
 		// What the module's code threw is the module's: it is read as the module, wherever it is reported (#599).
 		runtime_rememberMadeFailure(owner, error);
@@ -6126,10 +6190,11 @@ function runtime_rememberMadeFailure(owner, error) {
  * @param {Array<*>} [args=[]] - Its arguments.
  * @param {boolean} [attribute=true] - Hand what it returns back as the module's too.
  * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
+ * @param {object|null} [origin=null] - For a stand-in, the call it was handed to alone (see {@link runtime_originOf}).
  * @returns {*} What it returned.
  * @private
  */
-function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false) {
+function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false, origin = null) {
 	const contextManager = owner.slothlet?.contextManager;
 	if (!contextManager?.runInContext || !owner.slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
 	// An instance that is gone (shut down) has no context to run its code in: the code runs outside every instance, as
@@ -6140,7 +6205,7 @@ function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attrib
 	// value handed out records its definer and grants nothing: the caller running it, read now, is its ceiling, so every
 	// access has to be allowed for both (#726). A node's own code (an accessor or a Proxy export of an api object, `new`
 	// on an exported class) is checked as a call of its node, and runs as that call does, under no ceiling of its caller.
-	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.slothlet);
+	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.slothlet, origin);
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
 	);
@@ -6439,6 +6504,21 @@ function runtime_holdsCode(value, depth, budget) {
  */
 function runtime_handOut(maker, owner, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	runtime_noteMoved(value);
+	const handed = runtime_handOutValue(maker, owner, value);
+	if (handed !== value) runtime_noteMoved(handed);
+	return handed;
+}
+
+/**
+ * {@link runtime_handOut} for an object or function, without noting where its stand-in goes.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper a new stand-in runs as.
+ * @param {object|Function} value - The value.
+ * @returns {*} What is handed out.
+ * @private
+ */
+function runtime_handOutValue(maker, owner, value) {
 	const inbound = INBOUND_VIEWS.get(value);
 	if (inbound) return inbound.original;
 	// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
@@ -6611,12 +6691,34 @@ function runtime_promiseStandIn(maker, owner, original) {
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call.
  * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
+ * @param {object|null} [receiver=null] - The call whose own code receives the value, when that call was handed code
+ *   (see `ownReceiver`): a function stand-in made for it here is recorded as handed to that call alone.
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value, callerIsHost = false, caller = null) {
+function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	const previous = handOutReceiver;
+	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
+	try {
+		runtime_noteMoved(value);
+		return runtime_attributeResultTo(owner, value, callerIsHost, caller);
+	} finally {
+		handOutReceiver = previous;
+	}
+}
+
+/**
+ * {@link runtime_attributeResult} once the receiver is set.
+ * @param {object} owner - The wrapper whose call returned the value.
+ * @param {object|Function} value - What the call returned.
+ * @param {boolean} callerIsHost - Whether the host made the call.
+ * @param {object|null} caller - The wrapper of the module that made the call, when one did.
+ * @returns {*} What the caller gets.
+ * @private
+ */
+function runtime_attributeResultTo(owner, value, callerIsHost, caller) {
 	if (callerIsHost && typeof value === "object") {
 		const behind = runtime_behindMemberView(value);
 		if (runtime_knownPrototype(owner.slothlet, behind) !== undefined) return behind;
@@ -6743,6 +6845,7 @@ setInboundOriginal((value) => {
  */
 function runtime_handIn(maker, value, owner = maker.owner) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	runtime_noteMoved(value);
 	// A crossing view handed in stands for a value: this module's own comes back as itself, another module's stays a
 	// view, decided for this module.
 	const crossing = CROSSINGS.get(value);
@@ -7129,7 +7232,11 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		return Reflect.set(original, prop, value, receiver);
 	};
 	const handler = {
-		apply: (_shadow, thisArg, args) => runAs(owner, original, receiverOf(thisArg), runtime_handInAll(maker, args)),
+		apply: (_shadow, thisArg, args) => {
+			const receiver = receiverOf(thisArg);
+			const handed = runtime_handInAll(maker, args);
+			return runtime_runAsMaker(owner, original, receiver, handed, true, asNode, runtime_originOf(standIn));
+		},
 		construct: (_shadow, args, newTarget) => {
 			const target = newTarget === standIn ? original : runtime_handIn(maker, newTarget);
 			// A subclass's prototype is the subclass's, never the module's.
@@ -7218,6 +7325,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	standIn = new NativeProxy(shadow, handler);
 	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
+	if (isFunction) runtime_recordStandInOrigin(standIn);
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
 	const leaf = trustedRootOwn.implWrappers.get(original);
 	if (leaf) trustedRootOwn.implWrappers.set(standIn, leaf);
@@ -7239,7 +7347,11 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	const existing = made.get(original);
 	if (existing) return existing;
-	const run = (thisArg, args) => runtime_runAsMaker(owner, original, runtime_handIn(maker, thisArg), runtime_handInAll(maker, args));
+	const run = (thisArg, args) => {
+		const receiver = runtime_handIn(maker, thisArg);
+		const handed = runtime_handInAll(maker, args);
+		return runtime_runAsMaker(owner, original, receiver, handed, true, false, runtime_originOf(standIn));
+	};
 	const isGenerator = util.types.isGeneratorFunction(original);
 	const isAsync = util.types.isAsyncFunction(original);
 	let standIn;
@@ -7280,6 +7392,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	if (!Reflect.getOwnPropertyDescriptor(original, "name")) Reflect.deleteProperty(standIn, "name");
 	made.set(original, standIn);
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
+	runtime_recordStandInOrigin(standIn);
 	const leaf = trustedRootOwn.implWrappers.get(original);
 	if (leaf) trustedRootOwn.implWrappers.set(standIn, leaf);
 	return standIn;

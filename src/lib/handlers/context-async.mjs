@@ -42,7 +42,8 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, resolveSupplier, sampleStoreScripts } = framePlacementInternals("lib/handlers/context-async");
+const { attributeResult, enterCall, ownReceiver, resolveSupplier, sampleStoreScripts } =
+	framePlacementInternals("lib/handlers/context-async");
 
 /**
  * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
@@ -252,6 +253,8 @@ export class AsyncContextManager {
 		// on every path: spreading the base store must never leave a nested call holding its parent's.
 		const executionStore = { ...baseStore };
 		executionStore.record = this.#recordOf(baseStore);
+		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
+		let receiver = null;
 		if (asHost) {
 			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
 			executionStore.callerWrapper = null;
@@ -272,6 +275,7 @@ export class AsyncContextManager {
 				const identity = resolved?.identity && resolved.store === baseStore ? resolved.identity : this.#identityOf(baseStore);
 				executionStore.callerWrapper = identity.currentWrapper;
 				executionStore.callerCeiling = identity.ceiling ?? null;
+				receiver = ownReceiver(parent, identity);
 			} else {
 				executionStore.callerWrapper = baseStore.currentWrapper;
 				executionStore.callerCeiling = parent ? (parent.ceiling ?? null) : (baseStore.currentCeiling ?? null);
@@ -296,7 +300,7 @@ export class AsyncContextManager {
 		const callerIsHost = !executionStore.callerWrapper;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
 				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context

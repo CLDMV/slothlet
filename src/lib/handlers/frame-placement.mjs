@@ -1522,8 +1522,31 @@ function setResultAttributor(attributor) {
  * @returns {*} What the caller gets.
  * @internal
  */
-function attributeResult(wrapper, value, callerIsHost = false, caller = null) {
-	return resultAttributor(wrapper, value, callerIsHost, caller);
+function attributeResult(wrapper, value, callerIsHost = false, caller = null, receiver = null) {
+	return resultAttributor(wrapper, value, callerIsHost, caller, receiver);
+}
+
+/**
+ * The call whose own code receives what a call returns, when that call was handed code (see
+ * {@link supplierChainCeiling}): the parent call, when the code that made the call is the parent leaf's own (its
+ * identity, as resolved for the call, is the parent's wrapper under the parent's own ceiling). Null when the parent was
+ * handed no code, when code the parent was handed made the call, when that cannot be told (`provenance` off, an
+ * identity left unresolved), or when the parent is not known. A stand-in made for what such a call returns is recorded
+ * as handed to that call alone, until slothlet sees it handed anywhere else (see `runtime_originOf`).
+ * @param {{wrapper?: object, flagged?: boolean, ceiling?: object|null}|null|undefined} parent - The call that made the
+ *   call.
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null, unresolved?: boolean}|null|undefined} identity -
+ *   The identity the call was made with.
+ * @returns {object|null} The parent's record, or null.
+ * @internal
+ */
+function ownReceiver(parent, identity) {
+	if (!parent?.flagged || !identity || identity.unresolved || !parent.wrapper) return null;
+	if (!trustedRootOwn.genuineWrappers.has(parent.wrapper)) return null;
+	// With `provenance` off no frames are read, so code the parent was handed is not told from the parent's own.
+	if (parent.wrapper.slothlet?.config?.permissions?.provenance === false) return null;
+	if (identity.currentWrapper !== parent.wrapper || (identity.ceiling ?? null) !== (parent.ceiling ?? null)) return null;
+	return parent;
 }
 
 /**
@@ -1781,8 +1804,10 @@ const MAX_CHAIN = 64;
 /**
  * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
  * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
- * running inside the call may be code those calls handed in, and slothlet cannot tell it from code the leaf obtained
- * itself, so it runs under all of them: returning a closure to a module lends that module nothing it can pass on.
+ * running inside the call may be code those calls handed in, however it got there (bound, behind a getter or a Proxy,
+ * nested in data, kept from an earlier call), so it runs under all of them: returning a closure to a module lends that
+ * module nothing it can pass on. The one exception is a stand-in slothlet handed to the call's own code and has seen
+ * handed nowhere else, run by that code (see {@link outerCallerCeiling}).
  * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
  * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
  *   by a module.
@@ -3615,11 +3640,14 @@ function runtime_checksPermissions(slothlet) {
  * @param {object} contextManager - The instance's context manager.
  * @param {string} instanceID - The instance.
  * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
+ * @param {object|null} [origin=null] - For a stand-in, the call it was handed to alone, when slothlet has seen it handed
+ *   nowhere else (see {@link ownReceiver}): run by that call's own code, it is code the call obtained itself, not code a
+ *   call above handed in, so the calls that handed code down are not its ceiling.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
  * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
-function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
+function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin = null) {
 	const identity = contextManager?.getCallerIdentity?.(instanceID);
 	if (!identity?.currentWrapper) {
 		// Who runs it cannot be told (several calls are waiting and the stack names more than one, or none): it is no
@@ -3645,8 +3673,10 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null) {
 		return callers.length ? combineCeilings(...callers) : null;
 	}
 	// Run inside a call that was handed code, it may be code the caller handed in: the calls that handed code down are
-	// its ceiling too (see supplierChainCeiling).
-	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null, supplierChainCeiling(identity.record));
+	// its ceiling too (see supplierChainCeiling). A stand-in handed to this call alone, run by the call's own code, is
+	// not (ID-D6).
+	const own = origin !== null && identity.record === origin && ownReceiver(origin, identity) === origin;
+	return combineCeilings(identity.currentWrapper, identity.ceiling ?? null, own ? null : supplierChainCeiling(identity.record));
 }
 
 /**
@@ -4705,6 +4735,7 @@ export function internals(consumer) {
 		isLeafFileFunction,
 		loadOnStack,
 		outerCallerCeiling,
+		ownReceiver,
 		recordInstanceOwner,
 		registerLeafFile,
 		resolveSupplier,
@@ -4803,6 +4834,8 @@ const guarded_createModuleLoad = guardInternal(createModuleLoad, "createModuleLo
 const guarded_loadOnStack = guardInternal(loadOnStack, "loadOnStack", import.meta.url);
 /** @type {typeof outerCallerCeiling} */
 const guarded_outerCallerCeiling = guardInternal(outerCallerCeiling, "outerCallerCeiling", import.meta.url);
+/** @type {typeof ownReceiver} */
+const guarded_ownReceiver = guardInternal(ownReceiver, "ownReceiver", import.meta.url);
 /** @type {typeof frameDefiner} */
 const guarded_frameDefiner = guardInternal(frameDefiner, "frameDefiner", import.meta.url);
 /** @type {typeof isLeafFileFunction} */
@@ -4838,6 +4871,7 @@ export {
 	guarded_createModuleLoad as createModuleLoad,
 	guarded_loadOnStack as loadOnStack,
 	guarded_outerCallerCeiling as outerCallerCeiling,
+	guarded_ownReceiver as ownReceiver,
 	guarded_frameDefiner as frameDefiner,
 	guarded_isLeafFileFunction as isLeafFileFunction,
 	guarded_registerLeafFile as registerLeafFile,
