@@ -27,6 +27,15 @@ import { self } from "@cldmv/slothlet/runtime";
 export const make = () => () => self.vault.get();
 
 /**
+ * An async closure that reads the vault after an await.
+ * @returns {Function} The closure.
+ */
+export const makeAsync = () => async () => {
+	await null;
+	return self.vault.get();
+};
+
+/**
  * An object holding such a closure.
  * @returns {{run: Function}} The object.
  */

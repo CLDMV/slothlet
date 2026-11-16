@@ -26,8 +26,10 @@
  * lends on purpose: a closure pinned with `self.slothlet.lockCaller()`, a leaf, and a leaf acting on its own with
  * nothing handed in. The host handing the same closure to the same leaf is allowed: the host is no module.
  *
- * Inside a call that was handed code, slothlet cannot tell which function the caller handed in from one the leaf
- * obtained itself, so another module's handed-out code run there is held to the caller too.
+ * Inside a call that was handed code, a closure the leaf asked for itself is held to the leaf alone under "precise",
+ * which records where it handed the closure. Wherever a closure the caller held reaches the leaf (bound, behind a
+ * getter or a Proxy, nested in data, kept for a later call), it is held to the caller. Under "fast" nothing records
+ * where a closure went, so another module's code run inside such a call is held to the caller whichever it is.
  *
  * @module tests/vitests/suites/permissions/permissions-relayed-code
  */
@@ -87,9 +89,28 @@ describe.each(MATRIX)("Permissions > a closure relayed through an allowed leaf >
 		["handed down a chain of two leaves", "relayed"],
 		["handed to a host object leaf", "hostLeaf"],
 		["taken out of returned data and handed to a host object leaf", "hostLeafBoxed"],
-		["run by an allowed leaf of its own accord, inside a call the denied module handed a callback", "runnerOwnWith"]
+		["handed to another module's leaf behind a getter", "runnerGetter"],
+		["fetched by the denied module's getter while the leaf runs, and run by the leaf", "runnerGetterFetch"],
+		["handed to another module's leaf behind a Proxy", "runnerProxy"],
+		["handed to another module's leaf nested in data", "runnerNested"],
+		["that awaits, handed to another module's leaf", "runnerAsync"],
+		["that awaits, bound and handed to another module's leaf", "runnerAsyncBound"],
+		["handed to another module's leaf, kept, and run in a later call the denied module handed a callback", "runnerKept"],
+		["the leaf asked for itself, then handed out to the denied module and handed back behind a getter", "runnerShared"]
 	])("refuses a closure %s (%s)", async (_label, route) => {
 		expect(await api.ext.probe(route)).toBe(DENIED);
+	});
+
+	// Inside a call the denied module handed a callback, a closure the leaf asked for itself was never in the denied
+	// module's hands. Under "precise" it is a stand-in that records where slothlet handed it, so it runs under the leaf
+	// alone. Under "fast" nothing is wrapped and the stack cannot tell it from one the caller handed in: refused.
+	it.each([
+		["run by an allowed leaf of its own accord, inside a call the denied module handed a callback", "runnerOwnWith"],
+		["run by an allowed leaf of its own accord after an await, inside a call the denied module handed a callback", "runnerOwnWithLater"],
+		["that awaits, run by an allowed leaf of its own accord, inside a call the denied module handed a callback", "runnerOwnWithAsync"],
+		["mapped with by an allowed leaf of its own accord, inside a call the denied module handed a callback", "runnerOwnWithMap"]
+	])("a closure %s (%s): allowed under precise, refused under fast", async (_label, route) => {
+		expect(await api.ext.probe(route)).toBe(attribution === "precise" ? SECRET : DENIED);
 	});
 
 	it.each([

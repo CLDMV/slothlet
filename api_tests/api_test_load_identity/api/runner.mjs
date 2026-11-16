@@ -48,3 +48,90 @@ export const own = async () => (await self.bag.make())();
  * @returns {Promise<*>} What the closure returned.
  */
 export const ownWith = async (callback) => (typeof callback === "function" ? (await self.bag.make())() : undefined);
+
+/**
+ * Run a closure it asked `bag` for itself, after an await, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the closure returned.
+ */
+export const ownWithLater = async (callback) => {
+	if (typeof callback !== "function") return undefined;
+	const fn = await self.bag.make();
+	await null;
+	return fn();
+};
+
+/**
+ * Run an async closure it asked `bag` for itself, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the closure returned.
+ */
+export const ownWithAsync = async (callback) => (typeof callback === "function" ? (await self.bag.makeAsync())() : undefined);
+
+/**
+ * Map with a closure it asked `bag` for itself, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} The first result.
+ */
+export const ownWithMap = async (callback) => (typeof callback === "function" ? [1].map(await self.bag.make())[0] : undefined);
+
+/**
+ * Run the function a holder's `fn` member gives.
+ * @param {{fn: Function}} holder - The holder.
+ * @returns {*} What the function returned.
+ */
+export const callGot = (holder) => holder.fn();
+
+/**
+ * Run the function a holder's `fn` member settles to.
+ * @param {{fn: Promise<Function>}} holder - The holder.
+ * @returns {Promise<*>} What the function returned.
+ */
+export const callAwaited = async (holder) => (await holder.fn)();
+
+/**
+ * Run the function nested in data it is handed.
+ * @param {{inner: {list: Array<Function>}}} data - The data.
+ * @returns {*} What the function returned.
+ */
+export const callNested = (data) => data.inner.list[0]();
+
+/** The function {@link keep} was handed last. */
+let kept = null;
+
+/**
+ * Keep a function to run later.
+ * @param {Function} fn - The function.
+ * @returns {boolean} True.
+ */
+export const keep = (fn) => {
+	kept = fn;
+	return true;
+};
+
+/**
+ * Run the function {@link keep} was handed, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {*} What the kept function returned.
+ */
+export const runKept = (callback) => (typeof callback === "function" ? kept() : undefined);
+
+/** The closure {@link share} asked `bag` for last. */
+let shared = null;
+
+/**
+ * Ask `bag` for a closure, keep it where {@link peek} hands it out, then run the function a holder's `fn` member
+ * settles to.
+ * @param {{fn: Promise<Function>}} holder - The holder.
+ * @returns {Promise<*>} What the function returned.
+ */
+export const share = async (holder) => {
+	shared = await self.bag.make();
+	return (await holder.fn)();
+};
+
+/**
+ * The closure {@link share} asked `bag` for last.
+ * @returns {Function|null} The closure.
+ */
+export const peek = () => shared;

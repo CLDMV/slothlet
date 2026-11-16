@@ -55,6 +55,38 @@ export async function probe(route) {
 	if (route === "hostLeafBoxed") return settle(() => self.host.records.run(boxed.run));
 	if (route === "runnerOwn") return settle(() => self.runner.own());
 	if (route === "runnerOwnWith") return settle(() => self.runner.ownWith(() => 1));
+	if (route === "runnerOwnWithLater") return settle(() => self.runner.ownWithLater(() => 1));
+	if (route === "runnerOwnWithAsync") return settle(() => self.runner.ownWithAsync(() => 1));
+	if (route === "runnerOwnWithMap") return settle(() => self.runner.ownWithMap(() => 1));
+	if (route === "runnerGetter")
+		return settle(() =>
+			self.runner.callGot({
+				get fn() {
+					return made;
+				}
+			})
+		);
+	if (route === "runnerGetterFetch")
+		return settle(() =>
+			self.runner.callAwaited({
+				get fn() {
+					return self.bag.make();
+				}
+			})
+		);
+	if (route === "runnerProxy") return settle(() => self.runner.call(new Proxy(made, {})));
+	if (route === "runnerNested") return settle(() => self.runner.callNested({ inner: { list: [made] } }));
+	if (route === "runnerAsync") return settle(async () => self.runner.call(await self.bag.makeAsync()));
+	if (route === "runnerAsyncBound") return settle(async () => self.runner.call((await self.bag.makeAsync()).bind(null)));
+	if (route === "runnerShared")
+		return settle(() =>
+			self.runner.share({
+				get fn() {
+					return self.runner.peek();
+				}
+			})
+		);
+	if (route === "runnerKept") return settle(async () => (await self.runner.keep(made)) && self.runner.runKept(() => 1));
 	if (route === "lent") return settle(async () => self.runner.call(await self.bag.lend()));
 	if (route === "leaf") return settle(() => self.bag.read());
 	return "no such route";
