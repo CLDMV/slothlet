@@ -35,28 +35,52 @@ import {
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import {
-	Reflect,
-	Objects,
+	appendList,
+	ArrayMethods,
 	Arrays,
-	JSON,
-	functionSource,
-	Map,
-	Set,
-	WeakMap,
-	WeakSet,
-	WeakRef,
-	Symbol,
-	Symbols,
-	Math,
-	URL,
-	URLSearchParams,
 	Boolean,
+	concatLists,
+	copyList,
 	decodeURIComponent,
 	Error,
+	filterList,
+	functionSource,
+	generatorSteps,
+	JSON,
+	listSteps,
+	Map,
+	mapEntries,
+	mapKeys,
+	mapList,
+	MapMethods,
+	matchAllOf,
+	Math,
+	Objects,
+	Processes,
+	Reflect,
 	RegExp,
+	RegExpMethods,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
 	String,
+	StringMethods,
+	Symbol,
+	Symbols,
 	TextDecoder,
-	Processes
+	URL,
+	URLMethods,
+	URLSearchParams,
+	WeakMap,
+	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods,
+	WeakSet,
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { hasEngineStack, readStack, stackBudget, unreadError } from "@cldmv/slothlet/helpers/stack-read";
@@ -145,7 +169,7 @@ function sha256(data, encoding) {
 function mapValues(map) {
 	const values = [];
 	try {
-		Reflect.apply(MAP_FOREACH, map, [(value) => values.push(value)]);
+		Reflect.apply(MAP_FOREACH, map, [(value) => ArrayMethods.push(values, value)]);
 	} catch {
 		return [];
 	}
@@ -161,7 +185,7 @@ function mapValues(map) {
 function setMembers(set) {
 	const members = [];
 	try {
-		Reflect.apply(SET_FOREACH, set, [(member) => members.push(member)]);
+		Reflect.apply(SET_FOREACH, set, [(member) => ArrayMethods.push(members, member)]);
 	} catch {
 		return [];
 	}
@@ -193,7 +217,7 @@ function queryParam(query, name) {
  * @returns {string} Escaped source.
  * @private
  */
-const escapeForRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeForRegExp = (literal) => regExpReplace(/[.*+?^${}()|[\]\\]/g, literal, "\\$&");
 
 /**
  * Reduce a source location — a filesystem path or a URL — to a form two spellings of the same file
@@ -216,21 +240,21 @@ const escapeForRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$
 export function toComparablePath(value) {
 	// Some loaders (vitest's module runner among them) report a module by bare path with the loader's
 	// cache-busting query still attached, so a query is dropped from a plain path as well.
-	let text = String(value).replace(/\\/g, "/");
-	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) {
-		text = text.replace(/[?#].*$/, "");
+	let text = regExpReplace(/\\/g, String(value), "/");
+	if (RegExpMethods.exec(/^[a-z][a-z0-9+.-]*:\/\//i, text) !== null) {
+		text = regExpReplace(/[?#].*$/, text, "");
 		try {
 			text = decodeURIComponent(text);
 		} catch {
 			// A malformed escape cannot name a real file differently than it is spelled; compare it raw.
 		}
-		text = text.replace(/^file:\/\//i, "");
+		text = regExpReplace(/^file:\/\//i, text, "");
 		// `file:///C:/x` → `C:/x`, the spelling a Windows path takes once its separators are normalised.
-		if (/^\/[a-z]:\//i.test(text)) text = text.slice(1);
+		if (RegExpMethods.exec(/^\/[a-z]:\//i, text) !== null) text = StringMethods.slice(text, 1);
 	} else {
-		text = text.replace(/\?.*$/, "");
+		text = regExpReplace(/\?.*$/, text, "");
 	}
-	return text.replace(/\/+$/, "");
+	return regExpReplace(/\/+$/, text, "");
 }
 
 /**
@@ -246,7 +270,7 @@ function runtime_importedLocations(wrapper, filePath) {
 	if (!filePath) return null;
 	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath, wrapper?.____slothletInternal?.moduleID);
 	if (!recorded?.size) return null;
-	return new Set([...recorded].map(toComparablePath));
+	return setFrom(mapList(setToArray(recorded), toComparablePath));
 }
 
 /**
@@ -270,7 +294,7 @@ const REAL_PATHS = new Map();
  */
 function runtime_realComparablePath(filePath) {
 	if (!filePath) return null;
-	let real = REAL_PATHS.get(filePath);
+	let real = MapMethods.get(REAL_PATHS, filePath);
 	if (real === undefined) {
 		real = null;
 		try {
@@ -279,7 +303,7 @@ function runtime_realComparablePath(filePath) {
 		} catch {
 			// A path that does not resolve (a synthetic or browser path) has no other spelling.
 		}
-		REAL_PATHS.set(filePath, real);
+		MapMethods.set(REAL_PATHS, filePath, real);
 	}
 	return real;
 }
@@ -292,10 +316,11 @@ function runtime_realComparablePath(filePath) {
  * @private
  */
 function runtime_entryNames(apiPath, currentWrapper) {
-	const names = new Set([apiPath.slice(apiPath.lastIndexOf(".") + 1)]);
+	const names = setFrom([StringMethods.slice(apiPath, StringMethods.lastIndexOf(apiPath, ".") + 1)]);
 	const impl = currentWrapper?.____slothletInternal?.impl;
-	if (typeof impl === "function" && typeof impl.name === "string" && impl.name && impl.name !== "anonymous") names.add(impl.name);
-	return [...names].filter(Boolean);
+	if (typeof impl === "function" && typeof impl.name === "string" && impl.name && impl.name !== "anonymous")
+		SetMethods.add(names, impl.name);
+	return filterList(setToArray(names), Boolean);
 }
 
 /**
@@ -320,22 +345,25 @@ function runtime_importGraphEntry(family) {
 	const source = instanceImporters(family);
 	if (!source) return EMPTY_GRAPH;
 	const edges = source.edges ?? 0;
-	const cached = IMPORT_GRAPHS.get(source);
+	const cached = WeakMapMethods.get(IMPORT_GRAPHS, source);
 	if (cached && cached.edges === edges) return cached;
 	const graph = new Map();
 	const files = new Set();
-	for (const [file, importers] of source) {
-		const location = toComparablePath(file);
-		if (!graph.has(location)) graph.set(location, new Set());
-		files.add(location);
-		for (const importer of importers) {
-			const from = toComparablePath(importer);
-			graph.get(location).add(from);
-			files.add(from);
+	// The graph is a view another copy of slothlet may have made: its walk is a generator, stepped with the functions
+	// taken at load; each entry is a fresh [file, importers array] pair.
+	for (const entry of generatorSteps(source[Symbol.iterator]())) {
+		const location = toComparablePath(entry[0]);
+		const importers = entry[1];
+		if (!MapMethods.has(graph, location)) MapMethods.set(graph, location, new Set());
+		SetMethods.add(files, location);
+		for (let i = 0; i < importers.length; i++) {
+			const from = toComparablePath(importers[i]);
+			SetMethods.add(MapMethods.get(graph, location), from);
+			SetMethods.add(files, from);
 		}
 	}
 	const entry = { edges, graph, files };
-	IMPORT_GRAPHS.set(source, entry);
+	WeakMapMethods.set(IMPORT_GRAPHS, source, entry);
 	return entry;
 }
 
@@ -362,26 +390,30 @@ const MODULE_ROOTS = new WeakMap();
 
 /**
  * One instance's module roots, longest first, rebuilt only when its cached modules change.
- * @param {object} cache - The instance's api cache manager.
+ * @param {object} cacheManager - The instance's api cache manager.
  * @returns {Array<{moduleID: string, root: string}>} Module roots.
  * @private
  */
-function runtime_moduleRoots(cache) {
-	const cached = MODULE_ROOTS.get(cache);
-	if (cached && cached.version === cache.version) return cached.roots;
+function runtime_moduleRoots(cacheManager) {
+	const cached = WeakMapMethods.get(MODULE_ROOTS, cacheManager);
+	if (cached && cached.version === cacheManager.version) return cached.roots;
 	const roots = [];
-	for (const moduleID of cache.getAllModuleIDs()) {
-		const { folderPath } = cache.get(moduleID);
+	for (let ofIndex = 0, ofList = cacheManager.getAllModuleIDs(); ofIndex < ofList.length; ofIndex++) {
+		const moduleID = ofList[ofIndex];
+		const { folderPath } = cacheManager.get(moduleID);
 		// No base directory (`base: null`) and in-memory modules have no folder to own files by.
-		if (typeof folderPath !== "string" || folderPath.startsWith("synthetic:")) continue;
-		roots.push({ moduleID, root: toComparablePath(folderPath) });
+		if (typeof folderPath !== "string" || StringMethods.startsWith(folderPath, "synthetic:")) continue;
+		ArrayMethods.push(roots, { moduleID, root: toComparablePath(folderPath) });
 		// A root reached through a symlink: frames name its files by their real path.
 		const realRoot = runtime_realComparablePath(folderPath);
-		if (realRoot) roots.push({ moduleID, root: realRoot });
+		if (realRoot) ArrayMethods.push(roots, { moduleID, root: realRoot });
 	}
 	// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
-	const sorted = roots.filter(({ root }) => root).sort((a, b) => b.root.length - a.root.length);
-	MODULE_ROOTS.set(cache, { version: cache.version, roots: sorted });
+	const sorted = ArrayMethods.sort(
+		filterList(roots, ({ root }) => root),
+		(a, b) => b.root.length - a.root.length
+	);
+	WeakMapMethods.set(MODULE_ROOTS, cacheManager, { version: cacheManager.version, roots: sorted });
 	return sorted;
 }
 
@@ -403,15 +435,16 @@ const COMMONJS_LOCATIONS = new WeakMap();
 function runtime_commonJSLocations(family) {
 	const version = instanceCommonJSVersion(family);
 	if (!version) return NO_LOCATIONS;
-	const cached = COMMONJS_LOCATIONS.get(version.key);
+	const cached = WeakMapMethods.get(COMMONJS_LOCATIONS, version.key);
 	if (cached && cached.count === version.count) return cached.locations;
 	const locations = new Set();
-	for (const file of instanceCommonJSFiles(family)) {
-		locations.add(toComparablePath(file));
+	for (let i = 0, commonJSFiles = instanceCommonJSFiles(family); i < commonJSFiles.length; i++) {
+		const file = commonJSFiles[i];
+		SetMethods.add(locations, toComparablePath(file));
 		const real = runtime_realComparablePath(file);
-		if (real) locations.add(real);
+		if (real) SetMethods.add(locations, real);
 	}
-	COMMONJS_LOCATIONS.set(version.key, { count: version.count, locations });
+	WeakMapMethods.set(COMMONJS_LOCATIONS, version.key, { count: version.count, locations });
 	return locations;
 }
 
@@ -437,10 +470,10 @@ const LOADED_LOCATIONS = new WeakMap();
  */
 function runtime_loadedLocations(loader) {
 	const list = loader.importedLocations?.() ?? [];
-	let set = LOADED_LOCATIONS.get(list);
+	let set = WeakMapMethods.get(LOADED_LOCATIONS, list);
 	if (!set) {
-		set = new Set(list.map(toComparablePath));
-		LOADED_LOCATIONS.set(list, set);
+		set = setFrom(mapList(list, toComparablePath));
+		WeakMapMethods.set(LOADED_LOCATIONS, list, set);
 	}
 	return set;
 }
@@ -458,9 +491,11 @@ export function runtime_namesEntry(head, entry) {
 	// Compiled on first use and kept on the entry: one pattern for all its names, not one per frame read.
 	if (entry.namePattern === undefined) {
 		const names = entry.fnNames ?? (entry.fnName ? [entry.fnName] : []);
-		entry.namePattern = names.length ? new RegExp(`(?:^|[\\s.])(?:${names.map(escapeForRegExp).join("|")})(?=\\s|$|\\[)`) : null;
+		entry.namePattern = names.length
+			? new RegExp(`(?:^|[\\s.])(?:${ArrayMethods.join(mapList(names, escapeForRegExp), "|")})(?=\\s|$|\\[)`)
+			: null;
 	}
-	return entry.namePattern !== null && entry.namePattern.test(head.trim() + " ");
+	return entry.namePattern !== null && RegExpMethods.exec(entry.namePattern, StringMethods.trim(head) + " ") !== null;
 }
 
 /**
@@ -471,7 +506,7 @@ export function runtime_namesEntry(head, entry) {
  * @private
  */
 function runtime_frameInstanceTag(line) {
-	return /[?&]slothlet_instance=([^&#:)\s]+)/.exec(line)?.[1] ?? null;
+	return RegExpMethods.exec(/[?&]slothlet_instance=([^&#:)\s]+)/, line)?.[1] ?? null;
 }
 
 /**
@@ -484,9 +519,9 @@ function runtime_frameInstanceTag(line) {
 function runtime_frameModuleTag(line) {
 	// The loader writes the moduleID encoded (the Node loader with encodeURIComponent, the browser one through
 	// URLSearchParams, which writes a space as `+`), so the raw tag holds none of the characters that end it here.
-	const tag = /[?&]module=([^&#:)\s]+)/.exec(line)?.[1];
+	const tag = RegExpMethods.exec(/[?&]module=([^&#:)\s]+)/, line)?.[1];
 	if (!tag) return null;
-	const spaced = tag.replace(/\+/g, " ");
+	const spaced = regExpReplace(/\+/g, tag, " ");
 	try {
 		return decodeURIComponent(spaced);
 	} catch {
@@ -505,10 +540,10 @@ function runtime_frameModuleTag(line) {
  * @private
  */
 function runtime_frameImporterTag(line) {
-	const tag = /[?&]slothlet_for=([^&#:)\s]+)/.exec(line)?.[1];
+	const tag = RegExpMethods.exec(/[?&]slothlet_for=([^&#:)\s]+)/, line)?.[1];
 	if (!tag) return null;
 	const decode = (value) => {
-		const spaced = value.replace(/\+/g, " ");
+		const spaced = regExpReplace(/\+/g, value, " ");
 		try {
 			return decodeURIComponent(spaced);
 		} catch {
@@ -516,7 +551,7 @@ function runtime_frameImporterTag(line) {
 			return spaced;
 		}
 	};
-	const mount = /[?&]slothlet_mount=([^&#:)\s]+)/.exec(line)?.[1];
+	const mount = RegExpMethods.exec(/[?&]slothlet_mount=([^&#:)\s]+)/, line)?.[1];
 	return { path: toComparablePath(decode(tag)), mount: mount ? decode(mount) : null };
 }
 
@@ -585,7 +620,7 @@ export function textFrames(text, limit) {
 		const unlocated = !trimmed.startsWith("at ") && trimmed.endsWith("@");
 		const frame = unlocated ? { head: trimmed.slice(0, -1), path: "" } : parseStackFrame(line);
 		if (frame) {
-			frames.push({
+			ArrayMethods.push(frames, {
 				...frame,
 				line,
 				async: /^at async /.test(trimmed),
@@ -613,12 +648,13 @@ export function textFrames(text, limit) {
 function runtime_structuredFrames(_error, callSites) {
 	// Converted as the resolver walks them, innermost first: it usually stops within the first few.
 	return {
-		[Symbol.iterator]: () => runtime_siteFrames(callSites, false),
+		// Each walk steps its generator with the functions taken at load (see helpers/intrinsics `generatorSteps`).
+		[Symbol.iterator]: () => generatorSteps(runtime_siteFrames(callSites, false)),
 		// The same frames, in the same order, with slothlet's own described only by where they are and what they enter:
 		// for a reader that passes over slothlet's own frames by those two alone.
-		lean: () => runtime_siteFrames(callSites, true),
+		lean: () => generatorSteps(runtime_siteFrames(callSites, true)),
 		// The same frames after the one at an index, converted only from there (see runtime_framesAfter).
-		after: (index) => runtime_siteFrames(callSites, false, index + 1),
+		after: (index) => generatorSteps(runtime_siteFrames(callSites, false, index + 1)),
 		structured: true,
 		truncated: callSites.length >= stackBudget(),
 		// Whether the outermost frame is a builtin's, which has no location: what began the job is the engine's own.
@@ -638,7 +674,8 @@ function runtime_structuredFrames(_error, callSites) {
 function* runtime_siteFrames(callSites, lean, skip = 0) {
 	// Whether a frame with no location (a builtin's) was passed over since the last one yielded.
 	let gap = false;
-	for (const site of callSites) {
+	for (let ofIndex = 0, ofList = callSites; ofIndex < ofList.length; ofIndex++) {
+		const site = ofList[ofIndex];
 		// An eval'd frame names the file it was evaluated from in its origin, as the formatted text does.
 		const sourceURL = site.getScriptNameOrSourceURL?.() ?? null;
 		const fileName = site.getFileName?.() ?? null;
@@ -653,7 +690,7 @@ function* runtime_siteFrames(callSites, lean, skip = 0) {
 		}
 		if (lean && location) {
 			const described = runtime_comparableLocation(location);
-			if (described.path.startsWith(FRAMEWORK_PREFIX)) {
+			if (StringMethods.startsWith(described.path, FRAMEWORK_PREFIX)) {
 				yield { path: described.path, enter: runtime_entryKind(site.getFunctionName?.() ?? site.getMethodName?.() ?? "") };
 				gap = false;
 				continue;
@@ -724,12 +761,12 @@ const COMPARABLE_LOCATIONS = new Map();
  * @private
  */
 function runtime_comparableLocation(location) {
-	let described = COMPARABLE_LOCATIONS.get(location);
+	let described = MapMethods.get(COMPARABLE_LOCATIONS, location);
 	if (described === undefined) {
 		const path = toComparablePath(location);
 		described = { path, key: runtime_scriptKey(path, location) };
-		if (COMPARABLE_LOCATIONS.size >= 4096) COMPARABLE_LOCATIONS.clear();
-		COMPARABLE_LOCATIONS.set(location, described);
+		if (MapMethods.size(COMPARABLE_LOCATIONS) >= 4096) MapMethods.clear(COMPARABLE_LOCATIONS);
+		MapMethods.set(COMPARABLE_LOCATIONS, location, described);
 	}
 	return described;
 }
@@ -771,8 +808,8 @@ setCallerCheck((entry) => runtime_registeredScript(entry, true)?.location ?? nul
  * @private
  */
 function runtime_rememberScript(key, hash) {
-	let hashes = SCRIPT_HASHES.get(key);
-	if (!hashes) SCRIPT_HASHES.set(key, (hashes = []));
+	let hashes = MapMethods.get(SCRIPT_HASHES, key);
+	if (!hashes) MapMethods.set(SCRIPT_HASHES, key, (hashes = []));
 	rememberNewest(hashes, hash);
 }
 
@@ -785,11 +822,11 @@ function runtime_rememberScript(key, hash) {
  * @private
  */
 function runtime_knowsScript(key, hash) {
-	const learned = SCRIPT_HASHES.get(key);
+	const learned = MapMethods.get(SCRIPT_HASHES, key);
 	const loaded = loadedScriptLookup(key, hash);
 	return {
 		known: Boolean(learned?.length) || loaded.known,
-		has: (hash !== undefined && Boolean(learned?.includes(hash))) || loaded.has
+		has: (hash !== undefined && Boolean(learned == null ? undefined : ArrayMethods.includes(learned, hash))) || loaded.has
 	};
 }
 
@@ -801,7 +838,7 @@ function runtime_knowsScript(key, hash) {
  * learnedScriptCount(); // 8
  */
 export function learnedScriptCount() {
-	return SCRIPT_HASHES.size;
+	return MapMethods.size(SCRIPT_HASHES);
 }
 
 /**
@@ -825,8 +862,8 @@ const RETIRED_COMMONJS = new Set();
  */
 function forgetInstanceScripts(instanceID) {
 	if (instanceID == null) return;
-	for (const key of SCRIPT_HASHES.keys()) if (scriptKeyInstance(key) === String(instanceID)) SCRIPT_HASHES.delete(key);
-	for (const location of runtime_commonJSLocations(instanceID)) RETIRED_COMMONJS.add(location);
+	for (const key of mapKeys(SCRIPT_HASHES)) if (scriptKeyInstance(key) === String(instanceID)) MapMethods.delete(SCRIPT_HASHES, key);
+	for (const location of setValues(runtime_commonJSLocations(instanceID))) SetMethods.add(RETIRED_COMMONJS, location);
 }
 
 /**
@@ -868,8 +905,8 @@ function runtime_readFileSourceHashes(path) {
 		mtimeMs = nodeFs(FS_STAT, path).mtimeMs;
 		const source = nodeFs(FS_READ_FILE, path);
 		const text = Reflect.apply(TEXT_DECODE, new CapturedTextDecoder(), [source]);
-		const hashes = new Set([sha256(source), sha256(text)]);
-		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) hashes.add(sha256(source.subarray(3)));
+		const hashes = setFrom([sha256(source), sha256(text)]);
+		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) SetMethods.add(hashes, sha256(source.subarray(3)));
 		return { mtimeMs, hashes };
 	} catch {
 		// A file that is not there (a name code was compiled under), or cannot be read, runs nothing of its own — until
@@ -894,14 +931,19 @@ function runtime_runsFileSource(frame) {
 	if (frame.key && runtime_knowsScript(frame.key, frame.hash).has) return true;
 	// Under vitest, the script its runner compiles a file's code into, as recorded before slothlet loaded (#714): only a
 	// record that existed then is taken (see RUNNER_SNAPSHOT); one added later is not read.
-	if (RUNNER_SNAPSHOT.scripts.get(frame.path)?.has(frame.hash)) return true;
-	let known = FILE_SOURCE_HASHES.get(frame.path);
+	if (
+		MapMethods.get(RUNNER_SNAPSHOT.scripts, frame.path) == null
+			? undefined
+			: SetMethods.has(MapMethods.get(RUNNER_SNAPSHOT.scripts, frame.path), frame.hash)
+	)
+		return true;
+	let known = MapMethods.get(FILE_SOURCE_HASHES, frame.path);
 	if (known === undefined) {
 		known = runtime_readFileSourceHashes(frame.path);
-		if (FILE_SOURCE_HASHES.size >= 4096) FILE_SOURCE_HASHES.clear();
-		FILE_SOURCE_HASHES.set(frame.path, known);
+		if (MapMethods.size(FILE_SOURCE_HASHES) >= 4096) MapMethods.clear(FILE_SOURCE_HASHES);
+		MapMethods.set(FILE_SOURCE_HASHES, frame.path, known);
 	}
-	if (known.hashes.has(frame.hash)) return true;
+	if (SetMethods.has(known.hashes, frame.hash)) return true;
 	// The file may have changed since it was read (an edit before a reload): it is read again only then.
 	let mtimeMs;
 	try {
@@ -911,8 +953,8 @@ function runtime_runsFileSource(frame) {
 	}
 	if (mtimeMs === known.mtimeMs) return false;
 	const fresh = runtime_readFileSourceHashes(frame.path);
-	FILE_SOURCE_HASHES.set(frame.path, fresh);
-	return fresh.hashes.has(frame.hash);
+	MapMethods.set(FILE_SOURCE_HASHES, frame.path, fresh);
+	return SetMethods.has(fresh.hashes, frame.hash);
 }
 
 /**
@@ -938,12 +980,13 @@ export function isUnverifiedCode(frame, placement) {
 function runtime_conflictingScripts(frames) {
 	let seen = null;
 	let conflicts = null;
-	for (const frame of frames) {
+	for (let ofIndex = 0, ofList = frames; ofIndex < ofList.length; ofIndex++) {
+		const frame = ofList[ofIndex];
 		if (!frame.hash || !frame.key || runtime_knowsScript(frame.key).known) continue;
 		seen ??= new Map();
-		const hash = seen.get(frame.key);
-		if (hash === undefined) seen.set(frame.key, frame.hash);
-		else if (hash !== frame.hash) (conflicts ??= new Set()).add(frame.key);
+		const hash = MapMethods.get(seen, frame.key);
+		if (hash === undefined) MapMethods.set(seen, frame.key, frame.hash);
+		else if (hash !== frame.hash) SetMethods.add((conflicts ??= new Set()), frame.key);
 	}
 	return conflicts;
 }
@@ -971,14 +1014,14 @@ const LEARNABLE = new WeakMap();
  * @private
  */
 function runtime_isLearnable(fn) {
-	let learnable = LEARNABLE.get(fn);
+	let learnable = WeakMapMethods.get(LEARNABLE, fn);
 	if (learnable === undefined) {
 		try {
-			learnable = !util.types.isProxy(fn) && !/\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
+			learnable = !util.types.isProxy(fn) && !(RegExpMethods.exec(/\{\s*\[native code\]\s*\}\s*$/, functionSource(fn)) !== null);
 		} catch {
 			learnable = false;
 		}
-		LEARNABLE.set(fn, learnable);
+		WeakMapMethods.set(LEARNABLE, fn, learnable);
 	}
 	return learnable;
 }
@@ -992,9 +1035,9 @@ function runtime_isLearnable(fn) {
  * @private
  */
 function runtime_entryKind(name) {
-	if (!name || !name.includes("slothlet_enter")) return null;
-	if (/\bslothlet_enterLeaf\b/.test(name)) return "leaf";
-	if (/\bslothlet_enterCall\b/.test(name)) return "call";
+	if (!name || !StringMethods.includes(name, "slothlet_enter")) return null;
+	if (RegExpMethods.exec(/\bslothlet_enterLeaf\b/, name) !== null) return "leaf";
+	if (RegExpMethods.exec(/\bslothlet_enterCall\b/, name) !== null) return "call";
 	return null;
 }
 
@@ -1043,11 +1086,11 @@ function runtime_ownDefault(impl) {
  * @private
  */
 function slothlet_enterLeaf(wrapper, fn, thisArg, args) {
-	ENTERING.push({ wrapper, learnable: runtime_isLearnable(fn) });
+	ArrayMethods.push(ENTERING, { wrapper, learnable: runtime_isLearnable(fn) });
 	try {
 		return Reflect.apply(fn, thisArg, args);
 	} finally {
-		ENTERING.pop();
+		ArrayMethods.pop(ENTERING);
 	}
 }
 
@@ -1075,10 +1118,10 @@ function runtime_learnEntered(frames) {
 	let depth = 0;
 	for (let index = 0; index < frames.length; index++) {
 		const frame = frames[index];
-		if (frame.enter !== "leaf" || !frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		if (frame.enter !== "leaf" || !StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 		const entering = ENTERING[ENTERING.length - 1 - depth++];
 		const own = frames[index - 1];
-		if (!entering?.learnable || frame.gap || !own?.hash || !own.key || own.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		if (!entering?.learnable || frame.gap || !own?.hash || !own.key || StringMethods.startsWith(own.path, FRAMEWORK_DIR + "/")) continue;
 		if (runtime_isOwnModuleLocation(entering.wrapper, own.path)) runtime_rememberScript(own.key, own.hash);
 	}
 }
@@ -1094,15 +1137,18 @@ function runtime_isOwnModuleLocation(wrapper, path) {
 	const description = describeCall(wrapper);
 	if (
 		path === description.comparablePath ||
-		(description.comparablePath && path.endsWith("/" + description.comparablePath)) ||
+		(description.comparablePath && StringMethods.endsWith(path, "/" + description.comparablePath)) ||
 		path === description.realComparablePath ||
-		description.locations?.has(path)
+		(description.locations == null ? undefined : SetMethods.has(description.locations, path))
 	) {
 		return true;
 	}
 	const cache = wrapper.slothlet?.handlers?.apiCacheManager;
 	if (!cache) return false;
-	return runtime_moduleRoots(cache).some(({ moduleID, root }) => moduleID === description.moduleID && path.startsWith(root + "/"));
+	return ArrayMethods.some(
+		runtime_moduleRoots(cache),
+		({ moduleID, root }) => moduleID === description.moduleID && StringMethods.startsWith(path, root + "/")
+	);
 }
 
 /**
@@ -1128,11 +1174,11 @@ function runtime_isOwnModuleLocation(wrapper, path) {
  * parseStackFrame("run@http://host/api/run.mjs:4:9"); // { head: "run", path: "http://host/api/run.mjs" }
  */
 export function parseStackFrame(line) {
-	const text = String(line).trim();
+	const text = StringMethods.trim(String(line));
 	let head = "";
 	let location;
-	if (text.startsWith("at ")) {
-		if (text.endsWith(")")) {
+	if (StringMethods.startsWith(text, "at ")) {
+		if (StringMethods.endsWith(text, ")")) {
 			// Walk back from the closing parenthesis to its partner, so a location containing
 			// parentheses of its own (`C:/Program Files (x86)/…`) stays whole.
 			let depth = 0;
@@ -1145,19 +1191,22 @@ export function parseStackFrame(line) {
 				}
 			}
 			if (open < 0) return null;
-			head = text.slice(0, open);
-			location = text.slice(open + 1, -1);
+			head = StringMethods.slice(text, 0, open);
+			location = StringMethods.slice(text, open + 1, -1);
 		} else {
-			location = text.replace(/^at (?:async )?/, "");
+			location = regExpReplace(/^at (?:async )?/, text, "");
 		}
 	} else {
 		let at = -1;
-		for (const match of text.matchAll(/@(?=[a-z][a-z0-9+.-]*:|\/)/gi)) at = match.index;
+		for (let ofIndex = 0, ofList = matchAllOf(text, /@(?=[a-z][a-z0-9+.-]*:|\/)/gi); ofIndex < ofList.length; ofIndex++) {
+			const match = ofList[ofIndex];
+			at = match.index;
+		}
 		if (at < 0) return null;
-		head = text.slice(0, at);
-		location = text.slice(at + 1);
+		head = StringMethods.slice(text, 0, at);
+		location = StringMethods.slice(text, at + 1);
 	}
-	return { head, path: toComparablePath(location.replace(/:\d+(?::\d+)?$/, "")) };
+	return { head, path: toComparablePath(regExpReplace(/:\d+(?::\d+)?$/, location, "")) };
 }
 
 /**
@@ -1169,7 +1218,7 @@ export function parseStackFrame(line) {
  * @type {string}
  * @private
  */
-export const FRAMEWORK_DIR = toComparablePath(new URL("../../", import.meta.url).href);
+export const FRAMEWORK_DIR = toComparablePath(URLMethods.href(new URL("../../", import.meta.url)));
 
 /**
  * What the path of every frame of slothlet's own code starts with.
@@ -1204,7 +1253,7 @@ function describeCall(wrapper) {
 	const filePath = internal?.filePath ?? null;
 	const apiPath = internal?.apiPath ?? "";
 	/* v8 ignore stop */
-	const cached = DESCRIPTIONS.get(wrapper);
+	const cached = WeakMapMethods.get(DESCRIPTIONS, wrapper);
 	if (cached && cached.impl === impl && cached.filePath === filePath) return cached.description;
 	const description = {
 		filePath,
@@ -1221,11 +1270,14 @@ function describeCall(wrapper) {
 		moduleID: internal?.moduleID ?? null,
 		apiPath,
 		// Leaf segment of the api path — the function name as it appears in a stack frame.
-		fnName: apiPath.slice(apiPath.lastIndexOf(".") + 1),
+		fnName:
+			typeof apiPath === "string"
+				? StringMethods.slice(apiPath, ArrayMethods.lastIndexOf(apiPath, ".") + 1)
+				: copyList(apiPath, ArrayMethods.lastIndexOf(apiPath, ".") + 1),
 		// The names the function goes by on a stack: its api key, and its own name when that differs.
 		fnNames: runtime_entryNames(apiPath, wrapper)
 	};
-	DESCRIPTIONS.set(wrapper, { impl, filePath, description });
+	WeakMapMethods.set(DESCRIPTIONS, wrapper, { impl, filePath, description });
 	return description;
 }
 
@@ -1245,12 +1297,17 @@ function runtime_moduleRootsFor(candidates) {
 	// Every candidate is a live wrapper, which always reaches its instance's cache; the optional chain
 	// guards a partially-built wrapper handed in by a direct caller.
 	/* v8 ignore next */
-	const caches = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager).filter(Boolean));
+	const caches = setFrom(
+		filterList(
+			mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager),
+			Boolean
+		)
+	);
 	// One instance's roots are kept between reads as they are; several instances' are merged, deepest first.
-	if (caches.size === 1) return runtime_moduleRoots([...caches][0]);
+	if (SetMethods.size(caches) === 1) return runtime_moduleRoots(setToArray(caches)[0]);
 	const roots = [];
-	for (const cache of caches) roots.push(...runtime_moduleRoots(cache));
-	return roots.sort((a, b) => b.root.length - a.root.length);
+	for (const cache of setValues(caches)) appendList(roots, runtime_moduleRoots(cache));
+	return ArrayMethods.sort(roots, (a, b) => b.root.length - a.root.length);
 }
 
 /**
@@ -1277,15 +1334,20 @@ function runtime_moduleRootsFor(candidates) {
  */
 function createFramePlacer(candidates) {
 	const roots = runtime_moduleRootsFor(candidates);
-	const families = new Set(candidates.map((entry) => entry.family).filter(Boolean));
+	const families = setFrom(
+		filterList(
+			mapList(candidates, (entry) => entry.family),
+			Boolean
+		)
+	);
 
 	// The CommonJS helpers each instance's leaves required run under their plain path, untagged; a frame
 	// in one of them is that instance's code all the same. Node loads a CommonJS file once, so several
 	// instances built from one folder share it: a path maps to every instance that required it.
 	const commonJSFamiliesAt = (location) => {
 		let found;
-		for (const family of families) {
-			if (runtime_commonJSLocations(family).has(location)) (found ??= new Set()).add(family);
+		for (const family of setValues(families)) {
+			if (SetMethods.has(runtime_commonJSLocations(family), location)) SetMethods.add((found ??= new Set()), family);
 		}
 		return found;
 	};
@@ -1293,13 +1355,13 @@ function createFramePlacer(candidates) {
 	// The files that import a file of an instance, transitively, and the file itself.
 	const importersOf = (family, location) => {
 		const graph = runtime_importGraph(family);
-		const seen = new Set([location]);
+		const seen = setFrom([location]);
 		const queue = [location];
 		while (queue.length) {
-			for (const importer of graph.get(queue.pop()) ?? []) {
-				if (!seen.has(importer)) {
-					seen.add(importer);
-					queue.push(importer);
+			for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
+				if (!SetMethods.has(seen, importer)) {
+					SetMethods.add(seen, importer);
+					ArrayMethods.push(queue, importer);
 				}
 			}
 		}
@@ -1311,9 +1373,9 @@ function createFramePlacer(candidates) {
 	// matched by its real path too, as Node reports it.
 	const isEntryLocation = (location, entry) =>
 		location === entry.comparablePath ||
-		location.endsWith("/" + entry.comparablePath) ||
+		StringMethods.endsWith(location, "/" + entry.comparablePath) ||
 		(entry.realComparablePath !== null && location === entry.realComparablePath) ||
-		Boolean(entry.locations?.has(location));
+		Boolean(entry.locations == null ? undefined : SetMethods.has(entry.locations, location));
 
 	// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
 	// graphs. The sets are cached across reads and rebuilt only when their instance loads more.
@@ -1322,10 +1384,18 @@ function createFramePlacer(candidates) {
 		if (!tagged) {
 			// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
 			/* v8 ignore next */
-			const loaders = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.processors?.loader).filter(Boolean));
-			tagged = [...[...loaders].map(runtime_loadedLocations), ...[...families].map((family) => runtime_importGraphEntry(family).files)];
+			const loaders = setFrom(
+				filterList(
+					mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.processors?.loader),
+					Boolean
+				)
+			);
+			tagged = concatLists(
+				mapList(setToArray(loaders), runtime_loadedLocations),
+				mapList(setToArray(families), (family) => runtime_importGraphEntry(family).files)
+			);
 		}
-		return tagged.some((set) => set.has(location));
+		return ArrayMethods.some(tagged, (set) => SetMethods.has(set, location));
 	};
 
 	const place = (frame) => {
@@ -1340,7 +1410,8 @@ function createFramePlacer(candidates) {
 		// the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#597) — a module of
 		// its own, which the call did not enter — so it is placed by who imports it, as any other file is.
 		const frameModule = runtime_frameModuleTag(frame.line);
-		const byFile = candidates.filter(
+		const byFile = filterList(
+			candidates,
 			(entry) =>
 				isEntryLocation(frame.path, entry) &&
 				(!frameInstance || !entry.family || entry.family === frameInstance) &&
@@ -1348,16 +1419,16 @@ function createFramePlacer(candidates) {
 		);
 		if (byFile.length) return { matches: byFile, byFile: true };
 		const commonJSFamilies = frameInstance ? null : commonJSFamiliesAt(frame.path);
-		const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamilies;
+		const frameFamilies = frameInstance ? setFrom([frameInstance]) : commonJSFamilies;
 		if (frameFamilies) {
 			// A helper copy loaded for one api file (`helpers: "module"`) names it: only that file's calls can be running it.
 			const loadedFor = frameInstance ? runtime_helperCopyOf(frameInstance, frame) : null;
-			const owners = candidates.filter((entry) => {
-				if (!frameFamilies.has(entry.family)) return false;
+			const owners = filterList(candidates, (entry) => {
+				if (!SetMethods.has(frameFamilies, entry.family)) return false;
 				// A leaf's own copy names its mount: only that mount's calls can be running it.
 				if (frameModule && entry.moduleID !== frameModule) return false;
 				if (loadedFor) return isEntryLocation(loadedFor.path, entry) && (!loadedFor.mount || entry.moduleID === loadedFor.mount);
-				for (const importer of importersOf(entry.family, frame.path)) if (isEntryLocation(importer, entry)) return true;
+				for (const importer of setValues(importersOf(entry.family, frame.path))) if (isEntryLocation(importer, entry)) return true;
 				return false;
 			});
 			// A CommonJS file runs under its plain path, which code compiled by someone can name too (#597).
@@ -1368,8 +1439,9 @@ function createFramePlacer(candidates) {
 		if (!frameInstance) {
 			const importers = runtime_runnerTaggedImporters(frame.path);
 			const owners = importers.length
-				? candidates.filter((entry) =>
-						importers.some(
+				? filterList(candidates, (entry) =>
+						ArrayMethods.some(
+							importers,
 							(importer) =>
 								importer.family === entry.family &&
 								(!importer.mount || importer.mount === entry.moduleID) &&
@@ -1380,10 +1452,15 @@ function createFramePlacer(candidates) {
 			if (owners.length) return { matches: owners, byFile: false, unverified: true };
 		}
 		// A CommonJS file only a gone instance loaded: its code is accounted for by no live call.
-		if (isNode && !frameInstance && RETIRED_COMMONJS.has(frame.path)) return { matches: [], byFile: false };
-		const owner = roots.find(({ root }) => frame.path.startsWith(root + "/"));
+		if (isNode && !frameInstance && SetMethods.has(RETIRED_COMMONJS, frame.path)) return { matches: [], byFile: false };
+		const owner = ArrayMethods.find(roots, ({ root }) => StringMethods.startsWith(frame.path, root + "/"));
 		if (owner)
-			return { matches: candidates.filter((entry) => entry.moduleID === owner.moduleID), byFile: false, byModule: true, unverified: true };
+			return {
+				matches: filterList(candidates, (entry) => entry.moduleID === owner.moduleID),
+				byFile: false,
+				byModule: true,
+				unverified: true
+			};
 		return null;
 	};
 
@@ -1404,10 +1481,12 @@ function createFramePlacer(candidates) {
  */
 export function isRunnerFrame(frame) {
 	return (
-		frame.path.startsWith("node:internal/process/task_queues") ||
+		StringMethods.startsWith(frame.path, "node:internal/process/task_queues") ||
 		frame.path === "node:internal/timers" ||
-		/\b(?:processTicksAndRejections|runMicrotasks)\b/.test(frame.head) ||
-		(frame.path === "node:internal/async_hooks" && /\bcallbackTrampoline\b/.test(frame.head) && runtime_isNodeScript(frame))
+		RegExpMethods.exec(/\b(?:processTicksAndRejections|runMicrotasks)\b/, frame.head) !== null ||
+		(frame.path === "node:internal/async_hooks" &&
+			RegExpMethods.exec(/\bcallbackTrampoline\b/, frame.head) !== null &&
+			runtime_isNodeScript(frame))
 	);
 }
 
@@ -1421,23 +1500,24 @@ export function isRunnerFrame(frame) {
 function runtime_rootSpellings(root) {
 	if (typeof root !== "string" || !root) return [];
 	const comparable = toComparablePath(root);
-	const absolute = comparable.startsWith("/");
+	const absolute = StringMethods.startsWith(comparable, "/");
 	const segments = [];
-	for (const segment of comparable.split("/")) {
+	for (let ofIndex = 0, ofList = splitText(comparable, "/"); ofIndex < ofList.length; ofIndex++) {
+		const segment = ofList[ofIndex];
 		if (segment === "" || segment === ".") continue;
 		if (segment === "..") {
-			if (segments.length && segments[segments.length - 1] !== "..") segments.pop();
-			else if (!absolute) segments.push(segment);
+			if (segments.length && segments[segments.length - 1] !== "..") ArrayMethods.pop(segments);
+			else if (!absolute) ArrayMethods.push(segments, segment);
 			continue;
 		}
-		segments.push(segment);
+		ArrayMethods.push(segments, segment);
 	}
-	const collapsed = (absolute ? "/" : "") + segments.join("/");
+	const collapsed = (absolute ? "/" : "") + ArrayMethods.join(segments, "/");
 	const spellings = [];
 	// An empty root (or `/`) would own every absolute path; it owns nothing.
-	if (collapsed && collapsed !== "/") spellings.push(collapsed);
+	if (collapsed && collapsed !== "/") ArrayMethods.push(spellings, collapsed);
 	const real = runtime_realComparablePath(root);
-	if (real && real !== collapsed) spellings.push(real);
+	if (real && real !== collapsed) ArrayMethods.push(spellings, real);
 	return spellings;
 }
 
@@ -1455,24 +1535,32 @@ function runtime_rootSpellings(root) {
  * @internal
  */
 function stackHoldsInstanceCode(sources) {
-	const families = new Set(sources.map(({ family }) => family));
+	const families = setFrom(mapList(sources, ({ family }) => family));
 	const locations = [];
 	const roots = [];
-	for (const { family, slothlet, roots: building } of sources) {
-		locations.push(runtime_commonJSLocations(family), runtime_importGraphEntry(family).files);
+	for (let ofIndex = 0, ofList = sources; ofIndex < ofList.length; ofIndex++) {
+		const { family, slothlet, roots: building } = ofList[ofIndex];
+		ArrayMethods.push(locations, runtime_commonJSLocations(family), runtime_importGraphEntry(family).files);
 		const loader = slothlet?.processors?.loader;
-		if (loader) locations.push(runtime_loadedLocations(loader));
+		if (loader) ArrayMethods.push(locations, runtime_loadedLocations(loader));
 		const cache = slothlet?.handlers?.apiCacheManager;
-		if (cache) for (const { root } of runtime_moduleRoots(cache)) roots.push(root);
-		for (const root of building) roots.push(...runtime_rootSpellings(root));
+		if (cache)
+			for (let ofIndex = 0, ofList = runtime_moduleRoots(cache); ofIndex < ofList.length; ofIndex++) {
+				const { root } = ofList[ofIndex];
+				ArrayMethods.push(roots, root);
+			}
+		for (let ofIndex = 0, ofList = building; ofIndex < ofList.length; ofIndex++) {
+			const root = ofList[ofIndex];
+			appendList(roots, runtime_rootSpellings(root));
+		}
 	}
 	const holds = (frames) => {
-		for (const frame of frames) {
-			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		for (const frame of framesOf(frames)) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 			const tag = runtime_frameInstanceTag(frame.line);
-			if (tag && families.has(tag)) return true;
-			if (locations.some((set) => set.has(frame.path))) return true;
-			if (roots.some((root) => frame.path.startsWith(root + "/"))) return true;
+			if (tag && SetMethods.has(families, tag)) return true;
+			if (ArrayMethods.some(locations, (set) => SetMethods.has(set, frame.path))) return true;
+			if (ArrayMethods.some(roots, (root) => StringMethods.startsWith(frame.path, root + "/"))) return true;
 		}
 		return false;
 	};
@@ -1687,7 +1775,7 @@ const PLAIN_DATA_PROPERTIES = 256;
  */
 function runtime_isPlainData(value, depth, budget) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-	if (trustedRootOwn.genuineWrappers.has(value)) return true;
+	if (WeakSetMethods.has(trustedRootOwn.genuineWrappers, value)) return true;
 	if (isApiValue(value)) return !apiValueHarborsCode(value);
 	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
 	try {
@@ -1699,7 +1787,8 @@ function runtime_isPlainData(value, depth, budget) {
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return false;
-		for (const key of keys) {
+		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			if (!descriptor || !Objects.hasOwn(descriptor, "value") || !runtime_isPlainData(descriptor.value, depth - 1, budget)) return false;
 		}
@@ -1724,7 +1813,7 @@ const carriesCode = (raw, budget) => {
 	return (
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
-		!trustedRootOwn.genuineWrappers.has(value) &&
+		!WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) &&
 		!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget)
 	);
 };
@@ -1772,14 +1861,14 @@ function handedLeafFunctions(thisArg, args) {
 		// A module's view of a caller's value holds what the caller handed: that is what is looked into.
 		value = inboundOriginal(value);
 		if (typeof value === "function") {
-			const wrapper = trustedRootOwn.implWrappers.get(value);
-			if (wrapper) (found ??= []).push(wrapper);
+			const wrapper = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+			if (wrapper) ArrayMethods.push((found ??= []), wrapper);
 			return;
 		}
 		if (
 			depth <= 0 ||
 			budget.remaining <= 0 ||
-			trustedRootOwn.genuineWrappers.has(value) ||
+			WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) ||
 			isApiValue(value) ||
 			!isNode ||
 			util.types.isProxy(value)
@@ -1792,7 +1881,8 @@ function handedLeafFunctions(thisArg, args) {
 			const keys = Reflect.ownKeys(value);
 			budget.remaining -= keys.length;
 			if (budget.remaining < 0) return;
-			for (const key of keys) {
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 				if (descriptor && Objects.hasOwn(descriptor, "value")) visit(descriptor.value, depth - 1);
 			}
@@ -1831,10 +1921,11 @@ const MAX_CHAIN = 64;
 function supplierChainCeiling(record) {
 	const parts = [];
 	for (let current = record, depth = 0; current?.flagged && current.parent && depth < MAX_CHAIN; current = current.parent, depth++) {
-		if (current.parent.wrapper && trustedRootOwn.genuineWrappers.has(current.parent.wrapper)) parts.push(current.parent.wrapper);
-		if (current.parent.ceiling) parts.push(current.parent.ceiling);
+		if (current.parent.wrapper && WeakSetMethods.has(trustedRootOwn.genuineWrappers, current.parent.wrapper))
+			ArrayMethods.push(parts, current.parent.wrapper);
+		if (current.parent.ceiling) ArrayMethods.push(parts, current.parent.ceiling);
 	}
-	return parts.length ? combineCeilings(...parts) : null;
+	return parts.length ? Reflect.apply(combineCeilings, undefined, parts) : null;
 }
 
 /**
@@ -1874,25 +1965,27 @@ function supplierChainCeiling(record) {
 function resolveSupplier(record, capture = null) {
 	// Code a file started while it loaded: its module is the caller, and the code doing the access is told by its frames.
 	if (record?.topLevel)
-		return trustedRootOwn.genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record) ? runtime_topLevelRunning(record) : null;
+		return WeakSetMethods.has(trustedRootOwn.genuineWrappers, record.wrapper) && runtime_guardsForeignCode(record)
+			? runtime_topLevelRunning(record)
+			: null;
 	// Code a module handed out, run through the stand-in recording its definer: the stack names the definer wherever it
 	// can, and the record stands only where it cannot (#726).
-	if (record?.made && trustedRootOwn.genuineWrappers.has(record.wrapper) && runtime_guardsForeignCode(record)) {
+	if (record?.made && WeakSetMethods.has(trustedRootOwn.genuineWrappers, record.wrapper) && runtime_guardsForeignCode(record)) {
 		const told = runtime_madeCodeDefiner(record);
 		if (told !== undefined) return told;
 	}
 	if (!record?.flagged)
-		return runtime_guardsForeignCode(record) && trustedRootOwn.genuineWrappers.has(record.wrapper)
+		return runtime_guardsForeignCode(record) && WeakSetMethods.has(trustedRootOwn.genuineWrappers, record.wrapper)
 			? runtime_foreignCodeRunning(record, capture)
 			: null;
 	const leaf = record.wrapper;
-	if (!trustedRootOwn.genuineWrappers.has(leaf)) return null;
+	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf)) return null;
 	if (!record.parent?.wrapper) {
 		if (record.unaccountedCaller) return runtime_unaccountedInside(record);
 		return runtime_guardsForeignCode(record) ? runtime_foreignCodeRunning(record, capture) : null;
 	}
 	const chain = [];
-	const seen = new Set([leaf]);
+	const seen = setFrom([leaf]);
 	// The call that made the leaf's: what an unattributable frame is taken to be.
 	let fallback = null;
 	const leafDescription = describeCall(leaf);
@@ -1901,17 +1994,23 @@ function resolveSupplier(record, capture = null) {
 	// in runs as the caller (see runtime_isFilelessLeafCode).
 	const fileless = runtime_isHostObjectLeaf(leaf, leafDescription.filePath);
 	if (!fileless && leafDescription.filePath)
-		chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
+		ArrayMethods.push(chain, { ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
-		if (!wrapper || seen.has(wrapper) || !trustedRootOwn.genuineWrappers.has(wrapper)) continue;
-		seen.add(wrapper);
+		if (!wrapper || SetMethods.has(seen, wrapper) || !WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper)) continue;
+		SetMethods.add(seen, wrapper);
 		fallback ??= { currentWrapper: wrapper, record: current };
 		const description = describeCall(wrapper);
 		// A call with no file (an in-memory module) has no frames of its own to be placed on.
 		if (!description.filePath) continue;
-		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length, record: current });
+		ArrayMethods.push(chain, {
+			...description,
+			currentWrapper: wrapper,
+			family: wrapper.slothlet.instanceID,
+			distance: chain.length,
+			record: current
+		});
 	}
 	// No call of a module's above it (only the host's): read as a call with no parent is, so another module's code
 	// running inside it is still told by its frames (#726).
@@ -1932,9 +2031,9 @@ function resolveSupplier(record, capture = null) {
 	// inside it.
 	const collect = (frames) => {
 		const range = [];
-		for (const frame of frames) {
-			range.push(frame);
-			if ((frame.enter && frame.path.startsWith(FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame))
+		for (const frame of framesOf(frames)) {
+			ArrayMethods.push(range, frame);
+			if ((frame.enter && StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame))
 				return { range, complete: true };
 		}
 		return { range, complete: !frames.truncated };
@@ -1949,10 +2048,11 @@ function resolveSupplier(record, capture = null) {
 		let leafSeen = false;
 		for (let index = 0; index < range.length; index++) {
 			const frame = range[index];
-			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 			if (frame.async || isRunnerFrame(frame)) break;
 			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
-			if (frame.evaluated || isForeignScript(frame) || conflicts?.has(frame.key)) return fallback;
+			if (frame.evaluated || isForeignScript(frame) || (conflicts == null ? undefined : SetMethods.has(conflicts, frame.key)))
+				return fallback;
 			const placement = place(frame);
 			if (fileless) {
 				// Inside a leaf with no file, code that is no module's (the host's, any package's, one a call up the chain
@@ -1970,7 +2070,16 @@ function resolveSupplier(record, capture = null) {
 				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
 				// already running inside it (a package the leaf called back into the leaf).
 				if (leafSeen) continue;
-				if (guards && placement && (authored = runtime_authorAnswer(record, frame, range.slice(index + 1)))) return AUTHORED;
+				if (
+					guards &&
+					placement &&
+					(authored = runtime_authorAnswer(
+						record,
+						frame,
+						typeof range === "string" ? StringMethods.slice(range, index + 1) : copyList(range, index + 1)
+					))
+				)
+					return AUTHORED;
 				return fallback;
 			}
 			const { matches } = placement;
@@ -1981,13 +2090,25 @@ function resolveSupplier(record, capture = null) {
 				// Code of the leaf's file written inside another export (a closure a sibling leaf made), with no frame of the
 				// leaf's own code between: it may be what the caller handed in, so it runs as its definer under the leaf and
 				// the calls that handed code down (#726).
-				if (guards && placement.byFile && !leafSeen && (authored = runtime_siblingAuthor(record, frame, range.slice(index + 1))))
+				if (
+					guards &&
+					placement.byFile &&
+					!leafSeen &&
+					(authored = runtime_siblingAuthor(
+						record,
+						frame,
+						typeof range === "string" ? StringMethods.slice(range, index + 1) : copyList(range, index + 1)
+					))
+				)
 					return AUTHORED;
 				leafSeen = true;
 				continue;
 			}
 			let nearest = null;
-			for (const match of matches) if (match.currentWrapper !== leaf && (!nearest || match.distance < nearest.distance)) nearest = match;
+			for (let ofIndex = 0, ofList = matches; ofIndex < ofList.length; ofIndex++) {
+				const match = ofList[ofIndex];
+				if (match.currentWrapper !== leaf && (!nearest || match.distance < nearest.distance)) nearest = match;
+			}
 			return nearest ?? fallback;
 		}
 		if (leafSeen) return complete ? leaf : undefined;
@@ -2001,7 +2122,8 @@ function resolveSupplier(record, capture = null) {
 		const deeper = collect(runtime_captureFrames(80));
 		answer = decide(deeper);
 		// Still cut short: the leaf's own frames, as far as they were read, decide.
-		if (answer === undefined) answer = deeper.range.some((frame) => !frame.path.startsWith(FRAMEWORK_DIR + "/")) ? leaf : fallback;
+		if (answer === undefined)
+			answer = ArrayMethods.some(deeper.range, (frame) => !StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) ? leaf : fallback;
 	}
 	if (answer === AUTHORED) return authored;
 	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
@@ -2027,10 +2149,10 @@ function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = 
 	let position = -1;
 	// Whether anything but slothlet's own frames has been passed since the frame the walk started after.
 	let passedCode = false;
-	for (const frame of frames) {
+	for (const frame of framesOf(frames)) {
 		position++;
 		if (position <= index) continue;
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 			if (frame.enter) {
 				if (!throughOwnEntry || passedCode) break;
 				throughOwnEntry = false;
@@ -2039,12 +2161,19 @@ function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = 
 		}
 		passedCode = true;
 		if (frame.async || isRunnerFrame(frame)) break;
-		if (frame.evaluated || frame.path.startsWith("node:") || isForeignScript(frame)) continue;
+		if (frame.evaluated || StringMethods.startsWith(frame.path, "node:") || isForeignScript(frame)) continue;
 		const leaves = slothlet ? runtime_leavesAt(slothlet, frame) : runtime_leavesAtLocation(frame.path, frame.line);
 		if (!leaves?.length) continue;
-		for (const caller of runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, position))) callers.add(caller);
+		for (
+			let ofIndex = 0, ofList = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, position));
+			ofIndex < ofList.length;
+			ofIndex++
+		) {
+			const caller = ofList[ofIndex];
+			SetMethods.add(callers, caller);
+		}
 	}
-	return [...callers];
+	return setToArray(callers);
 }
 
 /**
@@ -2087,8 +2216,10 @@ function runtime_topLevelRunning(record) {
 	// once, inside whichever load imported it first, so the flow carries that load's module alone; every module importing
 	// the helper has to be allowed.
 	const helperFlow = (helper) => {
-		const others = runtime_helperModules(helper).filter((other) => other !== module);
-		return others.length ? { wrapper: module, ceiling: combineCeilings(record.ceiling ?? null, ...others) } : null;
+		const others = filterList(runtime_helperModules(helper), (other) => other !== module);
+		return others.length
+			? { wrapper: module, ceiling: Reflect.apply(combineCeilings, undefined, concatLists([record.ceiling ?? null], others)) }
+			: null;
 	};
 	const decide = (frames) => {
 		let index = -1;
@@ -2099,9 +2230,9 @@ function runtime_topLevelRunning(record) {
 		// The helper file the module imports that the innermost code runs in, while the walk looks for the code that
 		// called it.
 		let helper = null;
-		for (const frame of frames) {
+		for (const frame of framesOf(frames)) {
 			index++;
-			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 				if (frame.enter) {
 					if (passedOwnEntry || passedCode) return helper ? helperFlow(helper) : null;
 					passedOwnEntry = true;
@@ -2112,7 +2243,7 @@ function runtime_topLevelRunning(record) {
 			if (frame.async || isRunnerFrame(frame)) return helper ? helperFlow(helper) : null;
 			if (frame.evaluated || isForeignScript(frame)) return UNACCOUNTED_SUPPLIER;
 			// Node's own code acts for whoever called it: the next frame out decides.
-			if (frame.path.startsWith("node:")) {
+			if (StringMethods.startsWith(frame.path, "node:")) {
 				if (runtime_isNodeScript(frame)) continue;
 				return UNACCOUNTED_SUPPLIER;
 			}
@@ -2124,12 +2255,15 @@ function runtime_topLevelRunning(record) {
 				const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 				// Every leaf whose code is further out on the stack is a caller too: the code ran through them. So is every
 				// module importing a helper whose own flow the code runs in.
-				const callers = [
-					...runtime_outerCallers(frames, index, slothlet, true),
-					...runtime_outerHelperModules(frames, index, slothlet)
-				].filter((caller) => caller !== module && caller !== definers[0]);
+				const callers = filterList(
+					concatLists(runtime_outerCallers(frames, index, slothlet, true), runtime_outerHelperModules(frames, index, slothlet)),
+					(caller) => caller !== module && caller !== definers[0]
+				);
 				if (definers.length === 1 && definers[0] === module && !callers.length) return null;
-				return { wrapper: definers[0], ceiling: combineCeilings(module, record.ceiling ?? null, ...definers.slice(1), ...callers) };
+				return {
+					wrapper: definers[0],
+					ceiling: Reflect.apply(combineCeilings, undefined, concatLists([module, record.ceiling ?? null], copyList(definers, 1), callers))
+				};
 			}
 			if (helper) {
 				// Further out than the helper's code is the helper's own again, or code of no leaf's file (the host's, a
@@ -2185,7 +2319,7 @@ function runtime_loadedFileLeaves(slothlet, filePath, moduleID) {
 	const leaves = runtime_leavesAtFile(slothlet, toComparablePath(filePath), null, moduleID || null);
 	const real = runtime_realComparablePath(filePath);
 	return real && real !== toComparablePath(filePath)
-		? [...leaves, ...runtime_leavesAtFile(slothlet, real, null, moduleID || null)]
+		? concatLists(leaves, runtime_leavesAtFile(slothlet, real, null, moduleID || null))
 		: leaves;
 }
 
@@ -2206,10 +2340,10 @@ function runtime_outerHelperModules(frames, index, slothlet) {
 	let position = -1;
 	let passedOwnEntry = false;
 	let passedCode = false;
-	for (const frame of frames) {
+	for (const frame of framesOf(frames)) {
 		position++;
 		if (position <= index) continue;
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 			if (frame.enter) {
 				if (passedOwnEntry || passedCode) break;
 				passedOwnEntry = true;
@@ -2218,12 +2352,17 @@ function runtime_outerHelperModules(frames, index, slothlet) {
 		}
 		passedCode = true;
 		if (frame.async || isRunnerFrame(frame)) break;
-		if (frame.evaluated || frame.path.startsWith("node:") || isForeignScript(frame) || seen.has(frame.path)) continue;
-		seen.add(frame.path);
+		if (frame.evaluated || StringMethods.startsWith(frame.path, "node:") || isForeignScript(frame) || SetMethods.has(seen, frame.path))
+			continue;
+		SetMethods.add(seen, frame.path);
 		const helper = runtime_helperOwner(frame, slothlet);
-		if (helper) for (const module of runtime_helperModules(helper)) modules.add(module);
+		if (helper)
+			for (let ofIndex = 0, ofList = runtime_helperModules(helper); ofIndex < ofList.length; ofIndex++) {
+				const module = ofList[ofIndex];
+				SetMethods.add(modules, module);
+			}
 	}
-	return [...modules];
+	return setToArray(modules);
 }
 
 /**
@@ -2243,21 +2382,24 @@ function runtime_madeCodeDefiner(record) {
 	const frames = runtime_captureFrames(24);
 	let index = -1;
 	// Slothlet's own frames are passed over by their path and what they enter alone, so they are read no further.
-	for (const frame of frames.lean?.() ?? frames) {
+	for (const frame of framesOf(!Arrays.isArray(frames) && typeof frames.lean === "function" ? frames.lean() : frames)) {
 		index++;
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 			if (frame.enter) return undefined;
 			continue;
 		}
 		if (frame.async || isRunnerFrame(frame) || frame.evaluated || isForeignScript(frame)) return undefined;
 		// Node's own code reads values for whoever called it: the next frame out decides.
-		if (frame.path.startsWith("node:") && runtime_isNodeScript(frame)) continue;
+		if (StringMethods.startsWith(frame.path, "node:") && runtime_isNodeScript(frame)) continue;
 		if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return undefined;
 		const leaves = runtime_leavesAt(recorded.slothlet, frame);
 		if (!leaves.length) return undefined;
 		const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
-		if (definers.includes(recorded)) return null;
-		return { wrapper: definers[0], ceiling: combineCeilings(record.ceiling ?? null, ...definers.slice(1)) };
+		if (ArrayMethods.includes(definers, recorded)) return null;
+		return {
+			wrapper: definers[0],
+			ceiling: Reflect.apply(combineCeilings, undefined, concatLists([record.ceiling ?? null], copyList(definers, 1)))
+		};
 	}
 	return undefined;
 }
@@ -2276,19 +2418,20 @@ function runtime_madeCodeDefiner(record) {
 function runtime_siblingAuthor(record, frame, outer) {
 	const leaf = record.wrapper;
 	const leaves = runtime_leavesAt(leaf.slothlet, frame);
-	if (leaves.length < 2 || !leaves.includes(leaf)) return null;
+	if (leaves.length < 2 || !ArrayMethods.includes(leaves, leaf)) return null;
 	const source = runtime_sourceOf(leaf.____slothletInternal.filePath, frame);
 	if (!source) return null;
 	// The nearest frame of the file inside an export names the code's leaf; the leaf's own module node holds none.
 	let holder = runtime_leafHolding(leaves, source, frame);
-	for (const further of holder ? [] : outer) {
+	for (let ofIndex = 0, ofList = holder ? [] : outer; ofIndex < ofList.length; ofIndex++) {
+		const further = ofList[ofIndex];
 		if (!runtime_sameFileFrame(further, frame)) break;
 		if ((holder = runtime_leafHolding(leaves, source, further))) break;
 	}
 	if (!holder || holder === leaf) return null;
 	// A leaf nested in the entered one (a member of a callable node) is the entered leaf's own code.
 	const own = String(leaf.____slothletInternal.apiPath ?? "");
-	if (String(holder.____slothletInternal.apiPath ?? "").startsWith(own + ".")) return null;
+	if (StringMethods.startsWith(String(holder.____slothletInternal.apiPath ?? ""), own + ".")) return null;
 	return { wrapper: holder, ceiling: combineCeilings(leaf, record.ceiling, supplierChainCeiling(record)) };
 }
 
@@ -2303,7 +2446,7 @@ function runtime_siblingAuthor(record, frame, outer) {
  * @private
  */
 function runtime_isHostObjectLeaf(leaf, filePath) {
-	if (typeof filePath !== "string" || !filePath.startsWith("synthetic:")) return false;
+	if (typeof filePath !== "string" || !StringMethods.startsWith(filePath, "synthetic:")) return false;
 	const internal = leaf.____slothletInternal;
 	const { ownership, apiManager } = leaf.slothlet.handlers;
 	// A synthetic leaf always carries the moduleID of the add that built it, and its instance its handlers; the guard
@@ -2312,17 +2455,10 @@ function runtime_isHostObjectLeaf(leaf, filePath) {
 	if (!internal?.moduleID || !ownership || !apiManager) return false;
 	// The deepest of its module's mounts that holds it, and the mounter recorded for it: null for host code, the module's
 	// id for a module's own add.
-	const segments = internal.apiPath.split(".");
-	const holds = (endpoint) =>
-		endpoint
-			.split(".")
-			.filter(Boolean)
-			.every((part, index) => segments[index] === part);
-	const mount = ownership
-		.getModuleMounts(internal.moduleID)
-		.filter(holds)
-		.sort((a, b) => b.length - a.length)[0];
-	return mount !== undefined && apiManager.mountedBy.get(apiManager.mountKey(internal.moduleID, mount)) === null;
+	const segments = splitText(internal.apiPath, ".");
+	const holds = (endpoint) => ArrayMethods.every(filterList(splitText(endpoint, "."), Boolean), (part, index) => segments[index] === part);
+	const mount = ArrayMethods.sort(filterList(ownership.getModuleMounts(internal.moduleID), holds), (a, b) => b.length - a.length)[0];
+	return mount !== undefined && MapMethods.get(apiManager.mountedBy, apiManager.mountKey(internal.moduleID, mount)) === null;
 }
 
 /**
@@ -2343,7 +2479,8 @@ function runtime_isHostObjectLeaf(leaf, filePath) {
 function runtime_isFilelessLeafCode(record, frame) {
 	const leaf = record.wrapper;
 	if (runtime_isUnownedPackage(leaf, frame, true)) return false;
-	if (!frame.path.includes("/node_modules/") && runtime_packageImportingLeaves(leaf.slothlet, frame.path).size) return false;
+	if (!StringMethods.includes(frame.path, "/node_modules/") && SetMethods.size(runtime_packageImportingLeaves(leaf.slothlet, frame.path)))
+		return false;
 	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame);
 }
 
@@ -2360,7 +2497,7 @@ function runtime_isFilelessLeafCode(record, frame) {
  * @private
  */
 function runtime_isUnownedPackage(leaf, frame, fileless) {
-	if (!frame.path.includes("/node_modules/") || isInstanceOwnerFile(leaf.slothlet, frame.path)) return false;
+	if (!StringMethods.includes(frame.path, "/node_modules/") || isInstanceOwnerFile(leaf.slothlet, frame.path)) return false;
 	return fileless ? Boolean(RUNNER_MODULES) : !runtime_fileImporters(frame.path).length;
 }
 
@@ -2385,7 +2522,7 @@ function runtime_fileImporters(path) {
 	// Plus the importers vitest's runner recorded before slothlet loaded (see RUNNER_SNAPSHOT): a record added later is
 	// not read (#714).
 	// And those the vite plugin recorded as it resolved the imports (#714).
-	return [...importers, ...(RUNNER_SNAPSHOT.importers.get(path) ?? []), ...(VITE_LOADED_REGISTRY?.importersOf(path) ?? [])];
+	return concatLists(importers, MapMethods.get(RUNNER_SNAPSHOT.importers, path) ?? [], VITE_LOADED_REGISTRY?.importersOf(path) ?? []);
 }
 
 /**
@@ -2399,18 +2536,23 @@ function runtime_runnerTaggedImporters(path) {
 	// Only the records that existed before slothlet loaded are walked (see RUNNER_SNAPSHOT) (#714).
 	if (!RUNNER_MODULES) return [];
 	const found = [];
-	const seen = new Set([path]);
+	const seen = setFrom([path]);
 	const queue = [path];
-	while (queue.length && seen.size <= PACKAGE_WALK) {
-		for (const id of RUNNER_SNAPSHOT.importers.get(queue.shift()) ?? []) {
+	while (queue.length && SetMethods.size(seen) <= PACKAGE_WALK) {
+		for (
+			let ofIndex = 0, ofList = MapMethods.get(RUNNER_SNAPSHOT.importers, ArrayMethods.shift(queue)) ?? [];
+			ofIndex < ofList.length;
+			ofIndex++
+		) {
+			const id = ofList[ofIndex];
 			if (typeof id !== "string") continue;
 			const location = toComparablePath(id);
-			const query = id.split("?")[1] ?? "";
+			const query = splitText(id, "?")[1] ?? "";
 			const family = queryParam(query, "slothlet_instance");
-			if (family) found.push({ family, mount: queryParam(query, "module"), location });
-			else if (!seen.has(location)) {
-				seen.add(location);
-				queue.push(location);
+			if (family) ArrayMethods.push(found, { family, mount: queryParam(query, "module"), location });
+			else if (!SetMethods.has(seen, location)) {
+				SetMethods.add(seen, location);
+				ArrayMethods.push(queue, location);
 			}
 		}
 	}
@@ -2430,49 +2572,57 @@ function runtime_packageImportingLeaves(slothlet, path) {
 	const leaves = new Set();
 	const graph = runtime_importGraph(family);
 	const commonJS = runtime_commonJSLocations(family);
-	const seen = new Set([path]);
+	const seen = setFrom([path]);
 	const queue = [path];
 	// The instance's own files reached: each is a leaf's, or a helper of the leaves importing it.
 	const reached = [];
-	while (queue.length && seen.size <= PACKAGE_WALK) {
-		for (const importer of runtime_fileImporters(queue.shift())) {
-			const query = importer.split("?")[1] ?? "";
+	while (queue.length && SetMethods.size(seen) <= PACKAGE_WALK) {
+		for (let ofIndex = 0, ofList = runtime_fileImporters(ArrayMethods.shift(queue)); ofIndex < ofList.length; ofIndex++) {
+			const importer = ofList[ofIndex];
+			const query = splitText(importer, "?")[1] ?? "";
 			const location = toComparablePath(importer);
 			const instance = queryParam(query, "slothlet_instance");
 			// A module's copy of any instance names the module's file: an untagged file is loaded once per process, by
 			// whichever instance came first, and is the same module's code for every instance built from that file.
 			if (instance) {
-				reached.push({ location, tagged: true, mount: queryParam(query, "module") });
+				ArrayMethods.push(reached, { location, tagged: true, mount: queryParam(query, "module") });
 				continue;
 			}
 			// A file the instance runs under its plain path (a CommonJS leaf, or one of its helpers) carries no tag to match.
-			if (commonJS.has(location) || LEAF_FILES.get(slothlet)?.has(location)) {
-				reached.push({ location, tagged: false, mount: null });
+			if (
+				SetMethods.has(commonJS, location) ||
+				(WeakMapMethods.get(LEAF_FILES, slothlet) == null ? undefined : MapMethods.has(WeakMapMethods.get(LEAF_FILES, slothlet), location))
+			) {
+				ArrayMethods.push(reached, { location, tagged: false, mount: null });
 				continue;
 			}
-			if (!seen.has(location)) {
-				seen.add(location);
-				queue.push(location);
+			if (!SetMethods.has(seen, location)) {
+				SetMethods.add(seen, location);
+				ArrayMethods.push(queue, location);
 			}
 		}
 	}
-	for (const { location, tagged, mount } of reached) {
-		const files = new Set([location]);
+	for (let ofIndex = 0, ofList = reached; ofIndex < ofList.length; ofIndex++) {
+		const { location, tagged, mount } = ofList[ofIndex];
+		const files = setFrom([location]);
 		const walk = [location];
-		while (walk.length && files.size <= PACKAGE_WALK) {
-			const file = walk.shift();
+		while (walk.length && SetMethods.size(files) <= PACKAGE_WALK) {
+			const file = ArrayMethods.shift(walk);
 			// The file reached is matched by the tags its import carried; a file run under its plain path carries none, and
 			// is no copy of a leaf's (#691) for that alone. The api files further up are named by path in the graph, not by
 			// a URL.
 			const own = runtime_leavesAtFile(slothlet, file, tagged && file === location ? family : null, mount);
 			if (own.length) {
-				for (const leaf of own) leaves.add(leaf);
+				for (let ofIndex = 0, ofList = own; ofIndex < ofList.length; ofIndex++) {
+					const leaf = ofList[ofIndex];
+					SetMethods.add(leaves, leaf);
+				}
 				continue;
 			}
-			for (const importer of graph.get(file) ?? []) {
-				if (!files.has(importer)) {
-					files.add(importer);
-					walk.push(importer);
+			for (const importer of setValues(MapMethods.get(graph, file))) {
+				if (!SetMethods.has(files, importer)) {
+					SetMethods.add(files, importer);
+					ArrayMethods.push(walk, importer);
 				}
 			}
 		}
@@ -2504,17 +2654,22 @@ function runtime_packageAnswer(record, frame, fileless, own = null) {
 	// own only when the frame runs its own source: code compiled under a name no file holds, or holding another source
 	// (`vm`, `Module#_compile`, a `data:` URL, a `vm.SourceTextModule` named after a file), is no one's.
 	// The package that created the instance is the host's own, wherever it is installed (#714).
-	if (!importers.size) {
+	if (!SetMethods.size(importers)) {
 		if (runtime_isUnownedPackage(leaf, frame, false)) return UNACCOUNTED_SUPPLIER;
 		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame)
 			? null
 			: UNACCOUNTED_SUPPLIER;
 	}
-	if (importers.has(leaf)) return null;
-	for (const ceiling of ceilingMembers(record.ceiling)) if (importers.has(ceiling)) return null;
-	if (own) for (const wrapper of own) if (importers.has(wrapper)) return null;
-	const [first, ...rest] = importers;
-	return { wrapper: first, ceiling: combineCeilings(leaf, record.ceiling, supplierChainCeiling(record), ...rest) };
+	if (SetMethods.has(importers, leaf)) return null;
+	for (let i = 0, members = ceilingMembers(record.ceiling); i < members.length; i++) if (SetMethods.has(importers, members[i])) return null;
+	if (own) for (let i = 0; i < own.length; i++) if (SetMethods.has(importers, own[i])) return null;
+	const importerList = setToArray(importers);
+	const first = importerList[0];
+	const rest = copyList(importerList, 1);
+	return {
+		wrapper: first,
+		ceiling: Reflect.apply(combineCeilings, undefined, concatLists([leaf, record.ceiling, supplierChainCeiling(record)], rest))
+	};
 }
 
 /**
@@ -2531,8 +2686,11 @@ const OWNER_PACKAGES = new WeakMap();
  * @type {Set<string>}
  * @private
  */
-const PACKAGE_ENTRIES = new Set(
-	["index.mjs", "index.cjs"].map((file) => `${FRAMEWORK_DIR.slice(0, FRAMEWORK_DIR.lastIndexOf("/"))}/${file}`)
+const PACKAGE_ENTRIES = setFrom(
+	mapList(
+		["index.mjs", "index.cjs"],
+		(file) => `${StringMethods.slice(FRAMEWORK_DIR, 0, StringMethods.lastIndexOf(FRAMEWORK_DIR, "/"))}/${file}`
+	)
 );
 
 /**
@@ -2549,16 +2707,20 @@ const PACKAGE_ROOTS = new Map();
  * @private
  */
 function runtime_packageRootOf(path) {
-	if (PACKAGE_ROOTS.has(path)) return PACKAGE_ROOTS.get(path);
+	if (MapMethods.has(PACKAGE_ROOTS, path)) return MapMethods.get(PACKAGE_ROOTS, path);
 	let root = null;
-	for (let dir = path.slice(0, path.lastIndexOf("/")); dir; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+	for (
+		let dir = StringMethods.slice(path, 0, StringMethods.lastIndexOf(path, "/"));
+		dir;
+		dir = StringMethods.slice(dir, 0, StringMethods.lastIndexOf(dir, "/"))
+	) {
 		if (nodeFs(FS_EXISTS, `${dir}/package.json`)) {
 			root = dir;
 			break;
 		}
 	}
-	if (PACKAGE_ROOTS.size >= 4096) PACKAGE_ROOTS.clear();
-	PACKAGE_ROOTS.set(path, root);
+	if (MapMethods.size(PACKAGE_ROOTS) >= 4096) MapMethods.clear(PACKAGE_ROOTS);
+	MapMethods.set(PACKAGE_ROOTS, path, root);
 	return root;
 }
 
@@ -2576,11 +2738,16 @@ function runtime_packageRootOf(path) {
  */
 function recordInstanceOwner(slothlet) {
 	if (!isNode) return;
-	for (const frame of runtime_captureFrames(32)) {
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:") || PACKAGE_ENTRIES.has(frame.path)) continue;
+	for (const frame of framesOf(runtime_captureFrames(32))) {
+		if (
+			StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") ||
+			StringMethods.startsWith(frame.path, "node:") ||
+			SetMethods.has(PACKAGE_ENTRIES, frame.path)
+		)
+			continue;
 		if (frame.evaluated) return;
 		const root = runtime_packageRootOf(frame.path);
-		if (root) OWNER_PACKAGES.set(slothlet, root);
+		if (root) WeakMapMethods.set(OWNER_PACKAGES, slothlet, root);
 		return;
 	}
 }
@@ -2596,7 +2763,7 @@ function recordInstanceOwner(slothlet) {
  * isInstanceOwnerFile(instance, "/app/node_modules/host/lib/context.mjs"); // true when host created the instance
  */
 function isInstanceOwnerFile(slothlet, path) {
-	const owner = OWNER_PACKAGES.get(slothlet);
+	const owner = WeakMapMethods.get(OWNER_PACKAGES, slothlet);
 	return owner !== undefined && runtime_packageRootOf(path) === owner;
 }
 
@@ -2614,7 +2781,7 @@ const PACKAGE_NAMES = new Map();
  * @private
  */
 function runtime_packageName(root) {
-	if (!PACKAGE_NAMES.has(root)) {
+	if (!MapMethods.has(PACKAGE_NAMES, root)) {
 		let name = null;
 		try {
 			const parsed = JSON_PARSE(nodeFs(FS_READ_FILE, `${root}/package.json`, "utf8"));
@@ -2622,9 +2789,9 @@ function runtime_packageName(root) {
 		} catch {
 			// A manifest that cannot be read or parsed names no package.
 		}
-		PACKAGE_NAMES.set(root, name);
+		MapMethods.set(PACKAGE_NAMES, root, name);
 	}
-	return PACKAGE_NAMES.get(root);
+	return MapMethods.get(PACKAGE_NAMES, root);
 }
 
 /**
@@ -2632,7 +2799,7 @@ function runtime_packageName(root) {
  * @type {Set<string>}
  * @private
  */
-const VITE_RUNNERS = new Set(["vitest", "vite"]);
+const VITE_RUNNERS = setFrom(["vitest", "vite"]);
 
 /**
  * The `stack` getter V8 gives every error, to tell a genuine error's stack from one a script put on it.
@@ -2680,7 +2847,7 @@ function runtime_registrationFrames(entry) {
 	const frames = readStack(
 		(error, sites) => {
 			const read = runtime_structuredFrames(error, sites);
-			READ_REGISTRATIONS.add(read);
+			WeakSetMethods.add(READ_REGISTRATIONS, read);
 			return read;
 		},
 		{ error: entry }
@@ -2707,21 +2874,28 @@ function runtime_registeredScript(entry, called = false) {
 	if (OWN_CAPTURES.has(entry)) called = true;
 	let own = null;
 	let runner = null;
-	for (const frame of frames) {
+	for (const frame of framesOf(frames)) {
 		if (!own) {
-			if (called && frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (called && StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 			own = frame;
 			continue;
 		}
 		// Node's own code between them (the microtask queue a module resumes in after its imports) is passed over.
-		if (frame.path.startsWith("node:") && !frame.evaluated && runtime_isNodeScript(frame)) continue;
+		if (StringMethods.startsWith(frame.path, "node:") && !frame.evaluated && runtime_isNodeScript(frame)) continue;
 		runner = frame;
 		break;
 	}
-	if (!own?.hash || !own.key || own.evaluated || own.path.startsWith(FRAMEWORK_DIR + "/") || own.path.startsWith("node:")) return null;
-	if (!runner?.hash || runner.evaluated || runner.path.startsWith("node:")) return null;
+	if (
+		!own?.hash ||
+		!own.key ||
+		own.evaluated ||
+		StringMethods.startsWith(own.path, FRAMEWORK_DIR + "/") ||
+		StringMethods.startsWith(own.path, "node:")
+	)
+		return null;
+	if (!runner?.hash || runner.evaluated || StringMethods.startsWith(runner.path, "node:")) return null;
 	const runnerRoot = runtime_packageRootOf(runner.path);
-	if (!runnerRoot || !VITE_RUNNERS.has(runtime_packageName(runnerRoot)) || !runtime_runsFileSource(runner)) return null;
+	if (!runnerRoot || !SetMethods.has(VITE_RUNNERS, runtime_packageName(runnerRoot)) || !runtime_runsFileSource(runner)) return null;
 	return { key: own.key, hash: own.hash, location: own.location };
 }
 
@@ -2775,13 +2949,13 @@ function installViteHostRegistry(target) {
 		for (let i = 0; i < pending; i++) {
 			const script = runtime_registeredScript(Objects.getOwnPropertyDescriptor(queue, i)?.value);
 			if (!script) continue;
-			let hashes = scripts.get(script.key);
-			if (!hashes) scripts.set(script.key, (hashes = new Set()));
-			hashes.add(script.hash);
+			let hashes = MapMethods.get(scripts, script.key);
+			if (!hashes) MapMethods.set(scripts, script.key, (hashes = new Set()));
+			SetMethods.add(hashes, script.hash);
 		}
 		// What was read is dropped; anything pushed while reading stays for the next read.
-		queue.splice(0, pending);
-		return scripts.get(scriptKey)?.has(hash) === true;
+		ArrayMethods.splice(queue, 0, pending);
+		return (MapMethods.get(scripts, scriptKey) == null ? undefined : SetMethods.has(MapMethods.get(scripts, scriptKey), hash)) === true;
 	};
 	Objects.defineProperty(queue, "registered", {
 		value: Objects.freeze(registered),
@@ -2871,7 +3045,7 @@ function runtime_loadedFrom(script, json) {
 		return null;
 	}
 	if (!Arrays.isArray(importers)) return null;
-	return { path: toComparablePath(loaded), importers: importers.filter((id) => typeof id === "string") };
+	return { path: toComparablePath(loaded), importers: filterList(importers, (id) => typeof id === "string") };
 }
 
 /**
@@ -2895,9 +3069,9 @@ function installViteLoadedRegistry(target) {
 	const records = new Map();
 	const keep = (record) => {
 		if (!record) return;
-		let importers = records.get(record.path);
-		if (!importers) records.set(record.path, (importers = new Set()));
-		for (let i = 0; i < record.importers.length; i++) importers.add(record.importers[i]);
+		let importers = MapMethods.get(records, record.path);
+		if (!importers) MapMethods.set(records, record.path, (importers = new Set()));
+		for (let i = 0; i < record.importers.length; i++) SetMethods.add(importers, record.importers[i]);
 	};
 	// What records were pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
 	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
@@ -2918,7 +3092,7 @@ function installViteLoadedRegistry(target) {
 			keep(runtime_loadedFrom(runtime_registeredScript(captured), json));
 		}),
 		importersOf: Objects.freeze((path) => {
-			const found = records.get(path);
+			const found = MapMethods.get(records, path);
 			return found ? setMembers(found) : null;
 		})
 	});
@@ -2954,9 +3128,12 @@ const RUNNER_MODULES = isNode ? (globalThis.__vitest_worker__?.evaluatedModules 
  * @private
  */
 const RUNNER_PARAMETERS = Objects.freeze(
-	[
-		"__vite_ssr_exports__,__vite_ssr_import_meta__,__vite_ssr_import__,__vite_ssr_dynamic_import__,__vite_ssr_exportAll__,__vite_ssr_exportName__"
-	].flatMap((ssr) => [ssr, `${ssr},__filename,__dirname,module,exports,require`])
+	ArrayMethods.flatMap(
+		[
+			"__vite_ssr_exports__,__vite_ssr_import_meta__,__vite_ssr_import__,__vite_ssr_dynamic_import__,__vite_ssr_exportAll__,__vite_ssr_exportName__"
+		],
+		(ssr) => [ssr, `${ssr},__filename,__dirname,module,exports,require`]
+	)
 );
 
 /**
@@ -2987,18 +3164,22 @@ function runtime_snapshotRunner() {
 	const scripts = new Map();
 	const importers = new Map();
 	if (!RUNNER_MODULES || !NODE_CRYPTO) return { scripts, importers };
-	for (const node of mapValues(RUNNER_MODULES.idToModuleMap)) {
+	for (let ofIndex = 0, ofList = mapValues(RUNNER_MODULES.idToModuleMap); ofIndex < ofList.length; ofIndex++) {
+		const node = ofList[ofIndex];
 		const file = typeof node?.file === "string" ? node.file : null;
 		if (!file) continue;
 		const path = toComparablePath(file);
 		const code = node?.meta?.code;
 		if (typeof code === "string") {
-			let hashes = scripts.get(path);
-			if (!hashes) scripts.set(path, (hashes = new Set()));
-			for (const parameters of RUNNER_PARAMETERS) hashes.add(sha256(`'use strict';async (${parameters})=>{{${code}\n}}`));
+			let hashes = MapMethods.get(scripts, path);
+			if (!hashes) MapMethods.set(scripts, path, (hashes = new Set()));
+			for (let ofIndex = 0, ofList = RUNNER_PARAMETERS; ofIndex < ofList.length; ofIndex++) {
+				const parameters = ofList[ofIndex];
+				SetMethods.add(hashes, sha256(`'use strict';async (${parameters})=>{{${code}\n}}`));
+			}
 		}
-		const ids = setMembers(node?.importers).filter((id) => typeof id === "string");
-		if (ids.length) importers.set(path, [...(importers.get(path) ?? []), ...ids]);
+		const ids = filterList(setMembers(node?.importers), (id) => typeof id === "string");
+		if (ids.length) MapMethods.set(importers, path, concatLists(MapMethods.get(importers, path) ?? [], ids));
 	}
 	return { scripts, importers };
 }
@@ -3039,7 +3220,8 @@ function runtime_enteredAsItself(leaf, frame, outer) {
 		Boolean(candidate.enclosingLine && candidate.enclosingColumn) &&
 		(source.starts[candidate.enclosingLine - 1] ?? Infinity) + candidate.enclosingColumn - 1 === range[0];
 	if (starts(frame)) return true;
-	for (const candidate of outer) {
+	for (let ofIndex = 0, ofList = outer; ofIndex < ofList.length; ofIndex++) {
+		const candidate = ofList[ofIndex];
 		if (!runtime_sameFileFrame(candidate, frame)) return false;
 		if (starts(candidate)) return true;
 	}
@@ -3063,9 +3245,13 @@ function runtime_leafCallAnswer(leaf, running) {
 	const target = String(internal.apiPath ?? "");
 	const context = leaf.slothlet?.contextManager?.tryGetContext?.()?.context ?? null;
 	const runners = new Set();
-	for (const part of running) for (const member of ceilingMembers(part)) if (member && member !== leaf) runners.add(member);
-	for (const runner of runners) {
-		if (!trustedRootOwn.genuineWrappers.has(runner)) return REFUSED_SUPPLIER;
+	for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
+		const part = ofList[ofIndex];
+		for (let m = 0, members = ceilingMembers(part); m < members.length; m++)
+			if (members[m] && members[m] !== leaf) SetMethods.add(runners, members[m]);
+	}
+	for (const runner of setValues(runners)) {
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, runner)) return REFUSED_SUPPLIER;
 		const caller = String(runner.____slothletInternal.apiPath ?? "");
 		const allowed = permissionManager?.enforceAccess?.(
 			caller,
@@ -3118,7 +3304,11 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// Inside a call that was handed code, the calls that handed it down are held to as well (see supplierChainCeiling).
 	return {
 		wrapper: authors[0],
-		ceiling: combineCeilings(record.wrapper, record.ceiling, supplierChainCeiling(record), ...authors.slice(1))
+		ceiling: Reflect.apply(
+			combineCeilings,
+			undefined,
+			concatLists([record.wrapper, record.ceiling, supplierChainCeiling(record)], copyList(authors, 1))
+		)
 	};
 }
 
@@ -3146,7 +3336,7 @@ function runtime_replayable(frames) {
 					done = true;
 					return;
 				}
-				read.push(next.value);
+				ArrayMethods.push(read, next.value);
 				yield next.value;
 			}
 		}
@@ -3177,7 +3367,7 @@ const LEAF_RANGES = new WeakMap();
  */
 function runtime_asSource(text) {
 	const starts = [0];
-	for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+	for (let i = StringMethods.indexOf(text, "\n"); i !== -1; i = StringMethods.indexOf(text, "\n", i + 1)) ArrayMethods.push(starts, i + 1);
 	return { text, starts, names: null };
 }
 
@@ -3199,17 +3389,17 @@ function runtime_asSource(text) {
 function runtime_sourceOf(filePath, frame = null) {
 	if (frame?.key) {
 		const scriptID = `${frame.key}\u0000${frame.hash ?? ""}`;
-		const known = FILE_SOURCES.get(scriptID);
+		const known = MapMethods.get(FILE_SOURCES, scriptID);
 		if (known) return known;
 		const recorded = loadedScriptText(frame.key, frame.hash ?? null);
 		if (typeof recorded === "string") {
 			const source = runtime_asSource(recorded);
-			if (FILE_SOURCES.size >= 4096) FILE_SOURCES.clear();
-			FILE_SOURCES.set(scriptID, source);
+			if (MapMethods.size(FILE_SOURCES) >= 4096) MapMethods.clear(FILE_SOURCES);
+			MapMethods.set(FILE_SOURCES, scriptID, source);
 			return source;
 		}
 	}
-	if (FILE_SOURCES.has(filePath)) return FILE_SOURCES.get(filePath);
+	if (MapMethods.has(FILE_SOURCES, filePath)) return MapMethods.get(FILE_SOURCES, filePath);
 	let source;
 	try {
 		// Under vite's module runner the file runs as the code vite transformed it into: its frames and its functions'
@@ -3217,7 +3407,8 @@ function runtime_sourceOf(filePath, frame = null) {
 		let runnerCode = null;
 		if (RUNNER_MODULES) {
 			const comparable = toComparablePath(filePath);
-			for (const node of mapValues(RUNNER_MODULES.idToModuleMap)) {
+			for (let ofIndex = 0, ofList = mapValues(RUNNER_MODULES.idToModuleMap); ofIndex < ofList.length; ofIndex++) {
+				const node = ofList[ofIndex];
 				if (typeof node?.file === "string" && typeof node?.meta?.code === "string" && toComparablePath(node.file) === comparable) {
 					runnerCode = node.meta.code;
 					break;
@@ -3225,13 +3416,13 @@ function runtime_sourceOf(filePath, frame = null) {
 			}
 		}
 		source = runtime_asSource(
-			runnerCode ?? String(nodeFs(FS_READ_FILE, filePath.startsWith("file:") ? new URL(filePath) : filePath, "utf8"))
+			runnerCode ?? String(nodeFs(FS_READ_FILE, StringMethods.startsWith(filePath, "file:") ? new URL(filePath) : filePath, "utf8"))
 		);
 	} catch {
 		// A file that cannot be read gives no ranges: its code is the file's module.
 		source = null;
 	}
-	FILE_SOURCES.set(filePath, source);
+	MapMethods.set(FILE_SOURCES, filePath, source);
 	return source;
 }
 
@@ -3256,26 +3447,51 @@ function runtime_exportLocals(source) {
 	const names = new Map();
 	const add = (exported, local) => {
 		if (!exported || !local) return;
-		let held = names.get(exported);
-		if (!held) names.set(exported, (held = new Set()));
-		held.add(local);
+		let held = MapMethods.get(names, exported);
+		if (!held) MapMethods.set(names, exported, (held = new Set()));
+		SetMethods.add(held, local);
 	};
 	const { text } = source;
 	const entry = new RegExp(`^\\s*(${IDENTIFIER})(?:\\s+as\\s+(${IDENTIFIER}|"[^"]*"|'[^']*'))?\\s*$`);
-	for (const list of text.matchAll(/export\s*\{([^}]*)\}/g)) {
-		for (const part of list[1].split(",")) {
-			const named = entry.exec(part);
-			if (named) add((named[2] ?? named[1]).replace(/^["']|["']$/g, ""), named[1]);
+	for (let ofIndex = 0, ofList = matchAllOf(text, /export\s*\{([^}]*)\}/g); ofIndex < ofList.length; ofIndex++) {
+		const list = ofList[ofIndex];
+		for (let ofIndex = 0, ofList = splitText(list[1], ","); ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
+			const named = RegExpMethods.exec(entry, part);
+			if (named) add(regExpReplace(/^["']|["']$/g, named[2] ?? named[1], ""), named[1]);
 		}
 	}
-	for (const given of text.matchAll(new RegExp(`export\\s+default\\s+(${IDENTIFIER})\\s*(?:;|$)`, "gm"))) add("default", given[1]);
-	for (const given of text.matchAll(new RegExp(`module\\.exports\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm"))) add("default", given[1]);
-	for (const given of text.matchAll(new RegExp(`(?:module\\.)?exports\\.(${IDENTIFIER})\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm")))
+	for (
+		let ofIndex = 0, ofList = matchAllOf(text, new RegExp(`export\\s+default\\s+(${IDENTIFIER})\\s*(?:;|$)`, "gm"));
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const given = ofList[ofIndex];
+		add("default", given[1]);
+	}
+	for (
+		let ofIndex = 0, ofList = matchAllOf(text, new RegExp(`module\\.exports\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm"));
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const given = ofList[ofIndex];
+		add("default", given[1]);
+	}
+	for (
+		let ofIndex = 0,
+			ofList = matchAllOf(text, new RegExp(`(?:module\\.)?exports\\.(${IDENTIFIER})\\s*=\\s*(${IDENTIFIER})\\s*(?:;|$)`, "gm"));
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const given = ofList[ofIndex];
 		add(given[1], given[2]);
+	}
 	const pair = new RegExp(`^\\s*(${IDENTIFIER})(?:\\s*:\\s*(${IDENTIFIER}))?\\s*$`);
-	for (const literal of text.matchAll(/module\.exports\s*=\s*\{([^{}]*)\}/g)) {
-		for (const part of literal[1].split(",")) {
-			const named = pair.exec(part);
+	for (let ofIndex = 0, ofList = matchAllOf(text, /module\.exports\s*=\s*\{([^{}]*)\}/g); ofIndex < ofList.length; ofIndex++) {
+		const literal = ofList[ofIndex];
+		for (let ofIndex = 0, ofList = splitText(literal[1], ","); ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
+			const named = RegExpMethods.exec(pair, part);
 			if (named) add(named[1], named[2] ?? named[1]);
 		}
 	}
@@ -3296,15 +3512,16 @@ function runtime_exportLocals(source) {
  */
 function runtime_declaredAt(text, at, own, names) {
 	// What precedes the function, less any parentheses it is wrapped in.
-	const before = text.slice(Math.max(0, at - 160), at).replace(/[\s(]+$/, "");
-	for (const name of names) {
-		if (name === "default" && /(?:export\s+default|module\.exports\s*=)$/.test(before)) return true;
+	const before = regExpReplace(/[\s(]+$/, StringMethods.slice(text, Math.max(0, at - 160), at), "");
+	for (const name of setValues(names)) {
+		if (name === "default" && RegExpMethods.exec(/(?:export\s+default|module\.exports\s*=)$/, before) !== null) return true;
 		// The name is matched as text: every character a pattern reads otherwise is escaped.
-		const escaped = name.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-		if (new RegExp(`(?:^|[^\\w$])${escaped}\\s*[=:]$`).test(before)) return true;
-		if (new RegExp(`^(?:async\\s+)?function\\s*\\*?\\s*${escaped}(?![\\w$])`).test(own)) return true;
-		if (new RegExp(`^class\\s+${escaped}(?![\\w$])`).test(own)) return true;
-		if (new RegExp(`^(?:static\\s+)?(?:async\\s+)?(?:get\\s+|set\\s+)?\\*?\\s*${escaped}\\s*\\(`).test(own)) return true;
+		const escaped = regExpReplace(/[\\^$.*+?()[\]{}|]/g, name, "\\$&");
+		if (RegExpMethods.exec(new RegExp(`(?:^|[^\\w$])${escaped}\\s*[=:]$`), before) !== null) return true;
+		if (RegExpMethods.exec(new RegExp(`^(?:async\\s+)?function\\s*\\*?\\s*${escaped}(?![\\w$])`), own) !== null) return true;
+		if (RegExpMethods.exec(new RegExp(`^class\\s+${escaped}(?![\\w$])`), own) !== null) return true;
+		if (RegExpMethods.exec(new RegExp(`^(?:static\\s+)?(?:async\\s+)?(?:get\\s+|set\\s+)?\\*?\\s*${escaped}\\s*\\(`), own) !== null)
+			return true;
 	}
 	return false;
 }
@@ -3324,21 +3541,28 @@ function runtime_declaredAt(text, at, own, names) {
  * @private
  */
 function runtime_leafRange(leaf, source) {
-	const held = LEAF_RANGES.get(leaf);
+	const held = WeakMapMethods.get(LEAF_RANGES, leaf);
 	if (held && held.source === source) return held.range;
 	let range = null;
 	const impl = leaf.____slothletInternal?.impl;
 	if (typeof impl === "function") {
 		try {
 			const own = functionSource(impl);
-			if (!own.endsWith("{ [native code] }")) {
+			if (!StringMethods.endsWith(own, "{ [native code] }")) {
 				const places = [];
-				for (let at = source.text.indexOf(own); at !== -1 && places.length < 64; at = source.text.indexOf(own, at + 1)) places.push(at);
+				for (
+					let at = StringMethods.indexOf(source.text, own);
+					at !== -1 && places.length < 64;
+					at = StringMethods.indexOf(source.text, own, at + 1)
+				)
+					ArrayMethods.push(places, at);
 				if (places.length) {
 					const exportPath = leaf.____slothletInternal.exportPath;
 					const exported = Arrays.isArray(exportPath) && exportPath.length ? String(exportPath[exportPath.length - 1]) : null;
-					const names = new Set(exported === null ? [] : [exported, ...(runtime_exportLocals(source).get(exported) ?? [])]);
-					const declared = names.size ? places.filter((at) => runtime_declaredAt(source.text, at, own, names)) : [];
+					const names = setFrom(
+						exported === null ? [] : concatLists([exported], setToArray(MapMethods.get(runtime_exportLocals(source), exported)))
+					);
+					const declared = SetMethods.size(names) ? filterList(places, (at) => runtime_declaredAt(source.text, at, own, names)) : [];
 					if (declared.length === 1) range = [declared[0], declared[0] + own.length];
 					else if (!declared.length && places.length === 1) range = [places[0], places[0] + own.length];
 				}
@@ -3347,7 +3571,7 @@ function runtime_leafRange(leaf, source) {
 			range = null;
 		}
 	}
-	LEAF_RANGES.set(leaf, { source, range });
+	WeakMapMethods.set(LEAF_RANGES, leaf, { source, range });
 	return range;
 }
 
@@ -3382,15 +3606,16 @@ function setModuleNodeResolver(resolver) {
  */
 function runtime_moduleRootPath(leaves) {
 	let root = null;
-	for (const leaf of leaves) {
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		const leaf = ofList[ofIndex];
 		const internal = leaf.____slothletInternal;
 		const recorded = internal.exportPath;
 		if (!Arrays.isArray(recorded)) continue;
-		const exportPath = recorded[0] === "default" ? recorded.slice(1) : recorded;
+		const exportPath = recorded[0] === "default" ? copyList(recorded, 1) : recorded;
 		if (!exportPath.length) continue;
-		const segments = String(internal.apiPath ?? "").split(".");
+		const segments = splitText(String(internal.apiPath ?? ""), ".");
 		if (segments.length <= exportPath.length) return null;
-		const path = segments.slice(0, segments.length - exportPath.length).join(".");
+		const path = ArrayMethods.join(copyList(segments, 0, segments.length - exportPath.length), ".");
 		if (root !== null && root !== path) return null;
 		root = path;
 	}
@@ -3410,7 +3635,8 @@ function runtime_leafHolding(leaves, source, frame) {
 	const offset = (source.starts[frame.lineNumber - 1] ?? Infinity) + frame.columnNumber - 1;
 	let best = null;
 	let bestLength = Infinity;
-	for (const leaf of leaves) {
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		const leaf = ofList[ofIndex];
 		const range = runtime_leafRange(leaf, source);
 		if (range && range[0] <= offset && offset < range[1] && range[1] - range[0] < bestLength) {
 			best = leaf;
@@ -3445,14 +3671,36 @@ function runtime_sameFileFrame(frame, inner) {
  * @returns {Iterable<object>} The frames further out.
  * @private
  */
-function* runtime_framesAfter(frames, index) {
+function runtime_framesAfter(frames, index) {
 	// A capture of call sites converts only the frames from there.
-	if (typeof frames.after === "function") {
-		yield* frames.after(index);
-		return;
-	}
+	// An array is read by index alone: nothing is looked up on Array.prototype.
+	if (!Arrays.isArray(frames) && typeof frames.after === "function") return frames.after(index);
+	return generatorSteps(runtime_framesFrom(frames, index));
+}
+
+/**
+ * The frames of a walk after the one at an index (see {@link runtime_framesAfter}).
+ * @param {Iterable<object>} frames - The frames.
+ * @param {number} index - The index of the frame they follow.
+ * @returns {Generator<object>} The frames further out.
+ * @private
+ */
+function* runtime_framesFrom(frames, index) {
 	let i = 0;
-	for (const frame of frames) if (i++ > index) yield frame;
+	for (const frame of framesOf(frames)) if (i++ > index) yield frame;
+}
+
+/**
+ * A walk of frames that reads nothing module code can replace: an array's elements by the array iterator's `next`
+ * taken at load, and a capture's (or {@link runtime_framesAfter}'s) through the walk it hands out, which steps its
+ * generator with the functions taken at load.
+ * @param {Iterable<object>} frames - An array of frames, a capture, or frames further out.
+ * @returns {Iterable<object>} The frames.
+ * @private
+ */
+function framesOf(frames) {
+	if (Arrays.isArray(frames)) return listSteps(frames);
+	return frames[Symbol.iterator]();
 }
 
 /**
@@ -3473,14 +3721,16 @@ function runtime_narrowToLeaf(leaves, frame, outer = []) {
 	if (leaves.length < 2 || !frame?.lineNumber || !frame.columnNumber) return leaves;
 	// The file the frame runs from: a lazy folder's node indexed at its only file has the folder as its own path.
 	const filePath = (
-		leaves.find((leaf) => leaf.____slothletInternal.filePath && toComparablePath(leaf.____slothletInternal.filePath) === frame.path) ??
-		leaves.find((leaf) => leaf.____slothletInternal.filePath)
+		ArrayMethods.find(
+			leaves,
+			(leaf) => leaf.____slothletInternal.filePath && toComparablePath(leaf.____slothletInternal.filePath) === frame.path
+		) ?? ArrayMethods.find(leaves, (leaf) => leaf.____slothletInternal.filePath)
 	)?.____slothletInternal.filePath;
 	const source = filePath ? runtime_sourceOf(filePath, frame) : null;
 	if (!source) return leaves;
 	let best = runtime_leafHolding(leaves, source, frame);
 	if (!best) {
-		for (const further of outer) {
+		for (const further of framesOf(outer)) {
 			if (!runtime_sameFileFrame(further, frame)) break;
 			if ((best = runtime_leafHolding(leaves, source, further))) break;
 		}
@@ -3500,14 +3750,16 @@ function runtime_narrowToLeaf(leaves, frame, outer = []) {
 function runtime_fileModuleOf(leaves) {
 	if (leaves.length < 2) return leaves;
 	// Code outside every leaf's range is the module's: the file's module node, whose path every leaf's starts with.
-	const paths = leaves.map((leaf) => String(leaf.____slothletInternal.apiPath ?? ""));
-	const module = leaves.find((leaf, i) => paths.every((other) => other === paths[i] || other.startsWith(paths[i] + ".")));
+	const paths = mapList(leaves, (leaf) => String(leaf.____slothletInternal.apiPath ?? ""));
+	const module = ArrayMethods.find(leaves, (leaf, i) =>
+		ArrayMethods.every(paths, (other) => other === paths[i] || StringMethods.startsWith(other, paths[i] + "."))
+	);
 	if (module) return [module];
 	// A lazy tree's module node was built with no file: found by its path, the same node an eager tree builds for the file.
 	const modulePath = runtime_moduleRootPath(leaves);
-	if (modulePath === null || !paths.every((path) => path.startsWith(modulePath + "."))) return leaves;
+	if (modulePath === null || !ArrayMethods.every(paths, (path) => StringMethods.startsWith(path, modulePath + "."))) return leaves;
 	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
-	const standing = node && trustedRootOwn.genuineWrappers.has(node) && node.slothlet === leaves[0].slothlet;
+	const standing = node && WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) && node.slothlet === leaves[0].slothlet;
 	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
 }
 
@@ -3538,9 +3790,9 @@ function createModuleLoad(slothlet, filePath, moduleID) {
 			const instances = slothlet?.contextManager?.instances;
 			if (!instances?.has) return null;
 			for (let id = slothlet.instanceID; id;) {
-				if (instances.has(id)) return id;
-				const reloaded = id.lastIndexOf("_reload_");
-				id = reloaded > 0 ? id.slice(0, reloaded) : null;
+				if (MapMethods.has(instances, id)) return id;
+				const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+				id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 			}
 			return null;
 		},
@@ -3577,31 +3829,32 @@ function createModuleLoad(slothlet, filePath, moduleID) {
  * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
  */
 function loadOnStack(loads) {
-	for (const frame of runtime_captureFrames(32)) {
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+	for (const frame of framesOf(runtime_captureFrames(32))) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 			// A call slothlet entered is running: its code is the call's, not a load's.
 			if (frame.enter) return null;
 			continue;
 		}
-		if (frame.path.startsWith("node:")) continue;
+		if (StringMethods.startsWith(frame.path, "node:")) continue;
 		if (frame.evaluated) return null;
 		const tag = runtime_frameInstanceTag(frame.line);
 		const mount = runtime_frameModuleTag(frame.line);
 		const sameInstance = [];
-		for (const loading of loads) {
+		for (const loading of setValues(loads)) {
 			const family = loading.slothlet?.instanceID;
 			if (tag && family !== tag) continue;
 			if (toComparablePath(loading.filePath) === frame.path || runtime_realComparablePath(loading.filePath) === frame.path) {
 				if (!mount || !loading.moduleID || loading.moduleID === mount) return loading;
 				continue;
 			}
-			if (tag) sameInstance.push(loading);
+			if (tag) ArrayMethods.push(sameInstance, loading);
 		}
 		if (!sameInstance.length) return null;
 		// A helper copy loaded for one api file (`helpers: "module"`) is evaluated by that file's load.
 		const loadedFor = tag ? runtime_helperCopyOf(tag, frame) : null;
 		if (loadedFor) {
-			const own = sameInstance.filter(
+			const own = filterList(
+				sameInstance,
 				(loading) =>
 					(toComparablePath(loading.filePath) === loadedFor.path || runtime_realComparablePath(loading.filePath) === loadedFor.path) &&
 					(!loadedFor.mount || !loading.moduleID || loading.moduleID === loadedFor.mount)
@@ -3611,16 +3864,16 @@ function loadOnStack(loads) {
 		if (sameInstance.length === 1) return sameInstance[0];
 		// A helper several loads may be evaluating: the load whose file imports it, when one alone does.
 		const graph = runtime_importGraph(tag);
-		const seen = new Set([frame.path]);
+		const seen = setFrom([frame.path]);
 		const queue = [frame.path];
-		while (queue.length && seen.size <= PACKAGE_WALK) {
-			for (const importer of graph.get(queue.pop()) ?? []) {
-				if (seen.has(importer)) continue;
-				seen.add(importer);
-				queue.push(importer);
+		while (queue.length && SetMethods.size(seen) <= PACKAGE_WALK) {
+			for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
+				if (SetMethods.has(seen, importer)) continue;
+				SetMethods.add(seen, importer);
+				ArrayMethods.push(queue, importer);
 			}
 		}
-		const importing = sameInstance.filter((loading) => seen.has(toComparablePath(loading.filePath)));
+		const importing = filterList(sameInstance, (loading) => SetMethods.has(seen, toComparablePath(loading.filePath)));
 		// Several pending loads import it: the first stands for the flow, and every module importing the helper is held
 		// to when the flow's code makes an access (see runtime_topLevelRunning).
 		return importing.length ? importing[0] : false;
@@ -3673,8 +3926,12 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 			// The engine reading a member of a value a promise is resolved with (its `then`) is no code running it: with
 			// only slothlet's and Node's own frames on the stack, nothing runs the code, and it stays its definer's.
 			let running = false;
-			for (const frame of runtime_captureFrames(FAR_FRAMES)) {
-				if (!frame.evaluated && (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:"))) continue;
+			for (const frame of framesOf(runtime_captureFrames(FAR_FRAMES))) {
+				if (
+					!frame.evaluated &&
+					(StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:"))
+				)
+					continue;
 				running = true;
 				break;
 			}
@@ -3687,7 +3944,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 		if (identity?.unresolved || !slothlet || !runtime_guardsForeignCode({ wrapper: { slothlet } })) return null;
 		if (typeof contextManager.isAmbient === "function" && !contextManager.isAmbient(instanceID)) return null;
 		const callers = runtime_outerCallers(runtime_captureFrames(32), -1, slothlet);
-		return callers.length ? combineCeilings(...callers) : null;
+		return callers.length ? Reflect.apply(combineCeilings, undefined, callers) : null;
 	}
 	// Run inside a call that was handed code, it may be code the caller handed in: the calls that handed code down are
 	// its ceiling too (see supplierChainCeiling). A stand-in handed to this call alone, run by the call's own code, is
@@ -3743,9 +4000,9 @@ function runtime_instanceRuns(slothlet) {
 	const instances = slothlet?.contextManager?.instances;
 	if (!instances?.has) return false;
 	for (let id = slothlet.instanceID; id;) {
-		if (instances.has(id)) return true;
-		const reloaded = id.lastIndexOf("_reload_");
-		id = reloaded > 0 ? id.slice(0, reloaded) : null;
+		if (MapMethods.has(instances, id)) return true;
+		const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 	}
 	return false;
 }
@@ -3775,11 +4032,13 @@ function runtime_leavesAtLocation(path, line, running = null, location = null) {
 	let goneInstance = null;
 	// Whether more than one running instance holds the file: only the one whose flow is running is then read.
 	let several = false;
-	for (const [id, reference] of LIVE_INSTANCES) {
+	for (const ofEntry of mapEntries(LIVE_INSTANCES)) {
+		const id = ofEntry[0],
+			reference = ofEntry[1];
 		if (tag && id !== tag) continue;
-		const slothlet = reference.deref();
+		const slothlet = WeakRefMethods.deref(reference);
 		if (!slothlet) {
-			LIVE_INSTANCES.delete(id);
+			MapMethods.delete(LIVE_INSTANCES, id);
 			continue;
 		}
 		// What a shut-down instance made has no standing while its permission system was on; with it off the code is
@@ -3846,9 +4105,9 @@ function runtime_definerAt(frames, running) {
 	let index = -1;
 	// The helper file of an instance the innermost code runs in, while the walk looks for the leaf that called it.
 	let helper = null;
-	for (const frame of frames) {
+	for (const frame of framesOf(frames)) {
 		index++;
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 		// A helper's code with no leaf's code calling it (the helper's function handed out as it is): the modules of the
 		// files that import it stand for it, all of them.
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
@@ -3879,7 +4138,9 @@ function runtime_definerAt(frames, running) {
 		const narrowed = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 		// The leaves whose code is further out on the stack ran this code: with no call to say who the caller is,
 		// they are its callers, so a module running another's code from a timer of its own does not count as the host.
-		const callers = runtime_anyInstanceChecks() ? runtime_outerCallers(frames, index).filter((caller) => !narrowed.includes(caller)) : [];
+		const callers = runtime_anyInstanceChecks()
+			? filterList(runtime_outerCallers(frames, index), (caller) => !ArrayMethods.includes(narrowed, caller))
+			: [];
 		return narrowed.length === 1 ? { wrapper: narrowed[0], callers } : { leaves: narrowed, callers };
 	}
 	return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
@@ -3948,12 +4209,15 @@ function runtime_holdDetachedJob(definer, frames) {
 	// flow whoever awaits it, as the async runtime's store does.
 	const starter = slothlet.contextManager.runningFlowStarter?.() ?? null;
 	const started =
-		starter && trustedRootOwn.genuineWrappers.has(starter.wrapper) && starter.wrapper.slothlet === slothlet
-			? [starter.wrapper, ...ceilingMembers(starter.ceiling ?? null)]
+		starter && WeakSetMethods.has(trustedRootOwn.genuineWrappers, starter.wrapper) && starter.wrapper.slothlet === slothlet
+			? concatLists([starter.wrapper], ceilingMembers(starter.ceiling ?? null))
 			: [];
 	const letGo = runtime_jobLetGo(frames, slothlet);
 	if (!letGo && !started.length) return definer;
-	return { ...definer, callers: [...new Set([...definer.callers, ...started, ...(letGo ? runtime_instanceLeaves(slothlet) : [])])] };
+	return {
+		...definer,
+		callers: setToArray(setFrom(concatLists(definer.callers, started, letGo ? runtime_instanceLeaves(slothlet) : [])))
+	};
 }
 
 /**
@@ -3980,11 +4244,11 @@ function runtime_jobLetGo(frames, slothlet) {
 		// Whether the outermost frame of the synchronous part read so far is the instance's own code.
 		let outermostOwn = false;
 		let syncEnded = false;
-		for (const frame of list) {
+		for (const frame of framesOf(list)) {
 			if (!syncEnded) {
 				// Slothlet's own code running the instance's (a trap it reads while it builds or settles something) began
 				// the job: it is no flow a module let go of.
-				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+				if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 					if (!frame.async) {
 						outermostOwn = false;
 						continue;
@@ -3995,15 +4259,21 @@ function runtime_jobLetGo(frames, slothlet) {
 					if (!outermostOwn || frame.path === "node:internal/timers") return false;
 					syncEnded = true;
 				} else {
-					outermostOwn = !frame.path.startsWith("node:") && instanceCode(frame);
+					outermostOwn = !StringMethods.startsWith(frame.path, "node:") && instanceCode(frame);
 					continue;
 				}
 			}
 			// The flows awaiting it: the innermost one that is someone's code says whose flow this is.
-			if (!frame.async || !frame.path || frame.path.startsWith("node:") || frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (
+				!frame.async ||
+				!frame.path ||
+				StringMethods.startsWith(frame.path, "node:") ||
+				StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")
+			)
+				continue;
 			if (instanceCode(frame)) return true;
 			// A package a module loaded awaits it for that module; any other file's code is the host's.
-			return runtime_packageImportingLeaves(slothlet, frame.path).size > 0;
+			return SetMethods.size(runtime_packageImportingLeaves(slothlet, frame.path)) > 0;
 		}
 		return list.truncated ? undefined : syncEnded || outermostOwn;
 	};
@@ -4018,13 +4288,14 @@ function runtime_jobLetGo(frames, slothlet) {
  */
 function runtime_instanceLeaves(slothlet) {
 	const leaves = new Set();
-	for (const held of LEAF_FILES.get(slothlet)?.values() ?? []) {
-		for (const reference of held) {
-			const wrapper = reference.deref();
-			if (wrapper && !runtime_isGone(wrapper)) leaves.add(wrapper);
+	for (let ofIndex = 0, ofList = mapValues(WeakMapMethods.get(LEAF_FILES, slothlet)); ofIndex < ofList.length; ofIndex++) {
+		const held = ofList[ofIndex];
+		for (const reference of setValues(held)) {
+			const wrapper = WeakRefMethods.deref(reference);
+			if (wrapper && !runtime_isGone(wrapper)) SetMethods.add(leaves, wrapper);
 		}
 	}
-	return [...leaves];
+	return setToArray(leaves);
 }
 
 /**
@@ -4042,14 +4313,14 @@ function runtime_helperCopyOf(family, frame) {
 	const loadedFor = runtime_frameImporterTag(frame.line);
 	if (!loadedFor || loadedFor.path === frame.path) return null;
 	const graph = runtime_importGraph(family);
-	const seen = new Set([frame.path]);
+	const seen = setFrom([frame.path]);
 	const queue = [frame.path];
-	while (queue.length && seen.size <= PACKAGE_WALK) {
-		for (const importer of graph.get(queue.pop()) ?? []) {
+	while (queue.length && SetMethods.size(seen) <= PACKAGE_WALK) {
+		for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
 			if (importer === loadedFor.path) return loadedFor;
-			if (seen.has(importer)) continue;
-			seen.add(importer);
-			queue.push(importer);
+			if (SetMethods.has(seen, importer)) continue;
+			SetMethods.add(seen, importer);
+			ArrayMethods.push(queue, importer);
 		}
 	}
 	return null;
@@ -4065,13 +4336,15 @@ function runtime_helperCopyOf(family, frame) {
  * @private
  */
 function runtime_helperOwner(frame, only = null) {
-	if (frame.evaluated || frame.path.startsWith("node:")) return null;
+	if (frame.evaluated || StringMethods.startsWith(frame.path, "node:")) return null;
 	const tag = runtime_frameInstanceTag(frame.line);
 	let found = null;
-	for (const [id, reference] of LIVE_INSTANCES) {
-		const slothlet = reference.deref();
+	for (const ofEntry of mapEntries(LIVE_INSTANCES)) {
+		const id = ofEntry[0],
+			reference = ofEntry[1];
+		const slothlet = WeakRefMethods.deref(reference);
 		if (!slothlet || (only && slothlet !== only) || !runtime_instanceRuns(slothlet)) continue;
-		if (tag ? id !== tag : !runtime_commonJSLocations(id).has(frame.path)) continue;
+		if (tag ? id !== tag : !SetMethods.has(runtime_commonJSLocations(id), frame.path)) continue;
 		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
 		// A CommonJS helper two running instances load carries no tag to tell them apart (#735): it is no one's here.
 		if (found) return null;
@@ -4090,15 +4363,15 @@ function runtime_helperOwner(frame, only = null) {
  */
 function runtime_helperImporters(helper) {
 	// A copy loaded for one api file is that file's alone, whoever else imports the helper's file.
-	if (helper.importer) return new Set([helper.path, helper.importer.path]);
+	if (helper.importer) return setFrom([helper.path, helper.importer.path]);
 	const graph = runtime_importGraph(helper.slothlet.instanceID);
-	const seen = new Set([helper.path]);
+	const seen = setFrom([helper.path]);
 	const queue = [helper.path];
-	while (queue.length && seen.size <= PACKAGE_WALK) {
-		for (const importer of graph.get(queue.pop()) ?? []) {
-			if (seen.has(importer)) continue;
-			seen.add(importer);
-			queue.push(importer);
+	while (queue.length && SetMethods.size(seen) <= PACKAGE_WALK) {
+		for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
+			if (SetMethods.has(seen, importer)) continue;
+			SetMethods.add(seen, importer);
+			ArrayMethods.push(queue, importer);
 		}
 	}
 	return seen;
@@ -4116,14 +4389,15 @@ function runtime_helperImporters(helper) {
 function runtime_importsHelper(helper, leaves) {
 	if (leaves[0]?.slothlet !== helper.slothlet) return false;
 	const importers = runtime_helperImporters(helper);
-	if (importers.size === 1) return true;
+	if (SetMethods.size(importers) === 1) return true;
 	const mount = helper.importer?.mount ?? null;
-	return leaves.some((leaf) => {
+	return ArrayMethods.some(leaves, (leaf) => {
 		const filePath = leaf.____slothletInternal.filePath;
 		if (!filePath || (mount && leaf.____slothletInternal.moduleID !== mount)) return false;
-		if (importers.has(toComparablePath(filePath)) || importers.has(runtime_realComparablePath(filePath))) return true;
+		if (SetMethods.has(importers, toComparablePath(filePath)) || SetMethods.has(importers, runtime_realComparablePath(filePath)))
+			return true;
 		// A leaf run from another location (a TypeScript leaf's compiled copy) is named by it.
-		for (const location of runtime_importedLocations(leaf, filePath) ?? []) if (importers.has(location)) return true;
+		for (const location of setValues(runtime_importedLocations(leaf, filePath))) if (SetMethods.has(importers, location)) return true;
 		return false;
 	});
 }
@@ -4149,49 +4423,57 @@ function isLeafFileFunction(fn, leaves) {
 	} catch {
 		return false;
 	}
-	if (/^class(?![\w$])/.test(own)) return true;
-	if (/\{\s*\[native code\]\s*\}\s*$/.test(own)) return false;
+	if (RegExpMethods.exec(/^class(?![\w$])/, own) !== null) return true;
+	if (RegExpMethods.exec(/\{\s*\[native code\]\s*\}\s*$/, own) !== null) return false;
 	let inLeaf = false;
-	for (const leaf of leaves) {
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		const leaf = ofList[ofIndex];
 		const internal = leaf?.____slothletInternal;
 		const filePath = internal?.filePath;
 		const slothlet = leaf?.slothlet;
 		if (typeof filePath !== "string" || !slothlet) continue;
 		const texts = [];
-		const locations = new Set([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
-		for (const imported of runtime_importedLocations(leaf, filePath) ?? []) locations.add(imported);
-		for (const location of locations) {
+		const locations = setFrom([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
+		for (const imported of setValues(runtime_importedLocations(leaf, filePath))) SetMethods.add(locations, imported);
+		for (const location of setValues(locations)) {
 			if (!location) continue;
-			for (const key of [`${location}\u0000${slothlet.instanceID ?? ""}\u0000${internal.moduleID ?? ""}`, `${location}\u0000\u0000`]) {
+			for (
+				let ofIndex = 0,
+					ofList = [`${location}\u0000${slothlet.instanceID ?? ""}\u0000${internal.moduleID ?? ""}`, `${location}\u0000\u0000`];
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const key = ofList[ofIndex];
 				const text = loadedScriptText(key, null);
-				if (typeof text === "string") texts.push(text);
+				if (typeof text === "string") ArrayMethods.push(texts, text);
 			}
 		}
 		// Nothing recorded for the file (a loader slothlet's hook does not see): the file as it can be read.
-		if (!texts.length && isNode && !filePath.startsWith("synthetic:")) {
+		if (!texts.length && isNode && !StringMethods.startsWith(filePath, "synthetic:")) {
 			const source = runtime_sourceOf(filePath);
-			if (source) texts.push(source.text);
+			if (source) ArrayMethods.push(texts, source.text);
 		}
-		if (texts.some((text) => text.includes(own))) {
+		if (ArrayMethods.some(texts, (text) => StringMethods.includes(text, own))) {
 			inLeaf = true;
 			break;
 		}
 	}
 	if (!inLeaf) return false;
 	// The same text in a helper file of the instance: the function may be the helper's.
-	for (const leaf of leaves) {
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		const leaf = ofList[ofIndex];
 		const slothlet = leaf.slothlet;
 		const family = slothlet?.instanceID;
 		if (!family) continue;
-		for (const file of runtime_importGraphEntry(family).files) {
-			if (/\.(?:json|node|wasm)$/i.test(file) || runtime_leavesAtFile(slothlet, file, null, null).length) continue;
+		for (const file of setValues(runtime_importGraphEntry(family).files)) {
+			if (RegExpMethods.exec(/\.(?:json|node|wasm)$/i, file) !== null || runtime_leavesAtFile(slothlet, file, null, null).length) continue;
 			// As recorded when the helper loaded; where the hook recorded nothing, the file as it can be read. A helper
 			// whose source cannot be found may hold the function.
 			const text =
 				loadedScriptText(`${file}\u0000${family}\u0000`, null) ??
 				loadedScriptText(`${file}\u0000\u0000`, null) ??
 				(isNode ? runtime_sourceOf(file)?.text : undefined);
-			if (typeof text !== "string" || text.includes(own)) return false;
+			if (typeof text !== "string" || StringMethods.includes(text, own)) return false;
 		}
 	}
 	return true;
@@ -4206,12 +4488,15 @@ function isLeafFileFunction(fn, leaves) {
  */
 function runtime_helperModules(helper) {
 	const modules = new Set();
-	for (const file of runtime_helperImporters(helper)) {
+	for (const file of setValues(runtime_helperImporters(helper))) {
 		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, helper.importer?.mount ?? null);
 		if (!leaves.length) continue;
-		for (const module of runtime_fileModuleOf(leaves)) modules.add(module);
+		for (let ofIndex = 0, ofList = runtime_fileModuleOf(leaves); ofIndex < ofList.length; ofIndex++) {
+			const module = ofList[ofIndex];
+			SetMethods.add(modules, module);
+		}
 	}
-	return [...modules];
+	return setToArray(modules);
 }
 
 /**
@@ -4225,7 +4510,9 @@ function runtime_helperModules(helper) {
  * @private
  */
 function runtime_leafOfHelper(helper) {
-	const [first, ...others] = runtime_helperModules(helper);
+	const unpacked1 = runtime_helperModules(helper),
+		first = unpacked1[0],
+		others = copyList(unpacked1, 1);
 	if (!first) return undefined;
 	return { wrapper: first, callers: runtime_checksPermissions(helper.slothlet) ? others : [] };
 }
@@ -4244,9 +4531,14 @@ function runtime_leafOfHelper(helper) {
 function runtime_helperAnswer(record, frame) {
 	const helper = runtime_helperOwner(frame, record.wrapper.slothlet);
 	if (!helper) return null;
-	const [first, ...others] = runtime_helperModules(helper);
+	const unpacked2 = runtime_helperModules(helper),
+		first = unpacked2[0],
+		others = copyList(unpacked2, 1);
 	if (!first) return null;
-	return { wrapper: first, ceiling: combineCeilings(record.wrapper, record.ceiling, supplierChainCeiling(record), ...others) };
+	return {
+		wrapper: first,
+		ceiling: Reflect.apply(combineCeilings, undefined, concatLists([record.wrapper, record.ceiling, supplierChainCeiling(record)], others))
+	};
 }
 
 /**
@@ -4256,8 +4548,9 @@ function runtime_helperAnswer(record, frame) {
  * @private
  */
 function runtime_isInstanceFile(path) {
-	for (const reference of LIVE_INSTANCES.values()) {
-		const slothlet = reference.deref();
+	for (let ofIndex = 0, ofList = mapValues(LIVE_INSTANCES); ofIndex < ofList.length; ofIndex++) {
+		const reference = ofList[ofIndex];
+		const slothlet = WeakRefMethods.deref(reference);
 		if (
 			slothlet &&
 			runtime_checksPermissions(slothlet) &&
@@ -4276,8 +4569,9 @@ function runtime_isInstanceFile(path) {
  * @private
  */
 function runtime_anyInstanceChecks() {
-	for (const reference of LIVE_INSTANCES.values()) {
-		const slothlet = reference.deref();
+	for (let ofIndex = 0, ofList = mapValues(LIVE_INSTANCES); ofIndex < ofList.length; ofIndex++) {
+		const reference = ofList[ofIndex];
+		const slothlet = WeakRefMethods.deref(reference);
 		if (slothlet && runtime_checksPermissions(slothlet) && runtime_instanceRuns(slothlet)) return true;
 	}
 	return false;
@@ -4323,21 +4617,26 @@ function registerLeafFile(wrapper, at = undefined) {
 	const filePath = at ?? wrapper?.____slothletInternal?.filePath;
 	const slothlet = wrapper?.slothlet;
 	if (!filePath || !slothlet || typeof WeakRef !== "function") return;
-	if (slothlet.instanceID && !LIVE_INSTANCES.get(slothlet.instanceID)?.deref())
-		LIVE_INSTANCES.set(slothlet.instanceID, new WeakRef(slothlet));
-	let files = LEAF_FILES.get(slothlet);
-	if (!files) LEAF_FILES.set(slothlet, (files = new Map()));
-	if (at !== undefined) LEAF_SOURCE_FILES.set(wrapper, at);
+	if (
+		slothlet.instanceID &&
+		!(MapMethods.get(LIVE_INSTANCES, slothlet.instanceID) == null
+			? undefined
+			: WeakRefMethods.deref(MapMethods.get(LIVE_INSTANCES, slothlet.instanceID)))
+	)
+		MapMethods.set(LIVE_INSTANCES, slothlet.instanceID, new WeakRef(slothlet));
+	let files = WeakMapMethods.get(LEAF_FILES, slothlet);
+	if (!files) WeakMapMethods.set(LEAF_FILES, slothlet, (files = new Map()));
+	if (at !== undefined) WeakMapMethods.set(LEAF_SOURCE_FILES, wrapper, at);
 	const reference = new WeakRef(wrapper);
 	// The file itself, and where its code actually runs from when that is another file: a TypeScript leaf runs from
 	// the compiled copy slothlet wrote for it, so that copy's frames are the leaf's.
-	const locations = new Set([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
-	for (const imported of runtime_importedLocations(wrapper, filePath) ?? []) locations.add(imported);
-	for (const location of locations) {
+	const locations = setFrom([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
+	for (const imported of setValues(runtime_importedLocations(wrapper, filePath))) SetMethods.add(locations, imported);
+	for (const location of setValues(locations)) {
 		if (!location) continue;
-		let held = files.get(location);
-		if (!held) files.set(location, (held = new Set()));
-		held.add(reference);
+		let held = MapMethods.get(files, location);
+		if (!held) MapMethods.set(files, location, (held = new Set()));
+		SetMethods.add(held, reference);
 	}
 }
 
@@ -4365,16 +4664,17 @@ function runtime_leavesAt(slothlet, frame) {
  * @private
  */
 function runtime_leavesAtFile(slothlet, path, instance, mount) {
-	const held = LEAF_FILES.get(slothlet)?.get(path);
+	const held =
+		WeakMapMethods.get(LEAF_FILES, slothlet) == null ? undefined : MapMethods.get(WeakMapMethods.get(LEAF_FILES, slothlet), path);
 	if (!held) return [];
 	const leaves = [];
 	// A removed node keeps its place while the permission system is off: nothing is checked, and what it made runs as plain
 	// JavaScript, `self` included (#726).
 	const keepGone = !runtime_checksPermissions(slothlet);
-	for (const reference of held) {
-		const wrapper = reference.deref();
+	for (const reference of setValues(held)) {
+		const wrapper = WeakRefMethods.deref(reference);
 		if (!wrapper) {
-			held.delete(reference);
+			SetMethods.delete(held, reference);
 			continue;
 		}
 		if (runtime_isGone(wrapper) && !keepGone) continue;
@@ -4401,13 +4701,13 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 function runtime_codeWritersOnStack(slothlet) {
 	const family = slothlet.instanceID;
 	const sources = [{ family, slothlet, roots: [] }];
-	for (const frame of runtime_captureFrames(48)) {
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/") || frame.path.startsWith("node:")) continue;
+	for (const frame of framesOf(runtime_captureFrames(48))) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:")) continue;
 		if (frame.evaluated || isForeignScript(frame)) return stackHoldsInstanceCode(sources) ? null : [];
 		const leaves = runtime_leavesAt(slothlet, frame);
 		if (leaves.length) return leaves;
 		const tag = runtime_frameInstanceTag(frame.line);
-		if (tag && tag.startsWith(String(family).split("_reload_")[0])) return null;
+		if (tag && StringMethods.startsWith(tag, splitText(String(family), "_reload_")[0])) return null;
 		return [];
 	}
 	return [];
@@ -4468,14 +4768,21 @@ function runtime_foreignCodeRunning(record, capture = null) {
 	});
 	// A pinned call (a slothlet function a module read, run by another) carries the calls it runs under as its ceiling:
 	// their code calling it is accounted for, held to them already.
-	const ceilings = ceilingMembers(record.ceiling).filter(
-		(wrapper) => wrapper && wrapper !== leaf && trustedRootOwn.genuineWrappers.has(wrapper) && describeCall(wrapper).filePath
+	const ceilings = filterList(
+		ceilingMembers(record.ceiling),
+		(wrapper) =>
+			wrapper && wrapper !== leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper) && describeCall(wrapper).filePath
 	);
-	let cached = ceilings.length ? null : SINGLE_PLACERS.get(leaf);
+	let cached = ceilings.length ? null : WeakMapMethods.get(SINGLE_PLACERS, leaf);
 	if (!cached || cached.description !== description) {
-		const { place } = createFramePlacer([entryOf(leaf, record), ...ceilings.map((wrapper) => entryOf(wrapper, null))]);
+		const { place } = createFramePlacer(
+			concatLists(
+				[entryOf(leaf, record)],
+				mapList(ceilings, (wrapper) => entryOf(wrapper, null))
+			)
+		);
 		cached = { description, place };
-		if (!ceilings.length) SINGLE_PLACERS.set(leaf, cached);
+		if (!ceilings.length) WeakMapMethods.set(SINGLE_PLACERS, leaf, cached);
 	}
 	// `whole` says the capture reaches as far as the answer may need: a short first capture settles only what its own
 	// frames decide, and leaves anything that reads the frames further out to the full one.
@@ -4485,9 +4792,9 @@ function runtime_foreignCodeRunning(record, capture = null) {
 		let builtinSince = false;
 		let index = -1;
 		// Slothlet's own frames are passed over by their path and what they enter alone, so they are read no further.
-		for (const frame of frames.lean?.() ?? frames) {
+		for (const frame of framesOf(!Arrays.isArray(frames) && typeof frames.lean === "function" ? frames.lean() : frames)) {
 			index++;
-			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 				if (frame.enter) return null;
 				builtinSince = false;
 				continue;
@@ -4500,7 +4807,7 @@ function runtime_foreignCodeRunning(record, capture = null) {
 			if (frame.evaluated || isForeignScript(frame)) return UNACCOUNTED_SUPPLIER;
 			// Node's own code (`util.inspect` reading a value) acts for whoever called it: the next frame out decides. Only
 			// Node's own scripts are passed over, told by their hash: a `node:` name is one any compiled code can take.
-			if (frame.path.startsWith("node:")) {
+			if (StringMethods.startsWith(frame.path, "node:")) {
 				if (runtime_isNodeScript(frame)) {
 					builtinSince ||= frame.gap;
 					continue;
@@ -4571,8 +4878,8 @@ function runtime_unaccountedInside(record) {
 	const { place } = createFramePlacer([{ ...description, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record }]);
 	// The frames that decide sit near the top of the stack: the capture is widened only when it was cut short first.
 	const decide = (frames) => {
-		for (const frame of frames) {
-			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) {
+		for (const frame of framesOf(frames)) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
 				if (frame.enter) return null;
 				continue;
 			}
@@ -4622,10 +4929,13 @@ function runtime_supplierAnswer(record, supplier) {
 		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
-		parts.push(current.wrapper, current.ceiling);
+		ArrayMethods.push(parts, current.wrapper, current.ceiling);
 	}
-	const members = ceilingMembers(combineCeilings(...parts)).filter((member) => member !== supplier.currentWrapper);
-	return { wrapper: supplier.currentWrapper, ceiling: combineCeilings(...members) };
+	const members = filterList(
+		ceilingMembers(Reflect.apply(combineCeilings, undefined, parts)),
+		(member) => member !== supplier.currentWrapper
+	);
+	return { wrapper: supplier.currentWrapper, ceiling: Reflect.apply(combineCeilings, undefined, members) };
 }
 
 /**
@@ -4658,8 +4968,11 @@ const NODE_SOURCE_HASHES = new Map();
 
 if (isNode) {
 	try {
-		for (const [id, source] of Objects.entries(Processes.binding("natives"))) {
-			if (typeof source === "string") NODE_SOURCES.set(id, source);
+		for (let ofIndex = 0, ofList = Objects.entries(Processes.binding("natives")); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				id = ofEntry[0],
+				source = ofEntry[1];
+			if (typeof source === "string") MapMethods.set(NODE_SOURCES, id, source);
 		}
 	} catch {
 		// A Node that no longer offers the table: Node's own scripts are known from the sample alone.
@@ -4676,14 +4989,15 @@ if (isNode) {
  */
 function runtime_isNodeScript(frame) {
 	if (!frame.hash) return false;
-	if (NODE_SCRIPTS.get(frame.path)?.has(frame.hash)) return true;
-	const id = frame.path.slice("node:".length);
-	const source = NODE_SOURCES.get(id);
+	if (MapMethods.get(NODE_SCRIPTS, frame.path) == null ? undefined : SetMethods.has(MapMethods.get(NODE_SCRIPTS, frame.path), frame.hash))
+		return true;
+	const id = StringMethods.slice(frame.path, "node:".length);
+	const source = MapMethods.get(NODE_SOURCES, id);
 	if (source === undefined) return false;
-	let hash = NODE_SOURCE_HASHES.get(id);
+	let hash = MapMethods.get(NODE_SOURCE_HASHES, id);
 	if (hash === undefined) {
 		hash = sha256(source, "utf8");
-		NODE_SOURCE_HASHES.set(id, hash);
+		MapMethods.set(NODE_SOURCE_HASHES, id, hash);
 	}
 	return frame.hash === hash;
 }
@@ -4694,11 +5008,11 @@ function runtime_isNodeScript(frame) {
  * @private
  */
 function runtime_sampleNodeScripts() {
-	for (const frame of runtime_captureFrames(64)) {
-		if (!frame.path.startsWith("node:") || !frame.hash || frame.evaluated) continue;
-		let hashes = NODE_SCRIPTS.get(frame.path);
-		if (!hashes) NODE_SCRIPTS.set(frame.path, (hashes = new Set()));
-		hashes.add(frame.hash);
+	for (const frame of framesOf(runtime_captureFrames(64))) {
+		if (!StringMethods.startsWith(frame.path, "node:") || !frame.hash || frame.evaluated) continue;
+		let hashes = MapMethods.get(NODE_SCRIPTS, frame.path);
+		if (!hashes) MapMethods.set(NODE_SCRIPTS, frame.path, (hashes = new Set()));
+		SetMethods.add(hashes, frame.hash);
 	}
 }
 
@@ -4756,25 +5070,31 @@ if (isNode) {
 	}
 	const { EventEmitter } = builtin("node:events");
 	const nodeSetTimeout = builtin("node:timers").setTimeout;
-	for (const sample of [
-		() =>
-			inspect(
-				{
-					get value() {
-						runtime_sampleNodeScripts();
-						return 0;
-					}
+	for (
+		let ofIndex = 0,
+			ofList = [
+				() =>
+					inspect(
+						{
+							get value() {
+								runtime_sampleNodeScripts();
+								return 0;
+							}
+						},
+						{ getters: true }
+					),
+				() => {
+					const emitter = new EventEmitter();
+					emitter.on("sample", runtime_sampleNodeScripts);
+					emitter.emit("sample");
 				},
-				{ getters: true }
-			),
-		() => {
-			const emitter = new EventEmitter();
-			emitter.on("sample", runtime_sampleNodeScripts);
-			emitter.emit("sample");
-		},
-		() => nodeSetTimeout(runtime_sampleNodeScripts, 0).unref(),
-		() => Processes.nextTick(runtime_sampleNodeScripts)
-	]) {
+				() => nodeSetTimeout(runtime_sampleNodeScripts, 0).unref(),
+				() => Processes.nextTick(runtime_sampleNodeScripts)
+			];
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const sample = ofList[ofIndex];
 		try {
 			sample();
 		} catch {
