@@ -37,8 +37,9 @@
  * - "steer": the stand-ins answer what would mislead slothlet when its source calls them (every `has` true, every
  *   `get` empty, every iteration empty, `includes` and `startsWith` false). Every step answers as with nothing replaced.
  *
- * Calls the engine makes from a job of its own (a promise settling) have no caller frame to tell them by and are not
- * counted.
+ * The reader reads the owner's data without the replaced methods: a replaced method the reader calls through a view
+ * runs as the reader asked, as in plain JavaScript, and is the reader's own call. Calls the engine makes from a job of
+ * its own (a promise settling) have no caller frame to tell them by and are not counted.
  */
 
 import path from "node:path";
@@ -116,14 +117,18 @@ beforeAll(() => {
 		"};",
 		"export function probe() {",
 		"\tconst value = self.owner.getHeld();",
-		"\tconst [first] = value.list;",
-		"\tconst fromSet = [...value.set][0];",
+		"\t// Read without the replaced methods: calling one through a view runs it as the reader asked, as plain JavaScript does.",
+		"\tconst first = value.list[0];",
+		"\tlet fromSet;",
+		"\tvalue.set.forEach((member) => (fromSet = member));",
+		"\tlet fromMap;",
+		"\tvalue.map.forEach((member) => (fromMap = member));",
 		"\treturn {",
 		"\t\twrapped: types.isProxy(value),",
 		"\t\tinst: value.inst.hi(),",
 		"\t\tfirst: first.hi(),",
 		"\t\tfromSet: fromSet.hi(),",
-		"\t\tfromMap: value.map.get('k').hi(),",
+		"\t\tfromMap: fromMap.hi(),",
 		"\t\tfn: value.fn(),",
 		"\t\tproto: attempt(() => (Object.getPrototypeOf(value.inst).planted = () => 'planted')),",
 		"\t\tlisted: attempt(() => (Object.getPrototypeOf(value.list[1]).plantedList = () => 'planted')),",
