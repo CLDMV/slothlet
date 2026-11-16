@@ -37,6 +37,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { checkCapability } from "@cldmv/slothlet/helpers/capability-context";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { concatLists, listPush, Objects, Reflect } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
@@ -106,7 +107,11 @@ function runtime_patchScheduler(host, name) {
 	const layer = openLayer(installed);
 	const original = layer.below;
 
+	// A string a timer runs as code (a browser's `setTimeout("…")`) is code from a string: module code needs
+	// `capability:code` for it (see helpers/capability-context).
+	const runsStrings = host === globalThis && (name === "setTimeout" || name === "setInterval");
 	const wrapper = function (callback, ...rest) {
+		if (runsStrings && layer.active && callback != null && typeof callback !== "function") checkCapability("code", name);
 		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
 		// disabled under another copy's passes everything through.
 		if (typeof callback !== "function" || !layer.active) return Reflect.apply(original.call, original, concatLists([host, callback], rest));

@@ -37,6 +37,8 @@ const DIR = TEST_DIRS.API_TEST_VM_RECOMPILED;
 
 /** Deny by default; the secret is the trusted modules' alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "trusted.**", target: "vault.secret.**", effect: "allow" },
 	{ caller: "trustedesm.**", target: "vault.secret.**", effect: "allow" },
 	{ caller: "reader.**", target: "trusted.ops.run", effect: "allow" },

@@ -36,6 +36,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
 - [Write Permissions](#write-permissions)
+- [Built-in Capabilities](#built-in-capabilities)
 - [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
@@ -1348,6 +1349,45 @@ Module code the host invokes inside its own `context.run()` / `scope()` — a fu
 
 ---
 
+## Built-in Capabilities
+
+While the permission system is on, module code is refused a few of the language's and Node's built-in capabilities: ways to run code that no file holds, or to change how every later file loads. Each is refused with `CAPABILITY_REFUSED` (its context names the `capability`, the `route` used and the `caller`) until a rule opens it. Host code is never restricted, and while the permission system is off or disabled nothing is checked.
+
+| Capability           | What it covers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | What opening it allows                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capability:code`    | Turning a string into code: the `Function`, `AsyncFunction`, `GeneratorFunction` and `AsyncGeneratorFunction` constructors by every route to them (the global, `(async () => {}).constructor`, `Object.getPrototypeOf(function* () {}).constructor`, `Function.prototype.constructor`, a subclass, `Reflect.construct`, a bound copy), a string given to `setTimeout` or `setInterval`, `vm.runInThisContext`, `vm.runInNewContext`, `vm.runInContext`, `vm.compileFunction`, `vm.createScript`, `new vm.Script`, `new vm.SourceTextModule`, `Module.prototype._compile` called by anything but Node's own loader, and `process.binding("contextify")` | The leaf compiles and runs code from text. The code it compiles names no file of a module's, so it has no module's standing of its own (see [Code passed by routes slothlet does not see](#code-passed-by-routes-slothlet-does-not-see)). |
+| `capability:imports` | An `import()` of a `data:` or `blob:` URL                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | The leaf loads a module from text it wrote.                                                                                                                                                                                               |
+| `capability:loader`  | `module.registerHooks()` and `module.register()`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The leaf's hooks see, and can change, how every file loaded after them is resolved and loaded, slothlet's sources included.                                                                                                               |
+
+A capability is opened with an ordinary rule whose target is `capability:<name>`. Its `caller` is the leaf path (or a pattern of them) the capability is opened for, and the rule is ranked as any other: the most specific rule wins, then the higher layer, then the last registered. A rule can be added in the config, by a manifest, or at runtime with `addRule`, and `control.seal()` stops further changes. The target is matched exactly: a broader target such as `**` never names a capability, so a rule allowing everything opens none, and a `capability:<name>` naming no capability is refused as a malformed rule (`INVALID_PERMISSION_RULE`).
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		defaultPolicy: "deny",
+		rules: [
+			{ caller: "**", target: "**", effect: "allow" }, // opens no capability
+			{ caller: "templates.render", target: "capability:code", effect: "allow" }, // this leaf may compile templates
+			{ caller: "templates.render.debug", target: "capability:code", effect: "deny" } // a more specific deny wins
+		]
+	}
+});
+```
+
+Whose code uses a capability is told as for any access: the leaf whose call is running, read from the stack where calls of the live runtime are in flight, and, while no call runs, the code's own frames (a function a module handed out and the host runs is its definer's). Code that cannot be attributed is refused. That includes the code a file runs at its top level as it first loads: no node stands for the file yet, so it cannot be told from the instance's other files, and it is refused whatever the rules say. An `import` statement of a `data:` or `blob:` URL in a module file is refused the same way, under Node's loader and under vite alike: it is resolved while the file links, before anything of the file has run. Compile or import such code in the leaf that needs it, with `import()` for a URL.
+
+The entry points are wrapped while an instance with a permission config is up, and unwrapped with the last such instance. Each wrapper is marked as the other boundary patches are, and calls what it wraps with exactly what it was given. The function constructors are wrapped in a Proxy, so `Function.prototype.toString`, `name`, `length`, `prototype` and `instanceof Function` answer as before. `vm` and `module` are refreshed for named imports (`module.syncBuiltinESMExports()`).
+
+What this does not cover:
+
+- **Direct `eval`.** It is not wrapped: wrapping the global `eval` would make every direct `eval` indirect. Its code names no file, so it already runs as no module (see the evaluated-code limit under [Code a module hands out runs as its definer](#code-a-module-hands-out-runs-as-its-definer)).
+- **Another realm.** A browser page's same-origin `iframe`, a worker, or a `vm` context made before slothlet wrapped `vm` has its own `Function` constructor. Node's other ways to run text (`new Worker(code, { eval: true })`, `node:inspector`'s `Runtime.evaluate`, a child process) run it outside this realm.
+- **A reference taken before the wrappers were installed**, by code that ran before the first instance was created.
+- **A script element** a browser page adds to its own document.
+
+---
+
 ## Event Rules
 
 The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order) (event patterns of one kind are also ranked by their literal segments, so `guest.zz.**` beats `guest.**` whichever was registered last; see [Precedence](./EVENTS.md#precedence)), and control what each subscriber receives:
@@ -1693,6 +1733,7 @@ A module of one instance that calls into another's api (through a reference the 
 | `PERMISSION_DENIED`       | A call or a module write was blocked by a permission rule. Includes `caller` and `target` in the error context; a write's target carries the `:write` suffix.                        |
 | `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                                                                              |
 | `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                                                                        |
+| `CAPABILITY_REFUSED`      | Module code used a [built-in capability](#built-in-capabilities) no rule opens for it. Includes `caller`, `capability`, and `route`.                                                 |
 | `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating` / `principal.register` / `principal.unregister`) was called after `control.seal()`. |
 | `PRINCIPAL_NAME_OWNED`    | A module tried to register a principal name another module (or the host) owns. Includes `name`, `owner`, and `claimant`.                                                             |
 | `PRINCIPAL_NOT_OWNER`     | A module other than the owner tried to unregister or invalidate a principal. Includes `name`, `operation`, `owner`, and `caller`.                                                    |

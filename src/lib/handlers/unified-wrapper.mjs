@@ -172,6 +172,7 @@ const {
 	setModuleNodeResolver,
 	setHostPrototypeCheck,
 	frameDefiner,
+	runtime_codeWritersOnStack,
 	isLeafFileFunction,
 	outerCallerCeiling,
 	setApiValueCheck,
@@ -449,6 +450,49 @@ function runtime_selfModuleReader(slothlet) {
 	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	return identity?.unresolved ? UNATTRIBUTED_READER : null;
+}
+
+/**
+ * Refuse module code of this instance a built-in capability no rule opens for it (see
+ * `PermissionManager#assertCapability`), told as any other access is: the call running, read from the stack where
+ * calls are in flight; while no call runs, the code's own frames (a function a module handed out, run by the host, is
+ * its definer's). Code the live runtime cannot attribute is refused; the host's own code, a package's run by the host,
+ * and another instance's code are left to their own checks.
+ *
+ * @param {object} slothlet - The instance.
+ * @param {string} name - The capability.
+ * @param {string} route - What the code used, for the error.
+ * @param {string|null} [moduleFile=null] - A file of this instance's the code is known to belong to (an import it
+ *   makes as it links), so that code is never taken for the host's.
+ * @returns {void}
+ * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @internal
+ * @example
+ * runtime_assertCapability(slothlet, "code", "new Function");
+ */
+function runtime_assertCapability(slothlet, name, route, moduleFile = null) {
+	const permissionManager = slothlet?.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled?.()) return;
+	const contextManager = slothlet.contextManager;
+	let caller = null;
+	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper) caller = identity.currentWrapper;
+	// Calls the live runtime cannot tell apart are in flight: code that is no file of the instance's (the host's, a
+	// package's, Node's own) is still not a module's; anything else could be any of them, and is refused.
+	else if (identity?.unresolved && !identity.unaccounted) {
+		const writers = runtime_codeWritersOnStack(slothlet);
+		caller = writers === null || writers.length > 1 ? UNATTRIBUTED_READER : writers.length ? writers[0] : null;
+	} else {
+		const definer = frameDefiner(contextManager?.runningInstanceID?.() ?? null);
+		if (definer?.wrapper) caller = definer.wrapper.slothlet === slothlet ? definer.wrapper : null;
+		else if (definer?.unplaced || definer?.leaves) caller = UNATTRIBUTED_READER;
+		// Code of a file of the instance's no node stands for yet (a file's top level as it first loads) or no leaf
+		// accounts for is the instance's, never the host's.
+		else if (runtime_codeWritersOnStack(slothlet) === null) caller = UNATTRIBUTED_READER;
+	}
+	// A file of the instance's linking an import: its own code, whatever the stack says (nothing of the file's runs yet).
+	if (caller === null && moduleFile !== null) caller = UNATTRIBUTED_READER;
+	permissionManager.assertCapability(caller, name, route);
 }
 
 /**
@@ -21714,6 +21758,7 @@ export function internals(consumer) {
 		releaseModuleMakers,
 		releaseStandInChanges,
 		resolveWrapper,
+		runtime_assertCapability,
 		runtime_assertFrameworkRootChange,
 		runtime_codeLabel,
 		runtime_contextRead,

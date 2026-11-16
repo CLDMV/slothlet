@@ -45,6 +45,8 @@ const SELF_FN_REL = "api_tests/api_test_self_parity/fnroot";
 const SELF_OBJ_REL = "api_tests/api_test_self_parity/objroot";
 // A sibling api file that imports a leaf's file itself.
 const LEAF_COPY_REL = "api_tests/api_test_leaf_file_import_browser";
+// A module turning strings into code by every route a browser offers (built-in capabilities).
+const CODE_STRINGS_REL = "api_tests/api_test_code_strings_browser";
 
 export default defineConfig(async () => {
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.
@@ -55,6 +57,7 @@ export default defineConfig(async () => {
 	const selfFnManifest = await generateManifest(resolve(REPO, SELF_FN_REL));
 	const selfObjManifest = await generateManifest(resolve(REPO, SELF_OBJ_REL));
 	const leafCopyManifest = await generateManifest(resolve(REPO, LEAF_COPY_REL));
+	const codeStringsManifest = await generateManifest(resolve(REPO, CODE_STRINGS_REL));
 
 	// slothlet resolves internal modules at runtime via `import(<computed bare specifier>)`, which vite
 	// can't statically rewrite — so the browser needs an importmap for them. Point it at the vite-served
@@ -83,7 +86,8 @@ export default defineConfig(async () => {
 					`export const rootLeafManifest = ${JSON.stringify(rootLeafManifest)};\nexport const rootLeafRel = ${JSON.stringify(ROOT_LEAF_REL)};\n` +
 					`export const selfFnManifest = ${JSON.stringify(selfFnManifest)};\nexport const selfFnRel = ${JSON.stringify(SELF_FN_REL)};\n` +
 					`export const selfObjManifest = ${JSON.stringify(selfObjManifest)};\nexport const selfObjRel = ${JSON.stringify(SELF_OBJ_REL)};\n` +
-					`export const leafCopyManifest = ${JSON.stringify(leafCopyManifest)};\nexport const leafCopyRel = ${JSON.stringify(LEAF_COPY_REL)};\n`
+					`export const leafCopyManifest = ${JSON.stringify(leafCopyManifest)};\nexport const leafCopyRel = ${JSON.stringify(LEAF_COPY_REL)};\n` +
+					`export const codeStringsManifest = ${JSON.stringify(codeStringsManifest)};\nexport const codeStringsRel = ${JSON.stringify(CODE_STRINGS_REL)};\n`
 				);
 			}
 		},

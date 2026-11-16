@@ -275,9 +275,10 @@ beforeAll(() => {
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
 			"\tconst results = {};",
 			"\tfor (const [name, permissions] of [",
-			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }],',
-			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [] }],',
-			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }]',
+			// Code from strings and data: imports are built-in capabilities (D4 ruling part 1); the rows are about where such code runs.
+			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }]',
 			"\t]) {",
 			`\t\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions });`,
 			"\t\tresults[name] = {",
@@ -505,7 +506,15 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 			base: API,
 			...config,
 			silent: true,
-			permissions: { defaultPolicy: "allow", ...permissions, rules: [{ caller: "slots.**", target: "vault.**", effect: "deny" }] }
+			// Code from strings is a built-in capability (D4 ruling part 1); these tests are about where such code runs.
+			permissions: {
+				defaultPolicy: "allow",
+				...permissions,
+				rules: [
+					{ caller: "slots.**", target: "vault.**", effect: "deny" },
+					{ caller: "**", target: "capability:code", effect: "allow" }
+				]
+			}
 		});
 		return api;
 	}
@@ -631,7 +640,12 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("runs a compiled script of the module's that may read the vault, with provenance off", async () => {
-		api = await slothlet({ base: API, ...config, silent: true, permissions: { defaultPolicy: "allow", provenance: false, rules: [] } });
+		api = await slothlet({
+			base: API,
+			...config,
+			silent: true,
+			permissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
+		});
 		expect(await api.esm.viaScript()).toBe(42);
 	});
 

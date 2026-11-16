@@ -67,7 +67,19 @@ const options = ({ mode, runtime, permissions }) => ({
 	mode,
 	runtime,
 	silent: true,
-	...(permissions === "off" ? {} : { permissions: { defaultPolicy: "allow", attribution: permissions } })
+	...(permissions === "off"
+		? {}
+		: {
+				permissions: {
+					defaultPolicy: "allow",
+					attribution: permissions,
+					// `data:` and `blob:` imports and code from strings are built-in capabilities (D4 ruling part 1); this suite is about what they reach.
+					rules: [
+						{ caller: "**", target: "capability:imports", effect: "allow" },
+						{ caller: "**", target: "capability:code", effect: "allow" }
+					]
+				}
+			})
 });
 
 /**

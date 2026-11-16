@@ -105,6 +105,7 @@ import { internals as promiseContextInternals } from "@cldmv/slothlet/helpers/pr
 import { internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
 import { internals as asyncResourceContextInternals } from "@cldmv/slothlet/helpers/async-resource-context";
 import { internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
+import { internals as capabilityContextInternals } from "@cldmv/slothlet/helpers/capability-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isGuardedInternal, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
@@ -134,7 +135,9 @@ import {
 	SetMethods,
 	setToArray,
 	splitText,
-	StringMethods
+	StringMethods,
+	URLSearchParams,
+	URLSearchParamsMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 const {
 	resolveWrapper,
@@ -157,7 +160,8 @@ const {
 	runtime_rootPrototypeFor,
 	runtime_rootInheritedRead,
 	runtime_behindGivenView,
-	runtime_unwrapSelfView
+	runtime_unwrapSelfView,
+	runtime_assertCapability
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -172,6 +176,7 @@ const { enablePromisePatching, disablePromisePatching } = promiseContextInternal
 const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
 const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
+const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
 const { forgetInstanceScripts, recordInstanceOwner } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
@@ -303,6 +308,33 @@ class Slothlet {
 	 * @type {{instanceID: string, require: function(string, object=): *, release: function(): void}|null}
 	 */
 	#importScope = null;
+
+	/**
+	 * The id this instance's capability check was registered under (see helpers/capability-context), or null.
+	 * @type {string|null}
+	 * @private
+	 */
+	#capabilityHolder = null;
+
+	/**
+	 * Whether a URL is one of this instance's own files: it carries this instance's tag, or that of the instance it was
+	 * reloaded from.
+	 * @param {string|null} url - An importer's URL.
+	 * @returns {boolean} True for this instance's file.
+	 * @private
+	 */
+	#importsAsOwnFile(url) {
+		if (typeof url !== "string") return false;
+		const tag = URLSearchParamsMethods.get(
+			new URLSearchParams(StringMethods.includes(url, "?") ? StringMethods.slice(url, StringMethods.indexOf(url, "?") + 1) : ""),
+			"slothlet_instance"
+		);
+		if (!tag) return false;
+		const own = `${this.instanceID ?? ""}`;
+		return (
+			tag === own || StringMethods.startsWith(own, `${tag}_reload_`) || StringMethods.startsWith(tag, `${splitText(own, "_reload_")[0]}`)
+		);
+	}
 
 	/**
 	 * The clock this instance reads the time and schedules its deferred work with (the `clock` option): held here alone,
@@ -1228,6 +1260,17 @@ class Slothlet {
 		// one: the patch answers the function's source, as `node.toString()` does (#750).
 		enableFunctionSourcePatching();
 
+		// Built-in capabilities (code from strings, `data:`/`blob:` imports, module hooks): refused to module code while
+		// the permission system is on, unless a rule opens one. The entry points are wrapped while any instance with a
+		// permission config that can be on is up, and unwrapped with the last.
+		if (this.config?.permissions && this.config.permissions.mode !== "disabled") {
+			const instanceID = this.instanceID;
+			registerCapabilityCheck(instanceID, (name, route, importer) =>
+				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null)
+			);
+			this.#capabilityHolder = instanceID;
+		}
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		SetMethods.add(boundaryPatchHolders, this.instanceID);
 
@@ -2135,6 +2178,10 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		SetMethods.delete(boundaryPatchHolders, this.instanceID);
+		if (this.#capabilityHolder !== null) {
+			releaseCapabilityCheck(this.#capabilityHolder);
+			this.#capabilityHolder = null;
+		}
 		if (SetMethods.delete(promisePatchHolders, this.instanceID) && SetMethods.size(promisePatchHolders) === 0) {
 			disablePromisePatching();
 			disableAsyncResourcePatching();

@@ -1969,6 +1969,8 @@ function checkModuleImport(specifier, importer) {
 	const text = typeof specifier === "string" ? specifier : String(specifier);
 	// A module the instance module imports by a URL that is no file's (`data:`): what it imports is held as the
 	// module's own imports are, where Node's loader resolves them.
+	// A `data:` or `blob:` URL is code the module wrote: refused unless a rule opens `capability:imports` for it.
+	refuseCodeImport(text, typeof importer === "string" && StringMethods.includes(importer, MARKER) ? importer : null, []);
 	if (
 		RegExpMethods.exec(/^[a-z][a-z0-9+.-]+:/i, text) !== null &&
 		!StringMethods.startsWith(text, "file:") &&
@@ -2020,6 +2022,27 @@ async function viteImportRefusal(specifier, file) {
 }
 
 /**
+ * The error the vite plugin throws for an `import` statement of a `data:` or `blob:` URL in an instance file:
+ * `CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
+ * @param {string} importer - The importing file.
+ * @returns {Promise<Error>} The error.
+ * @private
+ */
+async function viteCapabilityRefusal(importer) {
+	try {
+		const { SlothletError } = await import("@cldmv/slothlet/errors");
+		return new SlothletError("CAPABILITY_REFUSED", { caller: importer, capability: "imports", route: "import" }, null, {
+			validationError: true
+		});
+	} catch {
+		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
+		const error = new PristineError(`CAPABILITY_REFUSED: imports (import) ${importer}`);
+		error.code = "CAPABILITY_REFUSED";
+		return error;
+	}
+}
+
+/**
  * Keep slothlet's own files to slothlet: an import or require a module's code makes that resolves to any file of
  * slothlet's code but the runtime's entry files is refused, however it is spelled (a package subpath, `#imports`, a
  * file URL, an absolute or relative path, `import.meta.resolve`, `require.resolve`). The host's own imports, and
@@ -2045,6 +2068,40 @@ function refuseInternalImport(specifier, context, result) {
 	}
 	if (!isSlothletInternal(url)) return;
 	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
+}
+
+/**
+ * The capability check (see `helpers/capability-context`), registered by it as it loads; null until then.
+ * @type {?function(string, string, ?string): void}
+ * @private
+ */
+let CAPABILITY_CHECK = null;
+
+/**
+ * Register the capability check the import hooks ask (see {@link refuseCodeImport}). Taken once.
+ * @param {function(string, string, ?string): void} check - The check.
+ * @returns {void}
+ * @internal
+ */
+function setCapabilityCheck(check) {
+	if (CAPABILITY_CHECK === null && typeof check === "function") CAPABILITY_CHECK = check;
+}
+
+/**
+ * Refuse module code importing a `data:` or `blob:` URL, unless a rule opens `capability:imports` for it: the code a
+ * module would get that way is whatever text it wrote. Asked as the import is resolved, which for an `import()` is
+ * inside the call that made it, so the code making it decides; for a file's own `import` statement, which is resolved
+ * as the file links, the file is the instance's and is refused.
+ * @param {string} specifier - The specifier.
+ * @param {string|null} parentURL - The importer.
+ * @param {Array<string>|undefined} conditions - The resolution's conditions.
+ * @returns {void}
+ * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @private
+ */
+function refuseCodeImport(specifier, parentURL, conditions) {
+	if (CAPABILITY_CHECK === null || typeof specifier !== "string" || !(RegExpMethods.exec(/^(?:data|blob):/i, specifier) !== null)) return;
+	CAPABILITY_CHECK("imports", "import()", isModuleImport(parentURL, conditions ?? []) ? parentURL : null);
 }
 
 /**
@@ -3708,6 +3765,7 @@ const HOOKS = Objects.freeze({
 		) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
+		refuseCodeImport(specifier, context?.parentURL ?? null, context?.conditions);
 		const next = nextResolve(specifier, context);
 		refuseInternalImport(specifier, context, next);
 		const resolved = applyToResult(specifier, context, next);
@@ -4086,6 +4144,10 @@ export function slothletInstanceImports() {
 				const instanceID = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(importer)[1] ?? ""), "slothlet_instance");
 				if (target && !target.external && instanceID && isRuntimeEntryId(target.id)) return `\0${SELF_PREFIX}${instanceID}|${target.id}`;
 			}
+			// An `import` statement of a `data:` or `blob:` URL in an instance file: resolved as the file links, before
+			// anything of the file has run, so it is refused, as Node's resolve hook refuses it (a module's `import()` of one
+			// is checked where it runs; see checkModuleImport).
+			if (tagged && RegExpMethods.exec(/^(?:data|blob):/i, source) !== null) throw await viteCapabilityRefusal(importer);
 			// A file only the host loaded imports as vite resolves it.
 			if (!tagged && !MapMethods.has(moduleImporters, importer)) return null;
 			// A bare specifier an instance file imports that cannot name a file of its own package is recorded where the file
@@ -4172,6 +4234,16 @@ export function slothletInstanceImports() {
 					}
 				};
 				visit(ast.body);
+				// An `import` / `export … from` statement of a `data:` or `blob:` URL: refused, as Node's resolve hook refuses
+				// it (vitest's runner loads such a URL itself, so no resolve names this file as its importer).
+				for (let index = 0; index < ast.body.length; index++) {
+					const node = ast.body[index];
+					const source =
+						RegExpMethods.exec(/^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration)$/, node?.type) !== null
+							? node.source?.value
+							: undefined;
+					if (typeof source === "string" && RegExpMethods.exec(/^(?:data|blob):/i, source) !== null) throw await viteCapabilityRefusal(id);
+				}
 				// A file no instance tags that the module imports by a bare specifier (a linked package, its package's own
 				// `#imports`) is recorded as the module's (#714). A specifier computed at run time is not seen here.
 				// The files no instance tags that the module imports, of those the plugin registers: each gets a record of its
@@ -4286,6 +4358,7 @@ export function internals(consumer) {
 		!mayTakeInternals(consumer, [
 			"lib/builders/modes-processor",
 			"lib/handlers/frame-placement",
+			"lib/helpers/capability-context",
 			"lib/processors/loader",
 			"lib/runtime/runtime",
 			"lib/runtime/runtime-asynclocalstorage",
@@ -4316,6 +4389,7 @@ export function internals(consumer) {
 		requireInInstance,
 		scriptKeyInstance,
 		setCallerCheck,
+		setCapabilityCheck,
 		setImportRefusal,
 		setScriptKey
 	};

@@ -32,6 +32,8 @@ import { makeRecords, invoke } from "./host/records.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); the probe is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "ext.b.**", target: "host.records.**", effect: "allow" },
 	{ caller: "host.records.**", target: "store.**", effect: "allow" },
 	{ caller: "ext.b.**", target: "records.host.**", effect: "allow" },

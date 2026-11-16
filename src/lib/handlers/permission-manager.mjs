@@ -111,6 +111,23 @@ const HOOK_TARGET_TYPES = setFrom(["before", "after", "always", "error", "around
 const WRITE_TARGET_SUFFIX = ":write";
 
 /**
+ * The prefix of a rule target naming one of the built-in capabilities module code is refused by default while the
+ * permission system is on (`capability:code`, …): see {@link CAPABILITIES}.
+ * @type {string}
+ */
+const CAPABILITY_PREFIX = "capability:";
+
+/**
+ * The built-in capabilities, in the order they are reported: what each covers is listed in PERMISSIONS.md.
+ * - `code`: turning a string into code (the function constructors, a string timer, `vm`, `Module#_compile`, Node's
+ *   `contextify` binding);
+ * - `imports`: importing a `data:` or `blob:` URL;
+ * - `loader`: registering module hooks (`module.registerHooks()`, `module.register()`).
+ * @type {ReadonlyArray<string>}
+ */
+const CAPABILITIES = Objects.freeze(["code", "imports", "loader"]);
+
+/**
  * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
  * @type {string}
  */
@@ -806,6 +823,14 @@ export class PermissionManager extends ComponentBase {
 		// included, so it is the host's. An allow for a module lifts it. Checked by assertGlobalMetadataWrite once the
 		// call's arguments are valid, never by the call gate.
 		this.#globalMetadataRuleId = this.addRule({ caller: "**", target: GLOBAL_METADATA_TARGET, effect: "deny" }, "__builtin__");
+
+		// Built-in capabilities: refused to module code while the permission system is on. A rule naming the capability as
+		// its target (`{ caller: "ext.render", target: "capability:code", effect: "allow" }`) opens it for the callers it
+		// names, ranked as any rule is. Decided by assertCapability, never by the call gate: no api path is a capability.
+		for (let ofIndex = 0, ofList = CAPABILITIES; ofIndex < ofList.length; ofIndex++) {
+			const name = ofList[ofIndex];
+			this.addRule({ caller: "**", target: `${CAPABILITY_PREFIX}${name}`, effect: "deny" }, "__builtin__");
+		}
 
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
@@ -2231,6 +2256,83 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Refuse module code a built-in capability no rule opens for it (see {@link CAPABILITIES}). Only while the permission
+	 * system is on; host code is never checked. The rules whose target is exactly `capability:<name>` decide for the
+	 * caller's path, ranked as any rule is; a broader target (`**`) never names a capability.
+	 *
+	 * @param {object|null} caller - The module code's wrapper (the leaf running, or the file's own node for its top
+	 *   level), the reader standing for code no one accounts for, or null for the host.
+	 * @param {string} name - The capability.
+	 * @param {string} route - What the code used, for the error (`new Function`, `vm.runInThisContext`, …).
+	 * @returns {void}
+	 * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller.
+	 * @example
+	 * pm.assertCapability(leaf, "code", "new Function");
+	 */
+	assertCapability(caller, name, route) {
+		if (caller === null || !this.#enabled) return;
+		const target = `${CAPABILITY_PREFIX}${name}`;
+		const callerPath = caller?.____slothletInternal ? String(caller.____slothletInternal.apiPath ?? "") : null;
+		const winner = callerPath === null ? null : this.#capabilityWinner(callerPath, target);
+		if (winner?.effect === "allow") return;
+		this.#emitAuditEvent("permission:denied", {
+			caller: callerPath,
+			target,
+			rule: winner ? this.#serializeRule(winner) : null,
+			conditionMatched: winner?.condition != null
+		});
+		throw new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route });
+	}
+
+	/**
+	 * The rule that decides a capability for a caller: among the rules whose target is exactly the capability's (the
+	 * built-in deny always among them), most specific first, then the higher layer, then the last registered.
+	 *
+	 * @param {string} callerPath - The caller's api path.
+	 * @param {string} target - `capability:<name>`.
+	 * @returns {object} The winning rule entry.
+	 * @private
+	 */
+	#capabilityWinner(callerPath, target) {
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const conditioned = [];
+		for (const entry of mapValues(this.#callRules)) {
+			if (entry.target !== target || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (this.#conditionMatches(entry, runtimeContext, null)) listPush(conditioned, entry);
+		}
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, target),
+			(entry) => this.#literalSegments(entry.caller)
+		);
+		return conditioned[0];
+	}
+
+	/**
+	 * The built-in capabilities and the callers the rules open each for: for each capability, in the order code,
+	 * imports, loader, the `caller` patterns of the allow rules whose target is exactly `capability:<name>`, most
+	 * specific first, then the higher layer, then the newest. The built-in denies are not listed; a rule with a
+	 * condition is listed as it is, its condition not evaluated.
+	 *
+	 * @returns {Array<{name: string, allowed: string[]}>} The report.
+	 * @example
+	 * pm.capabilityReport(); // [{ name: "code", allowed: ["ext.render"] }, { name: "imports", allowed: [] }, …]
+	 */
+	capabilityReport() {
+		return mapList(CAPABILITIES, (name) => {
+			const target = `${CAPABILITY_PREFIX}${name}`;
+			const allows = [];
+			for (const entry of mapValues(this.#callRules)) if (entry.target === target && entry.effect === "allow") listPush(allows, entry);
+			this.#sortBySpecificity(
+				allows,
+				(entry) => this.#patternSpecificity(entry.caller, ""),
+				(entry) => this.#literalSegments(entry.caller)
+			);
+			return { name, allowed: mapList(allows, (entry) => entry.caller) };
+		});
+	}
+
+	/**
 	 * The call rule that wins for `callerPath` on `targetPath` where a built-in default deny always matches: most
 	 * specific first, then the higher layer, then the last registered. The default policy plays no part.
 	 *
@@ -2950,6 +3052,20 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_EFFECT_INVALID"),
 				received: rule.effect
+			});
+		}
+		if (
+			StringMethods.startsWith(rule.target, CAPABILITY_PREFIX) &&
+			!ArrayMethods.includes(
+				CAPABILITIES,
+				typeof rule.target === "string"
+					? StringMethods.slice(rule.target, CAPABILITY_PREFIX.length)
+					: copyList(rule.target, CAPABILITY_PREFIX.length)
+			)
+		) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_CAPABILITY_UNKNOWN", { names: ArrayMethods.join(CAPABILITIES, ", ") }),
+				received: rule.target
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {

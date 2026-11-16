@@ -42,6 +42,8 @@ const HOST_FILE = path.join(FIXTURE, "host", "access.mjs");
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "project.**", target: "host.**", effect: "allow" },
 	{ caller: "project.**", target: "vault.open", effect: "allow" },
 	{ caller: "host.**", target: "vault.get", effect: "allow" },
