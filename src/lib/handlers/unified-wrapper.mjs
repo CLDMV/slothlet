@@ -15105,13 +15105,9 @@ class UnifiedWrapper extends ComponentBase {
 					if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) {
 						const end = kept ? resolveWrapper(node) : null;
 						if (!end) return runtime_standInMember(node, prop);
-						const previous = keptAccessorRead;
-						keptAccessorRead = { wrapper: end, reader: kept.reader };
-						try {
-							return runtime_standInMember(node, prop);
-						} finally {
-							keptAccessorRead = previous;
-						}
+						// A kept stand-in reads for the module that kept it: the read of the node says so to the node's own
+						// check, as a kept node's read does, so code the read runs (a getter) cannot make it anyone else's (#661).
+						return runtime_accessAsKept(end, kept.reader, () => runtime_standInMember(node, prop));
 					}
 				}
 
