@@ -615,18 +615,19 @@ function runtime_captureFrames(limit) {
  */
 export function textFrames(text, limit) {
 	const frames = [];
-	for (const line of String(text).split("\n")) {
-		const trimmed = line.trim();
-		if (trimmed.endsWith("@[native code]")) continue;
+	for (let ofIndex = 0, ofList = splitText(String(text), "\n"); ofIndex < ofList.length; ofIndex++) {
+		const line = ofList[ofIndex];
+		const trimmed = StringMethods.trim(line);
+		if (StringMethods.endsWith(trimmed, "@[native code]")) continue;
 		// JavaScriptCore's compiled code: a frame with no location.
-		const unlocated = !trimmed.startsWith("at ") && trimmed.endsWith("@");
-		const frame = unlocated ? { head: trimmed.slice(0, -1), path: "" } : parseStackFrame(line);
+		const unlocated = !StringMethods.startsWith(trimmed, "at ") && StringMethods.endsWith(trimmed, "@");
+		const frame = unlocated ? { head: StringMethods.slice(trimmed, 0, -1), path: "" } : parseStackFrame(line);
 		if (frame) {
 			listPush(frames, {
 				...frame,
 				line,
-				async: /^at async /.test(trimmed),
-				evaluated: unlocated || /\beval at\b/.test(line) || / line \d+ > /.test(line),
+				async: RegExpMethods.exec(/^at async /, trimmed) !== null,
+				evaluated: unlocated || RegExpMethods.exec(/\beval at\b/, line) !== null || RegExpMethods.exec(/ line \d+ > /, line) !== null,
 				hash: null,
 				key: null,
 				enter: runtime_entryKind(frame.head),
@@ -1645,7 +1646,7 @@ function attributeResult(wrapper, value, callerIsHost = false, caller = null, re
  */
 function ownReceiver(parent, identity) {
 	if (!parent?.flagged || !identity || identity.unresolved || !parent.wrapper) return null;
-	if (!trustedRootOwn.genuineWrappers.has(parent.wrapper)) return null;
+	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, parent.wrapper)) return null;
 	// With `provenance` off no frames are read, so code the parent was handed is not told from the parent's own.
 	if (parent.wrapper.slothlet?.config?.permissions?.provenance === false) return null;
 	if (identity.currentWrapper !== parent.wrapper || (identity.ceiling ?? null) !== (parent.ceiling ?? null)) return null;
@@ -2842,7 +2843,7 @@ const EARLY_READS = new WeakMap();
  * @private
  */
 function runtime_registrationFrames(entry) {
-	if (EARLY_READS.has(entry)) return EARLY_READS.get(entry);
+	if (WeakMapMethods.has(EARLY_READS, entry)) return WeakMapMethods.get(EARLY_READS, entry);
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
 	if (!hasEngineStack(entry)) return null;
@@ -2854,7 +2855,7 @@ function runtime_registrationFrames(entry) {
 		},
 		{ error: entry }
 	)?.value;
-	return READ_REGISTRATIONS.has(frames) ? frames : null;
+	return WeakSetMethods.has(READ_REGISTRATIONS, frames) ? frames : null;
 }
 
 /**
@@ -2873,7 +2874,7 @@ function runtime_registrationFrames(entry) {
 function runtime_registeredScript(entry, called = false) {
 	const frames = runtime_registrationFrames(entry);
 	if (frames === null) return null;
-	if (OWN_CAPTURES.has(entry)) called = true;
+	if (WeakSetMethods.has(OWN_CAPTURES, entry)) called = true;
 	let own = null;
 	let runner = null;
 	for (const frame of framesOf(frames)) {
@@ -2940,7 +2941,7 @@ function installViteHostRegistry(target) {
 	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
 		for (let i = 0; i < current.value.length; i++) {
 			const entry = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
-			if (entry !== null && typeof entry === "object") EARLY_READS.set(entry, runtime_registrationFrames(entry));
+			if (entry !== null && typeof entry === "object") WeakMapMethods.set(EARLY_READS, entry, runtime_registrationFrames(entry));
 			queue[queue.length] = entry;
 		}
 	}
@@ -2969,10 +2970,11 @@ function installViteHostRegistry(target) {
 	// A registration calls `push` on the registry from the file's own top-level code: what it hands over is not read, and
 	// the registry captures the stack itself from slothlet's own realm, whatever the global stack settings hold.
 	Objects.defineProperty(queue, "push", {
+		__proto__: null,
 		value: Objects.freeze(() => {
 			const captured = unreadError(REGISTRATION_FRAMES);
 			if (captured !== null) {
-				OWN_CAPTURES.add(captured);
+				WeakSetMethods.add(OWN_CAPTURES, captured);
 				queue[queue.length] = captured;
 			}
 			return queue.length;
@@ -2981,7 +2983,7 @@ function installViteHostRegistry(target) {
 		writable: false,
 		configurable: false
 	});
-	Objects.defineProperty(target, key, { value: queue, enumerable: false, writable: false, configurable: false });
+	Objects.defineProperty(target, key, { __proto__: null, value: queue, enumerable: false, writable: false, configurable: false });
 	return queue;
 }
 
@@ -3038,8 +3040,8 @@ function runtime_loadedRecord(entry) {
  */
 function runtime_loadedFrom(script, json) {
 	const prefix = `\0${LOADED_BY_SPECIFIER}`;
-	if (typeof script?.location !== "string" || !script.location.startsWith(prefix)) return null;
-	const loaded = queryParam(script.location.slice(prefix.length), "id");
+	if (typeof script?.location !== "string" || !StringMethods.startsWith(script.location, prefix)) return null;
+	const loaded = queryParam(StringMethods.slice(script.location, prefix.length), "id");
 	if (!loaded) return null;
 	let importers;
 	try {
@@ -3091,7 +3093,7 @@ function installViteLoadedRegistry(target) {
 			if (typeof json !== "string") return;
 			const captured = unreadError(REGISTRATION_FRAMES);
 			if (captured === null) return;
-			OWN_CAPTURES.add(captured);
+			WeakSetMethods.add(OWN_CAPTURES, captured);
 			keep(runtime_loadedFrom(runtime_registeredScript(captured), json));
 		}),
 		importersOf: Objects.freeze((path) => {
@@ -4052,7 +4054,7 @@ function runtime_leavesAtLocation(path, line, running = null, location = null) {
 		// A frame carrying a mount's tag runs in a copy slothlet's loader imported for it only when the loader imported the
 		// file under that exact query: one some module wrote out for it (another parameter added) is a module of its own
 		// making (#691).
-		if (mount && location !== null) leaves = leaves.filter((wrapper) => runtime_importedUnder(wrapper, location));
+		if (mount && location !== null) leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, location));
 		if (!leaves.length) continue;
 		if (!runs) {
 			// A file no tag tells apart (a CommonJS file) that a running instance loads is that instance's: the copy an
@@ -4160,12 +4162,12 @@ function runtime_definerAt(frames, running) {
 function runtime_importedUnder(wrapper, location) {
 	const loader = wrapper.slothlet?.processors?.loader;
 	if (typeof loader?.importedUnderQuery !== "function") return true;
-	const at = location.indexOf("?");
+	const at = StringMethods.indexOf(location, "?");
 	if (at === -1) return false;
-	const query = location.slice(at + 1).replace(/#.*$/, "");
+	const query = regExpReplace(/#.*$/, StringMethods.slice(location, at + 1), "");
 	if (loader.importedUnderQuery(wrapper.____slothletInternal.filePath, query)) return true;
 	// A lazy folder's node keeps the folder as its path while its function's code runs from the file it was written in.
-	const sourceFile = LEAF_SOURCE_FILES.get(wrapper);
+	const sourceFile = WeakMapMethods.get(LEAF_SOURCE_FILES, wrapper);
 	return sourceFile !== undefined && loader.importedUnderQuery(sourceFile, query);
 }
 
@@ -4179,11 +4181,13 @@ function runtime_importedUnder(wrapper, location) {
  */
 function runtime_isUntaggedCopy(frame) {
 	if (!isNode || runtime_frameInstanceTag(frame.line)) return false;
-	for (const reference of LIVE_INSTANCES.values()) {
-		const slothlet = reference.deref();
+	for (let ofIndex = 0, ofList = mapValues(LIVE_INSTANCES); ofIndex < ofList.length; ofIndex++) {
+		const reference = ofList[ofIndex];
+		const slothlet = WeakRefMethods.deref(reference);
 		if (!slothlet || !runtime_checksPermissions(slothlet) || !runtime_instanceRuns(slothlet)) continue;
-		if (runtime_commonJSLocations(slothlet.instanceID).has(frame.path)) continue;
-		if (runtime_leavesAtFile(slothlet, frame.path, null, null).some((wrapper) => wrapper.____slothletInternal.moduleID)) return true;
+		if (SetMethods.has(runtime_commonJSLocations(slothlet.instanceID), frame.path)) continue;
+		if (ArrayMethods.some(runtime_leavesAtFile(slothlet, frame.path, null, null), (wrapper) => wrapper.____slothletInternal.moduleID))
+			return true;
 	}
 	return false;
 }
@@ -4686,7 +4690,7 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 		// Code carrying the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#691):
 		// a module of its own, which slothlet loaded for no leaf, as frame placement reads it inside a call.
 		if (instance && !mount && wrapper.____slothletInternal.moduleID) continue;
-		leaves.push(wrapper);
+		listPush(leaves, wrapper);
 	}
 	return leaves;
 }
