@@ -17,10 +17,10 @@
  * @fileoverview Verifies the complete endpoint availability of `api.slothlet` under
  * all combinations of `diagnostics` and `hook.enabled` configuration flags.
  *
- * ## What is always present on `api.slothlet` (18 keys)
+ * ## What is always present on `api.slothlet` (17 keys; 18 with `hook`)
  *
  * Regardless of diagnostics or hook configuration, these namespaces and values
- * must always be available:
+ * must always be available (`hook` is conditional, see below):
  *
  *   version       - semver string from package.json
  *   versioning    - VersionManager API: { list, setDefault, unregister, getVersionMetadata, setVersionMetadata }
@@ -31,7 +31,6 @@
  *   lockCaller    - pin the registering module's caller identity onto a callback
  *   bind          - freeze the whole async context onto a callback (AsyncResource.bind)
  *   context       - per-request context: { get, diagnostics, run, scope }
- *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
  *   metadata      - metadata API: { setGlobal, set, remove, setFor, removeFor }
  *   scope         - run a function with current context
  *   run           - run a function with provided context
@@ -40,6 +39,11 @@
  *   owner         - ownership query: { get }
  *   materialize   - lazy materialization tracking: { materialized, get, wait }
  *   lifecycle     - lifecycle event emitter: { on, off }
+ *
+ * ## Present only when hooks are enabled or `diagnostics: true` (#821)
+ *
+ *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
+ *                   absent when `hook` is off and `diagnostics` is not true
  *
  * ## Only present when `diagnostics: true` (adds `diag`)
  *
@@ -52,14 +56,12 @@
  *     caches          - cache diagnostics: { get, getAllModuleIDs, has }
  *     SlothletWarning - SlothletWarning class (for captured-warning access in tests)
  *     hook            - hook manager introspection: { enabled, compilePattern }
- *                       always present (hookManager is always instantiated, even when
- *                       hook.enabled: false - it's just in disabled state)
+ *                       present whenever diagnostics is on (hookManager is always instantiated,
+ *                       even when hook.enabled: false - it's just in disabled state)
  *
  * ## Never present (regardless of any config)
  *
- *   hooks (plural) - there is a `delete namespace.hooks` in api_builder.mjs but
- *                    `namespace.hooks` is never assigned, making it a no-op dead code
- *                    path. `api.slothlet.hooks` is always undefined.
+ *   hooks (plural) - `namespace.hooks` is never assigned. `api.slothlet.hooks` is always undefined.
  *
  * @see src/lib/builders/api_builder.mjs - namespace construction and conditional logic
  */
@@ -89,7 +91,6 @@ const ALWAYS_PRESENT_KEYS = [
 	"lockCaller",
 	"bind",
 	"context",
-	"hook",
 	"metadata",
 	"scope",
 	"run",
@@ -101,10 +102,16 @@ const ALWAYS_PRESENT_KEYS = [
 ];
 
 /**
+ * `hook` is present only when hooks are enabled or `diagnostics` is true (#821).
+ * @param {{ diagnostics: boolean, hook: { enabled: boolean } }} cfg - Matrix config.
+ * @returns {boolean} Whether `api.slothlet.hook` is expected.
+ */
+const hookExpected = ({ diagnostics, hook }) => hook.enabled === true || diagnostics === true;
+
+/**
  * Keys that must NEVER be present on `api.slothlet` regardless of any config.
- * `hooks` (plural) is never assigned to the namespace - `delete namespace.hooks`
- * in api_builder.mjs is a no-op dead code path. The actual hook API is `hook`
- * (singular), which is always present.
+ * `hooks` (plural) is never assigned to the namespace. The actual hook API is `hook`
+ * (singular), present only when hooks are enabled or diagnostics is on.
  * @type {string[]}
  */
 const NEVER_PRESENT_KEYS = ["hooks"];
@@ -168,6 +175,7 @@ const MATRIX = [
 
 describe("api.slothlet - diagnostics endpoint availability", () => {
 	describe.each(MATRIX)("$label", ({ diagnostics, hook }) => {
+		const withHook = hookExpected({ diagnostics, hook });
 		let api;
 
 		beforeEach(async () => {
@@ -193,7 +201,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Always-present endpoints ─────────────────────────────────────
 
 		describe("always-present top-level keys", () => {
-			it("should have all 18 always-present keys defined on api.slothlet", () => {
+			it("should have all 17 always-present keys defined on api.slothlet", () => {
 				expectKeysPresent(api.slothlet, ALWAYS_PRESENT_KEYS, "api.slothlet");
 			});
 
@@ -244,12 +252,19 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expectKeysPresent(api.slothlet.context, EXPECTED_CONTEXT_SUBKEYS, "api.slothlet.context");
 			});
 
-			it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list", () => {
-				expectKeysPresent(api.slothlet.hook, EXPECTED_HOOK_SUBKEYS, "api.slothlet.hook");
-				for (const key of EXPECTED_HOOK_SUBKEYS) {
-					expect(typeof api.slothlet.hook[key], `api.slothlet.hook.${key} should be a function`).toBe("function");
-				}
-			});
+			if (withHook) {
+				it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list", () => {
+					expectKeysPresent(api.slothlet.hook, EXPECTED_HOOK_SUBKEYS, "api.slothlet.hook");
+					for (const key of EXPECTED_HOOK_SUBKEYS) {
+						expect(typeof api.slothlet.hook[key], `api.slothlet.hook.${key} should be a function`).toBe("function");
+					}
+				});
+			} else {
+				it("api.slothlet.hook should be absent when hook is off and diagnostics is not true (#821)", () => {
+					expect(api.slothlet.hook).toBeUndefined();
+					expect(Object.keys(api.slothlet)).not.toContain("hook");
+				});
+			}
 
 			it("api.slothlet.metadata should have setGlobal, set, remove, setFor, removeFor", () => {
 				expectKeysPresent(api.slothlet.metadata, EXPECTED_METADATA_SUBKEYS, "api.slothlet.metadata");
@@ -291,7 +306,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Never-present endpoints ──────────────────────────────────────
 
 		describe("never-present keys", () => {
-			it("api.slothlet.hooks (plural) should never be defined - it is a dead code path in api_builder.mjs", () => {
+			it("api.slothlet.hooks (plural) should never be defined", () => {
 				expectKeysAbsent(api.slothlet, NEVER_PRESENT_KEYS, "api.slothlet");
 			});
 		});
@@ -304,8 +319,9 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expectKeysAbsent(api.slothlet, DIAG_ONLY_KEYS, "api.slothlet");
 				});
 
-				it("api.slothlet should have exactly the 18 always-present keys and no more", () => {
+				it("api.slothlet should have exactly the always-present keys (plus hook when expected) and no more", () => {
 					const actualKeys = Object.keys(api.slothlet);
+					expect(actualKeys.includes("hook")).toBe(withHook);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
 					}
@@ -353,17 +369,18 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(typeof api.slothlet.diag.SlothletWarning).toBe("function");
 				});
 
-				it("api.slothlet.diag.hook should always be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {
+				it("api.slothlet.diag.hook should be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {
 					// The hookManager is always created regardless of hook.enabled - it's just
 					// disabled (intercepting nothing) when hook.enabled: false. Therefore
-					// api.slothlet.diag.hook is always present when diagnostics is on, and its
+					// api.slothlet.diag.hook is present whenever diagnostics is on, and its
 					// `enabled` property mirrors the hook.enabled config value.
 					expect(api.slothlet.diag.hook).toBeDefined();
 					expect(api.slothlet.diag.hook.enabled).toBe(hook.enabled);
 				});
 
-				it("api.slothlet should have exactly the 18 always-present keys plus diag", () => {
+				it("api.slothlet should have exactly the always-present keys plus hook and diag", () => {
 					const actualKeys = Object.keys(api.slothlet);
+					expect(actualKeys).toContain("hook");
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
 					}
