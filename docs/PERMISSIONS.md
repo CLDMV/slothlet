@@ -99,13 +99,11 @@ Known limits that no check covers:
 
 - **Firefox and `//# sourceURL=`.** Firefox prints a `sourceURL` comment's name as the frame's location, with no sign the code was compiled from a string, for `eval` (direct and indirect), the `Function` constructors, string timers, runtime inline scripts, `blob:` and `data:` modules and `import()`. Code that names a module's file URL so is taken for that file's code. Under a policy that refuses `'unsafe-eval'`, `blob:` and `data:` scripts, what is left is a page's own runtime inline scripts and string timers where the policy allows inline script. WebKit ignores `sourceURL`, and Chromium is read through V8's call sites, which tell them apart.
 - **WebKit string timers and runtime inline scripts.** WebKit reports both as the page's own code (`global code@<page URL>`), whoever wrote them, where the policy allows them.
-- **Under decision:** a file of a module's folder required by a sibling CommonJS file while the folder loads, and exact copies of a package's files.
+- **Covered without a check:** an api file that loads another api file's file itself (a sibling's `require` or `import` of it) gets a helper file of its own, held to the api file that loaded it, never the leaf ([File-level code has its own permission path](#file-level-code-has-its-own-permission-path)); and compiling an exact copy of a package's file, or of any real file outside the leaf's own folder, is refused under `capability:code`, closed by default and refused under such a name even where a rule opens it ([Built-in Capabilities](#built-in-capabilities)).
 
 ### Capabilities
 
-<!-- Filled in with the per-capability list (code, imports, loader) and the rules that open them. -->
-
-While permissions are on, built-in capabilities of the platform are refused to module code by default, and a host opens one per leaf with an ordinary rule whose target is `capability:<name>`. `control.report()` lists each capability and the callers rules open it to.
+While permissions are on, built-in capabilities of the platform are refused to module code by default, and a host opens one per leaf with an ordinary rule whose target is `capability:<name>`. `control.report()` lists each capability and the callers rules open it to. The capabilities, the routes each covers and how rules open them are listed under [Built-in Capabilities](#built-in-capabilities).
 
 ### `control.report()`
 
