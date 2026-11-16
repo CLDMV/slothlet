@@ -3743,10 +3743,12 @@ function runtime_instanceRuns(slothlet) {
  * @param {string} path - Comparable path.
  * @param {string} line - Raw text holding the location's tags.
  * @param {string|null} [running=null] - The instance whose flow is running, when one is.
+ * @param {string|null} [location=null] - The location as the frame names it, query included: a frame carrying a mount's
+ *   tag is held to the queries the instance's loader imported the file under.
  * @returns {Array<object>|null} Leaves of one instance.
  * @private
  */
-function runtime_leavesAtLocation(path, line, running = null) {
+function runtime_leavesAtLocation(path, line, running = null, location = null) {
 	const tag = runtime_frameInstanceTag(line);
 	const mount = runtime_frameModuleTag(line);
 	let found = null;
@@ -3767,7 +3769,11 @@ function runtime_leavesAtLocation(path, line, running = null) {
 		// still told apart, and runs as plain JavaScript, with no context to read `self` from (#726).
 		const runs = runtime_instanceRuns(slothlet);
 		if (!runs && runtime_checksPermissions(slothlet)) continue;
-		const leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
+		let leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
+		// A frame carrying a mount's tag runs in a copy slothlet's loader imported for it only when the loader imported the
+		// file under that exact query: one some module wrote out for it (another parameter added) is a module of its own
+		// making (#691).
+		if (mount && location !== null) leaves = leaves.filter((wrapper) => runtime_importedUnder(wrapper, location));
 		if (!leaves.length) continue;
 		if (!runs) {
 			// A file no tag tells apart (a CommonJS file) that a running instance loads is that instance's: the copy an
@@ -3831,7 +3837,11 @@ function runtime_definerAt(frames, running) {
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
 		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
-		const leaves = runtime_leavesAtLocation(frame.path, frame.line, running);
+		// An untagged frame at an ES module file an instance loaded under its tag runs in another module of the file (a raw
+		// `import` of it by a module, the host or a package), which slothlet loaded for no leaf: code no one accounts for,
+		// as frame placement reads it inside a call (#691).
+		if (runtime_isUntaggedCopy(frame)) return { unplaced: true };
+		const leaves = runtime_leavesAtLocation(frame.path, frame.line, running, frame.location ?? null);
 		if (leaves === null) {
 			if (runtime_isInstanceFile(frame.path)) return { unplaced: true, shared: true };
 			// A helper file of an instance that is no api file (one a leaf imports): its code runs for the leaf whose code
@@ -3856,6 +3866,41 @@ function runtime_definerAt(frames, running) {
 		return narrowed.length === 1 ? { wrapper: narrowed[0], callers } : { leaves: narrowed, callers };
 	}
 	return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
+}
+
+/**
+ * Whether the instance's loader imported a leaf's file under the query a frame's location carries (see
+ * {@link runtime_leavesAtLocation}). A loader that keeps no such record (a stand-in) says yes.
+ * @param {object} wrapper - The leaf.
+ * @param {string} location - The frame's location.
+ * @returns {boolean} True when it did.
+ * @private
+ */
+function runtime_importedUnder(wrapper, location) {
+	const loader = wrapper.slothlet?.processors?.loader;
+	if (typeof loader?.importedUnderQuery !== "function") return true;
+	const at = location.indexOf("?");
+	if (at === -1) return false;
+	return loader.importedUnderQuery(wrapper.____slothletInternal.filePath, location.slice(at + 1).replace(/#.*$/, ""));
+}
+
+/**
+ * Whether a frame carrying no instance tag runs at an ES module file a running instance with its permission system on
+ * built leaves from (see {@link runtime_definerAt}). In Node, and under a vite runner, slothlet loads each such file
+ * under the instance's tag; a CommonJS file runs under its plain path, and is told by its script instead.
+ * @param {{path: string, line: string}} frame - A frame.
+ * @returns {boolean} True for another module of the file.
+ * @private
+ */
+function runtime_isUntaggedCopy(frame) {
+	if (!isNode || runtime_frameInstanceTag(frame.line)) return false;
+	for (const reference of LIVE_INSTANCES.values()) {
+		const slothlet = reference.deref();
+		if (!slothlet || !runtime_checksPermissions(slothlet) || !runtime_instanceRuns(slothlet)) continue;
+		if (runtime_commonJSLocations(slothlet.instanceID).has(frame.path)) continue;
+		if (runtime_leavesAtFile(slothlet, frame.path, null, null).some((wrapper) => wrapper.____slothletInternal.moduleID)) return true;
+	}
+	return false;
 }
 
 /**
@@ -4305,6 +4350,9 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 		if (runtime_isGone(wrapper) && !keepGone) continue;
 		if (instance && wrapper.slothlet.instanceID !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
+		// Code carrying the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#691):
+		// a module of its own, which slothlet loaded for no leaf, as frame placement reads it inside a call.
+		if (instance && !mount && wrapper.____slothletInternal.moduleID) continue;
 		leaves.push(wrapper);
 	}
 	return leaves;

@@ -395,20 +395,36 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 
 	it("a source loaded again is recorded once", () => {
 		const load = loadHook();
-		const url = freshURL("again.cjs");
-		const next = () => ({ format: "commonjs", source: "module.exports = 1;\n" });
-		load(url, {}, next);
-		load(url, {}, next);
-		expect(recorded(url)).toEqual([sha256("module.exports = 1;\n")]);
+		const instanceID = `round5-again-${process.pid}-${counter}`;
+		const url = `${freshURL("again.mjs")}?slothlet_instance=${instanceID}&module=m`;
+		const next = () => ({ format: "module", source: "export const v = 1;\n" });
+		const first = load(url, {}, next);
+		const second = load(url, {}, next);
+		// The source is handed on sealed (#691), the same way each time it loads.
+		expect(second.source).toBe(first.source);
+		expect(first.source.startsWith("export const v = 1;\n")).toBe(true);
+		expect(recorded(url)).toEqual([sha256(first.source)]);
+		releaseInstanceScope(instanceID);
 	});
 
 	it("a file's sources are kept to a bounded number", () => {
 		const load = loadHook();
-		const url = freshURL("changing.cjs");
-		for (let index = 0; index < 40; index++) load(url, {}, () => ({ format: "commonjs", source: `module.exports = ${index};\n` }));
+		const instanceID = `round5-changing-${process.pid}-${counter}`;
+		const url = `${freshURL("changing.mjs")}?slothlet_instance=${instanceID}&module=m`;
+		let last;
+		for (let index = 0; index < 40; index++) last = load(url, {}, () => ({ format: "module", source: `export const v = ${index};\n` }));
 		expect(recorded(url).length).toBeGreaterThan(0);
 		expect(recorded(url).length).toBeLessThanOrEqual(16);
-		expect(recorded(url).at(-1)).toBe(sha256("module.exports = 39;\n"));
+		expect(recorded(url).at(-1)).toBe(sha256(last.source));
+		releaseInstanceScope(instanceID);
+	});
+
+	it("a CommonJS file loaded outside an instance's scope is not recorded, and is handed on as it is (#691)", () => {
+		const load = loadHook();
+		const url = freshURL("unscoped.cjs");
+		const result = load(url, {}, () => ({ format: "commonjs", source: "module.exports = 1;\n" }));
+		expect(result.source).toBe("module.exports = 1;\n");
+		expect(recorded(url)).toEqual([]);
 	});
 
 	it("an instance's sources are dropped when it shuts down", () => {
@@ -429,8 +445,9 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const base = freshURL("reloaded.mjs");
 		const instanceID = `round5-reload-${process.pid}-${counter}`;
 		const before = recordedScriptCount();
+		let last;
 		for (let index = 0; index < 40; index++) {
-			load(`${base}?slothlet_instance=${instanceID}&module=m&_reload=${index}`, {}, () => ({
+			last = load(`${base}?slothlet_instance=${instanceID}&module=m&_reload=${index}`, {}, () => ({
 				format: "module",
 				source: `export const v = ${index};\n`
 			}));
@@ -438,7 +455,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		expect(recordedScriptCount()).toBe(before + 1);
 		const hashes = recorded(`${base}?slothlet_instance=${instanceID}&module=m&_reload=40`);
 		expect(hashes.length).toBe(16);
-		expect(hashes.at(-1)).toBe(sha256("export const v = 39;\n"));
+		expect(hashes.at(-1)).toBe(sha256(last.source));
 		releaseInstanceScope(instanceID);
 		expect(recordedScriptCount()).toBe(before);
 	});
@@ -447,7 +464,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const load = loadHook();
 		const instanceID = `round5-kept-${process.pid}-${counter}`;
 		const url = `${freshURL("kept.mjs")}?slothlet_instance=${instanceID}&module=m`;
-		load(url, {}, () => ({ format: "module", source: "export const v = 1;\n" }));
+		const { source } = load(url, {}, () => ({ format: "module", source: "export const v = 1;\n" }));
 		const forged = sha256("forged");
 		const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
 		expect(state).toBeTypeOf("object");
@@ -469,7 +486,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 				// A refusal is as good as nothing changed.
 			}
 		}
-		expect(recorded(url)).toEqual([sha256("export const v = 1;\n")]);
+		expect(recorded(url)).toEqual([sha256(source)]);
 		releaseInstanceScope(instanceID);
 		expect(recorded(url)).toEqual([]);
 	});
@@ -481,16 +498,15 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		expect(recorded(url)).toEqual([]);
 	});
 
-	it.runIf(typeof stripTypeScriptTypes === "function")(
-		"a TypeScript CommonJS source is recorded as Node compiles it, its types stripped",
-		() => {
-			const load = loadHook();
-			const url = freshURL("typed.cts");
-			const source = "const answer: number = 3;\nmodule.exports = answer;\n";
-			load(url, {}, () => ({ format: "commonjs-typescript", source }));
-			expect(recorded(url)).toEqual([sha256(stripTypeScriptTypes(source))]);
-		}
-	);
+	it.runIf(typeof stripTypeScriptTypes === "function")("a TypeScript source is recorded as Node compiles it, its types stripped", () => {
+		const load = loadHook();
+		const instanceID = `round5-typed-${process.pid}-${counter}`;
+		const url = `${freshURL("typed.mts")}?slothlet_instance=${instanceID}&module=m`;
+		const source = "const answer: number = 3;\nexport default answer;\n";
+		const result = load(url, {}, () => ({ format: "module-typescript", source }));
+		expect(recorded(url)).toEqual([sha256(stripTypeScriptTypes(result.source))]);
+		releaseInstanceScope(instanceID);
+	});
 });
 
 describe("Frame placement > scripts learned from a shut-down instance are released (#597)", () => {

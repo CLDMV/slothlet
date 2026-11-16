@@ -362,6 +362,20 @@ function runtime_encodeQueryValue(value) {
 }
 
 /**
+ * A URL query in one spelling whatever order its parameters were written in, for comparing two queries.
+ * @param {string} query - A query, without its `?`.
+ * @returns {string} Its parameters, sorted.
+ * @private
+ */
+function runtime_sortedQuery(query) {
+	return query
+		.split("&")
+		.filter((part) => part !== "")
+		.sort()
+		.join("&");
+}
+
+/**
  * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
  * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
  * never in browser mode. `node:module` is read through the platform's createRequire rather than an
@@ -438,6 +452,21 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#importedLocationList = null;
+
+	/**
+	 * Every URL a file was imported from by this loader, the newest {@link Loader.IMPORTED_URLS_PER_FILE} kept, by the
+	 * path it was loaded as (#691): a reload's URL is added, not put in place of the one before, so code a copy loaded
+	 * before a reload still made is told from a copy someone else imported under a URL of their own.
+	 * @type {Map<string, Array<string>>}
+	 * @private
+	 */
+	#importedURLs = new Map();
+
+	/**
+	 * How many of a file's imported URLs {@link Loader#importedURLs} keeps.
+	 * @type {number}
+	 */
+	static IMPORTED_URLS_PER_FILE = 64;
 
 	/**
 	 * Create a Loader instance.
@@ -691,6 +720,7 @@ export class Loader extends ComponentBase {
 			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 			byMount.set(moduleID ?? "", String(moduleUrl));
 			this.#importedLocationList = null;
+			this.#rememberImportedURL(filePath, String(moduleUrl));
 			// What the file imports is a module's, whichever loader evaluates it and however a require names it.
 			noteModuleFile(filePath);
 			noteModuleFile(String(moduleUrl));
@@ -1358,10 +1388,48 @@ export class Loader extends ComponentBase {
 		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 		byMount.set(moduleID ?? "", String(imported));
 		this.#importedLocationList = null;
+		this.#rememberImportedURL(filePath, String(imported));
 		// The helper files a leaf imports carry no tag in a browser: the folder the leaf came from tells them a module's.
 		noteModuleRoot(String(specifier), filePath);
 		const module = await import(imported);
 		return module;
+	}
+
+	/**
+	 * Add a URL to those a file was imported from (see {@link Loader#importedURLs}).
+	 * @param {string} filePath - The path the file was loaded as.
+	 * @param {string} url - The URL it was imported from.
+	 * @returns {void}
+	 * @private
+	 */
+	#rememberImportedURL(filePath, url) {
+		let urls = this.#importedURLs.get(filePath);
+		if (!urls) this.#importedURLs.set(filePath, (urls = []));
+		if (urls.includes(url)) return;
+		urls.push(url);
+		if (urls.length > Loader.IMPORTED_URLS_PER_FILE) urls.splice(0, urls.length - Loader.IMPORTED_URLS_PER_FILE);
+	}
+
+	/**
+	 * Whether this loader imported a file under a query (#691): the file's own loads, under any mount and across its
+	 * reloads (the newest {@link Loader.IMPORTED_URLS_PER_FILE}), and not a URL some module wrote out for it.
+	 * @param {string} filePath - The path the file was loaded as.
+	 * @param {string} query - A query, without its `?`.
+	 * @returns {boolean} True when one of its imports carried exactly that query.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedUnderQuery("/app/api/tally.mjs", "slothlet_instance=abc&module=mod1"); // true
+	 */
+	importedUnderQuery(filePath, query) {
+		const urls = this.#importedURLs.get(filePath);
+		if (!urls) return false;
+		const wanted = runtime_sortedQuery(query);
+		for (const url of urls) {
+			const at = url.indexOf("?");
+			if (at !== -1 && runtime_sortedQuery(url.slice(at + 1).replace(/#.*$/, "")) === wanted) return true;
+		}
+		return false;
 	}
 
 	/**

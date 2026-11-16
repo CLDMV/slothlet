@@ -245,8 +245,8 @@ const SCOPE_KEYS = new Map();
 
 /**
  * The scope a synchronous {@link scopeRequire} is running in (`anchor` is the file it required; `importer` the api
- * file whose own copies are served, under `helpers: "module"`), else null.
- * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null }|null}
+ * file whose own copies are served, under `helpers: "module"`; `fresh` when the anchor is loaded as a leaf), else null.
+ * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean }|null}
  * @private
  */
 let ACTIVE = null;
@@ -313,6 +313,14 @@ const LOADED_SCRIPTS = new Map();
  * @private
  */
 const LOADED_TEXTS = new Map();
+
+/**
+ * The random value each script key's sources are sealed with (see {@link sealLoadedSource}), drawn the first time a
+ * file loads under the key and kept with its sources, so a source loaded again is the same script.
+ * @type {Map<string, string>}
+ * @private
+ */
+const SEALS = new Map();
 
 /**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
@@ -2265,8 +2273,10 @@ export function propagateInstanceQuery(specifier, parent, child) {
 	// a helper copy is loaded for is never the importer's to write: those tags are dropped and given as below.
 	const written = childParams.has("slothlet_instance");
 	if (written) {
-		if (!HELPER_TAGS.some((key) => childParams.has(key))) return child;
-		for (const key of HELPER_TAGS) childParams.delete(key);
+		// The module-system bridges slothlet serves (require of an ES module) import the URL slothlet built.
+		if (parent.startsWith(ESM_PREFIX) || parent.startsWith(FACADE_PREFIX)) return child;
+		if (!WRITTEN_TAGS.some((key) => childParams.has(key))) return child;
+		for (const key of WRITTEN_TAGS) childParams.delete(key);
 	} else {
 		if (!belongsToInstance(specifier, childBase, parent)) return child;
 		for (const key of INSTANCE_QUERY_KEYS) {
@@ -2297,6 +2307,15 @@ export function propagateInstanceQuery(specifier, parent, child) {
 const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
 
 /**
+ * The tags a URL an importer writes out never keeps: the helper tags, and the mount a leaf's own module is loaded
+ * under, which only slothlet's loader gives (#691). A file imported under a mount tag its importer wrote is a module
+ * of the importer's making, not the leaf's.
+ * @type {string[]}
+ * @private
+ */
+const WRITTEN_TAGS = [...HELPER_TAGS, "module"];
+
+/**
  * A resolved child without the helper tags its URL carries, when its importer is neither an instance file nor one of
  * slothlet's own: a package's file, the host's, evaluated code. A URL is text any code can write, and a copy's frames
  * are read by those tags, so a file imported under tags its importer wrote is loaded as the same file without them.
@@ -2307,13 +2326,13 @@ const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
  */
 function withoutWrittenHelperTags(parent, child) {
 	if (typeof child !== "string" || !child.includes(MARKER)) return child;
-	if (!HELPER_TAGS.some((key) => child.includes(`${key}=`))) return child;
+	if (!WRITTEN_TAGS.some((key) => new URLSearchParams(splitQuery(child)[1] ?? "").has(key))) return child;
 	if (typeof parent === "string" && OWN_PREFIXES.some((prefix) => toSlashPath(parent).startsWith(prefix))) return child;
 	// Slothlet's loader imports a leaf from its own files; a first import with no importer is the host's entry.
 	if (typeof parent !== "string") return child;
 	const [childBase, childQuery = ""] = splitQuery(child);
 	const childParams = new URLSearchParams(childQuery);
-	for (const key of HELPER_TAGS) childParams.delete(key);
+	for (const key of WRITTEN_TAGS) childParams.delete(key);
 	const hashIdx = childBase.indexOf("#");
 	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
 	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
@@ -2417,7 +2436,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		if (!LEAVES.has(instanceID)) LEAVES.set(instanceID, new Set());
 		LEAVES.get(instanceID).add(resolved);
 	}
-	ACTIVE = { instanceID, anchor: resolved, importer, mount };
+	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh };
 	try {
 		return requireFn(resolved);
 	} finally {
@@ -2431,6 +2450,27 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		}
 		for (const [file, mod] of setAside) cache[file] = mod;
 	}
+}
+
+/**
+ * Whether a CommonJS file Node is loading is one an instance's scope loads as its own (see {@link scopeRequire}): a
+ * file required while a scope is active, other than an api file of the instance, which is the instance's only when
+ * the scope is loading it as its leaf.
+ * @param {string} url - The file's URL.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function isScopeLoad(url) {
+	const active = ACTIVE;
+	if (active === null) return false;
+	let filePath;
+	try {
+		filePath = NODE.url.fileURLToPath(splitQuery(url)[0]);
+	} catch {
+		return false;
+	}
+	if (active.fresh && filePath === active.anchor) return true;
+	return !LEAVES.get(active.instanceID)?.has(filePath);
 }
 
 /**
@@ -2546,6 +2586,7 @@ function releaseScope(instanceID) {
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
 		LOADED_SCRIPTS.delete(key);
 		LOADED_TEXTS.delete(key);
+		SEALS.delete(key);
 	}
 }
 
@@ -2963,7 +3004,7 @@ function loadInstanceModule(url, context, nextLoad) {
 		};
 	}
 	const instanceID = params.get("slothlet_instance");
-	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) recordLoadedSource(url, result);
+	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) return sealLoadedSource(url, result);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	const filePath = NODE.url.fileURLToPath(base);
 	const importer = helperCopyImporter(params);
@@ -3076,12 +3117,8 @@ function setScriptKey(keyOf) {
  * @private
  */
 function recordLoadedSource(url, result) {
-	const source = result?.source;
-	if (source === undefined || source === null) return;
-	let text;
-	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
-	else if (ArrayBuffers.isView(source) || source instanceof ArrayBuffer) text = HOST.decode(source);
-	else return;
+	let text = loadedText(result);
+	if (text === null) return;
 	if (isTypeScriptLoad(result)) {
 		const strip = STRIP_TYPESCRIPT_TYPES;
 		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
@@ -3106,6 +3143,42 @@ function recordLoadedSource(url, result) {
 	if (!texts) LOADED_TEXTS.set(key, (texts = new Map()));
 	texts.set(hash, text);
 	for (const known of texts.keys()) if (!hashes.includes(known)) texts.delete(known);
+}
+
+/**
+ * A load result's source as the text the engine compiles: decoded as UTF-8, without a byte-order mark, which both
+ * loaders drop.
+ * @param {{source?: string|ArrayBufferView|ArrayBuffer}|undefined} result - The load hook's result.
+ * @returns {string|null} The text, or null when the result carries none.
+ * @private
+ */
+function loadedText(result) {
+	const source = result?.source;
+	if (typeof source === "string") return source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+	if (source !== undefined && source !== null && (ArrayBuffers.isView(source) || source instanceof ArrayBuffer)) return HOST.decode(source);
+	return null;
+}
+
+/**
+ * Give a source slothlet loads for an instance a comment no one else can write, at its end, and record it (see
+ * {@link recordLoadedSource}). V8 reports a frame's script by the hash of the text it compiled, and anyone can read a
+ * file and compile it again under its name (`vm.compileFunction`, `Module#_compile`, `vm.SourceTextModule`): the
+ * comment, a random value drawn for the file's script key (see {@link SEALS}), makes the script slothlet loaded hash
+ * as no copy made from the file can (#691). It ends the text, so no line or column of the file's own code moves.
+ * @param {string} url - The module URL, query included.
+ * @param {object} result - The load hook's result.
+ * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
+ * @private
+ */
+function sealLoadedSource(url, result) {
+	const text = loadedText(result);
+	if (text === null) return result;
+	const key = scriptKeyOf(url);
+	let seal = SEALS.get(key);
+	if (seal === undefined) SEALS.set(key, (seal = HOST.randomUUID()));
+	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
+	recordLoadedSource(url, sealed);
+	return sealed;
 }
 
 /**
@@ -3388,7 +3461,9 @@ const HOOKS = Objects.freeze({
 		if (SINGLE_COPY_FILES.includes(url) && !OWN_MODULES.has(url)) NODE_LOADED.add(url);
 		if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
 		const result = nextLoad(url, context);
-		if (url.startsWith("file:") && shouldRecordCommonJS(url, result)) recordLoadedSource(url, result);
+		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
+		// is another module of the file, and so is a leaf's file evaluated in the scope other than as that leaf (#691).
+		if (url.startsWith("file:") && isScopeLoad(url) && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result);
 		return result;
 	}
 });
