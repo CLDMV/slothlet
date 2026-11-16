@@ -22,10 +22,11 @@
  * is not met is one warning naming it. `control.report()` gives the mode, the baseline and the capabilities the rules open
  * (an empty list until capabilities are built).
  *
- * On Node the baseline is `node-stack-realm` (slothlet reads call stacks from a realm of its own) and, under vitest,
- * `vitest-plugin` (the `slothletInstanceImports()` plugin's records seen). The baseline holds only what slothlet needs to
- * tell the caller and refuse correctly: `--disallow-code-generation-from-strings` is recommended hardening, not a check,
- * as slothlet tells `eval` and `Function` code apart and refuses it without the flag. The process is started in child
+ * On Node the baseline is empty outside vitest and `vitest-plugin` under it (the `slothletInstanceImports()` plugin's
+ * records seen). The baseline holds only what slothlet needs to tell the caller and refuse correctly:
+ * `--disallow-code-generation-from-strings` is recommended hardening, not a check, as slothlet tells `eval` and
+ * `Function` code apart and refuses it without the flag; slothlet's own stack realm is always there on supported Node,
+ * and without it caller checks fail closed. The process is started in child
  * processes (`api_tests/api_test_permissions_strict/child.mjs`) with and without the flag; the vitest check runs here,
  * where the repository's config loads the plugin, and against stand-in probes for the plugin being absent. The browser
  * checks run in `tests/browser/permissions-baseline-*.browser.test.mjs`.
@@ -34,6 +35,10 @@
  * starts (was: refused); under on without the flag nothing is warned (was: one warning for `node-code-generation`); the
  * reports list `node-stack-realm` (and `vitest-plugin` under vitest) only; under vitest strict starts (was: refused);
  * the stand-in rows drop `node-code-generation`.
+ *
+ * Rows changed by the ruling that removed `node-stack-realm` from the baseline (2026-11-16): the Node reports list no
+ * check outside vitest (was: `node-stack-realm`) and `vitest-plugin` alone under vitest; the stand-in row for a missing
+ * realm is gone, and the row for a probe that throws uses the vitest check.
  * @module tests/vitests/suites/permissions/permissions-strict-baseline
  */
 
@@ -79,7 +84,7 @@ const MET_NODE = {
 	mode: "strict",
 	baseline: {
 		met: true,
-		checks: [{ id: "node-stack-realm", met: true, reason: null }]
+		checks: []
 	},
 	capabilities: expect.any(Array)
 };
@@ -135,10 +140,7 @@ describe("permissions mode strict > under vitest with the plugin", () => {
 	let api = null;
 	const UNDER_VITEST = {
 		met: true,
-		checks: [
-			{ id: "node-stack-realm", met: true, reason: null },
-			{ id: "vitest-plugin", met: true, reason: null }
-		]
+		checks: [{ id: "vitest-plugin", met: true, reason: null }]
 	};
 
 	afterEach(async () => {
@@ -166,36 +168,27 @@ describe("permissions baseline > the checks, against stand-in probes", () => {
 	const probes = (extra) => ({
 		codeFromStringsRefused: () => true,
 		importRefused: async () => true,
-		stackRealm: () => true,
 		vitestWorker: null,
 		viteRecords: () => 0,
 		...extra
 	});
 
-	it("on Node without vitest: the stack realm only, whether code from strings is refused or not", async () => {
+	it("on Node without vitest: no check, whether code from strings is refused or not", async () => {
 		for (const refused of [true, false]) {
-			expect(await runBaseline("node", probes({ codeFromStringsRefused: () => refused }))).toEqual({
-				met: true,
-				checks: [{ id: "node-stack-realm", met: true, reason: null }]
-			});
+			expect(await runBaseline("node", probes({ codeFromStringsRefused: () => refused }))).toEqual({ met: true, checks: [] });
 		}
-		const noRealm = await runBaseline("node", probes({ stackRealm: () => false }));
-		expect(noRealm).toEqual({ met: false, checks: [{ id: "node-stack-realm", met: false, reason: expect.any(String) }] });
 	});
 
 	it("under vitest: the plugin's records seen, or not", async () => {
 		const seen = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => 3 }));
-		expect(seen.checks[1]).toEqual({ id: "vitest-plugin", met: true, reason: null });
+		expect(seen).toEqual({ met: true, checks: [{ id: "vitest-plugin", met: true, reason: null }] });
 		const absent = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => 0 }));
 		expect(absent).toEqual({
 			met: false,
-			checks: [
-				{ id: "node-stack-realm", met: true, reason: null },
-				{ id: "vitest-plugin", met: false, reason: expect.any(String) }
-			]
+			checks: [{ id: "vitest-plugin", met: false, reason: expect.any(String) }]
 		});
 		const unknown = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => null }));
-		expect(unknown.checks[1].met).toBe(false);
+		expect(unknown.checks[0].met).toBe(false);
 	});
 
 	it("in a browser: code from strings, blob: and data: scripts", async () => {
@@ -222,11 +215,12 @@ describe("permissions baseline > the checks, against stand-in probes", () => {
 		const out = await runBaseline(
 			"node",
 			probes({
-				stackRealm: () => {
+				vitestWorker: {},
+				viteRecords: () => {
 					throw new Error("probe");
 				}
 			})
 		);
-		expect(out.checks[0]).toEqual({ id: "node-stack-realm", met: false, reason: expect.any(String) });
+		expect(out).toEqual({ met: false, checks: [{ id: "vitest-plugin", met: false, reason: expect.any(String) }] });
 	});
 });

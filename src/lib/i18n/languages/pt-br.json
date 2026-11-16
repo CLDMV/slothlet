@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "a página permite criar código a partir de strings: sua Content Security Policy permite 'unsafe-eval', ou ela não tem nenhuma.",
 		"BASELINE_CSP_BLOB_ALLOWED": "a página executa scripts de URLs blob:: sua Content Security Policy os permite, ou ela não tem nenhuma.",
 		"BASELINE_CSP_DATA_ALLOWED": "a página executa scripts de URLs data:: sua Content Security Policy os permite, ou ela não tem nenhuma.",
-		"BASELINE_NODE_STACK_REALM_MISSING": "o slothlet não conseguiu criar um realm próprio para ler pilhas de chamadas.",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "execução sob vitest sem o plugin slothletInstanceImports() do slothlet na configuração do vitest."
 	},
 	"metadata": {

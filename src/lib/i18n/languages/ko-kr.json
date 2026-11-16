@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "페이지가 문자열로 코드를 만드는 것을 허용합니다. Content Security Policy가 'unsafe-eval'을 허용하거나 정책이 없습니다.",
 		"BASELINE_CSP_BLOB_ALLOWED": "페이지가 blob: URL의 스크립트를 실행합니다. Content Security Policy가 이를 허용하거나 정책이 없습니다.",
 		"BASELINE_CSP_DATA_ALLOWED": "페이지가 data: URL의 스크립트를 실행합니다. Content Security Policy가 이를 허용하거나 정책이 없습니다.",
-		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet이 호출 스택을 읽을 자체 realm을 만들지 못했습니다.",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest 설정에 slothlet의 slothletInstanceImports() 플러그인 없이 vitest에서 실행 중입니다."
 	},
 	"metadata": {

@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "la page permet de créer du code à partir de chaînes : sa Content Security Policy autorise 'unsafe-eval', ou elle n'en a pas.",
 		"BASELINE_CSP_BLOB_ALLOWED": "la page exécute des scripts d'URL blob: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"BASELINE_CSP_DATA_ALLOWED": "la page exécute des scripts d'URL data: : sa Content Security Policy les autorise, ou elle n'en a pas.",
-		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet n'a pas pu créer de realm à lui pour lire les piles d'appels.",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin slothletInstanceImports() de slothlet dans la configuration de vitest."
 	},
 	"metadata": {

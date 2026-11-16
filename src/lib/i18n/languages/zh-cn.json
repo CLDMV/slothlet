@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "该页面允许从字符串生成代码：其 Content Security Policy 允许 'unsafe-eval'，或者没有策略。",
 		"BASELINE_CSP_BLOB_ALLOWED": "该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"BASELINE_CSP_DATA_ALLOWED": "该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
-		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet 无法创建自己的 realm 来读取调用栈。",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 slothletInstanceImports() 插件。"
 	},
 	"metadata": {

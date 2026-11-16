@@ -23,14 +23,13 @@
  * - `csp-eval` (browser): the page refuses code made from a string (`Function`, and so `eval`): its Content Security
  *   Policy has no `'unsafe-eval'`.
  * - `csp-blob-script` and `csp-data-script` (browser): the page refuses scripts from `blob:` and `data:` URLs.
- * - `node-stack-realm` (Node): slothlet reads call stacks from a realm of its own, so what the global `Error` and its
- *   stack settings hold does not change whose code an access is taken for.
  * - `vitest-plugin` (Node, under vitest): the `slothletInstanceImports()` plugin is loaded: its records of who loaded
  *   each file have reached slothlet.
  *
  * The baseline holds only what slothlet needs to tell the caller and refuse correctly. In Node, slothlet tells `eval`
  * and `Function` code apart and refuses it without help, so `--disallow-code-generation-from-strings` is recommended
- * hardening, not a check.
+ * hardening, not a check. slothlet's own stack realm (`helpers/stack-read`) is always there on supported Node, and
+ * without it caller checks fail closed, so it is not a check either.
  *
  * A check passed means only that what slothlet could test passed. Code that ran before slothlet (the page's own
  * scripts, an extension, a compromised dependency) can have changed what the checks read.
@@ -40,7 +39,6 @@
  */
 
 import { translate } from "@cldmv/slothlet/i18n";
-import { ownRealmInUse } from "@cldmv/slothlet/helpers/stack-read";
 import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -117,7 +115,6 @@ function viteRecords() {
  * @typedef {object} BaselineProbes
  * @property {function(): boolean} codeFromStringsRefused - Whether making code from a string is refused.
  * @property {function(string): Promise<boolean>} importRefused - Whether a script from a `blob:` or `data:` URL is refused.
- * @property {function(): boolean} stackRealm - Whether stacks are read from slothlet's own realm.
  * @property {object|null} vitestWorker - vitest's worker global, or null outside vitest.
  * @property {function(): (number|null)} viteRecords - How many vite plugin records slothlet accepted, or null.
  * @private
@@ -128,7 +125,7 @@ function viteRecords() {
  * @type {BaselineProbes}
  * @private
  */
-const PROBES = { codeFromStringsRefused, importRefused, stackRealm: ownRealmInUse, vitestWorker: VITEST_WORKER, viteRecords };
+const PROBES = { codeFromStringsRefused, importRefused, vitestWorker: VITEST_WORKER, viteRecords };
 
 /**
  * One check's result.
@@ -186,14 +183,6 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			)
 		);
 	} else {
-		listPush(
-			checks,
-			await check(
-				"node-stack-realm",
-				() => probes.stackRealm(),
-				() => translate("BASELINE_NODE_STACK_REALM_MISSING")
-			)
-		);
 		if (probes.vitestWorker) {
 			listPush(
 				checks,

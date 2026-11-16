@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "このページは文字列からのコード生成を許可しています。Content Security Policy が 'unsafe-eval' を許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_BLOB_ALLOWED": "このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_DATA_ALLOWED": "このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
-		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet はコールスタックを読むための独自の realm を作れませんでした。",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の slothletInstanceImports() プラグインがないまま vitest で実行しています。"
 	},
 	"metadata": {
