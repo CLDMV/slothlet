@@ -451,7 +451,8 @@ export function stackReadCount() {
  */
 export function stackText(_error, sites) {
 	let text = "Error";
-	for (const site of sites) text += "\n    at " + site.toString();
+	// The site's `toString` is fixed on V8's call-site prototype; it is called through the `call` taken at load.
+	for (let i = 0; i < sites.length; i++) text += "\n    at " + FunctionMethods.call(sites[i].toString, sites[i]);
 	return text;
 }
 
