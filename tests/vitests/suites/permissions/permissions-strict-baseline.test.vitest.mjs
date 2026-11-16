@@ -22,11 +22,18 @@
  * is not met is one warning naming it. `control.report()` gives the mode, the baseline and the capabilities the rules open
  * (an empty list until capabilities are built).
  *
- * On Node the baseline is `node-code-generation` (code from strings refused: `--disallow-code-generation-from-strings`)
- * and, under vitest, `vitest-plugin` (the `slothletInstanceImports()` plugin's records seen). The process flag is read
- * in child processes (`api_tests/api_test_permissions_strict/child.mjs`) with and without it; the vitest check runs
- * here, where the repository's config loads the plugin, and against stand-in probes for the plugin being absent. The
- * browser checks run in `tests/browser/permissions-baseline-*.browser.test.mjs`.
+ * On Node the baseline is `node-stack-realm` (slothlet reads call stacks from a realm of its own) and, under vitest,
+ * `vitest-plugin` (the `slothletInstanceImports()` plugin's records seen). The baseline holds only what slothlet needs to
+ * tell the caller and refuse correctly: `--disallow-code-generation-from-strings` is recommended hardening, not a check,
+ * as slothlet tells `eval` and `Function` code apart and refuses it without the flag. The process is started in child
+ * processes (`api_tests/api_test_permissions_strict/child.mjs`) with and without the flag; the vitest check runs here,
+ * where the repository's config loads the plugin, and against stand-in probes for the plugin being absent. The browser
+ * checks run in `tests/browser/permissions-baseline-*.browser.test.mjs`.
+ *
+ * Rows changed by the ruling that removed `node-code-generation` from the baseline (2026-11-16): strict without the flag
+ * starts (was: refused); under on without the flag nothing is warned (was: one warning for `node-code-generation`); the
+ * reports list `node-stack-realm` (and `vitest-plugin` under vitest) only; under vitest strict starts (was: refused);
+ * the stand-in rows drop `node-code-generation`.
  * @module tests/vitests/suites/permissions/permissions-strict-baseline
  */
 
@@ -72,10 +79,7 @@ const MET_NODE = {
 	mode: "strict",
 	baseline: {
 		met: true,
-		checks: [
-			{ id: "node-code-generation", met: true, reason: null },
-			{ id: "node-stack-realm", met: true, reason: null }
-		]
+		checks: [{ id: "node-stack-realm", met: true, reason: null }]
 	},
 	capabilities: expect.any(Array)
 };
@@ -92,9 +96,11 @@ describe("permissions mode strict > config", () => {
 });
 
 describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loading / $runtime", (config) => {
-	it("starts with code from strings refused, applies every rule, and cannot be left at runtime", () => {
-		const out = child("strict", config, NO_CODEGEN);
-		expect(out).toEqual({
+	it.each([
+		["without", []],
+		["with", NO_CODEGEN]
+	])("starts %s --disallow-code-generation-from-strings, applies every rule, and cannot be left at runtime", (_label, flags) => {
+		expect(child("strict", config, flags)).toEqual({
 			start: "started",
 			warnings: [],
 			report: MET_NODE,
@@ -108,34 +114,14 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 		});
 	});
 
-	it("refuses to start while code from strings is allowed", () => {
-		expect(child("strict", config)).toEqual({ start: "PERMISSION_BASELINE_UNMET", warnings: [] });
-	});
-
-	it("under on, warns once for each check not met and starts", () => {
+	it("under on, warns nothing without the flag, and the runtime switches work", () => {
 		const out = child("on", config);
 		expect(out.start).toBe("started");
-		expect(out.warnings).toEqual([{ code: "WARNING_PERMISSION_BASELINE_UNMET", check: "node-code-generation" }]);
-		expect(out.report).toEqual({
-			mode: "on",
-			baseline: {
-				met: false,
-				checks: [
-					{ id: "node-code-generation", met: false, reason: expect.any(String) },
-					{ id: "node-stack-realm", met: true, reason: null }
-				]
-			},
-			capabilities: expect.any(Array)
-		});
-		expect([out.good, out.settler]).toEqual(["GOOD-ONLY", "PERMISSION_DENIED"]);
-		// Under on the runtime switches work: off, then on again.
-		expect([out.disable, out.enable, out.modeAfter, out.settlerAfter]).toEqual([undefined, undefined, "on", "PERMISSION_DENIED"]);
-	});
-
-	it("under on with every check met, warns nothing", () => {
-		const out = child("on", config, NO_CODEGEN);
 		expect(out.warnings).toEqual([]);
 		expect(out.report).toEqual({ ...MET_NODE, mode: "on" });
+		expect([out.good, out.settler]).toEqual(["GOOD-ONLY", "PERMISSION_DENIED"]);
+		// Off, then on again.
+		expect([out.disable, out.enable, out.modeAfter, out.settlerAfter]).toEqual([undefined, undefined, "on", "PERMISSION_DENIED"]);
 	});
 
 	it.each(["off", "disabled"])("under %s, runs no check and warns nothing", (mode) => {
@@ -147,47 +133,32 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 
 describe("permissions mode strict > under vitest with the plugin", () => {
 	let api = null;
+	const UNDER_VITEST = {
+		met: true,
+		checks: [
+			{ id: "node-stack-realm", met: true, reason: null },
+			{ id: "vitest-plugin", met: true, reason: null }
+		]
+	};
 
 	afterEach(async () => {
 		SlothletWarning.suppressConsole = false;
-		SlothletWarning.clearCaptured?.();
 		SlothletWarning.captured.length = 0;
 		await api?.shutdown();
 		api = null;
 	});
 
-	it("refuses to start, naming the check not met", async () => {
-		const error = await slothlet({ base: BASE, permissions: { mode: "strict", rules: RULES } }).catch((caught) => caught);
-		expect(error?.code).toBe("PERMISSION_BASELINE_UNMET");
-		expect(error.message).toContain("node-code-generation");
-		expect(error.message).not.toContain("vitest-plugin");
+	it("starts under strict with the plugin's records seen", async () => {
+		api = await slothlet({ base: BASE, silent: true, permissions: { mode: "strict", rules: RULES } });
+		expect(api.slothlet.permissions.control.report()).toEqual({ mode: "strict", baseline: UNDER_VITEST, capabilities: expect.any(Array) });
+		expect(await api.good.readOnly()).toBe("GOOD-ONLY");
 	});
 
-	it("under on, reports the plugin check met and warns for the rest", async () => {
+	it("under on, reports every check met and warns nothing", async () => {
 		SlothletWarning.suppressConsole = true;
 		api = await slothlet({ base: BASE, permissions: { mode: "on", rules: RULES } });
-		expect(api.slothlet.permissions.control.report()).toEqual({
-			mode: "on",
-			baseline: {
-				met: false,
-				checks: [
-					{ id: "node-code-generation", met: false, reason: expect.any(String) },
-					{ id: "node-stack-realm", met: true, reason: null },
-					{ id: "vitest-plugin", met: true, reason: null }
-				]
-			},
-			capabilities: expect.any(Array)
-		});
-		expect(SlothletWarning.captured.map((warning) => [warning.code, warning.context.check])).toEqual([
-			["WARNING_PERMISSION_BASELINE_UNMET", "node-code-generation"]
-		]);
-	});
-
-	it("warns nothing when the instance is silent", async () => {
-		SlothletWarning.suppressConsole = true;
-		api = await slothlet({ base: BASE, silent: true, permissions: { mode: "on", rules: RULES } });
-		expect(SlothletWarning.captured).toEqual([]);
-		expect(api.slothlet.permissions.control.report().baseline.met).toBe(false);
+		expect(api.slothlet.permissions.control.report()).toEqual({ mode: "on", baseline: UNDER_VITEST, capabilities: expect.any(Array) });
+		expect(SlothletWarning.captured.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET")).toEqual([]);
 	});
 });
 
@@ -201,33 +172,30 @@ describe("permissions baseline > the checks, against stand-in probes", () => {
 		...extra
 	});
 
-	it("on Node without vitest: code from strings and the stack realm", async () => {
-		expect(await runBaseline("node", probes())).toEqual({
-			met: true,
-			checks: [
-				{ id: "node-code-generation", met: true, reason: null },
-				{ id: "node-stack-realm", met: true, reason: null }
-			]
-		});
+	it("on Node without vitest: the stack realm only, whether code from strings is refused or not", async () => {
+		for (const refused of [true, false]) {
+			expect(await runBaseline("node", probes({ codeFromStringsRefused: () => refused }))).toEqual({
+				met: true,
+				checks: [{ id: "node-stack-realm", met: true, reason: null }]
+			});
+		}
 		const noRealm = await runBaseline("node", probes({ stackRealm: () => false }));
-		expect(noRealm.met).toBe(false);
-		expect(noRealm.checks[1]).toEqual({ id: "node-stack-realm", met: false, reason: expect.any(String) });
+		expect(noRealm).toEqual({ met: false, checks: [{ id: "node-stack-realm", met: false, reason: expect.any(String) }] });
 	});
 
 	it("under vitest: the plugin's records seen, or not", async () => {
 		const seen = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => 3 }));
-		expect(seen.checks[2]).toEqual({ id: "vitest-plugin", met: true, reason: null });
+		expect(seen.checks[1]).toEqual({ id: "vitest-plugin", met: true, reason: null });
 		const absent = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => 0 }));
 		expect(absent).toEqual({
 			met: false,
 			checks: [
-				{ id: "node-code-generation", met: true, reason: null },
 				{ id: "node-stack-realm", met: true, reason: null },
 				{ id: "vitest-plugin", met: false, reason: expect.any(String) }
 			]
 		});
 		const unknown = await runBaseline("node", probes({ vitestWorker: {}, viteRecords: () => null }));
-		expect(unknown.checks[2].met).toBe(false);
+		expect(unknown.checks[1].met).toBe(false);
 	});
 
 	it("in a browser: code from strings, blob: and data: scripts", async () => {
@@ -254,11 +222,11 @@ describe("permissions baseline > the checks, against stand-in probes", () => {
 		const out = await runBaseline(
 			"node",
 			probes({
-				codeFromStringsRefused: () => {
+				stackRealm: () => {
 					throw new Error("probe");
 				}
 			})
 		);
-		expect(out.checks[0]).toEqual({ id: "node-code-generation", met: false, reason: expect.any(String) });
+		expect(out.checks[0]).toEqual({ id: "node-stack-realm", met: false, reason: expect.any(String) });
 	});
 });

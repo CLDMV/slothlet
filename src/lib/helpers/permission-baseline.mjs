@@ -23,12 +23,14 @@
  * - `csp-eval` (browser): the page refuses code made from a string (`Function`, and so `eval`): its Content Security
  *   Policy has no `'unsafe-eval'`.
  * - `csp-blob-script` and `csp-data-script` (browser): the page refuses scripts from `blob:` and `data:` URLs.
- * - `node-code-generation` (Node): the process refuses code made from a string
- *   (`--disallow-code-generation-from-strings`).
  * - `node-stack-realm` (Node): slothlet reads call stacks from a realm of its own, so what the global `Error` and its
  *   stack settings hold does not change whose code an access is taken for.
  * - `vitest-plugin` (Node, under vitest): the `slothletInstanceImports()` plugin is loaded: its records of who loaded
  *   each file have reached slothlet.
+ *
+ * The baseline holds only what slothlet needs to tell the caller and refuse correctly. In Node, slothlet tells `eval`
+ * and `Function` code apart and refuses it without help, so `--disallow-code-generation-from-strings` is recommended
+ * hardening, not a check.
  *
  * A check passed means only that what slothlet could test passed. Code that ran before slothlet (the page's own
  * scripts, an extension, a compromised dependency) can have changed what the checks read.
@@ -184,14 +186,6 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			)
 		);
 	} else {
-		listPush(
-			checks,
-			await check(
-				"node-code-generation",
-				() => probes.codeFromStringsRefused(),
-				() => translate("BASELINE_NODE_CODE_GENERATION_ALLOWED")
-			)
-		);
 		listPush(
 			checks,
 			await check(

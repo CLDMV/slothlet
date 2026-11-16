@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "страница разрешает создавать код из строк: её Content Security Policy разрешает 'unsafe-eval' или отсутствует.",
 		"BASELINE_CSP_BLOB_ALLOWED": "страница выполняет скрипты с адресов blob:: её Content Security Policy разрешает их или отсутствует.",
 		"BASELINE_CSP_DATA_ALLOWED": "страница выполняет скрипты с адресов data:: её Content Security Policy разрешает их или отсутствует.",
-		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "процесс разрешает создавать код из строк: запустите Node с флагом --disallow-code-generation-from-strings.",
 		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet не смог создать собственный realm для чтения стеков вызовов.",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина slothletInstanceImports() от slothlet в конфигурации vitest."
 	},

@@ -78,18 +78,19 @@ Rules decide what one module may do with another. Some protections need more tha
 
 ### The baseline
 
-With permissions `"on"` or `"strict"`, an instance runs these checks as it starts, before any module's code loads. Each one tries the thing and sees whether it is refused, using the built-ins as slothlet loaded them:
+With permissions `"on"` or `"strict"`, an instance runs these checks as it starts, before any module's code loads. The baseline holds only what slothlet needs to tell the caller and refuse correctly. Each check tries the thing and sees whether it is refused, using the built-ins as slothlet loaded them:
 
-| Check                  | Where              | Met when                                                                                                                 | What it rules out                                                                                                                                 |
-| ---------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `csp-eval`             | browser            | Building a `Function` from a string throws `EvalError`: the page's Content Security Policy has no `'unsafe-eval'`.       | Module code making code from a string with `eval` and the `Function` constructors, which nothing else can stop (direct `eval` cannot be patched). |
-| `csp-blob-script`      | browser            | `import()` of a module from a `blob:` URL is refused.                                                                    | Code from a `blob:` URL, which a browser may report under any name it carries.                                                                    |
-| `csp-data-script`      | browser            | `import()` of a module from a `data:` URL is refused.                                                                    | The same for `data:` URLs.                                                                                                                        |
-| `node-code-generation` | Node               | Building a `Function` from a string throws `EvalError`: the process runs with `--disallow-code-generation-from-strings`. | Module code making code from a string with `eval` and `new Function` (`vm` is not covered by the flag; see [Capabilities](#capabilities)).        |
-| `node-stack-realm`     | Node               | slothlet reads call stacks from a realm of its own (a `vm` context made when it loads).                                  | A module changing the global `Error` or its stack settings, or fixing them in place, to change or stop the reads.                                 |
-| `vitest-plugin`        | Node, under vitest | The `slothletInstanceImports()` vite plugin is loaded: records its virtual modules make have reached slothlet.           | Host files vite transforms being taken for code of no file ([TESTING.md](./TESTING.md)).                                                          |
+| Check              | Where              | Met when                                                                                                           | What it rules out                                                                                                                                 |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `csp-eval`         | browser            | Building a `Function` from a string throws `EvalError`: the page's Content Security Policy has no `'unsafe-eval'`. | Module code making code from a string with `eval` and the `Function` constructors, which nothing else can stop (direct `eval` cannot be patched). |
+| `csp-blob-script`  | browser            | `import()` of a module from a `blob:` URL is refused.                                                              | Code from a `blob:` URL, which a browser may report under any name it carries.                                                                    |
+| `csp-data-script`  | browser            | `import()` of a module from a `data:` URL is refused.                                                              | The same for `data:` URLs.                                                                                                                        |
+| `node-stack-realm` | Node               | slothlet reads call stacks from a realm of its own (a `vm` context made when it loads).                            | A module changing the global `Error` or its stack settings, or fixing them in place, to change or stop the reads.                                 |
+| `vitest-plugin`    | Node, under vitest | The `slothletInstanceImports()` vite plugin is loaded: records its virtual modules make have reached slothlet.     | Host files vite transforms being taken for code of no file ([TESTING.md](./TESTING.md)).                                                          |
 
-A page sets the policy with a `Content-Security-Policy` header (or a `<meta http-equiv>` before slothlet loads), for example `script-src 'self'`; a nonce or hash for its own inline scripts keeps them working. In Node, start the process with `node --disallow-code-generation-from-strings`.
+A page sets the policy with a `Content-Security-Policy` header (or a `<meta http-equiv>` before slothlet loads), for example `script-src 'self'`; a nonce or hash for its own inline scripts keeps them working.
+
+**Recommended in Node, not checked:** `node --disallow-code-generation-from-strings`. slothlet tells `eval` and `Function` code apart in Node and refuses it as the rules say without the flag, so it is not part of the baseline. The flag is extra hardening: it refuses code made from strings in the whole process, slothlet's checks aside.
 
 Under `"on"`, each check that is not met is one `WARNING_PERMISSION_BASELINE_UNMET` warning naming it (none when the instance is `silent`), and the instance starts. Under `"strict"`, any check not met refuses the start with `PERMISSION_BASELINE_UNMET`, naming every check that failed. Under `"off"` and `"disabled"` no check runs. A reload or restart runs them again.
 
@@ -113,8 +114,7 @@ While permissions are on, built-in capabilities of the platform are refused to m
 api.slothlet.permissions.control.report();
 // {
 //   mode: "on",
-//   baseline: { met: false, checks: [
-//     { id: "node-code-generation", met: false, reason: "the process lets code be made from strings: …" },
+//   baseline: { met: true, checks: [
 //     { id: "node-stack-realm", met: true, reason: null }
 //   ] },
 //   capabilities: [{ name: "code", allowed: [] }, …]

@@ -376,13 +376,14 @@ The `permissions` block turns the permission system on; every option it takes is
 
 ### `permissions.mode: "strict"`
 
-`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; in Node, `--disallow-code-generation-from-strings` and slothlet's own stack realm; under vitest, the `slothletInstanceImports()` plugin. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
+`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; in Node, slothlet's own stack realm; under vitest, the `slothletInstanceImports()` plugin. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
 
 ```javascript
-// node --disallow-code-generation-from-strings app.mjs
 const api = await slothlet({ dir: "./api", permissions: { mode: "strict", rules } });
 api.slothlet.permissions.control.report().baseline.met; // true
 ```
+
+In Node, `--disallow-code-generation-from-strings` is recommended extra hardening: slothlet refuses `eval` and `Function` code as the rules say without it, so it is not a check, but the flag refuses code made from strings in the whole process.
 
 A met baseline means only that the checks slothlet can make passed. Code that ran before slothlet can have replaced globals or faked what the checks read, and a browser can never be fully trusted. The checks, what each rules out, and the known limits are in [PERMISSIONS.md → Strict mode, the baseline, and capabilities](./PERMISSIONS.md#strict-mode-the-baseline-and-capabilities).
 

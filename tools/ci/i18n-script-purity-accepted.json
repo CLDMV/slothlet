@@ -18,7 +18,6 @@
 		"पेज स्ट्रिंग से कोड बनाने देता है: उसकी Content Security Policy 'unsafe-eval' की अनुमति देती है, या कोई नीति नहीं है।",
 		"पेज blob: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
 		"पेज data: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
-		"प्रोसेस स्ट्रिंग से कोड बनाने देता है: Node को --disallow-code-generation-from-strings के साथ शुरू करें।",
 		"slothlet कॉल स्टैक पढ़ने के लिए अपना realm नहीं बना सका।",
 		"vitest कॉन्फ़िग में slothlet के slothletInstanceImports() प्लगइन के बिना vitest के तहत चल रहा है।",
 		"हर जाँच इस बारे में एक तथ्य है कि होस्ट slothlet को कैसे चलाता है; हर जाँच को क्या चाहिए, यह docs/PERMISSIONS.md में है। मोड \"strict\" में इंस्टेंस शुरू नहीं होता।"
@@ -42,7 +41,6 @@
 		"このページは文字列からのコード生成を許可しています。Content Security Policy が 'unsafe-eval' を許可しているか、ポリシーがありません。",
 		"このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
-		"このプロセスは文字列からのコード生成を許可しています。Node を --disallow-code-generation-from-strings 付きで起動してください。",
 		"slothlet はコールスタックを読むための独自の realm を作れませんでした。",
 		"vitest の設定に slothlet の slothletInstanceImports() プラグインがないまま vitest で実行しています。",
 		"各チェックはホストが slothlet をどう実行しているかについての事実です。各チェックに必要なことは docs/PERMISSIONS.md にあります。モード \"strict\" ではインスタンスは開始しません。"
@@ -66,7 +64,6 @@
 		"페이지가 문자열로 코드를 만드는 것을 허용합니다. Content Security Policy가 'unsafe-eval'을 허용하거나 정책이 없습니다.",
 		"페이지가 blob: URL의 스크립트를 실행합니다. Content Security Policy가 이를 허용하거나 정책이 없습니다.",
 		"페이지가 data: URL의 스크립트를 실행합니다. Content Security Policy가 이를 허용하거나 정책이 없습니다.",
-		"프로세스가 문자열로 코드를 만드는 것을 허용합니다. Node를 --disallow-code-generation-from-strings로 시작하세요.",
 		"slothlet이 호출 스택을 읽을 자체 realm을 만들지 못했습니다.",
 		"vitest 설정에 slothlet의 slothletInstanceImports() 플러그인 없이 vitest에서 실행 중입니다.",
 		"각 검사는 호스트가 slothlet을 어떻게 실행하는지에 대한 사실입니다. 각 검사에 필요한 것은 docs/PERMISSIONS.md에 있습니다. 모드 \"strict\"에서는 인스턴스가 시작되지 않습니다."
@@ -90,7 +87,6 @@
 		"страница разрешает создавать код из строк: её Content Security Policy разрешает 'unsafe-eval' или отсутствует.",
 		"страница выполняет скрипты с адресов blob:: её Content Security Policy разрешает их или отсутствует.",
 		"страница выполняет скрипты с адресов data:: её Content Security Policy разрешает их или отсутствует.",
-		"процесс разрешает создавать код из строк: запустите Node с флагом --disallow-code-generation-from-strings.",
 		"slothlet не смог создать собственный realm для чтения стеков вызовов.",
 		"запуск под vitest без плагина slothletInstanceImports() от slothlet в конфигурации vitest.",
 		"Каждая проверка — это факт о том, как хост запускает slothlet; в docs/PERMISSIONS.md указано, что нужно каждой. В режиме \"strict\" экземпляр не запустился бы."
@@ -114,7 +110,6 @@
 		"该页面允许从字符串生成代码：其 Content Security Policy 允许 'unsafe-eval'，或者没有策略。",
 		"该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
-		"该进程允许从字符串生成代码：请使用 --disallow-code-generation-from-strings 启动 Node。",
 		"slothlet 无法创建自己的 realm 来读取调用栈。",
 		"在 vitest 下运行，但 vitest 配置中没有 slothlet 的 slothletInstanceImports() 插件。",
 		"每项检查都是关于宿主如何运行 slothlet 的事实；docs/PERMISSIONS.md 列出了每项检查的要求。在模式 \"strict\" 下实例不会启动。"

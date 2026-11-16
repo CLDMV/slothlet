@@ -567,7 +567,6 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "the page lets code be made from strings: its Content Security Policy allows 'unsafe-eval', or it has none.",
 		"BASELINE_CSP_BLOB_ALLOWED": "the page runs scripts from blob: URLs: its Content Security Policy allows them, or it has none.",
 		"BASELINE_CSP_DATA_ALLOWED": "the page runs scripts from data: URLs: its Content Security Policy allows them, or it has none.",
-		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "the process lets code be made from strings: start Node with --disallow-code-generation-from-strings.",
 		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet could not make a realm of its own to read call stacks from.",
 		"BASELINE_VITEST_PLUGIN_ABSENT": "running under vitest without slothlet's slothletInstanceImports() plugin in the vitest config."
 	},
