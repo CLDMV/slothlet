@@ -105,7 +105,7 @@ export type SlothletOptions = {
      */
     context?: object | null | undefined;
     /**
-     * - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
+     * - Object whose properties are merged directly onto the root API and, with `diagnostics: true`, readable as `api.slothlet.diag.reference`.
      */
     reference?: object | null | undefined;
     /**
@@ -391,7 +391,6 @@ export type SlothletAPI = {
         };
         context: {
             get: Function;
-            inspect: () => Object;
             run: Function;
             scope: Function;
             set: Function;
@@ -509,10 +508,6 @@ export type SlothletAPI = {
         owner: {
             get: Function;
         };
-        ownership: {
-            get: Function;
-            unregister: Function;
-        };
         permissions: {
             control: {
                 enabled: boolean;
@@ -533,7 +528,6 @@ export type SlothletAPI = {
         };
         lockCaller: Function;
         bind: Function;
-        reference?: object | undefined;
         reload: Function;
         restart: Function;
         run: Function;

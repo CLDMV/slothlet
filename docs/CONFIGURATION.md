@@ -354,7 +354,7 @@ See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for per-request context iso
 **Type**: `object` | `null`
 **Default**: `null`
 
-An object whose properties are merged directly into the root of the built API and also made accessible as `api.slothlet.reference`. Commonly used to expose the API object itself back through `reference` so modules can call peer methods without circular imports.
+An object whose properties are merged directly into the root of the built API and, when `diagnostics: true` is set, readable as `api.slothlet.diag.reference`. Commonly used to expose the API object itself back through `reference` so modules can call peer methods without circular imports.
 
 ```javascript
 const api = await slothlet({
