@@ -29,9 +29,12 @@ import {
 	matchAllOf,
 	RegExp,
 	RegExpMethods,
+	regExpReplace,
+	regExpSplit,
 	splitText,
 	String,
-	StringMethods
+	StringMethods,
+	textReplace
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 // ============================================================================
@@ -71,17 +74,13 @@ export class Sanitize extends ComponentBase {
 		// **STRING** requires surrounding characters (positive lookbehind/ahead)
 		if (StringMethods.startsWith(pattern, "**") && StringMethods.endsWith(pattern, "**") && pattern.length > 4) {
 			const innerString = StringMethods.slice(pattern, 2, -2);
-			const escapedString = RegExpMethods.symbolReplace(/[.+^${}()|[\]\\*?]/g, innerString, "\\$&");
+			const escapedString = regExpReplace(/[.+^${}()|[\]\\*?]/g, innerString, "\\$&");
 			const flags = caseSensitive ? "" : "i";
 			return new RegExp(`(?<=.)${escapedString}(?=.)`, flags);
 		}
 
 		// Standard glob: * → .*, ? → .
-		const regexPattern = RegExpMethods.symbolReplace(
-			/\?/g,
-			RegExpMethods.symbolReplace(/\*/g, RegExpMethods.symbolReplace(/[.+^${}()|[\]\\]/g, pattern, "\\$&"), ".*"),
-			"."
-		);
+		const regexPattern = regExpReplace(/\?/g, regExpReplace(/\*/g, regExpReplace(/[.+^${}()|[\]\\]/g, pattern, "\\$&"), ".*"), ".");
 
 		const flags = caseSensitive ? "" : "i";
 		return new RegExp(`^${regexPattern}$`, flags);
@@ -116,7 +115,7 @@ export class Sanitize extends ComponentBase {
 	 * @returns {string[]} Array of literal segments
 	 */
 	#extractPatternLiterals(pattern) {
-		return filterList(RegExpMethods.symbolSplit(/[*?]+/, pattern), Boolean);
+		return filterList(regExpSplit(/[*?]+/, pattern), Boolean);
 	}
 
 	// ========================================================================
@@ -179,7 +178,7 @@ export class Sanitize extends ComponentBase {
 					for (let ofIndex = 0, ofList = literals; ofIndex < ofList.length; ofIndex++) {
 						const literal = ofList[ofIndex];
 						// Clean literal but also trim underscores at boundaries since we're matching sub-segments
-						const cleanLiteral = RegExpMethods.symbolReplace(/^_+|_+$/g, RegExpMethods.symbolReplace(/[^A-Za-z0-9_$]/g, literal, ""), "");
+						const cleanLiteral = regExpReplace(/^_+|_+$/g, regExpReplace(/[^A-Za-z0-9_$]/g, literal, ""), "");
 						if (cleanLiteral && StringMethods.toLowerCase(segment) === StringMethods.toLowerCase(cleanLiteral)) {
 							return ArrayMethods.includes(upperRules, pattern) ? StringMethods.toUpperCase(segment) : StringMethods.toLowerCase(segment);
 						}
@@ -219,7 +218,7 @@ export class Sanitize extends ComponentBase {
 			// **STRING** requires surrounding characters (positive lookbehind/ahead)
 			if (StringMethods.startsWith(pattern, "**") && StringMethods.endsWith(pattern, "**") && pattern.length > 4) {
 				const innerString = StringMethods.slice(pattern, 2, -2);
-				const innerRegex = new RegExp(RegExpMethods.symbolReplace(/[.+^${}()|[\]\\*?]/g, innerString, "\\$&"), "gi");
+				const innerRegex = new RegExp(regExpReplace(/[.+^${}()|[\]\\*?]/g, innerString, "\\$&"), "gi");
 				const matches = matchAllOf(result, innerRegex);
 
 				for (let ofIndex = 0, ofList = matches; ofIndex < ofList.length; ofIndex++) {
@@ -242,9 +241,9 @@ export class Sanitize extends ComponentBase {
 				const literalParts = filterList(splitText(pattern, "*"), Boolean);
 				for (let i = 0; i < literalParts.length; i++) {
 					const literal = literalParts[i];
-					const literalRegex = new RegExp(RegExpMethods.symbolReplace(/[.+^${}()|[\]\\]/g, literal, "\\$&"), "gi");
+					const literalRegex = new RegExp(regExpReplace(/[.+^${}()|[\]\\]/g, literal, "\\$&"), "gi");
 					const replacement = toUpper ? StringMethods.toUpperCase(literal) : StringMethods.toLowerCase(literal);
-					result = RegExpMethods.symbolReplace(literalRegex, result, replacement);
+					result = regExpReplace(literalRegex, result, replacement);
 				}
 			}
 		};
@@ -347,14 +346,14 @@ export class Sanitize extends ComponentBase {
 
 		// Split into segments at hyphens and non-identifier characters (NOT underscores)
 		// These are "primary segments" that will be camelCased together
-		let primarySegments = filterList(RegExpMethods.symbolSplit(/[-]+|[^A-Za-z0-9_$]+/, originalString), Boolean);
+		let primarySegments = filterList(regExpSplit(/[-]+|[^A-Za-z0-9_$]+/, originalString), Boolean);
 
 		// Edge case: empty result
 		if (primarySegments.length === 0) return "_";
 
 		// Ensure first segment starts with valid identifier character
 		while (primarySegments.length && !(RegExpMethods.exec(/^[A-Za-z_$]/, primarySegments[0][0]) !== null)) {
-			primarySegments[0] = RegExpMethods.symbolReplace(/^[^A-Za-z_$]+/, primarySegments[0], "");
+			primarySegments[0] = regExpReplace(/^[^A-Za-z_$]+/, primarySegments[0], "");
 			if (!primarySegments[0]) ArrayMethods.shift(primarySegments);
 		}
 		if (primarySegments.length === 0) return "_";
@@ -367,7 +366,7 @@ export class Sanitize extends ComponentBase {
 		const lowerRuleApplied = [];
 		const processedPrimarySegments = mapList(primarySegments, (primarySeg, primaryIdx) => {
 			// Split by underscores, capturing the separators to preserve exact count
-			const parts = RegExpMethods.symbolSplit(/(_+)/, primarySeg);
+			const parts = regExpSplit(/(_+)/, primarySeg);
 
 			// Process only the non-separator parts (odd indices are separators)
 			const processedParts = mapList(parts, (part, partIdx) => {
@@ -376,7 +375,7 @@ export class Sanitize extends ComponentBase {
 				if (!part) return part;
 
 				// Clean and process sub-segment
-				const cleanSeg = RegExpMethods.symbolReplace(/[^A-Za-z0-9_$]/g, part, "");
+				const cleanSeg = regExpReplace(/[^A-Za-z0-9_$]/g, part, "");
 
 				// Apply segment rules (without camelCase - that happens at primary level)
 				const config = { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules };
@@ -392,11 +391,7 @@ export class Sanitize extends ComponentBase {
 							const literals = this.#extractPatternLiterals(pattern);
 							for (let ofIndex = 0, ofList = literals; ofIndex < ofList.length; ofIndex++) {
 								const literal = ofList[ofIndex];
-								const cleanLiteral = RegExpMethods.symbolReplace(
-									/^_+|_+$/g,
-									RegExpMethods.symbolReplace(/[^A-Za-z0-9_$]/g, literal, ""),
-									""
-								);
+								const cleanLiteral = regExpReplace(/^_+|_+$/g, regExpReplace(/[^A-Za-z0-9_$]/g, literal, ""), "");
 								if (cleanLiteral && StringMethods.toLowerCase(cleanSeg) === StringMethods.toLowerCase(cleanLiteral)) {
 									return true;
 								}
@@ -470,7 +465,7 @@ export class Sanitize extends ComponentBase {
 
 		// Join primary segments (no delimiter - camelCase)
 		let result = ArrayMethods.join(camelCasedSegments, "");
-		result = RegExpMethods.symbolReplace(/[^A-Za-z0-9_$]/g, result, "");
+		result = regExpReplace(/[^A-Za-z0-9_$]/g, result, "");
 
 		return result;
 	}
@@ -484,9 +479,9 @@ export class Sanitize extends ComponentBase {
 	 */
 	getModuleId(filePath, baseDir) {
 		// Remove base directory and extension
-		let relative = RegExpMethods.symbolReplace(/\\/g, StringMethods.replace(filePath, baseDir, ""), "/");
-		relative = RegExpMethods.symbolReplace(/^\//, relative, ""); // Remove leading slash
-		relative = RegExpMethods.symbolReplace(/\.(mjs|cjs|js)$/, relative, ""); // Remove extension
+		let relative = regExpReplace(/\\/g, textReplace(filePath, baseDir, ""), "/");
+		relative = regExpReplace(/^\//, relative, ""); // Remove leading slash
+		relative = regExpReplace(/\.(mjs|cjs|js)$/, relative, ""); // Remove extension
 
 		return relative;
 	}

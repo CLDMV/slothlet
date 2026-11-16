@@ -49,7 +49,10 @@ import {
 	promiseAllSettled,
 	Reflect,
 	RegExp,
+	regExpMatch,
 	RegExpMethods,
+	regExpReplace,
+	regExpSearch,
 	Set,
 	setFrom,
 	SetMethods,
@@ -427,7 +430,7 @@ function sweepStaleSlothletCache(projectRoot) {
 		await promiseAllSettled(
 			mapList(entries, async (entry) => {
 				if (!entry.isDirectory()) return;
-				const match = RegExpMethods.symbolMatch(/^(\d+)-/, entry.name);
+				const match = regExpMatch(/^(\d+)-/, entry.name);
 				if (!match) return;
 				const pid = Number(match[1]);
 				if (pid === currentPid || isProcessAlive(pid)) return;
@@ -723,7 +726,7 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 * @returns {string} The replacement specifier
 	 */
 	const handle = (specifier) => {
-		const suffixIdx = RegExpMethods.symbolSearch(/[?#]/, specifier);
+		const suffixIdx = regExpSearch(/[?#]/, specifier);
 		const pathPart = suffixIdx === -1 ? specifier : StringMethods.slice(specifier, 0, suffixIdx);
 		const suffix = suffixIdx === -1 ? "" : StringMethods.slice(specifier, suffixIdx);
 		return resolveSpecifier(path.resolve(sourceDir, pathPart), suffix, specifier);
@@ -739,7 +742,7 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 */
 	const rewriteWith = (text, regex, replacer) => {
 		const mask = maskStringsAndComments(text);
-		return RegExpMethods.symbolReplace(regex, text, (...args) => {
+		return regExpReplace(regex, text, (...args) => {
 			// String.prototype.replace passes (match, ...groups, offset, string);
 			// with no named groups, the offset is the second-to-last argument.
 			const offset = args[args.length - 2];

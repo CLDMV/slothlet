@@ -84,7 +84,12 @@ const { apply } = NativeReflect;
 const getPrototypeOfNative = NativeReflect.getPrototypeOf;
 const globalThisMap = globalThis.Map;
 const globalThisSet = globalThis.Set;
+const ArrayFrom = globalThis.Array.from;
 const globalThisRegExp = globalThis.RegExp;
+const NativeString = globalThis.String;
+const NativeNumber = globalThis.Number;
+const globalThisTypeError = globalThis.TypeError;
+const AsyncGeneratorPrototype = getPrototypeOfNative(getPrototypeOfNative((async function* () {})()));
 const GeneratorPrototype = getPrototypeOfNative(getPrototypeOfNative((function* () {})()));
 
 /**
@@ -1224,16 +1229,32 @@ class SafeIterator {
 	#next;
 	/** @type {Function|null} */
 	#return;
+	/** @type {Function|null} */
+	#throw;
 
 	/**
 	 * @param {object} iterator - The iterator the language made.
 	 * @param {Function} next - Its `next`, taking the iterator first.
 	 * @param {Function|null} [stop] - Its `return`, taking the iterator first, where stopping early must close it.
+	 * @param {Function|null} [raise] - Its `throw`, taking the iterator first, for a generator `yield*` hands a throw to.
 	 */
-	constructor(iterator, next, stop = null) {
+	constructor(iterator, next, stop = null, raise = null) {
 		this.#iterator = iterator;
 		this.#next = next;
 		this.#return = stop;
+		this.#throw = raise;
+	}
+
+	/**
+	 * Throw into the generator, as `yield*` does when the generator delegating to it is thrown into. An iterator with no
+	 * `throw` of its own is closed and the error is a `TypeError`, as the language does for one.
+	 * @param {unknown} error - What is thrown.
+	 * @returns {{value: unknown, done: boolean}} The step the generator takes.
+	 */
+	throw(error) {
+		if (this.#throw) return this.#throw(this.#iterator, error);
+		this.return();
+		throw new globalThisTypeError("The iterator does not provide a 'throw' method");
 	}
 
 	/**
@@ -1332,7 +1353,105 @@ export function setValues(set) {
  * for (const frame of generatorSteps(frames())) use(frame);
  */
 export function generatorSteps(generator) {
-	return new SafeIterator(generator, IteratorMethods.generatorNext, IteratorMethods.generatorReturn);
+	return new SafeIterator(generator, IteratorMethods.generatorNext, IteratorMethods.generatorReturn, IteratorMethods.generatorThrow);
+}
+
+/**
+ * An async iterator over an async generator, stepped with the async generator functions taken at load, for
+ * `for await…of` and `yield*` in an async generator.
+ * @private
+ */
+class SafeAsyncIterator {
+	/** @type {object} */
+	#generator;
+
+	/**
+	 * @param {object} generator - The async generator.
+	 */
+	constructor(generator) {
+		this.#generator = generator;
+	}
+
+	/**
+	 * The next step.
+	 * @param {unknown} [value] - What the step is sent.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The step.
+	 */
+	next(value) {
+		return ASYNC_GENERATOR_NEXT(this.#generator, value);
+	}
+
+	/**
+	 * Stop early, closing the generator.
+	 * @param {unknown} [value] - The value to finish with.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The last step.
+	 */
+	return(value) {
+		return ASYNC_GENERATOR_RETURN(this.#generator, value);
+	}
+
+	/**
+	 * Throw into the generator.
+	 * @param {unknown} error - What is thrown.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The step it takes.
+	 */
+	throw(error) {
+		return ASYNC_GENERATOR_THROW(this.#generator, error);
+	}
+
+	/**
+	 * Itself, so `for await…of` and `yield*` can walk it.
+	 * @returns {SafeAsyncIterator} This iterator.
+	 */
+	[NativeSymbol.asyncIterator]() {
+		return this;
+	}
+}
+const ASYNC_GENERATOR_NEXT = uncurryThis(AsyncGeneratorPrototype.next);
+const ASYNC_GENERATOR_RETURN = uncurryThis(AsyncGeneratorPrototype.return);
+const ASYNC_GENERATOR_THROW = uncurryThis(AsyncGeneratorPrototype.throw);
+NativeReflect.setPrototypeOf(SafeAsyncIterator.prototype, null);
+freeze(SafeAsyncIterator.prototype);
+freeze(SafeAsyncIterator);
+
+/**
+ * The steps of an async generator, for `for await…of` or `yield*` in an async generator, stepped (and closed or thrown
+ * into) with the async generator functions taken at load.
+ * @param {AsyncGenerator<unknown>} generator - The async generator.
+ * @returns {AsyncIterable<unknown>} Its values.
+ * @internal
+ * @example
+ * for await (const chunk of asyncGeneratorSteps(read())) use(chunk);
+ */
+export function asyncGeneratorSteps(generator) {
+	return new SafeAsyncIterator(generator);
+}
+
+/**
+ * The elements of an array, for `for…of`, stepped with the array iterator's `next` taken at load.
+ * @param {ArrayLike<unknown>} list - The array.
+ * @returns {Iterable<unknown>} Its elements.
+ * @internal
+ * @example
+ * for (const frame of listSteps(frames)) use(frame);
+ */
+export function listSteps(list) {
+	return new SafeIterator(ArrayMethods.values(list), IteratorMethods.arrayNext);
+}
+
+/**
+ * The values of something module code supplied, walked with its own iterator as plain JavaScript would (a set-like a
+ * caller hands a `Set` method), optionally mapped. Only for values whose own iteration is the behaviour asked for;
+ * slothlet's own collections are walked with the helpers above.
+ * @param {Iterable<unknown>} iterable - The value.
+ * @param {function(unknown, number): unknown} [map] - Called with each value and its index.
+ * @returns {Array<unknown>} The values.
+ * @internal
+ * @example
+ * listFromIterable(setLike, (entry) => held(entry));
+ */
+export function listFromIterable(iterable, map) {
+	return map === undefined ? ArrayFrom(iterable) : ArrayFrom(iterable, map);
 }
 
 /**
@@ -1498,25 +1617,298 @@ export function mapEntriesToArray(map) {
  * `String.prototype`, where a module can put one.) An empty separator splits into code units.
  * @param {string} text - The text.
  * @param {string} separator - What to split at.
+ * @param {number} [limit] - The most pieces to give.
  * @returns {string[]} The pieces.
  * @internal
  * @example
  * splitText("a.b.c", "."); // ["a", "b", "c"]
  */
-export function splitText(text, separator) {
+export function splitText(text, separator, limit = 4294967295) {
 	const out = [];
+	if (limit === 0) return out;
 	if (separator === "") {
-		for (let i = 0; i < text.length; i++) out[i] = text[i];
+		for (let i = 0; i < text.length && out.length < limit; i++) out[i] = text[i];
 		return out;
 	}
 	let from = 0;
 	let at;
 	while ((at = StringMethods.indexOf(text, separator, from)) !== -1) {
 		out[out.length] = StringMethods.slice(text, from, at);
+		if (out.length >= limit) return out;
 		from = at + separator.length;
 	}
 	out[out.length] = StringMethods.slice(text, from);
 	return out;
+}
+
+/**
+ * What a replacement string stands for at one match, as `String.prototype.replace` reads it: `$$`, `$&`, `` $` ``,
+ * `$'`, `$1`…`$99` and `$<name>`.
+ * @param {string} replacement - The replacement string.
+ * @param {Array<string|undefined>} match - The match and its captures.
+ * @param {string} text - The text searched.
+ * @param {number} position - Where the match starts.
+ * @param {object|undefined} groups - The named captures.
+ * @returns {string} The text to put in.
+ * @private
+ */
+function substitution(replacement, match, text, position, groups) {
+	let out = "";
+	const captures = match.length - 1;
+	for (let i = 0; i < replacement.length; i++) {
+		const char = replacement[i];
+		if (char !== "$" || i + 1 >= replacement.length) {
+			out += char;
+			continue;
+		}
+		const next = replacement[i + 1];
+		if (next === "$") {
+			out += "$";
+			i++;
+		} else if (next === "&") {
+			out += match[0];
+			i++;
+		} else if (next === "`") {
+			out += StringMethods.slice(text, 0, position);
+			i++;
+		} else if (next === "'") {
+			out += StringMethods.slice(text, position + match[0].length);
+			i++;
+		} else if (next >= "0" && next <= "9") {
+			const two =
+				i + 2 < replacement.length && replacement[i + 2] >= "0" && replacement[i + 2] <= "9" ? NativeNumber(next + replacement[i + 2]) : -1;
+			const one = NativeNumber(next);
+			if (two >= 1 && two <= captures) {
+				out += match[two] ?? "";
+				i += 2;
+			} else if (one >= 1 && one <= captures) {
+				out += match[one] ?? "";
+				i++;
+			} else out += "$";
+		} else if (next === "<" && groups !== undefined) {
+			const close = StringMethods.indexOf(replacement, ">", i + 2);
+			if (close === -1) out += "$";
+			else {
+				const value = groups[StringMethods.slice(replacement, i + 2, close)];
+				out += value === undefined ? "" : NativeString(value);
+				i = close;
+			}
+		} else out += "$";
+	}
+	return out;
+}
+
+/**
+ * The matches a replace or a split walks: every match from the start for a global expression, otherwise the first from
+ * `lastIndex` for a sticky one and from the start for any other, each found with the `exec` taken at load. A global or
+ * sticky expression's `lastIndex` ends as `String.prototype.replace` leaves it.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {Array<RegExpExecArray>} The matches.
+ * @private
+ */
+function matchesOf(regexp, text) {
+	const out = [];
+	if (!RegExpMethods.global(regexp)) {
+		if (!RegExpMethods.sticky(regexp)) regexp.lastIndex = 0;
+		const match = RegExpMethods.exec(regexp, text);
+		if (match !== null) out[0] = match;
+		return out;
+	}
+	const unicode = RegExpMethods.unicode(regexp) || (RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	regexp.lastIndex = 0;
+	let match;
+	while ((match = RegExpMethods.exec(regexp, text)) !== null) {
+		out[out.length] = match;
+		if (match[0] === "") {
+			const at = regexp.lastIndex;
+			const code = unicode ? StringMethods.codePointAt(text, at) : undefined;
+			regexp.lastIndex = at + (code !== undefined && code > 0xffff ? 2 : 1);
+		}
+	}
+	return out;
+}
+
+/**
+ * `text` with the matches of a regular expression replaced, as `text.replace(regexp, replacement)` (or `replaceAll`)
+ * gives, found with the `exec` taken at load. (`text.replace(regexp, …)` reads `Symbol.replace`, `flags` and `exec` off
+ * the expression's prototype, where module code can replace them.)
+ * @param {RegExp} regexp - The expression; a global one replaces every match.
+ * @param {string} text - The text.
+ * @param {string|Function} replacement - The replacement string (with `$` patterns), or a function called as
+ *   `String.prototype.replace` calls one.
+ * @returns {string} The new text.
+ * @internal
+ * @example
+ * regExpReplace(/\./g, "a.b", "/"); // "a/b"
+ */
+export function regExpReplace(regexp, text, replacement) {
+	text = NativeString(text);
+	const matches = matchesOf(regexp, text);
+	if (matches.length === 0) return text;
+	let out = "";
+	let from = 0;
+	for (let m = 0; m < matches.length; m++) {
+		const match = matches[m];
+		const position = match.index;
+		let piece;
+		if (typeof replacement === "function") {
+			const args = [];
+			for (let i = 0; i < match.length; i++) args[i] = match[i];
+			args[args.length] = position;
+			args[args.length] = text;
+			if (match.groups !== undefined) args[args.length] = match.groups;
+			piece = NativeString(apply(replacement, undefined, args));
+		} else piece = substitution(NativeString(replacement), match, text, position, match.groups);
+		out += StringMethods.slice(text, from, position) + piece;
+		from = position + match[0].length;
+	}
+	return out + StringMethods.slice(text, from);
+}
+
+/**
+ * `text` split at the matches of a regular expression, captures included, as `text.split(regexp, limit)` gives, found
+ * with the `exec` taken at load on a sticky copy of the expression.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @param {number} [limit] - The most pieces to give.
+ * @returns {string[]} The pieces.
+ * @internal
+ * @example
+ * regExpSplit(/[,;]/, "a,b;c"); // ["a", "b", "c"]
+ */
+export function regExpSplit(regexp, text, limit = 4294967295) {
+	text = NativeString(text);
+	const out = [];
+	if (limit === 0) return out;
+	// The language's own algorithm: a sticky copy tried at each position in turn.
+	const unicode = RegExpMethods.unicode(regexp) || (RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	const splitter = new globalThisRegExp(RegExpMethods.source(regexp), flagsOf(regexp, "y", "g"));
+	const size = text.length;
+	if (size === 0) {
+		splitter.lastIndex = 0;
+		if (RegExpMethods.exec(splitter, text) === null) out[0] = text;
+		return out;
+	}
+	const advance = (index) => {
+		if (!unicode || index + 1 >= size) return index + 1;
+		const code = StringMethods.codePointAt(text, index);
+		return index + (code !== undefined && code > 0xffff ? 2 : 1);
+	};
+	let p = 0;
+	let q = 0;
+	while (q < size) {
+		splitter.lastIndex = q;
+		const match = RegExpMethods.exec(splitter, text);
+		if (match === null) {
+			q = advance(q);
+			continue;
+		}
+		const e = NativeMath.min(splitter.lastIndex, size);
+		if (e === p) {
+			q = advance(q);
+			continue;
+		}
+		out[out.length] = StringMethods.slice(text, p, q);
+		if (out.length >= limit) return out;
+		p = e;
+		for (let i = 1; i < match.length; i++) {
+			out[out.length] = match[i];
+			if (out.length >= limit) return out;
+		}
+		q = p;
+	}
+	out[out.length] = StringMethods.slice(text, p, size);
+	return out;
+}
+
+/**
+ * What `text.match(regexp)` gives, found with the `exec` taken at load: the first match (with its captures) for an
+ * expression that is not global, every matched text for a global one, or null for none.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {RegExpExecArray|string[]|null} The match or matches.
+ * @internal
+ * @example
+ * regExpMatch(/\d+/g, "a1b22"); // ["1", "22"]
+ */
+export function regExpMatch(regexp, text) {
+	text = NativeString(text);
+	if (!RegExpMethods.global(regexp)) {
+		if (!RegExpMethods.sticky(regexp)) regexp.lastIndex = 0;
+		return RegExpMethods.exec(regexp, text);
+	}
+	const matches = matchesOf(regexp, text);
+	if (matches.length === 0) return null;
+	return mapList(matches, (match) => match[0]);
+}
+
+/**
+ * Where the first match of a regular expression in `text` starts, as `text.search(regexp)` gives (-1 for none), found
+ * with the `exec` taken at load; the expression's `lastIndex` is left as it was.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {number} The index.
+ * @internal
+ * @example
+ * regExpSearch(/b/, "abc"); // 1
+ */
+export function regExpSearch(regexp, text) {
+	const kept = regexp.lastIndex;
+	regexp.lastIndex = 0;
+	const match = RegExpMethods.exec(regexp, NativeString(text));
+	regexp.lastIndex = kept;
+	return match === null ? -1 : match.index;
+}
+
+/**
+ * `text` with the first occurrence of `search` replaced, as `text.replace(search, replacement)` gives for a string
+ * `search`, found with the `indexOf` taken at load. (`text.replace(search, …)` looks `Symbol.replace` up on `search`,
+ * which for a string is `String.prototype`, where module code can put one.)
+ * @param {string} text - The text.
+ * @param {string} search - What to replace.
+ * @param {string|Function} replacement - The replacement string (with `$` patterns), or a function.
+ * @returns {string} The new text.
+ * @internal
+ * @example
+ * textReplace("a.b.c", ".", "/"); // "a/b.c"
+ */
+export function textReplace(text, search, replacement) {
+	text = NativeString(text);
+	search = NativeString(search);
+	const position = StringMethods.indexOf(text, search);
+	if (position === -1) return text;
+	const match = [search];
+	const piece =
+		typeof replacement === "function"
+			? NativeString(replacement(search, position, text))
+			: substitution(NativeString(replacement), match, text, position, undefined);
+	return StringMethods.slice(text, 0, position) + piece + StringMethods.slice(text, position + search.length);
+}
+
+/**
+ * The flags of a regular expression, read one by one with the accessors taken at load, with `add` added and `drop`
+ * left out.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} [add] - Flags to add.
+ * @param {string} [drop] - Flags to leave out.
+ * @returns {string} The flags.
+ * @private
+ */
+function flagsOf(regexp, add = "", drop = "") {
+	let flags = "";
+	const take = (flag, on) => {
+		if ((on || StringMethods.includes(add, flag)) && !StringMethods.includes(drop, flag)) flags += flag;
+	};
+	take("d", RegExpMethods.hasIndices(regexp));
+	take("g", RegExpMethods.global(regexp));
+	take("i", RegExpMethods.ignoreCase(regexp));
+	take("m", RegExpMethods.multiline(regexp));
+	take("s", RegExpMethods.dotAll(regexp));
+	take("u", RegExpMethods.unicode(regexp));
+	take("v", RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	take("y", RegExpMethods.sticky(regexp));
+	return flags;
 }
 
 /**
@@ -1531,15 +1923,7 @@ export function splitText(text, separator) {
  * matchAllOf("a1b2", /\d/g).length; // 2
  */
 export function matchAllOf(text, regexp) {
-	let flags = "g";
-	if (RegExpMethods.hasIndices(regexp)) flags += "d";
-	if (RegExpMethods.ignoreCase(regexp)) flags += "i";
-	if (RegExpMethods.multiline(regexp)) flags += "m";
-	if (RegExpMethods.dotAll(regexp)) flags += "s";
-	if (RegExpMethods.unicode(regexp)) flags += "u";
-	if (RegExpMethods.unicodeSets && RegExpMethods.unicodeSets(regexp)) flags += "v";
-	if (RegExpMethods.sticky(regexp)) flags += "y";
-	const copy = new globalThisRegExp(RegExpMethods.source(regexp), flags);
+	const copy = new globalThisRegExp(RegExpMethods.source(regexp), flagsOf(regexp, "g"));
 	const out = [];
 	let match;
 	while ((match = RegExpMethods.exec(copy, text)) !== null) {

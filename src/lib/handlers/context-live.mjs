@@ -44,6 +44,7 @@ import {
 import {
 	appendList,
 	ArrayMethods,
+	Arrays,
 	Boolean,
 	concatLists,
 	copyList,
@@ -51,6 +52,7 @@ import {
 	FinalizationRegistry,
 	FinalizationRegistryMethods,
 	FunctionMethods,
+	listSteps,
 	Map,
 	mapEntriesToArray,
 	mapKeysToArray,
@@ -517,6 +519,20 @@ let liveContextManagerRef = null;
  * #123) and for the lowest-overhead single-flow case. See docs/CONTEXT-PROPAGATION.md.
  * @public
  */
+
+/**
+ * A walk of frames, lean where the capture offers it, that reads nothing module code can replace: an array's elements by
+ * the array iterator's `next` taken at load, and a capture's through the walk it hands out (frame placement's captures
+ * step their generator with the functions taken at load).
+ * @param {Iterable<object>} frames - An array of frames, or a capture.
+ * @returns {Iterable<object>} The frames.
+ * @private
+ */
+function framesOf(frames) {
+	if (Arrays.isArray(frames)) return listSteps(frames);
+	return typeof frames.lean === "function" ? frames.lean() : frames[Symbol.iterator]();
+}
+
 export class LiveContextManager {
 	/**
 	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
@@ -1204,7 +1220,7 @@ export class LiveContextManager {
 			// The synchronous frames below the outermost placed one: what started the job.
 			let below = [];
 			// Slothlet's own frames are passed over by their path alone, so they are read no further than that.
-			for (const frame of frames.lean?.() ?? frames) {
+			for (const frame of framesOf(frames)) {
 				if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;

@@ -33,7 +33,7 @@ import {
 	navigator,
 	Objects,
 	RegExp,
-	RegExpMethods,
+	regExpReplace,
 	setFrom,
 	SetMethods,
 	splitText,
@@ -181,9 +181,7 @@ function i18n_languageFileExists(lang) {
  * @private
  */
 function i18n_normalizeEnvLanguage(envLang) {
-	const normalized = StringMethods.toLowerCase(
-		RegExpMethods.symbolReplace(/_/g, splitText(splitText(String(envLang), ".")[0], "@")[0], "-")
-	);
+	const normalized = StringMethods.toLowerCase(regExpReplace(/_/g, splitText(splitText(String(envLang), ".")[0], "@")[0], "-"));
 
 	if (normalized === "c" || normalized === "posix") return "en-us";
 
@@ -356,11 +354,11 @@ export function translate(errorCode, params = {}) {
 		const ofEntry = ofList[ofIndex],
 			key = ofEntry[0],
 			value = ofEntry[1];
-		message = RegExpMethods.symbolReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? String(value) : "");
+		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? String(value) : "");
 	}
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)
-	message = StringMethods.trim(RegExpMethods.symbolReplace(/\s+/g, RegExpMethods.symbolReplace(/\{\w+\}/g, message, ""), " "));
+	message = StringMethods.trim(regExpReplace(/\s+/g, regExpReplace(/\{\w+\}/g, message, ""), " "));
 
 	return message;
 }

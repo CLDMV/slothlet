@@ -37,7 +37,7 @@ import {
 	Functions,
 	Objects,
 	Reflect,
-	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -204,8 +204,8 @@ export class Flatten extends ComponentBase {
 			if (multiDefaultDecision.preserveAsNamespace) {
 				const exportToCheck = typeof mod === "function" ? mod : mod?.default && typeof mod.default === "function" ? mod.default : null;
 				if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
-					const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
-					const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
+					const normalizedFunctionName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+					const normalizedModuleName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 					if (normalizedFunctionName === normalizedModuleName) {
 						multiDefaultDecision.preferredName = exportToCheck.name;
 					}
@@ -236,8 +236,8 @@ export class Flatten extends ComponentBase {
 
 		if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 			// Check if function name relates to filename (case-insensitive, ignoring separators)
-			const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
-			const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
+			const normalizedFunctionName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+			const normalizedModuleName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 			const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
 
 			// Rule 9: Use exact function name to preserve casing (XMLParser vs xmlParser, getHTTPStatus vs getHttpStatus)
@@ -769,8 +769,8 @@ export class Flatten extends ComponentBase {
 		if (typeof mod === "function" && mod.name && currentDepth > 0) {
 			const functionNameMatchesFolder =
 				StringMethods.toLowerCase(mod.name) === StringMethods.toLowerCase(categoryName) ||
-				RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(mod.name), "") ===
-					RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(categoryName), "");
+				regExpReplace(/[-_]/g, StringMethods.toLowerCase(mod.name), "") ===
+					regExpReplace(/[-_]/g, StringMethods.toLowerCase(categoryName), "");
 
 			if (functionNameMatchesFolder) {
 				return {
@@ -788,8 +788,8 @@ export class Flatten extends ComponentBase {
 
 		if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 			// Check if function name relates to filename (case-insensitive, ignoring separators)
-			const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
-			const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
+			const normalizedFunctionName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+			const normalizedModuleName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 			const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
 
 			// Rule 9: Always use function name to preserve casing (XMLParser vs xmlParser)

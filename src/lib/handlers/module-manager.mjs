@@ -54,6 +54,7 @@ import {
 	Numbers,
 	promiseAll,
 	RegExpMethods,
+	regExpSplit,
 	String
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
@@ -804,7 +805,7 @@ function pickHighestSemver(versions) {
 	/* v8 ignore next */
 	if (versions.length === 1) return versions[0];
 	const segs = (v) =>
-		mapList(RegExpMethods.symbolSplit(/[.\-+]/, String(v)), (p) => {
+		mapList(regExpSplit(/[.\-+]/, String(v)), (p) => {
 			const n = Numbers.parseInt(p, 10);
 			return Numbers.isFinite(n) ? n : 0;
 		});

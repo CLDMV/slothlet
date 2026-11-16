@@ -89,7 +89,7 @@ import {
 	Objects,
 	promiseAll,
 	Reflect,
-	RegExpMethods,
+	regExpMatch,
 	Set,
 	setFrom,
 	SetMethods,
@@ -4777,8 +4777,8 @@ export class ApiManager extends ComponentBase {
 			// Sort paths to delete by depth (deep to shallow)
 			// This ensures we delete children before parent containers
 			ArrayMethods.sort(pathsToDelete, (a, b) => {
-				const depthA = (RegExpMethods.symbolMatch(/\./g, a) || []).length;
-				const depthB = (RegExpMethods.symbolMatch(/\./g, b) || []).length;
+				const depthA = (regExpMatch(/\./g, a) || []).length;
+				const depthB = (regExpMatch(/\./g, b) || []).length;
 				return depthB - depthA; // Reverse sort for deep-to-shallow
 			});
 

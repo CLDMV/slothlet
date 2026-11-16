@@ -33,7 +33,7 @@ import {
 	Math,
 	NumberMethods,
 	Objects,
-	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -288,7 +288,7 @@ export class Metadata extends ComponentBase {
 		// module id and the composite is always unambiguous to split (#303).
 		let fullModuleID = systemData.moduleID;
 		if (systemData.apiPath && systemData.moduleID) {
-			const apiPathSlashes = RegExpMethods.symbolReplace(/\./g, systemData.apiPath, "/");
+			const apiPathSlashes = regExpReplace(/\./g, systemData.apiPath, "/");
 			fullModuleID = `${systemData.moduleID}${MODULE_ID_SEPARATOR}${apiPathSlashes}`;
 		}
 

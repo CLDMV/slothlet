@@ -36,6 +36,7 @@ import {
 	mapList,
 	Objects,
 	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -335,9 +336,9 @@ function originType(origin, context) {
 function importSpecifier(filePath, outputDir) {
 	let relative = ArrayMethods.join(splitText(path.relative(outputDir, filePath), path.sep), "/");
 	if (!StringMethods.startsWith(relative, ".")) relative = `./${relative}`;
-	return RegExpMethods.symbolReplace(
+	return regExpReplace(
 		/\.tsx$/,
-		RegExpMethods.symbolReplace(/\.(m|c)?ts$/, relative, (____match, kind) => `.${kind ?? ""}js`),
+		regExpReplace(/\.(m|c)?ts$/, relative, (____match, kind) => `.${kind ?? ""}js`),
 		".jsx"
 	);
 }

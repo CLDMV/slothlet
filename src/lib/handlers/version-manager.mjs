@@ -47,7 +47,8 @@ import {
 	promiseAll,
 	PromiseMethods,
 	Reflect,
-	RegExpMethods,
+	regExpMatch,
+	regExpReplace,
 	setFrom,
 	SetMethods,
 	setToArray,
@@ -84,7 +85,7 @@ const inspect = util.inspect;
  */
 function stripPrefix(tag) {
 	// Remove characters before the first digit
-	return RegExpMethods.symbolReplace(/^[^0-9]+/, tag, "");
+	return regExpReplace(/^[^0-9]+/, tag, "");
 }
 
 /**
@@ -97,7 +98,7 @@ function stripPrefix(tag) {
  */
 function stripSuffix(s) {
 	// Remove anything after a dash or plus that's not part of the numeric portion
-	return RegExpMethods.symbolReplace(/[-+].*$/, s, "");
+	return regExpReplace(/[-+].*$/, s, "");
 }
 
 /**
@@ -515,9 +516,9 @@ export class VersionManager extends ComponentBase {
 				// Tiebreak: prefer stable over pre-release (shorter suffix = stable)
 				// Only one ordering is exercised by the test matrix; reverse-order branch is not hit.
 				/* v8 ignore next */
-				const aSuffix = RegExpMethods.symbolMatch(/[-+]/, a.tag) ? 1 : 0;
+				const aSuffix = regExpMatch(/[-+]/, a.tag) ? 1 : 0;
 				/* v8 ignore next */
-				const bSuffix = RegExpMethods.symbolMatch(/[-+]/, b.tag) ? 1 : 0;
+				const bSuffix = regExpMatch(/[-+]/, b.tag) ? 1 : 0;
 				return aSuffix - bSuffix;
 			}
 		);

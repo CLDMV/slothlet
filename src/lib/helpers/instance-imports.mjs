@@ -90,11 +90,14 @@ import {
 	Processes,
 	Reflect,
 	RegExpMethods,
+	regExpReplace,
+	regExpSearch,
 	Set,
 	setFrom,
 	SetMethods,
 	setToArray,
 	setValues,
+	splitText,
 	String,
 	StringMethods,
 	Symbol,
@@ -110,8 +113,7 @@ import {
 	WeakMap,
 	WeakMapMethods,
 	WeakSet,
-	WeakSetMethods,
-	splitText
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { readStack, stackText, unreadError } from "@cldmv/slothlet/helpers/stack-read";
 
@@ -408,7 +410,7 @@ function runningTaggedFrame() {
  * @private
  */
 function packageKey(url) {
-	return RegExpMethods.symbolReplace(/^\/([a-z]:\/)/i, toSlashPath(url), "$1");
+	return regExpReplace(/^\/([a-z]:\/)/i, toSlashPath(url), "$1");
 }
 
 /**
@@ -1412,12 +1414,12 @@ export function isFileSpecifier(specifier) {
  */
 function toSlashPath(ref) {
 	let p = ref;
-	const cut = RegExpMethods.symbolSearch(/[?#]/, p);
+	const cut = regExpSearch(/[?#]/, p);
 	if (cut !== -1) p = StringMethods.slice(p, 0, cut);
 	if (StringMethods.startsWith(p, "file:")) {
-		p = decodeURIComponent(RegExpMethods.symbolReplace(/^file:\/\/[^/]*/, p, ""));
+		p = decodeURIComponent(regExpReplace(/^file:\/\/[^/]*/, p, ""));
 	}
-	return RegExpMethods.symbolReplace(/\\/g, p, "/");
+	return regExpReplace(/\\/g, p, "/");
 }
 
 /**
@@ -1499,7 +1501,7 @@ function packageRoot(slashPath) {
 	if (installed !== null) return installed;
 	if (HOST === null) return null;
 	// A Windows drive is read as the drive itself (`C:/…`), not as `/C:/…`.
-	const filePath = RegExpMethods.symbolReplace(/^\/([a-z]:\/)/i, slashPath, "$1");
+	const filePath = regExpReplace(/^\/([a-z]:\/)/i, slashPath, "$1");
 	const walked = [];
 	let root = null;
 	for (
@@ -1682,7 +1684,7 @@ function slothletCodePath(ref) {
 	const root = packageRoot(path);
 	if (root === null || packageName(root) !== "@cldmv/slothlet") return null;
 	const inside = StringMethods.slice(
-		StringMethods.startsWith(path, `${root}/`) ? path : RegExpMethods.symbolReplace(/^\/([a-z]:\/)/i, path, "$1"),
+		StringMethods.startsWith(path, `${root}/`) ? path : regExpReplace(/^\/([a-z]:\/)/i, path, "$1"),
 		root.length + 1
 	);
 	return ArrayMethods.some(CODE_DIRS, (dir) => StringMethods.startsWith(inside, dir)) || ArrayMethods.includes(ENTRY_FILES, inside)
@@ -1746,7 +1748,7 @@ const MODULE_ROOTS = new Set();
 function noteModuleRoot(url, filePath) {
 	if (typeof url !== "string" || typeof filePath !== "string" || filePath === "") return;
 	const location = toSlashPath(url);
-	const suffix = "/" + RegExpMethods.symbolReplace(/^\.?\//, filePath, "");
+	const suffix = "/" + regExpReplace(/^\.?\//, filePath, "");
 	if (!StringMethods.endsWith(location, suffix)) return;
 	const root = StringMethods.slice(location, 0, location.length - suffix.length + 1);
 	let parsed;
@@ -3726,7 +3728,7 @@ export function isCommonJSFile(filePath) {
 		if (host.dirname(dir) === dir || host.basename(dir) === "node_modules") break;
 	}
 	try {
-		const source = RegExpMethods.symbolReplace(/^#!.*/, host.readFile(filePath, "utf8"), "");
+		const source = regExpReplace(/^#!.*/, host.readFile(filePath, "utf8"), "");
 		host.compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"]);
 		return true;
 	} catch {
@@ -3982,7 +3984,7 @@ export function slothletInstanceImports() {
 	 * What the name an instance module imports the import check under ends with: one no module can know beforehand.
 	 * @type {string}
 	 */
-	const checkName = HOST === null ? "0" : RegExpMethods.symbolReplace(/-/g, HOST.randomUUID(), "");
+	const checkName = HOST === null ? "0" : regExpReplace(/-/g, HOST.randomUUID(), "");
 	return {
 		name: "slothlet-instance-imports",
 		enforce: "pre",

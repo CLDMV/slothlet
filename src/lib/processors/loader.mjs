@@ -63,6 +63,7 @@ import {
 	PromiseMethods,
 	Reflect,
 	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -259,9 +260,9 @@ function compileHidden(globs) {
 		// Compile the pattern BODY (without a leading "!") as a positive matcher; the "!" is applied here
 		// as gitignore-style un-hiding, NOT via compilePattern's "match everything except" semantics —
 		// those don't compose under a hide-list (a single `!x` would then hide everything except x).
-		const body = RegExpMethods.symbolReplace(/\//g, negated ? StringMethods.slice(g, 1) : g, ".");
+		const body = regExpReplace(/\//g, negated ? StringMethods.slice(g, 1) : g, ".");
 		if (body.length === 0) continue; // bare "!" — nothing to match
-		ArrayMethods.push(rules, { negated, match: compilePattern(body) });
+		ArrayMethods.push(rules, { negated, matches: compilePattern(body) });
 	}
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
@@ -270,7 +271,8 @@ function compileHidden(globs) {
 		let hidden = false;
 		let winner = -1;
 		for (let index = 0; index < rules.length; index++) {
-			if (StringMethods.match(rules[index], relDotted)) {
+			// Each rule holds its compiled pattern as its own `matches`.
+			if (rules[index].matches(relDotted)) {
 				hidden = !rules[index].negated;
 				winner = index;
 			}
@@ -278,8 +280,7 @@ function compileHidden(globs) {
 		if (hidden && isFolder) {
 			// Names no file or folder can have (a `.` would split them), so only a glob that matches everything
 			// beneath the folder matches both.
-			const coversBelow =
-				StringMethods.match(rules[winner], `${relDotted}.\u0000`) && StringMethods.match(rules[winner], `${relDotted}.\u0000.\u0000`);
+			const coversBelow = rules[winner].matches(`${relDotted}.\u0000`) && rules[winner].matches(`${relDotted}.\u0000.\u0000`);
 			if (coversBelow && ArrayMethods.some(copyList(rules, winner + 1), (rule) => rule.negated)) return false;
 		}
 		return hidden;
@@ -380,7 +381,7 @@ export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
  * @private
  */
 function runtime_encodeQueryValue(value) {
-	return RegExpMethods.symbolReplace(
+	return regExpReplace(
 		/[!'()*]/g,
 		encodeURIComponent(value),
 		(char) => `%${StringMethods.toUpperCase(NumberMethods.toString(StringMethods.charCodeAt(char, 0), 16))}`
@@ -957,7 +958,7 @@ export class Loader extends ComponentBase {
 		if (type !== "none") return false;
 		const compileFunction = VM_COMPILE_FUNCTION;
 		// A leading hashbang is valid in a CommonJS file (Node strips it) but not in a function body.
-		const source = RegExpMethods.symbolReplace(/^#!.*/, await fsp.readFile(filePath, "utf8"), "");
+		const source = regExpReplace(/^#!.*/, await fsp.readFile(filePath, "utf8"), "");
 		try {
 			compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"], { filename: filePath });
 			return true;
@@ -1044,7 +1045,7 @@ export class Loader extends ComponentBase {
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
 		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
 		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
-		const apiRel = (p) => ArrayMethods.join(StringMethods.split(path.relative(rootDir, p), path.sep), ".");
+		const apiRel = (p) => ArrayMethods.join(splitText(path.relative(rootDir, p), path.sep), ".");
 
 		try {
 			await fsp.stat(dir);
@@ -1205,11 +1206,11 @@ export class Loader extends ComponentBase {
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
 		/* v8 ignore next */
-		const configBase = RegExpMethods.symbolReplace(/\/$/, this.slothlet.config?.dir || "", "");
+		const configBase = regExpReplace(/\/$/, this.slothlet.config?.dir || "", "");
 		/* v8 ignore next */
-		let relativePath = RegExpMethods.symbolReplace(/\/$/, dir || "", "");
+		let relativePath = regExpReplace(/\/$/, dir || "", "");
 		if (configBase && StringMethods.startsWith(relativePath, configBase)) {
-			relativePath = RegExpMethods.symbolReplace(/^\/|\/$/g, StringMethods.slice(relativePath, configBase.length), "");
+			relativePath = regExpReplace(/^\/|\/$/g, StringMethods.slice(relativePath, configBase.length), "");
 		}
 
 		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
@@ -1234,7 +1235,7 @@ export class Loader extends ComponentBase {
 	 * this.#findManifestNode(manifest, "billing/reports");
 	 */
 	#findManifestNode(node, targetPath) {
-		const normalised = RegExpMethods.symbolReplace(/^\/|\/$/g, RegExpMethods.symbolReplace(/\\/g, targetPath, "/"), "");
+		const normalised = regExpReplace(/^\/|\/$/g, regExpReplace(/\\/g, targetPath, "/"), "");
 		// `node.directories || []` defensive fallback for malformed manifest nodes
 		// — generateManifest always emits the field, and the validation in Config
 		// guarantees the top-level shape. The fallback is unreachable in normal flow.
@@ -1246,7 +1247,7 @@ export class Loader extends ComponentBase {
 			// omit one or the other. The final `|| ""` arm is unreachable because
 			// at least one of `path` / `name` is required for a usable directory entry.
 			/* v8 ignore next */
-			const dirPath = RegExpMethods.symbolReplace(/^\/|\/$/g, RegExpMethods.symbolReplace(/\\/g, dir.path || dir.name || "", "/"), "");
+			const dirPath = regExpReplace(/^\/|\/$/g, regExpReplace(/\\/g, dir.path || dir.name || "", "/"), "");
 			if (dirPath === normalised) return dir.children || dir;
 			// Recurse into sub-directories for nested paths like "billing/reports".
 			const found = this.#findManifestNode(dir.children || dir, normalised);
@@ -1413,7 +1414,7 @@ export class Loader extends ComponentBase {
 						? StringMethods.endsWith(base, "/")
 							? base
 							: base + "/"
-						: "file://" + leadingSlash + RegExpMethods.symbolReplace(/\/?$/, base, "/");
+						: "file://" + leadingSlash + regExpReplace(/\/?$/, base, "/");
 				return URLMethods.href(new URL(p, baseUrl));
 			});
 

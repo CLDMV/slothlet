@@ -644,7 +644,7 @@ export class ModesProcessor extends ComponentBase {
 		const hoistedOntoMount = (filePath, isFolder = false) => {
 			if (isFolder) return false;
 			if (typeof filePath !== "string" || typeof sourceFolder !== "string") return true;
-			const normalize = (value) => RegExpMethods.symbolReplace(/\/$/, RegExpMethods.symbolReplace(/\\/g, value, "/"), "");
+			const normalize = (value) => regExpReplace(/\/$/, regExpReplace(/\\/g, value, "/"), "");
 			const entryDir = ArrayMethods.join(copyList(splitText(normalize(filePath), "/"), 0, -1), "/");
 			const mountFolder = normalize(sourceFolder);
 			const childFolder =
@@ -1662,8 +1662,8 @@ export class ModesProcessor extends ComponentBase {
 					// Skip matching objects - they need to go through the matching-object branch below
 					if (!isMatchingObject) {
 						// Only auto-flatten if the export name matches the module name (case-insensitive, ignore separators)
-						const normalizedKey = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(key), "");
-						const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
+						const normalizedKey = regExpReplace(/[-_]/g, StringMethods.toLowerCase(key), "");
+						const normalizedModuleName = regExpReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 						if (normalizedKey === normalizedModuleName) {
 							// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
 							const preferredName = key;
@@ -2871,8 +2871,8 @@ export class ModesProcessor extends ComponentBase {
 			// sourceFolder is always provided by callers; config?.dir fallback unreachable.
 			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
-				? RegExpMethods.symbolReplace(/\\/g, `${sourceFolder}/${dir.sourceName ?? dir.name}`, "/")
-				: RegExpMethods.symbolReplace(/\\/g, `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`, "/");
+				? regExpReplace(/\\/g, `${sourceFolder}/${dir.sourceName ?? dir.name}`, "/")
+				: regExpReplace(/\\/g, `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`, "/");
 			/* v8 ignore stop */
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)

@@ -42,8 +42,10 @@ import {
 	mapList,
 	RegExp,
 	RegExpMethods,
+	regExpReplace,
 	splitText,
-	StringMethods
+	StringMethods,
+	textReplace
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -96,10 +98,10 @@ export function compilePattern(pattern, options = {}) {
 	// alternatives are treated as literals (their regex specials are escaped); globs inside `!(...)`
 	// are not supported.
 	const extglobs = [];
-	pattern = RegExpMethods.symbolReplace(/!\(([^()]*)\)/g, pattern, (_match, body) => {
+	pattern = regExpReplace(/!\(([^()]*)\)/g, pattern, (_match, body) => {
 		const alts = mapList(
 			filterList(splitText(body, "|"), (alt) => alt.length > 0),
-			(alt) => RegExpMethods.symbolReplace(/[.+^$()|[\]\\*?{}]/g, alt, "\\$&")
+			(alt) => regExpReplace(/[.+^$()|[\]\\*?{}]/g, alt, "\\$&")
 		);
 		// `!()` (no alternatives) excludes nothing → any single segment matches.
 		const guard = alts.length ? `(?!(?:${ArrayMethods.join(alts, "|")})(?:\\.|$))` : "";
@@ -130,15 +132,11 @@ export function compilePattern(pattern, options = {}) {
 		}
 		// The `.` before this segment, unless a `**` before it already took it.
 		if (!first && segments[index - 1] !== "**") regexPattern += "\\.";
-		regexPattern += RegExpMethods.symbolReplace(
+		regexPattern += regExpReplace(
 			/\?/g,
-			RegExpMethods.symbolReplace(
+			regExpReplace(
 				/__DOUBLESTAR__/g,
-				RegExpMethods.symbolReplace(
-					/\*/g,
-					RegExpMethods.symbolReplace(/\*\*/g, RegExpMethods.symbolReplace(/[+^$()|[\]\\]/g, segment, "\\$&"), "__DOUBLESTAR__"),
-					"[^.]*"
-				),
+				regExpReplace(/\*/g, regExpReplace(/\*\*/g, regExpReplace(/[+^$()|[\]\\]/g, segment, "\\$&"), "__DOUBLESTAR__"), "[^.]*"),
 				".*"
 			),
 			"."
@@ -148,7 +146,7 @@ export function compilePattern(pattern, options = {}) {
 	// Restore scoped-exclusion segment matchers (function replacement avoids `$` in the lookahead
 	// being read as a replacement token).
 	ArrayMethods.forEach(extglobs, (re, i) => {
-		regexPattern = StringMethods.replace(regexPattern, `__EXTGLOB_${i}__`, () => re);
+		regexPattern = textReplace(regexPattern, `__EXTGLOB_${i}__`, () => re);
 	});
 
 	regexPattern = `^${regexPattern}$`;

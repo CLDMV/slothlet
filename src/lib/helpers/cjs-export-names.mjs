@@ -49,6 +49,7 @@ import {
 	parseInt,
 	RegExp,
 	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -160,7 +161,7 @@ function stripComments(src) {
 		} else if (ch === "/" && next === "*") {
 			const end = StringMethods.indexOf(src, "*/", i + 2);
 			const stop = end === -1 ? src.length : end + 2;
-			out += RegExpMethods.symbolReplace(/[^\n]/g, StringMethods.slice(src, i, stop), " ");
+			out += regExpReplace(/[^\n]/g, StringMethods.slice(src, i, stop), " ");
 			i = stop;
 		} else if (ch === "'" || ch === '"') {
 			const end = skipString(src, i);
@@ -233,12 +234,9 @@ const SIMPLE_ESCAPES = Objects.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "
  * @private
  */
 function decodeStringBody(body) {
-	if (
-		RegExpMethods.exec(/\\(?:x(?![\da-f]{2})|u(?![\da-f]{4}|\{[\da-f]{1,6}\}))/i, RegExpMethods.symbolReplace(/\\\\/g, body, "")) !== null
-	)
-		return body;
+	if (RegExpMethods.exec(/\\(?:x(?![\da-f]{2})|u(?![\da-f]{4}|\{[\da-f]{1,6}\}))/i, regExpReplace(/\\\\/g, body, "")) !== null) return body;
 	// A line continuation is `\` + any line terminator; CRLF and CR count as one, so fold them to LF.
-	body = RegExpMethods.symbolReplace(/\r\n?/g, body, "\n");
+	body = regExpReplace(/\r\n?/g, body, "\n");
 	let out = "";
 	for (let i = 0; i < body.length; i++) {
 		const ch = body[i];
@@ -273,7 +271,7 @@ function decodeStringBody(body) {
  * @private
  */
 function escapeRegExp(text) {
-	return RegExpMethods.symbolReplace(/[.*+?^${}()|[\]\\/]/g, text, "\\$&");
+	return regExpReplace(/[.*+?^${}()|[\]\\/]/g, text, "\\$&");
 }
 
 /**
@@ -399,7 +397,7 @@ function readObjectKeys(src, start, names, reexports) {
  * scanCommonJSExports('exports.a = 1; module.exports.b = 2;').names; // Set { "a", "b" }
  */
 export function scanCommonJSExports(source) {
-	const src = stripComments(RegExpMethods.symbolReplace(/^#!.*/, String(source), ""));
+	const src = stripComments(regExpReplace(/^#!.*/, String(source), ""));
 	const names = new Set();
 	const reexports = [];
 	/**

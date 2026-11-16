@@ -93,6 +93,7 @@ import {
 	promiseAll,
 	Reflect,
 	RegExpMethods,
+	regExpReplace,
 	Set,
 	setFrom,
 	SetMethods,
@@ -221,12 +222,12 @@ async function scanDir(absDir, rootDir) {
 		if (entry.isFile()) {
 			if (isApiFile(entry.name)) {
 				const absPath = path.join(absDir, entry.name);
-				const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(rootDir, absPath), "/");
+				const rel = regExpReplace(/\\/g, path.relative(rootDir, absPath), "/");
 				ArrayMethods.push(files, makeFileEntry(rel));
 			}
 		} else if (entry.isDirectory()) {
 			const absSubDir = path.join(absDir, entry.name);
-			const relDir = RegExpMethods.symbolReplace(/\\/g, path.relative(rootDir, absSubDir), "/");
+			const relDir = regExpReplace(/\\/g, path.relative(rootDir, absSubDir), "/");
 			const children = await scanDir(absSubDir, rootDir);
 			// Only include directories that contain at least one loadable file (directly or nested)
 			if (children.files.length > 0 || children.directories.length > 0) {
@@ -397,7 +398,7 @@ async function collectSlothletSpecifiers(root) {
 			}
 			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
 				const f = ofList[ofIndex];
-				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				const norm = regExpReplace(/\\/g, String(f), "/");
 				if (StringMethods.endsWith(norm, suffix)) SetMethods.add(specifiers, specPrefix + StringMethods.slice(norm, 0, -suffix.length));
 			}
 		}
@@ -437,7 +438,7 @@ async function collectSlothletSpecifiers(root) {
 			}
 			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
 				const f = ofList[ofIndex];
-				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				const norm = regExpReplace(/\\/g, String(f), "/");
 				if (StringMethods.endsWith(norm, suffix)) SetMethods.add(specifiers, specPrefix + StringMethods.slice(norm, 0, -suffix.length));
 			}
 		}
@@ -527,7 +528,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 			// skip it rather than fail the whole importmap (or emit a dead entry).
 			continue;
 		}
-		const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(root, fileURLToPath(resolved)), "/");
+		const rel = regExpReplace(/\\/g, path.relative(root, fileURLToPath(resolved)), "/");
 		place(spec, rel);
 	}
 
@@ -541,7 +542,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 			ofIndex++
 		) {
 			const f = ofList[ofIndex];
-			const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(root, path.join(sampleDir, f)), "/");
+			const rel = regExpReplace(/\\/g, path.relative(root, path.join(sampleDir, f)), "/");
 			place(`@cldmv/slothlet/i18n/language/${f}`, rel);
 		}
 	} catch {
@@ -555,7 +556,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		const packRoot = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet-i18n/package.json")));
 		// Swap the final `@cldmv/slothlet` segment for the pack, preserving any `@version` suffix so a
 		// versioned CDN base (e.g. .../@cldmv/slothlet@3/) maps to .../@cldmv/slothlet-i18n@3/ not the slothlet base.
-		const packBase = RegExpMethods.symbolReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "@cldmv/slothlet-i18n$1/");
+		const packBase = regExpReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "@cldmv/slothlet-i18n$1/");
 		// Only enumerate pack locales when the swap actually fired — i.e. `base` ended with the
 		// `@cldmv/slothlet` segment. For a custom base served elsewhere (e.g. at "/") the replace is a
 		// no-op and packBase would point back into the slothlet base; emit nothing rather than wrong
@@ -701,7 +702,7 @@ async function collectPackageSpecifiers(packageRoot) {
 			const suffix = StringMethods.slice(tmpl, star + 1);
 			if (!isBrowserModuleTarget(suffix)) continue;
 			const specPrefix = splitText(key === "./*" ? `${name}/` : `${name}${StringMethods.slice(key, 1)}`, "*")[0];
-			const dirRel = RegExpMethods.symbolReplace(/^\.\//, StringMethods.slice(tmpl, 0, star), "");
+			const dirRel = regExpReplace(/^\.\//, StringMethods.slice(tmpl, 0, star), "");
 			let files;
 			try {
 				files = await fs.readdir(path.join(packageRoot, dirRel), { recursive: true });
@@ -710,14 +711,14 @@ async function collectPackageSpecifiers(packageRoot) {
 			}
 			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
 				const f = ofList[ofIndex];
-				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				const norm = regExpReplace(/\\/g, String(f), "/");
 				if (StringMethods.endsWith(norm, suffix))
 					MapMethods.set(out, specPrefix + StringMethods.slice(norm, 0, -suffix.length), dirRel + norm);
 			}
 		} else {
 			const tmpl = pickBrowserTarget(value);
 			if (!tmpl || !isBrowserModuleTarget(tmpl)) continue;
-			MapMethods.set(out, key === "." ? name : `${name}${StringMethods.slice(key, 1)}`, RegExpMethods.symbolReplace(/^\.\//, tmpl, ""));
+			MapMethods.set(out, key === "." ? name : `${name}${StringMethods.slice(key, 1)}`, regExpReplace(/^\.\//, tmpl, ""));
 		}
 	}
 	return out;
@@ -844,7 +845,7 @@ async function collectGraphImports(apiDir, packagesBase) {
  * @returns {string} The served base for sibling packages (ends with `/`).
  */
 function derivePackagesBase(base) {
-	const stripped = RegExpMethods.symbolReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "");
+	const stripped = regExpReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "");
 	return stripped !== base ? stripped : "/node_modules/";
 }
 
