@@ -1309,7 +1309,7 @@ export class PermissionManager extends ComponentBase {
 	onModuleRemoved(moduleID) {
 		// The function conditions it registered stop running, wherever their rules live (a module it mounted keeps
 		// its rules): a later module taking the freed id must not reach them (#625).
-		const base = StringMethods.split(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		const base = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
 		for (const pin of setValues(MapMethods.get(this.#conditionPins, base))) pin.live = false;
 		MapMethods.delete(this.#conditionPins, base);
 		for (const ofEntry of mapEntries(this.#principals)) {
@@ -1724,7 +1724,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#sameOwner(a, b) {
 		if (a === null || b === null) return a === b;
-		return StringMethods.split(String(a), MODULE_ID_SEPARATOR)[0] === StringMethods.split(String(b), MODULE_ID_SEPARATOR)[0];
+		return splitText(String(a), MODULE_ID_SEPARATOR)[0] === splitText(String(b), MODULE_ID_SEPARATOR)[0];
 	}
 
 	/**
@@ -1996,7 +1996,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#pinCondition(fn, writer) {
 		const slothlet = this.slothlet;
-		const pin = { moduleID: StringMethods.split(String(writer.____slothletInternal?.moduleID), MODULE_ID_SEPARATOR)[0], live: true };
+		const pin = { moduleID: splitText(String(writer.____slothletInternal?.moduleID), MODULE_ID_SEPARATOR)[0], live: true };
 		// instanceID and contextManager are read when the condition runs, so a rule replayed after a reload runs in
 		// the current instance. rawErrors: a throw reaches the condition matcher unchanged, which treats it as no match.
 		// Once its module is removed the condition no longer matches.
@@ -3289,7 +3289,7 @@ export class PermissionManager extends ComponentBase {
 	 * the composed tree, but they are framework surface, not module code, so they are never granted.
 	 */
 	#sharedOwner(callerPath, targetPath) {
-		if (SetMethods.has(FRAMEWORK_ROOTS, StringMethods.split(String(targetPath), ".", 1)[0])) return null;
+		if (SetMethods.has(FRAMEWORK_ROOTS, splitText(String(targetPath), ".", 1)[0])) return null;
 		const ownership = this.slothlet.handlers.ownership;
 		// A caller path with no ownership entry (null/empty, or a path nothing registered) owns nothing.
 		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID;
