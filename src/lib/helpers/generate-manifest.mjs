@@ -79,7 +79,29 @@ import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import * as nodeUrl from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { Objects, Arrays, JSON, Map, Set, Promises, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	filterList,
+	FunctionMethods,
+	JSON,
+	Map,
+	mapEntries,
+	MapMethods,
+	Objects,
+	Promises,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	String,
+	StringMethods,
+	splitText
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -118,7 +140,7 @@ const DEFAULT_SLOTHLET_BASE = "/node_modules/@cldmv/slothlet/";
  * specifier of slothlet's maps only for slothlet's own files (see {@link generateImportMap}).
  * @type {Set<string>}
  */
-const PAGE_SPECIFIERS = new Set([
+const PAGE_SPECIFIERS = setFrom([
 	"@cldmv/slothlet",
 	"@cldmv/slothlet/runtime",
 	"@cldmv/slothlet/runtime/async",
@@ -130,7 +152,7 @@ const PAGE_SPECIFIERS = new Set([
  * Extensions treated as loadable API modules.
  * @type {Set<string>}
  */
-const LOADABLE_EXTENSIONS = new Set([".mjs", ".cjs", ".js", ".ts", ".mts", ".cts"]);
+const LOADABLE_EXTENSIONS = setFrom([".mjs", ".cjs", ".js", ".ts", ".mts", ".cts"]);
 
 /**
  * Prefixes that mark a file as internal/non-API (slothlet convention).
@@ -152,7 +174,7 @@ const SKIP_PREFIXES = ["__", "."];
  */
 function isApiFile(filename) {
 	const ext = path.extname(filename);
-	return LOADABLE_EXTENSIONS.has(ext);
+	return SetMethods.has(LOADABLE_EXTENSIONS, ext);
 }
 
 /**
@@ -192,22 +214,23 @@ async function scanDir(absDir, rootDir) {
 	const files = [];
 	const directories = [];
 
-	for (const entry of entries) {
-		if (SKIP_PREFIXES.some((p) => entry.name.startsWith(p))) continue;
+	for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+		const entry = ofList[ofIndex];
+		if (ArrayMethods.some(SKIP_PREFIXES, (p) => StringMethods.startsWith(entry.name, p))) continue;
 
 		if (entry.isFile()) {
 			if (isApiFile(entry.name)) {
 				const absPath = path.join(absDir, entry.name);
-				const rel = path.relative(rootDir, absPath).replace(/\\/g, "/");
-				files.push(makeFileEntry(rel));
+				const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(rootDir, absPath), "/");
+				ArrayMethods.push(files, makeFileEntry(rel));
 			}
 		} else if (entry.isDirectory()) {
 			const absSubDir = path.join(absDir, entry.name);
-			const relDir = path.relative(rootDir, absSubDir).replace(/\\/g, "/");
+			const relDir = RegExpMethods.symbolReplace(/\\/g, path.relative(rootDir, absSubDir), "/");
 			const children = await scanDir(absSubDir, rootDir);
 			// Only include directories that contain at least one loadable file (directly or nested)
 			if (children.files.length > 0 || children.directories.length > 0) {
-				directories.push({
+				ArrayMethods.push(directories, {
 					name: entry.name,
 					path: relDir,
 					children
@@ -324,49 +347,58 @@ function slothletPackageRoot() {
  *   its flat (non-wildcard) public exports.
  */
 async function collectSlothletSpecifiers(root) {
-	const specifiers = new Set(["@cldmv/slothlet"]);
+	const specifiers = setFrom(["@cldmv/slothlet"]);
 
 	// Seed slothlet's declared public entry points from package.json `exports`, so the importmap
 	// always resolves every flat (non-wildcard) public module specifier — including public aggregators like the
 	// bare `@cldmv/slothlet/runtime` that internals never import directly, which the source scan below
 	// would otherwise miss (or pick up only fragilely from a doc comment that minification strips).
 	const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
-	for (const key of Objects.keys(pkg.exports)) {
+	for (let ofIndex = 0, ofList = Objects.keys(pkg.exports); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		// Skip wildcard patterns here (every file under them is enumerated per-file just below) and
 		// non-module entries (the exported JSON schema is tooling-only, not a browser module import); i18n locales are enumerated separately.
-		if (key.includes("*") || key.endsWith(".json")) continue;
-		specifiers.add(key === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${key.slice(1)}`);
+		if (StringMethods.includes(key, "*") || StringMethods.endsWith(key, ".json")) continue;
+		SetMethods.add(specifiers, key === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${StringMethods.slice(key, 1)}`);
 	}
 
 	// Enumerate every wildcard module-export directory so EVERY exported subpath gets an importmap
 	// entry by construction — guaranteeing a browser can resolve any wildcard endpoint, even modules
 	// slothlet's own source never imports. (i18n locales are enumerated in generateImportMap; the
 	// JSON schema export isn't a browser module.)
-	for (const [key, value] of Objects.entries(pkg.exports)) {
-		if (!key.includes("*") || key.startsWith("./i18n/language/")) continue;
-		const specPrefix = `@cldmv/slothlet${key.slice(1)}`.split("*")[0]; // bare-specifier prefix for this namespace (text before the wildcard)
+	for (let ofIndex = 0, ofList = Objects.entries(pkg.exports); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			key = ofEntry[0],
+			value = ofEntry[1];
+		if (!StringMethods.includes(key, "*") || StringMethods.startsWith(key, "./i18n/language/")) continue;
+		const specPrefix = splitText(`@cldmv/slothlet${StringMethods.slice(key, 1)}`, "*")[0]; // bare-specifier prefix for this namespace (text before the wildcard)
 		// Every "*.mjs" filesystem target this export declares (dev `src/` + published `dist/`).
 		const targets = [];
 		(function collectTargets(v) {
 			if (typeof v === "string") {
-				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
+				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) ArrayMethods.push(targets, v);
 			} else if (v && typeof v === "object") {
-				for (const child of Objects.values(v)) collectTargets(child);
+				for (let ofIndex = 0, ofList = Objects.values(v); ofIndex < ofList.length; ofIndex++) {
+					const child = ofList[ofIndex];
+					collectTargets(child);
+				}
 			}
 		})(value);
-		for (const tmpl of targets) {
-			const star = tmpl.indexOf("*");
-			const dirRel = tmpl.slice(0, star);
-			const suffix = tmpl.slice(star + 1);
+		for (let ofIndex = 0, ofList = targets; ofIndex < ofList.length; ofIndex++) {
+			const tmpl = ofList[ofIndex];
+			const star = StringMethods.indexOf(tmpl, "*");
+			const dirRel = StringMethods.slice(tmpl, 0, star);
+			const suffix = StringMethods.slice(tmpl, star + 1);
 			let files;
 			try {
 				files = await fs.readdir(path.join(root, dirRel), { recursive: true });
 			} catch {
 				continue; // target dir absent in this layout (e.g. src/ missing in a published install)
 			}
-			for (const f of files) {
-				const norm = String(f).replace(/\\/g, "/");
-				if (norm.endsWith(suffix)) specifiers.add(specPrefix + norm.slice(0, -suffix.length));
+			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+				const f = ofList[ofIndex];
+				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				if (StringMethods.endsWith(norm, suffix)) SetMethods.add(specifiers, specPrefix + StringMethods.slice(norm, 0, -suffix.length));
 			}
 		}
 	}
@@ -375,55 +407,64 @@ async function collectSlothletSpecifiers(root) {
 	// `#factories/*`) are no longer public exports, but slothlet's own browser code still imports
 	// them by their `#`-prefixed specifier — which the page's importmap must resolve. Browsers accept
 	// `#`-prefixed importmap keys, so the literal `#handlers/<name>` string becomes the map key.
-	for (const [key, value] of Objects.entries(pkg.imports ?? {})) {
-		if (!key.includes("*")) continue;
-		const specPrefix = key.split("*")[0]; // e.g. "#handlers/" — the literal importmap-key prefix
+	for (let ofIndex = 0, ofList = Objects.entries(pkg.imports ?? {}); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			key = ofEntry[0],
+			value = ofEntry[1];
+		if (!StringMethods.includes(key, "*")) continue;
+		const specPrefix = splitText(key, "*")[0]; // e.g. "#handlers/" — the literal importmap-key prefix
 		const targets = [];
 		(function collectTargets(v) {
 			if (typeof v === "string") {
-				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
+				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) ArrayMethods.push(targets, v);
 			} else if (v && typeof v === "object") {
-				for (const child of Objects.values(v)) collectTargets(child);
+				for (let ofIndex = 0, ofList = Objects.values(v); ofIndex < ofList.length; ofIndex++) {
+					const child = ofList[ofIndex];
+					collectTargets(child);
+				}
 			}
 		})(value);
-		for (const tmpl of targets) {
-			const star = tmpl.indexOf("*");
-			const dirRel = tmpl.slice(0, star);
-			const suffix = tmpl.slice(star + 1);
+		for (let ofIndex = 0, ofList = targets; ofIndex < ofList.length; ofIndex++) {
+			const tmpl = ofList[ofIndex];
+			const star = StringMethods.indexOf(tmpl, "*");
+			const dirRel = StringMethods.slice(tmpl, 0, star);
+			const suffix = StringMethods.slice(tmpl, star + 1);
 			let files;
 			try {
 				files = await fs.readdir(path.join(root, dirRel), { recursive: true });
 			} catch {
 				continue; // target dir absent in this layout (e.g. src/ missing in a published install)
 			}
-			for (const f of files) {
-				const norm = String(f).replace(/\\/g, "/");
-				if (norm.endsWith(suffix)) specifiers.add(specPrefix + norm.slice(0, -suffix.length));
+			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+				const f = ofList[ofIndex];
+				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				if (StringMethods.endsWith(norm, suffix)) SetMethods.add(specifiers, specPrefix + StringMethods.slice(norm, 0, -suffix.length));
 			}
 		}
 	}
 
 	// Backstop: scan slothlet's shipped source for any imported `@cldmv/slothlet` specifier the
 	// export-driven steps above didn't add (defense-in-depth for an unusual export shape).
-	const SKIP_DIRS = new Set(["node_modules", "types", "coverage", "tmp", "tests", "api_tests", ".git", "docs"]);
+	const SKIP_DIRS = setFrom(["node_modules", "types", "coverage", "tmp", "tests", "api_tests", ".git", "docs"]);
 	async function scan(dir) {
 		// Fail loud: slothlet's own package files are always present/readable, so an fs error here
 		// means a corrupted install — surfacing it beats emitting a silently incomplete importmap.
 		const entries = await fs.readdir(dir, { withFileTypes: true });
-		for (const e of entries) {
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const e = ofList[ofIndex];
 			if (e.isDirectory()) {
-				if (!SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) await scan(path.join(dir, e.name));
-			} else if (/\.(mjs|cjs|js)$/.test(e.name)) {
+				if (!SetMethods.has(SKIP_DIRS, e.name) && !StringMethods.startsWith(e.name, ".")) await scan(path.join(dir, e.name));
+			} else if (RegExpMethods.exec(/\.(mjs|cjs|js)$/, e.name) !== null) {
 				const src = await fs.readFile(path.join(dir, e.name), "utf8");
 				let m;
 				SLOTHLET_SPEC_RE.lastIndex = 0;
-				while ((m = SLOTHLET_SPEC_RE.exec(src))) {
+				while ((m = RegExpMethods.exec(SLOTHLET_SPEC_RE, src))) {
 					const spec = m[1];
 					// Ignore doc-comment fragments — only add resolvable subpaths (no glob/placeholder/
 					// trailing-slash/empty segment), so the scan can't inject junk or trigger DEP0155.
-					if (spec.startsWith("@cldmv/slothlet/i18n/language/")) continue;
-					if (/[*<>]|\.\.\.|\/$/.test(spec) || spec.split("/").some((s) => s === "")) continue;
-					specifiers.add(spec);
+					if (StringMethods.startsWith(spec, "@cldmv/slothlet/i18n/language/")) continue;
+					if (RegExpMethods.exec(/[*<>]|\.\.\.|\/$/, spec) !== null || ArrayMethods.some(splitText(spec, "/"), (s) => s === "")) continue;
+					SetMethods.add(specifiers, spec);
 				}
 			}
 		}
@@ -457,7 +498,7 @@ async function collectSlothletSpecifiers(root) {
  *   object ready to inline as `<script type="importmap">`.
  */
 async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
-	const base = String(slothletBase).endsWith("/") ? String(slothletBase) : `${slothletBase}/`;
+	const base = StringMethods.endsWith(String(slothletBase), "/") ? String(slothletBase) : `${slothletBase}/`;
 	const root = slothletPackageRoot();
 	const imports = {};
 	// Slothlet's own specifiers, for its own files (see PAGE_SPECIFIERS).
@@ -465,11 +506,14 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	// Where slothlet's own files are served: a code folder (`src/`, `dist/`) or an entry file, per mapped file.
 	const ownFiles = new Set();
 	const place = (spec, rel) => {
-		(PAGE_SPECIFIERS.has(spec) ? imports : own)[spec] = base + rel;
-		ownFiles.add(rel.includes("/") ? `${base}${rel.slice(0, rel.indexOf("/") + 1)}` : base + rel);
+		(SetMethods.has(PAGE_SPECIFIERS, spec) ? imports : own)[spec] = base + rel;
+		SetMethods.add(
+			ownFiles,
+			StringMethods.includes(rel, "/") ? `${base}${StringMethods.slice(rel, 0, StringMethods.indexOf(rel, "/") + 1)}` : base + rel
+		);
 	};
 
-	for (const spec of await collectSlothletSpecifiers(root)) {
+	for (const spec of setValues(await collectSlothletSpecifiers(root))) {
 		let resolved;
 		try {
 			resolved = import.meta.resolve(spec);
@@ -483,7 +527,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 			// skip it rather than fail the whole importmap (or emit a dead entry).
 			continue;
 		}
-		const rel = path.relative(root, fileURLToPath(resolved)).replace(/\\/g, "/");
+		const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(root, fileURLToPath(resolved)), "/");
 		place(spec, rel);
 	}
 
@@ -491,8 +535,13 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	// template the static scan can't see — so enumerate every shipped locale explicitly.
 	try {
 		const sampleDir = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet/i18n/language/en-us.json")));
-		for (const f of (await fs.readdir(sampleDir)).filter((n) => n.endsWith(".json"))) {
-			const rel = path.relative(root, path.join(sampleDir, f)).replace(/\\/g, "/");
+		for (
+			let ofIndex = 0, ofList = filterList(await fs.readdir(sampleDir), (n) => StringMethods.endsWith(n, ".json"));
+			ofIndex < ofList.length;
+			ofIndex++
+		) {
+			const f = ofList[ofIndex];
+			const rel = RegExpMethods.symbolReplace(/\\/g, path.relative(root, path.join(sampleDir, f)), "/");
 			place(`@cldmv/slothlet/i18n/language/${f}`, rel);
 		}
 	} catch {
@@ -506,13 +555,18 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		const packRoot = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet-i18n/package.json")));
 		// Swap the final `@cldmv/slothlet` segment for the pack, preserving any `@version` suffix so a
 		// versioned CDN base (e.g. .../@cldmv/slothlet@3/) maps to .../@cldmv/slothlet-i18n@3/ not the slothlet base.
-		const packBase = base.replace(/@cldmv\/slothlet(@[^/]+)?\/$/, "@cldmv/slothlet-i18n$1/");
+		const packBase = RegExpMethods.symbolReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "@cldmv/slothlet-i18n$1/");
 		// Only enumerate pack locales when the swap actually fired — i.e. `base` ended with the
 		// `@cldmv/slothlet` segment. For a custom base served elsewhere (e.g. at "/") the replace is a
 		// no-op and packBase would point back into the slothlet base; emit nothing rather than wrong
 		// entries (the consumer can supply a pack base explicitly).
 		if (packBase !== base) {
-			for (const f of (await fs.readdir(path.join(packRoot, "languages"))).filter((n) => n.endsWith(".json"))) {
+			for (
+				let ofIndex = 0, ofList = filterList(await fs.readdir(path.join(packRoot, "languages")), (n) => StringMethods.endsWith(n, ".json"));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const f = ofList[ofIndex];
 				imports[`@cldmv/slothlet-i18n/language/${f}`] = `${packBase}languages/${f}`;
 			}
 		}
@@ -521,7 +575,10 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	}
 
 	const scopes = {};
-	for (const prefix of [...ownFiles].sort()) scopes[prefix] = { ...own };
+	for (let ofIndex = 0, ofList = ArrayMethods.sort(setToArray(ownFiles)); ofIndex < ofList.length; ofIndex++) {
+		const prefix = ofList[ofIndex];
+		scopes[prefix] = { ...own };
+	}
 	return { imports, scopes };
 }
 
@@ -533,7 +590,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
  * @returns {boolean} True if `rel` names a browser-loadable ES module.
  */
 function isBrowserModuleTarget(rel) {
-	return /\.(mjs|js)$/.test(rel);
+	return RegExpMethods.exec(/\.(mjs|js)$/, rel) !== null;
 }
 
 /**
@@ -548,9 +605,9 @@ function isBrowserModuleTarget(rel) {
  * @returns {string|null} The package name, or `null` if `spec` is not a bare package specifier.
  */
 function packageNameOf(spec) {
-	if (!spec || /^[./#]/.test(spec) || spec.includes(":")) return null;
-	const parts = spec.split("/");
-	if (spec.startsWith("@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
+	if (!spec || RegExpMethods.exec(/^[./#]/, spec) !== null || StringMethods.includes(spec, ":")) return null;
+	const parts = splitText(spec, "/");
+	if (StringMethods.startsWith(spec, "@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
 	return parts[0];
 }
 
@@ -569,15 +626,17 @@ function pickBrowserTarget(value) {
 	if (value == null) return null;
 	if (typeof value === "string") return value;
 	if (Arrays.isArray(value)) {
-		for (const v of value) {
+		for (let ofIndex = 0, ofList = value; ofIndex < ofList.length; ofIndex++) {
+			const v = ofList[ofIndex];
 			const t = pickBrowserTarget(v);
 			if (t) return t;
 		}
 		return null;
 	}
 	if (typeof value === "object") {
-		for (const cond of ["browser", "import", "module", "default"]) {
-			if (Objects.prototype.hasOwnProperty.call(value, cond)) {
+		for (let ofIndex = 0, ofList = ["browser", "import", "module", "default"]; ofIndex < ofList.length; ofIndex++) {
+			const cond = ofList[ofIndex];
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, value, cond)) {
 				const t = pickBrowserTarget(value[cond]);
 				if (t) return t;
 			}
@@ -626,34 +685,39 @@ async function collectPackageSpecifiers(packageRoot) {
 	const field = pkg.exports;
 	let entries;
 	if (typeof field === "string") entries = [[".", field]];
-	else entries = Objects.keys(field).some((k) => k.startsWith(".")) ? Objects.entries(field) : [[".", field]];
+	else entries = ArrayMethods.some(Objects.keys(field), (k) => StringMethods.startsWith(k, ".")) ? Objects.entries(field) : [[".", field]];
 
-	for (const [key, value] of entries) {
-		if (!key.startsWith(".")) continue; // only subpath keys (conditions inside are handled by pickBrowserTarget)
-		if (key.includes("*")) {
+	for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			key = ofEntry[0],
+			value = ofEntry[1];
+		if (!StringMethods.startsWith(key, ".")) continue; // only subpath keys (conditions inside are handled by pickBrowserTarget)
+		if (StringMethods.includes(key, "*")) {
 			const tmpl = pickBrowserTarget(value);
 			// Only enumerate wildcard templates that end in a module extension (the common `./x/*.mjs`
 			// shape) — that keeps the suffix non-empty for the slice below and skips non-module targets.
-			if (!tmpl || !tmpl.includes("*")) continue;
-			const star = tmpl.indexOf("*");
-			const suffix = tmpl.slice(star + 1);
+			if (!tmpl || !StringMethods.includes(tmpl, "*")) continue;
+			const star = StringMethods.indexOf(tmpl, "*");
+			const suffix = StringMethods.slice(tmpl, star + 1);
 			if (!isBrowserModuleTarget(suffix)) continue;
-			const specPrefix = (key === "./*" ? `${name}/` : `${name}${key.slice(1)}`).split("*")[0];
-			const dirRel = tmpl.slice(0, star).replace(/^\.\//, "");
+			const specPrefix = splitText(key === "./*" ? `${name}/` : `${name}${StringMethods.slice(key, 1)}`, "*")[0];
+			const dirRel = RegExpMethods.symbolReplace(/^\.\//, StringMethods.slice(tmpl, 0, star), "");
 			let files;
 			try {
 				files = await fs.readdir(path.join(packageRoot, dirRel), { recursive: true });
 			} catch {
 				continue; // declared wildcard dir absent in this layout — skip
 			}
-			for (const f of files) {
-				const norm = String(f).replace(/\\/g, "/");
-				if (norm.endsWith(suffix)) out.set(specPrefix + norm.slice(0, -suffix.length), dirRel + norm);
+			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+				const f = ofList[ofIndex];
+				const norm = RegExpMethods.symbolReplace(/\\/g, String(f), "/");
+				if (StringMethods.endsWith(norm, suffix))
+					MapMethods.set(out, specPrefix + StringMethods.slice(norm, 0, -suffix.length), dirRel + norm);
 			}
 		} else {
 			const tmpl = pickBrowserTarget(value);
 			if (!tmpl || !isBrowserModuleTarget(tmpl)) continue;
-			out.set(key === "." ? name : `${name}${key.slice(1)}`, tmpl.replace(/^\.\//, ""));
+			MapMethods.set(out, key === "." ? name : `${name}${StringMethods.slice(key, 1)}`, RegExpMethods.symbolReplace(/^\.\//, tmpl, ""));
 		}
 	}
 	return out;
@@ -674,7 +738,7 @@ async function collectPackageSpecifiers(packageRoot) {
 async function resolvePackageRoot(name, fromDir) {
 	let dir = path.resolve(fromDir);
 	for (;;) {
-		const candidate = path.join(dir, "node_modules", ...name.split("/"));
+		const candidate = Reflect.apply(path.join, path, concatLists([dir, "node_modules"], splitText(name, "/")));
 		try {
 			if ((await fs.stat(path.join(candidate, "package.json"))).isFile()) return candidate;
 		} catch {
@@ -706,16 +770,17 @@ async function scanApiDirSpecifiers(apiDir) {
 		} catch {
 			return;
 		}
-		for (const e of entries) {
-			if (SKIP_PREFIXES.some((p) => e.name.startsWith(p))) continue;
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const e = ofList[ofIndex];
+			if (ArrayMethods.some(SKIP_PREFIXES, (p) => StringMethods.startsWith(e.name, p))) continue;
 			const abs = path.join(dir, e.name);
 			if (e.isDirectory()) {
 				if (e.name !== "node_modules") await walk(abs);
-			} else if (/\.(mjs|cjs|js|mts|cts|ts)$/.test(e.name)) {
+			} else if (RegExpMethods.exec(/\.(mjs|cjs|js|mts|cts|ts)$/, e.name) !== null) {
 				const src = await fs.readFile(abs, "utf8");
 				let m;
 				IMPORT_SPEC_RE.lastIndex = 0;
-				while ((m = IMPORT_SPEC_RE.exec(src))) specs.add(m[1]);
+				while ((m = RegExpMethods.exec(IMPORT_SPEC_RE, src))) SetMethods.add(specs, m[1]);
 			}
 		}
 	}
@@ -742,17 +807,19 @@ async function collectGraphImports(apiDir, packagesBase) {
 	const imports = {};
 	const absApiDir = path.resolve(apiDir);
 	const names = new Set();
-	for (const spec of await scanApiDirSpecifiers(absApiDir)) {
+	for (const spec of setValues(await scanApiDirSpecifiers(absApiDir))) {
 		const name = packageNameOf(spec);
 		// slothlet's own surface is emitted by generateImportMap under slothletBase — don't double-map it.
 		if (!name || name === "@cldmv/slothlet") continue;
-		names.add(name);
+		SetMethods.add(names, name);
 	}
-	for (const name of names) {
+	for (const name of setValues(names)) {
 		const root = await resolvePackageRoot(name, absApiDir);
 		if (!root) continue; // not resolvable from the consumer tree — leave to the prefix map
 		const pkgBase = `${packagesBase}${name}/`;
-		for (const [spec, relTarget] of await collectPackageSpecifiers(root)) {
+		for (const ofEntry of mapEntries(await collectPackageSpecifiers(root))) {
+			const spec = ofEntry[0],
+				relTarget = ofEntry[1];
 			try {
 				await fs.access(path.join(root, relTarget));
 			} catch {
@@ -777,7 +844,7 @@ async function collectGraphImports(apiDir, packagesBase) {
  * @returns {string} The served base for sibling packages (ends with `/`).
  */
 function derivePackagesBase(base) {
-	const stripped = base.replace(/@cldmv\/slothlet(@[^/]+)?\/$/, "");
+	const stripped = RegExpMethods.symbolReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "");
 	return stripped !== base ? stripped : "/node_modules/";
 }
 
@@ -836,13 +903,16 @@ async function generateBrowserAssets(apiDir, options = {}) {
 		});
 	}
 	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from slothletBase.
-	const base = String(slothletBase).endsWith("/") ? String(slothletBase) : `${slothletBase}/`;
+	const base = StringMethods.endsWith(String(slothletBase), "/") ? String(slothletBase) : `${slothletBase}/`;
 	const packagesBase = derivePackagesBase(base);
-	const [manifest, importmap, graphImports] = await Promises.all([
-		generateManifest(apiDir),
-		generateImportMap(slothletBase),
-		collectGraphImports(apiDir, packagesBase)
-	]);
+	const unpacked1 = await Promises.all([
+			generateManifest(apiDir),
+			generateImportMap(slothletBase),
+			collectGraphImports(apiDir, packagesBase)
+		]),
+		manifest = unpacked1[0],
+		importmap = unpacked1[1],
+		graphImports = unpacked1[2];
 	// Merge the consumer graph's third-party subpath keys under the slothlet map. Slothlet's own
 	// entries win on any collision (the graph collector already skips `@cldmv/slothlet`, so there are none).
 	importmap.imports = { ...graphImports, ...importmap.imports };

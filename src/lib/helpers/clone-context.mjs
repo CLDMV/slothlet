@@ -45,44 +45,47 @@
 import { isNode } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import {
-	Reflect,
-	Objects,
+	ArrayBuffer,
+	ArrayMethods,
 	Arrays,
-	Map,
-	Set,
-	Symbol,
-	Symbols,
-	NativeObject,
+	BigInt,
+	BigInt64Array,
+	BigUint64Array,
 	Boolean,
+	DataView,
 	Date,
 	Error,
-	Number,
-	RegExp,
-	String,
-	ArrayBuffer,
-	DataView,
-	Uint8Array,
-	SharedArrayBuffer,
-	BigInt,
-	Processes,
-	Int8Array,
-	Uint8ClampedArray,
-	Int16Array,
-	Uint16Array,
-	Int32Array,
-	Uint32Array,
+	EvalError,
+	filterList,
 	Float16Array,
 	Float32Array,
 	Float64Array,
-	BigInt64Array,
-	BigUint64Array,
-	EvalError,
+	Int16Array,
+	Int32Array,
+	Int8Array,
+	Map,
+	mapList,
+	NativeObject,
+	Number,
+	Objects,
+	Processes,
 	RangeError,
 	ReferenceError,
+	Reflect,
+	RegExp,
+	Set,
+	SharedArrayBuffer,
+	String,
+	structuredClone,
+	Symbol,
+	Symbols,
 	SyntaxError,
 	TypeError,
-	URIError,
-	structuredClone
+	Uint16Array,
+	Uint32Array,
+	Uint8Array,
+	Uint8ClampedArray,
+	URIError
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -127,18 +130,29 @@ const NativeDataView = DataView;
 const dateGetTime = Date.prototype.getTime;
 const regExpSource = getterOf(RegExp.prototype, "source");
 /** The flag getters of `RegExp.prototype`, each with the letter it stands for, in the order `flags` lists them. */
-const REGEXP_FLAGS = [
-	["d", "hasIndices"],
-	["g", "global"],
-	["i", "ignoreCase"],
-	["m", "multiline"],
-	["s", "dotAll"],
-	["u", "unicode"],
-	["v", "unicodeSets"],
-	["y", "sticky"]
-]
-	.map(([letter, key]) => [letter, getterOf(RegExp.prototype, key)])
-	.filter(([, getter]) => getter !== null);
+const REGEXP_FLAGS = filterList(
+	mapList(
+		[
+			["d", "hasIndices"],
+			["g", "global"],
+			["i", "ignoreCase"],
+			["m", "multiline"],
+			["s", "dotAll"],
+			["u", "unicode"],
+			["v", "unicodeSets"],
+			["y", "sticky"]
+		],
+		(entry1) => {
+			const letter = entry1[0],
+				key = entry1[1];
+			return [letter, getterOf(RegExp.prototype, key)];
+		}
+	),
+	(entry2) => {
+		const getter = entry2[1];
+		return getter !== null;
+	}
+);
 const bufferByteLength = getterOf(ArrayBuffer.prototype, "byteLength");
 const bufferResizable = getterOf(ArrayBuffer.prototype, "resizable");
 const bufferMaxByteLength = getterOf(ArrayBuffer.prototype, "maxByteLength");
@@ -155,20 +169,26 @@ const viewByteOffset = getterOf(DataView.prototype, "byteOffset");
 const viewByteLength = getterOf(DataView.prototype, "byteLength");
 /** The typed array classes, by the name each instance's tag gives. */
 const TYPED_ARRAYS = new NativeMap(
-	[
-		["Int8Array", Int8Array],
-		["Uint8Array", Uint8Array],
-		["Uint8ClampedArray", Uint8ClampedArray],
-		["Int16Array", Int16Array],
-		["Uint16Array", Uint16Array],
-		["Int32Array", Int32Array],
-		["Uint32Array", Uint32Array],
-		["Float16Array", Float16Array],
-		["Float32Array", Float32Array],
-		["Float64Array", Float64Array],
-		["BigInt64Array", BigInt64Array],
-		["BigUint64Array", BigUint64Array]
-	].filter(([, kind]) => typeof kind === "function")
+	filterList(
+		[
+			["Int8Array", Int8Array],
+			["Uint8Array", Uint8Array],
+			["Uint8ClampedArray", Uint8ClampedArray],
+			["Int16Array", Int16Array],
+			["Uint16Array", Uint16Array],
+			["Int32Array", Int32Array],
+			["Uint32Array", Uint32Array],
+			["Float16Array", Float16Array],
+			["Float32Array", Float32Array],
+			["Float64Array", Float64Array],
+			["BigInt64Array", BigInt64Array],
+			["BigUint64Array", BigUint64Array]
+		],
+		(entry3) => {
+			const kind = entry3[1];
+			return typeof kind === "function";
+		}
+	)
 );
 /** The error classes the structured clone algorithm keeps, by name; any other error is copied as an `Error`. */
 const ERROR_CLASSES = new NativeMap([
@@ -181,9 +201,10 @@ const ERROR_CLASSES = new NativeMap([
 	["URIError", URIError]
 ]);
 /** The `valueOf` of each boxed primitive's prototype: the engine's brand check for that box. */
-const BOXED_VALUE_OF = [Number, String, Boolean, typeof BigInt === "function" ? BigInt : null, Symbol]
-	.filter((kind) => kind !== null)
-	.map((kind) => kind.prototype.valueOf);
+const BOXED_VALUE_OF = mapList(
+	filterList([Number, String, Boolean, typeof BigInt === "function" ? BigInt : null, Symbol], (kind) => kind !== null),
+	(kind) => kind.prototype.valueOf
+);
 
 /**
  * Run a built-in method on a value, answering `undefined` where the value is not of the method's kind.
@@ -210,7 +231,8 @@ function runtime_tryBrand(method, value) {
  * isBoxedPrimitive(new Number(4)); // true
  */
 export function isBoxedPrimitive(value) {
-	for (const valueOf of BOXED_VALUE_OF) {
+	for (let ofIndex = 0, ofList = BOXED_VALUE_OF; ofIndex < ofList.length; ofIndex++) {
+		const valueOf = ofList[ofIndex];
 		try {
 			apply(valueOf, value, []);
 			return true;
@@ -266,7 +288,7 @@ function runtime_cloneSites() {
 			return;
 		}
 		if (!descriptor || typeof descriptor.value !== "function") return;
-		sites.push({ host, key, native: runtime_unwrapClone(descriptor.value) });
+		ArrayMethods.push(sites, { host, key, native: runtime_unwrapClone(descriptor.value) });
 	};
 	add(globalThis, "structuredClone");
 	add(globalThis.MessagePort?.prototype, "postMessage");
@@ -367,16 +389,19 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 		const copy = new NativeMap();
 		remember(copy);
 		const entries = [];
-		apply(mapForEach, data, [(member, key) => entries.push([key, member])]);
-		for (const [key, member] of entries) apply(mapSet, copy, [walk(key), walk(member)]);
+		apply(mapForEach, data, [(member, key) => ArrayMethods.push(entries, [key, member])]);
+		for (let i = 0; i < entries.length; i++) apply(mapSet, copy, [walk(entries[i][0]), walk(entries[i][1])]);
 		return copy;
 	}
 	if (runtime_hasBrand(data, setSize)) {
 		const copy = new NativeSet();
 		remember(copy);
 		const entries = [];
-		apply(setForEach, data, [(member) => entries.push(member)]);
-		for (const member of entries) apply(setAdd, copy, [walk(member)]);
+		apply(setForEach, data, [(member) => ArrayMethods.push(entries, member)]);
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const member = ofList[ofIndex];
+			apply(setAdd, copy, [walk(member)]);
+		}
 		return copy;
 	}
 	const time = runtime_tryBrand(dateGetTime, data);
@@ -384,7 +409,12 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 	const source = runtime_tryBrand(regExpSource, data);
 	if (source !== undefined) {
 		let flags = "";
-		for (const [letter, getter] of REGEXP_FLAGS) if (apply(getter, data, [])) flags += letter;
+		for (let ofIndex = 0, ofList = REGEXP_FLAGS; ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				letter = ofEntry[0],
+				getter = ofEntry[1];
+			if (apply(getter, data, [])) flags += letter;
+		}
 		// A copy starts at `lastIndex` 0, as the platform's does.
 		return new NativeRegExp(source, flags);
 	}
@@ -424,7 +454,8 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 	}
 	// Memory shared with the object: a clone would let the caller write it.
 	if (runtime_tryBrand(sharedByteLength, data) !== undefined) throw new NotCopied();
-	for (const valueOf of BOXED_VALUE_OF) {
+	for (let ofIndex = 0, ofList = BOXED_VALUE_OF; ofIndex < ofList.length; ofIndex++) {
+		const valueOf = ofList[ofIndex];
 		let primitive;
 		try {
 			primitive = apply(valueOf, data, []);
@@ -550,7 +581,8 @@ function runtime_reveal(root) {
 					const members = node.list ? [] : {};
 					apply(mapSet, copies, [value, members]);
 					if (subject !== value) apply(mapSet, copies, [subject, members]);
-					for (const key of ownKeys(subject)) {
+					for (let ofIndex = 0, ofList = ownKeys(subject); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						if (typeof key !== "string") continue;
 						const descriptor = getOwnPropertyDescriptor(subject, key);
 						if (!descriptor || !descriptor.enumerable) continue;
@@ -590,7 +622,8 @@ function runtime_reveal(root) {
 			apply(setForEach, subject, [(member) => apply(setAdd, copy, [walk(member)])]);
 			return copy;
 		}
-		for (const key of ownKeys(subject)) {
+		for (let ofIndex = 0, ofList = ownKeys(subject); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (typeof key !== "string") continue;
 			const descriptor = getOwnPropertyDescriptor(subject, key);
 			if (!descriptor || !descriptor.enumerable) continue;
@@ -622,7 +655,8 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
 function enableClonePatching() {
 	if (installed) return;
 	installed = [];
-	for (const { host, key, native } of CLONE_SITES) {
+	for (let ofIndex = 0, ofList = CLONE_SITES; ofIndex < ofList.length; ofIndex++) {
+		const { host, key, native } = ofList[ofIndex];
 		let descriptor;
 		try {
 			descriptor = getOwnPropertyDescriptor(host, key);
@@ -647,7 +681,7 @@ function enableClonePatching() {
 						const revealed = runtime_reveal(args[0]);
 						if (!revealed.found) throw error;
 						handed = [revealed.value];
-						for (let index = 1; index < args.length; index++) handed.push(runtime_reveal(args[index]).value);
+						for (let index = 1; index < args.length; index++) ArrayMethods.push(handed, runtime_reveal(args[index]).value);
 					} catch {
 						// Whatever reading the value threw is not the caller's to see: the platform's refusal stands.
 						throw error;
@@ -666,7 +700,7 @@ function enableClonePatching() {
 			continue;
 		}
 		markLayer(wrapper, layer);
-		installed.push({ host, key, layer, wrapper, descriptor });
+		ArrayMethods.push(installed, { host, key, layer, wrapper, descriptor });
 	}
 }
 
@@ -706,7 +740,8 @@ export function cloneTakingViews(value) {
  */
 function disableClonePatching() {
 	if (!installed) return;
-	for (const { host, key, layer, wrapper } of installed) {
+	for (let ofIndex = 0, ofList = installed; ofIndex < ofList.length; ofIndex++) {
+		const { host, key, layer, wrapper } = ofList[ofIndex];
 		const restore = closeLayer(layer, runtime_descriptorValue);
 		try {
 			if (holdsValue(host, key, wrapper)) defineProperty(host, key, restore);

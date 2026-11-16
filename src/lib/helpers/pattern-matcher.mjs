@@ -35,7 +35,16 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { RegExp } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	appendList,
+	ArrayMethods,
+	filterList,
+	mapList,
+	RegExp,
+	RegExpMethods,
+	splitText,
+	StringMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Compile a glob pattern into a matcher function.
@@ -62,9 +71,9 @@ import { RegExp } from "@cldmv/slothlet/helpers/intrinsics";
 export function compilePattern(pattern, options = {}) {
 	// Handle whole-pattern negation (leading "!"), but NOT the scoped "!(...)" exclusion extglob,
 	// which is a per-segment operator handled below.
-	const isNegation = pattern.startsWith("!") && !pattern.startsWith("!(");
+	const isNegation = StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(");
 	if (isNegation) {
-		pattern = pattern.slice(1);
+		pattern = StringMethods.slice(pattern, 1);
 		const matcher = compilePattern(pattern, options);
 		return (path) => !matcher(path);
 	}
@@ -73,8 +82,8 @@ export function compilePattern(pattern, options = {}) {
 	const expanded = expandBraces(pattern, 0, 10, options);
 	if (expanded.length > 1) {
 		// Multiple patterns - match if ANY match
-		const matchers = expanded.map((p) => compilePattern(p, options));
-		return (path) => matchers.some((m) => m(path));
+		const matchers = mapList(expanded, (p) => compilePattern(p, options));
+		return (path) => ArrayMethods.some(matchers, (m) => m(path));
 	}
 
 	// Single pattern - convert to regex
@@ -87,24 +96,25 @@ export function compilePattern(pattern, options = {}) {
 	// alternatives are treated as literals (their regex specials are escaped); globs inside `!(...)`
 	// are not supported.
 	const extglobs = [];
-	pattern = pattern.replace(/!\(([^()]*)\)/g, (_match, body) => {
-		const alts = body
-			.split("|")
-			.filter((alt) => alt.length > 0)
-			.map((alt) => alt.replace(/[.+^$()|[\]\\*?{}]/g, "\\$&"));
+	pattern = RegExpMethods.symbolReplace(/!\(([^()]*)\)/g, pattern, (_match, body) => {
+		const alts = mapList(
+			filterList(splitText(body, "|"), (alt) => alt.length > 0),
+			(alt) => RegExpMethods.symbolReplace(/[.+^$()|[\]\\*?{}]/g, alt, "\\$&")
+		);
 		// `!()` (no alternatives) excludes nothing → any single segment matches.
-		const guard = alts.length ? `(?!(?:${alts.join("|")})(?:\\.|$))` : "";
+		const guard = alts.length ? `(?!(?:${ArrayMethods.join(alts, "|")})(?:\\.|$))` : "";
 		const token = `__EXTGLOB_${extglobs.length}__`;
-		extglobs.push(`${guard}[^.]+`);
+		ArrayMethods.push(extglobs, `${guard}[^.]+`);
 		return token;
 	});
 
 	// A `**` that is a whole segment stands for any number of segments, none included, and takes the `.` beside it
 	// with it (#726). A run of them (`a.**.**`) says the same as one, so it is read as one.
 	const segments = [];
-	for (const segment of pattern.split(".")) {
+	for (let ofIndex = 0, ofList = splitText(pattern, "."); ofIndex < ofList.length; ofIndex++) {
+		const segment = ofList[ofIndex];
 		if (segment === "**" && segments[segments.length - 1] === "**") continue;
-		segments.push(segment);
+		ArrayMethods.push(segments, segment);
 	}
 	let regexPattern = "";
 	for (let index = 0; index < segments.length; index++) {
@@ -120,24 +130,31 @@ export function compilePattern(pattern, options = {}) {
 		}
 		// The `.` before this segment, unless a `**` before it already took it.
 		if (!first && segments[index - 1] !== "**") regexPattern += "\\.";
-		regexPattern += segment
-			.replace(/[+^$()|[\]\\]/g, "\\$&") // Escape regex specials; {} already expanded
-			.replace(/\*\*/g, "__DOUBLESTAR__") // A `**` inside a segment: any characters, dots included
-			.replace(/\*/g, "[^.]*") // * matches any chars except .
-			.replace(/__DOUBLESTAR__/g, ".*")
-			.replace(/\?/g, "."); // ? matches single char
+		regexPattern += RegExpMethods.symbolReplace(
+			/\?/g,
+			RegExpMethods.symbolReplace(
+				/__DOUBLESTAR__/g,
+				RegExpMethods.symbolReplace(
+					/\*/g,
+					RegExpMethods.symbolReplace(/\*\*/g, RegExpMethods.symbolReplace(/[+^$()|[\]\\]/g, segment, "\\$&"), "__DOUBLESTAR__"),
+					"[^.]*"
+				),
+				".*"
+			),
+			"."
+		); // ? matches single char
 	}
 
 	// Restore scoped-exclusion segment matchers (function replacement avoids `$` in the lookahead
 	// being read as a replacement token).
-	extglobs.forEach((re, i) => {
-		regexPattern = regexPattern.replace(`__EXTGLOB_${i}__`, () => re);
+	ArrayMethods.forEach(extglobs, (re, i) => {
+		regexPattern = StringMethods.replace(regexPattern, `__EXTGLOB_${i}__`, () => re);
 	});
 
 	regexPattern = `^${regexPattern}$`;
 	const regex = new RegExp(regexPattern);
 
-	return (path) => regex.test(path);
+	return (path) => RegExpMethods.exec(regex, path) !== null;
 }
 
 /**
@@ -164,7 +181,7 @@ export function expandBraces(pattern, depth = 0, maxDepth = 10, options = {}) {
 	}
 
 	// Find first brace group
-	const braceStart = pattern.indexOf("{");
+	const braceStart = StringMethods.indexOf(pattern, "{");
 	if (braceStart === -1) {
 		return [pattern]; // No braces to expand
 	}
@@ -188,20 +205,21 @@ export function expandBraces(pattern, depth = 0, maxDepth = 10, options = {}) {
 	}
 
 	// Extract parts
-	const prefix = pattern.slice(0, braceStart);
-	const braceContent = pattern.slice(braceStart + 1, braceEnd);
-	const suffix = pattern.slice(braceEnd + 1);
+	const prefix = StringMethods.slice(pattern, 0, braceStart);
+	const braceContent = StringMethods.slice(pattern, braceStart + 1, braceEnd);
+	const suffix = StringMethods.slice(pattern, braceEnd + 1);
 
 	// Split on commas (but not nested ones)
 	const alternatives = splitBraceAlternatives(braceContent);
 
 	// Generate expanded patterns
 	const expanded = [];
-	for (const alt of alternatives) {
+	for (let ofIndex = 0, ofList = alternatives; ofIndex < ofList.length; ofIndex++) {
+		const alt = ofList[ofIndex];
 		const combined = prefix + alt + suffix;
 		// Recursively expand nested braces
 		const recursiveExpanded = expandBraces(combined, depth + 1, maxDepth, options);
-		expanded.push(...recursiveExpanded);
+		appendList(expanded, recursiveExpanded);
 	}
 
 	return expanded;
@@ -230,7 +248,7 @@ export function splitBraceAlternatives(content) {
 			depth--;
 			current += char;
 		} else if (char === "," && depth === 0) {
-			alternatives.push(current);
+			ArrayMethods.push(alternatives, current);
 			current = "";
 		} else {
 			current += char;
@@ -238,7 +256,7 @@ export function splitBraceAlternatives(content) {
 	}
 
 	if (current) {
-		alternatives.push(current);
+		ArrayMethods.push(alternatives, current);
 	}
 
 	return alternatives;

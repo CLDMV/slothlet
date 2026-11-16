@@ -53,7 +53,18 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, isActiveLayer, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Objects, WeakMap, WeakSet, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	EventTarget,
+	filterList,
+	FunctionMethods,
+	Objects,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 import { isSlothletProxy } from "#handlers/framework-internals";
 
@@ -138,7 +149,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function" || !descriptor.configurable) return;
 	// Already this patch's accessor: an interface listed by name is also reached by discovery. One this
 	// copy disabled earlier, and that is back on top, is wrapped afresh instead.
-	if (installedGetters.has(descriptor.get) && isActiveLayer(descriptor.get)) return;
+	if (WeakSetMethods.has(installedGetters, descriptor.get) && isActiveLayer(descriptor.get)) return;
 
 	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
 	const layer = openLayer(descriptor, runtime_descriptorGetter);
@@ -151,8 +162,8 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	const tracked = new WeakMap();
 
 	const wrapperGet = function () {
-		const entry = tracked.get(this);
-		const current = originalGet.call(this);
+		const entry = WeakMapMethods.get(tracked, this);
+		const current = FunctionMethods.call(originalGet, this);
 		// Only substitute when the platform still reports the wrapper this patch installed — anything
 		// else means the property was reassigned to something this setter did not wrap (e.g. `null`),
 		// and the platform's own value is already the right answer.
@@ -161,7 +172,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 			// The platform no longer reports the wrapper this patch installed, so the entry no longer
 			// describes reality. Drop it rather than leaving it to keep the stale original/wrapper pair
 			// reachable for the lifetime of `this`.
-			tracked.delete(this);
+			WeakMapMethods.delete(tracked, this);
 		}
 		return current;
 	};
@@ -171,16 +182,16 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		// or reject the same way it would unpatched. Neither has an identity to pin — and an accessor
 		// disabled under another copy's pins nothing either.
 		if (typeof value !== "function" || !layer.active) {
-			const result = originalSet.call(this, value);
-			tracked.delete(this);
+			const result = FunctionMethods.call(originalSet, this, value);
+			WeakMapMethods.delete(tracked, this);
 			return result;
 		}
 
 		const wrapper = pinToCurrentCaller(value);
 		// Mutate `tracked` only once the platform setter has actually accepted the assignment — if it
 		// throws, the previous tracked entry (or lack of one) is still the accurate description of state.
-		const result = originalSet.call(this, wrapper);
-		tracked.set(this, { original: value, wrapper });
+		const result = FunctionMethods.call(originalSet, this, wrapper);
+		WeakMapMethods.set(tracked, this, { original: value, wrapper });
 		return result;
 	};
 
@@ -190,10 +201,10 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		get: wrapperGet,
 		set: wrapperSet
 	});
-	installedGetters.add(wrapperGet);
+	WeakSetMethods.add(installedGetters, wrapperGet);
 	markLayer(wrapperGet, layer);
 
-	patched.push({ proto, propName, layer, wrapperGet, wrapperSet });
+	ArrayMethods.push(patched, { proto, propName, layer, wrapperGet, wrapperSet });
 }
 
 /**
@@ -209,11 +220,17 @@ function runtime_patchHandlerAccessor(proto, propName) {
 function enableEventTargetPropertyPatching() {
 	if (isPatchingEnabled) return;
 
-	for (const [ctorName, propNames] of PATCHED_INTERFACES) {
+	for (let ofIndex = 0, ofList = PATCHED_INTERFACES; ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			ctorName = ofEntry[0],
+			propNames = ofEntry[1];
 		const ctor = globalThis[ctorName];
 		// Host doesn't provide this interface at all (most of these are browser-only) — nothing to patch.
 		if (typeof ctor !== "function") continue;
-		for (const propName of propNames) runtime_patchHandlerProperty(ctor, propName);
+		for (let ofIndex = 0, ofList = propNames; ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerProperty(ctor, propName);
+		}
 	}
 
 	runtime_patchDiscoveredHandlers();
@@ -228,7 +245,7 @@ function enableEventTargetPropertyPatching() {
  * @private
  */
 function runtime_ownHandlerNames(target) {
-	return Objects.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
+	return filterList(Objects.getOwnPropertyNames(target), (name) => StringMethods.startsWith(name, "on") && name.length > 2);
 }
 
 /**
@@ -248,7 +265,8 @@ function runtime_patchDiscoveredHandlers() {
 	if (typeof EventTargetCtor !== "function") return;
 	const base = EventTargetCtor.prototype;
 
-	for (const name of Objects.getOwnPropertyNames(globalThis)) {
+	for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(globalThis); ofIndex < ofList.length; ofIndex++) {
+		const name = ofList[ofIndex];
 		const value = Objects.getOwnPropertyDescriptor(globalThis, name)?.value;
 		// Slothlet's own Proxies (a function root's `self`, #803) are no interface, and are not read here.
 		if (
@@ -262,8 +280,11 @@ function runtime_patchDiscoveredHandlers() {
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (Objects.prototype.isPrototypeOf.call(base, globalThis)) {
-		for (const propName of runtime_ownHandlerNames(globalThis)) runtime_patchHandlerAccessor(globalThis, propName);
+	if (FunctionMethods.call(Objects.prototype.isPrototypeOf, base, globalThis)) {
+		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(globalThis); ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerAccessor(globalThis, propName);
+		}
 	}
 }
 
@@ -280,7 +301,8 @@ function runtime_patchDiscoveredHandlers() {
 function disableEventTargetPropertyPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
+	for (let ofIndex = 0, ofList = patched; ofIndex < ofList.length; ofIndex++) {
+		const { proto, propName, layer, wrapperGet, wrapperSet } = ofList[ofIndex];
 		const restore = closeLayer(layer, runtime_descriptorGetter);
 		const current = Objects.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {

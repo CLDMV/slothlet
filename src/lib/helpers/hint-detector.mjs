@@ -20,6 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { FunctionMethods, ObjectMethods, RegExpMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Hint detection rules - pattern matching for originalError messages
@@ -59,9 +60,10 @@ export class HintDetector extends ComponentBase {
 	detectHint(error, errorCode) {
 		// If we have an originalError, check pattern rules first
 		if (error) {
-			const errorMessage = error.message || error.toString();
-			for (const rule of HINT_RULES) {
-				if (rule.pattern.test(errorMessage)) {
+			const errorMessage = error.message || ObjectMethods.toString(error);
+			for (let ofIndex = 0, ofList = HINT_RULES; ofIndex < ofList.length; ofIndex++) {
+				const rule = ofList[ofIndex];
+				if (RegExpMethods.exec(rule.pattern, errorMessage) !== null) {
 					return rule.hintKey;
 				}
 			}
@@ -75,4 +77,4 @@ export class HintDetector extends ComponentBase {
 
 // Backwards-compatible standalone export
 const hintDetectorInstance_standalone = new HintDetector();
-export const detectHint = hintDetectorInstance_standalone.detectHint.bind(hintDetectorInstance_standalone);
+export const detectHint = FunctionMethods.bind(hintDetectorInstance_standalone.detectHint, hintDetectorInstance_standalone);

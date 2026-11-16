@@ -58,7 +58,7 @@
  * @public
  */
 
-import { URL, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import { StringMethods, TypeError, URL, URLMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Create a `resolveModuleSpecifier` callback that resolves manifest file entries
@@ -108,7 +108,7 @@ function createManifestResolver(base) {
 	// If base is a file/http URL that does not end with "/", strip the last segment
 	// so that relative resolution behaves like a directory (matching browser semantics).
 	let baseUrl = typeof base === "string" ? new URL(base) : base;
-	if (!baseUrl.pathname.endsWith("/")) {
+	if (!StringMethods.endsWith(URLMethods.pathname(baseUrl), "/")) {
 		baseUrl = new URL("./", baseUrl);
 	}
 
@@ -119,7 +119,7 @@ function createManifestResolver(base) {
 	 * @returns {string} Absolute URL for the module.
 	 */
 	return function resolveModuleSpecifier(entry) {
-		return new URL(entry.path, baseUrl).href;
+		return URLMethods.href(new URL(entry.path, baseUrl));
 	};
 }
 

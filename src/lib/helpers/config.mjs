@@ -32,14 +32,29 @@ import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/def
 // Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
 // rather than silently matching nothing forever (see normalizeRoutines()).
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	filterList,
+	mapList,
+	Numbers,
+	Objects,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	String,
+	StringMethods,
+	splitText
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { createClock } from "@cldmv/slothlet/helpers/clock";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
-const VALID_ROUTINE_MODES = new Set(["manual", "startup", "shutdown", "destroy"]);
+const VALID_ROUTINE_MODES = setFrom(["manual", "startup", "shutdown", "destroy"]);
 
 /** Valid `order` values for a routines entry. @type {ReadonlySet<string>} */
-const VALID_ROUTINE_ORDERS = new Set(["mount", "depth"]);
+const VALID_ROUTINE_ORDERS = setFrom(["mount", "depth"]);
 
 /**
  * Default `order` per mode when a routine entry doesn't specify one — `"depth"` (deepest-first)
@@ -72,7 +87,7 @@ const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Objects.freeze([
  * same class of bug, on a different property-assignment surface).
  * @type {ReadonlySet<string>}
  */
-const ROUTINE_NAME_RESERVED = new Set(["slothlet", "__proto__", "constructor", "prototype"]);
+const ROUTINE_NAME_RESERVED = setFrom(["slothlet", "__proto__", "constructor", "prototype"]);
 
 /**
  * Normalize the `hook` config (V2-style support) into a canonical
@@ -670,8 +685,8 @@ export class Config extends ComponentBase {
 
 		// String shorthand applies to both contexts
 		if (typeof collision === "string") {
-			const normalized = collision.toLowerCase();
-			const mode = validModes.includes(normalized) ? normalized : defaultMode;
+			const normalized = StringMethods.toLowerCase(collision);
+			const mode = ArrayMethods.includes(validModes, normalized) ? normalized : defaultMode;
 			return { initial: mode, api: mode };
 		}
 
@@ -679,8 +694,8 @@ export class Config extends ComponentBase {
 		if (collision && typeof collision === "object") {
 			const validateMode = (m) => {
 				if (!m) return defaultMode;
-				const normalized = String(m).toLowerCase();
-				return validModes.includes(normalized) ? normalized : defaultMode;
+				const normalized = StringMethods.toLowerCase(String(m));
+				return ArrayMethods.includes(validModes, normalized) ? normalized : defaultMode;
 			};
 			return {
 				initial: validateMode(collision.initial),
@@ -703,7 +718,7 @@ export class Config extends ComponentBase {
 			return "async"; // Default to AsyncLocalStorage
 		}
 
-		const normalized = runtime.toLowerCase().trim();
+		const normalized = StringMethods.trim(StringMethods.toLowerCase(runtime));
 
 		// AsyncLocalStorage runtime variants
 		if (normalized === "async" || normalized === "asynclocal" || normalized === "asynclocalstorage") {
@@ -730,7 +745,7 @@ export class Config extends ComponentBase {
 			return "eager"; // Default to eager
 		}
 
-		const normalized = mode.toLowerCase().trim();
+		const normalized = StringMethods.trim(StringMethods.toLowerCase(mode));
 
 		// Lazy mode variants
 		if (normalized === "lazy" || normalized === "deferred" || normalized === "proxy") {
@@ -1059,13 +1074,13 @@ export class Config extends ComponentBase {
 		let scopeConfig = config.scope;
 		if (scopeConfig && typeof scopeConfig === "object" && scopeConfig.merge) {
 			const validMergeStrategies = ["shallow", "deep"];
-			if (!validMergeStrategies.includes(scopeConfig.merge)) {
+			if (!ArrayMethods.includes(validMergeStrategies, scopeConfig.merge)) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: "scope.merge",
 						value: scopeConfig.merge,
-						expected: validMergeStrategies.join(" or "),
+						expected: ArrayMethods.join(validMergeStrategies, " or "),
 						hint: `Invalid merge strategy: "${scopeConfig.merge}". Must be "shallow" or "deep".`,
 						validationError: true
 					},
@@ -1157,12 +1172,16 @@ export class Config extends ComponentBase {
 		const normalizedRoutines = this.normalizeRoutines(config.routines);
 		const routines =
 			config.collectLifecycleHooks === true
-				? [
-						...normalizedRoutines.filter((routine) => routine.mode !== "shutdown" && routine.mode !== "destroy"),
-						...COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES.filter(
-							(implicit) => !normalizedRoutines.some((routine) => routine.name === implicit.name)
-						).map((implicit) => ({ ...implicit, recursive: false }))
-					]
+				? concatLists(
+						filterList(normalizedRoutines, (routine) => routine.mode !== "shutdown" && routine.mode !== "destroy"),
+						mapList(
+							filterList(
+								COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES,
+								(implicit) => !ArrayMethods.some(normalizedRoutines, (routine) => routine.name === implicit.name)
+							),
+							(implicit) => ({ ...implicit, recursive: false })
+						)
+					)
 				: normalizedRoutines;
 
 		// Build normalized config
@@ -1229,7 +1248,7 @@ export class Config extends ComponentBase {
 	normalizeSuppressFixes(suppressFixes, silent) {
 		// Known suppressible rule IDs — extend this list as more fixes land in v3.
 		// Format: <rule>_<PR number> (e.g. "C03_116" = API rule C03, fixed in PR #116).
-		const KNOWN_FIX_IDS = new Set(["C03_116"]);
+		const KNOWN_FIX_IDS = setFrom(["C03_116"]);
 		const REPO_PR_BASE = "https://github.com/CLDMV/slothlet/pull/";
 
 		if (!Arrays.isArray(suppressFixes) || suppressFixes.length === 0) {
@@ -1237,14 +1256,15 @@ export class Config extends ComponentBase {
 		}
 
 		const result = new Set();
-		for (const rule of suppressFixes) {
-			if (typeof rule !== "string" || !KNOWN_FIX_IDS.has(rule)) {
+		for (let ofIndex = 0, ofList = suppressFixes; ofIndex < ofList.length; ofIndex++) {
+			const rule = ofList[ofIndex];
+			if (typeof rule !== "string" || !SetMethods.has(KNOWN_FIX_IDS, rule)) {
 				continue;
 			}
-			result.add(rule);
+			SetMethods.add(result, rule);
 			if (!silent) {
 				// Extract PR number from the trailing _<number> segment of the rule ID
-				const prNumber = rule.split("_").pop();
+				const prNumber = ArrayMethods.pop(splitText(rule, "_"));
 				const url = `${REPO_PR_BASE}${prNumber}`;
 				new this.SlothletWarning("WARN_SUPPRESS_FIX_ACTIVE", { rule, url });
 			}
@@ -1271,7 +1291,7 @@ export class Config extends ComponentBase {
 
 		// String "fast" or "strict"
 		if (typeof typescript === "string") {
-			const mode = typescript.toLowerCase();
+			const mode = StringMethods.toLowerCase(typescript);
 			if (mode === "fast" || mode === "strict") {
 				return { enabled: true, mode };
 			}
@@ -1378,7 +1398,7 @@ export class Config extends ComponentBase {
 		if (!env || typeof env !== "object") {
 			return null; // No restriction — full snapshot
 		}
-		const include = Arrays.isArray(env.include) ? env.include.filter((k) => typeof k === "string") : null;
+		const include = Arrays.isArray(env.include) ? filterList(env.include, (k) => typeof k === "string") : null;
 		if (include && include.length > 0) {
 			return { include };
 		}
@@ -1448,9 +1468,13 @@ export class Config extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		for (const [event, handler] of Objects.entries(lifecycle)) {
+		for (let ofIndex = 0, ofList = Objects.entries(lifecycle); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				event = ofEntry[0],
+				handler = ofEntry[1];
 			const handlers = Arrays.isArray(handler) ? handler : [handler];
-			for (const fn of handlers) {
+			for (let ofIndex = 0, ofList = handlers; ofIndex < ofList.length; ofIndex++) {
+				const fn = ofList[ofIndex];
 				if (typeof fn !== "function") {
 					throw new this.SlothletError(
 						"INVALID_CONFIG",
@@ -1521,7 +1545,7 @@ export class Config extends ComponentBase {
 			// Clone the frozen defaults' entries into fresh plain objects: the normalized config
 			// value must stay independently mutable-shaped (an ordinary array of ordinary objects),
 			// never the frozen singleton itself.
-			return DEFAULT_ROUTINES.map((entry) => ({
+			return mapList(DEFAULT_ROUTINES, (entry) => ({
 				name: entry.name,
 				mode: entry.mode,
 				recursive: entry.recursive ?? false,
@@ -1547,18 +1571,18 @@ export class Config extends ComponentBase {
 			);
 		}
 
-		return routines.map((entry, index) => {
+		return mapList(routines, (entry, index) => {
 			let name;
 			let mode;
 
 			if (typeof entry === "string") {
-				const sepIndex = entry.indexOf(":");
+				const sepIndex = StringMethods.indexOf(entry, ":");
 				if (sepIndex === -1) {
 					name = entry;
 					mode = "manual";
 				} else {
-					name = entry.slice(0, sepIndex);
-					mode = entry.slice(sepIndex + 1);
+					name = StringMethods.slice(entry, 0, sepIndex);
+					mode = StringMethods.slice(entry, sepIndex + 1);
 				}
 			} else if (entry && typeof entry === "object" && !Arrays.isArray(entry)) {
 				name = entry.name;
@@ -1592,13 +1616,13 @@ export class Config extends ComponentBase {
 					{ validationError: true }
 				);
 			}
-			if (ROUTINE_NAME_RESERVED.has(name)) {
+			if (SetMethods.has(ROUTINE_NAME_RESERVED, name)) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}].name`,
 						value: name,
-						expected: `a name other than the reserved: ${[...ROUTINE_NAME_RESERVED].join(", ")}`,
+						expected: `a name other than the reserved: ${ArrayMethods.join(setToArray(ROUTINE_NAME_RESERVED), ", ")}`,
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
 					},
@@ -1606,13 +1630,13 @@ export class Config extends ComponentBase {
 					{ validationError: true }
 				);
 			}
-			if (!VALID_ROUTINE_MODES.has(mode)) {
+			if (!SetMethods.has(VALID_ROUTINE_MODES, mode)) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}].mode`,
 						value: String(mode),
-						expected: `one of: ${[...VALID_ROUTINE_MODES].join(", ")}`,
+						expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_MODES), ", ")}`,
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
 					},
@@ -1643,7 +1667,7 @@ export class Config extends ComponentBase {
 			// glob (root-anchored or not) fails fast at construction instead of silently matching
 			// nothing forever. `^` marks a root-anchored pattern (see docs/LIFECYCLE.md — "Routines");
 			// the compiler itself never sees the `^`.
-			const pattern = name.startsWith("^") ? name.slice(1) : name;
+			const pattern = StringMethods.startsWith(name, "^") ? StringMethods.slice(name, 1) : name;
 			if (pattern.length === 0) {
 				// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but then
 				// matches no real api path ever, silently — the exact "malformed glob" this validation
@@ -1685,13 +1709,13 @@ export class Config extends ComponentBase {
 			// `order` is only settable via the object form. Default depends on mode: "depth"
 			// (deepest-first) for shutdown/destroy, "mount" (registration order) for startup/manual.
 			const order = typeof entry === "object" && entry.order !== undefined ? entry.order : DEFAULT_ROUTINE_ORDER_BY_MODE[mode];
-			if (!VALID_ROUTINE_ORDERS.has(order)) {
+			if (!SetMethods.has(VALID_ROUTINE_ORDERS, order)) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}].order`,
 						value: String(order),
-						expected: `one of: ${[...VALID_ROUTINE_ORDERS].join(", ")}`,
+						expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_ORDERS), ", ")}`,
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
 					},

@@ -38,7 +38,17 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Functions, WeakMap, Symbol, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	concatLists,
+	FunctionMethods,
+	Functions,
+	Processes,
+	Reflect,
+	Symbol,
+	WeakMap,
+	WeakMapMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -156,7 +166,7 @@ function runtime_install(host, name, make) {
 		layer.active = false;
 		return false;
 	}
-	patched.push({ host, name, layer, wrapper });
+	ArrayMethods.push(patched, { host, name, layer, wrapper });
 	return true;
 }
 
@@ -193,7 +203,7 @@ function enableAsyncResourcePatching() {
 			const pinned = layer.active ? runtime_pinNow() : null;
 			if (!pinned) return run;
 			return function runInAsyncScope(fn, ...args) {
-				return typeof fn === "function" ? run(pinned, fn, this, args) : run(fn, ...args);
+				return typeof fn === "function" ? run(pinned, fn, this, args) : Reflect.apply(run, undefined, concatLists([fn], args));
 			};
 		};
 	});
@@ -202,7 +212,7 @@ function enableAsyncResourcePatching() {
 	runtime_install(Storage, "bind", (layer) => {
 		const original = layer.below;
 		return function bind(fn, ...rest) {
-			return Reflect.apply(original, this, [layer.active && !isTakingSnapshot ? pinToCurrentCaller(fn) : fn, ...rest]);
+			return Reflect.apply(original, this, concatLists([layer.active && !isTakingSnapshot ? pinToCurrentCaller(fn) : fn], rest));
 		};
 	});
 
@@ -217,9 +227,10 @@ function enableAsyncResourcePatching() {
 			 * @param {...*} args - As for Node's `AsyncResource`.
 			 */
 			constructor(...args) {
-				super(...args);
+				// Node's AsyncResource takes (type, options); read by index so the rest array is not iterated.
+				super(args[0], args[1]);
 				const pinned = layer.active ? runtime_pinNow() : null;
-				if (pinned) RESOURCE_PINS.set(this, pinned);
+				if (pinned) WeakMapMethods.set(RESOURCE_PINS, this, pinned);
 			}
 
 			/**
@@ -230,8 +241,9 @@ function enableAsyncResourcePatching() {
 			 * @returns {*} What it returns.
 			 */
 			runInAsyncScope(fn, thisArg, ...args) {
-				const pinned = layer.active ? RESOURCE_PINS.get(this) : undefined;
-				if (!pinned || typeof fn !== "function") return super.runInAsyncScope(fn, thisArg, ...args);
+				const pinned = layer.active ? WeakMapMethods.get(RESOURCE_PINS, this) : undefined;
+				if (!pinned || typeof fn !== "function")
+					return Reflect.apply(Below.prototype.runInAsyncScope, this, concatLists([fn, thisArg], args));
 				return super.runInAsyncScope(pinned, undefined, fn, thisArg, args);
 			}
 
@@ -253,7 +265,7 @@ function enableAsyncResourcePatching() {
 			 * @returns {boolean} Whether it is an `AsyncResource`.
 			 */
 			static [Symbol.hasInstance](value) {
-				return Functions.prototype[Symbol.hasInstance].call(Below, value);
+				return FunctionMethods.call(Functions.prototype[Symbol.hasInstance], Below, value);
 			}
 		}
 		return AsyncResource;
@@ -273,7 +285,8 @@ function enableAsyncResourcePatching() {
 function disableAsyncResourcePatching() {
 	if (!isPatchingEnabled) return;
 	let restored = false;
-	for (const { host, name, layer, wrapper } of patched) {
+	for (let ofIndex = 0, ofList = patched; ofIndex < ofList.length; ofIndex++) {
+		const { host, name, layer, wrapper } = ofList[ofIndex];
 		const below = closeLayer(layer);
 		if (holdsValue(host, name, wrapper)) {
 			host[name] = below;

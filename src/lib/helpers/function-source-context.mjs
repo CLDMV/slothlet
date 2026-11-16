@@ -40,7 +40,7 @@
  * slothlet in the realm, and this copy installs its wrapper once however many instances ask.
  */
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Functions, functionToString, WeakSet, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { Functions, functionToString, Reflect, Symbols, WeakSet, WeakSetMethods } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -133,7 +133,7 @@ function enableFunctionSourcePatching() {
 		return;
 	}
 	markLayer(wrapper, layer);
-	OWN_WRAPPERS.add(wrapper);
+	WeakSetMethods.add(OWN_WRAPPERS, wrapper);
 	installed = { layer, wrapper };
 }
 
@@ -167,7 +167,7 @@ function disableFunctionSourcePatching() {
  * isFunctionSourcePatch(Function.prototype.toString); // true while an instance is up
  */
 export function isFunctionSourcePatch(fn) {
-	return typeof fn === "function" && OWN_WRAPPERS.has(fn);
+	return typeof fn === "function" && WeakSetMethods.has(OWN_WRAPPERS, fn);
 }
 
 /**

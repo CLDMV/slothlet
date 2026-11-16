@@ -38,7 +38,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+import { ArrayMethods, concatLists, Objects, Reflect } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -75,7 +75,8 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_carryOwnExtras(wrapper, original) {
-	for (const key of Reflect.ownKeys(original)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(original); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
@@ -108,14 +109,14 @@ function runtime_patchScheduler(host, name) {
 	const wrapper = function (callback, ...rest) {
 		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
 		// disabled under another copy's passes everything through.
-		if (typeof callback !== "function" || !layer.active) return original.call(host, callback, ...rest);
-		return original.call(host, pinToCurrentCaller(callback), ...rest);
+		if (typeof callback !== "function" || !layer.active) return Reflect.apply(original.call, original, concatLists([host, callback], rest));
+		return Reflect.apply(original.call, original, concatLists([host, pinToCurrentCaller(callback)], rest));
 	};
 
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
-	patched.push({ host, name, layer, wrapper });
+	ArrayMethods.push(patched, { host, name, layer, wrapper });
 }
 
 /**
@@ -160,7 +161,8 @@ function enableSchedulerPatching() {
 function disableSchedulerPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { host, name, layer, wrapper } of patched) {
+	for (let ofIndex = 0, ofList = patched; ofIndex < ofList.length; ofIndex++) {
+		const { host, name, layer, wrapper } = ofList[ofIndex];
 		const restore = closeLayer(layer);
 		if (holdsValue(host, name, wrapper)) host[name] = restore;
 	}

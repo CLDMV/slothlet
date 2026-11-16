@@ -27,7 +27,17 @@
  * require(esm), which rejects any module graph containing top-level await.
  */
 
-import { Objects, Set, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	concatLists,
+	Objects,
+	RegExpMethods,
+	setFrom,
+	SetMethods,
+	setToArray,
+	splitText,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -35,7 +45,7 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/sloth
  * `ComponentBase.INTERNAL_KEYS`; see that static for what each group is used for.
  * @type {Set<string>}
  */
-const WRAPPER_INTERNAL_KEYS = new Set([
+const WRAPPER_INTERNAL_KEYS = setFrom([
 	// 4-underscore: true private state
 	"____slothletInternal",
 	"____slothlet",
@@ -79,7 +89,7 @@ const WRAPPER_INTERNAL_KEYS = new Set([
  * `IMPL_METADATA_KEYS` from `#handlers/unified-wrapper`. Matched by exact name, never by prefix.
  * @type {Set<string>}
  */
-const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+const IMPL_METADATA_KEYS = setFrom(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 
 /**
  * Whether a property name belongs to the framework rather than to a module's exports.
@@ -103,7 +113,7 @@ const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFi
  */
 export function isFrameworkReservedKey(key) {
 	if (typeof key !== "string") return false;
-	return WRAPPER_INTERNAL_KEYS.has(key) || IMPL_METADATA_KEYS.has(key);
+	return SetMethods.has(WRAPPER_INTERNAL_KEYS, key) || SetMethods.has(IMPL_METADATA_KEYS, key);
 }
 
 /**
@@ -111,14 +121,16 @@ export function isFrameworkReservedKey(key) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_WRITE_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes, which only the host's write rules may name (#625).
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(
+	setFrom(concatLists(setToArray(WRAPPER_INTERNAL_KEYS), setToArray(IMPL_METADATA_KEYS)))
+);
 
 /**
  * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
@@ -129,9 +141,10 @@ const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(new Set([...WRAPPER_INTERNA
  */
 export function writeTargetLiteralPrefix(pattern) {
 	const prefix = [];
-	for (const segment of String(pattern).split(".")) {
-		if (/[*?{}[\]!()]/.test(segment)) break;
-		prefix.push(segment);
+	for (let ofIndex = 0, ofList = splitText(String(pattern), "."); ofIndex < ofList.length; ofIndex++) {
+		const segment = ofList[ofIndex];
+		if (RegExpMethods.exec(/[*?{}[\]!()]/, segment) !== null) break;
+		ArrayMethods.push(prefix, segment);
 	}
 	return prefix;
 }
@@ -146,9 +159,9 @@ export function writeTargetLiteralPrefix(pattern) {
  * isFrameworkWriteTarget("victim.**.__metadata"); // true
  */
 export function isFrameworkWriteTarget(pattern) {
-	const segments = String(pattern).split(".");
-	if (FRAMEWORK_WRITE_ROOTS.has(segments[0])) return true;
-	return segments.some((segment) => FRAMEWORK_INTERNAL_WRITE_KEYS.has(segment));
+	const segments = splitText(String(pattern), ".");
+	if (SetMethods.has(FRAMEWORK_WRITE_ROOTS, segments[0])) return true;
+	return ArrayMethods.some(segments, (segment) => SetMethods.has(FRAMEWORK_INTERNAL_WRITE_KEYS, segment));
 }
 
 /**
