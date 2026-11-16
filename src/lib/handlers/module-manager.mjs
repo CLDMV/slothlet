@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
+ *	@Last modified time: 2026-11-15T21:09:19-08:00 (1794805759)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -141,8 +141,16 @@ export class ModuleManager extends ComponentBase {
 	 *
 	 * @param {DiscoverOptions} [options]
 	 * @returns {Promise<DiscoverResult[]>} Validated discovery results in walk order (apply `sortModules()` for deterministic ordering).
+	 * @throws {SlothletError} `MODULE_DISCOVERY_REQUIRES_NODE` in a browser, which has no filesystem to walk.
 	 */
 	async discover(options = {}) {
+		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
+		// rather than fail on a missing Node builtin (#817). addDiscovered() and addModule(name) run it too.
+		if (this.slothlet.envTarget === "browser") {
+			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: "api.slothlet.api.modules.discover()" }, null, {
+				validationError: true
+			});
+		}
 		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts

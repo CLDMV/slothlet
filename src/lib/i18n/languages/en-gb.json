@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir must be a relative path that stays inside the package. Remove '..' segments and absolute paths.",
 		"MODULE_VERSION_UNSUPPORTED": "Module manifest for package '{packageName}' uses unsupported schemaVersion '{schemaVersion}'. Supported: 1.",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "Upgrade slothlet to a version that supports schemaVersion {schemaVersion}, or update the manifest to use schemaVersion 1.",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "Module discovery ({operation}) needs Node.js: it reads the filesystem, which a browser does not have. Mount modules in the browser with api.slothlet.api.add() from the manifest instead.",
 		"MODULE_PACKAGE_NOT_FOUND": "Module package '{packageName}' was not found in the discovery cache. {hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "Either the package is not installed, the scanRoot does not cover its location, or no discover() call has been made yet. addModule(name) will lazily run discover() with scanRoot=process.cwd() if the cache is empty.",
 		"MODULE_RESERVED_MOUNTPATH": "Module package '{packageName}' declares reserved mountPath root '{mountPathRoot}' (from mountPath '{mountPath}'). Reserved roots: slothlet, shutdown, destroy.",

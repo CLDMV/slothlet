@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir deve ser um caminho relativo que permaneça dentro do pacote. Remova os segmentos '..' e caminhos absolutos.",
 		"MODULE_VERSION_UNSUPPORTED": "O manifesto do módulo para o pacote '{packageName}' usa uma schemaVersion não suportada '{schemaVersion}'. Suportadas: 1.",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "Atualize o slothlet para uma versão que suporte schemaVersion {schemaVersion}, ou atualize o manifesto para usar schemaVersion 1.",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "A descoberta de módulos ({operation}) precisa do Node.js: ela lê o sistema de arquivos, que um navegador não tem. No navegador, monte os módulos com api.slothlet.api.add() a partir do manifest.",
 		"MODULE_PACKAGE_NOT_FOUND": "Pacote de módulo '{packageName}' não encontrado no cache de descoberta. {hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "Ou o pacote não está instalado, ou scanRoot não cobre sua localização, ou nenhuma chamada a discover() foi feita ainda. addModule(name) executará discover() de forma preguiçosa com scanRoot=process.cwd() se o cache estiver vazio.",
 		"MODULE_RESERVED_MOUNTPATH": "O pacote de módulo '{packageName}' declara a raiz reservada de mountPath '{mountPathRoot}' (a partir de mountPath '{mountPath}'). Raízes reservadas: slothlet, shutdown, destroy.",

@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir muss ein relativer Pfad sein, der innerhalb des Pakets bleibt. Entfernen Sie '..'-Segmente und absolute Pfade.",
 		"MODULE_VERSION_UNSUPPORTED": "Modul-Manifest für Paket '{packageName}' verwendet nicht unterstützte schemaVersion '{schemaVersion}'. Unterstützt: 1.",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "Aktualisieren Sie slothlet auf eine Version, die schemaVersion {schemaVersion} unterstützt, oder aktualisieren Sie das Manifest auf schemaVersion 1.",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "Die Modulerkennung ({operation}) benötigt Node.js: Sie liest das Dateisystem, das ein Browser nicht hat. Binden Sie Module im Browser stattdessen mit api.slothlet.api.add() aus dem Manifest ein.",
 		"MODULE_PACKAGE_NOT_FOUND": "Modul-Paket '{packageName}' wurde nicht im Discovery-Cache gefunden. {hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "Entweder ist das Paket nicht installiert, der scanRoot deckt seinen Speicherort nicht ab, oder es wurde noch kein discover()-Aufruf durchgeführt. addModule(name) ruft discover() lazy mit scanRoot=process.cwd() auf, wenn der Cache leer ist.",
 		"MODULE_RESERVED_MOUNTPATH": "Modul-Paket '{packageName}' deklariert reservierte mountPath-Wurzel '{mountPathRoot}' (aus mountPath '{mountPath}'). Reservierte Wurzeln: slothlet, shutdown, destroy.",

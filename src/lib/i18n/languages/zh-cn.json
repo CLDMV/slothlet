@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir 必须是保持在包内部的相对路径。请删除 '..' 段和绝对路径。",
 		"MODULE_VERSION_UNSUPPORTED": "包 '{packageName}' 的模块清单使用了不支持的 schemaVersion '{schemaVersion}'。支持的版本：1。",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "将 slothlet 升级到支持 schemaVersion {schemaVersion} 的版本，或将清单更新为使用 schemaVersion 1。",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "模块发现（{operation}）需要 Node.js：它读取文件系统，而浏览器没有文件系统。在浏览器中，请改用 api.slothlet.api.add() 从 manifest 挂载模块。",
 		"MODULE_PACKAGE_NOT_FOUND": "在发现缓存中未找到模块包 '{packageName}'。{hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "可能是包未安装、scanRoot 未覆盖其位置，或尚未进行 discover() 调用。如果缓存为空，addModule(name) 将使用 scanRoot=process.cwd() 延迟运行 discover()。",
 		"MODULE_RESERVED_MOUNTPATH": "模块包 '{packageName}' 声明了保留的 mountPath 根 '{mountPathRoot}'（来自 mountPath '{mountPath}'）。保留的根：slothlet、shutdown、destroy。",

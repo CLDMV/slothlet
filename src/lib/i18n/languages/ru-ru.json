@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir должен быть относительным путём, остающимся внутри пакета. Удалите сегменты '..' и абсолютные пути.",
 		"MODULE_VERSION_UNSUPPORTED": "Манифест модуля для пакета '{packageName}' использует неподдерживаемую schemaVersion '{schemaVersion}'. Поддерживаемые: 1.",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "Обновите slothlet до версии, поддерживающей schemaVersion {schemaVersion}, или обновите манифест для использования schemaVersion 1.",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "Обнаружение модулей ({operation}) требует Node.js: оно читает файловую систему, которой нет в браузере. В браузере подключайте модули через api.slothlet.api.add() из manifest.",
 		"MODULE_PACKAGE_NOT_FOUND": "Пакет модуля '{packageName}' не найден в кэше обнаружения. {hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "Либо пакет не установлен, либо scanRoot не охватывает его местоположение, либо вызов discover() ещё не был выполнен. addModule(name) лениво запустит discover() с scanRoot=process.cwd(), если кэш пуст.",
 		"MODULE_RESERVED_MOUNTPATH": "Пакет модуля '{packageName}' объявляет зарезервированный корень mountPath '{mountPathRoot}' (из mountPath '{mountPath}'). Зарезервированные корни: slothlet, shutdown, destroy.",

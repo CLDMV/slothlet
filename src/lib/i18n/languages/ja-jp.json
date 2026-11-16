@@ -516,6 +516,7 @@
 		"HINT_MODULE_PATH_TRAVERSAL": "apiDir はパッケージ内に留まる相対パスである必要があります。'..' セグメントと絶対パスを削除してください。",
 		"MODULE_VERSION_UNSUPPORTED": "パッケージ '{packageName}' のモジュールマニフェストはサポートされていない schemaVersion '{schemaVersion}' を使用しています。サポートされているバージョン: 1。",
 		"HINT_MODULE_VERSION_UNSUPPORTED": "schemaVersion {schemaVersion} をサポートするバージョンに slothlet を更新するか、マニフェストを schemaVersion 1 を使用するように更新してください。",
+		"MODULE_DISCOVERY_REQUIRES_NODE": "モジュール検出 ({operation}) には Node.js が必要です: ファイルシステムを読み取りますが、ブラウザにはファイルシステムがありません。ブラウザでは manifest から api.slothlet.api.add() でモジュールをマウントしてください。",
 		"MODULE_PACKAGE_NOT_FOUND": "モジュールパッケージ '{packageName}' は検出キャッシュ内で見つかりませんでした。{hint}",
 		"HINT_MODULE_PACKAGE_NOT_FOUND": "パッケージがインストールされていない、scanRoot がその場所をカバーしていない、または discover() の呼び出しがまだ行われていない可能性があります。キャッシュが空の場合、addModule(name) は scanRoot=process.cwd() で discover() を遅延実行します。",
 		"MODULE_RESERVED_MOUNTPATH": "モジュールパッケージ '{packageName}' は予約された mountPath ルート '{mountPathRoot}'(mountPath '{mountPath}' から)を宣言しています。予約されたルート: slothlet、shutdown、destroy。",
