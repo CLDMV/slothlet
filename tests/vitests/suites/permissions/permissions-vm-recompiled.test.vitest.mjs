@@ -163,3 +163,88 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 		});
 	});
 });
+
+describe.each(getMatrixConfigs())(
+	"Permissions > vm code named after a module's own ES module file, run in its call > $name",
+	({ config }) => {
+		describe.each(["precise", "fast"])("attribution %s", (attribution) => {
+			let api;
+
+			afterEach(async () => {
+				delete globalThis.__slothletVmPlantedEsm;
+				if (api) await api.shutdown();
+				api = null;
+			});
+
+			/**
+			 * Build the base and mount the trusted modules and the reader, the vault not loaded yet in lazy mode.
+			 * @returns {Promise<object>} The api.
+			 */
+			const build = async () => {
+				api = await slothlet({
+					...config,
+					base: path.join(DIR, "base"),
+					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+				});
+				await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { moduleID: "trusted-mod" });
+				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
+				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+				return api;
+			};
+
+			// Lazy mode, before the vault has loaded: the call waits for the load and is decided after it, when the planted
+			// code's frame is gone. It is decided as the code that made it, which names a file it was not loaded from (#691).
+			it.each([
+				["the call itself", "self.vault.secret.secret()", "runGlobal"],
+				["a call it queues", "Promise.resolve().then(() => self.vault.secret.secret())", "runGlobal"],
+				["the call, while the module's own access loads the vault", "self.vault.secret.secret()", "runDuringLoad"]
+			])("%s is refused", async (_label, body, via) => {
+				await build();
+				await api.reader.probe.plantGlobal("__slothletVmPlantedEsm", body, path.join(DIR, "trustedesm", "ops.mjs"));
+				for (const ops of [api.trusted.ops, api.trustedesm.ops]) {
+					const outcome = await withSuppressedSlothletErrorOutput(() => attempt(() => ops[via]("__slothletVmPlantedEsm")));
+					expect(outcome.ok).toBe(false);
+					expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome.code);
+				}
+			});
+		});
+	}
+);
+
+describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host > $name", ({ config }) => {
+	describe.each([
+		["helpers per api file", "module"],
+		["helpers per instance", undefined]
+	])("%s", (_label, helpers) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		it("control: the trusted module reaches the secret through its helper", async () => {
+			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", rules: RULES } });
+			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
+			expect(await attempt(() => api.trustedesm.ops.viaHelper())).toEqual({ ok: true, value: "s3cret" });
+		});
+
+		it.each(["precise", "fast"])(
+			"a helper both import, handed out by the reader and run by the host, is refused (%s)",
+			async (attribution) => {
+				api = await slothlet({
+					...config,
+					helpers,
+					base: path.join(DIR, "base"),
+					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+				});
+				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
+				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+				// In lazy mode the vault loads first and the call is decided after: still as the helper's code, held to every
+				// module importing it, as in eager mode.
+				const { fn } = await api.reader.probe.sharedHelper();
+				expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
+			}
+		);
+	});
+});

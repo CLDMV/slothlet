@@ -21,6 +21,7 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import { peek } from "../shared/peek.mjs";
 
 /**
  * Call the vault's secret.
@@ -66,4 +67,32 @@ export function run(fn) {
  */
 export function runGlobal(name) {
 	return globalThis[name]();
+}
+
+/**
+ * Start a load of the vault by an access of this module's own, then run the function left on the global object while
+ * the load is under way, and wait for both.
+ * @param {string} name - The global's name.
+ * @returns {Promise<*>} What the function's result settled to.
+ * @public
+ * @example
+ * await api.trusted.ops.runDuringLoad("planted");
+ */
+export async function runDuringLoad(name) {
+	const own = self.vault.secret.whoami();
+	const planted = globalThis[name]();
+	// Both settle before either is read, so neither is left unhandled.
+	await Promise.allSettled([own, planted]);
+	return planted;
+}
+
+/**
+ * Call the vault's secret through the helper this module imports.
+ * @returns {string} The secret.
+ * @public
+ * @example
+ * api.trustedesm.ops.viaHelper(); // "s3cret"
+ */
+export function viaHelper() {
+	return peek();
 }

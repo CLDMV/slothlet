@@ -74,4 +74,21 @@ function runGlobal(name) {
 	return globalThis[name]();
 }
 
-module.exports = { read, who, run, runGlobal };
+/**
+ * Start a load of the vault by an access of this module's own, then run the function left on the global object while
+ * the load is under way, and wait for both.
+ * @param {string} name - The global's name.
+ * @returns {Promise<*>} What the function's result settled to.
+ * @public
+ * @example
+ * await api.trusted.ops.runDuringLoad("planted");
+ */
+async function runDuringLoad(name) {
+	const own = self.vault.secret.whoami();
+	const planted = globalThis[name]();
+	// Both settle before either is read, so neither is left unhandled.
+	await Promise.allSettled([own, planted]);
+	return planted;
+}
+
+module.exports = { read, who, run, runGlobal, runDuringLoad };

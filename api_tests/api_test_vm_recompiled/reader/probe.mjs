@@ -28,6 +28,7 @@ import fs from "node:fs";
 import Module, { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import * as runtime from "@cldmv/slothlet/runtime";
+import { peek } from "../shared/peek.mjs";
 
 const { self } = runtime;
 
@@ -208,4 +209,15 @@ export function plantGlobal(name, body = "self.vault.secret.secret()", filename 
 export async function plantIn(filename) {
 	const fn = vm.runInThisContext("(self) => () => self.vault.secret.secret()", { filename })(self);
 	return attempt(() => self.trusted.ops.run(fn));
+}
+
+/**
+ * Hand out the helper this module and the trusted ES module both import, for the host to run.
+ * @returns {{fn: Function}} The helper's function.
+ * @public
+ * @example
+ * const { fn } = api.reader.probe.sharedHelper(); fn(); // throws PERMISSION_DENIED
+ */
+export function sharedHelper() {
+	return { fn: peek };
 }

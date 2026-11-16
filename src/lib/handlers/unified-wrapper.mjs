@@ -17318,10 +17318,22 @@ class UnifiedWrapper extends ComponentBase {
 					___liveCallerWrapper ??
 					___creationCallerWrapper ??
 					(___capture ? runtime_hostRunDefiner(wrapper.slothlet, true, ___definerRead) : null);
+				// A node read by such code and called later by it: the code making the call is read now, while its frames are
+				// on the stack, as the gate reads them when the call is made at once (eager mode, or a loaded node). The
+				// modules further out on the stack, and every other module importing a helper whose code it is, are held to
+				// as well; deciding after the load, with those frames gone, would drop them (#691).
+				const ___callingCode =
+					!___liveCallerWrapper && ___creationCallerWrapper && ___capture
+						? runtime_hostRunDefiner(wrapper.slothlet, true, ___definerRead)
+						: null;
 				const ___capturedCeiling = ___liveCallerWrapper
 					? ___liveCeiling
 					: ___creationCallerWrapper
-						? ___creationCeiling
+						? combineCeilings(
+								___creationCeiling,
+								___definerRead.ceiling ?? null,
+								___callingCode && ___callingCode !== ___creationCallerWrapper ? ___callingCode : null
+							)
 						: (___definerRead.ceiling ?? null);
 				// A caller the live runtime cannot determine is refused now, as the node's own gate refuses it (#726): calls
 				// in flight it cannot tell apart, or code it cannot place. Only code no call accounts for, settled by the
