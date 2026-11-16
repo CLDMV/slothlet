@@ -549,16 +549,47 @@ function runtime_captureFrames(limit) {
 	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
 	if (read.value?.structured) return read.value;
 	// An engine without V8's call-site hook formats the trace as text, which is parsed instead.
-	/* v8 ignore next */
+	return textFrames(String(read.text ?? ""), limit);
+}
+
+/**
+ * Frames from a stack formatted as text (an engine without V8's call-site hook: Firefox, Safari), innermost first.
+ *
+ * Code compiled from a string is marked `evaluated`, whichever engine wrote the line, so it is never taken for the
+ * code of the file that compiled it:
+ *
+ * - V8: `at f (eval at g (file.js:3:9), <anonymous>:1:1)`.
+ * - SpiderMonkey (Firefox): the location names the file and line the code was compiled at, then what compiled it:
+ *   `f@file.js line 3 > eval:1:1`, `anonymous@file.js line 3 > Function:1:1`, nested `… line 3 > eval line 1 > eval:1:1`.
+ *   Any location with a ` line N > ` step is taken as compiled code.
+ * - JavaScriptCore (Safari): eval and `Function` code has no location at all: `eval code@`, `anonymous@`. A line whose
+ *   location is empty is taken as compiled code, whatever its function name says, as a function name is not to be
+ *   trusted (see {@link parseStackFrame}).
+ *
+ * A built-in's frame (`map@[native code]`) has no location and is passed over.
+ *
+ * @param {string} text - The stack.
+ * @param {number} limit - The frame budget the stack was captured with.
+ * @returns {Array<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: null, key: null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
+ * @internal
+ * @example
+ * textFrames("@http://host/api/run.mjs line 3 > eval:1:1\nrun@http://host/api/run.mjs:3:9", 10);
+ * // [{ path: "http://host/api/run.mjs line 3 > eval", evaluated: true, … }, { path: "http://host/api/run.mjs", evaluated: false, … }]
+ */
+export function textFrames(text, limit) {
 	const frames = [];
-	for (const line of String(read.text ?? "").split("\n")) {
-		const frame = parseStackFrame(line);
+	for (const line of String(text).split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.endsWith("@[native code]")) continue;
+		// JavaScriptCore's compiled code: a frame with no location.
+		const unlocated = !trimmed.startsWith("at ") && trimmed.endsWith("@");
+		const frame = unlocated ? { head: trimmed.slice(0, -1), path: "" } : parseStackFrame(line);
 		if (frame) {
 			frames.push({
 				...frame,
 				line,
-				async: /^at async /.test(line.trim()),
-				evaluated: /\beval at\b/.test(line),
+				async: /^at async /.test(trimmed),
+				evaluated: unlocated || /\beval at\b/.test(line) || / line \d+ > /.test(line),
 				hash: null,
 				key: null,
 				enter: runtime_entryKind(frame.head),
