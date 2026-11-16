@@ -219,16 +219,13 @@ export const rows = [
 			api = await build(env, root, { mode, runtime });
 			try {
 				const prototype = { inherited: 5 };
-				if (root === "objroot") {
-					Object.setPrototypeOf(api, prototype);
-					checks.push([
-						"prototype",
-						[Object.getPrototypeOf(api) === prototype, api.inherited, Object.keys(api).includes("inherited")],
-						[true, 5, false]
-					]);
-				} else {
-					checks.push(["a function root's prototype is not changed", Reflect.setPrototypeOf(api, prototype), false]);
-				}
+				// An object root and a function root alike, as an object and a function take one.
+				Object.setPrototypeOf(api, prototype);
+				checks.push([
+					"prototype",
+					[Object.getPrototypeOf(api) === prototype, api.inherited, Object.keys(api).includes("inherited")],
+					[true, 5, false]
+				]);
 			} finally {
 				await api.shutdown();
 			}

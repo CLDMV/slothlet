@@ -1278,6 +1278,24 @@ class Slothlet {
 			// `prototype` of its own, so the traps report the root's function as it is (an async function, an arrow, a
 			// bound function or a method has none) without breaking an invariant of the target's.
 			const proxyTarget = isCallable ? function () {}.bind() : {};
+			// A function root's prototype, on a record of the root's own as a function node's is on its node's: the root
+			// file's function's until the root is given one (`Object.setPrototypeOf(api, …)`), which the record then holds,
+			// so the function is never changed through the root. A load that gives the root a value starts it again.
+			const rootPrototype = { of: null, given: false, prototype: null };
+			const rootPrototypeNow = () => {
+				if (rootPrototype.of !== this.api) {
+					rootPrototype.of = this.api;
+					rootPrototype.given = false;
+				}
+				if (!rootPrototype.given) rootPrototype.prototype = Reflect.getPrototypeOf(this.api);
+				return rootPrototype.prototype;
+			};
+			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
+			const rootInherits = (prop) => {
+				if (!isCallable) return false;
+				rootPrototypeNow();
+				return rootPrototype.given && !Objects.prototype.hasOwnProperty.call(this.api, prop);
+			};
 			// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
 			runtime_defineRootInspect(this, proxyTarget);
 
@@ -1293,6 +1311,16 @@ class Slothlet {
 							// A key only the target holds (its inspect hook, which `util.inspect` reads through the proxy when the root
 							// is the target of another proxy) is the target's.
 							if (fixed && typeof prop === "symbol" && !(prop in this.api)) return fixed.value;
+							// A function root's `__proto__` is the prototype it reports, as a function's is.
+							if (isCallable && prop === "__proto__" && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
+								const from = rootPrototypeNow();
+								return from === null ? undefined : Reflect.get(from, prop, this.boundApi);
+							}
+							// A member a function root inherits from a prototype it was given is read from there, on the root.
+							if (rootInherits(prop)) {
+								const from = rootPrototype.prototype;
+								return runtime_rootMemberRead(this, prop, from === null ? undefined : Reflect.get(from, prop, this.boundApi));
+							}
 							return runtime_rootMemberRead(this, prop, this.api[prop]);
 						},
 						// A change to the root is a change to the api, held to the rules the same change at a node is held to.
@@ -1303,7 +1331,9 @@ class Slothlet {
 						},
 						has: (target, prop) => {
 							if (!this.api) return false;
-							if (prop in this.api) return true;
+							if (rootInherits(prop)) {
+								if (rootPrototype.prototype !== null && Reflect.has(rootPrototype.prototype, prop)) return true;
+							} else if (prop in this.api) return true;
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 							return fixed !== undefined && (!fixed.configurable || !Reflect.isExtensible(target));
 						},
@@ -1334,21 +1364,30 @@ class Slothlet {
 							runtime_rootCallCheck(this, args);
 							return runtime_rootCall(this, undefined, args, true);
 						},
-						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it.
+						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it,
+						// or the one the root was given.
 						getPrototypeOf: (target) =>
-							isCallable && this.api && Reflect.isExtensible(target) ? Reflect.getPrototypeOf(this.api) : Reflect.getPrototypeOf(target),
-						// A prototype set on the root is set on the api, whose members inherit from it; an object root reports its
-						// target's, which takes it too.
+							isCallable && this.api && Reflect.isExtensible(target) ? rootPrototypeNow() : Reflect.getPrototypeOf(target),
+						// A prototype set on an object root is set on the api, whose members inherit from it, and on its target, which
+						// reports it. A function root takes it on its own record, and its function keeps the one it has.
 						setPrototypeOf: (target, proto) => {
 							if (!this.api) return Reflect.setPrototypeOf(target, proto);
 							runtime_assertRootChange(this, null);
 							proto = runtime_unwrapSelfView(proto);
 							if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
-							if (!Reflect.setPrototypeOf(this.api, proto)) return false;
-							return isCallable || Reflect.setPrototypeOf(target, proto);
+							if (isCallable) {
+								rootPrototypeNow();
+								rootPrototype.given = proto !== Reflect.getPrototypeOf(this.api);
+								rootPrototype.prototype = proto;
+								return true;
+							}
+							return Reflect.setPrototypeOf(this.api, proto) && Reflect.setPrototypeOf(target, proto);
 						},
 						// Closing the root closes the api (see runtime_rootClose).
-						preventExtensions: (target) => (this.api ? runtime_rootClose(this, target, isCallable) : Reflect.preventExtensions(target)),
+						preventExtensions: (target) =>
+							this.api
+								? runtime_rootClose(this, target, isCallable, isCallable ? rootPrototypeNow() : undefined)
+								: Reflect.preventExtensions(target),
 						getOwnPropertyDescriptor: (target, prop) => {
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 							if (fixed && !fixed.configurable) return runtime_rootFixedMember(this, prop, fixed, true);

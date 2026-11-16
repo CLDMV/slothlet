@@ -14,8 +14,8 @@
  */
 
 /**
- * @fileoverview Rows: a prototype given to a function node or a namespace slothlet composed is reported and inherited
- * from as on a plain value, and what the node inherits is read under the rules its own members are (#802).
+ * @fileoverview Rows: a prototype given to a function node, a namespace slothlet composed or a function api root is
+ * reported and inherited from as on a plain value, and what the node inherits is read under the rules its own members are (#802).
  *
  * @description
  * The expected values of the first row are the same operations on a plain object or function. Eager and lazy mode, the
@@ -109,7 +109,65 @@ async function build(env, config, permissions) {
 	return api;
 }
 
+/**
+ * Give a function a prototype, then none, then close it with one, answering what each step shows.
+ * @param {Function} value - A plain function, or the api root standing for one.
+ * @returns {object} What it showed.
+ */
+function observeRoot(value) {
+	const prototype = {
+		inherited: 5,
+		hello() {
+			return "hi";
+		}
+	};
+	const first = Object.getPrototypeOf(value);
+	const shown = { first: [value.__proto__ === first, value instanceof Function, typeof value.call] };
+	shown.set = Reflect.setPrototypeOf(value, prototype);
+	shown.reported = [Object.getPrototypeOf(value) === prototype, value.__proto__ === prototype];
+	shown.reads = [value.inherited, value.hello(), "inherited" in value, Object.hasOwn(value, "inherited"), inheritedNames(value)];
+	shown.kind = [typeof value, value instanceof Object, value instanceof Function, typeof value.toString, typeof value.call];
+	shown.setNull = Reflect.setPrototypeOf(value, null);
+	shown.none = [Object.getPrototypeOf(value), value.inherited, value.toString, value.call, "toString" in value];
+	shown.setBack = Reflect.setPrototypeOf(value, first);
+	shown.back = [Object.getPrototypeOf(value) === first, typeof value.call];
+	Object.setPrototypeOf(value, prototype);
+	Object.preventExtensions(value);
+	shown.closed = [
+		Object.getPrototypeOf(value) === prototype,
+		value.inherited,
+		Reflect.setPrototypeOf(value, {}),
+		Reflect.setPrototypeOf(value, prototype)
+	];
+	return shown;
+}
+
 export const rows = [
+	{
+		title: "a function api root takes, reports, inherits from and closes with a prototype as a plain function does",
+		configs: matrix(),
+		async run(env, config) {
+			const checks = [];
+			for (const [root, plain] of [
+				["fnroot", () => function root() {}],
+				["asyncroot", () => async function root() {}]
+			]) {
+				const api = await env.compose({
+					fixture: "api_tests/api_test_api_root_integrity",
+					root,
+					files: ["data.mjs", "pnum.mjs", "root.mjs", "tool.mjs"],
+					options: { mode: config.mode, runtime: config.runtime, permissions: { attribution: config.attribution, defaultPolicy: "allow" } }
+				});
+				try {
+					checks.push([root, observeRoot(api), observeRoot(plain())]);
+					checks.push([`${root} still calls`, [typeof api, await api()], ["function", "root"]]);
+				} finally {
+					await api.shutdown();
+				}
+			}
+			return checks;
+		}
+	},
 	{
 		title: "a node takes, reports, inherits from and closes with a prototype as its plain twin does",
 		configs: matrix(),

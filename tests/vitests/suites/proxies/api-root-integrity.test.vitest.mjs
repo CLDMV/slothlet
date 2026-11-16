@@ -96,6 +96,93 @@ async function build(root, options) {
  */
 const listed = (node) => Reflect.ownKeys(node).filter((key) => NAMES.includes(key) && key !== "zz" && key !== "w");
 
+/**
+ * The names `for…in` lists that the value does not hold itself.
+ * @param {object|Function} value - The value.
+ * @returns {string[]} The inherited names.
+ */
+function inheritedNames(value) {
+	const own = Object.keys(value);
+	const names = [];
+	for (const name in value) if (!own.includes(name)) names.push(name);
+	return names;
+}
+
+/**
+ * Give a function a prototype, then none, then its first one back, answering what each step shows.
+ * @param {Function} value - A plain function, or the api root standing for one.
+ * @returns {object} What it showed.
+ */
+function observePrototype(value) {
+	const key = Symbol.for("slothlet-root-prototype");
+	const prototype = {
+		inherited: 5,
+		get viaThis() {
+			return this.inherited + 1;
+		},
+		hello() {
+			return "hi";
+		},
+		me() {
+			return this;
+		},
+		[key]: 7,
+		name: "shadowed"
+	};
+	const first = Object.getPrototypeOf(value);
+	const own = Object.keys(value).join();
+	const shown = { firstDunder: value.__proto__ === first, firstKind: [value instanceof Function, typeof value.call] };
+	shown.set = Reflect.setPrototypeOf(value, prototype);
+	shown.reported = [Object.getPrototypeOf(value) === prototype, value.__proto__ === prototype];
+	shown.reads = [value.inherited, value.viaThis, value[key], value.hello(), value.me() === value];
+	shown.has = ["inherited" in value, key in value, "missing" in value, "toString" in value, "call" in value];
+	shown.ownWins = value.name;
+	shown.notOwn = [Object.keys(value).join() === own, Object.hasOwn(value, "inherited"), Object.getOwnPropertyDescriptor(value, "hello")];
+	shown.forIn = inheritedNames(value);
+	shown.kind = [typeof value, value instanceof Object, value instanceof Function, typeof value.toString, typeof value.call, String(value)];
+	shown.setNull = Reflect.setPrototypeOf(value, null);
+	shown.none = [
+		Object.getPrototypeOf(value),
+		value.__proto__,
+		value.inherited,
+		value.toString,
+		value.constructor,
+		value.call,
+		"toString" in value,
+		value instanceof Object,
+		typeof value,
+		inheritedNames(value)
+	];
+	shown.setBack = Reflect.setPrototypeOf(value, first);
+	shown.back = [
+		Object.getPrototypeOf(value) === first,
+		value.inherited,
+		typeof value.toString,
+		typeof value.call,
+		value instanceof Function
+	];
+	return shown;
+}
+
+/**
+ * Give a function a prototype and close it, answering what the closed function shows and takes.
+ * @param {Function} value - A plain function, or the api root standing for one.
+ * @param {"seal"|"freeze"|"preventExtensions"} how - How it is closed.
+ * @returns {object} What it showed.
+ */
+function observeClosedPrototype(value, how) {
+	const prototype = { inherited: 5 };
+	Object.setPrototypeOf(value, prototype);
+	Object[how](value);
+	return {
+		reported: [Object.getPrototypeOf(value) === prototype, value.__proto__ === prototype],
+		reads: [value.inherited, "inherited" in value, inheritedNames(value)],
+		another: [Reflect.setPrototypeOf(value, {}), Reflect.setPrototypeOf(value, null), Reflect.setPrototypeOf(value, Function.prototype)],
+		same: Reflect.setPrototypeOf(value, prototype),
+		still: [Object.getPrototypeOf(value) === prototype, value.inherited]
+	};
+}
+
 describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 	describe.each(configs)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
 		let api;
@@ -145,8 +232,8 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				const twin = api.w.ops.change("setPrototypeOf", "given", "zz", api);
 				const atRoot = api.w.ops.change("setPrototypeOf", "given", "", api);
 				if ("threw" in twin) expect(atRoot).toEqual(twin);
-				// A function root's prototype is its module's function's, which is left unchanged: the change is refused.
-				else expect(atRoot).toEqual(root === "objroot" ? { same: true, inherited: 5 } : { threw: "TypeError" });
+				// A function root takes it too, on the root, as a function does.
+				else expect(atRoot).toEqual({ same: true, inherited: 5 });
 			});
 		});
 
@@ -244,21 +331,45 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				expect(api.pnum).toBe(7);
 			});
 
-			it("sets an object root's prototype, as on an object, and refuses to change a function root's", async () => {
+			it("sets the root's prototype, as on an object or a function", async () => {
 				api = await build(root, { mode, runtime });
 				const prototype = { inherited: 5 };
-				if (root !== "objroot") {
-					const before = Object.getPrototypeOf(api);
-					expect(Reflect.setPrototypeOf(api, prototype)).toBe(false);
-					expect(Reflect.setPrototypeOf(api, before)).toBe(true);
-					expect(Object.getPrototypeOf(api)).toBe(before);
-					return;
-				}
 				Object.setPrototypeOf(api, prototype);
 				expect(Object.getPrototypeOf(api)).toBe(prototype);
 				expect(api.inherited).toBe(5);
 				expect("inherited" in api).toBe(true);
 				expect(Object.keys(api)).not.toContain("inherited");
+			});
+
+			it.runIf(root !== "objroot")("a function root takes, reports and inherits from a prototype as a plain function does", async () => {
+				api = await build(root, { mode, runtime });
+				const plain = root === "fnroot" ? function root() {} : async function root() {};
+				expect(observePrototype(api)).toEqual(observePrototype(plain));
+				// The root still calls, and its file's function kept its prototype: the same folder's node at `zz` reports it.
+				expect(typeof api).toBe("function");
+				expect(await api()).toBe("root");
+				expect(Object.getPrototypeOf(api.zz)).toBe(Object.getPrototypeOf(plain));
+			});
+
+			it.runIf(root !== "objroot")("a function root closed with a prototype it was given reports it, and then takes no other", async () => {
+				for (const how of ["seal", "freeze", "preventExtensions"]) {
+					api = await build(root, { mode, runtime });
+					const plain = root === "fnroot" ? function root() {} : async function root() {};
+					expect(observeClosedPrototype(api, how), how).toEqual(observeClosedPrototype(plain, how));
+					await api.shutdown();
+				}
+				api = null;
+			});
+
+			it.runIf(root !== "objroot")("a function root has its function's prototype again once a reload gives it its value", async () => {
+				api = await build(root, { mode, runtime });
+				const first = Object.getPrototypeOf(api);
+				Object.setPrototypeOf(api, { inherited: 5 });
+				expect(api.inherited).toBe(5);
+				await api.slothlet.reload();
+				expect(Object.getPrototypeOf(api)).toBe(first);
+				expect(api.inherited).toBeUndefined();
+				expect(await api()).toBe("root");
 			});
 
 			it("refuses a reload of a closed root, which cannot take the members a rebuild makes, and still shuts down", async () => {

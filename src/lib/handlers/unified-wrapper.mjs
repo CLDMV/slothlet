@@ -10234,11 +10234,12 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
  * @param {object} slothlet - The instance.
  * @param {object|Function} target - The root proxy's target.
  * @param {boolean} isCallable - Whether the root is a function, whose prototype the root reports as its own.
+ * @param {object|Function|null} [prototype] - A function root's prototype, which its target takes.
  * @returns {boolean} Whether the root is closed.
  * @throws {SlothletError} When module code may not change the root (see {@link runtime_assertRootChange}).
  * @internal
  */
-function runtime_rootClose(slothlet, target, isCallable) {
+function runtime_rootClose(slothlet, target, isCallable, prototype) {
 	// Closing a root already closed changes nothing, as on a plain object.
 	if (!Reflect.isExtensible(target)) return true;
 	runtime_assertRootChange(slothlet, null);
@@ -10249,8 +10250,9 @@ function runtime_rootClose(slothlet, target, isCallable) {
 	// A function root's api is a layer over its module's function, kept open so the function is not changed: the target
 	// alone closes then, and from then on holds the keys the root has (see runtime_rootTakesKey).
 	if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
-	// A closed root reports its target's prototype (invariant): a function root's is its function's.
-	if (isCallable) Reflect.setPrototypeOf(target, Reflect.getPrototypeOf(api));
+	// A closed root reports its target's prototype (invariant): a function root's is its function's, or the one the
+	// root was given.
+	if (isCallable) Reflect.setPrototypeOf(target, prototype);
 	for (const key of Reflect.ownKeys(api))
 		Reflect.defineProperty(target, key, runtime_rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key)));
 	return Reflect.preventExtensions(target);
