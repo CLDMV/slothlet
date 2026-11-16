@@ -335,6 +335,9 @@ describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
 				await api.slothlet.reload();
 			});
 			expect(reported).toEqual([]);
+			// The traps run as the supplier, whose calls to the vault the reload left unloaded answer once it has loaded.
+			await api.vault.secret;
+			await new Promise((resolve) => setImmediate(resolve));
 			const answers = await api.supplier.trap.taken();
 			expect(answers.length).toBeGreaterThan(0);
 			expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);

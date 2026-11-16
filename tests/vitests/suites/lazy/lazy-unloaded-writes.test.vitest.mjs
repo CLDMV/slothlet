@@ -686,13 +686,16 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 					await load("lazy");
 					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { moduleID: "race" });
 					await api.race;
+					const loading = api.race.a;
 					// Queued on `a`, whose load waits on the gate; once `a` has loaded, the change moves down to `a.sub`.
 					api.race.a.sub.z.getterOnly.g = 2;
 					const reloaded = reloadPath ? api.slothlet.api.reload(reloadPath) : Promise.resolve();
 					open();
 					await reloaded;
-					// Let a load the reload did not wait for finish before reading the rebuilt node.
-					await new Promise((resolve) => setTimeout(resolve, 50));
+					// Let the load the reload did not wait for, and the load of `a.sub` the change moved down to, finish
+					// before reading the rebuilt node.
+					await settled(loading);
+					await settled(loading.sub);
 				} finally {
 					open();
 					delete globalThis[gate];
