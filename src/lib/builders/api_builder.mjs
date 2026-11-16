@@ -2436,7 +2436,7 @@ export class ApiBuilder extends ComponentBase {
 							const activeStore = MapMethods.get(slothlet.contextManager.instances, currentID);
 							const isOurInstance =
 								currentID === slothlet.instanceID ||
-								(currentID == null ? undefined : StringMethods.startsWith(currentID, slothlet.instanceID + "__run_")) ||
+								StringMethods.startsWith(currentID, slothlet.instanceID + "__run_") ||
 								activeStore?.parentInstanceID === slothlet.instanceID;
 
 							if (isOurInstance && activeStore) {
