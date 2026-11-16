@@ -213,7 +213,7 @@ export class SlothletWarning {
 	 * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
 	 * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
 	 * Warnings are still `instanceof SlothletWarning`.
-	 * @returns {typeof SlothletWarning} The per-instance class.
+	 * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
 	 * @public
 	 */
 	static forInstance() {
