@@ -228,6 +228,28 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			expect(await api.toplevel.boot.result()).toEqual(outcome);
 		});
 
+		// A helper file's top-level code, as it is first evaluated inside the load of the api file importing it, runs as
+		// that importer's module path under Node's loader (see the probe below). Under vite's module runner the import record
+		// naming the importer is written by the importer's own code, after the helper has run, so it is refused.
+		it.each([
+			["by default", []],
+			[
+				"under vite also under a rule on the importing file's module path",
+				[{ caller: "helpertop.user", target: "capability:code", effect: "allow" }]
+			],
+			["under a rule on another module", [{ caller: "coder.**", target: "capability:code", effect: "allow" }]]
+		])("a helper file's top-level code compiling a string as it is first evaluated is refused %s", async (_label, extra) => {
+			api = await slothlet({
+				...config,
+				silent: true,
+				base: path.join(ROOT, "base"),
+				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
+			});
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
+			await api.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { moduleID: "helpertop" });
+			expect(await api.helpertop.user.result()).toEqual(REFUSED);
+		});
+
 		// Under vite's module runner the import statement is resolved where the instance's rules are not (the vite server),
 		// so it is refused whatever they say; under Node's own loader the importing file's module path decides (below).
 		it.each([
@@ -278,7 +300,7 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
  * Under Node's own loader, outside vitest's module runner: an import statement of a `data:` URL in a module file is
  * decided by the importing file's module path, as the file links.
  */
-describe("Permissions > built-in capabilities > a static data: import under Node's own loader", () => {
+describe("Permissions > built-in capabilities > a static data: import and a helper's top level under Node's own loader", () => {
 	const SCENARIOS = {
 		none: [],
 		own: [{ caller: "staticdata.inline", target: "capability:imports", effect: "allow" }],
@@ -304,6 +326,14 @@ describe("Permissions > built-in capabilities > a static data: import under Node
 				}
 				out[mode + "/" + runtime + "/" + attribution + "/" + name] = outcome;
 				await api.shutdown();
+				const helperRules = name === "own" ? [{ caller: "helpertop.user", target: "capability:code", effect: "allow" }] : name === "sibling" ? [{ caller: "coder.**", target: "capability:code", effect: "allow" }] : [];
+				const helperApi = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
+					permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...helperRules], attribution } });
+				await helperApi.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
+				await helperApi.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { moduleID: "helpertop" });
+				const helper = await helperApi.helpertop.user.result();
+				out[mode + "/" + runtime + "/" + attribution + "/helper/" + name] = helper.ok ? helper.value : helper.code;
+				await helperApi.shutdown();
 			}
 		}
 		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
@@ -328,6 +358,11 @@ describe("Permissions > built-in capabilities > a static data: import under Node
 			for (const attribution of ["precise", "fast"]) {
 				it(`${mode}/${runtime}/${attribution}: refused by default, opened by a rule on the importing file's module path, not by another module's`, () => {
 					const at = `${mode}/${runtime}/${attribution}`;
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+				});
+
+				it(`${mode}/${runtime}/${attribution}: a helper's top-level compile runs as its importer's module path`, () => {
+					const at = `${mode}/${runtime}/${attribution}/helper`;
 					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
 				});
 			}

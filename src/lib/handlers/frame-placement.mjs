@@ -4200,9 +4200,58 @@ function runtime_loadingFileRunning(slothlet, importer = null) {
 	for (const frame of framesOf(runtime_captureFrames(24))) {
 		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:")) continue;
 		if (frame.evaluated || isForeignScript(frame)) return null;
-		return loader.loadingFile(frame.path, runtime_frameModuleTag(frame.line));
+		const mount = runtime_frameModuleTag(frame.line);
+		return (
+			loader.loadingFile(frame.path, mount) ?? (runtime_frameInstanceTag(frame.line) ? runtime_loadingHelper(slothlet, frame.path) : null)
+		);
 	}
 	return null;
+}
+
+/**
+ * A helper file of an instance's being evaluated for the first time, during the load of a file that imports it: the
+ * paths of every api file importing it, directly or through other helpers, as the import record has them (#742). An
+ * importing file still loading answers its load's paths (see `Loader#loadingFile`), one already built its module path.
+ * Null when any importer cannot be named, or the helper has none.
+ * @param {object} slothlet - The instance.
+ * @param {string} helperPath - The helper's file, in comparable form.
+ * @returns {{path: string, moduleID: null, paths: ReadonlyArray<string>}|null} The paths it runs as, or null.
+ * @private
+ */
+function runtime_loadingHelper(slothlet, helperPath) {
+	const graph = runtime_importGraph(slothlet.instanceID);
+	const loader = slothlet.processors.loader;
+	const paths = new Set();
+	const seen = setFrom([helperPath]);
+	const queue = [helperPath];
+	let anyLoading = false;
+	while (queue.length) {
+		const importers = MapMethods.get(graph, ArrayMethods.pop(queue));
+		if (!(importers == null ? undefined : SetMethods.size(importers))) return null;
+		for (const importer of setValues(importers)) {
+			if (SetMethods.has(seen, importer)) continue;
+			SetMethods.add(seen, importer);
+			const load = loader.loadingFile(importer);
+			if (load) {
+				if (!load.paths?.length) return null;
+				anyLoading = true;
+				for (let index = 0; index < load.paths.length; index++) SetMethods.add(paths, load.paths[index]);
+				continue;
+			}
+			const leaves = runtime_leavesAtFile(slothlet, importer, null, null);
+			if (leaves.length) {
+				const module = runtime_fileModuleOf(leaves);
+				if (module.length !== 1) return null;
+				SetMethods.add(paths, String(module[0].____slothletInternal.apiPath ?? ""));
+				continue;
+			}
+			// Another helper: the files importing it stand for it in turn.
+			if (SetMethods.size(seen) > PACKAGE_WALK) return null;
+			listPush(queue, importer);
+		}
+	}
+	// A helper evaluating for the first time is evaluated inside a load of a file importing it.
+	return anyLoading && SetMethods.size(paths) ? { path: helperPath, moduleID: null, paths: Objects.freeze(setToArray(paths)) } : null;
 }
 
 /**
