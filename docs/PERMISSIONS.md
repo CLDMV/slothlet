@@ -1026,9 +1026,9 @@ Call, write (`pattern:write`), hook (`pattern:type`) and [event](#event-rules) r
 
 ## Module-Private Exports
 
-An export whose name starts with `_` or `__` is **private to its module** — the directory of files that exports it. With permissions enabled:
+An export whose name starts with `_` or `__` is **private to its module**. By default the module is the **module ID that owns the member's path**, the same ownership `api.slothlet.api.remove()` / `reload()` and the [owner grant](#owner-grant) read: every leaf of the initial load belongs to the base module, and every leaf an `api.add()` composes belongs to that call's moduleID, given or generated. With permissions enabled:
 
-- **Same module — allowed.** The other files of the same directory reach the member through `self`, so sibling files never have to import each other directly. (Same-module means same directory; a subdirectory is its own module, exactly as it is its own namespace.)
+- **Same module — allowed.** Every leaf the owning module owns reaches the member through `self`, in whatever folder its file sits, so the module's files never have to import each other directly.
 - **Other modules — denied.** The refusal behaves like every other denial: a direct read throws `PERMISSION_DENIED`, the key is redacted from enumeration and serialization, and `permission:denied` is emitted — never a silent vanishing.
 - **The host — denied by default.** `permissions.private.host: "allow"` restores the trusted-root carve-out for private members:
 
@@ -1041,6 +1041,34 @@ const api = await slothlet({
 	}
 });
 ```
+
+`permissions.private.scope` picks what a member is private to. `"module"` is the default described above. `"folder"` makes it private to the folder of files that exports it, the rule before 3.25.0: the other files of that folder read it, and a subfolder is a module of its own. The folder is compared by the two files' paths (a URL's folder in a browser).
+
+```text
+api/billing/internals.mjs   export const __rate = 0.2
+api/billing/quote.mjs       reads self.billing.internals.__rate
+api/billing/deep/audit.mjs  reads self.billing.internals.__rate
+api/reporting/peek.mjs      reads self.billing.internals.__rate
+```
+
+```javascript
+// default, private.scope: "module" — all four files belong to the base module
+await api.billing.quote.total(); // reads 0.2
+await api.billing.deep.audit.check(); // reads 0.2
+await api.reporting.peek.rate(); // reads 0.2
+
+// private: { scope: "folder" }
+await api.billing.quote.total(); // reads 0.2 (same folder)
+await api.billing.deep.audit.check(); // PERMISSION_DENIED (a subfolder)
+await api.reporting.peek.rate(); // PERMISSION_DENIED (another folder)
+```
+
+Under either scope:
+
+- A module added with `api.slothlet.api.add("ext", "./ext", { moduleID: "ext" })` and the base module do not read each other's private members. An add without a moduleID is a module of its own under the generated one.
+- A later add that takes over a member's path (`forceOverwrite`) owns the member there: its own files read it, the base module's do not.
+- A module mounted at two paths keeps reading its members at one after the other is removed, and a reload changes no answer.
+- An in-memory leaf added as an object (`api.slothlet.api.add("obj", { _secret: 1, read() { … } }, { moduleID: "obj" })`) is a module of its own at its path. Under `"module"` its function reads its own `_secret`. No other module reads it under either scope.
 
 The guarantee is **absolute**: no user rule can grant a foreign module access to a private member, because privacy resolves before rule evaluation (the api path is a lossy projection of the module tree — no glob can encode "same module"). Sharing a private member means renaming it public; that is the contract, not a limitation.
 
@@ -1067,7 +1095,7 @@ export const helper = () => ({ ok: true });
 
 ## Owner Grant
 
-A module is rarely one directory. An extension added with a single `api.slothlet.api.add(path, folder, { moduleID })` typically spreads its files over subdirectories — and each subdirectory is its own permission module. The [self-call bypass](#self-call-bypass) covers only the same file, and [private members](#module-private-exports) only the same directory, so under `defaultPolicy: "deny"` every call a module makes between its own directories is denied:
+A module is rarely one directory. An extension added with a single `api.slothlet.api.add(path, folder, { moduleID })` typically spreads its files over subdirectories — and each subdirectory is its own permission module. The [self-call bypass](#self-call-bypass) covers only the same file, and [private members](#module-private-exports) are a separate matter, so under `defaultPolicy: "deny"` every call a module makes between its own directories is denied:
 
 ```text
 launcher/                          added as moduleID "launcher-ext" at "launcher"
@@ -1108,7 +1136,7 @@ api.launcher.intruder.poke(); // PERMISSION_DENIED — shared path, different ow
 
 - An explicit **deny** rule still wins — the grant applies only when no rule matched (or every matching rule's condition failed) and `defaultPolicy` denied.
 - Under `defaultPolicy: "allow"` it changes nothing.
-- It does not open [module-private members](#module-private-exports) across directories; privacy is still per directory.
+- It does not decide [module-private members](#module-private-exports): those are settled before it, by `permissions.private.scope` (the owning module by default, so the module's own leaves already read them; per directory under `"folder"`).
 - It never covers the framework's reserved roots (`slothlet.*`, `shutdown`, `destroy`), even though the composed tree registers them to the base module.
 
 ```javascript

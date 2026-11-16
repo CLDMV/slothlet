@@ -426,6 +426,38 @@ const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "deny"
 
 See [Code a module hands out runs as its definer](./PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer) for the rule, the trade-off and its limits.
 
+### `permissions.private`
+
+**Type**: `{ host?: "deny" | "allow", scope?: "module" | "folder" }`
+**Default**: `{ host: "deny", scope: "module" }`
+
+How [module-private members](./PERMISSIONS.md#module-private-exports) (exports named with a leading `_` or `__`) are held while the permission system is on.
+
+- `scope` decides what a private member is private to. Under `"module"` it is the module ID that owns the member's path: every leaf of the base folder belongs to the base module, and everything an `api.slothlet.api.add()` composes belongs to that add's moduleID, given or generated. Under `"folder"` it is the folder of files that exports the member, as before 3.25.0, and a subfolder is a module of its own.
+- `host` decides whether the host's own reads and calls of a private member are allowed (`"allow"`) or refused (`"deny"`).
+
+```text
+api/billing/internals.mjs   export const __rate = 0.2
+api/billing/quote.mjs       reads self.billing.internals.__rate
+api/billing/deep/audit.mjs  reads self.billing.internals.__rate
+api/reporting/peek.mjs      reads self.billing.internals.__rate
+ext/vault.mjs               added with api.slothlet.api.add("ext", "./ext", { moduleID: "ext" }), reads the same
+```
+
+| Reader               | `scope: "module"` (default) | `scope: "folder"`   |
+| -------------------- | --------------------------- | ------------------- |
+| `billing.quote`      | `0.2`                       | `0.2`               |
+| `billing.deep.audit` | `0.2`                       | `PERMISSION_DENIED` |
+| `reporting.peek`     | `0.2`                       | `PERMISSION_DENIED` |
+| `ext.vault`          | `PERMISSION_DENIED`         | `PERMISSION_DENIED` |
+| the host             | `PERMISSION_DENIED`         | `PERMISSION_DENIED` |
+
+Any other value of either key, or a `private` that is not an object, is rejected with `INVALID_CONFIG`.
+
+```javascript
+const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "allow", private: { scope: "folder", host: "allow" } } });
+```
+
 ---
 
 ## Hook Configuration

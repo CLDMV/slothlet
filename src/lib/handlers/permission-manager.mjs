@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:13:19-08:00 (1794798799)
+ *	@Last modified time: 2026-11-15T20:11:37-08:00 (1794802297)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -191,7 +191,8 @@ const FRAMEWORK_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy
 const FRAMEWORK_WRITE_KEYS = new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]);
 
 /**
- * Whether two source files belong to the same module — the same directory of files (#260).
+ * Whether two source files share a folder, the module a private member belongs to under
+ * `permissions.private.scope: "folder"` (#260).
  *
  * @param {string} callerFilePath - Absolute path of the caller's source file.
  * @param {string} targetFilePath - Absolute path of the target's source file.
@@ -199,12 +200,11 @@ const FRAMEWORK_WRITE_KEYS = new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, 
  * @internal
  *
  * @description
- * A slothlet module IS a directory of files, so same-directory is the module-identity encoding
- * that survives every composition shape — the api path is lossy in both directions, but
- * enforcement receives both REAL file paths, and `dirname` equality needs no new assigned
- * identity, no cache-key change, and no mode-dependent normalization. A subdirectory is its own
- * module: nesting expresses a boundary, exactly as it does for the api surface. The folders come from
- * `fileParts`, so a browser, where both files are URLs, compares them the same way.
+ * Under the `"folder"` scope a module is a directory of files: the api path is lossy in both
+ * directions, but enforcement receives both real file paths, and folder equality needs no
+ * assigned identity, no cache-key change, and no mode-dependent normalization. A subdirectory is
+ * its own module. The folders come from `fileParts`, so a browser, where both files are URLs,
+ * compares them the same way. The default `"module"` scope compares owning module IDs instead.
  */
 function runtime_sameModuleDir(callerFilePath, targetFilePath) {
 	return fileParts(callerFilePath).dir === fileParts(targetFilePath).dir;
@@ -493,6 +493,13 @@ export class PermissionManager extends ComponentBase {
 	#privateHost = "deny";
 
 	/**
+	 * What a `_`/`__`-prefixed member is private to: "module" (default) — the module ID that owns its path, so every
+	 * leaf that module owns reads it, wherever its file sits; "folder" — the folder of files that exports it.
+	 * @type {"module"|"folder"}
+	 */
+	#privateScope = "module";
+
+	/**
 	 * Owner grant (#509): when true, a caller leaf may access any target leaf whose CURRENT owner
 	 * (per the ownership registry) is the caller leaf's own current owner, wherever the default policy
 	 * would otherwise deny. Opt in via `permissions.owner: true`.
@@ -678,6 +685,8 @@ export class PermissionManager extends ComponentBase {
 			this.#capture = permConfig.references?.capture !== false;
 			// Module privacy (#260): whether the HOST may read `_`/`__` exports. Secure default deny.
 			this.#privateHost = permConfig.private?.host === "allow" ? "allow" : "deny";
+			// What a private member is private to; normalization guarantees "module" or "folder".
+			this.#privateScope = permConfig.private?.scope === "folder" ? "folder" : "module";
 			// Owner grant (#509): a module may reach every leaf it owns. Opt-in; normalization guarantees a boolean.
 			this.#owner = permConfig.owner === true;
 
@@ -3073,20 +3082,24 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Module privacy (#260): a `_`/`__`-prefixed member is private to the directory of files
-		// that exports it. Enforced HERE — before rules and before the cache — deliberately:
-		// the api path is a lossy projection of the module tree, so no rule glob can encode
-		// "same module" (the guarantee is absolute, not overridable by user rules), and the
-		// decision cache is keyed by path pair alone, which cannot distinguish two callers'
-		// module identities. Same-module is same-DIRECTORY of the two source files — the one
-		// identity that survives every composition shape, because enforcement already receives
-		// both real file paths.
+		// Module privacy (#260): a `_`/`__`-prefixed member is private to its module. Enforced HERE —
+		// before rules and before the cache — deliberately: the api path is a lossy projection of the
+		// module tree, so no rule glob can encode "same module" (the guarantee is absolute, not
+		// overridable by user rules), and the decision cache is keyed by path pair alone, which cannot
+		// distinguish two callers' module identities. Under `private.scope: "module"` (the default) the
+		// module is the module ID that currently owns the member's path, read live from the ownership
+		// registry like the owner grant, so it needs no file paths and moves with add/remove/reload.
+		// Under `"folder"` it is the directory of the two source files.
 		// The injected `slothlet.*` control tree is framework surface, not module exports — its
 		// members have no source files and no owning module, and internal machinery probes it with
 		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
 		// applies there.
 		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !targetPath.startsWith("slothlet.")) {
-			if (callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath)) {
+			const sameModule =
+				this.#privateScope === "folder"
+					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
+					: this.#privateOwner(callerPath, targetPath) !== null;
+			if (sameModule) {
 				return {
 					allowed: true,
 					event: "permission:private-module-bypass",
@@ -3149,6 +3162,29 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 		return entry;
+	}
+
+	/**
+	 * The module a private member's reader and the member both belong to, or null (#260).
+	 *
+	 * @param {string|null} callerPath - The reading leaf's api path; null for the host.
+	 * @param {string} targetPath - The private member's api path.
+	 * @returns {string|null} The shared owner's moduleID, or null when either has no owner or they differ.
+	 * @private
+	 *
+	 * @description
+	 * Both owners are the ownership registry's current owner of the exact path, the identity the owner grant reads: the
+	 * base module for the initial load, an `api.add()`'s moduleID (given or generated) for what it composed, and the
+	 * add's moduleID for an in-memory object leaf. A caller with no path (the host) or a path nothing owns has no
+	 * module, so it is refused here and left to the host policy.
+	 */
+	#privateOwner(callerPath, targetPath) {
+		const ownership = this.slothlet.handlers?.ownership;
+		if (!callerPath || !ownership) return null;
+		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID ?? null;
+		const targetOwner = ownership.getCurrentOwner(targetPath)?.moduleID ?? null;
+		if (callerOwner === null || targetOwner === null) return null;
+		return this.#sameOwner(callerOwner, targetOwner) ? callerOwner : null;
 	}
 
 	/**

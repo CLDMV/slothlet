@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:11-08:00 (1794635291)
+ *	@Last modified time: 2026-11-15T20:11:46-08:00 (1794802306)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2278,7 +2278,7 @@ export default slothlet;
  *   `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
  *   a member is handed over as a view.
  * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
- * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+ * @property {object} [permissions.private] - Module privacy (`{ host?: "deny"|"allow", scope?: "module"|"folder" }`): whether the host reads `_`/`__` members, and whether a member is private to its owning module ID (default) or to the folder that exports it.
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
  * @property {object} [permissions.events] - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.

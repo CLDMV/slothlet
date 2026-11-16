@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:13:34-08:00 (1794798814)
+ *	@Last modified time: 2026-11-15T20:11:48-08:00 (1794802308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,9 +18,10 @@
  *
  * @description
  * With permissions on, a `_`/`__`-prefixed member is reachable through `self` by the files of the folder that exports
- * it and refused to every other module and, by default, to the host. The check compares the two files' folders; in a
- * browser the files are URLs, so these rows check that a same-folder read and an other-folder read answer as they do
- * under Node. Expected values come from the fixture files imported plainly in the page.
+ * it and refused to every other module and, by default, to the host. Under the default `private.scope: "module"` the
+ * module is the module ID that owns the member; under `"folder"` it is the folder that exports it, compared by the two
+ * files' URLs in a browser. These rows check both answer as they do under Node. Expected values come from the fixture
+ * files imported plainly in the page.
  *
  * @module tests/browser/module-private.browser
  */
@@ -50,6 +51,24 @@ const MANIFEST = {
 	]
 };
 
+/** A folder outside the root, mounted by an add: a copy of `reporting/peek.mjs` that reads `billing.internals.__rate`. */
+const MOUNTED = [
+	{
+		name: "mounted",
+		path: "mounted",
+		children: { files: [{ path: "reporting/peek.mjs", name: "peek", fullName: "peek.mjs" }], directories: [] }
+	}
+];
+
+const MANIFESTS = new WeakMap();
+
+/**
+ * The manifest an instance was built with.
+ * @param {object} api - The api.
+ * @returns {object} Its manifest.
+ */
+const manifestOf = (api) => MANIFESTS.get(api);
+
 const configs = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
 );
@@ -69,14 +88,17 @@ const build = async (options) => {
 	const mod = await import("@cldmv/slothlet");
 	const slothlet = mod.default ?? mod.slothlet;
 	const BASE = baseUrl();
-	return slothlet({
+	const manifest = structuredClone(MANIFEST);
+	const api = await slothlet({
 		platform: "browser",
 		base: BASE,
-		manifest: MANIFEST,
+		manifest,
 		resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
 		silent: true,
 		...options
 	});
+	MANIFESTS.set(api, manifest);
+	return api;
 };
 
 /**
@@ -94,9 +116,13 @@ const settled = async (read) => {
 
 describe("module-private members in a real browser", () => {
 	describe.each(configs)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
-		it("a file of the same folder reads the private members through self", async () => {
+		it('scope "folder": a file of the same folder reads the private members through self', async () => {
 			const internals = await import(/* @vite-ignore */ baseUrl() + "billing/internals.mjs?plain-twin");
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			const api = await build({
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: [], private: { scope: "folder" } }
+			});
 			try {
 				expect(await settled(() => api.billing.quote.total(100))).toBe(100 * (1 + internals.__rate) + internals._fee);
 			} finally {
@@ -104,8 +130,12 @@ describe("module-private members in a real browser", () => {
 			}
 		});
 
-		it("a file of another folder is refused the private member; the host is refused by default", async () => {
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+		it('scope "folder": a file of another folder is refused the private member; the host is refused by default', async () => {
+			const api = await build({
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: [], private: { scope: "folder" } }
+			});
 			try {
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
 				expect(await settled(() => api.billing.internals.__rate)).toBe("THREW:PERMISSION_DENIED");
@@ -114,13 +144,14 @@ describe("module-private members in a real browser", () => {
 			}
 		});
 
-		it("an allow rule naming the private member still grants another folder nothing", async () => {
+		it('scope "folder": an allow rule naming the private member still grants another folder nothing', async () => {
 			const api = await build({
 				mode,
 				runtime,
 				permissions: {
 					defaultPolicy: "deny",
 					attribution,
+					private: { scope: "folder" },
 					rules: [
 						{ caller: "**", target: "billing.internals.__rate", effect: "allow" },
 						{ caller: "reporting.**", target: "billing.**", effect: "allow" }
@@ -129,6 +160,31 @@ describe("module-private members in a real browser", () => {
 			});
 			try {
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
+			} finally {
+				await api.shutdown();
+			}
+		});
+
+		it("the default scope: every file of the base module reads the private members, in its own folder and another", async () => {
+			const internals = await import(/* @vite-ignore */ baseUrl() + "billing/internals.mjs?plain-twin");
+			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			try {
+				expect(await settled(() => api.billing.quote.total(100))).toBe(100 * (1 + internals.__rate) + internals._fee);
+				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: internals.__rate, error: null });
+				expect(await settled(() => api.billing.internals.__rate)).toBe("THREW:PERMISSION_DENIED");
+			} finally {
+				await api.shutdown();
+			}
+		});
+
+		it("the default scope: a module added with a moduleID and the base module do not read each other's private members", async () => {
+			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			try {
+				// The add mounts a folder of the manifest outside the root: listed after the build, so the root never composes it.
+				MOUNTED.forEach((entry) => manifestOf(api).directories.push(entry));
+				await api.slothlet.api.add("ext", baseUrl() + "mounted", { moduleID: "ext-mod" });
+				expect(await settled(() => api.ext.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
+				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: 0.2, error: null });
 			} finally {
 				await api.shutdown();
 			}

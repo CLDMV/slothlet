@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:03-08:00 (1794635283)
+ *	@Last modified time: 2026-11-15T20:11:40-08:00 (1794802300)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -549,6 +549,22 @@ export function normalizePermissionsConfig(permissions) {
 		);
 	}
 
+	// What a private member is private to: its owning module ID (default) or the folder that exports it.
+	const privateScope = permissions.private?.scope === undefined ? "module" : permissions.private.scope;
+	if (privateScope !== "module" && privateScope !== "folder") {
+		throw new SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: "permissions.private.scope",
+				value: permissions.private.scope,
+				expected: '"module" or "folder"',
+				hint: "HINT_INVALID_CONFIG"
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+
 	// Validate the event-rule section (#407). Separate three-level construct (deny/notify/allow),
 	// distinct from the binary call/hook `rules` above. `default` is the base level applied when no
 	// event rule matches a subscriber/event pair (built-in default: "notify"); `rules` are
@@ -607,7 +623,7 @@ export function normalizePermissionsConfig(permissions) {
 		attribution,
 		typedArrayMembers,
 		references: { capture },
-		private: { host: privateHost },
+		private: { host: privateHost, scope: privateScope },
 		rules,
 		events: { default: eventDefault, rules: eventRules }
 	};
