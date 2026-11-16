@@ -469,3 +469,65 @@ describe("Live runtime > synchronous entries decide the caller (#512) [direct]",
 		manager.cleanup("direct-512b");
 	});
 });
+
+describe.each(getMatrixConfigs({ runtime: "live" }))(
+	"Live runtime > a call whose caller could not be told stays refused once its lazy target loads > $name",
+	({ config }) => {
+		describe.each(["precise", "fast"])("attribution %s", (attribution) => {
+			let api;
+
+			afterEach(async () => {
+				if (api) await api.shutdown();
+				api = null;
+			});
+
+			/**
+			 * Boot the host with the extension and the rogue module mounted.
+			 * @returns {Promise<{extID: string}>} The extension's id.
+			 */
+			async function boot() {
+				api = await slothlet({
+					...config,
+					base: ROOT,
+					hidden: ["ext", "rogue", "shared"],
+					routines: [{ name: "activate", mode: "manual", cascade: false }],
+					stackRoutines: true,
+					silent: true,
+					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+				});
+				const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
+				await api.slothlet.api.add(["rogue"], ROGUE_DIR);
+				return { extID };
+			}
+
+			it("two api paths of one module resuming in a file both import: every access is refused", async () => {
+				const { extID } = await boot();
+				const [activationGate, releaseActivation] = gate();
+				const [waitGate, releaseWait] = gate();
+				const activation = api.ext.activate.for(extID)("sibling", activationGate);
+				await turn();
+				const waiting = api.ext.peer.wait(waitGate);
+				await turn();
+				releaseActivation();
+				// The caller cannot be told: refused, as in eager mode, not taken as the host once the lazy target loads.
+				expect(await activation).toEqual(["denied", "denied"]);
+				releaseWait();
+				expect(await waiting).toBe("waited");
+			});
+
+			it("an outer caller of another module is not chosen for them: every access is refused", async () => {
+				const { extID } = await boot();
+				const [activationGate, releaseActivation] = gate();
+				const [waitGate, releaseWait] = gate();
+				const chained = api.run.chain("sibling", extID, activationGate);
+				await turn();
+				const waiting = api.ext.peer.wait(waitGate);
+				await turn();
+				releaseActivation();
+				expect(await chained).toEqual(["denied", "denied"]);
+				releaseWait();
+				expect(await waiting).toBe("waited");
+			});
+		});
+	}
+);
