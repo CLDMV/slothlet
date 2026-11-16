@@ -111,7 +111,29 @@ import { isGuardedInternal, internals as instanceImportsInternals } from "@cldmv
 import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
 import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, NativeProxy, Map, Set, Promises, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	copyList,
+	filterList,
+	FunctionMethods,
+	Map,
+	mapEntries,
+	mapList,
+	MapMethods,
+	NativeProcess,
+	NativeProxy,
+	Objects,
+	promiseAllSettled,
+	PromiseMethods,
+	Reflect,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	splitText,
+	StringMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const {
 	resolveWrapper,
 	releaseModuleMakers,
@@ -192,7 +214,7 @@ const promisePatchHolders = new Set();
  * @type {ReadonlySet<string>}
  * @private
  */
-const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
+const CONFIG_IDENTITY_KEYS = setFrom(["reference", "context"]);
 
 /**
  * Copy a config value for the retained original-config snapshot (#504).
@@ -216,18 +238,22 @@ const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
  */
 function copyConfigValue(value, freeze, seen = new Map()) {
 	if (!value || typeof value !== "object") return value;
-	if (seen.has(value)) return seen.get(value);
+	if (MapMethods.has(seen, value)) return MapMethods.get(seen, value);
 	if (Arrays.isArray(value)) {
 		const out = [];
-		seen.set(value, out);
-		for (const item of value) out.push(copyConfigValue(item, freeze, seen));
+		MapMethods.set(seen, value, out);
+		for (let ofIndex = 0, ofList = value; ofIndex < ofList.length; ofIndex++) {
+			const item = ofList[ofIndex];
+			ArrayMethods.push(out, copyConfigValue(item, freeze, seen));
+		}
 		return freeze ? Objects.freeze(out) : out;
 	}
 	const proto = Objects.getPrototypeOf(value);
 	if (proto !== Objects.prototype && proto !== null) return value;
 	const out = proto === null ? Objects.create(null) : {};
-	seen.set(value, out);
-	for (const key of Reflect.ownKeys(value)) {
+	MapMethods.set(seen, value, out);
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const descriptor = Objects.getOwnPropertyDescriptor(value, key);
 		if (!descriptor.enumerable) continue;
 		out[key] = copyConfigValue(value[key], freeze, seen);
@@ -249,8 +275,9 @@ function copyConfigValue(value, freeze, seen = new Map()) {
  */
 function copyTopLevelConfig(config, freeze) {
 	const out = {};
-	for (const key of Objects.keys(config)) {
-		out[key] = CONFIG_IDENTITY_KEYS.has(key) ? config[key] : copyConfigValue(config[key], freeze);
+	for (let ofIndex = 0, ofList = Objects.keys(config); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		out[key] = SetMethods.has(CONFIG_IDENTITY_KEYS, key) ? config[key] : copyConfigValue(config[key], freeze);
 	}
 	return freeze ? Objects.freeze(out) : out;
 }
@@ -391,7 +418,8 @@ class Slothlet {
 		this.componentCategories = ["helpers", "handlers", "builders", "processors", "modes"];
 
 		// Component namespaces (populated by _initializeComponents)
-		for (const category of this.componentCategories) {
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
 			this[category] = {};
 		}
 	}
@@ -417,11 +445,13 @@ class Slothlet {
 
 		const baseDir = path.join(path.dirname(url.fileURLToPath(import.meta.url)), "lib");
 
-		for (const category of this.componentCategories) {
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
 			const categoryDir = path.join(baseDir, category);
-			const files = fs.readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
+			const files = filterList(fs.readdirSync(categoryDir), (f) => StringMethods.endsWith(f, ".mjs"));
 
-			for (const file of files) {
+			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
 				const filePath = path.join(categoryDir, file);
 
 				try {
@@ -429,11 +459,13 @@ class Slothlet {
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
 					// A guarded internal export is no component, and is passed over without being used (it answers only the host).
-					const classExports = Objects.values(module).filter(
+					const classExports = filterList(
+						Objects.values(module),
 						(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
 					);
 
-					for (const ClassExport of classExports) {
+					for (let ofIndex = 0, ofList = classExports; ofIndex < ofList.length; ofIndex++) {
+						const ClassExport = ofList[ofIndex];
 						const propName = ClassExport.slothletProperty;
 						// Organize into category namespace
 						this[category][propName] = new ClassExport(this);
@@ -513,19 +545,22 @@ class Slothlet {
 			"@cldmv/slothlet/processors/loader"
 		];
 
-		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
+		for (let ofIndex = 0, ofList = BROWSER_COMPONENT_SPECIFIERS; ofIndex < ofList.length; ofIndex++) {
+			const specifier = ofList[ofIndex];
 			// Derive category from the specifier: public exports use "@cldmv/slothlet/<category>/...";
 			// internal-only handlers/factories use the package `imports` form "#<category>/...".
-			const parts = specifier.split("/");
-			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
+			const parts = splitText(specifier, "/");
+			const category = StringMethods.startsWith(specifier, "#") ? StringMethods.slice(parts[0], 1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
 			// A guarded internal export is no component, and is passed over without being used (it answers only the host).
-			const classExports = Objects.values(module).filter(
+			const classExports = filterList(
+				Objects.values(module),
 				(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
 			);
 
-			for (const ClassExport of classExports) {
+			for (let ofIndex = 0, ofList = classExports; ofIndex < ofList.length; ofIndex++) {
+				const ClassExport = ofList[ofIndex];
 				const propName = ClassExport.slothletProperty;
 				this[category][propName] = new ClassExport(this);
 			}
@@ -551,9 +586,13 @@ class Slothlet {
 			return;
 		}
 		const lifecycle = this.handlers.lifecycle;
-		for (const [event, handler] of Objects.entries(map)) {
+		for (let ofIndex = 0, ofList = Objects.entries(map); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				event = ofEntry[0],
+				handler = ofEntry[1];
 			const handlers = Arrays.isArray(handler) ? handler : [handler];
-			for (const fn of handlers) {
+			for (let ofIndex = 0, ofList = handlers; ofIndex < ofList.length; ofIndex++) {
+				const fn = ofList[ofIndex];
 				lifecycle.subscribe(event, fn);
 			}
 		}
@@ -614,7 +653,7 @@ class Slothlet {
 				// impl:removed always provides data.apiPath; false arm is defensive dead code.
 				/* v8 ignore next */
 				if (data.apiPath) {
-					const rootSegment = data.apiPath.split(".")[0];
+					const rootSegment = splitText(data.apiPath, ".")[0];
 					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 			});
@@ -914,8 +953,9 @@ class Slothlet {
 			}
 
 			// Resolve all waiting promises
-			const waiters = this._materializationWaiters.splice(0);
-			for (const resolve of waiters) {
+			const waiters = ArrayMethods.splice(this._materializationWaiters, 0);
+			for (let ofIndex = 0, ofList = waiters; ofIndex < ofList.length; ofIndex++) {
+				const resolve = ofList[ofIndex];
 				resolve();
 			}
 
@@ -960,15 +1000,19 @@ class Slothlet {
 	 */
 	_captureEnvSnapshot(envConfig) {
 		const rawInclude = envConfig?.include;
-		const include = Arrays.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const include = Arrays.isArray(rawInclude) ? filterList(rawInclude, (key) => typeof key === "string") : null;
 		const useAllowlist = include !== null && include.length > 0;
 		const raw = useAllowlist
-			? include.reduce((acc, key) => {
-					if (Objects.prototype.hasOwnProperty.call(NativeProcess.env, key)) {
-						acc[key] = NativeProcess.env[key];
-					}
-					return acc;
-				}, Objects.create(null))
+			? ArrayMethods.reduce(
+					include,
+					(acc, key) => {
+						if (FunctionMethods.call(Objects.prototype.hasOwnProperty, NativeProcess.env, key)) {
+							acc[key] = NativeProcess.env[key];
+						}
+						return acc;
+					},
+					Objects.create(null)
+				)
 			: { ...NativeProcess.env };
 		return Objects.freeze(raw);
 	}
@@ -1124,7 +1168,7 @@ class Slothlet {
 
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
-		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
+		if (preservedInstanceID && MapMethods.has(this.contextManager.instances, preservedInstanceID)) {
 			// Reload: DONT reuse store, delete old and create fresh
 			this.contextManager.cleanup(preservedInstanceID);
 			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
@@ -1171,7 +1215,7 @@ class Slothlet {
 			// runtime's identity is not part of: what they run is pinned to the caller that made them. Live runtime
 			// only, as the promise patch is, and released with it.
 			enableAsyncResourcePatching();
-			promisePatchHolders.add(this.instanceID);
+			SetMethods.add(promisePatchHolders, this.instanceID);
 		}
 
 		// The platform's cloning functions (`structuredClone`, `v8.serialize`, `postMessage`) refuse a Proxy, and what one
@@ -1183,7 +1227,7 @@ class Slothlet {
 		enableFunctionSourcePatching();
 
 		// Claim a share in the global patches, released on this instance's shutdown.
-		boundaryPatchHolders.add(this.instanceID);
+		SetMethods.add(boundaryPatchHolders, this.instanceID);
 
 		// Register context checker for EventEmitter tracking (must be after patching)
 		// registerEventEmitterContextChecker is always defined in both context managers.
@@ -1195,7 +1239,7 @@ class Slothlet {
 		// Note: ownership manager and hook manager already initialized via auto-discovery
 
 		// Generate base moduleID for ownership tracking
-		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
+		const baseModuleId = `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
@@ -1251,7 +1295,10 @@ class Slothlet {
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {
 			// Set as global metadata so it's inherited by all future api.add() calls
-			for (const [key, value] of Objects.entries(this.config.metadata)) {
+			for (let ofIndex = 0, ofList = Objects.entries(this.config.metadata); ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					key = ofEntry[0],
+					value = ofEntry[1];
 				this.handlers.metadata.setGlobalMetadata(key, value);
 			}
 
@@ -1369,7 +1416,7 @@ class Slothlet {
 						deleteProperty: (target, prop) => {
 							if (!this.api) return true;
 							runtime_assertRootChange(this, prop);
-							const held = Objects.prototype.hasOwnProperty.call(this.api, prop);
+							const held = FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop);
 							if (!Reflect.deleteProperty(this.api, prop)) return false;
 							if (!held && Reflect.isExtensible(target)) return true;
 							return Reflect.deleteProperty(target, prop);
@@ -1526,10 +1573,12 @@ class Slothlet {
 		// 1. Save operation history from api-manager for replay
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
 		/* v8 ignore next */
-		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
+		const operationHistory = this.handlers.apiManager?.state?.operationHistory
+			? copyList(this.handlers.apiManager.state.operationHistory)
+			: [];
 		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
 		/* v8 ignore next */
-		const addHistory = this.handlers.apiManager?.state?.addHistory ? [...this.handlers.apiManager.state.addHistory] : [];
+		const addHistory = this.handlers.apiManager?.state?.addHistory ? copyList(this.handlers.apiManager.state.addHistory) : [];
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
@@ -1547,8 +1596,8 @@ class Slothlet {
 			this.#claimImportScope();
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
-			boundaryPatchHolders.delete(oldInstanceID);
-			promisePatchHolders.delete(oldInstanceID);
+			SetMethods.delete(boundaryPatchHolders, oldInstanceID);
+			SetMethods.delete(promisePatchHolders, oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -1556,8 +1605,8 @@ class Slothlet {
 			// dir per reload until shutdown — an unbounded leak in long-lived dev
 			// processes that reload frequently.
 			if (isNode && this._typescriptCacheDirs?.size) {
-				await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
-				this._typescriptCacheDirs.clear();
+				await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
+				SetMethods.clear(this._typescriptCacheDirs);
 			}
 		}
 
@@ -1608,7 +1657,8 @@ class Slothlet {
 		// 5. Reparent any child __run_ context stores that were created before reload.
 		//    Their parentInstanceID points to the old base instanceID; updating it lets
 		//    context.get() still find them for callers that call reload() inside a .run() scope.
-		for (const [, store] of this.contextManager.instances) {
+		for (const ofEntry of mapEntries(this.contextManager.instances)) {
+			const store = ofEntry[1];
 			if (store.parentInstanceID === oldInstanceID) {
 				store.parentInstanceID = this.instanceID;
 			}
@@ -1616,12 +1666,17 @@ class Slothlet {
 
 		// 6. Clean up the old base context store now that the new one is active.
 		//    Guard with .has() because shutdown() may have already removed the store.
-		if (oldInstanceID && oldInstanceID !== this.instanceID && this.contextManager.instances?.has(oldInstanceID)) {
+		if (
+			oldInstanceID &&
+			oldInstanceID !== this.instanceID &&
+			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
+		) {
 			this.contextManager.cleanup(oldInstanceID);
 		}
 
 		// 6. Replay operation history in chronological order
-		for (const operation of operationHistory) {
+		for (let ofIndex = 0, ofList = operationHistory; ofIndex < ofList.length; ofIndex++) {
+			const operation = ofList[ofIndex];
 			if (operation.type === "add") {
 				await this.handlers.apiManager.addApiComponent({
 					apiPath: operation.apiPath,
@@ -1784,7 +1839,7 @@ class Slothlet {
 	 */
 	restart() {
 		if (this._restartPromise) return this._restartPromise;
-		this._restartPromise = this._restart().finally(() => {
+		this._restartPromise = PromiseMethods.finally(this._restart(), () => {
 			this._restartPromise = null;
 		});
 		return this._restartPromise;
@@ -1931,8 +1986,9 @@ class Slothlet {
 		const absoluteTargetDir = path.resolve(targetDir);
 
 		// Clear require.cache for CJS modules
-		for (const key of Objects.keys(require.cache)) {
-			if (key.startsWith(absoluteTargetDir)) {
+		for (let ofIndex = 0, ofList = Objects.keys(require.cache); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (StringMethods.startsWith(key, absoluteTargetDir)) {
 				delete require.cache[key];
 			}
 		}
@@ -2002,8 +2058,8 @@ class Slothlet {
 			// excluding functions would silently skip ALL lazy wrappers and their pending
 			// materializationPromises, making this drain a no-op in exactly the mode it exists for.
 			const objType = typeof obj;
-			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
-			seen.add(obj);
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || SetMethods.has(seen, obj)) return;
+			SetMethods.add(seen, obj);
 
 			try {
 				// Skip version dispatcher proxies — they have no materialization promises. Detect by the
@@ -2018,7 +2074,7 @@ class Slothlet {
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
 					const mat = wrapper.____slothletInternal.materializationPromise;
-					if (mat) pending.push(mat);
+					if (mat) ArrayMethods.push(pending, mat);
 
 					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
 					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers
@@ -2027,13 +2083,15 @@ class Slothlet {
 					// then resolves via resolveWrapper() on the next recursion.
 					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
 					// getter (#597).
-					for (const key of Objects.keys(wrapper)) {
+					for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
-				for (const key of Objects.keys(obj)) {
+				for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
@@ -2042,12 +2100,13 @@ class Slothlet {
 			}
 		};
 
-		for (const key of Objects.keys(this.api)) {
+		for (let ofIndex = 0, ofList = Objects.keys(this.api); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
-			await Promises.allSettled(pending);
+			await promiseAllSettled(pending);
 		}
 	}
 
@@ -2073,12 +2132,12 @@ class Slothlet {
 		// Release this instance's share of the global boundary patches, and unpatch only once nothing holds
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
-		boundaryPatchHolders.delete(this.instanceID);
-		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) {
+		SetMethods.delete(boundaryPatchHolders, this.instanceID);
+		if (SetMethods.delete(promisePatchHolders, this.instanceID) && SetMethods.size(promisePatchHolders) === 0) {
 			disablePromisePatching();
 			disableAsyncResourcePatching();
 		}
-		if (boundaryPatchHolders.size === 0) {
+		if (SetMethods.size(boundaryPatchHolders) === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
@@ -2127,11 +2186,13 @@ class Slothlet {
 		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
 		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
 		if (isNode && this._typescriptCacheDirs?.size) {
-			await Promises.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
-			this._typescriptCacheDirs.clear();
+			await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
+			SetMethods.clear(this._typescriptCacheDirs);
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
-			typescriptInternals ??= import("@cldmv/slothlet/processors/typescript").then((typescript) => typescript.internals("slothlet"));
+			typescriptInternals ??= PromiseMethods.then(import("@cldmv/slothlet/processors/typescript"), (typescript) =>
+				typescript.internals("slothlet")
+			);
 			await (await typescriptInternals).releaseSecureFallbackRoot();
 		}
 

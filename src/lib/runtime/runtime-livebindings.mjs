@@ -142,7 +142,7 @@ function runtime_refuseUnknownCaller(prop) {
 	if (!store?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const identity = liveRuntime.getCallerIdentity?.();
 	if (!identity?.unresolved || identity.unaccounted) return;
-	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
+	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
 	throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 }
 
@@ -151,7 +151,7 @@ function runtime_refuseUnknownCaller(prop) {
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
@@ -168,7 +168,7 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  */
 function runtime_selfMember(prop, value, resolved = null) {
 	if (typeof prop !== "string") return value;
-	if (FRAMEWORK_SELF_ROOTS.has(prop)) return runtime_selfFrameworkView(value);
+	if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return runtime_selfFrameworkView(value);
 	// The reader of the view is the code whose identity this same read just resolved.
 	const access = resolved?.identity ? runtime_resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
 	return runtime_selfView(value, undefined, null, access);

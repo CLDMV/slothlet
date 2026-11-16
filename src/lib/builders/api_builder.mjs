@@ -39,19 +39,39 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "@cldmv/slothlet/i18n";
 import {
-	Reflect,
-	Objects,
+	ArrayMethods,
 	Arrays,
+	concatLists,
+	copyList,
+	filterList,
+	FunctionMethods,
 	Functions,
+	Map,
+	mapEntriesToArray,
+	mapKeys,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
 	Math,
 	NativeProxy,
-	Map,
+	NumberMethods,
+	Objects,
+	Reflect,
+	RegExpMethods,
 	Set,
-	WeakMap,
-	WeakSet,
-	URL,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
 	String,
-	Symbols
+	StringMethods,
+	Symbols,
+	URL,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 const {
 	resolveWrapper,
@@ -89,7 +109,7 @@ const NAMESPACE_INSPECT_HOOKS = new WeakSet();
  * @type {Set<string>}
  * @private
  */
-const SELF_FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy"]);
+const SELF_FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
@@ -200,11 +220,12 @@ function runtime_scopeIdentity(slothlet, currentStore) {
 function runtime_ownerModuleIDs(identity) {
 	const supplier = identity?.currentWrapper?.____slothletInternal?.moduleID ?? null;
 	const ids = new Set();
-	for (const ceiling of identityCeilings(identity)) {
+	for (let i = 0, ceilings = identityCeilings(identity); i < ceilings.length; i++) {
+		const ceiling = ceilings[i];
 		const moduleID = ceiling.____slothletInternal?.moduleID ?? null;
-		if (moduleID !== null && moduleID !== supplier) ids.add(moduleID);
+		if (moduleID !== null && moduleID !== supplier) SetMethods.add(ids, moduleID);
 	}
-	return ids.size ? [...ids, supplier] : supplier;
+	return SetMethods.size(ids) ? concatLists(setToArray(ids), [supplier]) : supplier;
 }
 
 /**
@@ -222,7 +243,7 @@ function runtime_ownerModuleIDs(identity) {
  */
 function describeScopeReceived(value) {
 	if (Arrays.isArray(value)) {
-		const badIndex = value.findIndex((entry) => typeof entry !== "string");
+		const badIndex = ArrayMethods.findIndex(value, (entry) => typeof entry !== "string");
 		if (badIndex !== -1) {
 			return `array with non-string entry (${typeof value[badIndex]} at index ${badIndex})`;
 		}
@@ -244,7 +265,7 @@ function runtime_resolveAddFolder(slothlet, folderPath) {
 	const resolver = slothlet.helpers?.resolver;
 	if (!resolver || slothlet.envTarget === "browser") return folderPath;
 	const resolve = (entry) => (typeof entry === "string" && entry ? resolver.resolvePathFromCaller(entry) : entry);
-	return Arrays.isArray(folderPath) ? folderPath.map(resolve) : resolve(folderPath);
+	return Arrays.isArray(folderPath) ? mapList(folderPath, resolve) : resolve(folderPath);
 }
 
 /**
@@ -259,7 +280,7 @@ function runtime_resolveAddFolder(slothlet, folderPath) {
  */
 function runtime_buildAsNoModule(slothlet, build, folderPath) {
 	const contextManager = slothlet.contextManager;
-	const roots = (Arrays.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string" && root);
+	const roots = filterList(Arrays.isArray(folderPath) ? folderPath : [folderPath], (root) => typeof root === "string" && root);
 	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build, { slothlet, roots }) : build();
 }
 
@@ -302,18 +323,18 @@ function makeCopyOnWriteSelf(parentSelf) {
 	 * @returns {*} The value.
 	 */
 	const read = (prop) => {
-		if (overlay.has(prop)) return overlay.get(prop);
+		if (MapMethods.has(overlay, prop)) return MapMethods.get(overlay, prop);
 		const real = parentSelf[prop];
 		// Wrap object children in their own COW so deep-path writes are
 		// captured. Memoized so `self.X` returns the same view each time
 		// and in-scope writes to it are read back consistently.
 		if (real !== null && typeof real === "object") {
-			let view = childViews.get(prop);
+			let view = MapMethods.get(childViews, prop);
 			if (view === undefined) {
 				// The framework's namespace read in the scope is still the framework's: module code is handed its
 				// view of it, with the limits that view keeps, over the scope's copy (#625).
 				view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
-				childViews.set(prop, view);
+				MapMethods.set(childViews, prop, view);
 			}
 			return view;
 		}
@@ -425,7 +446,7 @@ function runtime_captureShell(fn) {
 	} catch {
 		constructible = false;
 	}
-	if (constructible) return Functions.prototype.bind.call(function slothlet_capturedFunction() {}, null);
+	if (constructible) return FunctionMethods.call(Functions.prototype.bind, function slothlet_capturedFunction() {}, null);
 	return () => {};
 }
 
@@ -488,8 +509,11 @@ export class ApiBuilder extends ComponentBase {
 		// discarding a user-exported shutdown/destroy function that was fresh-assigned by
 		// applyRootContributor's Object.assign() just before buildFinalAPI was called.
 		if (this.slothlet._ownBuiltins) {
-			for (const [key, ref] of Objects.entries(this.slothlet._ownBuiltins)) {
-				if (ref && Objects.prototype.hasOwnProperty.call(userApi, key) && userApi[key] === ref) {
+			for (let ofIndex = 0, ofList = Objects.entries(this.slothlet._ownBuiltins); ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					key = ofEntry[0],
+					ref = ofEntry[1];
+				if (ref && FunctionMethods.call(Objects.prototype.hasOwnProperty, userApi, key) && userApi[key] === ref) {
 					try {
 						delete userApi[key];
 					} catch (_) {
@@ -513,7 +537,8 @@ export class ApiBuilder extends ComponentBase {
 		// never reach it, so a lazy one must not count toward the materialization total, or remaining
 		// never reaches 0 and materialize.wait() never resolves (#588). It is parked, not discarded, so a load
 		// that still reaches it (in the background, or at shutdown) parks the wrappers it makes too (#585 review).
-		for (const hook of Objects.values(this.slothlet.userHooks)) {
+		for (let ofIndex = 0, ofList = Objects.values(this.slothlet.userHooks); ofIndex < ofList.length; ofIndex++) {
+			const hook = ofList[ofIndex];
 			const hookWrapper = resolveWrapper(hook);
 			if (!hookWrapper) continue;
 			hookWrapper.___trackLazyLoad("park");
@@ -580,7 +605,12 @@ export class ApiBuilder extends ComponentBase {
 			destroy: destroyWithApi
 		};
 		// Module code reads these through `self` as views that run as the module (#625).
-		for (const [name, member] of Objects.entries(this.slothlet._ownBuiltins)) runtime_registerFrameworkMember(member, this.slothlet, name);
+		for (let ofIndex = 0, ofList = Objects.entries(this.slothlet._ownBuiltins); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				name = ofEntry[0],
+				member = ofEntry[1];
+			runtime_registerFrameworkMember(member, this.slothlet, name);
+		}
 
 		return userApi;
 	}
@@ -660,13 +690,14 @@ export class ApiBuilder extends ComponentBase {
 				});
 			}
 			// Code a caller supplied to another call: every call of its ceiling has to be allowed as well (#597).
-			for (const ceiling of identityCeilings(identity)) {
+			for (let i = 0, ceilings = identityCeilings(identity); i < ceilings.length; i++) {
+				const ceiling = ceilings[i];
 				/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
 				const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
 				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
 				/* v8 ignore stop */
 				if (
-					!trustedRootOwn.genuineWrappers.has(ceiling) ||
+					!WeakSetMethods.has(trustedRootOwn.genuineWrappers, ceiling) ||
 					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
 				) {
 					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
@@ -711,7 +742,7 @@ export class ApiBuilder extends ComponentBase {
 
 			// Code supplied to another module's call traverses only where every call of its ceiling may as well (#597).
 			if (!canTraverseAs(targetPath, callerWrapper, ctx, permissionManager)) return false;
-			return identityCeilings(identity).every((ceiling) => canTraverseAs(targetPath, ceiling, ctx, permissionManager));
+			return ArrayMethods.every(identityCeilings(identity), (ceiling) => canTraverseAs(targetPath, ceiling, ctx, permissionManager));
 		};
 
 		/**
@@ -741,27 +772,30 @@ export class ApiBuilder extends ComponentBase {
 				typeof permissionManager.matchesCondition === "function" ? permissionManager.matchesCondition(condition, runtimeContext) : false;
 
 			const prefix = `${targetPath}.`;
-			for (const rule of callerRules) {
+			for (let i = 0; i < callerRules.length; i++) {
+				const rule = callerRules[i];
 				if (!rule || rule.effect !== "allow" || typeof rule.target !== "string") continue;
 
-				const couldMatchDescendant = rule.target.startsWith(prefix) || rule.target === "**" || rule.target === "*";
+				const couldMatchDescendant = StringMethods.startsWith(rule.target, prefix) || rule.target === "**" || rule.target === "*";
 				if (!couldMatchDescendant) continue;
 
-				if (rule.target.startsWith(prefix) && conditionMatches(rule.condition)) {
+				if (StringMethods.startsWith(rule.target, prefix) && conditionMatches(rule.condition)) {
 					return true;
 				}
 
 				const probePaths = [`${targetPath}.__probe__`];
-				if (rule.target.startsWith(prefix)) {
-					const suffix = rule.target.slice(prefix.length);
-					const firstSegment = suffix.split(".")[0];
-					if (firstSegment && !/[*!?{}]/u.test(firstSegment)) {
-						probePaths.unshift(`${targetPath}.${firstSegment}`);
-						probePaths.push(`${targetPath}.${firstSegment}.__probe__`);
+				if (StringMethods.startsWith(rule.target, prefix)) {
+					const suffix =
+						typeof rule.target === "string" ? StringMethods.slice(rule.target, prefix.length) : copyList(rule.target, prefix.length);
+					const firstSegment = splitText(suffix, ".")[0];
+					if (firstSegment && !(RegExpMethods.exec(/[*!?{}]/u, firstSegment) !== null)) {
+						ArrayMethods.unshift(probePaths, `${targetPath}.${firstSegment}`);
+						ArrayMethods.push(probePaths, `${targetPath}.${firstSegment}.__probe__`);
 					}
 				}
 
-				for (const probePath of probePaths) {
+				for (let ofIndex = 0, ofList = probePaths; ofIndex < ofList.length; ofIndex++) {
+					const probePath = ofList[ofIndex];
 					if (
 						permissionManager.checkAccess(callerPath, probePath, callerFilePath, null, runtimeContext, {
 							useCache: false
@@ -813,13 +847,13 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		const captureRouteFunction = (value, identity) => {
 			const reader = identity?.currentWrapper;
-			if (typeof value !== "function" || !reader || capturedRouteFunctionSet.has(value)) return value;
-			const readerCeiling = combineCeilings(...identityCeilings(identity));
-			let byReader = capturedRouteFunctions.get(value);
-			if (!byReader) capturedRouteFunctions.set(value, (byReader = new WeakMap()));
-			let byCeiling = byReader.get(reader);
-			if (!byCeiling) byReader.set(reader, (byCeiling = new WeakMap()));
-			const existing = byCeiling.get(readerCeiling ?? reader);
+			if (typeof value !== "function" || !reader || WeakSetMethods.has(capturedRouteFunctionSet, value)) return value;
+			const readerCeiling = Reflect.apply(combineCeilings, undefined, identityCeilings(identity));
+			let byReader = WeakMapMethods.get(capturedRouteFunctions, value);
+			if (!byReader) WeakMapMethods.set(capturedRouteFunctions, value, (byReader = new WeakMap()));
+			let byCeiling = WeakMapMethods.get(byReader, reader);
+			if (!byCeiling) WeakMapMethods.set(byReader, reader, (byCeiling = new WeakMap()));
+			const existing = WeakMapMethods.get(byCeiling, readerCeiling ?? reader);
 			if (existing) return existing;
 			const readerCalls = ceilingMembers(readerCeiling);
 			const callerWrapper = identity.callerWrapper ?? null;
@@ -831,9 +865,22 @@ export class ApiBuilder extends ComponentBase {
 				const live = liveIdentity();
 				if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
 				const liveCalls = identityCeilings(live);
-				if (live?.currentWrapper === reader && readerCalls.every((call) => liveCalls.includes(call))) return invoke();
-				const ceiling = combineCeilings(
-					...ceilingMembers(combineCeilings(readerCeiling, live?.currentWrapper ?? null, ...liveCalls)).filter((call) => call !== reader)
+				if (
+					live?.currentWrapper === reader &&
+					ArrayMethods.every(readerCalls, (call) =>
+						typeof liveCalls === "string" ? StringMethods.includes(liveCalls, call) : ArrayMethods.includes(liveCalls, call)
+					)
+				)
+					return invoke();
+				const ceiling = Reflect.apply(
+					combineCeilings,
+					undefined,
+					filterList(
+						ceilingMembers(
+							Reflect.apply(combineCeilings, undefined, concatLists([readerCeiling, live?.currentWrapper ?? null], liveCalls))
+						),
+						(call) => call !== reader
+					)
 				);
 				return slothlet.contextManager.runAsIdentity(
 					slothlet.instanceID,
@@ -847,7 +894,7 @@ export class ApiBuilder extends ComponentBase {
 			// plain function when it has its own `prototype`, a bound one (constructible, with none) when it can be
 			// constructed without one, and an arrow otherwise.
 			// Decided on the function the route proxy is over: asking the route proxy would run its permission checks.
-			const underlying = routeProxyTargets.get(value) ?? value;
+			const underlying = WeakMapMethods.get(routeProxyTargets, value) ?? value;
 			const shell = runtime_captureShell(underlying);
 			// The shell inherits what the function does (an async function's `AsyncFunction.prototype`), so a Proxy over it
 			// reports the function's prototype even once the shell is fixed.
@@ -869,15 +916,22 @@ export class ApiBuilder extends ComponentBase {
 			// shell takes its members as it holds them and stops taking new ones, so what the Proxy reports agrees with it.
 			const followIntegrity = () => {
 				if (Reflect.isExtensible(value) || !Reflect.isExtensible(shell)) return;
-				for (const key of Reflect.ownKeys(shell)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(shell, key);
-				for (const key of Reflect.ownKeys(value)) mirror(key);
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(shell); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(shell, key);
+				}
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					mirror(key);
+				}
 				Reflect.preventExtensions(shell);
 			};
 			// A member the function holds fixed is fixed on the shell from the start, so it is reported as the function holds it —
 			// one the reader may read: a member it may not stays off the shell, and describing it is refused as before.
 			// The shell's own `prototype` takes the function's when that is fixed (a class's is read-only), so the Proxy
 			// reports it read-only, as the function does, and hands out the function's own prototype object.
-			for (const key of Reflect.ownKeys(underlying)) {
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(underlying); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				if (Reflect.getOwnPropertyDescriptor(underlying, key)?.configurable !== false) continue;
 				if (Objects.hasOwn(shell, key) && key !== "prototype") continue;
 				try {
@@ -910,7 +964,10 @@ export class ApiBuilder extends ComponentBase {
 					followIntegrity();
 					if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 					const keys = Reflect.ownKeys(value);
-					for (const key of Reflect.ownKeys(target)) if (fixedOnShell(key) && !keys.includes(key)) keys.push(key);
+					for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						if (fixedOnShell(key) && !ArrayMethods.includes(keys, key)) ArrayMethods.push(keys, key);
+					}
 					return keys;
 				},
 				getOwnPropertyDescriptor(target, prop) {
@@ -959,8 +1016,14 @@ export class ApiBuilder extends ComponentBase {
 					if (!Reflect.preventExtensions(value)) return false;
 					// The shell takes every member as the function holds it before it stops taking new ones, so the Proxy reports
 					// the function's members and nothing else.
-					for (const key of Reflect.ownKeys(target)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(target, key);
-					for (const key of Reflect.ownKeys(value)) mirror(key);
+					for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(target, key);
+					}
+					for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						mirror(key);
+					}
 					return Reflect.preventExtensions(target);
 				},
 				set(_target, prop, newValue) {
@@ -972,8 +1035,8 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.deleteProperty(target, prop);
 				}
 			});
-			capturedRouteFunctionSet.add(markSlothletProxy(captured));
-			byCeiling.set(readerCeiling ?? reader, captured);
+			WeakSetMethods.add(capturedRouteFunctionSet, markSlothletProxy(captured));
+			WeakMapMethods.set(byCeiling, readerCeiling ?? reader, captured);
 			return captured;
 		};
 
@@ -997,21 +1060,28 @@ export class ApiBuilder extends ComponentBase {
 		const assertNamespaceChange = (changedPath) => {
 			const apiManager = slothlet.handlers.apiManager;
 			if (!apiManager.frameworkProtected()) return;
-			const parts = changedPath.split(".");
+			const parts = splitText(changedPath, ".");
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			if (identity?.unresolved) {
 				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
 			}
 			if (identity?.currentWrapper) {
 				// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
-				for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) apiManager.assertOwnedWrite(parts, writer);
+				for (
+					let ofIndex = 0, ofList = concatLists([identity.currentWrapper], identityCeilings(identity));
+					ofIndex < ofList.length;
+					ofIndex++
+				) {
+					const writer = ofList[ofIndex];
+					apiManager.assertOwnedWrite(parts, writer);
+				}
 				return;
 			}
 			// No call is running: whose code makes the change decides, so a function a module left where the host calls it
 			// later is still that module's.
 			const writers = runtime_codeWritersOnStack(slothlet);
 			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
-			for (const writer of writers) apiManager.assertOwnedWrite(parts, writer);
+			for (let i = 0; i < writers.length; i++) apiManager.assertOwnedWrite(parts, writers[i]);
 		};
 
 		/**
@@ -1031,14 +1101,14 @@ export class ApiBuilder extends ComponentBase {
 			const isMetaProperty = (prop) =>
 				prop === "__proto__" || prop === "prototype" || prop === "constructor" || prop === "caller" || prop === "arguments";
 
-			let routeCache = seen.get(value);
+			let routeCache = WeakMapMethods.get(seen, value);
 			if (!routeCache) {
 				routeCache = new Map();
-				seen.set(value, routeCache);
+				WeakMapMethods.set(seen, value, routeCache);
 			}
 
-			if (routeCache.has(routePath)) {
-				return routeCache.get(routePath);
+			if (MapMethods.has(routeCache, routePath)) {
+				return MapMethods.get(routeCache, routePath);
 			}
 
 			const proxy = new NativeProxy(value, {
@@ -1046,7 +1116,7 @@ export class ApiBuilder extends ComponentBase {
 					if (typeof prop !== "string") {
 						const result = Reflect.get(target, prop, receiver);
 						// The namespace's own inspect hook, as it is: it shows whoever calls it only what that code may read.
-						if (prop === INSPECT_KEY && NAMESPACE_INSPECT_HOOKS.has(result)) return result;
+						if (prop === INSPECT_KEY && WeakSetMethods.has(NAMESPACE_INSPECT_HOOKS, result)) return result;
 						return createInternalRouteProxy(result, routePath, seen);
 					}
 
@@ -1248,7 +1318,7 @@ export class ApiBuilder extends ComponentBase {
 				ownKeys(target) {
 					const keys = Reflect.ownKeys(target);
 					if (!Reflect.isExtensible(target)) return keys;
-					return keys.filter((prop) => {
+					return filterList(keys, (prop) => {
 						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 						if (!descriptor?.configurable) return true;
 						// A member named like a function's own (`slothlet.caller`, `lockCaller.caller`) is described only to a reader
@@ -1263,7 +1333,7 @@ export class ApiBuilder extends ComponentBase {
 							}
 						}
 						// The inspect hook is slothlet's, not a member of the namespace.
-						if (prop === INSPECT_KEY) return !NAMESPACE_INSPECT_HOOKS.has(descriptor.value);
+						if (prop === INSPECT_KEY) return !WeakSetMethods.has(NAMESPACE_INSPECT_HOOKS, descriptor.value);
 						if (typeof prop !== "string") return true;
 						const childRoutePath = `${routePath}.${prop}`;
 						try {
@@ -1290,8 +1360,8 @@ export class ApiBuilder extends ComponentBase {
 				}
 			});
 
-			routeCache.set(routePath, markSlothletProxy(proxy));
-			routeProxyTargets.set(proxy, value);
+			MapMethods.set(routeCache, routePath, markSlothletProxy(proxy));
+			WeakMapMethods.set(routeProxyTargets, proxy, value);
 			return proxy;
 		};
 
@@ -1306,7 +1376,9 @@ export class ApiBuilder extends ComponentBase {
 		 * slothlet (`reference`, `context`) and the one every instance shares (`types`). They are still shown inside it.
 		 * @type {Set<object>}
 		 */
-		const notHooked = new Set([slothlet.reference, slothlet.context, TYPE_STATES].filter((value) => value && typeof value === "object"));
+		const notHooked = setFrom(
+			filterList([slothlet.reference, slothlet.context, TYPE_STATES], (value) => value && typeof value === "object")
+		);
 
 		/**
 		 * What `util.inspect` shows for a label: the text as it is, as it shows `[Function: name]` or `[Getter]`.
@@ -1329,7 +1401,7 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		const namespaceShown = (view, raw, routePath, depth, made) => {
 			const shown = Reflect.getPrototypeOf(raw) === null ? Objects.create(null) : {};
-			made.set(raw, shown);
+			MapMethods.set(made, raw, shown);
 			// A frozen object (the environment snapshot) lists every member, so listing it is refused once a rule denies one
 			// of them: its names are then taken from the object itself, and each is still read through the route proxy.
 			let keys;
@@ -1339,7 +1411,8 @@ export class ApiBuilder extends ComponentBase {
 				if (error?.code !== "PERMISSION_DENIED") throw error;
 				keys = Objects.keys(raw);
 			}
-			for (const key of keys) {
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
 				/* v8 ignore next -- a key the route proxy lists is one of the object's own */
 				if (!descriptor) continue;
@@ -1354,7 +1427,7 @@ export class ApiBuilder extends ComponentBase {
 					const held = descriptor.value;
 					if (typeof held === "function") shown[key] = inspectLabel(runtime_codeLabel(held));
 					else if (held === null || typeof held !== "object") shown[key] = value;
-					else if (made.has(held)) shown[key] = made.get(held);
+					else if (MapMethods.has(made, held)) shown[key] = MapMethods.get(made, held);
 					else if (depth === null || depth > 0)
 						shown[key] = namespaceShown(value, held, childRoutePath, depth === null ? null : depth - 1, made);
 					else shown[key] = inspectLabel(Arrays.isArray(held) ? "[Array]" : "[Object]");
@@ -1378,14 +1451,17 @@ export class ApiBuilder extends ComponentBase {
 				if (typeof depth === "number" && depth < 0) return inspectLabel("[Object]");
 				let view = namespaceRoutes;
 				try {
-					for (const key of routePath.split(".").slice(1)) view = view[key];
+					for (let ofIndex = 0, ofList = copyList(splitText(routePath, "."), 1); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						view = view[key];
+					}
 				} catch (error) {
 					if (error?.code !== "PERMISSION_DENIED") throw error;
 					return {};
 				}
 				return namespaceShown(view, raw, routePath, typeof depth === "number" ? depth : null, new Map());
 			};
-			NAMESPACE_INSPECT_HOOKS.add(hook);
+			WeakSetMethods.add(NAMESPACE_INSPECT_HOOKS, hook);
 			Reflect.defineProperty(raw, INSPECT_KEY, { value: hook, writable: false, enumerable: false, configurable: true });
 		};
 
@@ -1396,12 +1472,13 @@ export class ApiBuilder extends ComponentBase {
 		 * @returns {void}
 		 */
 		const hookNamespace = (raw, routePath) => {
-			if (raw === null || typeof raw !== "object" || notHooked.has(raw) || !Reflect.isExtensible(raw)) return;
+			if (raw === null || typeof raw !== "object" || SetMethods.has(notHooked, raw) || !Reflect.isExtensible(raw)) return;
 			if (Reflect.getOwnPropertyDescriptor(raw, INSPECT_KEY)) return;
 			const prototype = Reflect.getPrototypeOf(raw);
 			if (prototype !== null && prototype !== Reflect.getPrototypeOf({})) return;
 			defineNamespaceInspect(raw, routePath);
-			for (const key of Reflect.ownKeys(raw)) {
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(raw); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				if (typeof key !== "string") continue;
 				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
 				if ("value" in descriptor) hookNamespace(descriptor.value, `${routePath}.${key}`);
@@ -1417,7 +1494,10 @@ export class ApiBuilder extends ComponentBase {
 		const inspectableSnapshot = (snapshot) => {
 			if (!snapshot) return snapshot;
 			const copy = Objects.create(Reflect.getPrototypeOf(snapshot));
-			for (const key of Reflect.ownKeys(snapshot)) Reflect.defineProperty(copy, key, Reflect.getOwnPropertyDescriptor(snapshot, key));
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(snapshot); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				Reflect.defineProperty(copy, key, Reflect.getOwnPropertyDescriptor(snapshot, key));
+			}
 			defineNamespaceInspect(copy, "slothlet.env");
 			return Objects.freeze(copy);
 		};
@@ -1538,16 +1618,17 @@ export class ApiBuilder extends ComponentBase {
 					const LOCKED_ADD_OPTIONS = ["collisionMode", "mutateExisting", "recordHistory"];
 					let effectiveOptions = options;
 					if (!config.api?.mutations?.allowCollisionOverride) {
-						const passed = LOCKED_ADD_OPTIONS.filter((key) => key in options);
+						const passed = filterList(LOCKED_ADD_OPTIONS, (key) => key in options);
 						if (passed.length > 0) {
 							// Console warning honors `silent`, like every other SlothletWarning site.
 							if (!config?.silent) {
-								new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: passed.join(", ") });
+								new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: ArrayMethods.join(passed, ", ") });
 							}
 							// Strip the locked options so the override does not take effect.
 							effectiveOptions = {};
-							for (const key of Objects.keys(options)) {
-								if (!LOCKED_ADD_OPTIONS.includes(key)) effectiveOptions[key] = options[key];
+							for (let ofIndex = 0, ofList = Objects.keys(options); ofIndex < ofList.length; ofIndex++) {
+								const key = ofList[ofIndex];
+								if (!ArrayMethods.includes(LOCKED_ADD_OPTIONS, key)) effectiveOptions[key] = options[key];
 							}
 						}
 					}
@@ -1706,10 +1787,18 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					const { details = false, includePrivate = false } = normalizedOptions;
-					for (const [name, value] of [
-						["details", details],
-						["includePrivate", includePrivate]
-					]) {
+					for (
+						let ofIndex = 0,
+							ofList = [
+								["details", details],
+								["includePrivate", includePrivate]
+							];
+						ofIndex < ofList.length;
+						ofIndex++
+					) {
+						const ofEntry = ofList[ofIndex],
+							name = ofEntry[0],
+							value = ofEntry[1];
 						if (typeof value !== "boolean") {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: `options.${name}`,
@@ -1746,8 +1835,11 @@ export class ApiBuilder extends ComponentBase {
 					// mount endpoint, then any owned path — matching how remove()/reload() take either.
 					let moduleID = null;
 					if (key === "." || key === "") {
-						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === ".")?.[0];
-					} else if (ownership.moduleToPath.has(key)) {
+						moduleID = ArrayMethods.find(mapEntriesToArray(ownership.moduleEndpoints), (entry1) => {
+							const endpoint = entry1[1];
+							return endpoint === ".";
+						})?.[0];
+					} else if (MapMethods.has(ownership.moduleToPath, key)) {
 						moduleID = key;
 					} else {
 						// Current owner first — the same resolution remove()/reload() use. Scanning the
@@ -1757,17 +1849,21 @@ export class ApiBuilder extends ComponentBase {
 						if (!moduleID) {
 							// A mount whose endpoint is not itself an owned path (it only registered
 							// children) is still addressable by that endpoint.
-							moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
+							moduleID =
+								ArrayMethods.find(mapEntriesToArray(ownership.moduleEndpoints), (entry2) => {
+									const endpoint = entry2[1];
+									return endpoint === key;
+								})?.[0] ?? null;
 						}
 					}
-					if (!moduleID || !ownership.moduleToPath.has(moduleID)) {
+					if (!moduleID || !MapMethods.has(ownership.moduleToPath, moduleID)) {
 						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
 					}
 
 					// Under lazy an untouched subtree has only namespace records — its leaf names genuinely
 					// do not exist until the files load. Settle the owned subtree so the records are
 					// complete; materialization itself registers the leaves.
-					const endpoint = ownership.moduleEndpoints.get(moduleID);
+					const endpoint = MapMethods.get(ownership.moduleEndpoints, moduleID);
 					const boundApi = slothlet.boundApi;
 					if (config.mode === "lazy" && boundApi) {
 						// Cycle-safe rather than depth-capped. `apiDepth` is unbounded by default, so an
@@ -1780,7 +1876,7 @@ export class ApiBuilder extends ComponentBase {
 						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
 						let root = boundApi;
 						if (endpoint !== ".") {
-							for (const segment of endpoint.split(".")) root = root[segment];
+							for (let i = 0, segments = splitText(endpoint, "."); i < segments.length; i++) root = root[segments[i]];
 						}
 						// Child discovery cannot rely on live enumeration alone: the walk reads the composed
 						// surface under the CALLER's permission context, and a module-private SUBDIRECTORY is
@@ -1798,7 +1894,7 @@ export class ApiBuilder extends ComponentBase {
 						// arbitrarily deep graft never accumulates path strings.
 						const pending = [{ node: root, path: endpoint === "." ? "" : endpoint }];
 						while (pending.length > 0) {
-							const { node, path } = pending.pop();
+							const { node, path } = ArrayMethods.pop(pending);
 							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
 							if (seen.has(node)) continue;
 							seen.add(node);
@@ -1808,21 +1904,29 @@ export class ApiBuilder extends ComponentBase {
 							if (raw && raw.____slothletInternal.state.materialized === false) {
 								await raw._materialize();
 							}
-							const childKeys = new Set(Objects.keys(node));
+							const childKeys = setFrom(Objects.keys(node));
 							// Read after the materialize await: that is what registers this node's children,
 							// and a concurrent remove() may have deleted the record set entirely (the
 							// post-settle re-check below turns that into the named error).
-							const records = ownership.moduleToPath.get(moduleID);
+							const records = MapMethods.get(ownership.moduleToPath, moduleID);
 							if (path !== null && records) {
 								const prefix = path === "" ? "" : `${path}.`;
-								for (const ownedPath of records) {
-									if (ownedPath === "" || (prefix !== "" && !ownedPath.startsWith(prefix))) continue;
-									const rest = ownedPath.slice(prefix.length);
-									const segmentEnd = rest.indexOf(".");
-									childKeys.add(segmentEnd === -1 ? rest : rest.slice(0, segmentEnd));
+								for (const ownedPath of setValues(records)) {
+									if (ownedPath === "" || (prefix !== "" && !StringMethods.startsWith(ownedPath, prefix))) continue;
+									const rest =
+										typeof ownedPath === "string" ? StringMethods.slice(ownedPath, prefix.length) : copyList(ownedPath, prefix.length);
+									const segmentEnd = typeof rest === "string" ? StringMethods.indexOf(rest, ".") : ArrayMethods.indexOf(rest, ".");
+									SetMethods.add(
+										childKeys,
+										segmentEnd === -1
+											? rest
+											: typeof rest === "string"
+												? StringMethods.slice(rest, 0, segmentEnd)
+												: copyList(rest, 0, segmentEnd)
+									);
 								}
 							}
-							for (const childKey of childKeys) {
+							for (const childKey of setValues(childKeys)) {
 								// The injected control tree (slothlet/shutdown/destroy) lives ONLY on the
 								// base-load root's plain object, so skip those names there and nowhere else.
 								// The same names NESTED under a mount are legitimate module exports — reserved
@@ -1846,7 +1950,10 @@ export class ApiBuilder extends ComponentBase {
 								const childWrapper = child ? resolveWrapper(child) : null;
 								if (childWrapper?.____slothletInternal?.userAssigned) continue;
 								const childPath = path === null ? null : path === "" ? childKey : `${path}.${childKey}`;
-								pending.push({ node: child, path: records?.has(childPath) ? childPath : null });
+								ArrayMethods.push(pending, {
+									node: child,
+									path: (records == null ? undefined : SetMethods.has(records, childPath)) ? childPath : null
+								});
 							}
 						}
 					}
@@ -1854,19 +1961,22 @@ export class ApiBuilder extends ComponentBase {
 					// Settling above awaits, and the instance stays live across it — a concurrent
 					// remove()/reload() can unregister this module while we wait. Re-check rather than
 					// spreading `undefined` into a raw TypeError from inside the framework.
-					if (!ownership.moduleToPath.has(moduleID)) {
+					if (!MapMethods.has(ownership.moduleToPath, moduleID)) {
 						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
 					}
 
 					// Classify from the records: the registered value names the kind, and a path with an
 					// owned strict child is a namespace regardless of its own shape.
-					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter((path) => {
+					const ownedPaths = filterList(setToArray(MapMethods.get(ownership.moduleToPath, moduleID)), (path) => {
 						// No mount registers the empty-string root path in moduleToPath — the base load, a root
 						// object mount, and a root folder mount all register named leaves — so this is a defensive
 						// skip for a momentarily-inconsistent record, mirroring the settle guard above.
 						/* v8 ignore next */
 						if (path === "") return false;
-						if (endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
+						if (
+							endpoint === "." &&
+							(path === "slothlet" || StringMethods.startsWith(path, "slothlet.") || path === "shutdown" || path === "destroy")
+						)
 							return false;
 						// Drop a path only when ANOTHER module currently owns it — i.e. it has been taken
 						// over on a shared mount — so leaves attributes it to the current owner, matching
@@ -1876,18 +1986,19 @@ export class ApiBuilder extends ComponentBase {
 						const currentOwner = ownership.getCurrentOwner(path);
 						return !currentOwner || currentOwner.moduleID === moduleID;
 					});
-					ownedPaths.sort();
+					ArrayMethods.sort(ownedPaths);
 					// Precomputed once. A path is a namespace iff some owned path has it as a strict
 					// prefix; collecting each owned path's ancestors costs one pass over the segments,
 					// where re-scanning the whole list per path was quadratic and showed up on modules
 					// with many owned paths — including on the default (non-details) call, which
 					// classifies every path to filter for callables.
 					const namespaces = new Set();
-					for (const owned of ownedPaths) {
-						let cut = owned.lastIndexOf(".");
+					for (let ofIndex = 0, ofList = ownedPaths; ofIndex < ofList.length; ofIndex++) {
+						const owned = ofList[ofIndex];
+						let cut = ArrayMethods.lastIndexOf(owned, ".");
 						while (cut > 0) {
-							namespaces.add(owned.slice(0, cut));
-							cut = owned.lastIndexOf(".", cut - 1);
+							SetMethods.add(namespaces, typeof owned === "string" ? StringMethods.slice(owned, 0, cut) : copyList(owned, 0, cut));
+							cut = ArrayMethods.lastIndexOf(owned, ".", cut - 1);
 						}
 					}
 					const kindOf = (path) => {
@@ -1896,8 +2007,11 @@ export class ApiBuilder extends ComponentBase {
 						// impl) can never misreport a namespace: anything function-typed left after it is a
 						// real callable leaf, and everything else — strings, numbers, childless object
 						// exports — is data.
-						if (namespaces.has(path)) return "namespace";
-						const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+						if (SetMethods.has(namespaces, path)) return "namespace";
+						const entry = ArrayMethods.find(
+							MapMethods.get(ownership.pathToModule, path) ?? [],
+							(candidate) => candidate.moduleID === moduleID
+						);
 						return typeof entry?.value === "function" ? "function" : "data";
 					};
 
@@ -1912,9 +2026,12 @@ export class ApiBuilder extends ComponentBase {
 						const callerPath = leavesCaller?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = leavesCaller?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-						visiblePaths = ownedPaths.filter((path) => {
+						visiblePaths = filterList(ownedPaths, (path) => {
 							if (!permissionManager.isPrivateTarget(path)) return true;
-							const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+							const entry = ArrayMethods.find(
+								MapMethods.get(ownership.pathToModule, path) ?? [],
+								(candidate) => candidate.moduleID === moduleID
+							);
 							// No `?? null` on the file path: checkAccess already defaults that parameter to
 							// null, so the fallback only added an arm nothing could drive.
 							return permissionManager.checkAccess(callerPath, path, callerFilePath, entry?.filePath, runtimeContext);
@@ -1922,9 +2039,9 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					if (details) {
-						return visiblePaths.map((path) => ({ path, kind: kindOf(path) }));
+						return mapList(visiblePaths, (path) => ({ path, kind: kindOf(path) }));
 					}
-					return visiblePaths.filter((path) => kindOf(path) === "function");
+					return filterList(visiblePaths, (path) => kindOf(path) === "function");
 				},
 
 				/**
@@ -1987,7 +2104,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Check if string matches a loaded moduleID
-					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
+					const isModuleId = ArrayMethods.some(slothlet.handlers.apiManager.state.addHistory, (entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
 						// Module code rebuilds only what it may write (#625).
@@ -1999,9 +2116,10 @@ export class ApiBuilder extends ComponentBase {
 
 					// Treat as API path - validate it exists in the user-facing API
 					const normalizedPath = slothlet.handlers.apiManager.normalizeApiPath(pathOrModuleId).apiPath;
-					const pathParts = normalizedPath.split(".");
+					const pathParts = splitText(normalizedPath, ".");
 					let current = slothlet.api;
-					for (const part of pathParts) {
+					for (let i = 0; i < pathParts.length; i++) {
+						const part = pathParts[i];
 						if (!current || (typeof current !== "object" && typeof current !== "function")) {
 							throw new slothlet.SlothletError("INVALID_API_PATH", {
 								apiPath: pathOrModuleId,
@@ -2049,7 +2167,7 @@ export class ApiBuilder extends ComponentBase {
 					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]}
 					 */
 					sort: function slothlet_modules_sort(results, comparator) {
-						return slothlet.handlers.moduleManager.sort(results, comparator);
+						return ArrayMethods.sort(slothlet.handlers.moduleManager, results, comparator);
 					},
 
 					/**
@@ -2113,7 +2231,7 @@ export class ApiBuilder extends ComponentBase {
 						// The calling module, read before the discovery's await loses it (#625).
 						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
-						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
+						const ordered = ArrayMethods.sort(slothlet.handlers.moduleManager, found, comparator);
 						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
 					},
 
@@ -2309,10 +2427,10 @@ export class ApiBuilder extends ComponentBase {
 						// Also check parentInstanceID so that child __run_ contexts created
 						// before a reload() (whose base instanceID changed) still resolve.
 						if (currentID) {
-							const activeStore = slothlet.contextManager.instances.get(currentID);
+							const activeStore = MapMethods.get(slothlet.contextManager.instances, currentID);
 							const isOurInstance =
 								currentID === slothlet.instanceID ||
-								currentID?.startsWith(slothlet.instanceID + "__run_") ||
+								(currentID == null ? undefined : StringMethods.startsWith(currentID, slothlet.instanceID + "__run_")) ||
 								activeStore?.parentInstanceID === slothlet.instanceID;
 
 							if (isOurInstance && activeStore) {
@@ -2321,7 +2439,7 @@ export class ApiBuilder extends ComponentBase {
 						}
 
 						// Fallback to base instance
-						const store = slothlet.contextManager.instances.get(slothlet.instanceID);
+						const store = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
 						// unreachable via tests (2026-03-05): instances map always contains the base
 						// instanceID after initialization; only fires if store was externally deleted.
 						/* v8 ignore next */
@@ -2341,7 +2459,7 @@ export class ApiBuilder extends ComponentBase {
 						// If we're in a .run() scope, currentStore will be the child instance
 						// If we're not in .run(), get base store for this instance
 						if (!currentStore) {
-							const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
+							const baseStore = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
 							// baseStore always has context; || {} fallback and spread form never triggered.
 							/* v8 ignore start */
 							const baseContext = baseStore?.context || {};
@@ -2353,7 +2471,7 @@ export class ApiBuilder extends ComponentBase {
 						const isOurInstance =
 							currentStore.instanceID === slothlet.instanceID ||
 							currentStore.parentInstanceID === slothlet.instanceID ||
-							currentStore.instanceID.startsWith(slothlet.instanceID + "__run_");
+							StringMethods.startsWith(currentStore.instanceID, slothlet.instanceID + "__run_");
 
 						if (isOurInstance) {
 							// We're in our own context (either base or .run() child)
@@ -2361,7 +2479,7 @@ export class ApiBuilder extends ComponentBase {
 						}
 
 						// We're in a different instance's context - return our base context
-						const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
+						const baseStore = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
 						// baseStore always has context; || {} fallback and cross-instance path not exercised in tests.
 						/* v8 ignore start */
 						const baseContext = baseStore?.context || {};
@@ -2395,12 +2513,12 @@ export class ApiBuilder extends ComponentBase {
 						instanceID: slothlet.instanceID,
 						managerType,
 						instancesMapSize: slothlet.contextManager.instances.size,
-						instancesMapKeys: Arrays.from(slothlet.contextManager.instances.keys()),
+						instancesMapKeys: mapKeysToArray(slothlet.contextManager.instances),
 						baseContext: slothlet.context
 					};
 
 					// Get store for THIS instance from instances Map
-					const store = slothlet.contextManager.instances.get(slothlet.instanceID);
+					const store = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
 					// The null branch (no store found) fires only when diagnostics() is called
 					// before load() registers the instance — a timing edge case not hit in tests.
 					/* v8 ignore next */
@@ -2757,7 +2875,7 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? Objects.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers ? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ") : "undefined",
 							validationError: true
 						});
 					}
@@ -2773,7 +2891,7 @@ export class ApiBuilder extends ComponentBase {
 					 * validateGlobalMetadataKeyPath("build.region");
 					 */
 					const validateGlobalMetadataKeyPath = (keyPath) => {
-						const blocked = new Set(["__proto__", "prototype", "constructor"]);
+						const blocked = setFrom(["__proto__", "prototype", "constructor"]);
 						if (typeof keyPath !== "string" || keyPath.length === 0) {
 							throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
 								key: keyPath,
@@ -2782,9 +2900,10 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 
-						const segments = keyPath.split(".");
-						for (const segment of segments) {
-							if (!segment || blocked.has(segment)) {
+						const segments = splitText(keyPath, ".");
+						for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
+							const segment = ofList[ofIndex];
+							if (!segment || SetMethods.has(blocked, segment)) {
 								throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
 									key: keyPath,
 									type: typeof keyPath,
@@ -2805,7 +2924,7 @@ export class ApiBuilder extends ComponentBase {
 					 * normalizeGlobalMetadataObject({ env: { mode: "prod" } });
 					 */
 					const normalizeGlobalMetadataObject = (source, prefix = "", ancestors = new WeakSet()) => {
-						if (ancestors.has(source)) {
+						if (WeakSetMethods.has(ancestors, source)) {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: "keyOrObj",
 								expected: "acyclic object",
@@ -2814,10 +2933,13 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 
-						ancestors.add(source);
+						WeakSetMethods.add(ancestors, source);
 						try {
 							const normalized = {};
-							for (const [key, nestedValue] of Objects.entries(source)) {
+							for (let ofIndex = 0, ofList = Objects.entries(source); ofIndex < ofList.length; ofIndex++) {
+								const ofEntry = ofList[ofIndex],
+									key = ofEntry[0],
+									nestedValue = ofEntry[1];
 								const fullKey = prefix ? `${prefix}.${key}` : key;
 								validateGlobalMetadataKeyPath(fullKey);
 								const nestedProto = nestedValue && typeof nestedValue === "object" ? Objects.getPrototypeOf(nestedValue) : null;
@@ -2830,14 +2952,17 @@ export class ApiBuilder extends ComponentBase {
 							}
 							return normalized;
 						} finally {
-							ancestors.delete(source);
+							WeakSetMethods.delete(ancestors, source);
 						}
 					};
 
 					if (keyOrObj && typeof keyOrObj === "object" && !Arrays.isArray(keyOrObj)) {
 						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
 						slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
-						for (const [key, nestedValue] of Objects.entries(normalizedMetadata)) {
+						for (let ofIndex = 0, ofList = Objects.entries(normalizedMetadata); ofIndex < ofList.length; ofIndex++) {
+							const ofEntry = ofList[ofIndex],
+								key = ofEntry[0],
+								nestedValue = ofEntry[1];
 							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
 						}
 						return;
@@ -2886,7 +3011,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
-								? Objects.keys(slothlet.handlers).join(", ")
+								? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ")
 								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
 									/* v8 ignore next */
 									"undefined",
@@ -2963,7 +3088,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
-								? Objects.keys(slothlet.handlers).join(", ")
+								? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ")
 								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
 									/* v8 ignore next */
 									"undefined",
@@ -3077,7 +3202,7 @@ export class ApiBuilder extends ComponentBase {
 				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? Objects.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers ? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ") : "undefined",
 							validationError: true
 						});
 					}
@@ -3345,8 +3470,8 @@ export class ApiBuilder extends ComponentBase {
 				const noop = () => {};
 				if (!handler) return { on: noop, off: noop };
 				return {
-					on: handler.on.bind(handler),
-					off: handler.off.bind(handler)
+					on: FunctionMethods.bind(handler.on, handler),
+					off: FunctionMethods.bind(handler.off, handler)
 				};
 			})(),
 
@@ -3389,13 +3514,13 @@ export class ApiBuilder extends ComponentBase {
 				}
 				/* v8 ignore stop */
 				return {
-					on: handler.on.bind(handler),
-					once: handler.once.bind(handler),
-					off: handler.off.bind(handler),
-					emit: handler.emit.bind(handler),
-					resolveLevel: handler.resolveLevel.bind(handler),
-					strategy: handler.strategy.bind(handler),
-					deliver: handler.deliver.bind(handler),
+					on: FunctionMethods.bind(handler.on, handler),
+					once: FunctionMethods.bind(handler.once, handler),
+					off: FunctionMethods.bind(handler.off, handler),
+					emit: FunctionMethods.bind(handler.emit, handler),
+					resolveLevel: FunctionMethods.bind(handler.resolveLevel, handler),
+					strategy: FunctionMethods.bind(handler.strategy, handler),
+					deliver: FunctionMethods.bind(handler.deliver, handler),
 					rules: {
 						/**
 						 * Add an event rule at runtime (gated by `config.api.mutations.events`). The host's rule enters the
@@ -3426,7 +3551,7 @@ export class ApiBuilder extends ComponentBase {
 							const ruleLayer = layer ?? "runtime";
 							const ruleId = permissionManager.addEventRule(rule, ownerModuleID, null, ruleLayer);
 							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-								slothlet.handlers.apiManager.state.operationHistory.push({
+								ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 									type: "addEventRule",
 									rule,
 									ownerModuleID,
@@ -3462,7 +3587,7 @@ export class ApiBuilder extends ComponentBase {
 							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-								slothlet.handlers.apiManager.state.operationHistory.push({
+								ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
@@ -3612,7 +3737,9 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
 					// Module code changes a version's metadata only where it may write: that version's mount (#625).
-					slothlet.handlers.apiManager.assertModuleWrite([String(versionTag), ...String(logicalPath).trim().split(".")]);
+					slothlet.handlers.apiManager.assertModuleWrite(
+						concatLists([String(versionTag)], splitText(StringMethods.trim(String(logicalPath)), "."))
+					);
 					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
 				}
 			},
@@ -3666,7 +3793,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Record in operationHistory for replay on reload
 					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-						slothlet.handlers.apiManager.state.operationHistory.push({
+						ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 							type: "addPermissionRule",
 							rule,
 							ownerModuleID,
@@ -3719,7 +3846,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Record in operationHistory for replay on reload
 					if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-						slothlet.handlers.apiManager.state.operationHistory.push({
+						ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 							type: "removePermissionRule",
 							ruleId,
 							callerModuleID,
@@ -3793,7 +3920,7 @@ export class ApiBuilder extends ComponentBase {
 						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
 						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-							slothlet.handlers.apiManager.state.operationHistory.push({
+							ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 								type: "registerPrincipal",
 								name,
 								definition,
@@ -3833,7 +3960,7 @@ export class ApiBuilder extends ComponentBase {
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
 						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-							slothlet.handlers.apiManager.state.operationHistory.push({
+							ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
@@ -3906,7 +4033,7 @@ export class ApiBuilder extends ComponentBase {
 						const runtimeContext = ctx?.context ?? null;
 						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
 						// Code supplied to another module's call may reach only what every call of its ceiling may as well (#597).
-						return identityCeilings(identity).every((ceiling) =>
+						return ArrayMethods.every(identityCeilings(identity), (ceiling) =>
 							slothlet.handlers.permissionManager.checkAccess(
 								ceiling.____slothletInternal.apiPath,
 								target,
@@ -3945,11 +4072,12 @@ export class ApiBuilder extends ComponentBase {
 						// Code supplied to another module's call sees only the rules that apply to that call as well
 						// (#597), so it discloses neither module's rules beyond what both share.
 						let shared = rules;
-						for (const ceiling of identityCeilings(identity)) {
-							const ids = new Set(
-								slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath).map((rule) => rule.id)
+						for (let i = 0, ceilings = identityCeilings(identity); i < ceilings.length; i++) {
+							const ceiling = ceilings[i];
+							const ids = setFrom(
+								mapList(slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath), (rule) => rule.id)
 							);
-							shared = shared.filter((rule) => ids.has(rule.id));
+							shared = filterList(shared, (rule) => SetMethods.has(ids, rule.id));
 						}
 						return shared;
 					}
@@ -4274,13 +4402,14 @@ export class ApiBuilder extends ComponentBase {
 						const reader = runtime_selfModuleReader(slothlet);
 						if (!reader) return { ...root };
 						const described = {};
-						for (const key of Reflect.ownKeys(root)) {
+						for (let ofIndex = 0, ofList = Reflect.ownKeys(root); ofIndex < ofList.length; ofIndex++) {
+							const key = ofList[ofIndex];
 							// A key the root lists but does not describe to the reader (the root function's own `prototype`
 							// to a reader that may not call the root) is not handed over, as a read of it is refused.
 							if (Reflect.getOwnPropertyDescriptor(root, key) === undefined) continue;
 							const value = root[key];
 							if (typeof key !== "string") described[key] = value;
-							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
+							else if (SetMethods.has(SELF_FRAMEWORK_ROOT_KEYS, key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
 							else described[key] = runtime_selfView(value, reader);
 						}
 						return described;
@@ -4673,7 +4802,7 @@ export class ApiBuilder extends ComponentBase {
 				// PROTECT_SENTINEL); `owners` binds a key to a named owner (a caller apiPath). Owner-locking
 				// is declared ONLY via scope()/run() options — never via run()'s positional args, whose 3rd+
 				// arguments are forwarded to the callback.
-				if (protect !== undefined && (!Arrays.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
+				if (protect !== undefined && (!Arrays.isArray(protect) || ArrayMethods.some(protect, (k) => typeof k !== "string"))) {
 					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: describeScopeReceived(protect) }, null, {
 						validationError: true
 					});
@@ -4688,7 +4817,10 @@ export class ApiBuilder extends ComponentBase {
 					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
 					// incorrect ownership matching (or a TypeError for a non-coercible value like a Symbol),
 					// so reject it up front rather than let it surface far from the actual mistake.
-					for (const [key, owner] of Objects.entries(owners)) {
+					for (let ofIndex = 0, ofList = Objects.entries(owners); ofIndex < ofList.length; ofIndex++) {
+						const ofEntry = ofList[ofIndex],
+							key = ofEntry[0],
+							owner = ofEntry[1];
 						if (typeof owner !== "string" || owner.length === 0) {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: `owners.${key}`,
@@ -4717,15 +4849,25 @@ export class ApiBuilder extends ComponentBase {
 					const base = parentOwners ?? null;
 					let child = base;
 					const claim = (key, owner) => {
-						const existing = child && Objects.prototype.hasOwnProperty.call(child, key) ? child[key] : undefined;
+						const existing = child && FunctionMethods.call(Objects.prototype.hasOwnProperty, child, key) ? child[key] : undefined;
 						if (existing !== undefined && existing !== owner) {
 							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
 						}
 						if (child === base) child = base ? Objects.assign(Objects.create(null), base) : Objects.create(null);
 						child[key] = owner;
 					};
-					if (Arrays.isArray(protect)) for (const k of protect) claim(k, trustedRootOwn.PROTECT_SENTINEL);
-					if (owners && typeof owners === "object") for (const [k, o] of Objects.entries(owners)) claim(k, o);
+					if (Arrays.isArray(protect))
+						for (let ofIndex = 0, ofList = protect; ofIndex < ofList.length; ofIndex++) {
+							const k = ofList[ofIndex];
+							claim(k, trustedRootOwn.PROTECT_SENTINEL);
+						}
+					if (owners && typeof owners === "object")
+						for (let ofIndex = 0, ofList = Objects.entries(owners); ofIndex < ofList.length; ofIndex++) {
+							const ofEntry = ofList[ofIndex],
+								k = ofEntry[0],
+								o = ofEntry[1];
+							claim(k, o);
+						}
 					return child;
 				};
 
@@ -4745,11 +4887,11 @@ export class ApiBuilder extends ComponentBase {
 					// Check if current is THIS instance or a child of THIS instance
 					const currentID = contextManager.currentInstanceID;
 					if (currentID) {
-						const activeStore = contextManager.instances.get(currentID);
+						const activeStore = MapMethods.get(contextManager.instances, currentID);
 						const isOurContext =
 							currentID === slothlet.instanceID ||
 							activeStore?.parentInstanceID === slothlet.instanceID ||
-							currentID.startsWith(slothlet.instanceID + "__run_");
+							StringMethods.startsWith(currentID, slothlet.instanceID + "__run_");
 
 						if (isOurContext) {
 							currentStore = activeStore;
@@ -4758,13 +4900,13 @@ export class ApiBuilder extends ComponentBase {
 
 					// Fall back to base store if not in our context
 					if (!currentStore) {
-						currentStore = contextManager.instances.get(slothlet.instanceID);
+						currentStore = MapMethods.get(contextManager.instances, slothlet.instanceID);
 					}
 
 					if (!currentStore) {
 						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
 							instanceID: slothlet.instanceID,
-							availableInstances: [...contextManager.instances.keys()].join(", ") || "none",
+							availableInstances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none",
 							validationError: true
 						});
 					}
@@ -4785,7 +4927,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${StringMethods.slice(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4824,7 +4966,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Register child instance
-					contextManager.instances.set(childInstanceID, childStore);
+					MapMethods.set(contextManager.instances, childInstanceID, childStore);
 					const previousInstanceID = contextManager.currentInstanceID;
 
 					try {
@@ -4832,11 +4974,11 @@ export class ApiBuilder extends ComponentBase {
 						contextManager.currentInstanceID = childInstanceID;
 
 						// Execute callback
-						return await fn(...args);
+						return await Reflect.apply(fn, undefined, args);
 					} finally {
 						// Restore previous instance ID and cleanup child
 						contextManager.currentInstanceID = previousInstanceID;
-						contextManager.instances.delete(childInstanceID);
+						MapMethods.delete(contextManager.instances, childInstanceID);
 					}
 				}
 
@@ -4851,7 +4993,7 @@ export class ApiBuilder extends ComponentBase {
 						const isOurContext =
 							activeStore.instanceID === slothlet.instanceID ||
 							activeStore.parentInstanceID === slothlet.instanceID ||
-							activeStore.instanceID.startsWith(slothlet.instanceID + "__run_");
+							StringMethods.startsWith(activeStore.instanceID, slothlet.instanceID + "__run_");
 
 						if (isOurContext) {
 							currentStore = activeStore;
@@ -4860,11 +5002,11 @@ export class ApiBuilder extends ComponentBase {
 
 					// Fall back to base store if not in our context
 					if (!currentStore) {
-						const baseStore = contextManager.instances.get(slothlet.instanceID);
+						const baseStore = MapMethods.get(contextManager.instances, slothlet.instanceID);
 						if (!baseStore) {
 							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
 								instanceID: slothlet.instanceID,
-								availableInstances: [...contextManager.instances.keys()].join(", ") || "none",
+								availableInstances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none",
 								validationError: true
 							});
 						}
@@ -4887,7 +5029,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${StringMethods.slice(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4926,16 +5068,16 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Register child instance
-					contextManager.instances.set(childInstanceID, childStore);
+					MapMethods.set(contextManager.instances, childInstanceID, childStore);
 
 					try {
 						// Run callback in new ALS context
 						return await contextManager.als.run(childStore, async () => {
-							return await fn(...args);
+							return await Reflect.apply(fn, undefined, args);
 						});
 					} finally {
 						// Cleanup: Remove temporary child instance
-						contextManager.instances.delete(childInstanceID);
+						MapMethods.delete(contextManager.instances, childInstanceID);
 					}
 				}
 
@@ -5021,11 +5163,13 @@ export class ApiBuilder extends ComponentBase {
 			slothlet.isDestroyed = true;
 
 			// Clear all references we can from both api and slothlet.api
-			const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
+			const objectsToClear = filterList([api, slothlet.api], (obj) => obj && typeof obj === "object");
 
-			for (const obj of objectsToClear) {
+			for (let ofIndex = 0, ofList = objectsToClear; ofIndex < ofList.length; ofIndex++) {
+				const obj = ofList[ofIndex];
 				const keys = Objects.keys(obj);
-				for (const key of keys) {
+				for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					try {
 						delete obj[key];
 					} catch (_) {

@@ -28,20 +28,36 @@ import * as nodeOs from "node:os";
 import * as nodeUrl from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import {
-	JSON,
-	Map,
-	Set,
-	Promises,
+	ArrayMethods,
+	BufferMethods,
+	Buffers,
+	concatLists,
 	Dates,
 	encodeURIComponent,
-	Number,
-	RegExp,
-	Uint8Array,
-	Buffers,
+	filterList,
+	FunctionMethods,
+	JSON,
+	Map,
+	mapEntries,
+	mapFrom,
+	mapList,
+	MapMethods,
 	NativeProcess,
-	Processes,
+	Number,
 	Objects,
-	Reflect
+	Processes,
+	promiseAllSettled,
+	Reflect,
+	RegExp,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	StringMethods,
+	Uint8Array,
+	URLMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -328,13 +344,13 @@ async function sweepStaleFallbackRoots() {
 		return;
 	}
 	const now = Dates.now();
-	await Promises.allSettled(
-		entries.map(async (entry) => {
+	await promiseAllSettled(
+		mapList(entries, async (entry) => {
 			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
 			const fullPath = path.join(tmpdir(), entry.name);
 			if (fullPath === secureFallbackRoot) return;
-			const owned = FALLBACK_ROOT_NAME.exec(entry.name);
-			const legacy = !owned && LEGACY_FALLBACK_ROOT_NAME.test(entry.name);
+			const owned = RegExpMethods.exec(FALLBACK_ROOT_NAME, entry.name);
+			const legacy = !owned && RegExpMethods.exec(LEGACY_FALLBACK_ROOT_NAME, entry.name) !== null;
 			if (!owned && !legacy) return;
 			const stats = fs.lstatSync(fullPath);
 			if (!stats.isDirectory() || !ownedByCurrentUser(stats)) return;
@@ -349,8 +365,8 @@ async function sweepStaleFallbackRoots() {
 				} catch {
 					// No cache directory at all — nothing inside can be in use.
 				}
-				const inUse = caches.some((name) => {
-					const match = /^(\d+)-/.exec(name);
+				const inUse = ArrayMethods.some(caches, (name) => {
+					const match = RegExpMethods.exec(/^(\d+)-/, name);
 					return match !== null && isProcessAlive(Number(match[1]));
 				});
 				if (inUse) return;
@@ -380,7 +396,7 @@ async function releaseSecureFallbackRoot() {
 	}
 	if (remaining.length > 0 || pendingFallbackWrites > 0 || secureFallbackRoot !== root) return false;
 	secureFallbackRoot = undefined;
-	sweepPromises.delete(root);
+	MapMethods.delete(sweepPromises, root);
 	await rm(root, { recursive: true, force: true });
 	return true;
 }
@@ -398,7 +414,7 @@ async function releaseSecureFallbackRoot() {
  * @private
  */
 function sweepStaleSlothletCache(projectRoot) {
-	if (sweepPromises.has(projectRoot)) return sweepPromises.get(projectRoot);
+	if (MapMethods.has(sweepPromises, projectRoot)) return MapMethods.get(sweepPromises, projectRoot);
 	const promise = (async () => {
 		const cacheRoot = path.join(projectRoot, ".slothlet-cache");
 		let entries;
@@ -408,10 +424,10 @@ function sweepStaleSlothletCache(projectRoot) {
 			return;
 		}
 		const currentPid = NativeProcess.pid;
-		await Promises.allSettled(
-			entries.map(async (entry) => {
+		await promiseAllSettled(
+			mapList(entries, async (entry) => {
 				if (!entry.isDirectory()) return;
-				const match = entry.name.match(/^(\d+)-/);
+				const match = RegExpMethods.symbolMatch(/^(\d+)-/, entry.name);
 				if (!match) return;
 				const pid = Number(match[1]);
 				if (pid === currentPid || isProcessAlive(pid)) return;
@@ -419,7 +435,7 @@ function sweepStaleSlothletCache(projectRoot) {
 			})
 		);
 	})();
-	sweepPromises.set(projectRoot, promise);
+	MapMethods.set(sweepPromises, projectRoot, promise);
 	return promise;
 }
 
@@ -451,15 +467,16 @@ export function resolveModuleFile(absoluteTarget) {
 		}
 	};
 	if (isFile(absoluteTarget)) {
-		return { path: absoluteTarget, isTS: TS_SOURCE_EXT.test(absoluteTarget) };
+		return { path: absoluteTarget, isTS: RegExpMethods.exec(TS_SOURCE_EXT, absoluteTarget) !== null };
 	}
 	// Literal target missing — probe the TS source extension for the importer's
 	// declared output extension (`./x.mjs` → `x.mts`, `./x.js` → `x.ts`) and the
 	// extensionless form.
 	const ext = path.extname(absoluteTarget);
-	const base = ext ? absoluteTarget.slice(0, -ext.length) : absoluteTarget;
+	const base = ext ? StringMethods.slice(absoluteTarget, 0, -ext.length) : absoluteTarget;
 	const candidates = ext === ".mjs" ? [".mts"] : ext === ".js" ? [".ts"] : ext === "" ? [".mts", ".ts"] : [];
-	for (const candidate of candidates) {
+	for (let ofIndex = 0, ofList = candidates; ofIndex < ofList.length; ofIndex++) {
+		const candidate = ofList[ofIndex];
 		if (isFile(base + candidate)) {
 			return { path: base + candidate, isTS: true };
 		}
@@ -476,7 +493,7 @@ export function resolveModuleFile(absoluteTarget) {
  * @constant
  * @private
  */
-const REGEX_PRECEDING_KEYWORDS = new Set([
+const REGEX_PRECEDING_KEYWORDS = setFrom([
 	"return",
 	"typeof",
 	"instanceof",
@@ -503,7 +520,7 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
  * @private
  */
 function isIdentifierChar(ch) {
-	const cc = ch.charCodeAt(0);
+	const cc = StringMethods.charCodeAt(ch, 0);
 	return (
 		(cc >= 0x61 && cc <= 0x7a) || // a-z
 		(cc >= 0x41 && cc <= 0x5a) || // A-Z
@@ -599,7 +616,7 @@ export function maskStringsAndComments(code) {
 			// out once (not built char-by-char) to stay linear in the word length.
 			const start = i;
 			while (i < n && isIdentifierChar(code[i])) i++;
-			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(code.slice(start, i));
+			regexAllowed = SetMethods.has(REGEX_PRECEDING_KEYWORDS, StringMethods.slice(code, start, i));
 		} else {
 			// Punctuator or numeric literal. `)`, `]` and digits are values (a `/`
 			// after them is division); every other punctuator — operators, `(`,
@@ -698,7 +715,7 @@ const DYNAMIC_IMPORT_RE = new RegExp(`(?<![.\\w$])import(${TOKEN_GAP}\\(${TOKEN_
  */
 export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	const sourceDir = path.dirname(sourcePath);
-	const resolveSpecifier = resolve ?? ((absoluteTarget, suffix) => pathToFileURL(absoluteTarget).href + suffix);
+	const resolveSpecifier = resolve ?? ((absoluteTarget, suffix) => URLMethods.href(pathToFileURL(absoluteTarget)) + suffix);
 	/**
 	 * Map one relative specifier to its replacement, splitting off any
 	 * `?query`/`#hash` suffix first (only the path portion is resolved).
@@ -706,9 +723,9 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 * @returns {string} The replacement specifier
 	 */
 	const handle = (specifier) => {
-		const suffixIdx = specifier.search(/[?#]/);
-		const pathPart = suffixIdx === -1 ? specifier : specifier.slice(0, suffixIdx);
-		const suffix = suffixIdx === -1 ? "" : specifier.slice(suffixIdx);
+		const suffixIdx = RegExpMethods.symbolSearch(/[?#]/, specifier);
+		const pathPart = suffixIdx === -1 ? specifier : StringMethods.slice(specifier, 0, suffixIdx);
+		const suffix = suffixIdx === -1 ? "" : StringMethods.slice(specifier, suffixIdx);
 		return resolveSpecifier(path.resolve(sourceDir, pathPart), suffix, specifier);
 	};
 	/**
@@ -722,11 +739,11 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 */
 	const rewriteWith = (text, regex, replacer) => {
 		const mask = maskStringsAndComments(text);
-		return text.replace(regex, (...args) => {
+		return RegExpMethods.symbolReplace(regex, text, (...args) => {
 			// String.prototype.replace passes (match, ...groups, offset, string);
 			// with no named groups, the offset is the second-to-last argument.
 			const offset = args[args.length - 2];
-			return mask[offset] ? args[0] : replacer(...args);
+			return mask[offset] ? args[0] : Reflect.apply(replacer, undefined, args);
 		});
 	};
 	let out = code;
@@ -815,24 +832,24 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	// Phase 1 — transpile the transitive graph of relative `.ts`/`.mts` imports.
 	// `transformed` maps each absolute TS source path to its transpiled (pre-rewrite)
 	// code; `deps` records the relative-`.ts`/`.mts` edges used for closure hashing.
-	const transformed = new Map([[absolutePath, code]]);
+	const transformed = mapFrom([[absolutePath, code]]);
 	const deps = new Map();
 	if (transform) {
 		const pending = [absolutePath];
 		while (pending.length > 0) {
-			const file = pending.pop();
+			const file = ArrayMethods.pop(pending);
 			const fileDeps = new Set();
-			deps.set(file, fileDeps);
+			MapMethods.set(deps, file, fileDeps);
 			// Discovery pass: collect relative `.ts`/`.mts` targets without rewriting.
-			rewriteRelativeSpecifiers(transformed.get(file), file, (absoluteTarget, _suffix, specifier) => {
+			rewriteRelativeSpecifiers(MapMethods.get(transformed, file), file, (absoluteTarget, _suffix, specifier) => {
 				const resolved = resolveModuleFile(absoluteTarget);
-				if (resolved.isTS) fileDeps.add(resolved.path);
+				if (resolved.isTS) SetMethods.add(fileDeps, resolved.path);
 				return specifier;
 			});
-			for (const dep of fileDeps) {
-				if (!transformed.has(dep)) {
-					transformed.set(dep, await transform(dep));
-					pending.push(dep);
+			for (const dep of setValues(fileDeps)) {
+				if (!MapMethods.has(transformed, dep)) {
+					MapMethods.set(transformed, dep, await transform(dep));
+					ArrayMethods.push(pending, dep);
 				}
 			}
 		}
@@ -848,15 +865,15 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	 * @returns {Set<string>} Every TS source reachable from `file` (incl. `file`)
 	 */
 	const closureOf = (file) => {
-		if (closureCache.has(file)) return closureCache.get(file);
+		if (MapMethods.has(closureCache, file)) return MapMethods.get(closureCache, file);
 		const seen = new Set();
 		const walk = (node) => {
-			if (seen.has(node)) return;
-			seen.add(node);
-			for (const next of deps.get(node) ?? []) walk(next);
+			if (SetMethods.has(seen, node)) return;
+			SetMethods.add(seen, node);
+			for (const next of setValues(MapMethods.get(deps, node))) walk(next);
 		};
 		walk(file);
-		closureCache.set(file, seen);
+		MapMethods.set(closureCache, file, seen);
 		return seen;
 	};
 	/**
@@ -869,20 +886,23 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 		const hash = createHash("sha256");
 		const update = (part) => Reflect.apply(HASH_UPDATE, hash, [part]);
 		// The NUL separators prevent path/code boundary collisions.
-		for (const member of [...closureOf(file)].sort()) {
+		for (let ofIndex = 0, ofList = ArrayMethods.sort(setToArray(closureOf(file))); ofIndex < ofList.length; ofIndex++) {
+			const member = ofList[ofIndex];
 			update(member);
 			update("\0");
-			update(transformed.get(member));
+			update(MapMethods.get(transformed, member));
 			update("\0");
 		}
 		update("entry\0");
 		update(file);
-		return `${Reflect.apply(HASH_DIGEST, hash, ["hex"]).slice(0, 16)}.mjs`;
+		return `${StringMethods.slice(Reflect.apply(HASH_DIGEST, hash, ["hex"]), 0, 16)}.mjs`;
 	};
 
 	// Phase 3 — rewrite each file's specifiers and write it to its cache file (the caller already
 	// created cacheDir).
-	for (const [file, fileCode] of transformed) {
+	for (const ofEntry of mapEntries(transformed)) {
+		const file = ofEntry[0],
+			fileCode = ofEntry[1];
 		const rewritten = rewriteRelativeSpecifiers(fileCode, file, (absoluteTarget, suffix) => {
 			const resolved = resolveModuleFile(absoluteTarget);
 			// A relative `.ts`/`.mts` import that was followed → its cache file;
@@ -892,10 +912,10 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			// points at `dep.ts`, not a non-existent `dep.js`. For plain `.mjs`/`.cjs`/
 			// `.js` targets `resolveModuleFile` leaves `resolved.path === absoluteTarget`,
 			// so this is identical for them.
-			if (resolved.isTS && transformed.has(resolved.path)) {
-				return pathToFileURL(path.join(cacheDir, cacheName(resolved.path))).href + suffix;
+			if (resolved.isTS && MapMethods.has(transformed, resolved.path)) {
+				return URLMethods.href(pathToFileURL(path.join(cacheDir, cacheName(resolved.path)))) + suffix;
 			}
-			return pathToFileURL(resolved.path).href + suffix;
+			return URLMethods.href(pathToFileURL(resolved.path)) + suffix;
 		});
 		const cachePath = path.join(cacheDir, cacheName(file));
 		// Atomic create-exclusive: cacheName() is a content hash, so an existing
@@ -908,7 +928,7 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			if (err.code !== "EEXIST") throw err;
 		}
 	}
-	return { url: pathToFileURL(path.join(cacheDir, cacheName(absolutePath))).href, cacheDir };
+	return { url: URLMethods.href(pathToFileURL(path.join(cacheDir, cacheName(absolutePath)))), cacheDir };
 }
 
 /**
@@ -967,8 +987,8 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		nodenext: ts.ModuleKind.NodeNext
 	};
 
-	const targetKey = (options.target || "es2020").toLowerCase();
-	const moduleKey = (options.module || "esnext").toLowerCase();
+	const targetKey = StringMethods.toLowerCase(options.target || "es2020");
+	const moduleKey = StringMethods.toLowerCase(options.module || "esnext");
 
 	const compilerOptions = {
 		target: targetMap[targetKey] || ts.ScriptTarget.ES2020,
@@ -996,17 +1016,17 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 			if (fileName === filePath) {
 				return code;
 			}
-			return originalReadFile.call(host, fileName);
+			return FunctionMethods.call(originalReadFile, host, fileName);
 		};
 
 		// Create program with single file
 		const program = ts.createProgram([filePath], compilerOptions, host);
 
 		// Get all diagnostics (semantic + syntactic)
-		const allDiagnostics = [...program.getSemanticDiagnostics(), ...program.getSyntacticDiagnostics()];
+		const allDiagnostics = concatLists(program.getSemanticDiagnostics(), program.getSyntacticDiagnostics());
 
 		// Filter to only this file's diagnostics
-		diagnostics = allDiagnostics.filter((d) => d.file && d.file.fileName === filePath);
+		diagnostics = filterList(allDiagnostics, (d) => d.file && d.file.fileName === filePath);
 	}
 
 	// Transform using transpileModule (fast, doesn't require full type checking)
@@ -1040,7 +1060,10 @@ function convertCompilerOptions(ts, compilerOptions) {
 			"INVALID_CONFIG",
 			{
 				option: "typescript.compilerOptions",
-				value: errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join(" "),
+				value: ArrayMethods.join(
+					mapList(errors, (error) => ts.flattenDiagnosticMessageText(error.messageText, " ")),
+					" "
+				),
 				expected: "valid tsconfig.json compilerOptions",
 				hint: "HINT_INVALID_CONFIG",
 				validationError: true
@@ -1063,11 +1086,13 @@ function convertCompilerOptions(ts, compilerOptions) {
  */
 function withAbsoluteMapSource(code, absolutePath) {
 	const marker = "//# sourceMappingURL=data:application/json;base64,";
-	const index = code.lastIndexOf(marker);
-	const map = JSON.parse(Buffers.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
+	const index = StringMethods.lastIndexOf(code, marker);
+	const map = JSON.parse(
+		BufferMethods.toString(Buffers.from(StringMethods.trim(StringMethods.slice(code, index + marker.length)), "base64"), "utf8")
+	);
 	map.sources = [absolutePath];
 	delete map.sourceRoot;
-	return code.slice(0, index) + marker + Buffers.from(JSON.stringify(map), "utf8").toString("base64");
+	return StringMethods.slice(code, 0, index) + marker + BufferMethods.toString(Buffers.from(JSON.stringify(map), "utf8"), "base64");
 }
 
 /**
@@ -1078,7 +1103,7 @@ function withAbsoluteMapSource(code, absolutePath) {
  * @public
  */
 export function formatDiagnostics(diagnostics, ts) {
-	return diagnostics.map((diagnostic) => {
+	return mapList(diagnostics, (diagnostic) => {
 		const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 		if (diagnostic.file && diagnostic.start !== undefined) {
 			const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);

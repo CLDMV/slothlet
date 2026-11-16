@@ -20,7 +20,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
-import { Objects, JSON, Symbols, Error, Errors, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { ArrayMethods, Error, Errors, filterList, JSON, Objects, String, StringMethods, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -98,7 +98,7 @@ export class SlothletError extends Error {
 			const staticHintKey = `HINT_${code}`;
 			const staticHint = translate(staticHintKey, enrichedContext);
 			// Only use it if it's not the fallback format (Error: HINT_...)
-			if (staticHint && !staticHint.startsWith("Error:")) {
+			if (staticHint && !StringMethods.startsWith(staticHint, "Error:")) {
 				translatedHint = staticHint;
 			}
 		}
@@ -153,11 +153,12 @@ export class SlothletError extends Error {
 
 		// Add only critical details
 		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
-		const detailKeys = Objects.keys(this.context).filter((k) => criticalKeys.includes(k));
+		const detailKeys = filterList(Objects.keys(this.context), (k) => ArrayMethods.includes(criticalKeys, k));
 
 		if (detailKeys.length > 0) {
 			output += "\nDetails:\n";
-			for (const key of detailKeys) {
+			for (let ofIndex = 0, ofList = detailKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				output += `  ${key}: ${this.context[key]}\n`;
 			}
 		}
@@ -243,7 +244,7 @@ export class SlothletWarning {
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
-			SlothletWarning.captured.push(this);
+			ArrayMethods.push(SlothletWarning.captured, this);
 		}
 	}
 
@@ -320,12 +321,12 @@ export class SlothletDebug {
 		const { key: msgKey, message, ...contextParams } = context;
 
 		// Key resolution: explicit key > category key (DEBUG_{CODE}) > raw message fallback
-		const translationKey = msgKey ?? `DEBUG_${code.toUpperCase()}`;
+		const translationKey = msgKey ?? `DEBUG_${StringMethods.toUpperCase(code)}`;
 		const translatedMessage = translate(translationKey, contextParams);
-		const hasTranslation = translatedMessage && !translatedMessage.startsWith("Error:");
+		const hasTranslation = translatedMessage && !StringMethods.startsWith(translatedMessage, "Error:");
 
 		// Format label
-		const label = `[DEBUG:${code.toUpperCase()}]`;
+		const label = `[DEBUG:${StringMethods.toUpperCase(code)}]`;
 
 		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 		if (hasTranslation) {
@@ -349,8 +350,9 @@ export class SlothletDebug {
 	 * @returns {string} Debug info
 	 */
 	toString() {
-		return `[SlothletDebug] flags: ${Objects.keys(this.debugFlags)
-			.filter((k) => this.debugFlags[k])
-			.join(", ")}`;
+		return `[SlothletDebug] flags: ${ArrayMethods.join(
+			filterList(Objects.keys(this.debugFlags), (k) => this.debugFlags[k]),
+			", "
+		)}`;
 	}
 }

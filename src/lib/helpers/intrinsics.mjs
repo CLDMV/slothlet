@@ -1169,6 +1169,17 @@ export const TextDecoderMethods = methodsOf(globalThis.TextDecoder?.prototype);
 export const TextEncoderMethods = methodsOf(globalThis.TextEncoder?.prototype);
 
 /**
+ * The methods of Node's `Buffer.prototype` (`toString`, …), as they were when slothlet loaded, each taking the buffer
+ * first; empty where the host has none (a browser).
+ * @type {object}
+ * @internal
+ * @example
+ * import { BufferMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * BufferMethods.toString(chunk, "utf8");
+ */
+export const BufferMethods = methodsOf(globalThis.Buffer?.prototype);
+
+/**
  * The methods of `FinalizationRegistry.prototype` (`register`, `unregister`), as they were when slothlet loaded, each
  * taking the registry first.
  * @type {object}

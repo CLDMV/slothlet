@@ -38,7 +38,7 @@ import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes as writeDeclarationFile } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { Arrays, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Objects, RegExpMethods, StringMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -161,5 +161,5 @@ function assertOption(value, name) {
  * @private
  */
 function camelToKebab(s) {
-	return s.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+	return RegExpMethods.symbolReplace(/[A-Z]/g, s, (m) => `-${StringMethods.toLowerCase(m)}`);
 }

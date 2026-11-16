@@ -28,7 +28,21 @@
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { Objects, Map, Set, Error, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Error,
+	filterList,
+	FunctionMethods,
+	Map,
+	MapMethods,
+	Objects,
+	PromiseMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setValues,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/api-assignment");
 const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperOwn;
 const { markFrameworkInternal } = frameworkInternalsInternals("lib/builders/api-assignment");
@@ -94,7 +108,8 @@ export class ApiAssignment extends ComponentBase {
 		// gating, no lazy semantics — where the same member composed the ordinary way is a wrapper.
 		// Extraction still supplies the leaf/primitive members that are not adopted as children.
 		const folderChildren = new Map();
-		for (const childKey of Objects.keys(offSlotFolder)) {
+		for (let ofIndex = 0, ofList = Objects.keys(offSlotFolder); ofIndex < ofList.length; ofIndex++) {
+			const childKey = ofList[ofIndex];
 			// Exact framework names, not an underscore prefix — a module's own `_x` / `__x` export is an
 			// api member, and skipping it here would merge the extracted snapshot instead of the live
 			// child wrapper, stripping its apiPath and gating.
@@ -105,7 +120,7 @@ export class ApiAssignment extends ComponentBase {
 			// suite deliberately composes none and the skip stays guarded rather than pinned.
 			/* v8 ignore next */
 			if (isFrameworkReservedKey(childKey)) continue;
-			folderChildren.set(childKey, offSlotFolder[childKey]);
+			MapMethods.set(folderChildren, childKey, offSlotFolder[childKey]);
 		}
 		const folderProduct = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(offSlotFolder);
 		// The off-slot folder is a materialized DIRECTORY wrapper, so extraction yields an object or a
@@ -114,7 +129,8 @@ export class ApiAssignment extends ComponentBase {
 		/* v8 ignore next */
 		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
 		const keptImpl = keptWrapper.____slothletInternal.impl;
-		for (const folderKey of Objects.keys(folderProduct)) {
+		for (let ofIndex = 0, ofList = Objects.keys(folderProduct); ofIndex < ofList.length; ofIndex++) {
+			const folderKey = ofList[ofIndex];
 			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
 			// extraction returns the function itself with every own key unfiltered, so a module export
 			// named for a reserved key (`__type`, `_materialize`, …) can appear here — and merging it
@@ -126,8 +142,8 @@ export class ApiAssignment extends ComponentBase {
 			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
 			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
 			const alreadyPresent =
-				Objects.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
-				(!!keptImpl && Objects.prototype.hasOwnProperty.call(keptImpl, folderKey));
+				FunctionMethods.call(Objects.prototype.hasOwnProperty, keptWrapper, folderKey) ||
+				(!!keptImpl && FunctionMethods.call(Objects.prototype.hasOwnProperty, keptImpl, folderKey));
 			if (alreadyPresent) {
 				// #441: the survivor already owns this name, so the folded-off folder's member is dropped.
 				// This is the "completely invisible" case — a self-named-namespace fold emits no per-leaf
@@ -150,7 +166,7 @@ export class ApiAssignment extends ComponentBase {
 				// the members adoption never turned into children — its private skip list holds `_state` /
 				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the
 				// merged slot only through the extracted product (pair/frog pins this in both modes).
-				value: folderChildren.has(folderKey) ? folderChildren.get(folderKey) : folderProduct[folderKey],
+				value: MapMethods.has(folderChildren, folderKey) ? MapMethods.get(folderChildren, folderKey) : folderProduct[folderKey],
 				writable: false,
 				enumerable: true,
 				configurable: true
@@ -480,8 +496,9 @@ export class ApiAssignment extends ComponentBase {
 							existingWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 						}
 
-						const valueChildKeys = Objects.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k));
-						for (const key of valueChildKeys) {
+						const valueChildKeys = filterList(Objects.keys(valueWrapper), (k) => !isFrameworkReservedKey(k));
+						for (let ofIndex = 0, ofList = valueChildKeys; ofIndex < ofList.length; ofIndex++) {
+							const key = ofList[ofIndex];
 							// Copy the member itself. Defining the key with no value left an empty, non-enumerable
 							// property, so the file's exports vanished from a lazy folder that won the slot (`services/`
 							// + `services.mjs`'s `getVersion`) where eager kept them (#583). Same descriptor shape as
@@ -495,7 +512,7 @@ export class ApiAssignment extends ComponentBase {
 								if (!existingWrapper.____slothletInternal.collisionMergedKeys) {
 									existingWrapper.____slothletInternal.collisionMergedKeys = new Set();
 								}
-								existingWrapper.____slothletInternal.collisionMergedKeys.add(key);
+								SetMethods.add(existingWrapper.____slothletInternal.collisionMergedKeys, key);
 							}
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
@@ -532,7 +549,7 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								valueWrapper._materialize().catch(() => {});
+								PromiseMethods.catch(valueWrapper._materialize(), () => {});
 							}
 							// Keep the existing callable on the slot; the merge above finishes the composition.
 							runtime_frameworkWrite(targetApi, () => {
@@ -553,13 +570,13 @@ export class ApiAssignment extends ComponentBase {
 								valueWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 							}
 
-							const existingChildKeys = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+							const existingChildKeys = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
 							// Debug logging inside the lazy-replace collision copy-children path.
 							// Only reached when debug.api=true AND a lazy-unmaterialized folder replaces an
 							// already-materialized wrapper — a combination not exercised by current tests.
 							this.slothlet.debug("api", {
 								key: "DEBUG_MODE_COLLISION_COPY_CHILD_KEYS",
-								existingChildKeys: existingChildKeys.join(","),
+								existingChildKeys: ArrayMethods.join(existingChildKeys, ","),
 								fromApiPath: existingWrapper.____slothletInternal.apiPath,
 								toApiPath: valueWrapper.____slothletInternal.apiPath,
 								valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
@@ -570,7 +587,8 @@ export class ApiAssignment extends ComponentBase {
 								valueWrapper.____slothletInternal.collisionMergedKeys = new Set();
 							}
 
-							for (const key of existingChildKeys) {
+							for (let ofIndex = 0, ofList = existingChildKeys; ofIndex < ofList.length; ofIndex++) {
+								const key = ofList[ofIndex];
 								// The descriptor, not a read: a read would run a getter.
 								const child = Objects.getOwnPropertyDescriptor(existingWrapper, key)?.value;
 								this.slothlet.debug("api", {
@@ -583,7 +601,7 @@ export class ApiAssignment extends ComponentBase {
 								// A getter stays a getter, running on the folder's node (#585 review).
 								unifiedWrapperOwn.UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key);
 								// Mark this key as collision-merged
-								valueWrapper.____slothletInternal.collisionMergedKeys.add(key);
+								SetMethods.add(valueWrapper.____slothletInternal.collisionMergedKeys, key);
 								// Store filePath mapping so child wrappers can inherit correct filePath
 								if (existingFilePath) {
 									valueWrapper.____slothletInternal.childFilePathsPreMaterialize[key] = existingFilePath;
@@ -604,7 +622,7 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								valueWrapper._materialize().catch((err) => {
+								PromiseMethods.catch(valueWrapper._materialize(), (err) => {
 									new this.slothlet.SlothletWarning(
 										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
 										{
@@ -639,8 +657,8 @@ export class ApiAssignment extends ComponentBase {
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
 					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
-					const existingChildCount = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
-					const valueChildCount = Objects.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
+					const existingChildCount = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k)).length;
+					const valueChildCount = filterList(Objects.keys(valueWrapper), (k) => !isFrameworkReservedKey(k)).length;
 					if (existingWrapper.____slothletInternal.impl && existingChildCount === 0) {
 						existingWrapper.___adoptImplChildren();
 					}
@@ -663,9 +681,10 @@ export class ApiAssignment extends ComponentBase {
 					// leaf (O02 / O09). Keeping the existing function there left the first callable in place
 					// even though its conflicting members were replaced (#584).
 					if (valueIsCallable && (!existingIsCallable || isMergeReplace)) {
-						const existingChildKeys2 = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
-						for (const key2 of existingChildKeys2) {
-							const keyOnValue = Objects.prototype.hasOwnProperty.call(valueWrapper, key2);
+						const existingChildKeys2 = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
+						for (let ofIndex = 0, ofList = existingChildKeys2; ofIndex < ofList.length; ofIndex++) {
+							const key2 = ofList[ofIndex];
+							const keyOnValue = FunctionMethods.call(Objects.prototype.hasOwnProperty, valueWrapper, key2);
 							if (keyOnValue && isMergeReplace) {
 								// merge-replace: the second source's member wins the conflict — leave it.
 								continue;
@@ -696,11 +715,12 @@ export class ApiAssignment extends ComponentBase {
 					// When both existing and new child at a key are wrappers, recursively merge
 					// their children (e.g., math wrapper from API_TEST merges with math wrapper
 					// from API_TEST_COLLISIONS → power, sqrt, modulo get added to existing math)
-					const valueChildKeys2 = Objects.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k));
-					for (const key of valueChildKeys2) {
+					const valueChildKeys2 = filterList(Objects.keys(valueWrapper), (k) => !isFrameworkReservedKey(k));
+					for (let ofIndex = 0, ofList = valueChildKeys2; ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						const isInternal = isFrameworkReservedKey(key);
 						// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
-						const keyExists = !isInternal && Objects.prototype.hasOwnProperty.call(existingWrapper, key);
+						const keyExists = !isInternal && FunctionMethods.call(Objects.prototype.hasOwnProperty, existingWrapper, key);
 
 						if (!keyExists) {
 							// A getter stays a getter, running on the node that holds the slot (#585 review).
@@ -727,14 +747,15 @@ export class ApiAssignment extends ComponentBase {
 							/* v8 ignore next */
 							if (existingChildWrapper && newChildWrapper) {
 								// Ensure new child has adopted its impl children before merge
-								const newChildChildCount = Objects.keys(newChildWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
+								const newChildChildCount = filterList(Objects.keys(newChildWrapper), (k) => !isFrameworkReservedKey(k)).length;
 								if (newChildWrapper.____slothletInternal.impl && newChildChildCount === 0) {
 									newChildWrapper.___adoptImplChildren();
 								}
-								const newChildKeys = Objects.keys(newChildWrapper).filter((k) => !isFrameworkReservedKey(k));
-								const ____existingChildKeys = Objects.keys(existingChildWrapper).filter((k) => !isFrameworkReservedKey(k));
-								for (const childKey of newChildKeys) {
-									const childKeyExists = Objects.prototype.hasOwnProperty.call(existingChildWrapper, childKey);
+								const newChildKeys = filterList(Objects.keys(newChildWrapper), (k) => !isFrameworkReservedKey(k));
+								const ____existingChildKeys = filterList(Objects.keys(existingChildWrapper), (k) => !isFrameworkReservedKey(k));
+								for (let ofIndex = 0, ofList = newChildKeys; ofIndex < ofList.length; ofIndex++) {
+									const childKey = ofList[ofIndex];
+									const childKeyExists = FunctionMethods.call(Objects.prototype.hasOwnProperty, existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).
 									/* v8 ignore next */
 									if (!childKeyExists) {
@@ -856,8 +877,8 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		// Merge source keys into target
-		const sourceKeys = new Set(Objects.keys(sourceApi));
-		for (const key of sourceKeys) {
+		const sourceKeys = setFrom(Objects.keys(sourceApi));
+		for (const key of setValues(sourceKeys)) {
 			const sourceValue = sourceApi[key];
 			const targetValue = targetApi[key];
 
@@ -900,8 +921,9 @@ export class ApiAssignment extends ComponentBase {
 
 		// Remove keys from target that don't exist in source
 		if (removeMissing) {
-			for (const key of Objects.keys(targetApi)) {
-				if (!sourceKeys.has(key)) {
+			for (let ofIndex = 0, ofList = Objects.keys(targetApi); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (!SetMethods.has(sourceKeys, key)) {
 					runtime_frameworkWrite(targetApi, () => delete targetApi[key]);
 				}
 			}

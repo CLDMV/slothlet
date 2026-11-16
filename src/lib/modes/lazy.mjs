@@ -20,7 +20,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
-import { Arrays, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, Reflect, RegExpMethods, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Lazy mode component - builds APIs with deferred (on-demand) loading.
@@ -51,14 +51,16 @@ export class LazyMode extends ComponentBase {
 	 * const fn = lazyMode.createNamedMaterializeFunc('api.math', async () => ({ add: (a,b) => a+b }));
 	 */
 	createNamedMaterializeFunc(apiPath, handler) {
-		const safePath = String(apiPath || "api")
-			.replace(/\./g, "__")
-			.replace(/[^A-Za-z0-9_$]/g, "_");
-		const normalized = /^[A-Za-z_$]/.test(safePath[0]) ? safePath : `_${safePath}`;
+		const safePath = RegExpMethods.symbolReplace(
+			/[^A-Za-z0-9_$]/g,
+			RegExpMethods.symbolReplace(/\./g, String(apiPath || "api"), "__"),
+			"_"
+		);
+		const normalized = RegExpMethods.exec(/^[A-Za-z_$]/, safePath[0]) !== null ? safePath : `_${safePath}`;
 		const funcName = `${normalized}__lazy_materializeFunc`;
 		return {
 			[funcName]: async function (...args) {
-				return handler(...args);
+				return Reflect.apply(handler, undefined, args);
 			}
 		}[funcName];
 	}

@@ -92,7 +92,7 @@ function safeGetContext() {
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
@@ -107,7 +107,7 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  */
 function runtime_selfMember(prop, value) {
 	if (typeof prop !== "string") return value;
-	return FRAMEWORK_SELF_ROOTS.has(prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
+	return SetMethods.has(FRAMEWORK_SELF_ROOTS, prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
 }
 
 /**

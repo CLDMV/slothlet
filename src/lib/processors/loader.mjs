@@ -43,17 +43,35 @@ import { translate } from "@cldmv/slothlet/i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
-	Objects,
+	ArrayMethods,
 	Arrays,
+	BufferMethods,
+	concatLists,
+	copyList,
+	encodeURIComponent,
+	filterList,
 	JSON,
 	Map,
-	Set,
-	Promise,
-	URL,
-	encodeURIComponent,
-	String,
+	mapEntries,
+	MapMethods,
+	mapValuesToArray,
 	NativeProcess,
-	Promises
+	NumberMethods,
+	Objects,
+	Promise,
+	promiseAll,
+	PromiseMethods,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	splitText,
+	String,
+	StringMethods,
+	URL,
+	URLMethods,
+	URLSearchParamsMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile, noteModuleRoot } =
 	instanceImportsInternals("lib/processors/loader");
@@ -71,7 +89,7 @@ const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
  * isHiddenEntryName("__helpers"); // true
  */
 function isHiddenEntryName(name) {
-	return name.startsWith(".") || name.startsWith("__");
+	return StringMethods.startsWith(name, ".") || StringMethods.startsWith(name, "__");
 }
 
 /**
@@ -102,7 +120,9 @@ const RUNTIME_EXTERNALIZED = !("env" in import.meta);
  * @type {Array<object|null>}
  * @private
  */
-const [NODE_VM, NODE_CHILD_PROCESS] = isNode ? await Promises.all([import("node:vm"), import("child_process")]) : [null, null];
+const unpacked1 = isNode ? await promiseAll([import("node:vm"), import("child_process")]) : [null, null],
+	NODE_VM = unpacked1[0],
+	NODE_CHILD_PROCESS = unpacked1[1];
 
 /**
  * `vm.compileFunction`, taken as slothlet loads, for telling a CommonJS file by whether its source compiles as a
@@ -232,15 +252,16 @@ function compileHidden(globs) {
 	if (!globs) return null;
 	const list = Arrays.isArray(globs) ? globs : [globs];
 	const rules = [];
-	for (const g of list) {
+	for (let ofIndex = 0, ofList = list; ofIndex < ofList.length; ofIndex++) {
+		const g = ofList[ofIndex];
 		if (typeof g !== "string" || g.length === 0) continue;
-		const negated = g.startsWith("!");
+		const negated = StringMethods.startsWith(g, "!");
 		// Compile the pattern BODY (without a leading "!") as a positive matcher; the "!" is applied here
 		// as gitignore-style un-hiding, NOT via compilePattern's "match everything except" semantics —
 		// those don't compose under a hide-list (a single `!x` would then hide everything except x).
-		const body = (negated ? g.slice(1) : g).replace(/\//g, ".");
+		const body = RegExpMethods.symbolReplace(/\//g, negated ? StringMethods.slice(g, 1) : g, ".");
 		if (body.length === 0) continue; // bare "!" — nothing to match
-		rules.push({ negated, match: compilePattern(body) });
+		ArrayMethods.push(rules, { negated, match: compilePattern(body) });
 	}
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
@@ -249,7 +270,7 @@ function compileHidden(globs) {
 		let hidden = false;
 		let winner = -1;
 		for (let index = 0; index < rules.length; index++) {
-			if (rules[index].match(relDotted)) {
+			if (StringMethods.match(rules[index], relDotted)) {
 				hidden = !rules[index].negated;
 				winner = index;
 			}
@@ -257,8 +278,9 @@ function compileHidden(globs) {
 		if (hidden && isFolder) {
 			// Names no file or folder can have (a `.` would split them), so only a glob that matches everything
 			// beneath the folder matches both.
-			const coversBelow = rules[winner].match(`${relDotted}.\u0000`) && rules[winner].match(`${relDotted}.\u0000.\u0000`);
-			if (coversBelow && rules.slice(winner + 1).some((rule) => rule.negated)) return false;
+			const coversBelow =
+				StringMethods.match(rules[winner], `${relDotted}.\u0000`) && StringMethods.match(rules[winner], `${relDotted}.\u0000.\u0000`);
+			if (coversBelow && ArrayMethods.some(copyList(rules, winner + 1), (rule) => rule.negated)) return false;
 		}
 		return hidden;
 	};
@@ -334,8 +356,8 @@ let instanceImportHooksInstalled = false;
  * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
  */
 export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
-	if (specifier instanceof URL) specifier = specifier.href;
-	if (!instanceID || typeof specifier !== "string" || !/^(?:https?|file):/i.test(specifier)) return specifier;
+	if (specifier instanceof URL) specifier = URLMethods.href(specifier);
+	if (!instanceID || typeof specifier !== "string" || !(RegExpMethods.exec(/^(?:https?|file):/i, specifier) !== null)) return specifier;
 	let parsed;
 	try {
 		parsed = new URL(specifier);
@@ -343,10 +365,10 @@ export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
 		// Not a URL after all (a resolver handed back something scheme-like but malformed): import it as given.
 		return specifier;
 	}
-	parsed.searchParams.set("slothlet_instance", instanceID);
-	if (moduleID) parsed.searchParams.set("module", moduleID);
-	if (cacheBust) parsed.searchParams.set("_reload", String(cacheBust));
-	return parsed.href;
+	URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "slothlet_instance", instanceID);
+	if (moduleID) URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "module", moduleID);
+	if (cacheBust) URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "_reload", String(cacheBust));
+	return URLMethods.href(parsed);
 }
 
 /**
@@ -358,7 +380,11 @@ export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
  * @private
  */
 function runtime_encodeQueryValue(value) {
-	return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+	return RegExpMethods.symbolReplace(
+		/[!'()*]/g,
+		encodeURIComponent(value),
+		(char) => `%${StringMethods.toUpperCase(NumberMethods.toString(StringMethods.charCodeAt(char, 0), 16))}`
+	);
 }
 
 /**
@@ -422,7 +448,7 @@ function ensureRuntimeLoaded() {
 	const done = () => {
 		runtimeLoaded = true;
 	};
-	runtimeLoading ??= import("@cldmv/slothlet/runtime").then(done, done);
+	runtimeLoading ??= PromiseMethods.then(import("@cldmv/slothlet/runtime"), done, done);
 	return runtimeLoading;
 }
 
@@ -523,7 +549,7 @@ export class Loader extends ComponentBase {
 			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`. Its relative
 			// requires share one private cache per instance (#518) — kept across partial reloads, like ESM helpers.
 			// The hooks serve its require() of an ES module the instance's copy (#534).
-			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
+			if (StringMethods.endsWith(filePath, ".cjs") || (StringMethods.endsWith(filePath, ".js") && (await this.#isCommonJSFile(filePath)))) {
 				ensureInstanceImportHooks();
 				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
 			}
@@ -533,7 +559,7 @@ export class Loader extends ComponentBase {
 			ensureInstanceImportHooks();
 
 			// Check if TypeScript transformation is needed
-			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
+			const isTypeScript = StringMethods.endsWith(filePath, ".ts") || StringMethods.endsWith(filePath, ".mts");
 			const typescriptConfig = this.slothlet.config?.typescript;
 
 			let moduleUrl;
@@ -584,7 +610,7 @@ export class Loader extends ComponentBase {
 							let errorOutput = "";
 
 							child.stderr?.on("data", (data) => {
-								errorOutput += data.toString();
+								errorOutput += BufferMethods.toString(data);
 							});
 
 							child.on("message", (msg) => {
@@ -647,9 +673,14 @@ export class Loader extends ComponentBase {
 							const errors = formatDiagnostics(result.diagnostics, ts);
 
 							// Throw error with formatted diagnostics
-							const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath: tsPath, errors: errors.join("\n") }, null, {
-								validationError: true
-							});
+							const error = new this.SlothletError(
+								"TS_TYPE_CHECK_ERRORS",
+								{ filePath: tsPath, errors: ArrayMethods.join(errors, "\n") },
+								null,
+								{
+									validationError: true
+								}
+							);
 							error.diagnostics = result.diagnostics;
 							throw error;
 						}
@@ -716,9 +747,9 @@ export class Loader extends ComponentBase {
 			const customImport = this.slothlet?.config?.import;
 			// The live runtime matches a suspended call's frames against the file it was imported from; a
 			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
-			let byMount = this.#importedLocations.get(filePath);
-			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
-			byMount.set(moduleID ?? "", String(moduleUrl));
+			let byMount = MapMethods.get(this.#importedLocations, filePath);
+			if (!byMount) MapMethods.set(this.#importedLocations, filePath, (byMount = new Map()));
+			MapMethods.set(byMount, moduleID ?? "", String(moduleUrl));
 			this.#importedLocationList = null;
 			this.#rememberImportedURL(filePath, String(moduleUrl));
 			// What the file imports is a module's, whichever loader evaluates it and however a require names it.
@@ -836,7 +867,8 @@ export class Loader extends ComponentBase {
 		//   - each own key of module.exports becomes a named export
 		const namespace = { default: exports };
 		if (exports !== null && typeof exports === "object") {
-			for (const key of Objects.keys(exports)) {
+			for (let ofIndex = 0, ofList = Objects.keys(exports); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				if (key !== "default") {
 					namespace[key] = exports[key];
 				}
@@ -873,13 +905,13 @@ export class Loader extends ComponentBase {
 		let current = dir;
 		let type = "none";
 		for (;;) {
-			const cached = this.#packageTypeCache.get(current);
+			const cached = MapMethods.get(this.#packageTypeCache, current);
 			if (cached !== undefined) {
 				type = cached;
 				break;
 			}
-			visited.push(current);
-			const raw = await fsp.readFile(path.join(current, "package.json"), "utf8").catch(() => null);
+			ArrayMethods.push(visited, current);
+			const raw = await PromiseMethods.catch(fsp.readFile(path.join(current, "package.json"), "utf8"), () => null);
 			if (raw !== null) {
 				const pkg = parseJsonOrNull(raw);
 				// Node rejects a package.json that is not a JSON object (ERR_INVALID_PACKAGE_CONFIG) and
@@ -892,7 +924,10 @@ export class Loader extends ComponentBase {
 			if (parent === current || path.basename(current) === "node_modules") break;
 			current = parent;
 		}
-		for (const d of visited) this.#packageTypeCache.set(d, type);
+		for (let ofIndex = 0, ofList = visited; ofIndex < ofList.length; ofIndex++) {
+			const d = ofList[ofIndex];
+			MapMethods.set(this.#packageTypeCache, d, type);
+		}
 		return type;
 	}
 
@@ -922,7 +957,7 @@ export class Loader extends ComponentBase {
 		if (type !== "none") return false;
 		const compileFunction = VM_COMPILE_FUNCTION;
 		// A leading hashbang is valid in a CommonJS file (Node strips it) but not in a function body.
-		const source = (await fsp.readFile(filePath, "utf8")).replace(/^#!.*/, "");
+		const source = RegExpMethods.symbolReplace(/^#!.*/, await fsp.readFile(filePath, "utf8"), "");
 		try {
 			compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"], { filename: filePath });
 			return true;
@@ -950,7 +985,7 @@ export class Loader extends ComponentBase {
 	 */
 	async #buildTypescriptModuleUrl(writeTransformedToCache, filePath, code, instanceID, moduleID, cacheBust, transform) {
 		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID, transform);
-		(this.slothlet._typescriptCacheDirs ??= new Set()).add(cacheDir);
+		SetMethods.add((this.slothlet._typescriptCacheDirs ??= new Set()), cacheDir);
 		let moduleUrl = `${url}?slothlet_instance=${instanceID}`;
 		// The false (no-moduleID) arm is covered by initial-TS-load tests in isolation but lost in
 		// full-suite coverage merge — the .mjs branch above (lines 195-204) uses the same pattern
@@ -991,7 +1026,7 @@ export class Loader extends ComponentBase {
 		const typescriptConfig = this.slothlet.config?.typescript;
 		const defaultExtensions = [".mjs", ".cjs", ".js"];
 		const typescriptExtensions = typescriptConfig?.enabled ? [".ts", ".mts"] : [];
-		const allExtensions = [...defaultExtensions, ...typescriptExtensions];
+		const allExtensions = concatLists(defaultExtensions, typescriptExtensions);
 
 		const {
 			recursive = true,
@@ -1009,7 +1044,7 @@ export class Loader extends ComponentBase {
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
 		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
 		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
-		const apiRel = (p) => path.relative(rootDir, p).split(path.sep).join(".");
+		const apiRel = (p) => ArrayMethods.join(StringMethods.split(path.relative(rootDir, p), path.sep), ".");
 
 		try {
 			await fsp.stat(dir);
@@ -1030,7 +1065,8 @@ export class Loader extends ComponentBase {
 
 		const entries = await fsp.readdir(dir, { withFileTypes: true });
 
-		for (const entry of entries) {
+		for (let i = 0; i < entries.length; i++) {
+			const entry = entries[i];
 			const fullPath = path.join(dir, entry.name);
 
 			if (entry.isDirectory()) {
@@ -1065,7 +1101,7 @@ export class Loader extends ComponentBase {
 					}
 					// Checked once the folder is known to produce a member, like the file check below.
 					this.#assertLoadableFolderName(entry.name, dir);
-					structure.directories.push({
+					ArrayMethods.push(structure.directories, {
 						path: fullPath,
 						name: entry.name,
 						children: subStructure
@@ -1073,7 +1109,7 @@ export class Loader extends ComponentBase {
 				}
 			} else if (entry.isFile()) {
 				const ext = path.extname(entry.name);
-				if (extensions.includes(ext)) {
+				if (typeof extensions === "string" ? StringMethods.includes(extensions, ext) : ArrayMethods.includes(extensions, ext)) {
 					// Built-in: skip `.`/`__`-prefixed files (JSDoc-only, test helpers, dotfiles, etc.).
 					if (isHiddenEntryName(entry.name)) {
 						continue;
@@ -1109,7 +1145,7 @@ export class Loader extends ComponentBase {
 					}
 					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
-					structure.files.push({
+					ArrayMethods.push(structure.files, {
 						path: fullPath,
 						name: nameWithoutExt,
 						fullName: entry.name,
@@ -1169,11 +1205,11 @@ export class Loader extends ComponentBase {
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
 		/* v8 ignore next */
-		const configBase = (this.slothlet.config?.dir || "").replace(/\/$/, "");
+		const configBase = RegExpMethods.symbolReplace(/\/$/, this.slothlet.config?.dir || "", "");
 		/* v8 ignore next */
-		let relativePath = (dir || "").replace(/\/$/, "");
-		if (configBase && relativePath.startsWith(configBase)) {
-			relativePath = relativePath.slice(configBase.length).replace(/^\/|\/$/g, "");
+		let relativePath = RegExpMethods.symbolReplace(/\/$/, dir || "", "");
+		if (configBase && StringMethods.startsWith(relativePath, configBase)) {
+			relativePath = RegExpMethods.symbolReplace(/^\/|\/$/g, StringMethods.slice(relativePath, configBase.length), "");
 		}
 
 		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
@@ -1198,18 +1234,19 @@ export class Loader extends ComponentBase {
 	 * this.#findManifestNode(manifest, "billing/reports");
 	 */
 	#findManifestNode(node, targetPath) {
-		const normalised = targetPath.replace(/\\/g, "/").replace(/^\/|\/$/g, "");
+		const normalised = RegExpMethods.symbolReplace(/^\/|\/$/g, RegExpMethods.symbolReplace(/\\/g, targetPath, "/"), "");
 		// `node.directories || []` defensive fallback for malformed manifest nodes
 		// — generateManifest always emits the field, and the validation in Config
 		// guarantees the top-level shape. The fallback is unreachable in normal flow.
 		/* v8 ignore next */
-		for (const dir of node.directories || []) {
+		for (let i = 0, dirs = node.directories || []; i < dirs.length; i++) {
+			const dir = dirs[i];
 			// `dir.path || dir.name || ""` is a defensive fallback chain. Both fields
 			// are normally populated by generateManifest; hand-crafted manifests may
 			// omit one or the other. The final `|| ""` arm is unreachable because
 			// at least one of `path` / `name` is required for a usable directory entry.
 			/* v8 ignore next */
-			const dirPath = (dir.path || dir.name || "").replace(/\\/g, "/").replace(/^\/|\/$/g, "");
+			const dirPath = RegExpMethods.symbolReplace(/^\/|\/$/g, RegExpMethods.symbolReplace(/\\/g, dir.path || dir.name || "", "/"), "");
 			if (dirPath === normalised) return dir.children || dir;
 			// Recurse into sub-directories for nested paths like "billing/reports".
 			const found = this.#findManifestNode(dir.children || dir, normalised);
@@ -1249,14 +1286,15 @@ export class Loader extends ComponentBase {
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
 		const structure = { files: [], directories: [] };
 
-		for (const file of node.files || []) {
+		for (let i = 0, files = node.files || []; i < files.length; i++) {
+			const file = files[i];
 			const filePath = file.path || file.relativePath || "";
-			const fullName = file.fullName || filePath.split("/").pop();
-			const lastDot = fullName.lastIndexOf(".");
-			const ext = lastDot >= 0 ? fullName.slice(lastDot) : "";
+			const fullName = file.fullName || ArrayMethods.pop(splitText(filePath, "/"));
+			const lastDot = ArrayMethods.lastIndexOf(fullName, ".");
+			const ext = lastDot >= 0 ? (typeof fullName === "string" ? StringMethods.slice(fullName, lastDot) : copyList(fullName, lastDot)) : "";
 
 			// Skip non-JS files and dot/double-underscore helpers.
-			if (!ALLOWED_EXTS.includes(ext)) continue;
+			if (!ArrayMethods.includes(ALLOWED_EXTS, ext)) continue;
 			if (isHiddenEntryName(fullName)) continue;
 
 			// Apply caller-supplied file filter (used for single-file api.add calls).
@@ -1266,7 +1304,13 @@ export class Loader extends ComponentBase {
 			// ALLOWED_EXTS check above (`continue` when ext === "") filters out any
 			// file without a dot in its fullName before reaching this name fallback.
 			/* v8 ignore next */
-			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+			const name =
+				file.name ||
+				(lastDot >= 0
+					? typeof fullName === "string"
+						? StringMethods.slice(fullName, 0, lastDot)
+						: copyList(fullName, 0, lastDot)
+					: fullName);
 
 			// Consumer `hidden` glob, matched against the file's extension-stripped api-relative
 			// dotted path — same semantics as the disk scan.
@@ -1280,7 +1324,7 @@ export class Loader extends ComponentBase {
 			}
 			this.#assertNotThenable(name, fullName, rootPath);
 
-			structure.files.push({
+			ArrayMethods.push(structure.files, {
 				path: filePath,
 				name,
 				fullName,
@@ -1290,9 +1334,10 @@ export class Loader extends ComponentBase {
 
 		// Never recurse into subdirectories when a file-filter is active (single-file mode).
 		if (!fileFilter) {
-			for (const dir of node.directories || []) {
+			for (let i = 0, dirs = node.directories || []; i < dirs.length; i++) {
+				const dir = dirs[i];
 				const dirPath = dir.path || dir.name || "";
-				const dirName = dir.name || dirPath.split("/").pop();
+				const dirName = dir.name || ArrayMethods.pop(splitText(dirPath, "/"));
 
 				// dot/`__`-prefixed folders are hidden unless the deprecated scanHiddenFolders opt-out
 				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
@@ -1314,7 +1359,7 @@ export class Loader extends ComponentBase {
 				if (children.files.length === 0 && children.directories.length === 0) continue;
 
 				this.#assertLoadableFolderName(dirName, rootPath);
-				structure.directories.push({ path: dirPath, name: dirName, children });
+				ArrayMethods.push(structure.directories, { path: dirPath, name: dirName, children });
 			}
 		}
 
@@ -1362,31 +1407,32 @@ export class Loader extends ComponentBase {
 				// without an actual Windows filesystem — passing a custom resolver
 				// bypasses this code path entirely.
 				/* v8 ignore next */
-				const leadingSlash = base.startsWith("/") ? "" : "/";
-				const baseUrl = /^[a-zA-Z][\w+\-.]*:\/\//.test(base)
-					? base.endsWith("/")
-						? base
-						: base + "/"
-					: "file://" + leadingSlash + base.replace(/\/?$/, "/");
-				return new URL(p, baseUrl).href;
+				const leadingSlash = StringMethods.startsWith(base, "/") ? "" : "/";
+				const baseUrl =
+					RegExpMethods.exec(/^[a-zA-Z][\w+\-.]*:\/\//, base) !== null
+						? StringMethods.endsWith(base, "/")
+							? base
+							: base + "/"
+						: "file://" + leadingSlash + RegExpMethods.symbolReplace(/\/?$/, base, "/");
+				return URLMethods.href(new URL(p, baseUrl));
 			});
 
-		const fullName = filePath.split("/").pop();
-		const lastDot = fullName.lastIndexOf(".");
+		const fullName = ArrayMethods.pop(splitText(filePath, "/"));
+		const lastDot = StringMethods.lastIndexOf(fullName, ".");
 		// Ternary false-arm (lastDot < 0) is unreachable: files reaching
 		// #loadModuleBrowser have already passed #manifestNodeToStructure's
 		// ALLOWED_EXTS filter, which requires a dot + recognised JS extension.
 		/* v8 ignore next */
-		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
+		const name = lastDot >= 0 ? StringMethods.slice(fullName, 0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
 		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
 		// The live runtime tells a suspended call apart from the host by the module's location in a stack
 		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
 		// URL, or another path on a server), so the URL actually imported is recorded to match against.
-		let byMount = this.#importedLocations.get(filePath);
-		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
-		byMount.set(moduleID ?? "", String(imported));
+		let byMount = MapMethods.get(this.#importedLocations, filePath);
+		if (!byMount) MapMethods.set(this.#importedLocations, filePath, (byMount = new Map()));
+		MapMethods.set(byMount, moduleID ?? "", String(imported));
 		this.#importedLocationList = null;
 		this.#rememberImportedURL(filePath, String(imported));
 		// The helper files a leaf imports carry no tag in a browser: the folder the leaf came from tells them a module's.
@@ -1446,10 +1492,10 @@ export class Loader extends ComponentBase {
 	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
 	 */
 	importedLocationsFor(filePath, moduleID) {
-		const byMount = this.#importedLocations.get(filePath);
+		const byMount = MapMethods.get(this.#importedLocations, filePath);
 		if (!byMount) return undefined;
-		if (moduleID != null && byMount.has(moduleID)) return new Set([byMount.get(moduleID)]);
-		return new Set(byMount.values());
+		if (moduleID != null && MapMethods.has(byMount, moduleID)) return setFrom([MapMethods.get(byMount, moduleID)]);
+		return setFrom(mapValuesToArray(byMount));
 	}
 
 	/**
@@ -1465,7 +1511,11 @@ export class Loader extends ComponentBase {
 	importedLocations() {
 		if (this.#importedLocationList) return this.#importedLocationList;
 		const locations = [];
-		for (const [filePath, byMount] of this.#importedLocations) locations.push(filePath, ...byMount.values());
+		for (const ofEntry of mapEntries(this.#importedLocations)) {
+			const filePath = ofEntry[0],
+				byMount = ofEntry[1];
+			Reflect.apply(ArrayMethods.push, undefined, concatLists([locations], concatLists([filePath], mapValuesToArray(byMount))));
+		}
 		this.#importedLocationList = locations;
 		return locations;
 	}
@@ -1487,7 +1537,8 @@ export class Loader extends ComponentBase {
 		}
 
 		// Add named exports (excluding module.exports which is a Node.js internal property)
-		for (const key of Objects.keys(module)) {
+		for (let ofIndex = 0, ofList = Objects.keys(module); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				// Reserved-name rejection (#260): an export named for a framework-reserved key
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
@@ -1526,11 +1577,11 @@ export class Loader extends ComponentBase {
 		if (exports.default && typeof exports.default === "object" && exports.default !== null && "default" in exports.default) {
 			// Check if this looks like the CJS pattern:
 			// All named exports at root should also exist in exports.default
-			const rootNamedKeys = Objects.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
-			const defaultKeys = Objects.keys(exports.default).filter((k) => k !== "default");
+			const rootNamedKeys = filterList(Objects.keys(exports), (k) => k !== "default" && k !== "module.exports");
+			const defaultKeys = filterList(Objects.keys(exports.default), (k) => k !== "default");
 
 			// If all root named exports exist in exports.default, this is the CJS pattern
-			const isCJSPattern = rootNamedKeys.every((k) => k in exports.default);
+			const isCJSPattern = ArrayMethods.every(rootNamedKeys, (k) => k in exports.default);
 
 			if (isCJSPattern && defaultKeys.length > 0) {
 				// Unwrap: promote exports.default.default to exports.default

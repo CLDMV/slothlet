@@ -30,14 +30,26 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
-import { Reflect, Objects, Arrays, Functions, Set } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	FunctionMethods,
+	Functions,
+	Objects,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	StringMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
+const LANGUAGE_PROTOTYPES = setFrom([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
  * Whether `descriptor` is one the language gives every function of its kind for `key`: its `name` and
@@ -192,8 +204,8 @@ export class Flatten extends ComponentBase {
 			if (multiDefaultDecision.preserveAsNamespace) {
 				const exportToCheck = typeof mod === "function" ? mod : mod?.default && typeof mod.default === "function" ? mod.default : null;
 				if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
-					const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
-					const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+					const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+					const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 					if (normalizedFunctionName === normalizedModuleName) {
 						multiDefaultDecision.preferredName = exportToCheck.name;
 					}
@@ -224,8 +236,8 @@ export class Flatten extends ComponentBase {
 
 		if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 			// Check if function name relates to filename (case-insensitive, ignoring separators)
-			const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
-			const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+			const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+			const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 			const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
 
 			// Rule 9: Use exact function name to preserve casing (XMLParser vs xmlParser, getHTTPStatus vs getHttpStatus)
@@ -298,10 +310,13 @@ export class Flatten extends ComponentBase {
 	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
 	 */
 	primitiveDefaultNamespace(value, mod, moduleKeys) {
-		if (!Objects.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
+		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") || moduleKeys.length === 0) return null;
 		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
 		const namespace = { default: value };
-		for (const key of moduleKeys) namespace[key] = mod[key];
+		for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			namespace[key] = mod[key];
+		}
 		return namespace;
 	}
 
@@ -341,11 +356,11 @@ export class Flatten extends ComponentBase {
 		const seen = new Set();
 		for (
 			let node = value;
-			node !== null && (typeof node === "object" || typeof node === "function") && !seen.has(node);
+			node !== null && (typeof node === "object" || typeof node === "function") && !SetMethods.has(seen, node);
 			node = Reflect.getPrototypeOf(node)
 		) {
-			seen.add(node);
-			if (LANGUAGE_PROTOTYPES.has(node)) return false;
+			SetMethods.add(seen, node);
+			if (SetMethods.has(LANGUAGE_PROTOTYPES, node)) return false;
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
 			if (descriptor) return !(node === value && typeof value === "function" && isLanguageFunctionMember(key, descriptor));
 		}
@@ -370,8 +385,8 @@ export class Flatten extends ComponentBase {
 		// The chain is scanned once; a Proxy may report one that loops back to itself.
 		const seen = new Set();
 		let found;
-		for (let node = target; node !== null && !found && !seen.has(node); node = Reflect.getPrototypeOf(node)) {
-			seen.add(node);
+		for (let node = target; node !== null && !found && !SetMethods.has(seen, node); node = Reflect.getPrototypeOf(node)) {
+			SetMethods.add(seen, node);
 			found = Reflect.getOwnPropertyDescriptor(node, key);
 		}
 		if (found === undefined || ("value" in found && found.writable)) {
@@ -475,13 +490,18 @@ export class Flatten extends ComponentBase {
 		const isAddapiFile =
 			moduleName === "addapi" ||
 			(file && file.name === "addapi") ||
-			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
+			(file &&
+				file.fullName &&
+				ArrayMethods.includes(["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"], StringMethods.toLowerCase(file.fullName)));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
 			// A primitive default holds no members: it is kept under `default` beside the named exports.
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
+				for (let ofIndex = 0, ofList = Objects.keys(primitiveNamespace); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					members[key] = [key];
+				}
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
 			// A function default gets a callable layer that holds the named exports, and an object default is
@@ -491,7 +511,8 @@ export class Flatten extends ComponentBase {
 			const moduleContent = isObjectDefault ? this.cloneDefault(mod.default) : this.composeFunctionDefault(mod.default);
 			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
-			for (const key of moduleKeys) {
+			for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const conflicts = this.defaultHasMember(mod.default, key);
 				if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
 				this.assignNamedExport(moduleContent, key, mod[key]);
@@ -510,23 +531,30 @@ export class Flatten extends ComponentBase {
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
+				for (let ofIndex = 0, ofList = Objects.keys(primitiveNamespace); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					members[key] = [key];
+				}
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
 					// The copy carries the default object's own members.
-					for (const key of Objects.keys(mod.default)) members[key] = ["default", key];
+					for (let ofIndex = 0, ofList = Objects.keys(mod.default); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						members[key] = ["default", key];
+					}
 				}
 				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
 				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
-				for (const key of moduleKeys) {
+				for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					const conflicts = this.defaultHasMember(mod.default, key);
 					if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
 					this.assignNamedExport(moduleContent, key, mod[key]);
@@ -537,7 +565,8 @@ export class Flatten extends ComponentBase {
 			// Only named exports: expose each directly (caller merges to parent)
 			const moduleContent = {};
 			const members = {};
-			for (const key of moduleKeys) {
+			for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				moduleContent[key] = mod[key];
 				members[key] = [key];
 			}
@@ -548,12 +577,15 @@ export class Flatten extends ComponentBase {
 		if (isSelfReferential) {
 			if (mod[moduleName]) return { moduleContent: mod[moduleName], origins: { self: [moduleName], members: {} } };
 			const members = {};
-			for (const key of Objects.keys(mod)) members[key] = [key];
+			for (let ofIndex = 0, ofList = Objects.keys(mod); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				members[key] = [key];
+			}
 			return { moduleContent: mod, origins: { self: null, members } };
 		}
 
 		// Hybrid pattern: default + named exports
-		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+		if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
@@ -565,7 +597,8 @@ export class Flatten extends ComponentBase {
 				// config default, matching every other collision decision in this same build
 				// (#372/#373 review, suppressed finding).
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
-				for (const key of moduleKeys) {
+				for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
@@ -586,7 +619,8 @@ export class Flatten extends ComponentBase {
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
-				for (const key of moduleKeys) {
+				for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
@@ -602,7 +636,8 @@ export class Flatten extends ComponentBase {
 			// Default is a primitive: wrap in a namespace object
 			const moduleContent = { default: mod.default };
 			const members = { default: ["default"] };
-			for (const key of moduleKeys) {
+			for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				moduleContent[key] = mod[key];
 				members[key] = [key];
 			}
@@ -610,7 +645,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+		if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }
@@ -620,7 +655,8 @@ export class Flatten extends ComponentBase {
 		// Fallback: named-only exports (no default — every path with a default returns above)
 		const moduleContent = {};
 		const members = {};
-		for (const key of moduleKeys) {
+		for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			moduleContent[key] = mod[key];
 			members[key] = [key];
 		}
@@ -658,7 +694,8 @@ export class Flatten extends ComponentBase {
 		const isAddapiFile =
 			moduleName === "addapi" ||
 			fileBaseName === "addapi" ||
-			(fileBaseName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(fileBaseName.toLowerCase()));
+			(fileBaseName &&
+				ArrayMethods.includes(["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"], StringMethods.toLowerCase(fileBaseName)));
 		if (isAddapiFile) {
 			// Check for metadata default export pattern (object default + named exports)
 			if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleKeys.length > 0) {
@@ -717,7 +754,7 @@ export class Flatten extends ComponentBase {
 		// Rule 10 (F02) - C14: Parent-level flattening (generic filenames)
 		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Arrays.isArray(mod)) {
 			const genericFilenames = ["singlefile", "index", "main", "default"];
-			const isGenericFilename = genericFilenames.includes(moduleName.toLowerCase());
+			const isGenericFilename = ArrayMethods.includes(genericFilenames, StringMethods.toLowerCase(moduleName));
 
 			if (moduleKeys.length === 1 && isGenericFilename) {
 				return {
@@ -731,8 +768,9 @@ export class Flatten extends ComponentBase {
 		// Rule 9 - C15: Function name matches folder
 		if (typeof mod === "function" && mod.name && currentDepth > 0) {
 			const functionNameMatchesFolder =
-				mod.name.toLowerCase() === categoryName.toLowerCase() ||
-				mod.name.toLowerCase().replace(/[-_]/g, "") === categoryName.toLowerCase().replace(/[-_]/g, "");
+				StringMethods.toLowerCase(mod.name) === StringMethods.toLowerCase(categoryName) ||
+				RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(mod.name), "") ===
+					RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(categoryName), "");
 
 			if (functionNameMatchesFolder) {
 				return {
@@ -750,8 +788,8 @@ export class Flatten extends ComponentBase {
 
 		if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 			// Check if function name relates to filename (case-insensitive, ignoring separators)
-			const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
-			const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+			const normalizedFunctionName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(exportToCheck.name), "");
+			const normalizedModuleName = RegExpMethods.symbolReplace(/[-_]/g, StringMethods.toLowerCase(moduleName), "");
 			const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
 
 			// Rule 9: Always use function name to preserve casing (XMLParser vs xmlParser)
