@@ -4253,10 +4253,9 @@ export class ApiBuilder extends ComponentBase {
 			}
 		};
 
-		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
-		// Note: Hooks are not yet implemented in v3, but the config option is ready
+		// Remove the `hook` namespace when hooks are disabled (unless diagnostics mode)
 		if (!config.hook?.enabled && config.diagnostics !== true) {
-			delete namespace.hooks;
+			delete namespace.hook;
 		}
 
 		// Add diagnostics if enabled
