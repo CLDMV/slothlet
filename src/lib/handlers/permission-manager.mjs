@@ -2352,12 +2352,12 @@ export class PermissionManager extends ComponentBase {
 	 */
 	writeRulesFor(callerPath) {
 		if (!this.#enabled) return "";
-		const cached = this.#writeRulesForCache.get(callerPath);
+		const cached = MapMethods.get(this.#writeRulesForCache, callerPath);
 		if (cached !== undefined) return cached;
 		const ids = [];
-		for (const entry of this.#writeRules.values()) if (this.#getCompiledPattern(entry.caller)(callerPath)) ids.push(entry.id);
-		const signature = ids.join("\u0000");
-		this.#writeRulesForCache.set(callerPath, signature);
+		for (const entry of mapValues(this.#writeRules)) if (this.#getCompiledPattern(entry.caller)(callerPath)) listPush(ids, entry.id);
+		const signature = ArrayMethods.join(ids, "\u0000");
+		MapMethods.set(this.#writeRulesForCache, callerPath, signature);
 		return signature;
 	}
 
@@ -3684,12 +3684,12 @@ export class PermissionManager extends ComponentBase {
 	#clearCache() {
 		MapMethods.clear(this.#resolvedCache);
 		this.#exactDenyTargets = null;
-		this.#exactDenyPrefixes.clear();
-		this.#allowsBeneath.clear();
-		this.#writeCache.clear();
-		this.#subtreeCache.clear();
-		this.#readSubtreeCache.clear();
-		this.#writeRulesForCache.clear();
+		MapMethods.clear(this.#exactDenyPrefixes);
+		MapMethods.clear(this.#allowsBeneath);
+		MapMethods.clear(this.#writeCache);
+		MapMethods.clear(this.#subtreeCache);
+		MapMethods.clear(this.#readSubtreeCache);
+		MapMethods.clear(this.#writeRulesForCache);
 		this.#ruleEpoch++;
 	}
 
