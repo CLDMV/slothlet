@@ -23,7 +23,8 @@
  * deeper, a function held in a module's data, and slothlet's own functions under `self.slothlet`. The value is the one
  * the host reads, by a dot read, `Reflect.get` and the member's own descriptor alike. A member a module itself provides
  * by that name (a callable folder's `name.mjs` or `length.mjs`) is the module's data and is held to the rules like any
- * other member. Eager and lazy, async and live, `"precise"` and `"fast"` attribution.
+ * other member, a named `name` or `length` export beside a default function included (T29). Eager and lazy, async and
+ * live, `"precise"` and `"fast"` attribution.
  * @module tests/vitests/suites/permissions/permissions-function-builtin-name
  */
 
@@ -265,3 +266,35 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 		}
 	});
 });
+
+describe.each(CONFIGS)(
+	"Permissions > a named name and length export beside a default function (T29) > $name",
+	({ config, attribution }) => {
+		const EXPORTED = fileURLToPath(new URL("exported", FIXTURE));
+
+		it.each(POLICIES)("is the module's data, held to the rules: $label", async ({ permissions, denies }) => {
+			const rules = permissions.rules.map((rule) => (rule.target === "mnt.**" ? { ...rule, target: "ext.**" } : rule));
+			const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, rules, attribution } });
+			try {
+				await api.slothlet.api.add(["ext"], EXPORTED);
+				await api.ext.calc;
+				await api.probe;
+				expect(hostRead(api, "ext.calc", "name")).toEqual({
+					held: "function",
+					dot: "custom-name",
+					reflect: "custom-name",
+					descriptor: "custom-name"
+				});
+				expect(hostRead(api, "ext.calc", "length")).toEqual({ held: "function", dot: 7, reflect: 7, descriptor: 7 });
+				const refused = { held: "function", dot: "THROW PERMISSION_DENIED", reflect: "THROW PERMISSION_DENIED", descriptor: undefined };
+				const read = (key) => withSuppressedSlothletErrorOutput(() => api.probe.read("ext.calc", key));
+				expect(await read("name")).toEqual(
+					denies ? refused : { held: "function", dot: "custom-name", reflect: "custom-name", descriptor: "custom-name" }
+				);
+				expect(await read("length")).toEqual(denies ? refused : { held: "function", dot: 7, reflect: 7, descriptor: 7 });
+			} finally {
+				await api.shutdown();
+			}
+		});
+	}
+);
