@@ -4144,9 +4144,9 @@ export function slothletInstanceImports() {
 				const instanceID = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(importer)[1] ?? ""), "slothlet_instance");
 				if (target && !target.external && instanceID && isRuntimeEntryId(target.id)) return `\0${SELF_PREFIX}${instanceID}|${target.id}`;
 			}
-			// An `import` statement of a `data:` or `blob:` URL in an instance file: resolved as the file links, before
-			// anything of the file has run, so it is refused, as Node's resolve hook refuses it (a module's `import()` of one
-			// is checked where it runs; see checkModuleImport).
+			// An `import` statement of a `data:` or `blob:` URL in an instance file: resolved here, in the vite server, where
+			// the instance's rules are not, so it is refused whatever they say (Node's resolve hook decides it by the
+			// importing file's module path; a module's `import()` of one is checked where it runs, see checkModuleImport).
 			if (tagged && RegExpMethods.exec(/^(?:data|blob):/i, source) !== null) throw await viteCapabilityRefusal(importer);
 			// A file only the host loaded imports as vite resolves it.
 			if (!tagged && !MapMethods.has(moduleImporters, importer)) return null;
@@ -4234,8 +4234,8 @@ export function slothletInstanceImports() {
 					}
 				};
 				visit(ast.body);
-				// An `import` / `export … from` statement of a `data:` or `blob:` URL: refused, as Node's resolve hook refuses
-				// it (vitest's runner loads such a URL itself, so no resolve names this file as its importer).
+				// An `import` / `export … from` statement of a `data:` or `blob:` URL: refused here, where the instance's rules
+				// are not (vitest's runner loads such a URL itself, so no resolve names this file as its importer).
 				for (let index = 0; index < ast.body.length; index++) {
 					const node = ast.body[index];
 					const source =

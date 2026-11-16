@@ -4185,6 +4185,27 @@ function runtime_importedUnder(wrapper, location) {
 }
 
 /**
+ * The load of an instance's file whose own code is running now, before any node stands for it: the file of the nearest
+ * frame that is not slothlet's own or Node's, or the file an import is being resolved for, among the files the
+ * instance's loader is loading (see `Loader#loadingFile`). Its top-level code runs as its module path (S4).
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [importer=null] - The importing file's URL, for an import being resolved as the file links.
+ * @returns {{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}|null} The load, or null.
+ * @internal
+ */
+function runtime_loadingFileRunning(slothlet, importer = null) {
+	const loader = slothlet?.processors?.loader;
+	if (typeof loader?.loadingFile !== "function") return null;
+	if (importer !== null) return loader.loadingFile(toComparablePath(importer), runtime_frameModuleTag(importer));
+	for (const frame of framesOf(runtime_captureFrames(24))) {
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:")) continue;
+		if (frame.evaluated || isForeignScript(frame)) return null;
+		return loader.loadingFile(frame.path, runtime_frameModuleTag(frame.line));
+	}
+	return null;
+}
+
+/**
  * Whether a frame carrying no instance tag runs at an ES module file a running instance with its permission system on
  * built leaves from (see {@link runtime_definerAt}). In Node, and under a vite runner, slothlet loads each such file
  * under the instance's tag; a CommonJS file runs under its plain path, and is told by its script instead.
@@ -5264,6 +5285,7 @@ export function internals(consumer) {
 		runtime_captureFrames,
 		sampleStoreScripts,
 		runtime_codeWritersOnStack,
+		runtime_loadingFileRunning,
 		setApiValueCheck,
 		setHandedOutCheck,
 		setHostPrototypeCheck,
@@ -5364,6 +5386,8 @@ const guarded_frameDefiner = guardInternal(frameDefiner, "frameDefiner", import.
 const guarded_isLeafFileFunction = guardInternal(isLeafFileFunction, "isLeafFileFunction", import.meta.url);
 /** @type {typeof registerLeafFile} */
 const guarded_registerLeafFile = guardInternal(registerLeafFile, "registerLeafFile", import.meta.url);
+/** @type {typeof runtime_loadingFileRunning} */
+const guarded_runtime_loadingFileRunning = guardInternal(runtime_loadingFileRunning, "runtime_loadingFileRunning", import.meta.url);
 /** @type {typeof runtime_codeWritersOnStack} */
 const guarded_runtime_codeWritersOnStack = guardInternal(runtime_codeWritersOnStack, "runtime_codeWritersOnStack", import.meta.url);
 export {
@@ -5397,5 +5421,6 @@ export {
 	guarded_frameDefiner as frameDefiner,
 	guarded_isLeafFileFunction as isLeafFileFunction,
 	guarded_registerLeafFile as registerLeafFile,
-	guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack
+	guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack,
+	guarded_runtime_loadingFileRunning as runtime_loadingFileRunning
 };

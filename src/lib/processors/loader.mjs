@@ -41,7 +41,7 @@ import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#h
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
-import { internals as framePlacementInternals } from "#handlers/frame-placement";
+import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
 	Arrays,
@@ -70,6 +70,7 @@ import {
 	Set,
 	setFrom,
 	SetMethods,
+	setValues,
 	splitText,
 	String,
 	StringMethods,
@@ -509,10 +510,59 @@ export class Loader extends ComponentBase {
 	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
 	 * @param {string} [moduleID] - Module ID for additional cache busting (used in api.slothlet.api.add)
 	 * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting (forces fresh import)
+	 * @param {string[]|null} [paths=null] - The paths the file's top-level code can run as while it first loads (see
+	 *   {@link Loader#loadingFile}), as the builder reads them before the file's exports are known.
 	 * @returns {Promise<Object>} Loaded module
 	 * @public
 	 */
-	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
+	async loadModule(filePath, instanceID, moduleID, cacheBust = null, paths = null) {
+		const entry = { path: toComparablePath(filePath), moduleID: moduleID ?? null, paths: paths ? Objects.freeze(copyList(paths)) : null };
+		SetMethods.add(this.#loadingFiles, entry);
+		try {
+			return await this.#loadModuleTracked(filePath, instanceID, moduleID, cacheBust);
+		} finally {
+			SetMethods.delete(this.#loadingFiles, entry);
+		}
+	}
+
+	/**
+	 * The files this loader is loading now (see {@link Loader#loadModule}).
+	 * @type {Set<{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}>}
+	 * @private
+	 */
+	#loadingFiles = new Set();
+
+	/**
+	 * A file this loader is loading now, by its comparable path and the mount its URL names: what its top-level code
+	 * runs as while it first loads, before any node stands for it (S4: the file's module path).
+	 * @param {string} path - The file, in comparable form.
+	 * @param {string|null} [mount=null] - The mount tag the code's location carries.
+	 * @returns {{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}|null} The load, or null when the
+	 *   file is not loading, or when two loads of it cannot be told apart.
+	 * @public
+	 * @example
+	 * loader.loadingFile("/app/api/ext/render.mjs", "ext"); // { path, moduleID: "ext", paths: ["ext.render"] }
+	 */
+	loadingFile(path, mount = null) {
+		let found = null;
+		for (const entry of setValues(this.#loadingFiles)) {
+			if (entry.path !== path || (mount !== null && entry.moduleID !== mount)) continue;
+			if (found) return null;
+			found = entry;
+		}
+		return found;
+	}
+
+	/**
+	 * Load a single module, inside its load context (see {@link Loader#loadModule}).
+	 * @param {string} filePath - Path to module file.
+	 * @param {string} [instanceID] - Slothlet instance ID.
+	 * @param {string} [moduleID] - Module ID.
+	 * @param {number|null} [cacheBust=null] - Reload cache bust.
+	 * @returns {Promise<Object>} Loaded module.
+	 * @private
+	 */
+	async #loadModuleTracked(filePath, instanceID, moduleID, cacheBust = null) {
 		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
 		if (!runtimeLoaded) {
 			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).

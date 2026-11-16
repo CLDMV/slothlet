@@ -174,6 +174,7 @@ const {
 	setHostPrototypeCheck,
 	frameDefiner,
 	runtime_codeWritersOnStack,
+	runtime_loadingFileRunning,
 	isLeafFileFunction,
 	outerCallerCeiling,
 	setApiValueCheck,
@@ -495,6 +496,19 @@ function runtime_assertCapability(slothlet, name, route, moduleFile = null, file
 	}
 	// A file of the instance's linking an import: its own code, whatever the stack says (nothing of the file's runs yet).
 	if (caller === null && moduleFile !== null) caller = UNATTRIBUTED_READER;
+	// A file's own top-level code as it first loads, or an import it links, before any node stands for it: decided as the
+	// file's module path (S4), as the loader reads it ahead of the build. Code that names no file loading (a helper's top
+	// level, code no load accounts for) stays refused.
+	if (caller === UNATTRIBUTED_READER) {
+		const load = runtime_loadingFileRunning(slothlet, moduleFile);
+		if (load?.paths?.length) {
+			permissionManager.assertCapabilityForPaths(load.paths, name, route);
+			if (filename !== null && namesForeignFile(filename, load.path)) {
+				permissionManager.assertCapabilityForPaths(load.paths, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
+			}
+			return;
+		}
+	}
 	permissionManager.assertCapability(caller, name, route);
 	// Opened for the caller: compiling under the name of a real file outside its own folder is still refused, since the
 	// code would be placed as that file's (a package's, another module's, the host's).

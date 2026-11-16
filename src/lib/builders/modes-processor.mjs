@@ -838,12 +838,32 @@ export class ModesProcessor extends ComponentBase {
 		 * @param {object} file - The file entry.
 		 * @returns {Promise<{exports: object}>} Its exports, boxed.
 		 */
+		/**
+		 * The paths a file's top-level code can run as while the file first loads (its module path, see the S4 rule in
+		 * PERMISSIONS.md), read before its exports are known: the file's own path, or the level's for a file the level
+		 * takes its name from (its self-named file, `addapi`). The only file of a folder may take the folder's path once its
+		 * exports are known, so both are given and both have to be allowed.
+		 * @param {object} file - The file entry.
+		 * @returns {string[]} The paths.
+		 */
+		const modes_moduleLoadPaths = (file) => {
+			const name = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
+			const own = levelPath ? `${levelPath}.${name}` : name;
+			if (levelPath && (name === "addapi" || (categoryName && name === categoryName))) return [levelPath];
+			return levelPath && files.length === 1 ? [own, levelPath] : [own];
+		};
 		const modes_loadExports = async (file) => {
 			// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 			// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 			// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
 			if (file.synthetic) return { exports: file.exports };
-			const loadedNamespace = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+			const loadedNamespace = await this.slothlet.processors.loader.loadModule(
+				file.path,
+				this.slothlet.instanceID,
+				moduleID,
+				cacheBust,
+				modes_moduleLoadPaths(file)
+			);
 			// Index where each exported value sits in the namespace, so every wrapper built from this
 			// file can record its module origin (#484).
 			this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
@@ -2139,7 +2159,14 @@ export class ModesProcessor extends ComponentBase {
 								isGeneric,
 								filenameMatches: filenameMatchesFolder
 							});
-							const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+							const folderPath = levelPath ? `${levelPath}.${subDirName}` : subDirName;
+							const mod = await this.slothlet.processors.loader.loadModule(
+								file.path,
+								this.slothlet.instanceID,
+								moduleID,
+								cacheBust,
+								filenameMatchesFolder ? [folderPath] : [`${folderPath}.${moduleName}`, folderPath]
+							);
 							this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 							const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
@@ -2923,7 +2950,13 @@ export class ModesProcessor extends ComponentBase {
 				const isGeneric = ArrayMethods.includes(genericFilenames, StringMethods.toLowerCase(moduleName));
 				const filenameMatchesFolder = moduleName === categoryName;
 				if (isGeneric || filenameMatchesFolder) {
-					const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+					const mod = await this.slothlet.processors.loader.loadModule(
+						file.path,
+						this.slothlet.instanceID,
+						moduleID,
+						cacheBust,
+						filenameMatchesFolder ? [apiPath] : [`${apiPath}.${moduleName}`, apiPath]
+					);
 					this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 					const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");

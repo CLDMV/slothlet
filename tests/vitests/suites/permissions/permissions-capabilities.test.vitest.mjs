@@ -29,6 +29,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import vm from "node:vm";
 import Module from "node:module";
@@ -193,46 +194,66 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			});
 		});
 
-		// As the file first loads, no node stands for it yet, so its code cannot be told from the instance's other files.
+		// A file's top-level code, as the file first loads, runs as the file's module path (S4): a rule on that path opens a
+		// capability for it, a rule on one of its leaves or on another module does not.
+		const TOP_PLAIN = {
+			newFunction: { ok: true, value: 7 },
+			vm: { ok: true, value: 7 },
+			stringTimeout: { ok: false, code: "ERR_INVALID_ARG_TYPE" }
+		};
+		const TOP_REFUSED = {
+			newFunction: REFUSED,
+			vm: REFUSED,
+			stringTimeout: REFUSED
+		};
 		it.each([
-			["by default", []],
-			["also under a rule on the file's module path", [{ caller: "toplevel.**", target: "capability:code", effect: "allow" }]]
-		])("a file's top-level code compiling a string as it first loads is refused, %s", async (_label, extra) => {
-			const outcome = { ok: false, code: "CAPABILITY_REFUSED" };
+			["refused by default", [], TOP_REFUSED],
+			["opened by a rule on the file's module path", [{ caller: "toplevel.boot", target: "capability:code", effect: "allow" }], TOP_PLAIN],
+			["opened by a rule on the module's subtree", [{ caller: "toplevel.**", target: "capability:code", effect: "allow" }], TOP_PLAIN],
+			[
+				"not opened by a rule on one of the file's leaves",
+				[{ caller: "toplevel.boot.result", target: "capability:code", effect: "allow" }],
+				TOP_REFUSED
+			],
+			["not opened by a rule on another module", [{ caller: "coder.**", target: "capability:code", effect: "allow" }], TOP_REFUSED]
+		])("a file's top-level code turning strings into code as it first loads: %s", async (_label, extra, outcome) => {
 			api = await slothlet({
 				...config,
 				silent: true,
 				base: path.join(ROOT, "base"),
 				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
 			});
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
 			await api.slothlet.api.add("toplevel", path.join(ROOT, "toplevel"), { moduleID: "toplevel" });
 			expect(await api.toplevel.boot.result()).toEqual(outcome);
 		});
 
-		it("an import statement of a data: URL in a module file is refused, whatever the rules", async () => {
+		// Under vite's module runner the import statement is resolved where the instance's rules are not (the vite server),
+		// so it is refused whatever they say; under Node's own loader the importing file's module path decides (below).
+		it.each([
+			["by default", []],
+			[
+				"also under a rule on the importing file's module path",
+				[{ caller: "staticdata.inline", target: "capability:imports", effect: "allow" }]
+			]
+		])("an import statement of a data: URL in a module file under vite is refused, %s", async (_label, extra) => {
 			api = await slothlet({
 				...config,
 				silent: true,
 				base: path.join(ROOT, "base"),
-				permissions: {
-					defaultPolicy: "deny",
-					rules: [OPEN, { caller: "**", target: "capability:imports", effect: "allow" }],
-					attribution
-				}
+				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
 			});
 			const loading = (async () => {
 				await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { moduleID: "staticdata" });
 				return api.staticdata.inline.value();
 			})();
-			const error = await withSuppressedSlothletErrorOutput(() =>
+			const outcome = await withSuppressedSlothletErrorOutput(() =>
 				loading.then(
-					() => null,
-					(caught) => caught
+					(value) => ({ ok: true, value }),
+					(error) => ({ ok: false, refused: String(error?.message).includes("CAPABILITY_REFUSED") })
 				)
 			);
-			expect(
-				JSON.stringify({ code: error?.code, cause: error?.cause?.code ?? error?.originalError?.code, message: String(error?.message) })
-			).toContain("CAPABILITY_REFUSED");
+			expect(outcome).toEqual({ ok: false, refused: true });
 		});
 
 		it("Node's contextify binding stays refused to a leaf the capability is opened for", async () => {
@@ -251,4 +272,63 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			);
 		});
 	});
+});
+
+/**
+ * Under Node's own loader, outside vitest's module runner: an import statement of a `data:` URL in a module file is
+ * decided by the importing file's module path, as the file links.
+ */
+describe("Permissions > built-in capabilities > a static data: import under Node's own loader", () => {
+	const SCENARIOS = {
+		none: [],
+		own: [{ caller: "staticdata.inline", target: "capability:imports", effect: "allow" }],
+		sibling: [{ caller: "coder.**", target: "capability:imports", effect: "allow" }]
+	};
+	const script = `
+		import path from "node:path";
+		import slothlet from "@cldmv/slothlet";
+		const ROOT = ${JSON.stringify(ROOT)};
+		const SCENARIOS = ${JSON.stringify(SCENARIOS)};
+		const out = {};
+		for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) for (const attribution of ["precise", "fast"]) {
+			for (const [name, extra] of Object.entries(SCENARIOS)) {
+				const api = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
+					permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...extra], attribution } });
+				await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
+				let outcome;
+				try {
+					await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { moduleID: "staticdata" });
+					outcome = await api.staticdata.inline.value();
+				} catch (error) {
+					outcome = String(error?.message).includes("CAPABILITY_REFUSED") ? "CAPABILITY_REFUSED" : String(error?.code);
+				}
+				out[mode + "/" + runtime + "/" + attribution + "/" + name] = outcome;
+				await api.shutdown();
+			}
+		}
+		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
+		process.exit(0);
+	`;
+	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
+		cwd: path.resolve(ROOT, "../.."),
+		encoding: "utf8",
+		timeout: 240000
+	});
+	const line = String(child.stdout)
+		.split("\n")
+		.find((text) => text.startsWith("RESULT "));
+	const out = line ? JSON.parse(line.slice("RESULT ".length)) : {};
+
+	it("runs the probe", () => {
+		expect(child.status).toBe(0);
+	});
+
+	for (const mode of ["eager", "lazy"])
+		for (const runtime of ["async", "live"])
+			for (const attribution of ["precise", "fast"]) {
+				it(`${mode}/${runtime}/${attribution}: refused by default, opened by a rule on the importing file's module path, not by another module's`, () => {
+					const at = `${mode}/${runtime}/${attribution}`;
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+				});
+			}
 });

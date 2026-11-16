@@ -2301,6 +2301,28 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Refuse a file's top-level code, as it first loads, a built-in capability (see {@link assertCapability}): decided
+	 * for each path the code can run as (its module path, as the loader reads it before the build), all of which have to
+	 * be opened.
+	 *
+	 * @param {ReadonlyArray<string>} paths - The paths.
+	 * @param {string} name - The capability.
+	 * @param {string} route - What the code used.
+	 * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason.
+	 * @returns {void}
+	 * @throws {SlothletError} `CAPABILITY_REFUSED`.
+	 * @example
+	 * pm.assertCapabilityForPaths(["ext.render"], "code", "new Function");
+	 */
+	assertCapabilityForPaths(paths, name, route, refusal = null) {
+		if (!this.#enabled) return;
+		for (let ofIndex = 0, ofList = paths; ofIndex < ofList.length; ofIndex++) {
+			const path = ofList[ofIndex];
+			this.assertCapability({ ____slothletInternal: { apiPath: path } }, name, route, refusal);
+		}
+	}
+
+	/**
 	 * The rule that decides a capability for a caller: among the rules whose target is exactly the capability's (the
 	 * built-in deny always among them), most specific first, then the higher layer, then the last registered.
 	 *
