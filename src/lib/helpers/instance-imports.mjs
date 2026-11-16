@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:05-08:00 (1794635285)
+ *	@Last modified time: 2026-11-15T18:55:15-08:00 (1794797715)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -887,6 +887,202 @@ const OWN_CLAIMS = new Set();
  * @private
  */
 const OWN_MODULE_PREFIX = "slothlet-own:";
+
+/**
+ * Virtual-module prefix: `slothlet-self:<instanceID>|<url>` is the module an instance's file is given for one of
+ * {@link SINGLE_COPY_FILES} (#803): it re-exports the runtime file, with a `self` of the form the instance's api root
+ * takes (see {@link selfModuleSource}).
+ * @type {string}
+ * @private
+ */
+const SELF_PREFIX = "slothlet-self:";
+
+/**
+ * The two forms of `self` each runtime entry file made, by the file's URL and by its namespace (#803): `object` (an
+ * object target, for an api whose root is an object) and `callable` (a bound function's target, for an api whose root
+ * is a function), and the setter of the file's own `self` binding.
+ * @type {Map<string|object, {object: object, callable: Function, bind: function(object): void}>}
+ * @private
+ */
+const SELF_FORMS = new Map();
+
+/**
+ * Whether each instance's api root is a function, by instance ID (#803), as the instance's `api` took it when it was
+ * first built: the form of `self` its files are given.
+ * @type {Map<string, boolean>}
+ * @private
+ */
+const SELF_KINDS = new Map();
+
+/**
+ * The setters of the `self` bindings each instance's files were given, by instance ID, then by runtime file URL
+ * (#803): each is called again when the instance's form is set.
+ * @type {Map<string, Map<string, Set<function(object): void>>>}
+ * @private
+ */
+const SELF_BINDINGS = new Map();
+
+/**
+ * Record the two forms of `self` one of slothlet's runtime entry files made (#803), and the setter of its own `self`
+ * export. Called by each of those files once, before {@link registerOwnModule}. The file's own `self` is given the form
+ * every running instance's root shares (see {@link sharedSelfCallable}).
+ * @param {string} url - The file's `import.meta.url`.
+ * @param {object} namespace - Its module namespace.
+ * @param {{object: object, callable: Function}} forms - The two forms.
+ * @param {function(object): void} bind - Sets the file's own `self` export.
+ * @returns {void}
+ * @internal
+ * @example
+ * registerSelfForms(import.meta.url, runtimeNamespace, { object: objectSelf, callable: callableSelf }, (v) => (self = v));
+ */
+function registerSelfForms(url, namespace, forms, bind) {
+	if (SELF_FORMS.has(url)) return;
+	const entry = Objects.freeze({ object: forms.object, callable: forms.callable, bind });
+	SELF_FORMS.set(url, entry);
+	SELF_FORMS.set(namespace, entry);
+	bind(sharedSelfCallable() ? entry.callable : entry.object);
+}
+
+/**
+ * The callable form of `self` the runtime entry file with this namespace made (#803), or null.
+ * @param {object} namespace - The runtime file's namespace.
+ * @returns {Function|null} Its callable form.
+ * @internal
+ */
+function callableSelfOf(namespace) {
+	return SELF_FORMS.get(namespace)?.callable ?? null;
+}
+
+/**
+ * Whether the `self` a runtime file exports to code no instance's own (the host's code, a page's leaves, which a
+ * browser loads without a resolve hook) takes the callable form (#803): when every instance running has a function
+ * root. With none running, or roots of both kinds, it is the object form.
+ * @returns {boolean} True for the callable form.
+ * @private
+ */
+function sharedSelfCallable() {
+	if (SELF_KINDS.size === 0) return false;
+	for (const callable of SELF_KINDS.values()) if (!callable) return false;
+	return true;
+}
+
+/**
+ * Give each runtime file's own `self` export the form {@link sharedSelfCallable} names.
+ * @returns {void}
+ * @private
+ */
+function rebindSharedSelf() {
+	const callable = sharedSelfCallable();
+	for (const [key, entry] of SELF_FORMS) if (typeof key === "string") entry.bind(callable ? entry.callable : entry.object);
+}
+
+/**
+ * Set the form of `self` an instance's files are given (#803): the callable form when its `api` is a function, the
+ * object form otherwise. Every `self` binding already given to its files takes the form, and the runtime files' own
+ * `self` exports follow (see {@link sharedSelfCallable}). Null forgets the instance (its shutdown, or a full reload's
+ * old ID).
+ * @param {string} instanceID - The instance.
+ * @param {boolean|null} callable - Whether its api root is a function, or null to forget it.
+ * @returns {void}
+ * @internal
+ */
+function setInstanceSelfKind(instanceID, callable) {
+	if (typeof instanceID !== "string") return;
+	if (callable === null) {
+		SELF_KINDS.delete(instanceID);
+		SELF_BINDINGS.delete(instanceID);
+		rebindSharedSelf();
+		return;
+	}
+	const kind = Boolean(callable);
+	if (SELF_KINDS.get(instanceID) === kind) return;
+	SELF_KINDS.set(instanceID, kind);
+	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+		const forms = SELF_FORMS.get(url);
+		if (forms) for (const set of setters) set(kind ? forms.callable : forms.object);
+	}
+	rebindSharedSelf();
+}
+
+/**
+ * The key under which each runtime entry file's `self` answers the function that binds an instance file's `self`
+ * (#803), whoever reads it and whether or not a call runs: see {@link bindInstanceSelf}. It starts with a NUL, which no
+ * api member's name can hold.
+ * @type {string}
+ * @internal
+ */
+const SELF_BIND_KEY = "\u0000slothlet:bindSelf";
+
+/**
+ * Give a `self` binding of an instance's file its form, now and whenever the instance's form is set (#803). The code
+ * of {@link selfModuleSource} calls it, through the runtime file's own `self` (see {@link SELF_BIND_KEY}). It hands out
+ * only one of the two forms the runtime file made, which any module can import, and takes nothing from its caller but
+ * a function to call.
+ * @param {string} url - The runtime file's URL.
+ * @param {string} instanceID - The instance.
+ * @param {function(object): void} assign - Sets the binding.
+ * @returns {void}
+ * @internal
+ */
+function bindInstanceSelf(url, instanceID, assign) {
+	const forms = SELF_FORMS.get(url);
+	if (!forms || typeof instanceID !== "string" || typeof assign !== "function") return;
+	let byURL = SELF_BINDINGS.get(instanceID);
+	if (!byURL) SELF_BINDINGS.set(instanceID, (byURL = new Map()));
+	let setters = byURL.get(url);
+	if (!setters) byURL.set(url, (setters = new Set()));
+	setters.add(assign);
+	assign(SELF_KINDS.get(instanceID) ? forms.callable : forms.object);
+}
+
+/**
+ * The source of the module an instance's file is given for one of slothlet's runtime entry files (#803): everything
+ * the file exports, with a `self` of the instance's own form. `self` is a live binding: it takes the callable form once
+ * the instance's api is built with a function root.
+ * The module reaches slothlet through the runtime file's own `self` alone (see {@link SELF_BIND_KEY}), never through
+ * the global object, so it loads whatever a module has done to the realm's built-ins, and it binds through the copy of
+ * slothlet that evaluated the runtime file.
+ * @param {string} instanceID - The instance.
+ * @param {string} url - The runtime file's URL.
+ * @param {string} [specifier=url] - What the module imports the file by (under vite, its module id).
+ * @returns {string} The module's source.
+ * @private
+ */
+function selfModuleSource(instanceID, url, specifier = url) {
+	return (
+		`export * from ${JSON.stringify(specifier)};\n` +
+		`import { self as shared } from ${JSON.stringify(specifier)};\n` +
+		`export let self = shared;\n` +
+		`shared[${JSON.stringify(SELF_BIND_KEY)}](${JSON.stringify(instanceID)}, (form) => { self = form; });\n`
+	);
+}
+
+/**
+ * Whether a vite module id is one of slothlet's runtime entry files (#803).
+ * @param {string} id - The module id: the file's path, perhaps with a query.
+ * @returns {boolean} True for `runtime.mjs` and the two runtimes it dispatches to.
+ * @private
+ */
+function isRuntimeEntryId(id) {
+	const path = toSlashPath(splitQuery(id)[0]);
+	return SINGLE_COPY_FILES.some((url) => NODE !== null && path === toSlashPath(NODE.url.fileURLToPath(url)));
+}
+
+/**
+ * The instance an importer of a runtime entry file belongs to, when it is one instance's own file (#803): the one its
+ * URL names, or the one instance a CommonJS file of no instance tag is held by.
+ * @param {string|undefined} parentURL - The importing file's URL.
+ * @returns {string|null} The instance ID.
+ * @private
+ */
+function selfInstanceOf(parentURL) {
+	if (typeof parentURL !== "string") return null;
+	const tagged = parentURL.includes(MARKER) ? new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance") : null;
+	if (tagged) return tagged;
+	if (!parentURL.startsWith("file:")) return null;
+	const found = instancesOfFile(parentURL);
+	return found.size === 1 ? [...found][0] : null;
+}
 
 /**
  * Record that one of slothlet's runtime entry files has been evaluated, with its namespace (#760). Called by each of
@@ -3009,7 +3205,12 @@ const HOOKS = Objects.freeze({
 	resolve: (specifier, context, nextResolve) => {
 		if (RESOLVE_PROBE.path !== null && specifier === RESOLVE_PROBE.path) RESOLVE_PROBE.seen = true;
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
-		if (specifier.startsWith(ESM_PREFIX) || specifier.startsWith(FACADE_PREFIX) || specifier.startsWith(OWN_MODULE_PREFIX)) {
+		if (
+			specifier.startsWith(ESM_PREFIX) ||
+			specifier.startsWith(FACADE_PREFIX) ||
+			specifier.startsWith(OWN_MODULE_PREFIX) ||
+			specifier.startsWith(SELF_PREFIX)
+		) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
 		const next = nextResolve(specifier, context);
@@ -3025,6 +3226,11 @@ const HOOKS = Objects.freeze({
 		// One of slothlet's runtime entry files, which this copy evaluated through another loader: the importer is given
 		// that module, unless it belongs to a second copy of slothlet Node loaded itself (#760).
 		const url = resolved?.url;
+		// An instance's file asking for a runtime entry file: the module that gives it the instance's own `self` (#803).
+		if (SINGLE_COPY_FILES.includes(url) && SELF_FORMS.has(url) && !isOtherCopysFile(context?.parentURL)) {
+			const instanceID = selfInstanceOf(context?.parentURL);
+			if (instanceID !== null) return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
+		}
 		if (OWN_MODULES.has(url) && !NODE_LOADED.has(url) && !isOtherCopysFile(context?.parentURL)) {
 			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
 		}
@@ -3042,6 +3248,11 @@ const HOOKS = Objects.freeze({
 				shortCircuit: true,
 				source: `module.exports = ${STATE_REF}.redeem(${JSON.stringify(ticket)}).requireFromModule(${JSON.stringify(target)}, "commonjs", module);\n`
 			};
+		}
+		// A runtime entry file as an instance's file is given it (#803).
+		if (url.startsWith(SELF_PREFIX)) {
+			const [instanceID, file] = url.slice(SELF_PREFIX.length).split("|");
+			return { format: "module", shortCircuit: true, source: selfModuleSource(instanceID, file) };
 		}
 		// One of slothlet's runtime entry files, evaluated through another loader: the module that re-exports it (#760).
 		if (url.startsWith(OWN_MODULE_PREFIX)) {
@@ -3338,6 +3549,12 @@ export function slothletInstanceImports() {
 				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
 				if (target && !target.external && isSlothletInternal(target.id)) throw await viteImportRefusal(source, target.id);
 			}
+			// An instance file importing a runtime entry file: the module that gives it the instance's own `self` (#803).
+			if (tagged && source.startsWith("@cldmv/slothlet/runtime")) {
+				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
+				const instanceID = new URLSearchParams(splitQuery(importer)[1] ?? "").get("slothlet_instance");
+				if (target && !target.external && instanceID && isRuntimeEntryId(target.id)) return `\0${SELF_PREFIX}${instanceID}|${target.id}`;
+			}
 			// A file only the host loaded imports as vite resolves it.
 			if (!tagged && !moduleImporters.has(importer)) return null;
 			// A bare specifier an instance file imports that cannot name a file of its own package is recorded where the file
@@ -3462,6 +3679,10 @@ export function slothletInstanceImports() {
 		 */
 		load(id) {
 			if (id === NO_RECORD_ID) return { code: "export {};\n", map: null };
+			if (typeof id === "string" && id.startsWith(`\0${SELF_PREFIX}`)) {
+				const [instanceID, file] = id.slice(1 + SELF_PREFIX.length).split("|");
+				return { code: selfModuleSource(instanceID, NODE.url.pathToFileURL(splitQuery(file)[0]).href, file), map: null };
+			}
 			// Read once, as the module importing it loads, from the shared object that module's own code cannot replace.
 			if (id === `\0${IMPORT_CHECK_SPECIFIER}`) return { code: `export const checkImport = ${STATE_REF}.checkImport;\n`, map: null };
 			if (typeof id === "string" && id.startsWith(`\0${LOADED_BY_SPECIFIER}`)) {
@@ -3500,6 +3721,7 @@ export function slothletInstanceImports() {
 export function internals(consumer) {
 	if (
 		!mayTakeInternals(consumer, [
+			"lib/builders/modes-processor",
 			"lib/handlers/frame-placement",
 			"lib/processors/loader",
 			"lib/runtime/runtime",
@@ -3521,6 +3743,11 @@ export function internals(consumer) {
 		noteModuleRoot,
 		packageImporters,
 		registerOwnModule,
+		registerSelfForms,
+		callableSelfOf,
+		bindInstanceSelf,
+		SELF_BIND_KEY,
+		setInstanceSelfKind,
 		requireInInstance,
 		scriptKeyInstance,
 		setCallerCheck,

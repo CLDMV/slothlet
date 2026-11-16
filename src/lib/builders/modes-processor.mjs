@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:08:20-08:00 (1794676100)
+ *	@Last modified time: 2026-11-15T18:55:10-08:00 (1794797710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,9 @@ import {
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
 import { Reflect, Objects, Arrays, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/modes-processor");
+const { setInstanceSelfKind } = instanceImportsInternals("lib/builders/modes-processor");
 const { resolveWrapper } = unifiedWrapperOwn;
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
@@ -1950,6 +1952,12 @@ export class ModesProcessor extends ComponentBase {
 					});
 				}
 			}
+		}
+		// The base load's root files are loaded: a single root file whose default export is a function makes the api root
+		// a function, so the files loaded from here on get the callable form of `self` from their first import (#803). The
+		// api, once built, sets the form it takes in the end.
+		if (isRoot && !apiPathPrefix && !populateDirectly && !this.slothlet.boundApi && rootContributors.length === 1) {
+			setInstanceSelfKind(this.slothlet.instanceID, true);
 		}
 		// Handle subdirectories based on mode
 		if (this.slothlet.config.debug?.modes) {

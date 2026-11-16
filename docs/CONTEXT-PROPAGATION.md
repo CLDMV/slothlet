@@ -125,6 +125,27 @@ These three capture Node's async context when they are made and restore it when 
 - **A subclass made earlier keeps Node's class.** A library that subclassed `AsyncResource` before the first live instance was created extends Node's class, not the patched one, so its resources are not pinned. The same holds for the class kept in a variable before then (`const { AsyncResource } = require("node:async_hooks")` at the top of a file loaded earlier); an ES module's named import follows the refreshed export.
 - **Not tested against third-party users of these APIs.** The patches are covered by slothlet's own tests; libraries that build on `AsyncResource` or `AsyncLocalStorage.snapshot()` / `bind()` have not been tested against them.
 
+### `self` takes the api root's form
+
+`self` answers what the host's `api` answers for the same instance. When the base folder's root file exports a function as its default, the api root is that function, and so is `self`: `typeof self` is `"function"`, `self(…)`, `Reflect.apply(self, …)` and `new self(…)` call the root under the root's call rule (see [PERMISSIONS.md](PERMISSIONS.md#read-level-gating)), and `Object.prototype.toString`, `instanceof Function` and `Object.getPrototypeOf(self)` report the root function. For an object root `self` is an object, as `api` is. The form is the one `api` took when the instance was first built: a reload that changes the root's kind changes neither.
+
+```javascript
+// api/root.mjs
+export default function root(n) {
+	return n * 2;
+}
+
+// api/tools/twice.mjs
+import { self } from "@cldmv/slothlet/runtime";
+export const twice = (n) => self(n); // same as api(n) from the host
+```
+
+Each instance's files get the form of their own instance, even with instances of both kinds running at once. The binding is live: `self` read when the code runs has the right form. Three cases see the other form:
+
+- **A copy taken while the instance is first built.** The form is known once the root files at the base folder's top level have loaded. A file in a folder beneath them already gets the callable form, but a file at the top level beside the root file gets the object form, as does a copy it takes at its top level (`const s = self`, or `self` taken from an `import()` that settles while it loads). Read `self` when the code runs, or take the copy later. A full reload knows the form from the start.
+- **A browser page with instances of both kinds.** A browser loads a leaf's import of the runtime without a resolve hook, so every leaf of the page shares one `self`, which is callable while every running instance has a function root and an object otherwise. `self.call(…)` calls the root in either form.
+- **A file loaded by neither of slothlet's import hooks.** Under Node the resolve hook gives each instance's files their own `self`; under vitest, the `slothletInstanceImports()` plugin does. A file that neither reaches (host code importing the runtime, a leaf of a module graph slothlet's plugin is not in) gets the shared `self` the browser case describes.
+
 ### Writable `self.X = …`
 
 `self` is writable. Assigning to `self` from inside a Slothlet module persists the value for the instance's lifetime, makes it visible to other modules through `self.X` and to the outside through `api.X`.

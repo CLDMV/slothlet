@@ -564,10 +564,11 @@ declare function moduleMakerCount(slothlet: object): number;
  * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
  * @param {object} contextManager - The runtime's context manager.
  * @param {object} selfProxy - The runtime's `self`.
+ * @param {Function|null} [callableSelf=null] - The runtime's callable `self` (#803).
  * @returns {void}
  * @internal
  */
-declare function registerRuntimeSelf(contextManager: object, selfProxy: object): void;
+declare function registerRuntimeSelf(contextManager: object, selfProxy: object, callableSelf?: Function | null): void;
 /**
  * A read of `self` made while no call runs — the host running code a module handed out, or code nested in data it
  * returned (#726) — by code whose frames place it in a module's file: read as that code's definer, the leaf whose
@@ -583,10 +584,12 @@ declare function registerRuntimeSelf(contextManager: object, selfProxy: object):
  * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
  *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
  *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
+ * @param {function(object): *|null} [use=null] - What is done with the runtime's `self` as the definer instead of
+ *   reading `prop` (a call of `self` itself, #803), or null to read it.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-declare function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null, hostFlowInstanceID?: string | null): {
+declare function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null, hostFlowInstanceID?: string | null, use?: (arg0: object) => any | null): {
     value: any;
 } | null;
 /**

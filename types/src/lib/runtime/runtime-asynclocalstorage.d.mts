@@ -1,21 +1,18 @@
 /**
- * Live binding to the current API (self-reference)
+ * Live binding to the current API (self-reference). Each instance's files get the form its api root takes: an object
+ * for an object root, a function for a function root (#803). This file's own binding, which a file of no instance
+ * imports, is the callable form while every running instance has a function root.
  * @type {Proxy}
  * @public
- *
- * @description
- * A proxy that provides access to the full API object within the current context.
- * Automatically resolves to the correct instance's API in AsyncLocalStorage context.
  *
  * @example
  * import { self } from "@cldmv/slothlet/runtime/async";
  *
  * export function callOtherFunction() {
- *   // Call another function in the same API
  *   return self.otherFunction();
  * }
  */
-export const self: ProxyConstructor;
+export let self: ProxyConstructor;
 /**
  * User-provided context object
  * @type {Proxy}

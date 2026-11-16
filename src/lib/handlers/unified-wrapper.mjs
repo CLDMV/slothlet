@@ -5342,16 +5342,26 @@ function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute
 const RUNTIME_SELVES = new Map();
 
 /**
+ * Each runtime's callable `self` (#803), by its context manager: a call of `self` made while no call runs is made
+ * through it, as a read is made through {@link RUNTIME_SELVES}.
+ * @type {Map<object, Function>}
+ * @private
+ */
+const RUNTIME_CALLABLE_SELVES = new Map();
+
+/**
  * Record a runtime's `self` for the context manager it reads its context from: a read of `self` made while no call
  * runs is read through the `self` of the runtime the definer's instance runs, whichever runtime's `self` it was made
  * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
  * @param {object} contextManager - The runtime's context manager.
  * @param {object} selfProxy - The runtime's `self`.
+ * @param {Function|null} [callableSelf=null] - The runtime's callable `self` (#803).
  * @returns {void}
  * @internal
  */
-function registerRuntimeSelf(contextManager, selfProxy) {
+function registerRuntimeSelf(contextManager, selfProxy, callableSelf = null) {
 	RUNTIME_SELVES.set(contextManager, selfProxy);
+	if (callableSelf !== null) RUNTIME_CALLABLE_SELVES.set(contextManager, callableSelf);
 }
 
 /**
@@ -5369,10 +5379,12 @@ function registerRuntimeSelf(contextManager, selfProxy) {
  * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
  *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
  *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
+ * @param {function(object): *|null} [use=null] - What is done with the runtime's `self` as the definer instead of
+ *   reading `prop` (a call of `self` itself, #803), or null to read it.
  * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
  * @internal
  */
-function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null) {
+function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowInstanceID = null, use = null) {
 	const definer = frameDefiner(loadingInstanceID ?? hostFlowInstanceID);
 	if (definer === null) return null;
 	// In a flow the host opened, code whose definer the frames cannot tell for want of a file (evaluated code) is
@@ -5411,12 +5423,25 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	}
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
-	const read = RUNTIME_SELVES.get(contextManager) ?? selfProxy;
+	const read =
+		use === null ? (RUNTIME_SELVES.get(contextManager) ?? selfProxy) : (RUNTIME_CALLABLE_SELVES.get(contextManager) ?? selfProxy);
 	// The leaves whose code is further out on the stack ran this code: they have to be allowed as well.
 	const ceiling = checks && definer.callers?.length ? combineCeilings(...definer.callers) : null;
 	return {
 		value: runtime_readOnBehalf(undefined, () =>
-			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, ceiling, null, false, true)
+			contextManager.runInContext(
+				instanceID,
+				() => (use === null ? read[prop] : use(read)),
+				undefined,
+				[],
+				leaf,
+				true,
+				false,
+				ceiling,
+				null,
+				false,
+				true
+			)
 		)
 	};
 }

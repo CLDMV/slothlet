@@ -319,58 +319,66 @@ function makeCopyOnWriteSelf(parentSelf) {
 		}
 		return real;
 	};
-	return markSlothletProxy(
-		new NativeProxy(
-			{},
-			{
-				get(_t, prop) {
-					return read(prop);
-				},
-				set(_t, prop, value) {
-					overlay.set(prop, value);
-					childViews.delete(prop);
-					return true;
-				},
-				has(_t, prop) {
-					return overlay.has(prop) || prop in parentSelf;
-				},
-				// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
-				// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
-				// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
-				deleteProperty(_t, prop) {
-					overlay.delete(prop);
-					childViews.delete(prop);
-					return true;
-				},
-				defineProperty(_t, prop, descriptor) {
-					if (!("value" in descriptor)) return false;
-					overlay.set(prop, descriptor.value);
-					childViews.delete(prop);
-					return true;
-				},
-				ownKeys() {
-					const keys = new Set(Reflect.ownKeys(parentSelf));
-					for (const k of overlay.keys()) keys.add(k);
-					return [...keys];
-				},
-				getOwnPropertyDescriptor(_t, prop) {
-					if (overlay.has(prop)) {
-						return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
-					}
-					const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
-					// Always configurable — the proxy target is an empty object, so a
-					// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
-					// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
-					if (!desc) return undefined;
-					return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
-				},
-				// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
-				// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
-				preventExtensions() {
-					return false;
-				}
+	// A function root's view is a function too (#803): called or constructed, it calls the root as `self` does outside
+	// the scope, and it reports the root's prototype. The target is a bound function, as the api root's own is.
+	const callable = typeof parentSelf === "function";
+	const callTraps = callable
+		? {
+				apply: (_t, thisArg, args) => Reflect.apply(parentSelf, thisArg, args),
+				construct: (_t, args) => Reflect.construct(parentSelf, args),
+				getPrototypeOf: () => Reflect.getPrototypeOf(parentSelf)
 			}
-		)
+		: {};
+	return markSlothletProxy(
+		new NativeProxy(callable ? function () {}.bind() : {}, {
+			...callTraps,
+			get(_t, prop) {
+				return read(prop);
+			},
+			set(_t, prop, value) {
+				overlay.set(prop, value);
+				childViews.delete(prop);
+				return true;
+			},
+			has(_t, prop) {
+				return overlay.has(prop) || prop in parentSelf;
+			},
+			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
+			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
+			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
+			deleteProperty(_t, prop) {
+				overlay.delete(prop);
+				childViews.delete(prop);
+				return true;
+			},
+			defineProperty(_t, prop, descriptor) {
+				if (!("value" in descriptor)) return false;
+				overlay.set(prop, descriptor.value);
+				childViews.delete(prop);
+				return true;
+			},
+			ownKeys() {
+				const keys = new Set(Reflect.ownKeys(parentSelf));
+				for (const k of overlay.keys()) keys.add(k);
+				return [...keys];
+			},
+			getOwnPropertyDescriptor(_t, prop) {
+				if (overlay.has(prop)) {
+					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+				}
+				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
+				// Always configurable — the proxy target is an empty object, so a
+				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
+				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
+				if (!desc) return undefined;
+				return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
+			},
+			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
+			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
+			preventExtensions() {
+				return false;
+			}
+		})
 	);
 }
 

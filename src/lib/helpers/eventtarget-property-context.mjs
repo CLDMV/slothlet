@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
+ *	@Last modified time: 2026-11-15T18:55:14-08:00 (1794797714)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,6 +55,7 @@ import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, isActiveLayer, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import { Objects, WeakMap, WeakSet, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { isSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -249,7 +250,14 @@ function runtime_patchDiscoveredHandlers() {
 
 	for (const name of Objects.getOwnPropertyNames(globalThis)) {
 		const value = Objects.getOwnPropertyDescriptor(globalThis, name)?.value;
-		if (typeof value !== "function" || !value.prototype || !Objects.prototype.isPrototypeOf.call(base, value.prototype)) continue;
+		// Slothlet's own Proxies (a function root's `self`, #803) are no interface, and are not read here.
+		if (
+			typeof value !== "function" ||
+			isSlothletProxy(value) ||
+			!value.prototype ||
+			!Objects.prototype.isPrototypeOf.call(base, value.prototype)
+		)
+			continue;
 		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
 	}
 

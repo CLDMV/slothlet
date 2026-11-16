@@ -144,7 +144,7 @@ const { enablePromisePatching, disablePromisePatching } = promiseContextInternal
 const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
 const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
-const { claimInstanceScope } = instanceImportsInternals("slothlet");
+const { claimInstanceScope, setInstanceSelfKind } = instanceImportsInternals("slothlet");
 const { forgetInstanceScripts, recordInstanceOwner } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
 
@@ -302,6 +302,8 @@ class Slothlet {
 		const scope = claimInstanceScope(this.instanceID);
 		if (!scope) throw new this.SlothletError("INSTANCE_ID_IN_USE", { instanceID: this.instanceID, validationError: true });
 		this.#importScope = scope;
+		// A reload's files get the form of `self` the api took when it was first built, from their first import (#803).
+		if (this.boundApi) setInstanceSelfKind(this.instanceID, typeof this.boundApi === "function");
 	}
 
 	/**
@@ -310,6 +312,7 @@ class Slothlet {
 	 * @private
 	 */
 	#releaseImportScope() {
+		if (this.#importScope) setInstanceSelfKind(this.#importScope.instanceID, null);
 		this.#importScope?.release();
 		this.#importScope = null;
 	}
@@ -1366,6 +1369,9 @@ class Slothlet {
 			);
 			/* v8 ignore stop */
 		}
+
+		// The instance's files get the form of `self` its api takes: a function for a function root (#803).
+		setInstanceSelfKind(this.instanceID, typeof this.boundApi === "function");
 
 		// Set self and context in store
 		store.self = this.boundApi;
