@@ -205,7 +205,7 @@ export type SlothletOptions = {
      */
     references?: object | undefined;
     /**
-     * - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+     * - Module privacy (`{ host?: "deny"|"allow", scope?: "module"|"folder" }`): whether the host reads `_`/`__` members, and whether a member is private to its owning module ID (default) or to the folder that exports it.
      */
     private?: object | undefined;
     /**

@@ -57,6 +57,28 @@ export let createRequire: any;
  */
 export function loadJson(ref: string): object | null | Promise<object | null>;
 /**
+ * The folder, name and extension of a file's path, in any host.
+ *
+ * @description
+ * Node answers with `node:path` (`dirname`, `basename`, `extname`), so a Windows path splits on either separator. A
+ * browser has no `node:path`; there a file is named by a URL or a `/`-separated path, so the parts come from the
+ * string: the folder is everything before the last `/` (`.` for a bare name and `/` for a name right after a leading
+ * `/`, as `path.dirname` answers), the name everything after it, and the extension the name's last `.` onward. A
+ * name whose only dot is its first character has no extension, as `path.extname(".mjs")` answers.
+ *
+ * @param {string} filePath - A filesystem path (Node), or a URL or `/`-separated path (browser).
+ * @returns {{dir: string, name: string, ext: string}} The folder, the file's name with its extension, and the extension.
+ * @internal
+ *
+ * @example
+ * fileParts("https://example.com/api/calc.mjs"); // { dir: "https://example.com/api", name: "calc.mjs", ext: ".mjs" }
+ */
+export function fileParts(filePath: string): {
+    dir: string;
+    name: string;
+    ext: string;
+};
+/**
  * Run `fn` on a later macrotask, in any host.
  *
  * @description
