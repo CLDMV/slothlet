@@ -2442,11 +2442,12 @@ function runtime_packageImportingLeaves(slothlet, path) {
 			// A module's copy of any instance names the module's file: an untagged file is loaded once per process, by
 			// whichever instance came first, and is the same module's code for every instance built from that file.
 			if (instance) {
-				reached.push({ location, mount: queryParam(query, "module") });
+				reached.push({ location, tagged: true, mount: queryParam(query, "module") });
 				continue;
 			}
+			// A file the instance runs under its plain path (a CommonJS leaf, or one of its helpers) carries no tag to match.
 			if (commonJS.has(location) || LEAF_FILES.get(slothlet)?.has(location)) {
-				reached.push({ location, mount: null });
+				reached.push({ location, tagged: false, mount: null });
 				continue;
 			}
 			if (!seen.has(location)) {
@@ -2455,12 +2456,15 @@ function runtime_packageImportingLeaves(slothlet, path) {
 			}
 		}
 	}
-	for (const { location, mount } of reached) {
+	for (const { location, tagged, mount } of reached) {
 		const files = new Set([location]);
 		const walk = [location];
 		while (walk.length && files.size <= PACKAGE_WALK) {
 			const file = walk.shift();
-			const own = runtime_leavesAtFile(slothlet, file, family, mount);
+			// The file reached is matched by the tags its import carried; a file run under its plain path carries none, and
+			// is no copy of a leaf's (#691) for that alone. The api files further up are named by path in the graph, not by
+			// a URL.
+			const own = runtime_leavesAtFile(slothlet, file, tagged && file === location ? family : null, mount);
 			if (own.length) {
 				for (const leaf of own) leaves.add(leaf);
 				continue;
