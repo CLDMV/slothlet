@@ -48,7 +48,7 @@
  * @internal
  */
 
-import { Error, Errors, Objects, Processes, Reflect, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import { Error, Errors, FunctionMethods, Objects, Processes, Reflect, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The realm's `Error`, as slothlet loaded with it.
@@ -223,14 +223,21 @@ function makeRealm() {
 		const global = Reflect.apply(VM.createContext, null, [VM.plain]);
 		const OwnError = global.Error;
 		if (typeof OwnError !== "function" || OwnError === RealmError) return null;
-		Objects.defineProperty(global, "Error", { value: OwnError, writable: false, enumerable: false, configurable: false });
+		Objects.defineProperty(global, "Error", { __proto__: null, value: OwnError, writable: false, enumerable: false, configurable: false });
 		Objects.defineProperty(OwnError, "prepareStackTrace", {
+			__proto__: null,
 			value: readingFormatter,
 			writable: false,
 			enumerable: false,
 			configurable: false
 		});
-		Objects.defineProperty(OwnError, "stackTraceLimit", { value: 10, writable: true, enumerable: true, configurable: true });
+		Objects.defineProperty(OwnError, "stackTraceLimit", {
+			__proto__: null,
+			value: 10,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
 		const realm = {
 			Error: OwnError,
 			stackGetter: Objects.getOwnPropertyDescriptor(new OwnError(), "stack")?.get ?? null,
