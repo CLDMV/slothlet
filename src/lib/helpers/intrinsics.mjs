@@ -2130,7 +2130,7 @@ function isSafePromise(value) {
 /**
  * A {@link SafePromise} settled with `value`: the value itself when it is one, otherwise fulfilled with it.
  * @param {unknown} value - The value.
- * @returns {SafePromise<unknown>} The promise.
+ * @returns {SafePromise} The promise.
  * @internal
  * @example
  * await settledWith(undefined);
