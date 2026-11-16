@@ -529,6 +529,56 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
+	/** The engine's own `next` of an array's iterator and of an iterator helper, taken before any module ran. */
+	const ARRAY_NEXT = Object.getPrototypeOf([][Symbol.iterator]()).next;
+	const HELPER_NEXT = Object.getPrototypeOf([0][Symbol.iterator]().map((value) => value)).next;
+	const DISGUISED = [
+		{ kind: "plainArrayIterator", next: ARRAY_NEXT },
+		{ kind: "plainIteratorHelper", next: HELPER_NEXT },
+		{ kind: "bareArrayIterator", next: ARRAY_NEXT }
+	];
+
+	/**
+	 * Step what the slots module handed the host with the engine's own `next`, and have the esm module, which may read
+	 * the vault, run what it yields.
+	 * @param {object} held - What the host was handed.
+	 * @param {Function} next - The engine's `next`.
+	 * @returns {Promise<*>} `"not stepped"` when the engine's `next` refuses it, else what running the yield gave.
+	 */
+	async function stepAndRun(held, next) {
+		let yielded;
+		try {
+			yielded = Reflect.apply(next, held, []).value;
+		} catch (error) {
+			return error instanceof TypeError ? "not stepped" : String(error);
+		}
+		return await api.esm.callLater(yielded);
+	}
+
+	// One of the language's iterators given the prototype of plain data keeps what it holds where no member shows it.
+	// With provenance off nothing reads the frames of what it yields, so it comes back as the module's: a stand-in the
+	// engine's own `next` refuses, never the iterator itself.
+	it.each(DISGUISED)("hands out $kind as the module's with provenance off", async ({ kind, next }) => {
+		await create({ provenance: false });
+		const held = await api.slots.holding(kind);
+		expect(types.isProxy(held)).toBe(true);
+		expect(await stepAndRun(held, next)).toBe("not stepped");
+	});
+
+	// With provenance on, what it yields is told by its frames: it runs as the module that wrote it, whoever runs it.
+	it.each(DISGUISED)("runs what $kind yields as the module with provenance on", async ({ kind, next }) => {
+		await create();
+		expect(await stepAndRun(await api.slots.holding(kind), next)).toBe("PERMISSION_DENIED");
+	});
+
+	it("hands out data with the prototype of plain data as itself with provenance off", async () => {
+		await create({ provenance: false });
+		const held = await api.slots.plainData();
+		expect(types.isProxy(held)).toBe(false);
+		expect(types.isProxy(held.nested)).toBe(false);
+		expect(held).toEqual({ nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: { n: 1 } } });
+	});
+
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
 		await create({ provenance: false });
 		expect(types.isProxy(await api.slots.script())).toBe(true);

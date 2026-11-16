@@ -101,7 +101,7 @@ export async function node() {
 /**
  * This module's function, kept where only an engine method reaches it: in a `Map`, a `Set`, behind a promise (one
  * carrying a member of its own, or a symbol member as Node's async hooks put there), a `WeakRef`, an error's cause, or a
- * `Map` iterator.
+ * `Map` iterator, or one of the language's iterators given the prototype of plain data.
  * @param {string} kind - Which holder.
  * @returns {*} The holder.
  */
@@ -124,9 +124,32 @@ export function holding(kind) {
 			return new WeakRef(steal);
 		case "cause":
 			return new Error("held", { cause: new Map([["f", steal]]) });
+		case "plainArrayIterator":
+			// An array's iterator given the prototype of plain data, holding an object and a long string of its own.
+			return Object.assign(Object.setPrototypeOf([steal][Symbol.iterator](), Object.prototype), { box: {}, text: "x".repeat(5000) });
+		case "plainIteratorHelper":
+			// An iterator helper given the prototype of plain data, holding an object of its own.
+			return Object.assign(
+				Object.setPrototypeOf(
+					[0][Symbol.iterator]().map(() => steal),
+					Object.prototype
+				),
+				{ box: { inner: [1] } }
+			);
+		case "bareArrayIterator":
+			// An array's iterator with no prototype and no members of its own.
+			return Object.setPrototypeOf([steal][Symbol.iterator](), null);
 		default:
 			return new Map([["f", steal]]).values();
 	}
+}
+
+/**
+ * Plain data holding no code: nested objects, an array, a long string, a date, an object of no prototype.
+ * @returns {object} The data.
+ */
+export function plainData() {
+	return { nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: Object.assign(Object.create(null), { n: 1 }) } };
 }
 
 /**

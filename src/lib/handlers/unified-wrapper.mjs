@@ -123,7 +123,8 @@ import {
 	TextDecoder,
 	TextEncoder,
 	NativeProcess,
-	Processes
+	Processes,
+	structuredClone
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
@@ -6483,11 +6484,117 @@ function runtime_holdsCode(value, depth, budget) {
 			}
 			if (runtime_holdsCode(member, depth - 1, budget)) return true;
 		}
+		// One of the language's own objects given the prototype of plain data (an array's iterator, an iterator helper)
+		// keeps what it holds where no member shows it.
+		if (!Arrays.isArray(value) && (prototype === null || INTRINSICS.has(prototype)) && runtime_keepsHiddenState(value, depth)) return true;
 		return false;
 	} catch {
 		// An exotic object that refuses to be described is taken to hold code.
 		return true;
 	}
+}
+
+/**
+ * Objects with the prototype of plain data (or none) that a copy showed to be ordinary objects: no internal state of the
+ * engine's behind them. An object never gains such state, so the answer holds for as long as the object lives.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const ORDINARY_OBJECTS = new WeakSet();
+
+/**
+ * The engine's own `Symbol.prototype.valueOf`, taken when slothlet loaded: it reads a boxed symbol's internal data and
+ * throws for any other object.
+ * @type {Function}
+ * @private
+ */
+const SYMBOL_VALUE_OF = Symbol.prototype.valueOf;
+
+/**
+ * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
+ * @param {object} value - A boxed primitive.
+ * @returns {boolean} True for a boxed symbol.
+ * @private
+ */
+function runtime_isBoxedSymbol(value) {
+	try {
+		Reflect.apply(SYMBOL_VALUE_OF, value, []);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
+ * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
+ * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
+ * none), a date, a regular expression, a buffer, a typed array, a boxed primitive other than a symbol, or a `Map` or
+ * `Set` whose entries are such values. Read from descriptors alone; members the copy skips (symbol keys, members that
+ * are not enumerable) are not looked at.
+ * @param {*} value - The value.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_copyRunsNoCode(value, depth) {
+	if (value === null || typeof value !== "object") return typeof value !== "symbol" && typeof value !== "function";
+	if (depth <= 0 || util.types.isProxy(value)) return false;
+	const types = util.types;
+	if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
+	if (types.isBoxedPrimitive(value)) return !runtime_isBoxedSymbol(value);
+	if (types.isMap(value) || types.isSet(value)) {
+		const entries = Reflect.apply(types.isMap(value) ? SLOT_READERS.mapEntries : SLOT_READERS.setValues, value, []);
+		for (const entry of entries)
+			for (const member of types.isMap(value) ? entry : [entry]) if (!runtime_copyRunsNoCode(member, depth - 1)) return false;
+		return true;
+	}
+	const prototype = Reflect.getPrototypeOf(value);
+	if (!Arrays.isArray(value) && prototype !== null && prototype !== Objects.prototype) return false;
+	for (const key of Reflect.ownKeys(value)) {
+		if (typeof key === "symbol") continue;
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable) continue;
+		if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return false;
+	}
+	return true;
+}
+
+/**
+ * Whether an object with the prototype of plain data (or none, or another of the language's own), not an array, may
+ * keep internal state of the engine's that holds a module's code where no member shows it: one of the language's
+ * iterators (an array's, a string's, an iterator helper, the wrapper `Iterator.from` makes) given such a prototype
+ * yields what it holds only when stepped, and no check of what kind of object it is runs without stepping it. A copy
+ * with `structuredClone` tells it, refusing such an object before it reads any member; the copy is made only where it
+ * runs none of a module's code and can be refused for nothing else ({@link runtime_copyRunsNoCode}). An object it
+ * cannot be made for, or that the copy refuses, cannot be told from such an iterator and is taken to keep such state.
+ * Objects found ordinary are remembered ({@link ORDINARY_OBJECTS}).
+ * @param {object} value - The object, not a Proxy and not an array.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it may keep such state.
+ * @private
+ */
+function runtime_keepsHiddenState(value, depth) {
+	if (ORDINARY_OBJECTS.has(value)) return false;
+	const types = util.types;
+	if (types.isModuleNamespaceObject?.(value) || types.isArgumentsObject?.(value)) return false;
+	if (typeof structuredClone !== "function") return true;
+	// The copy reads the object's members as they are now; whatever it finds, it is the object's own kind that decides.
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== null && prototype !== Objects.prototype) return true;
+	for (const key of Reflect.ownKeys(value)) {
+		if (typeof key === "symbol") continue;
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable) continue;
+		if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return true;
+	}
+	try {
+		structuredClone(value);
+	} catch {
+		return true;
+	}
+	ORDINARY_OBJECTS.add(value);
+	return false;
 }
 
 /**
