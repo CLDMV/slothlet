@@ -1085,7 +1085,16 @@ export class ApiBuilder extends ComponentBase {
 					const childRoutePath = `${routePath}.${prop}`;
 
 					if (isMetaProperty(prop)) {
-						enforceInternalPermission(childRoutePath);
+						try {
+							enforceInternalPermission(childRoutePath);
+						} catch (error) {
+							// A function's own `prototype` is fixed (non-configurable), so a listing has to report it: it is
+							// described with its value withheld, as the invariants allow for a writable member, and a read of it
+							// stays refused. Any other refused member is refused as before.
+							if (error?.code !== "PERMISSION_DENIED" || descriptor.configurable || !("value" in descriptor) || !descriptor.writable)
+								throw error;
+							return { ...descriptor, value: undefined };
+						}
 						return descriptor;
 					}
 
