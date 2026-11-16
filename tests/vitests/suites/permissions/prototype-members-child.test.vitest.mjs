@@ -22,9 +22,12 @@
  * accessors that note when slothlet's own source runs them:
  *
  * - "members": on `Object.prototype`, the names slothlet reads off descriptors, records, options and results it makes
- *   (`get`, `set`, `value`, `writable`, `enumerable`, `configurable`, `then`, `catch`, `toJSON`, `next`, `done`,
- *   `return`, `throw`, `length`, `size`, `constructor`) and `Symbol.toPrimitive`. Each getter answers what an absent
- *   member reads as.
+ *   (`get`, `set`, `value`, `writable`, `enumerable`, `configurable`, `toJSON`, `next`, `done`, `return`, `throw`,
+ *   `length`, `size`, `constructor`), `Symbol.toPrimitive` and `Symbol.toStringTag`, and `toString` and `valueOf` (the
+ *   conversions a template literal or `String()` make). Each getter answers what the member reads as without it.
+ *   `then` is left out: it is read off what module code returns, as `await` reads it in plain JavaScript.
+ * - "promises": on `Promise.prototype`, `constructor`, `then`, `catch` and `finally`, and `Promise[Symbol.species]`,
+ *   which `await`, a promise's `then` and an async function's return read.
  * - "indices": on `Array.prototype` and `Object.prototype`, the indices 0 to 31, whose setters define the element as a
  *   plain write would; and `Array.prototype.constructor` and `Array[Symbol.species]`, read when an array method makes
  *   its result.
@@ -146,7 +149,7 @@ beforeAll(() => {
 		"const ArraySort = Array.prototype.sort;",
 		"const ObjectKeys = Object.keys;",
 		"const OWN_SOURCE = process.cwd() + '/src/';",
-		"const NAMES = ['get', 'set', 'value', 'writable', 'enumerable', 'configurable', 'then', 'catch', 'toJSON', 'next', 'done', 'return', 'throw', 'length', 'size'];",
+		"const NAMES = ['get', 'set', 'value', 'writable', 'enumerable', 'configurable', 'toJSON', 'next', 'done', 'return', 'throw', 'length', 'size'];",
 		"const hits = create(null);",
 		"let busy = false;",
 		"// The first frame with a file of its own below the accessor: slothlet's source, or someone else's code.",
@@ -157,6 +160,8 @@ beforeAll(() => {
 		"\t\tconst line = lines[i];",
 		"\t\tif (apply(StringIncludes, line, ['(<anonymous>)']) || apply(StringIncludes, line, ['(native)'])) continue;",
 		"\t\tif (apply(StringIndexOf, line, ['/']) === -1 && apply(StringIndexOf, line, ['file:']) === -1) continue;",
+		"\t\t// slothlet's live-runtime patch of Promise.prototype.then passes every then call through, as the language's own runs it.",
+		"\t\tif (apply(StringIncludes, line, ['/helpers/promise-context.mjs'])) return false;",
 		"\t\treturn apply(StringIncludes, line, [OWN_SOURCE]);",
 		"\t}",
 		"\treturn false;",
@@ -183,7 +188,23 @@ beforeAll(() => {
 		"\t\t}",
 		"\t\tconst ObjectConstructor = Object;",
 		"\t\tdefine(Object.prototype, 'constructor', 'Object.prototype.constructor', { get() { note('Object.prototype.constructor'); return ObjectConstructor; }, set(value) { defineProperty(this, 'constructor', { __proto__: null, value, writable: true, enumerable: true, configurable: true }); } });",
+		"\t\t// The conversions a template literal, String() or + make: the language's own functions, run through a getter that notes the read.",
+		"\t\tfor (const key of ['toString', 'valueOf']) {",
+		"\t\t\tconst original = Object.prototype[key];",
+		"\t\t\tdefine(Object.prototype, key, 'Object.prototype.' + key, { get() { note('Object.prototype.' + key); return original; }, set(value) { defineProperty(this, key, { __proto__: null, value, writable: true, enumerable: true, configurable: true }); } });",
+		"\t\t}",
+		"\t\tdefine(Object.prototype, Symbol.toStringTag, 'Object.prototype[Symbol.toStringTag]', { get() { note('Object.prototype[Symbol.toStringTag]'); return undefined; } });",
 		"\t\tdefine(Object.prototype, Symbol.toPrimitive, 'Object.prototype[Symbol.toPrimitive]', { get() { note('Object.prototype[Symbol.toPrimitive]'); return undefined; } });",
+		"\t}",
+		"\tif (kind === 'promises') {",
+		"\t\tconst PromiseConstructor = Promise;",
+		"\t\tdefine(Promise.prototype, 'constructor', 'Promise.prototype.constructor', { get() { note('Promise.prototype.constructor'); return PromiseConstructor; }, set(value) { defineProperty(this, 'constructor', { __proto__: null, value, writable: true, enumerable: true, configurable: true }); } });",
+		"\t\tconst species = getOwnPropertyDescriptor(Promise, Symbol.species);",
+		"\t\tdefine(Promise, Symbol.species, 'Promise[Symbol.species]', { get() { note('Promise[Symbol.species]'); return apply(species.get, this, []); } });",
+		"\t\tfor (const key of ['then', 'catch', 'finally']) {",
+		"\t\t\tconst original = Promise.prototype[key];",
+		"\t\t\tdefine(Promise.prototype, key, 'Promise.prototype.' + key, { writable: true, value: { [key](...args) { note('Promise.prototype.' + key); return apply(original, this, args); } }[key] });",
+		"\t\t}",
 		"\t}",
 		"\tif (kind === 'indices') {",
 		"\t\tfor (const holder of [Array.prototype, Object.prototype]) {",
@@ -253,7 +274,7 @@ afterAll(() => {
 
 /**
  * Run the probe in a child process.
- * @param {string[]} args - mode, runtime, attribution, and "no", "members" or "indices".
+ * @param {string[]} args - mode, runtime, attribution, and "no", "members", "promises" or "indices".
  * @returns {object} What each step answered.
  */
 function probe(args) {
@@ -304,6 +325,10 @@ describe.each(CONFIGS)(
 
 		it("reads no member a module added to Object.prototype", () => {
 			expect(probe([mode, runtime, attribution, "members"])).toEqual(EXPECTED);
+		});
+
+		it("settles its own promises through no member a module put on Promise", () => {
+			expect(probe([mode, runtime, attribution, "promises"])).toEqual(EXPECTED);
 		});
 
 		it("builds its arrays through no index or species a module added", () => {

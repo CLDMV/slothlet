@@ -64,6 +64,7 @@ import {
 	Objects,
 	Promise,
 	Reflect,
+	SafePromise,
 	Set,
 	SetMethods,
 	setToArray,
@@ -76,8 +77,7 @@ import {
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
-/** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
-const NativePromise = Promise;
+/** The functions the dispatcher uses, taken when slothlet loaded. */
 const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
 
@@ -96,7 +96,7 @@ function runAndSettle(listener, args) {
 	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
 	const then = result.then;
 	if (typeof then !== "function") return undefined;
-	return new NativePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
+	return new SafePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
 }
 
 /**
@@ -421,7 +421,7 @@ export class EventManager extends ComponentBase {
 			// Wait for every listener without Promise.all, which reads the global Promise: each promise here is the
 			// dispatcher's own and never rejects.
 			let pending = promises.length;
-			await new NativePromise((resolve) => {
+			await new SafePromise((resolve) => {
 				for (let ofIndex = 0, ofList = promises; ofIndex < ofList.length; ofIndex++) {
 					const settled = ofList[ofIndex];
 					reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);

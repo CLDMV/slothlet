@@ -84,6 +84,7 @@ const { apply } = NativeReflect;
 const getPrototypeOfNative = NativeReflect.getPrototypeOf;
 const setPrototypeOfNative = NativeReflect.setPrototypeOf;
 const ownKeysNative = NativeReflect.ownKeys;
+const defineOwnAtLoad = NativeReflect.defineProperty;
 const globalThisMap = globalThis.Map;
 const globalThisSet = globalThis.Set;
 const ArrayFrom = globalThis.Array.from;
@@ -2061,6 +2062,77 @@ export function matchAllOf(text, regexp) {
 }
 
 /**
+ * The promise slothlet makes for its own waits: a `Promise` whose `constructor`, `then`, `catch` and `finally` are its
+ * own frozen members (the language's own functions, taken at load) and whose `Symbol.species` is itself. Awaiting one, or
+ * calling the captured `then` on one, reads only those, never a member module code can put on `Promise.prototype` or
+ * `Promise`. It is still a `Promise` (`instanceof Promise`, `util.types.isPromise`).
+ * @internal
+ * @example
+ * import { SafePromise } from "@cldmv/slothlet/helpers/intrinsics";
+ * const settled = new SafePromise((resolve) => resolve());
+ */
+export class SafePromise extends NativePromise {}
+{
+	const proto = NativePromise.prototype;
+	const own = (key) => ({
+		__proto__: null,
+		value: getOwnPropertyDescriptor(proto, key).value,
+		writable: false,
+		enumerable: false,
+		configurable: false
+	});
+	defineOwnAtLoad(SafePromise.prototype, "then", own("then"));
+	defineOwnAtLoad(SafePromise.prototype, "catch", own("catch"));
+	defineOwnAtLoad(SafePromise.prototype, "finally", own("finally"));
+	defineOwnAtLoad(SafePromise, NativeSymbol.species, {
+		__proto__: null,
+		value: SafePromise,
+		writable: false,
+		enumerable: false,
+		configurable: false
+	});
+	freeze(SafePromise.prototype);
+	freeze(SafePromise);
+}
+
+/**
+ * Whether a value is a {@link SafePromise}, told by its prototype, read with the function taken at load.
+ * @param {unknown} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function isSafePromise(value) {
+	return value !== null && typeof value === "object" && getPrototypeOfNative(value) === SafePromise.prototype;
+}
+
+/**
+ * A {@link SafePromise} settled with `value`: the value itself when it is one, otherwise fulfilled with it.
+ * @param {unknown} value - The value.
+ * @returns {SafePromise<unknown>} The promise.
+ * @internal
+ * @example
+ * await settledWith(undefined);
+ */
+export function settledWith(value) {
+	if (isSafePromise(value)) return value;
+	return new SafePromise((resolve) => resolve(value));
+}
+
+/**
+ * React to one item of a {@link promiseAll} list on a later job: a {@link SafePromise} through its own `then`, any other
+ * promise or thenable through the captured `then` on a {@link SafePromise} resolved with it (which reads what the item
+ * itself offers, as `Promise.all` does), and a plain value as fulfilled.
+ * @param {unknown} item - The item.
+ * @param {function(unknown): void} onFulfilled - Called with its value.
+ * @param {function(unknown): void} onRejected - Called with its reason.
+ * @returns {void}
+ * @private
+ */
+function settleItem(item, onFulfilled, onRejected) {
+	PromiseMethods.then(settledWith(item), onFulfilled, onRejected);
+}
+
+/**
  * A promise for the values of the promises (or values) in `list`, as `Promise.all(list)` gives, without walking `list`
  * with its iterator or reading `then` off a promise: each is settled with the `then` taken at load.
  * @param {ArrayLike<unknown>} list - The promises or values.
@@ -2071,7 +2143,7 @@ export function matchAllOf(text, regexp) {
  */
 export function promiseAll(list) {
 	const length = list.length;
-	return new NativePromise((resolve, reject) => {
+	return new SafePromise((resolve, reject) => {
 		const out = [];
 		let left = length;
 		if (left === 0) {
@@ -2080,7 +2152,7 @@ export function promiseAll(list) {
 		}
 		for (let i = 0; i < length; i++) {
 			PromiseMethods.then(
-				Promises.resolve(list[i]),
+				settledWith(list[i]),
 				(value) => {
 					put(out, i, value);
 					if (--left === 0) resolve(out);
@@ -2102,7 +2174,7 @@ export function promiseAll(list) {
  */
 export function promiseAllSettled(list) {
 	const length = list.length;
-	return new NativePromise((resolve) => {
+	return new SafePromise((resolve) => {
 		const out = [];
 		let left = length;
 		if (left === 0) {
@@ -2114,8 +2186,8 @@ export function promiseAllSettled(list) {
 				put(out, i, result);
 				if (--left === 0) resolve(out);
 			};
-			PromiseMethods.then(
-				Promises.resolve(list[i]),
+			settleItem(
+				list[i],
 				(value) => settle({ status: "fulfilled", value }),
 				(reason) => settle({ status: "rejected", reason })
 			);
@@ -2139,6 +2211,133 @@ export function objectFromEntries(list) {
 		defineOwn(out, entry[0], { __proto__: null, value: entry[1], writable: true, enumerable: true, configurable: true });
 	}
 	return out;
+}
+
+/**
+ * The text `String(value)` gives for plain data, made without looking anything up on the value: strings, numbers,
+ * booleans, bigints, symbols, `null` and `undefined` as `String()` gives them; an array as its elements joined with
+ * `,` (`null` and `undefined` as empty); a function as its source text (by the `toString` taken at load); an error as
+ * `name: message` from its own data members; a date by the date `toString` taken at load; any other object as
+ * `[object Object]`. A `toString`, `valueOf`, `Symbol.toPrimitive` or `Symbol.toStringTag` an object carries, or one
+ * module code put on a shared prototype, is not read.
+ * @param {unknown} value - The value.
+ * @param {number} [depth] - How many arrays deep to render (deeper ones render as empty).
+ * @returns {string} The text.
+ * @internal
+ * @example
+ * stringOf(["a", 1]); // "a,1"
+ */
+export function stringOf(value, depth = 4) {
+	if (typeof value === "string") return value;
+	if (typeof value === "symbol") return SymbolMethods.toString(value);
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return NativeString(value);
+	if (typeof value === "function") {
+		try {
+			return functionSource(value);
+		} catch {
+			return "function () { [native code] }";
+		}
+	}
+	if (Arrays.isArray(value)) {
+		if (depth <= 0) return "";
+		let out = "";
+		for (let i = 0; i < value.length; i++) {
+			if (i > 0) out += ",";
+			const element = value[i];
+			if (element !== null && element !== undefined) out += stringOf(element, depth - 1);
+		}
+		return out;
+	}
+	const error = errorParts(value);
+	if (error !== null) return error.message ? `${error.name}: ${error.message}` : error.name;
+	try {
+		return DateMethods.toString(value);
+	} catch {
+		return "[object Object]";
+	}
+}
+
+/**
+ * The text `JSON.stringify(value)` gives for plain data, made without running code the value or module code carries: a
+ * copy of the value's own enumerable data members (getters, `toJSON` and functions left out, as are members of a
+ * prototype) is serialized with the `JSON.stringify` taken at load. A bigint renders as its digits; anything deeper than
+ * `depth` as `null`.
+ * @param {unknown} value - The value.
+ * @param {number} [depth] - How many objects deep to copy.
+ * @returns {string|undefined} The JSON text, or undefined where `JSON.stringify` gives none (a function, a symbol,
+ *   `undefined`).
+ * @internal
+ * @example
+ * jsonOf({ a: 1, get b() { return 2; } }); // '{"a":1}'
+ */
+export function jsonOf(value, depth = 8) {
+	return NativeJSON.stringify(plainCopy(value, depth));
+}
+
+/**
+ * A copy of plain data for {@link jsonOf}: primitives as they are (a bigint as its digits), arrays and objects as fresh
+ * arrays and prototype-less objects of their own enumerable data members, read with the functions taken at load.
+ * @param {unknown} value - The value.
+ * @param {number} depth - How many objects deep to copy.
+ * @returns {unknown} The copy.
+ * @private
+ */
+function plainCopy(value, depth) {
+	if (typeof value === "bigint") return NativeString(value);
+	if (value === null || typeof value !== "object") return value;
+	if (depth <= 0) return null;
+	if (Arrays.isArray(value)) {
+		const out = [];
+		for (let i = 0; i < value.length; i++) put(out, i, plainCopy(ownData(value, NativeString(i)), depth - 1));
+		return out;
+	}
+	const out = create(null);
+	const keys = ownKeysNative(value);
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i];
+		if (typeof key !== "string") continue;
+		const descriptor = getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable || !hasOwnNative(descriptor, "value")) continue;
+		const member = descriptor.value;
+		if (typeof member === "function" || typeof member === "symbol") continue;
+		defineOwn(out, key, { __proto__: null, value: plainCopy(member, depth - 1), writable: true, enumerable: true, configurable: true });
+	}
+	return out;
+}
+
+/**
+ * An own data member of an object, or undefined when it has none or holds a getter there.
+ * @param {object} value - The object.
+ * @param {string} key - The member.
+ * @returns {unknown} Its value.
+ * @private
+ */
+function ownData(value, key) {
+	const descriptor = getOwnPropertyDescriptor(value, key);
+	return descriptor && hasOwnNative(descriptor, "value") ? descriptor.value : undefined;
+}
+
+/**
+ * The name and message of an error, from its own data members (and the realm's `Error` brand where the engine offers
+ * `Error.isError`, else `instanceof` the `Error` taken at load), or null for a value that is not one.
+ * @param {object} value - The value.
+ * @returns {{name: string, message: string}|null} Its parts.
+ * @private
+ */
+function errorParts(value) {
+	const isError = typeof Errors.isError === "function" ? Errors.isError(value) : value instanceof Error;
+	if (!isError) return null;
+	const name = ownData(value, "name");
+	const message = ownData(value, "message");
+	let constructorName = "Error";
+	for (let proto = getPrototypeOfNative(value); proto !== null; proto = getPrototypeOfNative(proto)) {
+		const named = ownData(proto, "name");
+		if (typeof named === "string") {
+			constructorName = named;
+			break;
+		}
+	}
+	return { name: typeof name === "string" ? name : constructorName, message: typeof message === "string" ? message : "" };
 }
 
 /**

@@ -5075,9 +5075,9 @@ export class ApiBuilder extends ComponentBase {
 
 					try {
 						// Run callback in new ALS context
-						return await contextManager.als.run(childStore, async () => {
-							return await Reflect.apply(fn, undefined, args);
-						});
+						// The callback's own result is awaited, as the caller's await would: no promise of slothlet's own is made
+						// and awaited around it.
+						return await contextManager.als.run(childStore, () => Reflect.apply(fn, undefined, args));
 					} finally {
 						// Cleanup: Remove temporary child instance
 						MapMethods.delete(contextManager.instances, childInstanceID);

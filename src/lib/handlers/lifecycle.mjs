@@ -29,12 +29,13 @@ import {
 	listPush,
 	Map,
 	MapMethods,
-	Promise,
 	promiseAll,
 	PromiseMethods,
 	Reflect,
+	SafePromise,
 	Set,
 	SetMethods,
+	settledWith,
 	setValues
 } from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
@@ -61,7 +62,7 @@ function runAndSettle(handler, args) {
 	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
 	const then = result.then;
 	if (typeof then !== "function") return undefined;
-	return new Promise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
+	return new SafePromise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
 }
 
 export class Lifecycle extends ComponentBase {
@@ -227,9 +228,15 @@ export class Lifecycle extends ComponentBase {
 	 *   filePath: "/path/to/math.mjs"
 	 * });
 	 */
-	async emit(event, data, nodes) {
-		this.#logEvent(event, data);
-		await this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
+	emit(event, data, nodes) {
+		// Not an async function: the promise handed back is slothlet's own (helpers/intrinsics `SafePromise`), so awaiting
+		// it reads nothing module code can put on `Promise.prototype`.
+		try {
+			this.#logEvent(event, data);
+			return this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
+		} catch (error) {
+			return new SafePromise((resolve, reject) => reject(error));
+		}
 	}
 
 	/**
@@ -242,9 +249,13 @@ export class Lifecycle extends ComponentBase {
 	 * @returns {Promise<void>}
 	 * @internal
 	 */
-	async emitInternal(event, data) {
-		this.#logEvent(event, data);
-		await this.#notify(MapMethods.get(this.internalSubscribers, event), event, data);
+	emitInternal(event, data) {
+		try {
+			this.#logEvent(event, data);
+			return this.#notify(MapMethods.get(this.internalSubscribers, event), event, data);
+		} catch (error) {
+			return new SafePromise((resolve, reject) => reject(error));
+		}
 	}
 
 	/**
@@ -348,8 +359,8 @@ export class Lifecycle extends ComponentBase {
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async #notify(handlers, event, data, readers, nodes) {
-		if (!handlers) return;
+	#notify(handlers, event, data, readers, nodes) {
+		if (!handlers) return settledWith(undefined);
 
 		// Collect all handler promises (both sync and async)
 		const handlerPromises = [];
@@ -382,8 +393,7 @@ export class Lifecycle extends ComponentBase {
 		}
 
 		// Wait for all async handlers to complete
-		if (handlerPromises.length > 0) {
-			await promiseAll(handlerPromises);
-		}
+		if (handlerPromises.length === 0) return settledWith(undefined);
+		return PromiseMethods.then(promiseAll(handlerPromises), () => undefined);
 	}
 }
