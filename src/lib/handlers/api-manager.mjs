@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:10:09-08:00 (1794791409)
+ *	@Last modified time: 2026-11-15T21:09:16-08:00 (1794805756)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -517,6 +517,45 @@ export class ApiManager extends ComponentBase {
 				return undefined;
 			}
 			current = current[part];
+		}
+		return current;
+	}
+
+	/**
+	 * Read the member at an api path as slothlet's own bookkeeping: through each node's wrapper, never through the api's
+	 * proxies, so no reader's rules (a module-private member's host policy among them) apply to it (#815).
+	 * @param {function|object} root - API root object.
+	 * @param {string[]} parts - Path segments.
+	 * @returns {unknown} The member, or undefined when the path holds none.
+	 * @private
+	 *
+	 * @description
+	 * The api root's own members are namespaces, whose reads nothing gates; below it each node's member is its wrapper's
+	 * own data property, or its implementation's. An accessor is not run: what it answers is not the node's.
+	 *
+	 * @example
+	 * const live = resolveWrapper(this.#memberAtPath(this.slothlet.api, ["billing", "internals"]));
+	 */
+	#memberAtPath(root, parts) {
+		let current = root;
+		for (let index = 0; index < parts.length; index++) {
+			if (!current || (typeof current !== "object" && typeof current !== "function")) return undefined;
+			const raw = index === 0 ? null : resolveWrapper(current);
+			if (!raw) {
+				current = current[parts[index]];
+				continue;
+			}
+			const holders = [raw, raw.____slothletInternal.impl];
+			let next;
+			for (const holder of holders) {
+				if (!holder || (typeof holder !== "object" && typeof holder !== "function")) continue;
+				const descriptor = Reflect.getOwnPropertyDescriptor(holder, parts[index]);
+				if (descriptor && "value" in descriptor) {
+					next = descriptor.value;
+					break;
+				}
+			}
+			current = next;
 		}
 		return current;
 	}
@@ -4090,7 +4129,7 @@ export class ApiManager extends ComponentBase {
 	#collectRolledBackNodes(rollbacks) {
 		const callable = [];
 		for (const { apiPath } of rollbacks) {
-			const live = resolveWrapper(this.getValueAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
+			const live = resolveWrapper(this.#memberAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
 			if (!live) continue;
 			const impl = live.____slothletInternal.impl;
 			if (unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl))
@@ -4172,6 +4211,11 @@ export class ApiManager extends ComponentBase {
 		const last = sources[sources.length - 1];
 		const impl = target ? target.impl : last.____slothletInternal.impl;
 		const moduleID = target ? target.moduleID : last.____slothletInternal.moduleID;
+		// The node is the surviving module's again: the file and folder it was composed from too, which the folder
+		// privacy rule and the self-call bypass compare (#815). Set before the impl, whose export path is read
+		// against the file.
+		live.____slothletInternal.filePath = last.____slothletInternal.filePath;
+		live.____slothletInternal.sourceFolder = last.____slothletInternal.sourceFolder;
 		if (impl !== undefined) live.___setImpl(impl, moduleID);
 
 		const candidates = new Map();
@@ -4616,7 +4660,7 @@ export class ApiManager extends ComponentBase {
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 				for (const tree of [this.slothlet.api, this.slothlet.boundApi]) {
-					const live = resolveWrapper(this.getValueAtPath(tree, parts));
+					const live = resolveWrapper(this.#memberAtPath(tree, parts));
 					if (!live || restoredWrappers.has(live)) continue;
 					const sources = this.#survivingContributions(rollback.apiPath, live);
 					if (sources.length === 0) continue;
@@ -4703,17 +4747,24 @@ export class ApiManager extends ComponentBase {
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 
 				if (previousImpl !== undefined) {
+					// The node is the restored owner's again, the file it was composed from included (#815).
+					const restoredFile = this.slothlet.handlers.ownership.getCurrentOwner(rollback.apiPath)?.filePath ?? null;
+					const restoreFile = (raw) => {
+						if (restoredFile !== null) raw.____slothletInternal.filePath = restoredFile;
+					};
 					// Get the existing wrapper and update its _impl — unless the restore above already did.
-					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
+					const existingWrapper = this.#memberAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
 					if (existingWrapperRaw && !restoredWrappers.has(existingWrapperRaw)) {
+						restoreFile(existingWrapperRaw);
 						// Pass the restored moduleID for correct ownership tracking
 						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
-					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
+					const existingBoundWrapper = this.#memberAtPath(this.slothlet.boundApi, parts);
 					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
 					if (existingBoundWrapperRaw && !restoredWrappers.has(existingBoundWrapperRaw)) {
+						restoreFile(existingBoundWrapperRaw);
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
