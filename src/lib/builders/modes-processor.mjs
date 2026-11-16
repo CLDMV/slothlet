@@ -38,7 +38,28 @@ import {
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
-import { Reflect, Objects, Arrays, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	copyList,
+	filterList,
+	FunctionMethods,
+	listPush,
+	Map,
+	mapEntries,
+	mapList,
+	MapMethods,
+	Objects,
+	Reflect,
+	regExpReplace,
+	Set,
+	SetMethods,
+	splitText,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/modes-processor");
 const { setInstanceSelfKind, defaultExportLooksCallable } = instanceImportsInternals("lib/builders/modes-processor");
@@ -833,18 +854,19 @@ export class ModesProcessor extends ComponentBase {
 		// composed in their own order below.
 		const modes_preloaded = new Map();
 		if (modes_noteRootKind) {
-			const candidates = files.filter((file) => !file.synthetic && defaultExportLooksCallable(file.path));
+			const candidates = filterList(files, (file) => !file.synthetic && defaultExportLooksCallable(file.path));
 			if (candidates.length === 1) {
 				try {
 					const { exports: preloaded } = await modes_loadExports(candidates[0]);
-					modes_preloaded.set(candidates[0], preloaded);
+					MapMethods.set(modes_preloaded, candidates[0], preloaded);
 					if (typeof preloaded?.default === "function") setInstanceSelfKind(this.slothlet.instanceID, true);
 				} catch {
 					// The file is loaded again in its place below, which reports the failure.
 				}
 			}
 		}
-		for (const file of files) {
+		for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+			const file = ofList[ofIndex];
 			if (this.slothlet.config.debug?.modes && categoryName === "string") {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_PROCESSING_FILE",
@@ -859,11 +881,13 @@ export class ModesProcessor extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 				// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 				// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
-				const exports = modes_preloaded.has(file) ? modes_preloaded.get(file) : (await modes_loadExports(file)).exports;
+				const exports = MapMethods.has(modes_preloaded, file)
+					? MapMethods.get(modes_preloaded, file)
+					: (await modes_loadExports(file)).exports;
 				// The first root file with a function default makes the root a function; a second makes it a namespace.
 				if (modes_noteRootKind && typeof exports?.default === "function") {
 					modes_rootFunctions++;
-					if (modes_rootFunctions === 1 && !modes_preloaded.has(file)) setInstanceSelfKind(this.slothlet.instanceID, true);
+					if (modes_rootFunctions === 1 && !MapMethods.has(modes_preloaded, file)) setInstanceSelfKind(this.slothlet.instanceID, true);
 					else if (modes_rootFunctions === 2) setInstanceSelfKind(this.slothlet.instanceID, false);
 				}
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);

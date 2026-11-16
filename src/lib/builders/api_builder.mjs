@@ -353,48 +353,51 @@ function makeCopyOnWriteSelf(parentSelf) {
 			}
 		: {};
 	return markSlothletProxy(
-		new NativeProxy(copyOnWriteShell(callable ? function () {}.bind() : {}, parentSelf), {
+		new NativeProxy(copyOnWriteShell(callable ? FunctionMethods.bind(function () {}) : {}, parentSelf), {
+			__proto__: null,
 			...callTraps,
 			get(_t, prop) {
 				return read(prop);
 			},
 			set(_t, prop, value) {
-				overlay.set(prop, value);
-				childViews.delete(prop);
+				MapMethods.set(overlay, prop, value);
+				MapMethods.delete(childViews, prop);
 				return true;
 			},
 			has(_t, prop) {
-				return overlay.has(prop) || prop in parentSelf;
+				return MapMethods.has(overlay, prop) || prop in parentSelf;
 			},
 			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
 			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
 			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
 			deleteProperty(_t, prop) {
-				overlay.delete(prop);
-				childViews.delete(prop);
+				MapMethods.delete(overlay, prop);
+				MapMethods.delete(childViews, prop);
 				return true;
 			},
 			defineProperty(_t, prop, descriptor) {
 				if (!("value" in descriptor)) return false;
-				overlay.set(prop, descriptor.value);
-				childViews.delete(prop);
+				MapMethods.set(overlay, prop, descriptor.value);
+				MapMethods.delete(childViews, prop);
 				return true;
 			},
 			ownKeys() {
-				const keys = new Set(Reflect.ownKeys(parentSelf));
-				for (const k of overlay.keys()) keys.add(k);
-				return [...keys];
+				const keys = setFrom(Reflect.ownKeys(parentSelf));
+				for (const k of mapKeys(overlay)) SetMethods.add(keys, k);
+				return setToArray(keys);
 			},
 			getOwnPropertyDescriptor(_t, prop) {
-				if (overlay.has(prop)) {
-					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+				if (MapMethods.has(overlay, prop)) {
+					return { __proto__: null, value: MapMethods.get(overlay, prop), writable: true, enumerable: true, configurable: true };
 				}
 				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
 				// Always configurable — the proxy target is an empty object, so a
 				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
 				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
 				if (!desc) return undefined;
-				return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
+				return "value" in desc
+					? { __proto__: null, ...desc, value: read(prop), configurable: true }
+					: { __proto__: null, ...desc, configurable: true };
 			},
 			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
 			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
@@ -417,6 +420,7 @@ function makeCopyOnWriteSelf(parentSelf) {
  */
 function copyOnWriteShell(shell, parentSelf) {
 	Objects.defineProperty(shell, INSPECT_KEY, {
+		__proto__: null,
 		value: function inspectScopeSelf() {
 			return parentSelf;
 		},
@@ -1196,7 +1200,7 @@ export class ApiBuilder extends ComponentBase {
 							// stays refused. Any other refused member is refused as before.
 							if (error?.code !== "PERMISSION_DENIED" || descriptor.configurable || !("value" in descriptor) || !descriptor.writable)
 								throw error;
-							return { ...descriptor, value: undefined };
+							return { __proto__: null, ...descriptor, value: undefined };
 						}
 						return descriptor;
 					}
@@ -1898,8 +1902,8 @@ export class ApiBuilder extends ComponentBase {
 						while (pending.length > 0) {
 							const { node, path } = ArrayMethods.pop(pending);
 							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
-							if (seen.has(node)) continue;
-							seen.add(node);
+							if (WeakSetMethods.has(seen, node)) continue;
+							WeakSetMethods.add(seen, node);
 							// Settling is slothlet's own bookkeeping: the node's state is read from its wrapper, not through the
 							// caller's view, where a `__`-named marker would be held to the caller's rules (#816).
 							const raw = resolveWrapper(runtime_nodeBehind(runtime_unwrapSelfView(node)));
