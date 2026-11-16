@@ -22,8 +22,8 @@ export class SlothletError extends Error {
      * Renders a thrown value for message interpolation.
      *
      * @param {unknown} thrown - Whatever the guarded code threw.
-     * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
-     *   any other value JSON-serialized (falling back to String() for unserializable values).
+     * @returns {string} A human-readable rendering: an Error's own message, a string as itself, and
+     *   any other value's own data JSON-serialized (falling back to its `String()` text).
      */
     static #describeThrown(thrown: unknown): string;
     constructor(code: any, context?: {}, originalError?: null, options?: {});

@@ -532,15 +532,16 @@ declare function setCallerCheck(check: (arg0: Error) => (string | null)): void;
 declare function setScriptKey(keyOf: (arg0: string) => string): void;
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
  * @internal
  */
 declare function loadedScriptLookup(key: string, hash?: string): {
     known: boolean;
     has: boolean;
+    helper?: boolean;
 };
 /**
  * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the

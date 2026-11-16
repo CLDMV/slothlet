@@ -30,6 +30,44 @@ export function runtime_namesEntry(head: string, entry: {
     fnName?: string;
 }): boolean;
 /**
+ * Frames from a stack formatted as text (an engine without V8's call-site hook: Firefox, Safari), innermost first.
+ *
+ * Code compiled from a string is marked `evaluated`, whichever engine wrote the line, so it is never taken for the
+ * code of the file that compiled it:
+ *
+ * - V8: `at f (eval at g (file.js:3:9), <anonymous>:1:1)`.
+ * - SpiderMonkey (Firefox): the location names the file and line the code was compiled at, then what compiled it:
+ *   `f@file.js line 3 > eval:1:1`, `anonymous@file.js line 3 > Function:1:1`, nested `… line 3 > eval line 1 > eval:1:1`.
+ *   Any location with a ` line N > ` step is taken as compiled code.
+ * - JavaScriptCore (Safari): eval and `Function` code has no location at all: `eval code@`, `anonymous@`. A line whose
+ *   location is empty is taken as compiled code, whatever its function name says, as a function name is not to be
+ *   trusted (see {@link parseStackFrame}).
+ *
+ * A built-in's frame (`map@[native code]`) has no location and is passed over.
+ *
+ * @param {string} text - The stack.
+ * @param {number} limit - The frame budget the stack was captured with.
+ * @returns {Array<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: null, key: null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
+ * @internal
+ * @example
+ * textFrames("@http://host/api/run.mjs line 3 > eval:1:1\nrun@http://host/api/run.mjs:3:9", 10);
+ * // [{ path: "http://host/api/run.mjs line 3 > eval", evaluated: true, … }, { path: "http://host/api/run.mjs", evaluated: false, … }]
+ */
+export function textFrames(text: string, limit: number): Array<{
+    head: string;
+    path: string;
+    line: string;
+    async: boolean;
+    evaluated: boolean;
+    hash: null;
+    key: null;
+    enter: "leaf" | "call" | null;
+    gap: boolean;
+}> & {
+    truncated: boolean;
+    trailingGap: boolean;
+};
+/**
  * How many locations have scripts learned (see {@link SCRIPT_HASHES}).
  * @returns {number} The count.
  * @internal
@@ -50,6 +88,22 @@ export function isForeignScript(frame: {
     hash: string | null;
     key: string | null;
 }): boolean;
+/**
+ * Whether a frame the frame placer placed by its plain path alone (a module's folder, a CommonJS file) does not run
+ * that file's own source (#597, #691): code compiled under a file name in a module's folder that is not there, or
+ * whose source is something else. Such code is no module's, wherever it is read.
+ * @param {{path: string, hash: string|null, key: string|null}} frame - A frame.
+ * @param {{unverified?: boolean}|null} placement - What the placer answered for it.
+ * @returns {boolean} True when the frame cannot be the code its placement names.
+ * @internal
+ */
+export function isUnverifiedCode(frame: {
+    path: string;
+    hash: string | null;
+    key: string | null;
+}, placement: {
+    unverified?: boolean;
+} | null): boolean;
 /**
  * Split one stack-trace line into the text naming the function and the location it runs at.
  *
@@ -222,6 +276,8 @@ declare const guarded_createModuleLoad: typeof createModuleLoad;
 declare const guarded_loadOnStack: typeof loadOnStack;
 /** @type {typeof outerCallerCeiling} */
 declare const guarded_outerCallerCeiling: typeof outerCallerCeiling;
+/** @type {typeof ownReceiver} */
+declare const guarded_ownReceiver: typeof ownReceiver;
 /** @type {typeof frameDefiner} */
 declare const guarded_frameDefiner: typeof frameDefiner;
 /** @type {typeof isLeafFileFunction} */
@@ -230,6 +286,8 @@ declare const guarded_isLeafFileFunction: typeof isLeafFileFunction;
 declare const guarded_registerLeafFile: typeof registerLeafFile;
 /** @type {typeof runtime_codeWritersOnStack} */
 declare const guarded_runtime_codeWritersOnStack: typeof runtime_codeWritersOnStack;
+/** @type {typeof runtime_loadingFileRunning} */
+declare const guarded_runtime_loadingFileRunning: typeof runtime_loadingFileRunning;
 /**
  * The locations a suspended call's module was imported from, in the comparable form a stack frame's
  * location is reduced to (#601): a browser resolver's URL, or a TypeScript leaf's compiled copy.
@@ -419,7 +477,7 @@ declare function setResultAttributor(attributor: (arg0: object, arg1: any, arg2:
  * @returns {*} What the caller gets.
  * @internal
  */
-declare function attributeResult(wrapper: object, value: any, callerIsHost?: boolean, caller?: object | null): any;
+declare function attributeResult(wrapper: object, value: any, callerIsHost?: boolean, caller?: object | null, receiver?: null): any;
 /**
  * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
  * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
@@ -460,8 +518,10 @@ declare function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null |
 /**
  * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
  * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
- * running inside the call may be code those calls handed in, and slothlet cannot tell it from code the leaf obtained
- * itself, so it runs under all of them: returning a closure to a module lends that module nothing it can pass on.
+ * running inside the call may be code those calls handed in, however it got there (bound, behind a getter or a Proxy,
+ * nested in data, kept from an earlier call), so it runs under all of them: returning a closure to a module lends that
+ * module nothing it can pass on. The one exception is a stand-in slothlet handed to the call's own code and has seen
+ * handed nowhere else, run by that code (see {@link outerCallerCeiling}).
  * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
  * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
  *   by a module.
@@ -630,11 +690,37 @@ declare function loadOnStack(loads: Iterable<{
  * @param {object} contextManager - The instance's context manager.
  * @param {string} instanceID - The instance.
  * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
+ * @param {object|null} [origin=null] - For a stand-in, the call it was handed to alone, when slothlet has seen it handed
+ *   nowhere else (see {@link ownReceiver}): run by that call's own code, it is code the call obtained itself, not code a
+ *   call above handed in, so the calls that handed code down are not its ceiling.
  * @returns {object|ReadonlyArray<object>|null} The ceiling.
  * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
-declare function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null): object | ReadonlyArray<object> | null;
+declare function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null, origin?: object | null): object | ReadonlyArray<object> | null;
+/**
+ * The call whose own code receives what a call returns, when that call was handed code (see
+ * {@link supplierChainCeiling}): the parent call, when the code that made the call is the parent leaf's own (its
+ * identity, as resolved for the call, is the parent's wrapper under the parent's own ceiling). Null when the parent was
+ * handed no code, when code the parent was handed made the call, when that cannot be told (`provenance` off, an
+ * identity left unresolved), or when the parent is not known. A stand-in made for what such a call returns is recorded
+ * as handed to that call alone, until slothlet sees it handed anywhere else (see `runtime_originOf`).
+ * @param {{wrapper?: object, flagged?: boolean, ceiling?: object|null}|null|undefined} parent - The call that made the
+ *   call.
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null, unresolved?: boolean}|null|undefined} identity -
+ *   The identity the call was made with.
+ * @returns {object|null} The parent's record, or null.
+ * @internal
+ */
+declare function ownReceiver(parent: {
+    wrapper?: object;
+    flagged?: boolean;
+    ceiling?: object | null;
+} | null | undefined, identity: {
+    currentWrapper?: object | null;
+    ceiling?: object | ReadonlyArray<object> | null;
+    unresolved?: boolean;
+} | null | undefined): object | null;
 /**
  * The definer of the code doing an access while no call runs (the host running code a module handed out, #726): the
  * innermost frame below slothlet's own, placed on the leaf whose source range holds it, or on the file's module for
@@ -695,5 +781,19 @@ declare function registerLeafFile(wrapper: object, at?: string): void;
  * @internal
  */
 declare function runtime_codeWritersOnStack(slothlet: object): Array<object> | null;
-export { guarded_runtime_importedLocations as runtime_importedLocations, guarded_runtime_realComparablePath as runtime_realComparablePath, guarded_runtime_entryNames as runtime_entryNames, guarded_runtime_captureFrames as runtime_captureFrames, guarded_forgetInstanceScripts as forgetInstanceScripts, guarded_enterCall as enterCall, guarded_describeCall as describeCall, guarded_createFramePlacer as createFramePlacer, guarded_stackHoldsInstanceCode as stackHoldsInstanceCode, guarded_setApiValueCheck as setApiValueCheck, guarded_setResultAttributor as setResultAttributor, guarded_attributeResult as attributeResult, guarded_setHostPrototypeCheck as setHostPrototypeCheck, guarded_setHandedOutCheck as setHandedOutCheck, guarded_setInboundOriginal as setInboundOriginal, guarded_handedLeafFunctions as handedLeafFunctions, guarded_supplierChainCeiling as supplierChainCeiling, guarded_resolveSupplier as resolveSupplier, guarded_recordInstanceOwner as recordInstanceOwner, guarded_isInstanceOwnerFile as isInstanceOwnerFile, guarded_installViteHostRegistry as installViteHostRegistry, guarded_installViteLoadedRegistry as installViteLoadedRegistry, guarded_setModuleNodeResolver as setModuleNodeResolver, guarded_createModuleLoad as createModuleLoad, guarded_loadOnStack as loadOnStack, guarded_outerCallerCeiling as outerCallerCeiling, guarded_frameDefiner as frameDefiner, guarded_isLeafFileFunction as isLeafFileFunction, guarded_registerLeafFile as registerLeafFile, guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack };
+/**
+ * The load of an instance's file whose own code is running now, before any node stands for it: the file of the nearest
+ * frame that is not slothlet's own or Node's, or the file an import is being resolved for, among the files the
+ * instance's loader is loading (see `Loader#loadingFile`). Its top-level code runs as its module path (S4).
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [importer=null] - The importing file's URL, for an import being resolved as the file links.
+ * @returns {{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}|null} The load, or null.
+ * @internal
+ */
+declare function runtime_loadingFileRunning(slothlet: object, importer?: string | null): {
+    path: string;
+    moduleID: string | null;
+    paths: ReadonlyArray<string> | null;
+} | null;
+export { guarded_runtime_importedLocations as runtime_importedLocations, guarded_runtime_realComparablePath as runtime_realComparablePath, guarded_runtime_entryNames as runtime_entryNames, guarded_runtime_captureFrames as runtime_captureFrames, guarded_forgetInstanceScripts as forgetInstanceScripts, guarded_enterCall as enterCall, guarded_describeCall as describeCall, guarded_createFramePlacer as createFramePlacer, guarded_stackHoldsInstanceCode as stackHoldsInstanceCode, guarded_setApiValueCheck as setApiValueCheck, guarded_setResultAttributor as setResultAttributor, guarded_attributeResult as attributeResult, guarded_setHostPrototypeCheck as setHostPrototypeCheck, guarded_setHandedOutCheck as setHandedOutCheck, guarded_setInboundOriginal as setInboundOriginal, guarded_handedLeafFunctions as handedLeafFunctions, guarded_supplierChainCeiling as supplierChainCeiling, guarded_resolveSupplier as resolveSupplier, guarded_recordInstanceOwner as recordInstanceOwner, guarded_isInstanceOwnerFile as isInstanceOwnerFile, guarded_installViteHostRegistry as installViteHostRegistry, guarded_installViteLoadedRegistry as installViteLoadedRegistry, guarded_setModuleNodeResolver as setModuleNodeResolver, guarded_createModuleLoad as createModuleLoad, guarded_loadOnStack as loadOnStack, guarded_outerCallerCeiling as outerCallerCeiling, guarded_ownReceiver as ownReceiver, guarded_frameDefiner as frameDefiner, guarded_isLeafFileFunction as isLeafFileFunction, guarded_registerLeafFile as registerLeafFile, guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack, guarded_runtime_loadingFileRunning as runtime_loadingFileRunning };
 //# sourceMappingURL=frame-placement.d.mts.map

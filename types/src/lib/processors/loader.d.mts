@@ -117,6 +117,11 @@ export function withInstanceQuery(specifier: string | URL, instanceID?: string, 
 export class Loader extends ComponentBase {
     static slothletProperty: string;
     /**
+     * How many of a file's imported URLs {@link Loader#importedURLs} keeps.
+     * @type {number}
+     */
+    static IMPORTED_URLS_PER_FILE: number;
+    /**
      * Create a Loader instance.
      * @param {object} slothlet - Slothlet class instance.
      * @package
@@ -128,10 +133,28 @@ export class Loader extends ComponentBase {
      * @param {string} [instanceID] - Slothlet instance ID for cache busting
      * @param {string} [moduleID] - Module ID for additional cache busting (used in api.slothlet.api.add)
      * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting (forces fresh import)
+     * @param {string[]|null} [paths=null] - The paths the file's top-level code can run as while it first loads (see
+     *   {@link Loader#loadingFile}), as the builder reads them before the file's exports are known.
      * @returns {Promise<Object>} Loaded module
      * @public
      */
-    public loadModule(filePath: string, instanceID?: string, moduleID?: string, cacheBust?: number | null): Promise<Object>;
+    public loadModule(filePath: string, instanceID?: string, moduleID?: string, cacheBust?: number | null, paths?: string[] | null): Promise<Object>;
+    /**
+     * A file this loader is loading now, by its comparable path and the mount its URL names: what its top-level code
+     * runs as while it first loads, before any node stands for it (S4: the file's module path).
+     * @param {string} path - The file, in comparable form.
+     * @param {string|null} [mount=null] - The mount tag the code's location carries.
+     * @returns {{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}|null} The load, or null when the
+     *   file is not loading, or when two loads of it cannot be told apart.
+     * @public
+     * @example
+     * loader.loadingFile("/app/api/ext/render.mjs", "ext"); // { path, moduleID: "ext", paths: ["ext.render"] }
+     */
+    public loadingFile(path: string, mount?: string | null): {
+        path: string;
+        moduleID: string | null;
+        paths: ReadonlyArray<string> | null;
+    } | null;
     /**
      * Scan directory for module files
      * @param {string} dir - Directory to scan
@@ -156,6 +179,18 @@ export class Loader extends ComponentBase {
         scanHiddenFolders?: boolean | undefined;
         rootDir?: string | undefined;
     }): Promise<Object>;
+    /**
+     * Whether this loader imported a file under a query (#691): the file's own loads, under any mount and across its
+     * reloads (the newest {@link Loader.IMPORTED_URLS_PER_FILE}), and not a URL some module wrote out for it.
+     * @param {string} filePath - The path the file was loaded as.
+     * @param {string} query - A query, without its `?`.
+     * @returns {boolean} True when one of its imports carried exactly that query.
+     * @public
+     *
+     * @example
+     * loader.importedUnderQuery("/app/api/tally.mjs", "slothlet_instance=abc&module=mod1"); // true
+     */
+    public importedUnderQuery(filePath: string, query: string): boolean;
     /**
      * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
      * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.

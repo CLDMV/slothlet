@@ -532,6 +532,21 @@ export type SlothletAPI = {
                 readGating: (arg0: boolean) => void;
                 seal: () => void;
                 sealed: boolean;
+                report: () => {
+                    mode: string;
+                    baseline: {
+                        met: (boolean | null);
+                        checks: Array<{
+                            id: string;
+                            met: boolean;
+                            reason: (string | null);
+                        }>;
+                    };
+                    capabilities: Array<{
+                        name: string;
+                        allowed: Array<string>;
+                    }>;
+                };
             };
         };
         versioning: {

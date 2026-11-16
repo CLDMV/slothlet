@@ -1,8 +1,3 @@
-/**
- * Lifecycle event manager for impl changes
- * @extends ComponentBase
- * @public
- */
 export class Lifecycle extends ComponentBase {
     /**
      * Where this component should be mounted on the Slothlet instance
@@ -13,9 +8,12 @@ export class Lifecycle extends ComponentBase {
      * @param {object} slothlet - Slothlet instance
      */
     constructor(slothlet: object);
-    subscribers: Map<any, any>;
-    internalSubscribers: Map<any, any>;
-    subscriberReaders: Map<any, any>;
+    /** @type {Map<string, Set<Function>>} */
+    subscribers: Map<string, Set<Function>>;
+    /** @type {Map<string, Set<Function>>} */
+    internalSubscribers: Map<string, Set<Function>>;
+    /** @type {Map<string, Map<Function, unknown>>} */
+    subscriberReaders: Map<string, Map<Function, unknown>>;
     eventLog: any[];
     maxLogSize: number;
     /**

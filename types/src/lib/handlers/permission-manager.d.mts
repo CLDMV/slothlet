@@ -443,6 +443,53 @@ export class PermissionManager extends ComponentBase {
      */
     assertGlobalMetadataWrite(module: object | null): void;
     /**
+     * Refuse module code a built-in capability no rule opens for it (see {@link CAPABILITIES}). Only while the permission
+     * system is on; host code is never checked. The rules whose target is exactly `capability:<name>` decide for the
+     * caller's path, ranked as any rule is; a broader target (`**`) never names a capability.
+     *
+     * @param {object|null} caller - The module code's wrapper (the leaf running, or the file's own node for its top
+     *   level), the reader standing for code no one accounts for, or null for the host.
+     * @param {string} name - The capability.
+     * @param {string} route - What the code used, for the error (`new Function`, `vm.runInThisContext`, …).
+     * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason: code
+     *   compiled under the name of a real file outside the caller's own folder, or through Node's binding, whose names
+     *   cannot be read.
+     * @returns {void}
+     * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
+     * @example
+     * pm.assertCapability(leaf, "code", "new Function");
+     */
+    assertCapability(caller: object | null, name: string, route: string, refusal?: "foreign-filename" | "binding" | null): void;
+    /**
+     * Refuse a file's top-level code, as it first loads, a built-in capability (see {@link assertCapability}): decided
+     * for each path the code can run as (its module path, as the loader reads it before the build), all of which have to
+     * be opened.
+     *
+     * @param {ReadonlyArray<string>} paths - The paths.
+     * @param {string} name - The capability.
+     * @param {string} route - What the code used.
+     * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason.
+     * @returns {void}
+     * @throws {SlothletError} `CAPABILITY_REFUSED`.
+     * @example
+     * pm.assertCapabilityForPaths(["ext.render"], "code", "new Function");
+     */
+    assertCapabilityForPaths(paths: ReadonlyArray<string>, name: string, route: string, refusal?: "foreign-filename" | "binding" | null): void;
+    /**
+     * The built-in capabilities and the callers the rules open each for: for each capability, in the order code,
+     * imports, loader, the `caller` patterns of the allow rules whose target is exactly `capability:<name>`, most
+     * specific first, then the higher layer, then the newest. The built-in denies are not listed; a rule with a
+     * condition is listed as it is, its condition not evaluated.
+     *
+     * @returns {Array<{name: string, allowed: string[]}>} The report.
+     * @example
+     * pm.capabilityReport(); // [{ name: "code", allowed: ["ext.render"] }, { name: "imports", allowed: [] }, …]
+     */
+    capabilityReport(): Array<{
+        name: string;
+        allowed: string[];
+    }>;
+    /**
      * Decide a module's write to an api path by the write rules (`pattern:write`, #625): assigning, defining,
      * or deleting a member at `targetPath` (a symbol-keyed member: the path of the node it is on), or changing
      * the prototype or extensibility of the node there.
@@ -462,6 +509,16 @@ export class PermissionManager extends ComponentBase {
      * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
      */
     decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | null;
+    /**
+     * The write rules whose caller pattern matches `callerPath`, as one string of their ids: two callers given the same
+     * string are answered alike by the write rules for every write either could make. Kept until the rules change.
+     *
+     * @param {string} callerPath - Api path of a module's function.
+     * @returns {string} The ids, in the order the rules were added; empty while the system is off or no rule names it.
+     * @example
+     * pm.writeRulesFor("reader.x") === pm.writeRulesFor("reader.y"); // true when no write rule tells the two apart
+     */
+    writeRulesFor(callerPath: string): string;
     /**
      * What the write rules say about every write `callerPath` could make at `targetPath` or anywhere beneath it (#667),
      * read from the rule set alone and kept until the rules change: `"deny"` when a rule could refuse one of them (a
@@ -674,15 +731,51 @@ export class PermissionManager extends ComponentBase {
      */
     wasOnAtShutdown(): boolean;
     /**
-     * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
-     * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
-     * cover), or `"disabled"` (nothing applies).
+     * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
+     * strict. Under on, each check not met is one warning (unless the instance is silent); under strict, any check not
+     * met refuses the start.
+     * @param {"node"|"browser"} envTarget - Where the instance runs.
+     * @param {{silent?: boolean}} [options] - The instance's options.
+     * @returns {Promise<void>}
+     * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
+     * @example
+     * await pm.checkBaseline("node", { silent: false });
+     */
+    checkBaseline(envTarget: "node" | "browser", { silent }?: {
+        silent?: boolean;
+    }): Promise<void>;
+    /**
+     * The mode, what the permission baseline found when the instance started, and the capabilities rules open.
+     * @returns {{mode: string, baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}
+     *   The report; `baseline.met` is null when no check ran (the mode was off or disabled at start).
+     * @example
+     * pm.report(); // { mode: "on", baseline: { met: true, checks: [...] }, capabilities: [...] }
+     */
+    report(): {
+        mode: string;
+        baseline: {
+            met: boolean | null;
+            checks: Array<{
+                id: string;
+                met: boolean;
+                reason: string | null;
+            }>;
+        };
+        capabilities: Array<{
+            name: string;
+            allowed: string[];
+        }>;
+    };
+    /**
+     * The permission system's mode: `"on"` (every rule applies), `"strict"` (as on, chosen in the config only, with the
+     * permission baseline met), `"off"` (only the built-in rules that keep module code off the framework's own namespace,
+     * root functions, and keys on api nodes, and the host rules on what they cover), or `"disabled"` (nothing applies).
      *
-     * @returns {"on"|"off"|"disabled"} The mode.
+     * @returns {"on"|"strict"|"off"|"disabled"} The mode.
      * @example
      * pm.mode(); // "off" with no permissions config
      */
-    mode(): "on" | "off" | "disabled";
+    mode(): "on" | "strict" | "off" | "disabled";
     /**
      * Whether a built-in write rule covers a write to `targetPath`: the framework's own namespace, root functions, and
      * keys on api nodes. Such a write is checked unless the permission system is disabled.

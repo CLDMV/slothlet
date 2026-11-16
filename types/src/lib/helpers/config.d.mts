@@ -65,10 +65,11 @@ export function expandPermissionsShorthand(permissions: any): {
 /**
  * Normalize the `permissions` option to its full object form (or `null` for no permissions config).
  *
- * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
+ * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"strict"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
  * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
- * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
- *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
+ * @param {"on"|"strict"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
+ *   applies. `"strict"`: as `"on"`, chosen in the config only (it cannot be left at runtime), and the instance refuses to
+ *   start while a check of the permission baseline is not met (docs/PERMISSIONS.md). `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
  *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
  *   Takes precedence over `enabled`.
  * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.

@@ -17,12 +17,16 @@ export class OwnershipManager extends ComponentBase {
      * @param {object} slothlet - Slothlet class instance.
      */
     constructor(slothlet: object);
-    moduleToPath: Map<any, any>;
-    pathToModule: Map<any, any>;
+    /** @type {Map<string, Set<string>>} */
+    moduleToPath: Map<string, Set<string>>;
+    /** @type {Map<string, Array<object>>} */
+    pathToModule: Map<string, Array<object>>;
     _unregisteredModules: Set<any>;
     moduleEndpoints: Map<any, any>;
-    moduleMounts: Map<any, any>;
-    placementModes: Map<any, any>;
+    /** @type {Map<string, Set<string>>} */
+    moduleMounts: Map<string, Set<string>>;
+    /** @type {Map<string, Map<string, string>>} */
+    placementModes: Map<string, Map<string, string>>;
     exportIndex: Map<any, any>;
     cloneSources: WeakMap<object, any>;
     /**
