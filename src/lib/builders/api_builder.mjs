@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:50-08:00 (1794797750)
+ *	@Last modified time: 2026-11-15T21:09:15-08:00 (1794805755)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,7 +66,9 @@ const {
 	runtime_frameworkViewCaller,
 	runtime_codeLabel,
 	runtime_inheritsBuiltin,
-	runtime_isLanguageNameDescriptor
+	runtime_isLanguageNameDescriptor,
+	runtime_nodeBehind,
+	runtime_unwrapSelfView
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
@@ -1761,8 +1763,11 @@ export class ApiBuilder extends ComponentBase {
 							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
 							if (seen.has(node)) continue;
 							seen.add(node);
-							if (typeof node._materialize === "function" && node.__materialized === false) {
-								await node._materialize();
+							// Settling is slothlet's own bookkeeping: the node's state is read from its wrapper, not through the
+							// caller's view, where a `__`-named marker would be held to the caller's rules (#816).
+							const raw = resolveWrapper(runtime_nodeBehind(runtime_unwrapSelfView(node)));
+							if (raw && raw.____slothletInternal.state.materialized === false) {
+								await raw._materialize();
 							}
 							const childKeys = new Set(Objects.keys(node));
 							// Read after the materialize await: that is what registers this node's children,
