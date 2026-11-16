@@ -24,7 +24,18 @@
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { ArrayMethods, Map, MapMethods, promiseAll, Reflect, Set, SetMethods, setValues } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Map,
+	MapMethods,
+	Promise,
+	promiseAll,
+	PromiseMethods,
+	Reflect,
+	Set,
+	SetMethods,
+	setValues
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
 
 /**
@@ -32,6 +43,26 @@ const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("
  * @extends ComponentBase
  * @public
  */
+
+/**
+ * Run a subscriber and settle what it returns while still inside its call: a `then` it carries (a getter, a thenable's
+ * method, a promise's own `then`) is read and called here, so it runs as the subscriber, and no other member of it is
+ * called. The promise made here settles to `undefined` whatever the result resolves to, so the emitting flow never
+ * holds, and never reads, any value of the subscriber's.
+ * @param {Function} handler - The subscriber.
+ * @param {Array} args - Its arguments.
+ * @returns {Promise<void>|undefined} A promise that settles when the subscriber's result does, or `undefined` when it
+ *   returned no thenable.
+ * @private
+ */
+function runAndSettle(handler, args) {
+	const result = Reflect.apply(handler, undefined, args);
+	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
+	const then = result.then;
+	if (typeof then !== "function") return undefined;
+	return new Promise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
+}
+
 export class Lifecycle extends ComponentBase {
 	/**
 	 * Where this component should be mounted on the Slothlet instance
@@ -330,12 +361,14 @@ export class Lifecycle extends ComponentBase {
 				// event only: the instance's token is the framework's own.
 				const apiManager = this.slothlet.handlers?.apiManager;
 				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
-				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
-				// If handler returns a promise, track it
-				if (result && typeof result.then === "function") {
+				// What the subscriber returns is settled inside its own call, as an event listener's is: the promise made
+				// there is slothlet's, and settles to `undefined` whatever the subscriber's result resolves to.
+				const settle = (...args) => runAndSettle(handler, args);
+				const settled = reader ? this.#invokeAs(settle, reader, [this.#viewFor(data, reader, nodes)]) : settle(data, token);
+				if (settled) {
 					ArrayMethods.push(
 						handlerPromises,
-						result.catch((error) => {
+						PromiseMethods.then(settled, undefined, (error) => {
 							// Log error but don't stop other handlers
 							this.#warnHandlerError(event, data, error);
 						})
