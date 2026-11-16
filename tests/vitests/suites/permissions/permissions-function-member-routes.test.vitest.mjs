@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:10:46-08:00 (1794791446)
+ *	@Last modified time: 2026-11-15T19:50:46-08:00 (1794801046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,12 +50,9 @@ const CONFIGS = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
 );
 
-/** The routes that construct the node: the api root is no constructor to a module (`self` is no function). */
-const CONSTRUCTING = ["instance", "instanceUsed", "instancePrototype"];
-
 /** Each node read, with the plain function it stands for. */
 const NODES = [
-	{ label: "the api root", plain: plainRoot, read: (api) => api.reader.at(""), skip: CONSTRUCTING },
+	{ label: "the api root", plain: plainRoot, read: (api) => api.reader.at("") },
 	{ label: "a mounted function node (zz)", plain: plainRoot, read: (api) => api.reader.at("zz") },
 	{ label: "a class node (cls.k.K)", plain: PlainK, read: (api) => api.reader.at("cls.k.K") },
 	{ label: "its own module's function node (own, read by own.peek)", plain: plainOwn, read: (api) => api.own.peek.at() }
@@ -126,7 +123,7 @@ describe.each(CONFIGS)(
 				const plain = routes(node.plain);
 				const expected = policy.allowed ? plain : refused(plain);
 
-				it.each(Object.keys(plain).filter((route) => !node.skip?.includes(route)))("%s answers as the direct read rules", async (route) => {
+				it.each(Object.keys(plain))("%s answers as the direct read rules", async (route) => {
 					const answered = await node.read(api);
 					expect(answered[route]).toBe(expected[route]);
 				});

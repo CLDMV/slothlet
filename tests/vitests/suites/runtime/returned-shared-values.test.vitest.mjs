@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:05-08:00 (1794375005)
+ *	@Last modified time: 2026-11-15T19:51:24-08:00 (1794801084)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -391,7 +391,9 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		const api = await create();
 		const refs = await api.esm.refs();
 		expect(refs.EventEmitter).toBe(EventEmitter);
-		expect(refs.runtime).toBe(runtime);
+		// An api file's runtime is its instance's own module (#803): its members are the runtime's own.
+		for (const key of ["context", "instanceID", "SlothletSelf"]) expect(refs.runtime[key]).toBe(runtime[key]);
+		expect(Object.keys(refs.runtime).sort()).toEqual(Object.keys(runtime).sort());
 		expect(new EventEmitter()).toBeInstanceOf(refs.EventEmitter);
 	});
 
@@ -429,7 +431,9 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		const a = await create();
 		const b = await create();
 		const [refsA, refsB] = [await a.esm.refs(), await b.esm.refs()];
-		for (const key of ["EventEmitter", "runtime"]) expect(refsA[key]).toBe(refsB[key]);
+		expect(refsA.EventEmitter).toBe(refsB.EventEmitter);
+		// Each instance's api files get a runtime module of their own (#803), whose members are the runtime's own.
+		for (const key of ["context", "instanceID", "SlothletSelf"]) expect(refsA.runtime[key]).toBe(refsB.runtime[key]);
 	});
 
 	it("keeps a built-in's class a module put its own code on as that module's", async () => {

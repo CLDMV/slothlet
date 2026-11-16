@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:07:18-08:00 (1794791238)
+ *	@Last modified time: 2026-11-15T19:48:28-08:00 (1794800908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,8 +26,6 @@ import plainRoot from "../../api_tests/api_test_function_member_routes/base/root
 import { routes } from "../../api_tests/api_test_function_member_routes/lib/routes.mjs";
 
 const DENIED = "threw:PERMISSION_DENIED";
-/** The routes that construct the node: the api root is no constructor to a module (`self` is no function). */
-const CONSTRUCTING = ["instance", "instanceUsed", "instancePrototype"];
 
 /**
  * Boot a fixture folder served by the page.
@@ -51,20 +49,14 @@ const boot = async (rel, manifest, permissions, mode) => {
 	});
 };
 
-/**
- * The routes a module's read of the root answers, without the constructing ones.
- * @param {Record<string, string>} answered - What the routes answered.
- * @returns {Record<string, string>} The same, less the constructing routes.
- */
-const readRoutes = (answered) => Object.fromEntries(Object.entries(answered).filter(([key]) => !CONSTRUCTING.includes(key)));
-
-const PLAIN = readRoutes(routes(plainRoot));
+const PLAIN = routes(plainRoot);
 const REFUSED = {
 	...Object.fromEntries(Object.keys(PLAIN).map((key) => [key, DENIED])),
 	constructorDescribesTag: "undefined",
 	constructorListsTag: "false",
 	constructorEntries: "undefined",
-	prototypeChain: PLAIN.prototypeChain
+	prototypeChain: PLAIN.prototypeChain,
+	instanceUsed: PLAIN.instanceUsed
 };
 
 describe("browser: a callable api root", () => {
@@ -81,7 +73,7 @@ describe("browser: a callable api root", () => {
 		it.each(["eager", "lazy"])("%s: the root's own member answers by every route as a direct read does", async (mode) => {
 			const api = await boot(routesRel, routesManifest, permissions, mode);
 			try {
-				expect(readRoutes(await api.reader.at(""))).toEqual(expected);
+				expect(await api.reader.at("")).toEqual(expected);
 				expect(api.prototype.constructor.tag).toBe("TAG");
 			} finally {
 				await api.shutdown();
