@@ -1019,13 +1019,13 @@ function closedSelfForm(form, target) {
 	// target's; one it holds writable is the one read through `self`, as the language lets a closed object answer.
 	const describe = (prop, described) => {
 		const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
-		if (!fixed) return described === undefined ? undefined : { ...described, configurable: true };
+		if (!fixed) return described === undefined ? undefined : { __proto__: null, ...described, configurable: true };
 		if (fixed.configurable)
 			return described === undefined
 				? { ...fixed, ...("value" in fixed ? { value: undefined } : {}) }
-				: { ...described, configurable: true };
+				: { __proto__: null, ...described, configurable: true };
 		if (!("value" in fixed) || !fixed.writable) return fixed;
-		return { ...fixed, value: described && "value" in described ? described.value : undefined };
+		return { __proto__: null, ...fixed, value: described && "value" in described ? described.value : undefined };
 	};
 	return new NativeProxy(target, {
 		get(t, prop) {
@@ -1064,13 +1064,13 @@ function closedSelfForm(form, target) {
  * @private
  */
 function instanceSelfForm(instanceID, url) {
-	const forms = SELF_FORMS.get(url);
+	const forms = MapMethods.get(SELF_FORMS, url);
 	if (!forms) return undefined;
-	const form = SELF_KINDS.get(instanceID) ? forms.callable : forms.object;
-	const closed = SELF_CLOSED.get(instanceID);
+	const form = MapMethods.get(SELF_KINDS, instanceID) ? forms.callable : forms.object;
+	const closed = MapMethods.get(SELF_CLOSED, instanceID);
 	if (!closed) return form;
-	let made = closed.forms.get(url);
-	if (made === undefined) closed.forms.set(url, (made = closedSelfForm(form, closed.target)));
+	let made = MapMethods.get(closed.forms, url);
+	if (made === undefined) MapMethods.set(closed.forms, url, (made = closedSelfForm(form, closed.target)));
 	return made;
 }
 
@@ -1085,11 +1085,13 @@ function instanceSelfForm(instanceID, url) {
  */
 function closeInstanceSelf(instanceID, target) {
 	if (typeof instanceID !== "string" || target === null || (typeof target !== "object" && typeof target !== "function")) return;
-	if (SELF_CLOSED.get(instanceID)?.target === target) return;
-	SELF_CLOSED.set(instanceID, { target, forms: new Map() });
-	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+	if (MapMethods.get(SELF_CLOSED, instanceID)?.target === target) return;
+	MapMethods.set(SELF_CLOSED, instanceID, { target, forms: new Map() });
+	for (const ofEntry of mapEntries(MapMethods.get(SELF_BINDINGS, instanceID))) {
+		const url = ofEntry[0],
+			setters = ofEntry[1];
 		const form = instanceSelfForm(instanceID, url);
-		if (form) for (const set of setters) set(form);
+		if (form) for (const set of setValues(setters)) set(form);
 	}
 }
 
@@ -1107,10 +1109,10 @@ function closeInstanceSelf(instanceID, target) {
  * registerSelfForms(import.meta.url, runtimeNamespace, { object: objectSelf, callable: callableSelf }, (v) => (self = v));
  */
 function registerSelfForms(url, namespace, forms, bind) {
-	if (SELF_FORMS.has(url)) return;
+	if (MapMethods.has(SELF_FORMS, url)) return;
 	const entry = Objects.freeze({ object: forms.object, callable: forms.callable, bind });
-	SELF_FORMS.set(url, entry);
-	SELF_FORMS.set(namespace, entry);
+	MapMethods.set(SELF_FORMS, url, entry);
+	MapMethods.set(SELF_FORMS, namespace, entry);
 	bind(sharedSelfCallable() ? entry.callable : entry.object);
 }
 
@@ -1121,7 +1123,7 @@ function registerSelfForms(url, namespace, forms, bind) {
  * @internal
  */
 function callableSelfOf(namespace) {
-	return SELF_FORMS.get(namespace)?.callable ?? null;
+	return MapMethods.get(SELF_FORMS, namespace)?.callable ?? null;
 }
 
 /**
@@ -1132,8 +1134,8 @@ function callableSelfOf(namespace) {
  * @private
  */
 function sharedSelfCallable() {
-	if (SELF_KINDS.size === 0) return false;
-	for (const callable of SELF_KINDS.values()) if (!callable) return false;
+	if (MapMethods.size(SELF_KINDS) === 0) return false;
+	for (const callable of mapValues(SELF_KINDS)) if (!callable) return false;
 	return true;
 }
 
@@ -1144,7 +1146,12 @@ function sharedSelfCallable() {
  */
 function rebindSharedSelf() {
 	const callable = sharedSelfCallable();
-	for (const [key, entry] of SELF_FORMS) if (typeof key === "string") entry.bind(callable ? entry.callable : entry.object);
+	for (const ofEntry of mapEntries(SELF_FORMS)) {
+		const key = ofEntry[0],
+			entry = ofEntry[1];
+		// Each entry binds itself (its own `bind`).
+		if (typeof key === "string") FunctionMethods.call(entry.bind, entry, callable ? entry.callable : entry.object);
+	}
 }
 
 /**
@@ -1160,20 +1167,22 @@ function rebindSharedSelf() {
 function setInstanceSelfKind(instanceID, callable) {
 	if (typeof instanceID !== "string") return;
 	if (callable === null) {
-		SELF_KINDS.delete(instanceID);
-		SELF_BINDINGS.delete(instanceID);
-		SELF_CLOSED.delete(instanceID);
+		MapMethods.delete(SELF_KINDS, instanceID);
+		MapMethods.delete(SELF_BINDINGS, instanceID);
+		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
 	}
 	const kind = Boolean(callable);
-	if (SELF_KINDS.get(instanceID) === kind) return;
-	SELF_KINDS.set(instanceID, kind);
+	if (MapMethods.get(SELF_KINDS, instanceID) === kind) return;
+	MapMethods.set(SELF_KINDS, instanceID, kind);
 	// A root closed before its kind changed is closed no more once the api is built again.
-	SELF_CLOSED.delete(instanceID);
-	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+	MapMethods.delete(SELF_CLOSED, instanceID);
+	for (const ofEntry of mapEntries(MapMethods.get(SELF_BINDINGS, instanceID))) {
+		const url = ofEntry[0],
+			setters = ofEntry[1];
 		const form = instanceSelfForm(instanceID, url);
-		if (form) for (const set of setters) set(form);
+		if (form) for (const set of setValues(setters)) set(form);
 	}
 	rebindSharedSelf();
 }
@@ -1199,13 +1208,13 @@ const SELF_BIND_KEY = "\u0000slothlet:bindSelf";
  * @internal
  */
 function bindInstanceSelf(url, instanceID, assign) {
-	const forms = SELF_FORMS.get(url);
+	const forms = MapMethods.get(SELF_FORMS, url);
 	if (!forms || typeof instanceID !== "string" || typeof assign !== "function") return;
-	let byURL = SELF_BINDINGS.get(instanceID);
-	if (!byURL) SELF_BINDINGS.set(instanceID, (byURL = new Map()));
-	let setters = byURL.get(url);
-	if (!setters) byURL.set(url, (setters = new Set()));
-	setters.add(assign);
+	let byURL = MapMethods.get(SELF_BINDINGS, instanceID);
+	if (!byURL) MapMethods.set(SELF_BINDINGS, instanceID, (byURL = new Map()));
+	let setters = MapMethods.get(byURL, url);
+	if (!setters) MapMethods.set(byURL, url, (setters = new Set()));
+	SetMethods.add(setters, assign);
 	assign(instanceSelfForm(instanceID, url));
 }
 
@@ -1250,13 +1259,20 @@ function defaultExportLooksCallable(filePath) {
 		return false;
 	}
 	// Regular expression literals only: the realm's `RegExp` may have been replaced since slothlet loaded.
-	if (/^\s*export\s+default\s+(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
-	if (/^\s*module\.exports\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
-	const named = /^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m.exec(source)?.[1];
+	if (
+		RegExpMethods.exec(/^\s*export\s+default\s+(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m, source) !== null
+	)
+		return true;
+	if (
+		RegExpMethods.exec(/^\s*module\.exports\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m, source) !==
+		null
+	)
+		return true;
+	const named = RegExpMethods.exec(/^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m, source)?.[1];
 	if (!named) return false;
 	const declaration =
 		/^\s*(?:(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|class\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>))/gm;
-	for (let match = declaration.exec(source); match !== null; match = declaration.exec(source)) {
+	for (let match = RegExpMethods.exec(declaration, source); match !== null; match = RegExpMethods.exec(declaration, source)) {
 		if (match[1] === named || match[2] === named || match[3] === named) return true;
 	}
 	return false;
@@ -1270,7 +1286,7 @@ function defaultExportLooksCallable(filePath) {
  */
 function isRuntimeEntryId(id) {
 	const path = toSlashPath(splitQuery(id)[0]);
-	return SINGLE_COPY_FILES.some((url) => NODE !== null && path === toSlashPath(NODE.url.fileURLToPath(url)));
+	return ArrayMethods.some(SINGLE_COPY_FILES, (url) => NODE !== null && path === toSlashPath(NODE.url.fileURLToPath(url)));
 }
 
 /**
@@ -1282,11 +1298,13 @@ function isRuntimeEntryId(id) {
  */
 function selfInstanceOf(parentURL) {
 	if (typeof parentURL !== "string") return null;
-	const tagged = parentURL.includes(MARKER) ? new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance") : null;
+	const tagged = StringMethods.includes(parentURL, MARKER)
+		? URLSearchParamsMethods.get(new URLSearchParams(splitQuery(parentURL)[1] ?? ""), "slothlet_instance")
+		: null;
 	if (tagged) return tagged;
-	if (!parentURL.startsWith("file:")) return null;
+	if (!StringMethods.startsWith(parentURL, "file:")) return null;
 	const found = instancesOfFile(parentURL);
-	return found.size === 1 ? [...found][0] : null;
+	return SetMethods.size(found) === 1 ? setToArray(found)[0] : null;
 }
 
 /**
@@ -1944,7 +1962,9 @@ function checkModuleImport(specifier, importer) {
 		// A URL the module wrote out naming an instance, under vite, which does not name the module importing by it: it
 		// loses the tags only slothlet gives and is an edge of that instance's import graph from this module, as Node's
 		// resolve hook has it (#691).
-		const instanceID = text.includes(MARKER) ? new URLSearchParams(splitQuery(text)[1] ?? "").get("slothlet_instance") : null;
+		const instanceID = StringMethods.includes(text, MARKER)
+			? URLSearchParamsMethods.get(new URLSearchParams(splitQuery(text)[1] ?? ""), "slothlet_instance")
+			: null;
 		if (instanceID) {
 			const untagged = withoutWrittenTags(text);
 			if (typeof importer === "string") recordImport(instanceID, importer, withoutWrittenTags(file));
@@ -2421,9 +2441,12 @@ export function propagateInstanceQuery(specifier, parent, child) {
 	const written = URLSearchParamsMethods.has(childParams, "slothlet_instance");
 	if (written) {
 		// The module-system bridges slothlet serves (require of an ES module) import the URL slothlet built.
-		if (parent.startsWith(ESM_PREFIX) || parent.startsWith(FACADE_PREFIX)) return child;
-		if (!WRITTEN_TAGS.some((key) => childParams.has(key))) return child;
-		for (const key of WRITTEN_TAGS) childParams.delete(key);
+		if (StringMethods.startsWith(parent, ESM_PREFIX) || StringMethods.startsWith(parent, FACADE_PREFIX)) return child;
+		if (!ArrayMethods.some(WRITTEN_TAGS, (key) => URLSearchParamsMethods.has(childParams, key))) return child;
+		for (let ofIndex = 0, ofList = WRITTEN_TAGS; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			URLSearchParamsMethods.delete(childParams, key);
+		}
 	} else {
 		if (!belongsToInstance(specifier, childBase, parent)) return child;
 		for (let ofIndex = 0, ofList = INSTANCE_QUERY_KEYS; ofIndex < ofList.length; ofIndex++) {
@@ -2465,7 +2488,7 @@ const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
  * @type {string[]}
  * @private
  */
-const WRITTEN_TAGS = [...HELPER_TAGS, "module"];
+const WRITTEN_TAGS = concatLists(HELPER_TAGS, ["module"]);
 
 /**
  * A resolved child without the helper tags its URL carries, when its importer is neither an instance file nor one of
@@ -2477,7 +2500,8 @@ const WRITTEN_TAGS = [...HELPER_TAGS, "module"];
  * @private
  */
 function withoutWrittenHelperTags(parent, child) {
-	if (typeof parent === "string" && OWN_PREFIXES.some((prefix) => toSlashPath(parent).startsWith(prefix))) return child;
+	if (typeof parent === "string" && ArrayMethods.some(OWN_PREFIXES, (prefix) => StringMethods.startsWith(toSlashPath(parent), prefix)))
+		return child;
 	// Slothlet's loader imports a leaf from its own files; a first import with no importer is the host's entry.
 	if (typeof parent !== "string") return child;
 	return withoutWrittenTags(child);
@@ -2490,15 +2514,21 @@ function withoutWrittenHelperTags(parent, child) {
  * @private
  */
 function withoutWrittenTags(child) {
-	if (typeof child !== "string" || !child.includes(MARKER)) return child;
-	if (!WRITTEN_TAGS.some((key) => new URLSearchParams(splitQuery(child)[1] ?? "").has(key))) return child;
-	const [childBase, childQuery = ""] = splitQuery(child);
+	if (typeof child !== "string" || !StringMethods.includes(child, MARKER)) return child;
+	if (!ArrayMethods.some(WRITTEN_TAGS, (key) => URLSearchParamsMethods.has(new URLSearchParams(splitQuery(child)[1] ?? ""), key)))
+		return child;
+	const unpacked3 = splitQuery(child),
+		childBase = unpacked3[0],
+		childQuery = unpacked3[1] === undefined ? "" : unpacked3[1];
 	const childParams = new URLSearchParams(childQuery);
-	for (const key of WRITTEN_TAGS) childParams.delete(key);
-	const hashIdx = childBase.indexOf("#");
-	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
-	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
-	return `${base}?${childParams.toString()}${hash}`;
+	for (let ofIndex = 0, ofList = WRITTEN_TAGS; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		URLSearchParamsMethods.delete(childParams, key);
+	}
+	const hashIdx = StringMethods.indexOf(childBase, "#");
+	const base = hashIdx === -1 ? childBase : StringMethods.slice(childBase, 0, hashIdx);
+	const hash = hashIdx === -1 ? "" : StringMethods.slice(childBase, hashIdx);
+	return `${base}?${URLSearchParamsMethods.toString(childParams)}${hash}`;
 }
 
 /**
@@ -2642,7 +2672,9 @@ function isScopeLoad(url) {
 		return false;
 	}
 	if (active.fresh && filePath === active.anchor) return true;
-	return !LEAVES.get(active.instanceID)?.has(filePath);
+	return !(MapMethods.get(LEAVES, active.instanceID) == null
+		? undefined
+		: SetMethods.has(MapMethods.get(LEAVES, active.instanceID), filePath));
 }
 
 /**
@@ -2762,9 +2794,9 @@ function releaseScope(instanceID) {
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
 	for (const key of mapKeys(LOADED_SCRIPTS)) {
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
-		LOADED_SCRIPTS.delete(key);
-		LOADED_TEXTS.delete(key);
-		SEALS.delete(key);
+		MapMethods.delete(LOADED_SCRIPTS, key);
+		MapMethods.delete(LOADED_TEXTS, key);
+		MapMethods.delete(SEALS, key);
 	}
 }
 
@@ -3221,7 +3253,7 @@ function loadInstanceModule(url, context, nextLoad) {
 			source: `module.exports = ${STATE_REF}.redeem(${JSON.stringify(ticket)}).requireESM(${JSON.stringify(target)});\n`
 		};
 	}
-	const instanceID = params.get("slothlet_instance");
+	const instanceID = URLSearchParamsMethods.get(params, "slothlet_instance");
 	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) return sealLoadedSource(url, result);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	const filePath = NODE.url.fileURLToPath(base);
@@ -3372,7 +3404,7 @@ function recordLoadedSource(url, result) {
  */
 function loadedText(result) {
 	const source = result?.source;
-	if (typeof source === "string") return source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+	if (typeof source === "string") return StringMethods.charCodeAt(source, 0) === 0xfeff ? StringMethods.slice(source, 1) : source;
 	if (source !== undefined && source !== null && (ArrayBuffers.isView(source) || source instanceof ArrayBuffer)) return HOST.decode(source);
 	return null;
 }
@@ -3392,8 +3424,8 @@ function sealLoadedSource(url, result) {
 	const text = loadedText(result);
 	if (text === null) return result;
 	const key = scriptKeyOf(url);
-	let seal = SEALS.get(key);
-	if (seal === undefined) SEALS.set(key, (seal = HOST.randomUUID()));
+	let seal = MapMethods.get(SEALS, key);
+	if (seal === undefined) MapMethods.set(SEALS, key, (seal = HOST.randomUUID()));
 	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
 	recordLoadedSource(url, sealed);
 	return sealed;
@@ -3632,10 +3664,10 @@ const HOOKS = Objects.freeze({
 		if (RESOLVE_PROBE.path !== null && specifier === RESOLVE_PROBE.path) RESOLVE_PROBE.seen = true;
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
 		if (
-			specifier.startsWith(ESM_PREFIX) ||
-			specifier.startsWith(FACADE_PREFIX) ||
-			specifier.startsWith(OWN_MODULE_PREFIX) ||
-			specifier.startsWith(SELF_PREFIX)
+			StringMethods.startsWith(specifier, ESM_PREFIX) ||
+			StringMethods.startsWith(specifier, FACADE_PREFIX) ||
+			StringMethods.startsWith(specifier, OWN_MODULE_PREFIX) ||
+			StringMethods.startsWith(specifier, SELF_PREFIX)
 		) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
@@ -3653,11 +3685,11 @@ const HOOKS = Objects.freeze({
 		// that module, unless it belongs to a second copy of slothlet Node loaded itself (#760).
 		const url = resolved?.url;
 		// An instance's file asking for a runtime entry file: the module that gives it the instance's own `self` (#803).
-		if (SINGLE_COPY_FILES.includes(url) && SELF_FORMS.has(url) && !isOtherCopysFile(context?.parentURL)) {
+		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && MapMethods.has(SELF_FORMS, url) && !isOtherCopysFile(context?.parentURL)) {
 			const instanceID = selfInstanceOf(context?.parentURL);
 			if (instanceID !== null) return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
 		}
-		if (OWN_MODULES.has(url) && !NODE_LOADED.has(url) && !isOtherCopysFile(context?.parentURL)) {
+		if (MapMethods.has(OWN_MODULES, url) && !SetMethods.has(NODE_LOADED, url) && !isOtherCopysFile(context?.parentURL)) {
 			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
 		}
 		return resolved;
@@ -3676,8 +3708,10 @@ const HOOKS = Objects.freeze({
 			};
 		}
 		// A runtime entry file as an instance's file is given it (#803).
-		if (url.startsWith(SELF_PREFIX)) {
-			const [instanceID, file] = url.slice(SELF_PREFIX.length).split("|");
+		if (StringMethods.startsWith(url, SELF_PREFIX)) {
+			const selfParts = splitText(StringMethods.slice(url, SELF_PREFIX.length), "|");
+			const instanceID = selfParts[0],
+				file = selfParts[1];
 			return { format: "module", shortCircuit: true, source: selfModuleSource(instanceID, file) };
 		}
 		// One of slothlet's runtime entry files, evaluated through another loader: the module that re-exports it (#760).
@@ -3690,7 +3724,8 @@ const HOOKS = Objects.freeze({
 		const result = nextLoad(url, context);
 		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
 		// is another module of the file, and so is a leaf's file evaluated in the scope other than as that leaf (#691).
-		if (url.startsWith("file:") && isScopeLoad(url) && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result);
+		if (StringMethods.startsWith(url, "file:") && isScopeLoad(url) && shouldRecordCommonJS(url, result))
+			return sealLoadedSource(url, result);
 		return result;
 	}
 });
@@ -4009,9 +4044,9 @@ export function slothletInstanceImports() {
 				if (target && !target.external && isSlothletInternal(target.id)) throw await viteImportRefusal(source, target.id);
 			}
 			// An instance file importing a runtime entry file: the module that gives it the instance's own `self` (#803).
-			if (tagged && source.startsWith("@cldmv/slothlet/runtime")) {
+			if (tagged && StringMethods.startsWith(source, "@cldmv/slothlet/runtime")) {
 				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
-				const instanceID = new URLSearchParams(splitQuery(importer)[1] ?? "").get("slothlet_instance");
+				const instanceID = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(importer)[1] ?? ""), "slothlet_instance");
 				if (target && !target.external && instanceID && isRuntimeEntryId(target.id)) return `\0${SELF_PREFIX}${instanceID}|${target.id}`;
 			}
 			// A file only the host loaded imports as vite resolves it.
@@ -4155,8 +4190,10 @@ export function slothletInstanceImports() {
 		 */
 		load(id) {
 			if (id === NO_RECORD_ID) return { code: "export {};\n", map: null };
-			if (typeof id === "string" && id.startsWith(`\0${SELF_PREFIX}`)) {
-				const [instanceID, file] = id.slice(1 + SELF_PREFIX.length).split("|");
+			if (typeof id === "string" && StringMethods.startsWith(id, `\0${SELF_PREFIX}`)) {
+				const unpacked10 = splitText(StringMethods.slice(id, 1 + SELF_PREFIX.length), "|"),
+					instanceID = unpacked10[0],
+					file = unpacked10[1];
 				return { code: selfModuleSource(instanceID, NODE.url.pathToFileURL(splitQuery(file)[0]).href, file), map: null };
 			}
 			// Read once, as the module importing it loads, from the shared object that module's own code cannot replace.

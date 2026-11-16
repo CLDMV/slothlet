@@ -274,10 +274,13 @@ function runtime_patchDiscoveredHandlers() {
 			typeof value !== "function" ||
 			isSlothletProxy(value) ||
 			!value.prototype ||
-			!Objects.prototype.isPrototypeOf.call(base, value.prototype)
+			!FunctionMethods.call(Objects.prototype.isPrototypeOf, base, value.prototype)
 		)
 			continue;
-		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
+		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(value.prototype); ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerAccessor(value.prototype, propName);
+		}
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
