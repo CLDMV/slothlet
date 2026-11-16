@@ -6406,7 +6406,7 @@ function runtime_makerInstanceID(slothlet) {
 	const instances = slothlet.contextManager.instances;
 	for (let id = slothlet.instanceID; id;) {
 		if (MapMethods.has(instances, id)) return id;
-		const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+		const reloaded = StringMethods.lastIndexOf(id, "_reload_");
 		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 	}
 	return null;
