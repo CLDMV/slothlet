@@ -86,6 +86,25 @@ export async function probe(route) {
 				}
 			})
 		);
+	if (route === "instRun") return settle(() => self.runner.instRun(() => 1));
+	if (route === "instRunLater") return settle(() => self.runner.instRunLater(() => 1));
+	if (route === "instLater") return settle(() => self.runner.instLater(() => 1));
+	if (route === "instGetter") return settle(() => self.runner.instGetter(() => 1));
+	if (route === "instCallSameClass") return settle(async () => self.runner.instCall((await self.bag.inst()).run));
+	if (route === "instCallOtherClass") return settle(async () => self.runner.instCall((await self.bag.other()).run));
+	if (route === "instBindSameClass") return settle(async () => self.runner.instBind((await self.bag.inst()).run));
+	if (route === "instForeign") return settle(async () => self.runner.instForeign(await self.bag.other()));
+	if (route === "instProto") return settle(() => self.runner.instProto(() => 1));
+	if (route === "handedInstRun") return settle(async () => self.runner.callRun(await self.bag.inst()));
+	if (route === "handedInstGetter") return settle(async () => self.runner.readSecret(await self.bag.inst()));
+	if (route === "instShared")
+		return settle(() =>
+			self.runner.instShare({
+				get fn() {
+					return Promise.resolve(self.runner.peekInstance()).then((instance) => instance.run.bind(instance));
+				}
+			})
+		);
 	if (route === "runnerKept") return settle(async () => (await self.runner.keep(made)) && self.runner.runKept(() => 1));
 	if (route === "lent") return settle(async () => self.runner.call(await self.bag.lend()));
 	if (route === "leaf") return settle(() => self.bag.read());

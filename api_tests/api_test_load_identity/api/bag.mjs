@@ -59,3 +59,60 @@ export const lend = () => self.slothlet.lockCaller(() => self.vault.get());
  * @returns {*} The secret.
  */
 export const read = () => self.vault.get();
+
+/** A class whose methods and getter read the vault. */
+class Client {
+	/**
+	 * Read the vault.
+	 * @returns {*} The secret.
+	 */
+	run() {
+		return self.vault.get();
+	}
+
+	/**
+	 * Read the vault after an await.
+	 * @returns {Promise<*>} The secret.
+	 */
+	async later() {
+		await null;
+		return self.vault.get();
+	}
+
+	/**
+	 * The vault, read by a getter.
+	 * @returns {*} The secret.
+	 */
+	get secret() {
+		return self.vault.get();
+	}
+}
+
+/** Another class whose method reads the vault. */
+class Other {
+	/**
+	 * Read the vault.
+	 * @returns {*} The secret.
+	 */
+	run() {
+		return self.vault.get();
+	}
+}
+
+/**
+ * A new instance of a class whose methods read the vault.
+ * @returns {Client} The instance.
+ */
+export const inst = () => new Client();
+
+/**
+ * A new instance of another class whose method reads the vault.
+ * @returns {Other} The instance.
+ */
+export const other = () => new Other();
+
+/**
+ * The class itself.
+ * @returns {typeof Client} The class.
+ */
+export const klass = () => Client;

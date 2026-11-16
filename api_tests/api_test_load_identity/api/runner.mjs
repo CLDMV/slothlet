@@ -135,3 +135,105 @@ export const share = async (holder) => {
  * @returns {Function|null} The closure.
  */
 export const peek = () => shared;
+
+/**
+ * Inside a call that was handed something, ask `bag` for an instance and run what `use` does with it.
+ * @param {*} handed - What the call was handed.
+ * @param {function(object, *): *} use - What to do with the instance and what was handed.
+ * @returns {Promise<*>} What `use` returned.
+ */
+const withInstance = async (handed, use) => use(await self.bag.inst(), handed);
+
+/**
+ * Run a method of an instance it asked `bag` for, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the method returned.
+ */
+export const instRun = (callback) => withInstance(callback, (instance) => instance.run());
+
+/**
+ * Run a method of an instance it asked `bag` for after an await, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the method returned.
+ */
+export const instRunLater = (callback) =>
+	withInstance(callback, async (instance) => {
+		await null;
+		return instance.run();
+	});
+
+/**
+ * Run an async method of an instance it asked `bag` for, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the method returned.
+ */
+export const instLater = (callback) => withInstance(callback, (instance) => instance.later());
+
+/**
+ * Read a getter of an instance it asked `bag` for, inside a call that was handed a callback.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the getter returned.
+ */
+export const instGetter = (callback) => withInstance(callback, (instance) => instance.secret);
+
+/**
+ * Run the function it is handed with an instance it asked `bag` for as the receiver.
+ * @param {Function} fn - The function.
+ * @returns {Promise<*>} What the function returned.
+ */
+export const instCall = (fn) => withInstance(fn, (instance, handed) => handed.call(instance));
+
+/**
+ * Bind the function it is handed to an instance it asked `bag` for and run it.
+ * @param {Function} fn - The function.
+ * @returns {Promise<*>} What the function returned.
+ */
+export const instBind = (fn) => withInstance(fn, (instance, handed) => handed.bind(instance)());
+
+/**
+ * Run a method of an instance it asked `bag` for with the object it is handed as the receiver.
+ * @param {object} receiver - The receiver.
+ * @returns {Promise<*>} What the method returned.
+ */
+export const instForeign = (receiver) => withInstance(receiver, (instance, handed) => instance.run.call(handed));
+
+/**
+ * Run the class's own method, read through the class, on an instance it asked `bag` for.
+ * @param {Function} callback - A callback, which is not run.
+ * @returns {Promise<*>} What the method returned.
+ */
+export const instProto = (callback) => withInstance(callback, async (instance) => (await self.bag.klass()).prototype.run.call(instance));
+
+/**
+ * Run a method of the instance it is handed.
+ * @param {object} instance - The instance.
+ * @returns {*} What the method returned.
+ */
+export const callRun = (instance) => instance.run();
+
+/**
+ * Read a getter of the instance it is handed.
+ * @param {object} instance - The instance.
+ * @returns {*} What the getter returned.
+ */
+export const readSecret = (instance) => instance.secret;
+
+/** The instance {@link instShare} asked `bag` for last. */
+let sharedInstance = null;
+
+/**
+ * Ask `bag` for an instance, keep it where {@link peekInstance} hands it out, then run the function a holder's `fn`
+ * member settles to.
+ * @param {{fn: Promise<Function>}} holder - The holder.
+ * @returns {Promise<*>} What the function returned.
+ */
+export const instShare = async (holder) => {
+	sharedInstance = await self.bag.inst();
+	return (await holder.fn)();
+};
+
+/**
+ * The instance {@link instShare} asked `bag` for last.
+ * @returns {object|null} The instance.
+ */
+export const peekInstance = () => sharedInstance;
