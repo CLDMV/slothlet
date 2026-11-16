@@ -372,6 +372,23 @@ export class OwnershipManager extends ComponentBase {
         restoreModuleId: string | null;
     };
     /**
+     * Drop every module's entries for the paths strictly below `apiPath` (#799).
+     * @param {string} apiPath - The path whose subtree left the api.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * `remove(apiPath)` takes the whole live subtree off the api, whoever owns each node, while
+     * {@link OwnershipManager#removePath} drops only the entry at the path itself. Without this, the entries below
+     * stay recorded: a later add at the path stacks over them, and removing that add reverts its members to the
+     * removed module's values instead of removing them.
+     *
+     * @example
+     * ownership.removePath("extra", "base");
+     * ownership.removeSubtree("extra"); // "extra.ping" is no longer anyone's
+     */
+    public removeSubtree(apiPath: string): void;
+    /**
      * Get current owner of API path
      * @param {string} apiPath - API path to check
      * @returns {Object|null} Current owner entry or null

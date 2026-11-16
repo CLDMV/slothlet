@@ -478,6 +478,19 @@ export class PermissionManager extends ComponentBase {
      */
     writeSubtree(callerPath: string, targetPath: string): "deny" | "grant" | null;
     /**
+     * Whether the call and read rules could refuse `callerPath` a call or read at `targetPath` or anywhere beneath it,
+     * read from the rule set alone: a deny `defaultPolicy`, or a deny or conditional rule for the caller whose target
+     * pattern can reach the subtree. A value held as itself takes no check of its own, so a reader is handed one that
+     * reaches a node's own members only when no read of them could be refused. Hook-target rules decide no read.
+     *
+     * @param {string} callerPath - Api path of the module reading.
+     * @param {string} targetPath - Api path of the subtree's root (`""` for the api root).
+     * @returns {boolean} True when some read could be refused; false while the system is off.
+     * @example
+     * pm.readMayRefuseBeneath("reader.at", "zz"); // true under { caller: "reader.**", target: "zz.tag", effect: "deny" }
+     */
+    readMayRefuseBeneath(callerPath: string, targetPath: string): boolean;
+    /**
      * Whether a write rule grants `callerPath` the write to `targetPath` ({@link decideWrite} answering
      * `"grant"`), with no audit.
      *
