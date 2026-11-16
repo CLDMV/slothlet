@@ -159,7 +159,7 @@ if (isNode) {
 	const inspect = function inspect(...args) {
 		return Reflect.apply(nodeInspect, undefined, args);
 	};
-	Objects.defineProperty(inspect, "custom", { value: nodeInspect.custom, enumerable: true });
+	Objects.defineProperty(inspect, "custom", { __proto__: null, value: nodeInspect.custom, enumerable: true });
 	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);

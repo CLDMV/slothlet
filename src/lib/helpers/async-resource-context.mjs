@@ -39,10 +39,10 @@
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import {
-	ArrayMethods,
 	concatLists,
 	FunctionMethods,
 	Functions,
+	listPush,
 	Processes,
 	Reflect,
 	Symbol,
@@ -166,7 +166,7 @@ function runtime_install(host, name, make) {
 		layer.active = false;
 		return false;
 	}
-	ArrayMethods.push(patched, { host, name, layer, wrapper });
+	listPush(patched, { host, name, layer, wrapper });
 	return true;
 }
 

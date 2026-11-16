@@ -67,6 +67,7 @@ import {
 	Arrays,
 	copyList,
 	JSON,
+	listPush,
 	Map,
 	mapList,
 	MapMethods,
@@ -74,8 +75,8 @@ import {
 	Processes,
 	Set,
 	SetMethods,
-	StringMethods,
-	splitText
+	splitText,
+	StringMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
@@ -223,7 +224,7 @@ export async function discoverModules(options = {}) {
 		}
 
 		const apiDirAbs = path.resolve(realPath, normalized.apiDir);
-		ArrayMethods.push(
+		listPush(
 			results,
 			Objects.freeze({
 				packageName: pkg.name,
@@ -349,11 +350,11 @@ async function enumerateNpmPackages(root, prefixes) {
 				if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue;
 				const fullName = `${entry.name}/${scoped.name}`;
 				if (!matchesPrefix(fullName, prefixes)) continue;
-				ArrayMethods.push(out, { path: path.join(scopeDir, scoped.name), packageName: fullName });
+				listPush(out, { path: path.join(scopeDir, scoped.name), packageName: fullName });
 			}
 		} else {
 			if (!matchesPrefix(entry.name, prefixes)) continue;
-			ArrayMethods.push(out, { path: path.join(nodeModules, entry.name), packageName: entry.name });
+			listPush(out, { path: path.join(nodeModules, entry.name), packageName: entry.name });
 		}
 	}
 	return out;
@@ -383,7 +384,7 @@ async function enumerateFolderModules(root, prefixes) {
 		// for prefix-matching purposes. Actual package identity comes from each
 		// subdir's package.json once we read it.
 		if (!matchesPrefix(entry.name, prefixes)) continue;
-		ArrayMethods.push(out, { path: path.join(root, entry.name), packageName: entry.name });
+		listPush(out, { path: path.join(root, entry.name), packageName: entry.name });
 	}
 	return out;
 }

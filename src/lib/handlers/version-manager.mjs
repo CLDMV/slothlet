@@ -33,6 +33,7 @@ import {
 	Arrays,
 	concatLists,
 	isNaN,
+	listPush,
 	Map,
 	mapEntries,
 	mapKeys,
@@ -1065,12 +1066,12 @@ export class VersionManager extends ComponentBase {
 					}
 					// Configurable target properties (e.g. __isVersionDispatcher, __logicalPath):
 					// always report as configurable so version resolution retains maximum freedom.
-					return { configurable: true, enumerable: true, writable: false, value: t[prop] };
+					return { __proto__: null, configurable: true, enumerable: true, writable: false, value: t[prop] };
 				}
 
 				// Key not on raw target — return a stub without invoking resolveVersion(),
 				// which would run the user discriminator function prematurely.
-				return { configurable: true, enumerable: true, writable: false, value: undefined };
+				return { __proto__: null, configurable: true, enumerable: true, writable: false, value: undefined };
 			},
 
 			/**
@@ -1307,7 +1308,7 @@ export class VersionManager extends ComponentBase {
 					/* v8 ignore next */
 					if (!root || !isCurrent()) continue;
 					await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
-					ArrayMethods.push(written, root);
+					listPush(written, root);
 				}
 			} catch (error) {
 				// A tree written before the failure no longer shows the failed dispatcher.

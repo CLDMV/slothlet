@@ -51,6 +51,7 @@ import {
 	encodeURIComponent,
 	filterList,
 	JSON,
+	listPush,
 	Map,
 	mapEntries,
 	MapMethods,
@@ -262,7 +263,7 @@ function compileHidden(globs) {
 		// those don't compose under a hide-list (a single `!x` would then hide everything except x).
 		const body = regExpReplace(/\//g, negated ? StringMethods.slice(g, 1) : g, ".");
 		if (body.length === 0) continue; // bare "!" — nothing to match
-		ArrayMethods.push(rules, { negated, matches: compilePattern(body) });
+		listPush(rules, { negated, matches: compilePattern(body) });
 	}
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
@@ -878,7 +879,7 @@ export class Loader extends ComponentBase {
 		// import() of a CommonJS file exposes a "module.exports" binding, which is how the ownership index
 		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
 		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
-		Objects.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
+		Objects.defineProperty(namespace, "module.exports", { __proto__: null, value: exports, enumerable: false });
 		return namespace;
 	}
 
@@ -911,7 +912,7 @@ export class Loader extends ComponentBase {
 				type = cached;
 				break;
 			}
-			ArrayMethods.push(visited, current);
+			listPush(visited, current);
 			const raw = await PromiseMethods.catch(fsp.readFile(path.join(current, "package.json"), "utf8"), () => null);
 			if (raw !== null) {
 				const pkg = parseJsonOrNull(raw);
@@ -1102,7 +1103,7 @@ export class Loader extends ComponentBase {
 					}
 					// Checked once the folder is known to produce a member, like the file check below.
 					this.#assertLoadableFolderName(entry.name, dir);
-					ArrayMethods.push(structure.directories, {
+					listPush(structure.directories, {
 						path: fullPath,
 						name: entry.name,
 						children: subStructure
@@ -1146,7 +1147,7 @@ export class Loader extends ComponentBase {
 					}
 					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
-					ArrayMethods.push(structure.files, {
+					listPush(structure.files, {
 						path: fullPath,
 						name: nameWithoutExt,
 						fullName: entry.name,
@@ -1325,7 +1326,7 @@ export class Loader extends ComponentBase {
 			}
 			this.#assertNotThenable(name, fullName, rootPath);
 
-			ArrayMethods.push(structure.files, {
+			listPush(structure.files, {
 				path: filePath,
 				name,
 				fullName,
@@ -1360,7 +1361,7 @@ export class Loader extends ComponentBase {
 				if (children.files.length === 0 && children.directories.length === 0) continue;
 
 				this.#assertLoadableFolderName(dirName, rootPath);
-				ArrayMethods.push(structure.directories, { path: dirPath, name: dirName, children });
+				listPush(structure.directories, { path: dirPath, name: dirName, children });
 			}
 		}
 

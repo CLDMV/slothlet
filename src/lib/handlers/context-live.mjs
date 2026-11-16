@@ -52,6 +52,7 @@ import {
 	FinalizationRegistry,
 	FinalizationRegistryMethods,
 	FunctionMethods,
+	listPush,
 	listSteps,
 	Map,
 	mapEntriesToArray,
@@ -366,7 +367,7 @@ function runtime_inspectablePromise(promise) {
 	const chain = [];
 	for (let link = promise; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		ArrayMethods.push(chain, link);
+		listPush(chain, link);
 	}
 	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
 	const realmObject = Objects.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
@@ -440,7 +441,7 @@ function runtime_followSettled(promise, onSettled, family = null) {
 			? undefined
 			: FinalizationRegistryMethods.register(FOLLOWED_COLLECTED, promise, { families: follows.families, ref, follows }, follows);
 	}
-	ArrayMethods.push(follows, { family, onSettled });
+	listPush(follows, { family, onSettled });
 	if (follows.ref && family !== null && !SetMethods.has(follows.families, family)) {
 		SetMethods.add(follows.families, family);
 		let refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
@@ -1030,8 +1031,8 @@ export class LiveContextManager {
 			if (identity.unresolved || !identity.currentWrapper)
 				return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 			if (!first) first = identity;
-			else ArrayMethods.push(others, identity.currentWrapper, identity.ceiling ?? null);
-			ArrayMethods.push(others, supplierChainCeiling(identity.record));
+			else listPush(others, identity.currentWrapper, identity.ceiling ?? null);
+			listPush(others, supplierChainCeiling(identity.record));
 		}
 		return {
 			currentWrapper: first.currentWrapper,
@@ -1238,9 +1239,9 @@ export class LiveContextManager {
 				}
 				// A module's folder holding nothing suspended says nothing about which call is running.
 				if (placement.byModule && !placement.matches.length) continue;
-				if (syncEnded) ArrayMethods.push(awaiting, { frame, ...placement });
+				if (syncEnded) listPush(awaiting, { frame, ...placement });
 				else {
-					ArrayMethods.push(running, { frame, ...placement });
+					listPush(running, { frame, ...placement });
 					below = [];
 				}
 			}
@@ -1535,7 +1536,7 @@ export class LiveContextManager {
 		const stores = mapValuesToArray(this.instances);
 		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
 			const store = ofList[ofIndex];
-			ArrayMethods.push(this.#enteredFor(store), HOST_ENTRY);
+			listPush(this.#enteredFor(store), HOST_ENTRY);
 		}
 		return stores;
 	}
@@ -1679,7 +1680,7 @@ export class LiveContextManager {
 				: mapValuesToArray(this.instances);
 		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
 			const store = ofList[ofIndex];
-			ArrayMethods.push(this.#enteredFor(store), UNATTRIBUTED_ENTRY);
+			listPush(this.#enteredFor(store), UNATTRIBUTED_ENTRY);
 		}
 		this.#syncDepth++;
 		try {
@@ -1762,7 +1763,7 @@ export class LiveContextManager {
 			store.callerCeiling = previousCallerCeiling;
 		};
 		const entered = this.#enteredFor(store);
-		ArrayMethods.push(entered, UNATTRIBUTED_ENTRY);
+		listPush(entered, UNATTRIBUTED_ENTRY);
 		let result;
 		this.#syncDepth++;
 		try {
@@ -2000,7 +2001,7 @@ export class LiveContextManager {
 		// (#601), the same as a host-registered callback (see runRegisteredAsHost).
 		const entered = this.#enteredFor(store);
 		const hostStores = asHost ? this.#enterHost() : null;
-		if (!hostStores) ArrayMethods.push(entered, record);
+		if (!hostStores) listPush(entered, record);
 		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
 		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
 		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
@@ -2214,7 +2215,7 @@ export class LiveContextManager {
 		// identity that was unresolved at capture stays a looked-through entry, never the host's.
 		const entered = this.#enteredFor(store);
 		// A captured module is entered as a record already resolved: it was handed nothing here.
-		ArrayMethods.push(
+		listPush(
 			entered,
 			flow.unresolved
 				? null

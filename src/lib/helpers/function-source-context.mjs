@@ -127,8 +127,8 @@ function enableFunctionSourcePatching() {
 		}
 	}.toString;
 	try {
-		defineProperty(wrapper, ORIGINAL_TO_STRING, { value: below });
-		if (!defineProperty(FunctionPrototype, "toString", { ...descriptor, value: wrapper })) return;
+		defineProperty(wrapper, ORIGINAL_TO_STRING, { __proto__: null, value: below });
+		if (!defineProperty(FunctionPrototype, "toString", { __proto__: null, ...descriptor, value: wrapper })) return;
 	} catch {
 		return;
 	}

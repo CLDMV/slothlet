@@ -40,6 +40,8 @@ import {
 	FinalizationRegistry,
 	FinalizationRegistryMethods,
 	FunctionMethods,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	MapMethods,
@@ -271,7 +273,7 @@ function runtime_trackListener(emitter, event, originalListener, wrappedListener
 		wrappers = [];
 		MapMethods.set(eventTracking, originalListener, wrappers);
 	}
-	ArrayMethods.push(wrappers, wrappedListener);
+	listPush(wrappers, wrappedListener);
 }
 
 /**
@@ -390,7 +392,7 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	/* v8 ignore next */
 	if (idx === -1) return;
 
-	ArrayMethods.splice(wrappers, idx, 1);
+	listSplice(wrappers, idx, 1);
 	wrappedListener._slothletResource = null;
 
 	if (wrappers.length === 0) {

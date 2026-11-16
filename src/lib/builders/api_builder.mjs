@@ -46,6 +46,8 @@ import {
 	filterList,
 	FunctionMethods,
 	Functions,
+	listPush,
+	listUnshift,
 	Map,
 	mapEntriesToArray,
 	mapKeys,
@@ -591,6 +593,7 @@ export class ApiBuilder extends ComponentBase {
 		// Now create destroy with dynamic user hooks
 		const destroyWithApi = this.createDestroyFunction(userApi);
 		Objects.defineProperty(userApi, "destroy", {
+			__proto__: null,
 			value: destroyWithApi,
 			enumerable: true,
 			writable: false,
@@ -789,8 +792,8 @@ export class ApiBuilder extends ComponentBase {
 						typeof rule.target === "string" ? StringMethods.slice(rule.target, prefix.length) : copyList(rule.target, prefix.length);
 					const firstSegment = splitText(suffix, ".")[0];
 					if (firstSegment && !(RegExpMethods.exec(/[*!?{}]/u, firstSegment) !== null)) {
-						ArrayMethods.unshift(probePaths, `${targetPath}.${firstSegment}`);
-						ArrayMethods.push(probePaths, `${targetPath}.${firstSegment}.__probe__`);
+						listUnshift(probePaths, `${targetPath}.${firstSegment}`);
+						listPush(probePaths, `${targetPath}.${firstSegment}.__probe__`);
 					}
 				}
 
@@ -966,7 +969,7 @@ export class ApiBuilder extends ComponentBase {
 					const keys = Reflect.ownKeys(value);
 					for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];
-						if (fixedOnShell(key) && !ArrayMethods.includes(keys, key)) ArrayMethods.push(keys, key);
+						if (fixedOnShell(key) && !ArrayMethods.includes(keys, key)) listPush(keys, key);
 					}
 					return keys;
 				},
@@ -977,14 +980,14 @@ export class ApiBuilder extends ComponentBase {
 						// A writable member the shell fixed reports the function's current value.
 						if ("value" in own && own.writable) {
 							const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
-							if (descriptor && "value" in descriptor) return { ...own, value: descriptor.value };
+							if (descriptor && "value" in descriptor) return { __proto__: null, ...own, value: descriptor.value };
 						}
 						return own;
 					}
 					if (!Reflect.isExtensible(target)) return undefined;
 					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
 					// Reported as configurable: the shell does not hold it, so it cannot be reported otherwise.
-					return descriptor ? { ...descriptor, configurable: true } : undefined;
+					return descriptor ? { __proto__: null, ...descriptor, configurable: true } : undefined;
 				},
 				defineProperty(target, prop, descriptor) {
 					followIntegrity();
@@ -1205,6 +1208,7 @@ export class ApiBuilder extends ComponentBase {
 						// functions re-check permissions at invocation time.
 						if (descriptor.configurable === true) {
 							return {
+								__proto__: null,
 								...descriptor,
 								get:
 									typeof descriptor.get === "function"
@@ -1250,6 +1254,7 @@ export class ApiBuilder extends ComponentBase {
 
 						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
 							return {
+								__proto__: null,
 								...descriptor,
 								value: captureRouteFunction(createInternalRouteProxy(descriptorValue, childRoutePath, seen), reader)
 							};
@@ -1258,10 +1263,7 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor;
 					}
 
-					return {
-						...descriptor,
-						value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
-					};
+					return { __proto__: null, ...descriptor, value: createInternalRouteProxy(descriptorValue, childRoutePath, seen) };
 				},
 
 				// A change under a symbol meets the rules of the member it is made on; one under a string, those of its path.
@@ -1462,7 +1464,7 @@ export class ApiBuilder extends ComponentBase {
 				return namespaceShown(view, raw, routePath, typeof depth === "number" ? depth : null, new Map());
 			};
 			WeakSetMethods.add(NAMESPACE_INSPECT_HOOKS, hook);
-			Reflect.defineProperty(raw, INSPECT_KEY, { value: hook, writable: false, enumerable: false, configurable: true });
+			Reflect.defineProperty(raw, INSPECT_KEY, { __proto__: null, value: hook, writable: false, enumerable: false, configurable: true });
 		};
 
 		/**
@@ -1950,7 +1952,7 @@ export class ApiBuilder extends ComponentBase {
 								const childWrapper = child ? resolveWrapper(child) : null;
 								if (childWrapper?.____slothletInternal?.userAssigned) continue;
 								const childPath = path === null ? null : path === "" ? childKey : `${path}.${childKey}`;
-								ArrayMethods.push(pending, {
+								listPush(pending, {
 									node: child,
 									path: (records == null ? undefined : SetMethods.has(records, childPath)) ? childPath : null
 								});
@@ -3551,7 +3553,7 @@ export class ApiBuilder extends ComponentBase {
 							const ruleLayer = layer ?? "runtime";
 							const ruleId = permissionManager.addEventRule(rule, ownerModuleID, null, ruleLayer);
 							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-								ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+								listPush(slothlet.handlers.apiManager.state.operationHistory, {
 									type: "addEventRule",
 									rule,
 									ownerModuleID,
@@ -3587,7 +3589,7 @@ export class ApiBuilder extends ComponentBase {
 							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-								ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+								listPush(slothlet.handlers.apiManager.state.operationHistory, {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
@@ -3793,7 +3795,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Record in operationHistory for replay on reload
 					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-						ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+						listPush(slothlet.handlers.apiManager.state.operationHistory, {
 							type: "addPermissionRule",
 							rule,
 							ownerModuleID,
@@ -3846,7 +3848,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Record in operationHistory for replay on reload
 					if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-						ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+						listPush(slothlet.handlers.apiManager.state.operationHistory, {
 							type: "removePermissionRule",
 							ruleId,
 							callerModuleID,
@@ -3920,7 +3922,7 @@ export class ApiBuilder extends ComponentBase {
 						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
 						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-							ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+							listPush(slothlet.handlers.apiManager.state.operationHistory, {
 								type: "registerPrincipal",
 								name,
 								definition,
@@ -3960,7 +3962,7 @@ export class ApiBuilder extends ComponentBase {
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
 						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-							ArrayMethods.push(slothlet.handlers.apiManager.state.operationHistory, {
+							listPush(slothlet.handlers.apiManager.state.operationHistory, {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
@@ -4647,6 +4649,7 @@ export class ApiBuilder extends ComponentBase {
 		// Configurable (still read-only) so the view a module reads `self.slothlet` through can hand it
 		// over wrapped, as it does every other member: kept and called later, it runs as that module (#625).
 		Objects.defineProperty(namespace.lockCaller, "caller", {
+			__proto__: null,
 			value: lockCallerCaller,
 			enumerable: true,
 			writable: false,
@@ -4962,7 +4965,7 @@ export class ApiBuilder extends ComponentBase {
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
 					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
-						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 					}
 
 					// Register child instance
@@ -5064,7 +5067,7 @@ export class ApiBuilder extends ComponentBase {
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
 					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
-						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 					}
 
 					// Register child instance
@@ -5196,6 +5199,7 @@ export class ApiBuilder extends ComponentBase {
 		// Attach slothlet namespace
 		// Note: Using configurable: true for vitest compatibility (worker reuse)
 		Objects.defineProperty(userApi, "slothlet", {
+			__proto__: null,
 			value: builtins.slothlet,
 			enumerable: true,
 			writable: false,
@@ -5204,6 +5208,7 @@ export class ApiBuilder extends ComponentBase {
 
 		// Attach root-level shutdown (convenience)
 		Objects.defineProperty(userApi, "shutdown", {
+			__proto__: null,
 			value: builtins.shutdown,
 			enumerable: true,
 			writable: false,
@@ -5217,6 +5222,7 @@ export class ApiBuilder extends ComponentBase {
 		/* v8 ignore start */
 		if (builtins.destroy !== null) {
 			Objects.defineProperty(userApi, "destroy", {
+				__proto__: null,
 				value: builtins.destroy,
 				enumerable: true,
 				writable: false,

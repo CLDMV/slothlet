@@ -166,7 +166,7 @@ export class ModesProcessor extends ComponentBase {
 							return FunctionMethods.apply(method, content, args);
 						}
 					}[key];
-					Objects.defineProperty(bound, "length", { value: method.length });
+					Objects.defineProperty(bound, "length", { __proto__: null, value: method.length });
 					members[key] = { value: bound };
 				} else {
 					// A field or an accessor is read and written through the instance, as the instance itself answers
@@ -337,7 +337,7 @@ export class ModesProcessor extends ComponentBase {
 			? unifiedWrapperOwn.UnifiedWrapper._memberDescriptor(sourceWrapper, key)
 			: Objects.getOwnPropertyDescriptor(source, key);
 		return descriptor && !("value" in descriptor)
-			? { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true }
+			? { __proto__: null, get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true }
 			: null;
 	}
 
@@ -360,7 +360,11 @@ export class ModesProcessor extends ComponentBase {
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
 			if (isFrameworkReservedKey(key) || FunctionMethods.call(Objects.prototype.hasOwnProperty, fn, key)) continue;
 			const accessor = this.#accessorToCarry(sourceWrapper, key);
-			Objects.defineProperty(fn, key, accessor ?? { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
+			Objects.defineProperty(
+				fn,
+				key,
+				accessor ?? { __proto__: null, value: sourceWrapper[key], writable: false, enumerable: true, configurable: true }
+			);
 		}
 	}
 
@@ -456,7 +460,7 @@ export class ModesProcessor extends ComponentBase {
 		for (const ofEntry of mapEntries(members)) {
 			const key = ofEntry[0],
 				member = ofEntry[1];
-			Objects.defineProperty(owner, key, { value: member, writable: false, enumerable: true, configurable: true });
+			Objects.defineProperty(owner, key, { __proto__: null, value: member, writable: false, enumerable: true, configurable: true });
 		}
 	}
 
@@ -869,7 +873,7 @@ export class ModesProcessor extends ComponentBase {
 					hasNamed: moduleKeys.length > 0,
 					defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? typeof exports.default : null
 				};
-				ArrayMethods.push(loadedModules, { file, mod: exports, moduleName, moduleKeys, analysis });
+				listPush(loadedModules, { file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
 				// All errors thrown by loadModule are wrapped as SlothletError; the FALSE branch (non-SlothletError) is unreachable.
 				/* v8 ignore next */
@@ -994,7 +998,7 @@ export class ModesProcessor extends ComponentBase {
 				// The attached named exports' origins, for the callable's children (#484).
 				this.slothlet.handlers.ownership?.recordComposedContent(file.path, defaultFunc, rootMembers, ["default"]);
 				// Track root-level default function exports for post-processing
-				ArrayMethods.push(rootContributors, { moduleName, file, defaultFunc });
+				listPush(rootContributors, { moduleName, file, defaultFunc });
 				continue; // Skip normal processing for root contributors
 			} else {
 				// Regular module - apply flattening decisions
@@ -1830,6 +1834,7 @@ export class ModesProcessor extends ComponentBase {
 							// already taken goes through the collision rules below.
 							if (member.accessor && !FunctionMethods.call(Objects.prototype.hasOwnProperty, targetApi, key)) {
 								Objects.defineProperty(targetApi, key, {
+									__proto__: null,
 									get: member.accessor.get,
 									set: member.accessor.set,
 									enumerable: true,
@@ -2336,6 +2341,7 @@ export class ModesProcessor extends ComponentBase {
 														// Copied as described, not read: a getter adoption left on the impl stays a
 														// getter, and runs on the node it lands on (#585 review).
 														Objects.defineProperty(implToWrap, k, {
+															__proto__: null,
 															...Objects.getOwnPropertyDescriptor(modes_existingImpl, k),
 															configurable: true
 														});
@@ -2571,6 +2577,7 @@ export class ModesProcessor extends ComponentBase {
 							for (let ofIndex = 0, ofList = Objects.keys(existImpl); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
 								Objects.defineProperty(modes_fileFolderImpl, key, {
+									__proto__: null,
 									...Objects.getOwnPropertyDescriptor(existImpl, key),
 									configurable: true
 								});
@@ -3068,6 +3075,7 @@ export class ModesProcessor extends ComponentBase {
 								const k = ofList[ofIndex];
 								if (!(k in implToWrap)) {
 									Objects.defineProperty(implToWrap, k, {
+										__proto__: null,
 										...Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
 										configurable: true
 									});
@@ -3080,6 +3088,7 @@ export class ModesProcessor extends ComponentBase {
 								/* v8 ignore next */
 								if (implToWrap[k] === undefined) {
 									Objects.defineProperty(implToWrap, k, {
+										__proto__: null,
 										...Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
 										configurable: true
 									});
@@ -3303,7 +3312,12 @@ export class ModesProcessor extends ComponentBase {
 						// its private fields and internal slots).
 						const members = mapList(attachedKeys, (key) => [
 							key,
-							Reflect.getOwnPropertyDescriptor(nestedImpl, key) ?? { value: nestedValue[key], writable: false, enumerable: true }
+							Reflect.getOwnPropertyDescriptor(nestedImpl, key) ?? {
+								__proto__: null,
+								value: nestedValue[key],
+								writable: false,
+								enumerable: true
+							}
 						]);
 						return this.slothlet.processors.flatten.relayer(nestedImpl, members);
 					}
@@ -3388,12 +3402,7 @@ export class ModesProcessor extends ComponentBase {
 				// one); false branch unreachable. A member named with a leading underscore is the module's own.
 				/* v8 ignore next */
 				if (typeof k === "string" && !isFrameworkReservedKey(k)) {
-					Objects.defineProperty(wrapper, k, {
-						value: v,
-						writable: false,
-						enumerable: true,
-						configurable: true
-					});
+					Objects.defineProperty(wrapper, k, { __proto__: null, value: v, writable: false, enumerable: true, configurable: true });
 				}
 			}
 		}

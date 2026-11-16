@@ -74,6 +74,8 @@ import {
 	Dates,
 	filterList,
 	FunctionMethods,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	mapEntriesToArray,
@@ -1074,7 +1076,7 @@ export class ApiManager extends ComponentBase {
 			if (child) {
 				const real = String(child.____slothletInternal.apiPath ?? "");
 				if (real !== ArrayMethods.join(copyList(parts, 0, index + 1), "."))
-					ArrayMethods.push(paths, concatLists(filterList(splitText(real, "."), Boolean), copyList(parts, index + 1)));
+					listPush(paths, concatLists(filterList(splitText(real, "."), Boolean), copyList(parts, index + 1)));
 			}
 			node = next;
 		}
@@ -1487,6 +1489,7 @@ export class ApiManager extends ComponentBase {
 				if (SetMethods.has(userAssignedKeys, key)) continue;
 				const childValue = nextWrapper[key];
 				Objects.defineProperty(existingWrapper, key, {
+					__proto__: null,
 					value: childValue,
 					writable: false,
 					enumerable: true,
@@ -1507,6 +1510,7 @@ export class ApiManager extends ComponentBase {
 				if (!isInternal && !FunctionMethods.call(Objects.prototype.hasOwnProperty, existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Objects.defineProperty(existingWrapper, key, {
+						__proto__: null,
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1621,7 +1625,13 @@ export class ApiManager extends ComponentBase {
 							await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
 						} else {
 							delete existingWrapper[key];
-							Objects.defineProperty(existingWrapper, key, { value: childValue, writable: false, enumerable: true, configurable: true });
+							Objects.defineProperty(existingWrapper, key, {
+								__proto__: null,
+								value: childValue,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
 						}
 					} else {
 						// Defensive: every api leaf (callable, data, or namespace) is a UnifiedWrapper proxy, so both
@@ -1630,6 +1640,7 @@ export class ApiManager extends ComponentBase {
 						/* v8 ignore start */
 						delete existingWrapper[key];
 						Objects.defineProperty(existingWrapper, key, {
+							__proto__: null,
 							value: childValue,
 							writable: false,
 							enumerable: true,
@@ -1640,6 +1651,7 @@ export class ApiManager extends ComponentBase {
 				} else {
 					// New key - add it
 					Objects.defineProperty(existingWrapper, key, {
+						__proto__: null,
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1730,7 +1742,7 @@ export class ApiManager extends ComponentBase {
 				list = [];
 				MapMethods.set(this.state.replaceShadows, moduleIDKey, list);
 			}
-			ArrayMethods.push(list, { container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
+			listPush(list, { container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
 			// Off the api surface, nothing can load it, so its unloaded wrappers stop counting until it is
 			// put back; otherwise materialize.wait() never settles while it is hidden.
 			this._setShadowParked(child, true);
@@ -1810,7 +1822,7 @@ export class ApiManager extends ComponentBase {
 		if (WeakSetMethods.has(visited, api)) return;
 		WeakSetMethods.add(visited, api);
 		if (liveKept && this.#isLiveWrapper(resolveWrapper(api))) {
-			ArrayMethods.push(liveKept, api);
+			listPush(liveKept, api);
 			return;
 		}
 
@@ -2266,8 +2278,8 @@ export class ApiManager extends ComponentBase {
 			if (!current || (typeof current !== "object" && typeof current !== "function")) {
 				return false;
 			}
-			ArrayMethods.push(stack, { parent: current, key: part });
-			ArrayMethods.push(walked, part);
+			listPush(stack, { parent: current, key: part });
+			listPush(walked, part);
 			// Nothing at this path is removed through an alias: the node there is another node, which keeps what it holds.
 			if (isAlias(current, part, ArrayMethods.join(walked, "."))) return false;
 			// The node itself, never the view a read under a module's identity hands back: a removal a module
@@ -2819,7 +2831,7 @@ export class ApiManager extends ComponentBase {
 				operation.ownerModuleID != null &&
 				splitText(String(operation.ownerModuleID), MODULE_ID_SEPARATOR)[0] === base
 			)
-				ArrayMethods.splice(history, i, 1);
+				listSplice(history, i, 1);
 		}
 	}
 
@@ -2972,7 +2984,7 @@ export class ApiManager extends ComponentBase {
 					writer: callerWriter,
 					writerCeilings: callerCeilings
 				});
-				ArrayMethods.push(moduleIDs, moduleID);
+				listPush(moduleIDs, moduleID);
 			}
 			return moduleIDs;
 		}
@@ -3065,7 +3077,7 @@ export class ApiManager extends ComponentBase {
 					const entry = ofList[ofIndex];
 					const { target } = this.#normalizePermissionShorthandEntry(entry);
 					// Placed for the module code making the add, read before the build ran as no module (#597).
-					ArrayMethods.push(ruleLayers[effect], this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
+					listPush(ruleLayers[effect], this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
 				}
 			}
 		}
@@ -3803,7 +3815,7 @@ export class ApiManager extends ComponentBase {
 					// materializationPromise is always null after eager-mode add; this path never fires.
 					/* v8 ignore next 3 */
 					if (wrapper.____slothletInternal.materializationPromise) {
-						ArrayMethods.push(pendingMaterializations, wrapper.____slothletInternal.materializationPromise);
+						listPush(pendingMaterializations, wrapper.____slothletInternal.materializationPromise);
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
@@ -3990,7 +4002,7 @@ export class ApiManager extends ComponentBase {
 				// so replay and restore re-run the identical synthetic add. `resolvedFolderPath` is only the
 				// `synthetic:<path>` sentinel, which replay would wrongly treat as a filesystem path (#117).
 				const historyFolderPath = isSynthetic ? folderPath : resolvedFolderPath;
-				ArrayMethods.push(this.state.addHistory, {
+				listPush(this.state.addHistory, {
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
@@ -4000,7 +4012,7 @@ export class ApiManager extends ComponentBase {
 
 				// Track in operation history for reload replay
 				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
-				ArrayMethods.push(this.state.operationHistory, {
+				listPush(this.state.operationHistory, {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
@@ -4121,7 +4133,7 @@ export class ApiManager extends ComponentBase {
 		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
 		/* v8 ignore next */
 		if (addIndex !== -1) {
-			ArrayMethods.splice(this.state.operationHistory, addIndex, 1);
+			listSplice(this.state.operationHistory, addIndex, 1);
 		}
 
 		// --- Step 2: Scrub addHistory ---
@@ -4222,7 +4234,7 @@ export class ApiManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = this.slothlet.handlers.ownership.getPathHistory(apiPath); ofIndex < ofList.length; ofIndex++) {
 			const entry = ofList[ofIndex];
 			const wrapper = resolveWrapper(entry.value);
-			if (wrapper && wrapper !== live && !ArrayMethods.includes(contributions, wrapper)) ArrayMethods.push(contributions, wrapper);
+			if (wrapper && wrapper !== live && !ArrayMethods.includes(contributions, wrapper)) listPush(contributions, wrapper);
 		}
 		return contributions;
 	}
@@ -4248,7 +4260,7 @@ export class ApiManager extends ComponentBase {
 			const impl = live.____slothletInternal.impl;
 			if (unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl))
 				this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
-			ArrayMethods.push(callable, [apiPath, live]);
+			listPush(callable, [apiPath, live]);
 		}
 		return callable;
 	}
@@ -4340,10 +4352,10 @@ export class ApiManager extends ComponentBase {
 			for (let ofIndex = 0, ofList = childKeys(source); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
 				if (!MapMethods.has(candidates, key)) MapMethods.set(candidates, key, []);
-				ArrayMethods.push(MapMethods.get(candidates, key), source[key]);
+				listPush(MapMethods.get(candidates, key), source[key]);
 			}
 		}
-		const readOnly = (value) => ({ value, writable: false, enumerable: true, configurable: true });
+		const readOnly = (value) => ({ __proto__: null, value, writable: false, enumerable: true, configurable: true });
 		const layout = [];
 		for (const ofEntry of mapEntries(candidates)) {
 			const key = ofEntry[0],
@@ -4352,18 +4364,18 @@ export class ApiManager extends ComponentBase {
 			const liveChild = MapMethods.get(liveChildren, key)?.value;
 			const liveChildRaw = resolveWrapper(liveChild);
 			if (!liveChildRaw) {
-				ArrayMethods.push(layout, [key, readOnly(values[values.length - 1])]);
+				listPush(layout, [key, readOnly(values[values.length - 1])]);
 				continue;
 			}
 			const childSources = [];
 			for (let i = 0; i < values.length; i++) {
 				const raw = resolveWrapper(values[i]);
-				if (raw && raw !== liveChildRaw && !ArrayMethods.includes(childSources, raw)) ArrayMethods.push(childSources, raw);
+				if (raw && raw !== liveChildRaw && !ArrayMethods.includes(childSources, raw)) listPush(childSources, raw);
 			}
 			if (childSources.length > 0 && !SetMethods.has(context.restored, liveChildRaw)) {
 				await this.#restoreInto(liveChildRaw, childSources, `${apiPath}.${key}`, context);
 			}
-			ArrayMethods.push(layout, [key, readOnly(liveChild)]);
+			listPush(layout, [key, readOnly(liveChild)]);
 		}
 		// Any other live child is kept unless ownership records it as the removed module's and no surviving
 		// module owns it; hand-set values go last, in their own order, with their own descriptors.
@@ -4373,13 +4385,13 @@ export class ApiManager extends ComponentBase {
 			const key = ofEntry[0],
 				descriptor = ofEntry[1];
 			if (SetMethods.has(customKeys, key)) {
-				ArrayMethods.push(custom, [key, descriptor]);
+				listPush(custom, [key, descriptor]);
 				continue;
 			}
 			if (MapMethods.has(candidates, key)) continue;
 			const childPath = `${apiPath}.${key}`;
 			if (SetMethods.has(context.removedPaths, childPath) && !ownership.getCurrentOwner(childPath)) continue;
-			ArrayMethods.push(layout, [key, descriptor]);
+			listPush(layout, [key, descriptor]);
 		}
 		runtime_frameworkWrite(live, () => {
 			for (let ofIndex = 0, ofList = childKeys(live); ofIndex < ofList.length; ofIndex++) {
@@ -4609,7 +4621,7 @@ export class ApiManager extends ComponentBase {
 			// re-add (user-supplied ids AND auto-generated `<path>_<hash>` ids alike), so the same id exists
 			// when this op replays. `scopedModuleID` is what distinguishes it from a plain apiPath remove.
 			if (recordHistory) {
-				ArrayMethods.push(this.state.operationHistory, { type: "remove", apiPath: normalizedScoped, scopedModuleID: scopedModuleIDKey });
+				listPush(this.state.operationHistory, { type: "remove", apiPath: normalizedScoped, scopedModuleID: scopedModuleIDKey });
 			}
 			return true;
 		}
@@ -4673,7 +4685,7 @@ export class ApiManager extends ComponentBase {
 			// orphaned.
 			this.#sweepOrphanedCaches();
 			// Track in operation history for reload replay
-			ArrayMethods.push(this.state.operationHistory, {
+			listPush(this.state.operationHistory, {
 				type: "remove",
 				apiPath: normalizedPath
 			});
@@ -4763,13 +4775,13 @@ export class ApiManager extends ComponentBase {
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
 					// Has different owner → rollback to current owner
-					ArrayMethods.push(pathsToRollback, {
+					listPush(pathsToRollback, {
 						apiPath: path,
 						restoredTo: currentOwner.moduleID
 					});
 				} else if (!hasChildrenWithOtherOwners) {
 					// No owner (or self-ownership) and no children with other owners → safe to delete
-					ArrayMethods.push(pathsToDelete, path);
+					listPush(pathsToDelete, path);
 				}
 				// If has children with other owners but no owner itself, skip - children will handle their own cleanup
 			}
@@ -4804,7 +4816,7 @@ export class ApiManager extends ComponentBase {
 					const sources = this.#survivingContributions(rollback.apiPath, live);
 					if (sources.length === 0) continue;
 					await this.#restoreInto(live, sources, rollback.apiPath, restoreContext, { impl: previousImpl, moduleID: rollback.restoredTo });
-					ArrayMethods.push(restoredRoots, `${rollback.apiPath}.`);
+					listPush(restoredRoots, `${rollback.apiPath}.`);
 				}
 			}
 
@@ -4849,7 +4861,7 @@ export class ApiManager extends ComponentBase {
 					const common = [];
 					for (let i = 0; i < minLen; i++) {
 						const seg = segs[0][i];
-						if (ArrayMethods.every(segs, (s) => s[i] === seg)) ArrayMethods.push(common, seg);
+						if (ArrayMethods.every(segs, (s) => s[i] === seg)) listPush(common, seg);
 						else break;
 					}
 					mountRoot = ArrayMethods.join(common, ".");
@@ -4933,6 +4945,7 @@ export class ApiManager extends ComponentBase {
 					if (FunctionMethods.call(Objects.prototype.hasOwnProperty, shadow.container, shadow.key)) continue;
 					runtime_frameworkWrite(shadow.container, () =>
 						Objects.defineProperty(shadow.container, shadow.key, {
+							__proto__: null,
 							value: shadow.child,
 							writable: false,
 							enumerable: true,
@@ -4990,7 +5003,7 @@ export class ApiManager extends ComponentBase {
 			if (recordHistory && pathsToDelete.length > 0) {
 				// A removal by moduleID that kept another module mounted below it replays by that moduleID, so a reload
 				// keeps that module too (#625); otherwise it replays as the removal of its mount root, as before.
-				ArrayMethods.push(this.state.operationHistory, {
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath:
 						!isRootMount && (moduleMounts.length > 1 || this.#hasLiveForeignContent(mountRoot, moduleIDKey))
@@ -5038,7 +5051,7 @@ export class ApiManager extends ComponentBase {
 				// recordHistory is always true in the public deletePath call; FALSE never fires here.
 				/* v8 ignore next */
 				if (recordHistory) {
-					ArrayMethods.push(this.state.operationHistory, {
+					listPush(this.state.operationHistory, {
 						type: "remove",
 						apiPath: normalizedPath
 					});
@@ -5062,7 +5075,7 @@ export class ApiManager extends ComponentBase {
 			}
 			// Track in operation history for reload replay
 			if (recordHistory) {
-				ArrayMethods.push(this.state.operationHistory, {
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath: normalizedPath
 				});
@@ -5087,7 +5100,7 @@ export class ApiManager extends ComponentBase {
 				});
 				// Track in operation history for reload replay
 				if (recordHistory) {
-					ArrayMethods.push(this.state.operationHistory, {
+					listPush(this.state.operationHistory, {
 						type: "remove",
 						apiPath: normalizedPath
 					});
@@ -5097,7 +5110,7 @@ export class ApiManager extends ComponentBase {
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
 			// Track in operation history for reload replay
 			if (recordHistory) {
-				ArrayMethods.push(this.state.operationHistory, {
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath: normalizedPath
 				});
@@ -5356,7 +5369,7 @@ export class ApiManager extends ComponentBase {
 			/* v8 ignore next */
 			const ep = entry?.endpoint ?? ".";
 			if (!MapMethods.has(endpointOrder, ep)) MapMethods.set(endpointOrder, ep, []);
-			ArrayMethods.push(MapMethods.get(endpointOrder, ep), moduleID);
+			listPush(MapMethods.get(endpointOrder, ep), moduleID);
 		}
 
 		for (const ofEntry of mapEntries(endpointOrder)) {
@@ -5419,7 +5432,7 @@ export class ApiManager extends ComponentBase {
 				const moduleID = allModuleIDs[i];
 				const entry = cacheManager.get(moduleID);
 				if (entry && entry.endpoint === ".") {
-					ArrayMethods.push(baseModules, moduleID);
+					listPush(baseModules, moduleID);
 				}
 			}
 			return baseModules;
@@ -5431,7 +5444,7 @@ export class ApiManager extends ComponentBase {
 			const moduleID = allModuleIDs[i];
 			const entry = cacheManager.get(moduleID);
 			if (entry && entry.endpoint === apiPath) {
-				ArrayMethods.push(exactMatches, moduleID);
+				listPush(exactMatches, moduleID);
 			}
 		}
 		if (exactMatches.length > 0) return exactMatches;
@@ -5443,7 +5456,7 @@ export class ApiManager extends ComponentBase {
 			const moduleID = allModuleIDs[i];
 			const entry = cacheManager.get(moduleID);
 			if (typeof entry?.endpoint === "string" && StringMethods.startsWith(entry.endpoint, pathPrefix)) {
-				ArrayMethods.push(children, moduleID);
+				listPush(children, moduleID);
 			}
 		}
 		if (children.length > 0) return children;
@@ -5458,7 +5471,7 @@ export class ApiManager extends ComponentBase {
 				// Ownership history only records modules that are still in the cache; this check never fails.
 				/* v8 ignore next */
 				if (cacheManager.has(moduleID)) {
-					ArrayMethods.push(owned, moduleID);
+					listPush(owned, moduleID);
 				}
 			}
 			// owned is always non-empty when history is non-empty (every entry is in the cache).
@@ -5674,6 +5687,7 @@ export class ApiManager extends ComponentBase {
 						if (childFile) {
 							if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, implForReload, "__childFilePaths")) {
 								Objects.defineProperty(implForReload, "__childFilePaths", {
+									__proto__: null,
 									value: {},
 									enumerable: false,
 									configurable: true,
@@ -5775,7 +5789,7 @@ export class ApiManager extends ComponentBase {
 			const id = ofList[ofIndex];
 			if (SetMethods.has(reloadGroup, id)) continue;
 			const entry = cacheManager.get(id);
-			ArrayMethods.push(mounts, entry.endpoint);
+			listPush(mounts, entry.endpoint);
 			if (entry.collisionMode !== "replace") continue;
 			if (ownership) {
 				const prior = ownershipBefore == null ? undefined : MapMethods.get(ownershipBefore, entry.endpoint);
@@ -5815,7 +5829,7 @@ export class ApiManager extends ComponentBase {
 				const wholeApi = endpoint === "." || endpoint === "";
 				const inMount = wholeApi || StringMethods.startsWith(shadowPath, `${endpoint}.`);
 				if (shadow.ownerModuleID !== moduleID || !inMount) {
-					ArrayMethods.push(kept, shadow);
+					listPush(kept, shadow);
 					continue;
 				}
 				// Find the rebuilt value at the shadowed member's path, relative to the mount.
@@ -5847,7 +5861,7 @@ export class ApiManager extends ComponentBase {
 				}
 				// Still hidden: the wrappers the refresh gave it count no more than the ones it replaced.
 				this._setShadowParked(shadow.child, true);
-				ArrayMethods.push(kept, shadow);
+				listPush(kept, shadow);
 			}
 			MapMethods.set(this.state.replaceShadows, overwriter, kept);
 		}
@@ -5969,7 +5983,7 @@ export class ApiManager extends ComponentBase {
 			for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
 				const child = ofList[ofIndex];
 				const childNode = resolveWrapper(Objects.getOwnPropertyDescriptor(node, child).value);
-				if (childNode && !childNode.____slothletInternal.userAssigned) ArrayMethods.push(pending, [`${path}.${child}`, childNode]);
+				if (childNode && !childNode.____slothletInternal.userAssigned) listPush(pending, [`${path}.${child}`, childNode]);
 			}
 		}
 		return "own";
@@ -6026,7 +6040,7 @@ export class ApiManager extends ComponentBase {
 		const orderedSet = setFrom(ordered);
 		for (let ofIndex = 0, ofList = current; ofIndex < ofList.length; ofIndex++) {
 			const k = ofList[ofIndex];
-			if (!SetMethods.has(orderedSet, k)) ArrayMethods.push(ordered, k);
+			if (!SetMethods.has(orderedSet, k)) listPush(ordered, k);
 		}
 		for (let ofIndex = 0, ofList = ordered; ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];

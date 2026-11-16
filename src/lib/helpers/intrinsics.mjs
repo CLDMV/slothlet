@@ -82,6 +82,8 @@ const NativeSymbol = globalThis.Symbol;
 const { getOwnPropertyNames, getOwnPropertyDescriptor, freeze, create } = NativeObject;
 const { apply } = NativeReflect;
 const getPrototypeOfNative = NativeReflect.getPrototypeOf;
+const setPrototypeOfNative = NativeReflect.setPrototypeOf;
+const ownKeysNative = NativeReflect.ownKeys;
 const globalThisMap = globalThis.Map;
 const globalThisSet = globalThis.Set;
 const ArrayFrom = globalThis.Array.from;
@@ -109,6 +111,41 @@ function staticsOf(source) {
 }
 
 /**
+ * {@link staticsOf} for `Reflect` or `Object`, with `getOwnPropertyDescriptor` (and `Object.getOwnPropertyDescriptors`)
+ * answering descriptors with no prototype: a member a descriptor lacks (`get` on a data descriptor, `value` on an
+ * accessor) reads as absent, whatever module code put on `Object.prototype`, and a descriptor handed back to
+ * `defineProperty` or a proxy trap is read for its own members only.
+ * @param {object|Function} source - `Reflect` or `Object`.
+ * @returns {object} Its members, by name.
+ * @private
+ */
+function withPlainDescriptors(source) {
+	const copy = create(null);
+	const names = getOwnPropertyNames(source);
+	for (let i = 0; i < names.length; i++) {
+		const descriptor = getOwnPropertyDescriptor(source, names[i]);
+		if (descriptor && "value" in descriptor) copy[names[i]] = descriptor.value;
+	}
+	const describe = copy.getOwnPropertyDescriptor;
+	copy.getOwnPropertyDescriptor = (target, key) => {
+		const descriptor = describe(target, key);
+		if (descriptor !== undefined) setPrototypeOfNative(descriptor, null);
+		return descriptor;
+	};
+	if (typeof copy.getOwnPropertyDescriptors === "function") {
+		const describeAll = copy.getOwnPropertyDescriptors;
+		copy.getOwnPropertyDescriptors = (target) => {
+			const all = describeAll(target);
+			const keys = ownKeysNative(all);
+			for (let i = 0; i < keys.length; i++) setPrototypeOfNative(all[keys[i]], null);
+			setPrototypeOfNative(all, null);
+			return all;
+		};
+	}
+	return freeze(copy);
+}
+
+/**
  * The functions of `Reflect`, as they were when slothlet loaded.
  * @type {typeof globalThis.Reflect}
  * @internal
@@ -116,7 +153,7 @@ function staticsOf(source) {
  * import { Reflect } from "@cldmv/slothlet/helpers/intrinsics";
  * Reflect.getOwnPropertyDescriptor(value, "constructor");
  */
-export const Reflect = staticsOf(NativeReflect);
+export const Reflect = withPlainDescriptors(NativeReflect);
 
 /**
  * The static functions of `Object`, as they were when slothlet loaded.
@@ -126,7 +163,7 @@ export const Reflect = staticsOf(NativeReflect);
  * import { Objects } from "@cldmv/slothlet/helpers/intrinsics";
  * Objects.keys(value);
  */
-export const Objects = staticsOf(NativeObject);
+export const Objects = withPlainDescriptors(NativeObject);
 
 /**
  * The static functions of `Array`, as they were when slothlet loaded. `Arrays.from` and `Arrays.of` make plain arrays.
@@ -1469,7 +1506,7 @@ export function copyList(list, start = 0, end = list.length) {
 	let from = start < 0 ? NativeMath.max(length + start, 0) : NativeMath.min(start, length);
 	const to = end < 0 ? NativeMath.max(length + end, 0) : NativeMath.min(end, length);
 	const out = [];
-	for (let i = 0; from < to; from++, i++) out[i] = list[from];
+	for (let i = 0; from < to; from++, i++) put(out, i, list[from]);
 	return out;
 }
 
@@ -1486,9 +1523,99 @@ export function concatLists(...lists) {
 	let n = 0;
 	for (let i = 0; i < lists.length; i++) {
 		const list = lists[i];
-		for (let j = 0; j < list.length; j++) out[n++] = list[j];
+		for (let j = 0; j < list.length; j++) put(out, n++, list[j]);
 	}
 	return out;
+}
+
+/** `Array.prototype` and `Object.prototype` as slothlet loaded with them. */
+const ArrayPrototype = globalThis.Array.prototype;
+const ObjectPrototype = NativeObject.prototype;
+const defineOwn = NativeReflect.defineProperty;
+const hasOwnNative = uncurryThis(ObjectPrototype.hasOwnProperty);
+
+/**
+ * Set element `index` of an array slothlet makes, as `list[index] = value` does, without running a setter module code
+ * put at that index on `Array.prototype` or `Object.prototype` (or on a prototype put between them). When neither holds
+ * the index the plain write is taken; otherwise the element is defined.
+ * @param {Array<unknown>} list - The array.
+ * @param {number} index - The index.
+ * @param {unknown} value - The element.
+ * @returns {void}
+ * @private
+ */
+function put(list, index, value) {
+	if (
+		getPrototypeOfNative(list) === ArrayPrototype &&
+		getPrototypeOfNative(ArrayPrototype) === ObjectPrototype &&
+		!hasOwnNative(ArrayPrototype, index) &&
+		!hasOwnNative(ObjectPrototype, index)
+	) {
+		list[index] = value;
+		return;
+	}
+	defineOwn(list, index, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
+}
+
+/**
+ * Append values to an array, as `list.push(...values)` does, without running a setter module code put at an index of
+ * the shared prototypes (see {@link put}).
+ * @param {Array<unknown>} list - The array.
+ * @param {...unknown} values - What to append.
+ * @returns {number} The new length.
+ * @internal
+ * @example
+ * listPush(names, "a");
+ */
+export function listPush(list, ...values) {
+	for (let i = 0; i < values.length; i++) put(list, list.length, values[i]);
+	return list.length;
+}
+
+/**
+ * Insert values at the start of an array, as `list.unshift(...values)` does, without running a setter module code put
+ * at an index of the shared prototypes.
+ * @param {Array<unknown>} list - The array.
+ * @param {...unknown} values - What to insert.
+ * @returns {number} The new length.
+ * @internal
+ * @example
+ * listUnshift(frames, first);
+ */
+export function listUnshift(list, ...values) {
+	const count = values.length;
+	for (let i = list.length - 1; i >= 0; i--) put(list, i + count, list[i]);
+	for (let i = 0; i < count; i++) list[i] = values[i];
+	return list.length;
+}
+
+/**
+ * Remove and insert elements in place, as `list.splice(start, deleteCount, ...items)` does, without reading the array's
+ * `constructor` or `Symbol.species` and without running a setter module code put at an index of the shared prototypes.
+ * With only `start`, every element from there is removed.
+ * @param {Array<unknown>} list - The array.
+ * @param {number} start - Where to start (negative counts from the end).
+ * @param {...unknown} rest - How many to remove, then the elements to insert.
+ * @returns {Array<unknown>} The removed elements.
+ * @internal
+ * @example
+ * listSplice(stack, index, 1); // [the element removed]
+ */
+export function listSplice(list, start, ...rest) {
+	const length = list.length;
+	const from = start < 0 ? NativeMath.max(length + start, 0) : NativeMath.min(NativeMath.trunc(start) || 0, length);
+	const removeCount = rest.length === 0 ? length - from : NativeMath.min(NativeMath.max(NativeMath.trunc(rest[0]) || 0, 0), length - from);
+	const removed = [];
+	for (let i = 0; i < removeCount; i++) put(removed, i, list[from + i]);
+	const insertCount = rest.length > 1 ? rest.length - 1 : 0;
+	if (insertCount < removeCount) {
+		for (let k = from; k < length - removeCount; k++) list[k + insertCount] = list[k + removeCount];
+		list.length = length - removeCount + insertCount;
+	} else if (insertCount > removeCount) {
+		for (let k = length - removeCount; k > from; k--) put(list, k + insertCount - 1, list[k + removeCount - 1]);
+	}
+	for (let i = 0; i < insertCount; i++) put(list, from + i, rest[i + 1]);
+	return removed;
 }
 
 /**
@@ -1502,7 +1629,7 @@ export function concatLists(...lists) {
  */
 export function appendList(target, list) {
 	const length = list.length;
-	for (let i = 0; i < length; i++) ArrayMethods.push(target, list[i]);
+	for (let i = 0; i < length; i++) put(target, target.length, list[i]);
 	return target.length;
 }
 
@@ -1519,7 +1646,7 @@ export function appendList(target, list) {
 export function mapList(list, fn) {
 	const length = list.length;
 	const out = [];
-	for (let i = 0; i < length; i++) out[i] = fn(list[i], i, list);
+	for (let i = 0; i < length; i++) put(out, i, fn(list[i], i, list));
 	return out;
 }
 
@@ -1538,7 +1665,7 @@ export function filterList(list, fn) {
 	const out = [];
 	for (let i = 0, n = 0; i < length; i++) {
 		const value = list[i];
-		if (fn(value, i, list)) out[n++] = value;
+		if (fn(value, i, list)) put(out, n++, value);
 	}
 	return out;
 }
@@ -1555,7 +1682,7 @@ export function setToArray(set) {
 	const out = [];
 	if (set === undefined || set === null) return out;
 	SetMethods.forEach(set, (value) => {
-		out[out.length] = value;
+		put(out, out.length, value);
 	});
 	return out;
 }
@@ -1572,7 +1699,7 @@ export function mapKeysToArray(map) {
 	const out = [];
 	if (map === undefined || map === null) return out;
 	MapMethods.forEach(map, (value, key) => {
-		out[out.length] = key;
+		put(out, out.length, key);
 	});
 	return out;
 }
@@ -1589,7 +1716,7 @@ export function mapValuesToArray(map) {
 	const out = [];
 	if (map === undefined || map === null) return out;
 	MapMethods.forEach(map, (value) => {
-		out[out.length] = value;
+		put(out, out.length, value);
 	});
 	return out;
 }
@@ -1606,7 +1733,7 @@ export function mapEntriesToArray(map) {
 	const out = [];
 	if (map === undefined || map === null) return out;
 	MapMethods.forEach(map, (value, key) => {
-		out[out.length] = [key, value];
+		put(out, out.length, [key, value]);
 	});
 	return out;
 }
@@ -1627,17 +1754,17 @@ export function splitText(text, separator, limit = 4294967295) {
 	const out = [];
 	if (limit === 0) return out;
 	if (separator === "") {
-		for (let i = 0; i < text.length && out.length < limit; i++) out[i] = text[i];
+		for (let i = 0; i < text.length && out.length < limit; i++) put(out, i, text[i]);
 		return out;
 	}
 	let from = 0;
 	let at;
 	while ((at = StringMethods.indexOf(text, separator, from)) !== -1) {
-		out[out.length] = StringMethods.slice(text, from, at);
+		put(out, out.length, StringMethods.slice(text, from, at));
 		if (out.length >= limit) return out;
 		from = at + separator.length;
 	}
-	out[out.length] = StringMethods.slice(text, from);
+	put(out, out.length, StringMethods.slice(text, from));
 	return out;
 }
 
@@ -1712,14 +1839,14 @@ function matchesOf(regexp, text) {
 	if (!RegExpMethods.global(regexp)) {
 		if (!RegExpMethods.sticky(regexp)) regexp.lastIndex = 0;
 		const match = RegExpMethods.exec(regexp, text);
-		if (match !== null) out[0] = match;
+		if (match !== null) put(out, 0, match);
 		return out;
 	}
 	const unicode = RegExpMethods.unicode(regexp) || (RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
 	regexp.lastIndex = 0;
 	let match;
 	while ((match = RegExpMethods.exec(regexp, text)) !== null) {
-		out[out.length] = match;
+		put(out, out.length, match);
 		if (match[0] === "") {
 			const at = regexp.lastIndex;
 			const code = unicode ? StringMethods.codePointAt(text, at) : undefined;
@@ -1787,7 +1914,7 @@ export function regExpSplit(regexp, text, limit = 4294967295) {
 	const size = text.length;
 	if (size === 0) {
 		splitter.lastIndex = 0;
-		if (RegExpMethods.exec(splitter, text) === null) out[0] = text;
+		if (RegExpMethods.exec(splitter, text) === null) put(out, 0, text);
 		return out;
 	}
 	const advance = (index) => {
@@ -1809,16 +1936,16 @@ export function regExpSplit(regexp, text, limit = 4294967295) {
 			q = advance(q);
 			continue;
 		}
-		out[out.length] = StringMethods.slice(text, p, q);
+		put(out, out.length, StringMethods.slice(text, p, q));
 		if (out.length >= limit) return out;
 		p = e;
 		for (let i = 1; i < match.length; i++) {
-			out[out.length] = match[i];
+			put(out, out.length, match[i]);
 			if (out.length >= limit) return out;
 		}
 		q = p;
 	}
-	out[out.length] = StringMethods.slice(text, p, size);
+	put(out, out.length, StringMethods.slice(text, p, size));
 	return out;
 }
 
@@ -1927,7 +2054,7 @@ export function matchAllOf(text, regexp) {
 	const out = [];
 	let match;
 	while ((match = RegExpMethods.exec(copy, text)) !== null) {
-		out[out.length] = match;
+		put(out, out.length, match);
 		if (match[0] === "") copy.lastIndex++;
 	}
 	return out;
@@ -1955,7 +2082,7 @@ export function promiseAll(list) {
 			PromiseMethods.then(
 				Promises.resolve(list[i]),
 				(value) => {
-					out[i] = value;
+					put(out, i, value);
 					if (--left === 0) resolve(out);
 				},
 				reject
@@ -1984,7 +2111,7 @@ export function promiseAllSettled(list) {
 		}
 		for (let i = 0; i < length; i++) {
 			const settle = (result) => {
-				out[i] = result;
+				put(out, i, result);
 				if (--left === 0) resolve(out);
 			};
 			PromiseMethods.then(
@@ -2009,7 +2136,7 @@ export function objectFromEntries(list) {
 	const out = {};
 	for (let i = 0; i < list.length; i++) {
 		const entry = list[i];
-		NativeReflect.defineProperty(out, entry[0], { value: entry[1], writable: true, enumerable: true, configurable: true });
+		defineOwn(out, entry[0], { __proto__: null, value: entry[1], writable: true, enumerable: true, configurable: true });
 	}
 	return out;
 }

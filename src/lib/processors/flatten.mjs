@@ -393,7 +393,7 @@ export class Flatten extends ComponentBase {
 			holdMember(target, key, value);
 			return;
 		}
-		Objects.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
 	}
 
 	/**

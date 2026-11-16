@@ -34,6 +34,8 @@ import {
 	Date,
 	filterList,
 	FunctionMethods,
+	listPush,
+	listSplice,
 	Map,
 	mapList,
 	MapMethods,
@@ -323,6 +325,7 @@ export function failureSource(fields, record) {
 	let read = false;
 	let stack;
 	return Objects.defineProperty(fields, "stack", {
+		__proto__: null,
 		get() {
 			if (!read) {
 				stack = record.stack();
@@ -678,7 +681,7 @@ export class HookManager extends ComponentBase {
 				if (defaultTag == null) {
 					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
 				}
-				ArrayMethods.push(tags, defaultTag);
+				listPush(tags, defaultTag);
 			}
 			for (let ofIndex = 0, ofList = tags; ofIndex < ofList.length; ofIndex++) {
 				const tag = ofList[ofIndex];
@@ -694,7 +697,7 @@ export class HookManager extends ComponentBase {
 			try {
 				for (let ofIndex = 0, ofList = tags; ofIndex < ofList.length; ofIndex++) {
 					const tag = ofList[ofIndex];
-					ArrayMethods.push(
+					listPush(
 						memberIds,
 						this.on(`${tag}.${pattern}:${type}`, handler, {
 							...options,
@@ -808,7 +811,7 @@ export class HookManager extends ComponentBase {
 		if (!subsetIndex[pattern]) {
 			subsetIndex[pattern] = [];
 		}
-		ArrayMethods.push(subsetIndex[pattern], hook);
+		listPush(subsetIndex[pattern], hook);
 
 		// Add to ID index
 		MapMethods.set(this.#byId, id, hook);
@@ -1109,7 +1112,7 @@ export class HookManager extends ComponentBase {
 		if (filter.id) {
 			const hook = MapMethods.get(this.#byId, filter.id);
 			if (hook && (filter.enabled === undefined || hook.enabled === filter.enabled)) {
-				ArrayMethods.push(hooks, this.#serializeHook(hook));
+				listPush(hooks, this.#serializeHook(hook));
 			}
 			return { registeredHooks: hooks };
 		}
@@ -1146,7 +1149,7 @@ export class HookManager extends ComponentBase {
 							continue;
 						}
 
-						ArrayMethods.push(hooks, this.#serializeHook(hook));
+						listPush(hooks, this.#serializeHook(hook));
 					}
 				}
 			}
@@ -1260,7 +1263,7 @@ export class HookManager extends ComponentBase {
 					}
 
 					if (hook._compiled(apiPath)) {
-						ArrayMethods.push(subsetHooks, hook);
+						listPush(subsetHooks, hook);
 					}
 				}
 			}
@@ -2089,7 +2092,7 @@ export class HookManager extends ComponentBase {
 			});
 		}
 
-		ArrayMethods.splice(patternHooks, index, 1);
+		listSplice(patternHooks, index, 1);
 
 		// Clean up empty pattern arrays
 		if (patternHooks.length === 0) {
@@ -2211,7 +2214,7 @@ export class HookManager extends ComponentBase {
 	exportHooks() {
 		const registrations = [];
 		for (const hook of mapValues(this.#byId)) {
-			ArrayMethods.push(registrations, {
+			listPush(registrations, {
 				// Emit the canonical suffix form so reload replay (importHooks → on()) does not trip
 				// the prefix-form deprecation warning on slothlet's own re-registered hooks.
 				typePattern: `${hook.pattern}:${hook.type}`,

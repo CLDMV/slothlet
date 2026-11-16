@@ -43,6 +43,7 @@
 import {
 	ArrayMethods,
 	filterList,
+	listPush,
 	matchAllOf,
 	Math,
 	Objects,
@@ -140,7 +141,7 @@ function stripComments(src) {
 			} else if (ch === "$" && src[i + 1] === "{") {
 				out += "${";
 				i += 2;
-				ArrayMethods.push(templates, depth);
+				listPush(templates, depth);
 				depth++;
 				last = "{";
 				return;
@@ -356,7 +357,7 @@ function readObjectKeys(src, start, names, reexports) {
 			i += 3;
 			ws();
 			const spec = leadingRequire(StringMethods.slice(src, i, end));
-			if (spec !== null) ArrayMethods.push(reexports, spec);
+			if (spec !== null) listPush(reexports, spec);
 		} else if (src[i] === "[") {
 			// Computed key: not statically known.
 			i = skipBalanced(src, i);
@@ -378,7 +379,7 @@ function readObjectKeys(src, start, names, reexports) {
 				i++;
 				ws();
 				const spec = leadingRequire(StringMethods.slice(src, i, end));
-				if (spec !== null) ArrayMethods.push(reexports, spec);
+				if (spec !== null) listPush(reexports, spec);
 			}
 		}
 		// Skip the value (or method body) up to the next top-level comma.
@@ -426,13 +427,13 @@ export function scanCommonJSExports(source) {
 		if (src[at] === "{") readObjectKeys(src, at, names, reexports);
 		else {
 			const spec = leadingRequire(StringMethods.slice(src, at));
-			if (spec !== null) ArrayMethods.push(reexports, spec);
+			if (spec !== null) listPush(reexports, spec);
 		}
 	}
 
 	// TypeScript / Babel star re-exports.
 	const star = new RegExp(Strings.raw`__export(?:Star)?\s*\(\s*require\s*\(\s*${str(1)}\s*\)`, "g");
-	for (let i = 0, found = matchAllOf(src, star); i < found.length; i++) ArrayMethods.push(reexports, decodeStringBody(found[i][2]));
+	for (let i = 0, found = matchAllOf(src, star); i < found.length; i++) listPush(reexports, decodeStringBody(found[i][2]));
 
 	// Babel's star re-export: `var _x = require("x"); Object.keys(_x).forEach(function (key) { … exports[key] … })`.
 	const forEachKeys = /Object\s*\.\s*keys\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\.\s*forEach\s*\(/g;
@@ -442,7 +443,7 @@ export function scanCommonJSExports(source) {
 			new RegExp(Strings.raw`(?<![\w$.])${escapeRegExp(m[1])}\s*=\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?require\s*\(\s*${str(1)}\s*\)`),
 			src
 		);
-		if (binding) ArrayMethods.push(reexports, decodeStringBody(binding[2]));
+		if (binding) listPush(reexports, decodeStringBody(binding[2]));
 	}
 
 	return { names, reexports };
@@ -480,7 +481,7 @@ export function commonJSExportNames(filePath, source, io) {
 				target = io.resolve(spec, file);
 				if (SetMethods.has(visited, target) || !(RegExpMethods.exec(/\.(?:c?js)$/, target) !== null)) continue;
 				SetMethods.add(visited, target);
-				ArrayMethods.push(queue, [target, io.readFile(target)]);
+				listPush(queue, [target, io.readFile(target)]);
 			} catch {
 				// An unresolvable or unreadable re-export contributes no names (Node's lexer skips it too).
 			}

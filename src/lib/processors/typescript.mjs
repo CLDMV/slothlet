@@ -37,6 +37,7 @@ import {
 	filterList,
 	FunctionMethods,
 	JSON,
+	listPush,
 	Map,
 	mapEntries,
 	mapFrom,
@@ -852,7 +853,7 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			for (const dep of setValues(fileDeps)) {
 				if (!MapMethods.has(transformed, dep)) {
 					MapMethods.set(transformed, dep, await transform(dep));
-					ArrayMethods.push(pending, dep);
+					listPush(pending, dep);
 				}
 			}
 		}

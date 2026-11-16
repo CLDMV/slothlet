@@ -43,6 +43,7 @@ import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
 import {
 	ArrayMethods,
 	Arrays,
+	listPush,
 	Map,
 	mapEntries,
 	mapList,
@@ -226,7 +227,7 @@ export class ModuleManager extends ComponentBase {
 			const key = ofEntry[0],
 				mountResult = ofEntry[1];
 			if (!MapMethods.has(this.#cache, key)) {
-				ArrayMethods.push(stale, mountResult);
+				listPush(stale, mountResult);
 			}
 		}
 		return stale;
@@ -305,7 +306,7 @@ export class ModuleManager extends ComponentBase {
 		const resolved = [];
 		for (let ofIndex = 0, ofList = items; ofIndex < ofList.length; ofIndex++) {
 			const item = ofList[ofIndex];
-			ArrayMethods.push(resolved, await this.#resolveToDiscoverResult(item, options));
+			listPush(resolved, await this.#resolveToDiscoverResult(item, options));
 		}
 
 		// G7 multi-version mounting (case 2): if the resolved set has two or
@@ -360,7 +361,7 @@ export class ModuleManager extends ComponentBase {
 				mountResult = ofEntry[1];
 			if (mountResult.packageName !== name) continue;
 			if (opts.version !== undefined && mountResult.discoverResult.manifest.version !== opts.version) continue;
-			ArrayMethods.push(matches, { key, mountResult });
+			listPush(matches, { key, mountResult });
 		}
 		if (matches.length === 0) return false;
 		// Module code: every match is checked before any is removed, so the removal is all or nothing (#625).
@@ -415,7 +416,7 @@ export class ModuleManager extends ComponentBase {
 		for (const result of mapValues(this.#cache)) {
 			if (result.packageName !== arg) continue;
 			if (options.version !== undefined && result.manifest.version !== options.version) continue;
-			ArrayMethods.push(candidates, result);
+			listPush(candidates, result);
 		}
 		if (candidates.length === 0) {
 			throw new SlothletError(
@@ -536,7 +537,7 @@ export class ModuleManager extends ComponentBase {
 			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
 			history == null
 				? undefined
-				: ArrayMethods.push(history, {
+				: listPush(history, {
 						type: "addPermissionRule",
 						rule: placed,
 						ownerModuleID: moduleID,
@@ -553,7 +554,7 @@ export class ModuleManager extends ComponentBase {
 			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
 			history == null
 				? undefined
-				: ArrayMethods.push(history, {
+				: listPush(history, {
 						type: "addEventRule",
 						rule: placed,
 						ownerModuleID: moduleID,
@@ -595,7 +596,7 @@ export class ModuleManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = resolved; ofIndex < ofList.length; ofIndex++) {
 			const r = ofList[ofIndex];
 			const list = MapMethods.get(byName, r.packageName) ?? [];
-			ArrayMethods.push(list, r);
+			listPush(list, r);
 			MapMethods.set(byName, r.packageName, list);
 		}
 
@@ -677,7 +678,7 @@ export class ModuleManager extends ComponentBase {
 					(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
 					writer
 				);
-				ArrayMethods.push(mounted, mountResult);
+				listPush(mounted, mountResult);
 			} catch (err) {
 				if (onFailure === "throw") {
 					throw err;
@@ -687,7 +688,7 @@ export class ModuleManager extends ComponentBase {
 					throw err;
 				}
 				// best-effort: record and continue
-				ArrayMethods.push(failed, { item, error: err });
+				listPush(failed, { item, error: err });
 			}
 		}
 		if (onFailure === "best-effort") {
@@ -726,10 +727,10 @@ export class ModuleManager extends ComponentBase {
 						(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
 						writer
 					);
-					ArrayMethods.push(mounted, mountResult);
+					listPush(mounted, mountResult);
 				} catch (err) {
 					if (onFailure === "best-effort") {
-						ArrayMethods.push(failed, { item, error: err });
+						listPush(failed, { item, error: err });
 					} else if (!firstError) {
 						firstError = err;
 					}

@@ -26,9 +26,9 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
 import {
-	ArrayMethods,
 	Boolean,
 	filterList,
+	listPush,
 	NativeProcess,
 	navigator,
 	Objects,
@@ -147,9 +147,9 @@ function i18n_localeRefs(lang) {
 	/* v8 ignore stop */
 	const refs = [];
 	const packPath = i18n_resolvePackPath(lang);
-	if (packPath) ArrayMethods.push(refs, packPath);
+	if (packPath) listPush(refs, packPath);
 	const internal = path.join(translations_dirname, "languages", `${lang}.json`);
-	if (fs.existsSync(internal)) ArrayMethods.push(refs, internal);
+	if (fs.existsSync(internal)) listPush(refs, internal);
 	return refs;
 }
 

@@ -55,6 +55,7 @@ import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper"
 import {
 	ArrayMethods,
 	filterList,
+	listPush,
 	Map,
 	mapEntriesToArray,
 	mapList,
@@ -410,8 +411,7 @@ export class EventManager extends ComponentBase {
 				// Run pinned to the subscriber's identity/context so self.* resolves as that module.
 				// rawErrors:true surfaces the listener's own error so we can isolate + warn on it.
 				const settled = this.#invoke(sub, callArgs, cm);
-				if (settled)
-					ArrayMethods.push(promises, reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
+				if (settled) listPush(promises, reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
 			} catch (error) {
 				this.#warnListener(event, error);
 			}
@@ -489,7 +489,7 @@ export class EventManager extends ComponentBase {
 			// A listener denied at emit time is not a recipient.
 			const level = this.#levelFor(sub, event);
 			if (level === "deny") continue;
-			ArrayMethods.push(listeners, sub.id);
+			listPush(listeners, sub.id);
 			levels[sub.id] = level;
 			MapMethods.set(recipients, sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
 		}

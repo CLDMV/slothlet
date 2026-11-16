@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { ArrayMethods, Math, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import { listPush, Math, Promise } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Manager for tracking lazy folder materialization state
@@ -127,7 +127,7 @@ export class MaterializeManager extends ComponentBase {
 
 		// Create a promise that will resolve when materialization completes
 		return new Promise((resolve) => {
-			ArrayMethods.push(this.slothlet._materializationWaiters, resolve);
+			listPush(this.slothlet._materializationWaiters, resolve);
 		});
 	}
 }

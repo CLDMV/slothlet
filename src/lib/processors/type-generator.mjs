@@ -33,6 +33,7 @@ import {
 	DateMethods,
 	filterList,
 	JSON,
+	listPush,
 	mapList,
 	Objects,
 	RegExpMethods,
@@ -219,7 +220,7 @@ function describeMembers(value, apiPath, context, ancestors) {
 				continue;
 			}
 			const childPath = apiPath ? `${apiPath}.${key}` : key;
-			ArrayMethods.push(members, { key, ...describeNode(value[key], childPath, context, ancestors) });
+			listPush(members, { key, ...describeNode(value[key], childPath, context, ancestors) });
 		}
 		return members;
 	} finally {
@@ -353,7 +354,7 @@ function importSpecifier(filePath, outputDir) {
 function renderObject(members, indent) {
 	const lines = ["{"];
 	renderMembers(members, indent, lines);
-	ArrayMethods.push(lines, `${StringMethods.repeat("\t", indent - 1)}}`);
+	listPush(lines, `${StringMethods.repeat("\t", indent - 1)}}`);
 	return ArrayMethods.join(lines, "\n");
 }
 
@@ -369,11 +370,11 @@ function renderMembers(members, indent, lines) {
 	const pad = StringMethods.repeat("\t", indent);
 	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
 		const { key, type, comment } = ofList[ofIndex];
-		if (comment) ArrayMethods.push(lines, `${pad}/** ${comment} */`);
+		if (comment) listPush(lines, `${pad}/** ${comment} */`);
 		const name = RegExpMethods.exec(IDENTIFIER, key) !== null ? key : JSON.stringify(key);
 		// Nested object literals were rendered at depth 1; re-indent them to this member's depth.
 		const reindented = ArrayMethods.join(splitText(type, "\n"), `\n${pad}`);
-		ArrayMethods.push(lines, `${pad}${name}: ${reindented};`);
+		listPush(lines, `${pad}${name}: ${reindented};`);
 	}
 }
 
@@ -390,15 +391,15 @@ function generateDeclaration(members, options, rootCall = null) {
 	const augment = options.augmentRuntime !== false;
 	const lines = [];
 
-	ArrayMethods.push(lines, "/**");
-	ArrayMethods.push(lines, ` * Generated TypeScript declarations for Slothlet API`);
-	ArrayMethods.push(lines, ` * @generated ${DateMethods.toISOString(new Date())}`);
-	ArrayMethods.push(lines, " */");
-	ArrayMethods.push(lines, "");
+	listPush(lines, "/**");
+	listPush(lines, ` * Generated TypeScript declarations for Slothlet API`);
+	listPush(lines, ` * @generated ${DateMethods.toISOString(new Date())}`);
+	listPush(lines, " */");
+	listPush(lines, "");
 
 	if (augment) {
-		ArrayMethods.push(lines, `import type { SlothletAPI } from "@cldmv/slothlet";`);
-		ArrayMethods.push(lines, "");
+		listPush(lines, `import type { SlothletAPI } from "@cldmv/slothlet";`);
+		listPush(lines, "");
 	}
 
 	lines.push(`export interface ${interfaceName} {`);
@@ -410,8 +411,8 @@ function generateDeclaration(members, options, rootCall = null) {
 		lines.push(`\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
 	}
 	renderMembers(members, 1, lines);
-	ArrayMethods.push(lines, "}");
-	ArrayMethods.push(lines, "");
+	listPush(lines, "}");
+	listPush(lines, "");
 
 	// Type `self` for every leaf that imports it (#484). `self` is declared as the empty
 	// `SlothletSelf` class in `@cldmv/slothlet/runtime`; an interface of the same name merges into
@@ -422,11 +423,11 @@ function generateDeclaration(members, options, rootCall = null) {
 	// (`self.slothlet.*`, `self.shutdown()`), which `SlothletAPI` describes. The two heritage clauses
 	// merge into one `SlothletSelf` that extends both.
 	if (augment) {
-		ArrayMethods.push(lines, `declare module "@cldmv/slothlet/runtime" {`);
-		ArrayMethods.push(lines, `\tinterface SlothletSelf extends ${interfaceName} {}`);
-		ArrayMethods.push(lines, `\tinterface SlothletSelf extends SlothletAPI {}`);
-		ArrayMethods.push(lines, "}");
-		ArrayMethods.push(lines, "");
+		listPush(lines, `declare module "@cldmv/slothlet/runtime" {`);
+		listPush(lines, `\tinterface SlothletSelf extends ${interfaceName} {}`);
+		listPush(lines, `\tinterface SlothletSelf extends SlothletAPI {}`);
+		listPush(lines, "}");
+		listPush(lines, "");
 	}
 
 	return ArrayMethods.join(lines, "\n");

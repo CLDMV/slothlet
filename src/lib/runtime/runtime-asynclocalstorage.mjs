@@ -406,7 +406,7 @@ export const context = new NativeProxy(
 			if (!ctx || !ctx.context) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 			if (!descriptor || !("value" in descriptor)) return descriptor;
-			return { ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
 		}
 	}
 );

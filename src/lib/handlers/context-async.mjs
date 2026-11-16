@@ -279,7 +279,7 @@ export class AsyncContextManager {
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
-			Objects.defineProperty(executionStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
+			Objects.defineProperty(executionStore, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 		} else if (currentWrapper) {
 			const parent = executionStore.record;
 			// The caller is the call executing in this flow — or, when that call was handed code and the code is
@@ -535,7 +535,7 @@ export class AsyncContextManager {
 		if (!base || !this.als) return fn();
 		const current = () => MapMethods.get(this.instances, loading.instanceID()) ?? null;
 		const store = { ...base, callerWrapper: null, callerCeiling: null, currentCeiling: null };
-		const live = (name, read) => Objects.defineProperty(store, name, { get: read, enumerable: true, configurable: true });
+		const live = (name, read) => Objects.defineProperty(store, name, { __proto__: null, get: read, enumerable: true, configurable: true });
 		live("instanceID", () => current()?.instanceID ?? base.instanceID);
 		live("currentWrapper", () => loading.wrapper());
 		live("record", () => loading.record());
@@ -543,7 +543,7 @@ export class AsyncContextManager {
 		live("self", () => (loading.wrapper() ? current()?.self : undefined));
 		live("context", () => current()?.context ?? base.context);
 		// Not spread onto the stores of the calls made from it: only this store is the load's.
-		Objects.defineProperty(store, "moduleLoad", { value: loading, enumerable: false });
+		Objects.defineProperty(store, "moduleLoad", { __proto__: null, value: loading, enumerable: false });
 		const outside = this.als.getStore();
 		const result = this.als.run(store, fn);
 		// A lazy load runs detached, with no store ({@link runDetached}). Where `AsyncLocalStorage` rests on async hooks

@@ -162,6 +162,7 @@ export class ApiAssignment extends ComponentBase {
 				continue;
 			}
 			Objects.defineProperty(keptWrapper, folderKey, {
+				__proto__: null,
 				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
 				// the members adoption never turned into children — its private skip list holds `_state` /
 				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the

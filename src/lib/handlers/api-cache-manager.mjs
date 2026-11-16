@@ -39,6 +39,7 @@ import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import {
 	ArrayMethods,
 	Dates,
+	listPush,
 	Map,
 	mapEntries,
 	mapKeysToArray,
@@ -264,7 +265,7 @@ export class ApiCacheManager extends ComponentBase {
 			// Count paths in API tree
 			const pathCount = this._countPaths(entry.api);
 
-			ArrayMethods.push(caches, {
+			listPush(caches, {
 				moduleID,
 				endpoint: entry.endpoint,
 				folderPath: entry.folderPath,

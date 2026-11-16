@@ -45,6 +45,7 @@ import {
 	Dates,
 	filterList,
 	FunctionMethods,
+	listPush,
 	Map,
 	mapKeysToArray,
 	mapList,
@@ -164,7 +165,7 @@ export function combineCeilings(...parts) {
 			const member = ofList[ofIndex];
 			if (member === single || (members == null ? undefined : ArrayMethods.includes(members, member))) continue;
 			if (single === null && members === null) single = member;
-			else ArrayMethods.push((members ??= [single]), member);
+			else listPush((members ??= [single]), member);
 		}
 	}
 	if (members === null) return single;
@@ -482,7 +483,7 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 		__contextOwners: captured.contextOwners
 	};
 	if (captured.trusted) {
-		Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(childStore, TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 	}
 	return childStore;
 }

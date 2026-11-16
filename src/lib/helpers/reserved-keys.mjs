@@ -30,6 +30,7 @@
 import {
 	ArrayMethods,
 	concatLists,
+	listPush,
 	Objects,
 	RegExpMethods,
 	setFrom,
@@ -144,7 +145,7 @@ export function writeTargetLiteralPrefix(pattern) {
 	for (let ofIndex = 0, ofList = splitText(String(pattern), "."); ofIndex < ofList.length; ofIndex++) {
 		const segment = ofList[ofIndex];
 		if (RegExpMethods.exec(/[*?{}[\]!()]/, segment) !== null) break;
-		ArrayMethods.push(prefix, segment);
+		listPush(prefix, segment);
 	}
 	return prefix;
 }

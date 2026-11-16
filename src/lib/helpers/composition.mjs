@@ -137,8 +137,8 @@ export function isCompositionLayer(value) {
 export function holdMember(target, key, value) {
 	if (WeakMapMethods.has(LAYERS, target)) {
 		// The shell's fixed key (an array's `length`) takes only a writable data value, in its own form.
-		if (!Reflect.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })) {
-			Reflect.defineProperty(target, key, { value, writable: true });
+		if (!Reflect.defineProperty(target, key, { __proto__: null, value, writable: true, enumerable: true, configurable: true })) {
+			Reflect.defineProperty(target, key, { __proto__: null, value, writable: true });
 		}
 		return;
 	}
@@ -274,15 +274,17 @@ function layerMember(current, descriptor) {
 	if ("get" in descriptor || "set" in descriptor) {
 		const base = currentIsAccessor ? current : {};
 		return {
+			__proto__: null,
 			get: "get" in descriptor ? descriptor.get : base.get,
 			set: "set" in descriptor ? descriptor.set : base.set,
 			enumerable,
 			configurable: true
 		};
 	}
-	if (currentIsAccessor && !("value" in descriptor) && !("writable" in descriptor)) return { ...current, enumerable };
-	const base = current && !currentIsAccessor ? current : { value: undefined, writable: true };
+	if (currentIsAccessor && !("value" in descriptor) && !("writable" in descriptor)) return { __proto__: null, ...current, enumerable };
+	const base = current && !currentIsAccessor ? current : { __proto__: null, value: undefined, writable: true };
 	return {
+		__proto__: null,
 		value: "value" in descriptor ? descriptor.value : base.value,
 		writable: "writable" in descriptor ? descriptor.writable : base.writable,
 		enumerable,
@@ -344,7 +346,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		!ArrayMethods.includes(shellFixedKeys, key) && Reflect.getOwnPropertyDescriptor(shell, key)?.configurable === false;
 	const hold = (key, member, nonConfigurable) => {
 		if (nonConfigurable && !ArrayMethods.includes(shellFixedKeys, key)) {
-			const fixed = { ...member, configurable: false };
+			const fixed = { __proto__: null, ...member, configurable: false };
 			if (!Reflect.defineProperty(shell, key, fixed)) return false;
 			MapMethods.set(added, key, Reflect.getOwnPropertyDescriptor(shell, key));
 		} else {
@@ -360,6 +362,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
 	}
 	const layer = new NativeProxy(shell, {
+		__proto__: null,
 		get(_shell, key, receiver) {
 			if (!MapMethods.has(added, key)) return forwards(key) ? read(key) : undefined;
 			const member = MapMethods.get(added, key);
@@ -384,12 +387,16 @@ function layerOver(underlying, members = [], hidden = []) {
 			}
 			if (member && !member.writable) return false;
 			if (pinned(key)) {
-				Reflect.defineProperty(shell, key, { value });
+				Reflect.defineProperty(shell, key, { __proto__: null, value });
 				MapMethods.set(added, key, Reflect.getOwnPropertyDescriptor(shell, key));
 				return true;
 			}
 			SetMethods.delete(removed, key);
-			MapMethods.set(added, key, member ? { ...member, value } : { value, writable: true, enumerable: true, configurable: true });
+			MapMethods.set(
+				added,
+				key,
+				member ? { __proto__: null, ...member, value } : { __proto__: null, value, writable: true, enumerable: true, configurable: true }
+			);
 			return true;
 		},
 		defineProperty(_shell, key, descriptor) {
@@ -419,7 +426,8 @@ function layerOver(underlying, members = [], hidden = []) {
 			const complete = current
 				? descriptor
 				: {
-						...(isAccessor ? { get: undefined, set: undefined } : { value: undefined, writable: false }),
+						__proto__: null,
+						...(isAccessor ? { get: undefined, set: undefined } : { __proto__: null, value: undefined, writable: false }),
 						enumerable: false,
 						configurable: false,
 						...descriptor
@@ -438,7 +446,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		getOwnPropertyDescriptor(shell, key) {
 			// A member held over the shell's fixed key is reported in that key's own form.
 			if (MapMethods.has(added, key) && ArrayMethods.includes(shellFixedKeys, key)) {
-				return { value: MapMethods.get(added, key).value, writable: true, enumerable: false, configurable: false };
+				return { __proto__: null, value: MapMethods.get(added, key).value, writable: true, enumerable: false, configurable: false };
 			}
 			if (MapMethods.has(added, key)) return { ...MapMethods.get(added, key) };
 			if (!forwards(key)) return undefined;
@@ -447,8 +455,8 @@ function layerOver(underlying, members = [], hidden = []) {
 			// The shell's one fixed key (an array's `length`) is non-configurable and writable; the layer
 			// reports the value's member in that same form. Every other member is
 			// reported configurable, as the shell, which does not hold it, requires.
-			if (ArrayMethods.includes(shellFixedKeys, key)) return { ...descriptor, configurable: false, writable: true };
-			return { ...descriptor, configurable: true };
+			if (ArrayMethods.includes(shellFixedKeys, key)) return { __proto__: null, ...descriptor, configurable: false, writable: true };
+			return { __proto__: null, ...descriptor, configurable: true };
 		},
 		ownKeys: () =>
 			setToArray(

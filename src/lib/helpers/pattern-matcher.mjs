@@ -39,6 +39,7 @@ import {
 	appendList,
 	ArrayMethods,
 	filterList,
+	listPush,
 	mapList,
 	RegExp,
 	RegExpMethods,
@@ -106,7 +107,7 @@ export function compilePattern(pattern, options = {}) {
 		// `!()` (no alternatives) excludes nothing → any single segment matches.
 		const guard = alts.length ? `(?!(?:${ArrayMethods.join(alts, "|")})(?:\\.|$))` : "";
 		const token = `__EXTGLOB_${extglobs.length}__`;
-		ArrayMethods.push(extglobs, `${guard}[^.]+`);
+		listPush(extglobs, `${guard}[^.]+`);
 		return token;
 	});
 
@@ -116,7 +117,7 @@ export function compilePattern(pattern, options = {}) {
 	for (let ofIndex = 0, ofList = splitText(pattern, "."); ofIndex < ofList.length; ofIndex++) {
 		const segment = ofList[ofIndex];
 		if (segment === "**" && segments[segments.length - 1] === "**") continue;
-		ArrayMethods.push(segments, segment);
+		listPush(segments, segment);
 	}
 	let regexPattern = "";
 	for (let index = 0; index < segments.length; index++) {
@@ -246,7 +247,7 @@ export function splitBraceAlternatives(content) {
 			depth--;
 			current += char;
 		} else if (char === "," && depth === 0) {
-			ArrayMethods.push(alternatives, current);
+			listPush(alternatives, current);
 			current = "";
 		} else {
 			current += char;
@@ -254,7 +255,7 @@ export function splitBraceAlternatives(content) {
 	}
 
 	if (current) {
-		ArrayMethods.push(alternatives, current);
+		listPush(alternatives, current);
 	}
 
 	return alternatives;

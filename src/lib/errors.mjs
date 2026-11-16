@@ -20,7 +20,18 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
-import { ArrayMethods, Error, Errors, filterList, JSON, Objects, String, StringMethods, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Error,
+	Errors,
+	filterList,
+	JSON,
+	listPush,
+	Objects,
+	String,
+	StringMethods,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -112,29 +123,13 @@ export class SlothletError extends Error {
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
-		Objects.defineProperty(this, "code", {
-			value: code,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "code", { __proto__: null, value: code, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "context", {
-			value: context,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "context", { __proto__: null, value: context, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "originalError", {
-			value: originalError,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "originalError", { __proto__: null, value: originalError, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "hint", {
-			value: translatedHint,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "hint", { __proto__: null, value: translatedHint, enumerable: false, writable: false });
 
 		Errors.captureStackTrace(this, SlothletError);
 	}
@@ -244,7 +239,7 @@ export class SlothletWarning {
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
-			ArrayMethods.push(SlothletWarning.captured, this);
+			listPush(SlothletWarning.captured, this);
 		}
 	}
 

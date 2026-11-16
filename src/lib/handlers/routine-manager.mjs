@@ -38,6 +38,8 @@ import {
 	concatLists,
 	copyList,
 	filterList,
+	listPush,
+	listSplice,
 	Map,
 	mapKeys,
 	mapKeysToArray,
@@ -378,7 +380,7 @@ export class RoutineManager extends ComponentBase {
 				group = [];
 				MapMethods.set(groups, entry.apiPath, group);
 			}
-			ArrayMethods.push(group, entry);
+			listPush(group, entry);
 		}
 		return groups;
 	}
@@ -433,14 +435,14 @@ export class RoutineManager extends ComponentBase {
 			// since changed to something else (a direct reassignment to an object/null, or a lazy
 			// placeholder resolving to a non-function export) — drop the now-stale entry so a later
 			// cascade/stack rebuild never invokes a function that no longer reflects current state.
-			if (existingIndex !== -1) ArrayMethods.splice(this.raw, existingIndex, 1);
+			if (existingIndex !== -1) listSplice(this.raw, existingIndex, 1);
 			MapMethods.get(this.rawWrappers, moduleID) == null
 				? undefined
 				: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 			return;
 		}
 		const entry = { apiPath, moduleID, fn };
-		if (existingIndex === -1) ArrayMethods.push(this.raw, entry);
+		if (existingIndex === -1) listPush(this.raw, entry);
 		else this.raw[existingIndex] = entry;
 		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (the emit sites'), never
 		// the actual UnifiedWrapper — it has no `___invalidate()` to call. The REAL wrapper instance is
@@ -554,7 +556,7 @@ export class RoutineManager extends ComponentBase {
 				continue;
 			}
 			if (group.length === 0) continue;
-			ArrayMethods.push(matchingRoutines, routine);
+			listPush(matchingRoutines, routine);
 			winner = routine;
 			winnerGroup = group;
 		}
@@ -870,7 +872,7 @@ export class RoutineManager extends ComponentBase {
 			// `raw`, changing `stackRoutines: true`'s registration-order execution (#372/#373 review,
 			// suppressed finding). Clamp to the current length in case other entries were removed
 			// in the interim.
-			else ArrayMethods.splice(this.raw, Math.min(priorEntry.index, this.raw.length), 0, entry);
+			else listSplice(this.raw, Math.min(priorEntry.index, this.raw.length), 0, entry);
 			// onImplCreated already overwrote rawWrappers with the candidate's own (about to be
 			// invalidated by the caller) wrapper — restore tracking to whatever genuinely preceded
 			// it, or drop it if nothing did, so a later lookup never finds a stale, already-invalid
@@ -881,7 +883,7 @@ export class RoutineManager extends ComponentBase {
 					? undefined
 					: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 		} else {
-			if (idx !== -1) ArrayMethods.splice(this.raw, idx, 1);
+			if (idx !== -1) listSplice(this.raw, idx, 1);
 			MapMethods.get(this.rawWrappers, moduleID) == null
 				? undefined
 				: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
@@ -941,7 +943,7 @@ export class RoutineManager extends ComponentBase {
 				// rejected re-touch silently moves this contributor to the end of `raw`, changing
 				// `stackRoutines: true`'s registration-order execution (#372/#373 review, suppressed
 				// finding). Clamp to the current length in case other entries were removed meanwhile.
-				else ArrayMethods.splice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
+				else listSplice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
 				// Callers pair this with ApiManager#invalidateSpeculativeWrappers() on the concrete
 				// tree for actual invalidation — this just keeps rawWrappers tracking in sync with the
 				// just-restored raw entry (#372/#373 review, suppressed finding).
@@ -1050,7 +1052,7 @@ export class RoutineManager extends ComponentBase {
 				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior.fn };
 				// Re-insert at the ORIGINAL registration position rather than appending — see
 				// revertRawEntry()'s identical reasoning (#372/#373 review, suppressed finding).
-				else ArrayMethods.splice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: path, moduleID, fn: prior.fn });
+				else listSplice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: path, moduleID, fn: prior.fn });
 			} else {
 				this.raw = filterList(this.raw, (e) => !(e.apiPath === path && e.moduleID === moduleID));
 			}
@@ -1128,15 +1130,15 @@ export class RoutineManager extends ComponentBase {
 						MapMethods.get(this.rawWrappers, moduleID) == null
 							? undefined
 							: MapMethods.get(MapMethods.get(this.rawWrappers, moduleID), apiPath);
-					ArrayMethods.push(results, await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
+					listPush(results, await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
 				} else {
 					// Pre-load / post-teardown: no live extent to enter, so apply directly as before.
 					/* v8 ignore next */
-					ArrayMethods.push(results, await Reflect.apply(fn, receiver, args));
+					listPush(results, await Reflect.apply(fn, receiver, args));
 				}
 			} catch (error) {
 				// Best-effort: record the failure, attributed, and keep running the remaining contributors.
-				ArrayMethods.push(failures, { apiPath, moduleID, error });
+				listPush(failures, { apiPath, moduleID, error });
 			}
 		}
 		return { results, failures };
@@ -1158,10 +1160,11 @@ export class RoutineManager extends ComponentBase {
 		// default "[object Object],[object Object]" join.
 		const failureEntries = mapList(failures, ({ apiPath, moduleID }) => {
 			const entry = { apiPath, moduleID };
-			Objects.defineProperty(entry, "toString", { value: () => `${apiPath} (${moduleID})`, enumerable: false });
+			Objects.defineProperty(entry, "toString", { __proto__: null, value: () => `${apiPath} (${moduleID})`, enumerable: false });
 			return entry;
 		});
 		Objects.defineProperty(failureEntries, "toString", {
+			__proto__: null,
 			value: () => ArrayMethods.join(mapList(failureEntries, String), ", "),
 			enumerable: false
 		});
@@ -1610,7 +1613,7 @@ export class RoutineManager extends ComponentBase {
 			// its own extent inside #runEntries (attributed to its own leaf wrapper), so a cascade runs
 			// every contribution exactly as a direct call would (CLDMV/slothlet#393).
 			const outcome = await this.#runEntries(apiPath, MapMethods.get(groups, apiPath), args);
-			ArrayMethods.push(results, outcome.results.length === 1 ? outcome.results[0] : outcome.results);
+			listPush(results, outcome.results.length === 1 ? outcome.results[0] : outcome.results);
 			appendList(failures, outcome.failures);
 		}
 		if (failures.length > 0) this.#throwAggregate(failures);
@@ -1800,14 +1803,20 @@ export class RoutineManager extends ComponentBase {
 		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
 		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
 		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
-		Objects.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineName", {
+			__proto__: null,
+			value: routine.name,
+			enumerable: false,
+			configurable: true
+		});
 		// #400: per-contributor selector + enumerator on the stacked callable.
 		// `.for(key)` returns a callable that runs ONLY the contributor whose moduleID is `key` at this
 		// exact path (see runPathFor). `.contributors` lists the moduleIDs present here (see
 		// contributorsAt). Non-enumerable so they don't leak into spreads/enumeration of the callable,
 		// but remain directly reachable as `api.<path>.<name>.for(key)` / `.contributors`.
 		Objects.defineProperty(stacked, "for", {
+			__proto__: null,
 			value: (key) =>
 				async function slothletRoutineFor(...args) {
 					return manager.runPathFor(apiPath, key, args, routine);
@@ -1816,6 +1825,7 @@ export class RoutineManager extends ComponentBase {
 			configurable: true
 		});
 		Objects.defineProperty(stacked, "contributors", {
+			__proto__: null,
 			get: () => manager.contributorsAt(apiPath, routine),
 			enumerable: false,
 			configurable: true
@@ -1848,9 +1858,9 @@ export class RoutineManager extends ComponentBase {
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
 		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
 		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
-		Objects.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
 		return cascade;
 	}
 

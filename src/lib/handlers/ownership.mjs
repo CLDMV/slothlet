@@ -28,6 +28,8 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	mapEntriesToArray,
@@ -123,7 +125,7 @@ function ownDataKeys(value) {
 		if (typeof key !== "string") continue;
 		try {
 			const descriptor = Objects.getOwnPropertyDescriptor(value, key);
-			if (descriptor && descriptor.enumerable && "value" in descriptor) ArrayMethods.push(keys, key);
+			if (descriptor && descriptor.enumerable && "value" in descriptor) listPush(keys, key);
 		} catch {
 			// A namespace binding still in its temporal dead zone throws on inspection — skip it.
 		}
@@ -144,7 +146,7 @@ function namespaceKeys(mod) {
 		const key = ofList[ofIndex];
 		if (typeof key !== "string") continue;
 		try {
-			if (Objects.getOwnPropertyDescriptor(mod, key)?.enumerable) ArrayMethods.push(keys, key);
+			if (Objects.getOwnPropertyDescriptor(mod, key)?.enumerable) listPush(keys, key);
 		} catch {
 			// Temporal-dead-zone binding — skip it.
 		}
@@ -827,8 +829,8 @@ export class OwnershipManager extends ComponentBase {
 					// repositioning, C stays reported as current even after B's replace overwrote it).
 					const idx = ArrayMethods.indexOf(stack, existingEntry);
 					if (idx !== -1 && idx !== stack.length - 1) {
-						ArrayMethods.splice(stack, idx, 1);
-						ArrayMethods.push(stack, existingEntry);
+						listSplice(stack, idx, 1);
+						listPush(stack, existingEntry);
 					}
 				} else if (collisionMode === "merge") {
 					// A real collision only exists when some OTHER entry is CURRENTLY the non-loser
@@ -910,7 +912,7 @@ export class OwnershipManager extends ComponentBase {
 			isMergeLoss
 		};
 
-		ArrayMethods.push(stack, entry);
+		listPush(stack, entry);
 		return entry;
 	}
 
@@ -967,9 +969,9 @@ export class OwnershipManager extends ComponentBase {
 			const result = this.removePath(apiPath, moduleID);
 
 			if (result.action === "delete") {
-				ArrayMethods.push(removed, apiPath);
+				listPush(removed, apiPath);
 			} else if (result.action === "restore") {
-				ArrayMethods.push(rolledBack, {
+				listPush(rolledBack, {
 					apiPath,
 					restoredTo: result.restoreModuleId
 				});
@@ -1071,7 +1073,7 @@ export class OwnershipManager extends ComponentBase {
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
-		const unpacked1 = ArrayMethods.splice(stack, index, 1),
+		const unpacked1 = listSplice(stack, index, 1),
 			removed = unpacked1[0];
 		const removedModuleId = removed.moduleID;
 		if (removedModuleId && MapMethods.has(this.moduleToPath, removedModuleId)) {
@@ -1356,8 +1358,8 @@ export class OwnershipManager extends ComponentBase {
 		const stack = MapMethods.get(this.pathToModule, apiPath);
 		const index = ArrayMethods.indexOf(stack, entry);
 		if (index !== stack.length - 1) {
-			ArrayMethods.splice(stack, index, 1);
-			ArrayMethods.push(stack, entry);
+			listSplice(stack, index, 1);
+			listPush(stack, entry);
 		}
 	}
 

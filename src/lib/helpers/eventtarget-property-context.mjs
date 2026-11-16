@@ -54,10 +54,10 @@
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, isActiveLayer, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import {
-	ArrayMethods,
 	EventTarget,
 	filterList,
 	FunctionMethods,
+	listPush,
 	Objects,
 	StringMethods,
 	WeakMap,
@@ -196,6 +196,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	};
 
 	Objects.defineProperty(proto, propName, {
+		__proto__: null,
 		configurable: descriptor.configurable,
 		enumerable: descriptor.enumerable,
 		get: wrapperGet,
@@ -204,7 +205,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	WeakSetMethods.add(installedGetters, wrapperGet);
 	markLayer(wrapperGet, layer);
 
-	ArrayMethods.push(patched, { proto, propName, layer, wrapperGet, wrapperSet });
+	listPush(patched, { proto, propName, layer, wrapperGet, wrapperSet });
 }
 
 /**

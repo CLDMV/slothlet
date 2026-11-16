@@ -86,6 +86,7 @@ import {
 	filterList,
 	FunctionMethods,
 	JSON,
+	listPush,
 	Map,
 	mapEntries,
 	MapMethods,
@@ -223,7 +224,7 @@ async function scanDir(absDir, rootDir) {
 			if (isApiFile(entry.name)) {
 				const absPath = path.join(absDir, entry.name);
 				const rel = regExpReplace(/\\/g, path.relative(rootDir, absPath), "/");
-				ArrayMethods.push(files, makeFileEntry(rel));
+				listPush(files, makeFileEntry(rel));
 			}
 		} else if (entry.isDirectory()) {
 			const absSubDir = path.join(absDir, entry.name);
@@ -231,7 +232,7 @@ async function scanDir(absDir, rootDir) {
 			const children = await scanDir(absSubDir, rootDir);
 			// Only include directories that contain at least one loadable file (directly or nested)
 			if (children.files.length > 0 || children.directories.length > 0) {
-				ArrayMethods.push(directories, {
+				listPush(directories, {
 					name: entry.name,
 					path: relDir,
 					children
@@ -377,7 +378,7 @@ async function collectSlothletSpecifiers(root) {
 		const targets = [];
 		(function collectTargets(v) {
 			if (typeof v === "string") {
-				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) ArrayMethods.push(targets, v);
+				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) listPush(targets, v);
 			} else if (v && typeof v === "object") {
 				for (let ofIndex = 0, ofList = Objects.values(v); ofIndex < ofList.length; ofIndex++) {
 					const child = ofList[ofIndex];
@@ -417,7 +418,7 @@ async function collectSlothletSpecifiers(root) {
 		const targets = [];
 		(function collectTargets(v) {
 			if (typeof v === "string") {
-				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) ArrayMethods.push(targets, v);
+				if (StringMethods.includes(v, "*") && StringMethods.endsWith(v, ".mjs")) listPush(targets, v);
 			} else if (v && typeof v === "object") {
 				for (let ofIndex = 0, ofList = Objects.values(v); ofIndex < ofList.length; ofIndex++) {
 					const child = ofList[ofIndex];

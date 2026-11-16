@@ -41,7 +41,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { ArrayMethods, concatLists, Objects, Reflect, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import { concatLists, listPush, Objects, Reflect, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -130,12 +130,12 @@ function runtime_patchObserverConstructor(name) {
 	// `original.prototype` (so `instanceof` still walks the real hierarchy) but give the wrapper its own
 	// prototype object with `constructor` pointing back at itself.
 	wrapper.prototype = Objects.create(original.prototype, {
-		constructor: { value: wrapper, writable: true, configurable: true }
+		constructor: { __proto__: null, value: wrapper, writable: true, configurable: true }
 	});
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
-	ArrayMethods.push(patched, { name, layer, wrapper });
+	listPush(patched, { name, layer, wrapper });
 }
 
 /**

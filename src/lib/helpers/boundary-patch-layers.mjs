@@ -56,7 +56,7 @@ function runtime_layers() {
 	if (!(registry instanceof WeakMap)) {
 		registry = new WeakMap();
 		// Non-enumerable, so the global object's own keys look the same as before.
-		Objects.defineProperty(globalThis, LAYERS, { value: registry, configurable: true });
+		Objects.defineProperty(globalThis, LAYERS, { __proto__: null, value: registry, configurable: true });
 	}
 	return registry;
 }

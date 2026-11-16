@@ -46,7 +46,6 @@ import { isNode } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 import {
 	ArrayBuffer,
-	ArrayMethods,
 	Arrays,
 	BigInt,
 	BigInt64Array,
@@ -63,6 +62,7 @@ import {
 	Int16Array,
 	Int32Array,
 	Int8Array,
+	listPush,
 	Map,
 	mapList,
 	NativeObject,
@@ -288,7 +288,7 @@ function runtime_cloneSites() {
 			return;
 		}
 		if (!descriptor || typeof descriptor.value !== "function") return;
-		ArrayMethods.push(sites, { host, key, native: runtime_unwrapClone(descriptor.value) });
+		listPush(sites, { host, key, native: runtime_unwrapClone(descriptor.value) });
 	};
 	add(globalThis, "structuredClone");
 	add(globalThis.MessagePort?.prototype, "postMessage");
@@ -389,7 +389,7 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 		const copy = new NativeMap();
 		remember(copy);
 		const entries = [];
-		apply(mapForEach, data, [(member, key) => ArrayMethods.push(entries, [key, member])]);
+		apply(mapForEach, data, [(member, key) => listPush(entries, [key, member])]);
 		for (let i = 0; i < entries.length; i++) apply(mapSet, copy, [walk(entries[i][0]), walk(entries[i][1])]);
 		return copy;
 	}
@@ -397,7 +397,7 @@ function runtime_slotCopy(data, members, walk, remember, known, keep) {
 		const copy = new NativeSet();
 		remember(copy);
 		const entries = [];
-		apply(setForEach, data, [(member) => ArrayMethods.push(entries, member)]);
+		apply(setForEach, data, [(member) => listPush(entries, member)]);
 		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
 			const member = ofList[ofIndex];
 			apply(setAdd, copy, [walk(member)]);
@@ -513,7 +513,8 @@ function runtime_errorCopy(data, members, walk, remember) {
 	const Kind = (typeof name === "string" ? apply(mapGet, ERROR_CLASSES, [name]) : undefined) ?? NativeError;
 	const copy = new Kind();
 	remember(copy);
-	const define = (key, value) => defineProperty(copy, key, { value, writable: true, enumerable: false, configurable: true });
+	const define = (key, value) =>
+		defineProperty(copy, key, { __proto__: null, value, writable: true, enumerable: false, configurable: true });
 	// The platform reads a data `message` of the error's own, and the `stack` as any read of it gives it.
 	const message = own("message");
 	if (message && "value" in message) {
@@ -681,7 +682,7 @@ function enableClonePatching() {
 						const revealed = runtime_reveal(args[0]);
 						if (!revealed.found) throw error;
 						handed = [revealed.value];
-						for (let index = 1; index < args.length; index++) ArrayMethods.push(handed, runtime_reveal(args[index]).value);
+						for (let index = 1; index < args.length; index++) listPush(handed, runtime_reveal(args[index]).value);
 					} catch {
 						// Whatever reading the value threw is not the caller's to see: the platform's refusal stands.
 						throw error;
@@ -693,14 +694,14 @@ function enableClonePatching() {
 			}
 		}[key];
 		try {
-			defineProperty(wrapper, ORIGINAL_CLONE, { value: below });
-			defineProperty(wrapper, "length", { value: below.length, configurable: true });
-			if (!defineProperty(host, key, { ...descriptor, value: wrapper })) continue;
+			defineProperty(wrapper, ORIGINAL_CLONE, { __proto__: null, value: below });
+			defineProperty(wrapper, "length", { __proto__: null, value: below.length, configurable: true });
+			if (!defineProperty(host, key, { __proto__: null, ...descriptor, value: wrapper })) continue;
 		} catch {
 			continue;
 		}
 		markLayer(wrapper, layer);
-		ArrayMethods.push(installed, { host, key, layer, wrapper, descriptor });
+		listPush(installed, { host, key, layer, wrapper, descriptor });
 	}
 }
 

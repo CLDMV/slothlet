@@ -38,7 +38,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { ArrayMethods, concatLists, Objects, Reflect } from "@cldmv/slothlet/helpers/intrinsics";
+import { concatLists, listPush, Objects, Reflect } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -116,7 +116,7 @@ function runtime_patchScheduler(host, name) {
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
-	ArrayMethods.push(patched, { host, name, layer, wrapper });
+	listPush(patched, { host, name, layer, wrapper });
 }
 
 /**

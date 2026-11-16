@@ -78,6 +78,8 @@ import {
 	filterList,
 	FunctionMethods,
 	JSON,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	mapKeys,
@@ -425,13 +427,13 @@ function recordPackageImport(parentURL, url) {
 	if (typeof url !== "string" || !StringMethods.startsWith(url, "file:") || StringMethods.includes(url, MARKER)) return;
 	const loaders = [];
 	const parent = typeof parentURL === "string" && StringMethods.startsWith(parentURL, "file:") ? parentURL : null;
-	if (parent) ArrayMethods.push(loaders, parent);
+	if (parent) listPush(loaders, parent);
 	// Named as imported by a file nothing loaded through the hook (`createRequire` of any path, a host file loaded
 	// before it): the module whose code is running loaded it. A module's own import, or one of a file the hook saw
 	// loaded, keeps to its importer, so a module that merely triggers another's lazy load takes none of its files.
 	if (!parent || (!StringMethods.includes(parent, MARKER) && !MapMethods.has(PACKAGE_IMPORTERS, packageKey(parent)))) {
 		const running = runningTaggedFrame();
-		if (running) ArrayMethods.push(loaders, running);
+		if (running) listPush(loaders, running);
 	}
 	if (!loaders.length) return;
 	const key = packageKey(url);
@@ -791,7 +793,7 @@ function sharedState() {
 		requireCJS: requireCJSFromRunner,
 		checkImport: checkModuleImport
 	});
-	Objects.defineProperty(globalThis, STATE, { value: OWN_STATE, enumerable: false, configurable: false, writable: false });
+	Objects.defineProperty(globalThis, STATE, { __proto__: null, value: OWN_STATE, enumerable: false, configurable: false, writable: false });
 	return (SHARED = OWN_STATE);
 }
 
@@ -1322,7 +1324,7 @@ function ownModuleBridge(url) {
 	// The runtime's entry files export by name only.
 	for (let ofIndex = 0, ofList = Objects.keys(MapMethods.get(OWN_MODULES, url)); ofIndex < ofList.length; ofIndex++) {
 		const name = ofList[ofIndex];
-		ArrayMethods.push(lines, `const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
+		listPush(lines, `const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
 	return ArrayMethods.join(lines, "\n") + "\n";
@@ -1513,7 +1515,7 @@ function packageRoot(slashPath) {
 			root = MapMethods.get(PACKAGE_ROOTS, dir);
 			break;
 		}
-		ArrayMethods.push(walked, dir);
+		listPush(walked, dir);
 		if (isPackageRoot(HOST, dir)) {
 			root = dir;
 			break;
@@ -1805,7 +1807,7 @@ function isUntaggedModuleFile(ref) {
 			const through = packageKey(loader);
 			if (!SetMethods.has(seen, through) && !(RegExpMethods.exec(/\/node_modules\//, through) !== null)) {
 				SetMethods.add(seen, through);
-				ArrayMethods.push(queue, through);
+				listPush(queue, through);
 			}
 		}
 	}
@@ -2593,7 +2595,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		if (!keep(file)) continue;
 		if (cache[file] !== undefined) MapMethods.set(setAside, file, cache[file]);
 		cache[file] = mod;
-		ArrayMethods.push(served, file);
+		listPush(served, file);
 	}
 
 	if (fresh) {
@@ -3145,11 +3147,7 @@ function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
 	];
 	let n = 0;
 	for (const name of setValues(names)) {
-		ArrayMethods.push(
-			lines,
-			`const n${n} = m == null ? undefined : m[${JSON.stringify(name)}];`,
-			`export { n${n} as ${JSON.stringify(name)} };`
-		);
+		listPush(lines, `const n${n} = m == null ? undefined : m[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
 	return ArrayMethods.join(lines, "\n") + "\n";
@@ -3293,9 +3291,9 @@ export const SCRIPTS_PER_KEY = 16;
  */
 export function rememberNewest(hashes, hash) {
 	const index = ArrayMethods.indexOf(hashes, hash);
-	if (index !== -1) ArrayMethods.splice(hashes, index, 1);
-	ArrayMethods.push(hashes, hash);
-	if (hashes.length > SCRIPTS_PER_KEY) ArrayMethods.splice(hashes, 0, hashes.length - SCRIPTS_PER_KEY);
+	if (index !== -1) listSplice(hashes, index, 1);
+	listPush(hashes, hash);
+	if (hashes.length > SCRIPTS_PER_KEY) listSplice(hashes, 0, hashes.length - SCRIPTS_PER_KEY);
 }
 
 /**
@@ -3564,7 +3562,7 @@ function installInstanceImportHooks(nodeModule, registry = globalThis) {
 		const { registerHooks } = moduleMembers(nodeModule);
 		if (typeof registerHooks !== "function") return false;
 		Reflect.apply(registerHooks, nodeModule, [HOOKS]);
-		Objects.defineProperty(registry, INSTALLED, { value: true, enumerable: false });
+		Objects.defineProperty(registry, INSTALLED, { __proto__: null, value: true, enumerable: false });
 		return true;
 	}
 	// The hooks read what slothlet keeps about each instance's files, so they are the keeping copy's.
@@ -4082,7 +4080,7 @@ export function slothletInstanceImports() {
 						return;
 					}
 					if (typeof node.type !== "string") return;
-					if (node.type === "ImportExpression" && node.source) ArrayMethods.push(checked, node.source);
+					if (node.type === "ImportExpression" && node.source) listPush(checked, node.source);
 					else if (
 						node.type === "CallExpression" &&
 						node.callee?.type === "MemberExpression" &&
@@ -4090,7 +4088,7 @@ export function slothletInstanceImports() {
 						node.callee.object.meta?.name === "import" &&
 						node.callee.property?.name === "resolve"
 					)
-						ArrayMethods.push(checked, node);
+						listPush(checked, node);
 					const isImport =
 						RegExpMethods.exec(/^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/, node.type) !== null;
 					const source = isImport ? node.source?.value : undefined;
@@ -4119,7 +4117,7 @@ export function slothletInstanceImports() {
 				for (let ofIndex = 0, ofList = concatLists(setToArray(bare), setToArray(specifiers)); ofIndex < ofList.length; ofIndex++) {
 					const specifier = ofList[ofIndex];
 					const resolved = await this.resolve(specifier, id);
-					if (resolved && !resolved.external && StringMethods.includes(resolved.id, MARKER)) ArrayMethods.push(children, resolved.id);
+					if (resolved && !resolved.external && StringMethods.includes(resolved.id, MARKER)) listPush(children, resolved.id);
 					else noteShared(resolved);
 				}
 				const loadedBy = ArrayMethods.join(

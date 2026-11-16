@@ -33,6 +33,7 @@ import {
 	ArrayMethods,
 	Arrays,
 	Functions,
+	listPush,
 	Objects,
 	Processes,
 	Reflect,
@@ -92,10 +93,10 @@ function recordSharedExports(value) {
 				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
-				if ("value" in descriptor) ArrayMethods.push(pending, descriptor.value);
-				else ArrayMethods.push(pending, descriptor.get, descriptor.set);
+				if ("value" in descriptor) listPush(pending, descriptor.value);
+				else listPush(pending, descriptor.get, descriptor.set);
 			}
-			ArrayMethods.push(pending, Reflect.getPrototypeOf(member));
+			listPush(pending, Reflect.getPrototypeOf(member));
 		} catch {
 			// What refuses to be described records nothing of what it holds.
 		}

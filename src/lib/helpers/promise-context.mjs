@@ -177,11 +177,11 @@ function enablePromisePatching() {
 			return FunctionMethods.call(original, this, fulfilled, rejected);
 		}
 	}.then;
-	Objects.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
+	Objects.defineProperty(wrapper, ORIGINAL_THEN, { __proto__: null, value: original });
 	WeakSetMethods.add(THEN_WRAPPERS, wrapper);
 	markLayer(wrapper, layer);
 
-	Objects.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
+	Objects.defineProperty(Promise.prototype, "then", { __proto__: null, ...descriptor, value: wrapper });
 	installed = { layer, wrapper };
 }
 

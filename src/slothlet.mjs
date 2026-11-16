@@ -117,6 +117,8 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	mapList,
@@ -244,7 +246,7 @@ function copyConfigValue(value, freeze, seen = new Map()) {
 		MapMethods.set(seen, value, out);
 		for (let ofIndex = 0, ofList = value; ofIndex < ofList.length; ofIndex++) {
 			const item = ofList[ofIndex];
-			ArrayMethods.push(out, copyConfigValue(item, freeze, seen));
+			listPush(out, copyConfigValue(item, freeze, seen));
 		}
 		return freeze ? Objects.freeze(out) : out;
 	}
@@ -953,7 +955,7 @@ class Slothlet {
 			}
 
 			// Resolve all waiting promises
-			const waiters = ArrayMethods.splice(this._materializationWaiters, 0);
+			const waiters = listSplice(this._materializationWaiters, 0);
 			for (let ofIndex = 0, ofList = waiters; ofIndex < ofList.length; ofIndex++) {
 				const resolve = ofList[ofIndex];
 				resolve();
@@ -1182,7 +1184,7 @@ class Slothlet {
 		// resolved context carries this marker — the basis for failing closed on absent caller.
 		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
 		// only the genuine base store and scope stores explicitly descended from it are trusted.
-		Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -1469,7 +1471,7 @@ class Slothlet {
 							if (this.api && prop in this.api) {
 								const desc = Objects.getOwnPropertyDescriptor(this.api, prop);
 								const described = desc ? runtime_rootMemberDescriptor(this, prop, desc) : undefined;
-								if (described) return { ...described, configurable: true };
+								if (described) return { __proto__: null, ...described, configurable: true };
 							}
 							// A closed root reports every member it holds (proxy invariant): one the reader may not read is described
 							// with its value withheld (#825).
@@ -2074,7 +2076,7 @@ class Slothlet {
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
 					const mat = wrapper.____slothletInternal.materializationPromise;
-					if (mat) ArrayMethods.push(pending, mat);
+					if (mat) listPush(pending, mat);
 
 					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
 					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers

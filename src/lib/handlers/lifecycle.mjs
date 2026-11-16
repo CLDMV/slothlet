@@ -26,6 +26,7 @@ import { getInstanceToken } from "#handlers/lifecycle-token";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
 	ArrayMethods,
+	listPush,
 	Map,
 	MapMethods,
 	Promise,
@@ -255,7 +256,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	#logEvent(event, data) {
 		if (this.____config?.debug?.lifecycle) {
-			ArrayMethods.push(this.eventLog, {
+			listPush(this.eventLog, {
 				event,
 				data: { ...data },
 				timestamp: this.clock.now()
@@ -366,7 +367,7 @@ export class Lifecycle extends ComponentBase {
 				const settle = (...args) => runAndSettle(handler, args);
 				const settled = reader ? this.#invokeAs(settle, reader, [this.#viewFor(data, reader, nodes)]) : settle(data, token);
 				if (settled) {
-					ArrayMethods.push(
+					listPush(
 						handlerPromises,
 						PromiseMethods.then(settled, undefined, (error) => {
 							// Log error but don't stop other handlers
