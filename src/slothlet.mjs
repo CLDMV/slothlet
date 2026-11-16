@@ -339,7 +339,8 @@ class Slothlet {
 	constructor() {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
-		this.SlothletWarning = SlothletWarning;
+		// Per-instance subclass: capture and console suppression stay on this instance (#819).
+		this.SlothletWarning = SlothletWarning.forInstance();
 		// Debug logger will be initialized in load() with config
 		this.debugLogger = null;
 

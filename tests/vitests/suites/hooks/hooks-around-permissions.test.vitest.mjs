@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-15T22:53:42-08:00 (1794812022)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 		SlothletWarning.clearCaptured();
 	});
 
-	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, ...(permissions ? { permissions } : {}) });
+	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, diagnostics: true, ...(permissions ? { permissions } : {}) });
 	// Takes a thunk so the call happens INSIDE try — a synchronous throw is caught the same as a rejection.
 	const tryCall = async (fn) => {
 		try {
@@ -135,7 +135,7 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 		api = await boot(null);
 		const id = await api.auditor.armOpts("db.read:around", { lockCaller: false });
 		expect(api.slothlet.hook.list({ id }).registeredHooks[0].lockCaller).toBe(true);
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("a pinned around hook's next() runs the target as the intercepted call, not as the hook owner", async () => {

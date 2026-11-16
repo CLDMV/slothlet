@@ -4396,7 +4396,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * SlothletWarning class for accessing captured warnings in tests
+				 * This instance's SlothletWarning class: `captured`, `clearCaptured()` and `suppressConsole` apply to this instance only
 				 * @type {Function}
 				 * @example
 				 * // Access captured warnings in tests

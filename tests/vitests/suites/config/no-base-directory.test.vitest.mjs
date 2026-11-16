@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:24-07:00 (1791091704)
+ *	@Last modified time: 2026-11-15T22:52:44-08:00 (1794811964)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,10 +39,11 @@ const FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy", "initial
 const userKeys = (api) => Object.keys(api).filter((key) => !FRAMEWORK_ROOT_KEYS.has(key));
 
 /**
- * Codes of warnings captured since the last clear.
+ * Codes of warnings the instance captured (per instance, #819; needs `diagnostics: true`).
+ * @param {object} instance - Bound api.
  * @returns {string[]} Warning codes.
  */
-const warningCodes = () => SlothletWarning.captured.map((w) => w.code);
+const warningCodes = (instance) => instance.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
 
 describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config }) => {
 	let api;
@@ -64,13 +65,13 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	 */
 	const withoutBase = () => {
 		const { base: ___base, dir: ___dir, ...rest } = config;
-		return rest;
+		return { ...rest, diagnostics: true };
 	};
 
 	it("an instance with no base composes an empty root with no warning", async () => {
 		api = await slothlet(withoutBase());
 		expect(userKeys(api)).toEqual([]);
-		expect(warningCodes()).not.toContain("WARN_DIRECTORY_EMPTY");
+		expect(warningCodes(api)).not.toContain("WARN_DIRECTORY_EMPTY");
 	});
 
 	it("`base: null` means the same as omitting it", async () => {
@@ -125,7 +126,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 		const empty = await makeTestTmpDir("empty-base-471");
 		try {
 			api = await slothlet({ ...withoutBase(), base: empty });
-			expect(warningCodes()).toContain("WARN_DIRECTORY_EMPTY");
+			expect(warningCodes(api)).toContain("WARN_DIRECTORY_EMPTY");
 		} finally {
 			if (api) await api.shutdown();
 			api = null;

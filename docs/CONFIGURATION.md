@@ -919,7 +919,7 @@ const re = diag.hook.compilePattern("math.*");
 
 ### `diag.SlothletWarning`
 
-Direct reference to the `SlothletWarning` class. Used in tests to capture and assert on warnings.
+This instance's `SlothletWarning` class. Capture and console suppression are per instance: two instances never share a `captured` list, `clearCaptured()` on one leaves the other's warnings alone, and `suppressConsole` set on one does not change the other. Used in tests to capture and assert on warnings.
 
 ```javascript
 // In tests
@@ -928,6 +928,12 @@ diag.SlothletWarning.clearCaptured();
 const warnings = diag.SlothletWarning.captured;
 expect(warnings).toHaveLength(1);
 ```
+
+- `captured` - warnings this instance raised while console output was suppressed.
+- `clearCaptured()` - empties this instance's list.
+- `suppressConsole` - when `true`, this instance's warnings are captured instead of printed. It follows the process-level setting until you assign it on the instance (assign `null` to follow the process-level value again).
+
+Warnings raised outside any instance (for example a coverage notice from module load) go to the process-level class, `SlothletWarning` from `@cldmv/slothlet/errors`, which has its own `captured`, `clearCaptured()` and `suppressConsole`. Setting `SlothletWarning.suppressConsole = true` there also suppresses console output for every instance that has not set its own, but each instance still captures into its own list. Warnings from either class are `instanceof SlothletWarning`.
 
 ---
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-15T22:55:19-08:00 (1794812119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,24 +69,25 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	 * @returns {Promise<object>} The api.
 	 */
 	async function boot(opts = {}) {
-		const api = await slothlet({ base: root, mode, ...opts });
+		const api = await slothlet({ base: root, mode, diagnostics: true, ...opts });
 		apis.push(api);
 		return api;
 	}
 
 	/**
-	 * Run a callback with SlothletWarning console output suppressed and capture enabled.
+	 * Run a callback with SlothletWarning console output suppressed and capture enabled. Capture is per
+	 * instance (#819): the warnings come from the most recently booted instance's diag class.
 	 * @param {Function} fn - Async callback.
-	 * @returns {Promise<Array>} Warnings captured while the callback ran.
+	 * @returns {Promise<Array>} Warnings that instance captured while the callback ran.
 	 */
 	async function captureWarnings(fn) {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
+		apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
 		try {
 			await fn();
-			return [...SlothletWarning.captured];
+			return [...apis.at(-1).slothlet.diag.SlothletWarning.captured];
 		} finally {
-			SlothletWarning.clearCaptured();
+			apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
 			SlothletWarning.suppressConsole = false;
 		}
 	}

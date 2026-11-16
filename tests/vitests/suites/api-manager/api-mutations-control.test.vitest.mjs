@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-15T22:52:20-08:00 (1794811940)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,14 +84,10 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	// ===== BACKWARD COMPATIBILITY TESTS =====
 
 	it("should map allowMutation: false to api.mutations disabled (backward compat)", async () => {
-		// Clear captured warnings before test
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-
-		api = await createApiInstance(config, { allowMutation: false });
+		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = SlothletWarning.captured;
+		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");
@@ -118,14 +114,10 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	});
 
 	it("should allow normal API usage when allowMutation: false", async () => {
-		// Clear captured warnings before test
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-
-		api = await createApiInstance(config, { allowMutation: false });
+		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = SlothletWarning.captured;
+		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");

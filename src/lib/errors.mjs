@@ -192,9 +192,47 @@ export class SlothletError extends Error {
  * @public
  */
 export class SlothletWarning {
-	// Static array to capture warnings for testing
+	/**
+	 * Warnings captured while console output is suppressed (for testing).
+	 * On this class it is the process-level list: it holds warnings raised outside any slothlet
+	 * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
+	 * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
+	 * @type {SlothletWarning[]}
+	 */
 	static captured = [];
+
+	/**
+	 * Suppress console output and capture instead. On this class it is the process-level setting; an
+	 * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
+	 * @type {boolean}
+	 */
 	static suppressConsole = false;
+
+	/**
+	 * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
+	 * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
+	 * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
+	 * Warnings are still `instanceof SlothletWarning`.
+	 * @returns {typeof SlothletWarning} The per-instance class.
+	 * @public
+	 */
+	static forInstance() {
+		const Process = SlothletWarning;
+		let own = null;
+		class InstanceSlothletWarning extends Process {
+			static captured = [];
+			static get suppressConsole() {
+				return own ?? Process.suppressConsole;
+			}
+			static set suppressConsole(value) {
+				own = value;
+			}
+			static clearCaptured() {
+				InstanceSlothletWarning.captured = [];
+			}
+		}
+		return InstanceSlothletWarning;
+	}
 
 	/**
 	 * Create and emit a warning with automatic translation
@@ -228,8 +266,10 @@ export class SlothletWarning {
 			this.cause = cause;
 		}
 
-		// Emit warning to console unless suppressed
-		if (!SlothletWarning.suppressConsole) {
+		// Emit warning to console unless suppressed. `Home` is the instance's class for a warning raised through
+		// an instance (#819), or this class for one raised outside any instance.
+		const Home = this.constructor;
+		if (!Home.suppressConsole) {
 			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
@@ -243,7 +283,7 @@ export class SlothletWarning {
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
-			SlothletWarning.captured.push(this);
+			Home.captured.push(this);
 		}
 	}
 
@@ -256,7 +296,7 @@ export class SlothletWarning {
 	}
 
 	/**
-	 * Clear captured warnings (for testing)
+	 * Clear captured warnings (for testing). On an instance's class this clears that instance only.
 	 * @public
 	 */
 	static clearCaptured() {
