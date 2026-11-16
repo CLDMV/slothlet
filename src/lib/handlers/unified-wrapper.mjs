@@ -97,6 +97,8 @@ import {
 	Iterator,
 	Iterators,
 	listFromIterable,
+	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	mapEntriesToArray,
@@ -324,7 +326,8 @@ function runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClos
 			mirrorClosed();
 			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
 			assertWrite(prop);
-			const stored = "value" in descriptor ? { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
+			const stored =
+				"value" in descriptor ? { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
 			if (!Reflect.defineProperty(raw, prop, stored)) return false;
 			// A member defined fixed is fixed on the shadow as defined, which is what the engine checks it against.
 			if (descriptor.configurable === false) Reflect.defineProperty(shadow, prop, descriptor);
@@ -506,7 +509,7 @@ function runtime_selfWriteHasStanding(slothlet) {
  */
 function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
 	const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
-	if (owner && typeof prop === "string") ArrayMethods.push(parts, prop);
+	if (owner && typeof prop === "string") listPush(parts, prop);
 	// With the system off only a change to the framework's own is checked (its keys on the node); disabled, none.
 	if (!slothlet.handlers.apiManager.writeChecked(parts) || runtime_selfWriteHasStanding(slothlet)) return;
 	if (reader === HOST_READER) return;
@@ -670,7 +673,7 @@ function runtime_gatherIntrinsics() {
 				!WeakSetMethods.has(intrinsics, candidate) &&
 				!util.types.isProxy(candidate)
 			) {
-				ArrayMethods.push(pending, [candidate, depth + 1]);
+				listPush(pending, [candidate, depth + 1]);
 			}
 		};
 		next(Reflect.getPrototypeOf(current));
@@ -1286,8 +1289,8 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	};
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
-			? { ...descriptor, value: memberAt(prop, descriptor.value) }
-			: { ...descriptor, get: memberAt(prop, descriptor.get), set: memberAt(prop, descriptor.set) };
+			? { __proto__: null, ...descriptor, value: memberAt(prop, descriptor.value) }
+			: { __proto__: null, ...descriptor, get: memberAt(prop, descriptor.get), set: memberAt(prop, descriptor.set) };
 	// A member the object holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
 	const mirror = (prop) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
@@ -1400,6 +1403,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		return call;
 	};
 	view = new NativeProxy(shadow, {
+		__proto__: null,
 		get(_, prop) {
 			mirrorClosed();
 			const fixed = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1617,8 +1621,8 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? concatLists(parts, [prop]) : parts, prop, record);
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
-			? { ...descriptor, value: member(prop, descriptor.value) }
-			: { ...descriptor, get: member(prop, descriptor.get), set: member(prop, descriptor.set) };
+			? { __proto__: null, ...descriptor, value: member(prop, descriptor.value) }
+			: { __proto__: null, ...descriptor, get: member(prop, descriptor.get), set: member(prop, descriptor.set) };
 	// A member the value holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
 	const mirror = (prop) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
@@ -1677,6 +1681,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		return runtime_selfMemberOf(proto, reader, slothlet, concatLists(runtime_apiPathParts(classNode), ["prototype"]), "prototype");
 	};
 	const view = new NativeProxy(shadow, {
+		__proto__: null,
 		get(_, prop, receiver) {
 			mirrorClosed();
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -1925,7 +1930,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		// the empty path is the defensive answer should it not, owned only by who owns the whole tree.
 		/* v8 ignore next */
 		const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
-		if (typeof prop === "string") ArrayMethods.push(parts, prop);
+		if (typeof prop === "string") listPush(parts, prop);
 		return parts;
 	};
 	const viewMember = (prop, value) => {
@@ -2060,9 +2065,9 @@ function runtime_selfView(node, reader, from = null, access = null) {
 				// node that reports a fixed accessor; the guard keeps the proxy's answer valid if one ever does.
 				/* v8 ignore next */
 				if (!descriptor.configurable) return descriptor;
-				return { ...descriptor, get: viewMember(prop, descriptor.get), set: viewMember(prop, descriptor.set) };
+				return { __proto__: null, ...descriptor, get: viewMember(prop, descriptor.get), set: viewMember(prop, descriptor.set) };
 			}
-			return { ...descriptor, value: viewMember(prop, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: viewMember(prop, descriptor.value) };
 		},
 		ownKeys(_) {
 			return Reflect.ownKeys(node);
@@ -2112,7 +2117,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 				!runtime_isUnchangingDefinition(WeakMapMethods.get(capturedViewShadows, node) ?? node, prop, descriptor)
 			)
 				refuseWithoutStanding(prop);
-			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			const defined = vouched(() => Reflect.defineProperty(node, prop, descriptor));
 			// The engine now reads the node's descriptor to check the definition (freezing a node through its view
 			// fixes each member): that read is no reader's, so the node answers it ungated.
@@ -2464,12 +2469,13 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 				// change to them is refused like any other.
 				if (!("value" in descriptor)) {
 					return {
+						__proto__: null,
 						...descriptor,
 						get: runtime_frameworkViewOf(descriptor.get, slothlet, reader, childPath(prop)),
 						set: runtime_frameworkViewOf(descriptor.set, slothlet, reader, childPath(prop))
 					};
 				}
-				return { ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
+				return { __proto__: null, ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
 			});
 		},
 		apply(target, thisArg, args) {
@@ -2522,7 +2528,7 @@ const VIEW_READER_RUNS = [];
  * @private
  */
 function runtime_asViewReader(reader, use) {
-	ArrayMethods.push(VIEW_READER_RUNS, reader);
+	listPush(VIEW_READER_RUNS, reader);
 	try {
 		return use();
 	} finally {
@@ -2657,7 +2663,7 @@ function runtime_selfRootView(slothlet, reader) {
 		getOwnPropertyDescriptor(target, prop) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 			if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
-			return { ...descriptor, value: member(prop, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: member(prop, descriptor.value) };
 		},
 		set(target, prop, value) {
 			value = runtime_unwrapSelfView(value);
@@ -2670,7 +2676,7 @@ function runtime_selfRootView(slothlet, reader) {
 		},
 		defineProperty(target, prop, descriptor) {
 			assertChange(prop);
-			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
 		deleteProperty(target, prop) {
@@ -2716,6 +2722,7 @@ function runtime_markCallerLocked(fn) {
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
 	if (hasOwn(fn, "_slothletOriginal")) {
 		Objects.defineProperty(fn, "_slothletOriginal", {
+			__proto__: null,
 			value: fn._slothletOriginal,
 			writable: false,
 			enumerable: true,
@@ -2867,7 +2874,7 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 function runtime_assertOwnedWrite(wrapper, prop) {
 	if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return;
 	const parts = filterList(splitText(String(wrapper.____slothletInternal.apiPath), "."), Boolean);
-	if (typeof prop === "string") ArrayMethods.push(parts, prop);
+	if (typeof prop === "string") listPush(parts, prop);
 	runtime_assertOwnedWriteAt(wrapper, parts);
 }
 
@@ -3193,7 +3200,7 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
 		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 		// hand the refusal to the node that took its place.
-		ArrayMethods.push(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
+		listPush(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
 	}
 }
 
@@ -3210,7 +3217,7 @@ function runtime_takeRefusalAt(slothlet, path) {
 	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
 	runtime_pruneRefusedChanges(refused);
 	const index = ArrayMethods.findIndex(refused, (entry) => path === entry.path || StringMethods.startsWith(path, `${entry.path}.`));
-	return index === -1 ? null : ArrayMethods.splice(refused, index, 1)[0].error;
+	return index === -1 ? null : listSplice(refused, index, 1)[0].error;
 }
 
 /**
@@ -3272,7 +3279,7 @@ function runtime_queueStandInChange(wrapper, change) {
 	const captured = runtime_captureChange(wrapper, change);
 	// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
 	if (replayHolders) captured.holders = replayHolders;
-	ArrayMethods.push(wrapper.____slothletInternal.pendingChanges, captured);
+	listPush(wrapper.____slothletInternal.pendingChanges, captured);
 	if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.slothlet)) WeakMapMethods.set(PENDING_CHANGES, wrapper.slothlet, new Set());
 	SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
 }
@@ -4084,7 +4091,12 @@ const ADOPTED_ACCESSORS = new WeakMap();
  * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
 function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
-	Objects.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
+	Objects.defineProperty(wrapper, key, {
+		__proto__: null,
+		...runtime_adoptAccessor(wrapper, accessor),
+		enumerable: true,
+		configurable: true
+	});
 }
 
 /**
@@ -5180,7 +5192,7 @@ function runtime_followModuleMember(wrapper, object, seen, key) {
 		const wrapped = wrapper.___createChildWrapper(key, value, null, internal.deferChildAdopt);
 		if (wrapped !== null && wrapped !== undefined) stored = wrapped;
 	}
-	Objects.defineProperty(wrapper, key, { value: stored, writable: false, enumerable: true, configurable: true });
+	Objects.defineProperty(wrapper, key, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
 }
 
 /**
@@ -5386,11 +5398,12 @@ function runtime_writeModuleObject(wrapper, object, prop, value) {
 	const held = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (held === undefined) {
 		const added =
-			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true });
+			Reflect.isExtensible(object) &&
+			Reflect.defineProperty(object, prop, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
 		if (added && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(object), prop);
 		return added;
 	}
-	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { value });
+	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { __proto__: null, value });
 	if (typeof held.set !== "function") return false;
 	runtime_runAccessor(wrapper, held.set, object, [value]);
 	return true;
@@ -5440,7 +5453,7 @@ function runtime_onImpl(wrapper, operation) {
 function runtime_describeImplMember(wrapper, descriptor) {
 	if (!descriptor || (typeof descriptor.get !== "function" && typeof descriptor.set !== "function")) return descriptor;
 	const adopted = runtime_adoptAccessor(wrapper, descriptor);
-	return { ...descriptor, get: adopted.get, set: adopted.set };
+	return { __proto__: null, ...descriptor, get: adopted.get, set: adopted.set };
 }
 
 /**
@@ -5682,12 +5695,12 @@ function runtime_recordNodeObjectPrototypes() {
 	const crypto = Processes.getBuiltinModule("node:crypto");
 	const samples = [crypto.createSecretKey(new Uint8Array(16))];
 	const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-	ArrayMethods.push(samples, publicKey, privateKey);
+	listPush(samples, publicKey, privateKey);
 	if (typeof samples[0].toCryptoKey === "function")
-		ArrayMethods.push(samples, samples[0].toCryptoKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
+		listPush(samples, samples[0].toCryptoKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
 	if (typeof MessageChannel === "function") {
 		const channel = new MessageChannel();
-		ArrayMethods.push(samples, channel.port1);
+		listPush(samples, channel.port1);
 		channel.port1.close();
 		channel.port2.close();
 	}
@@ -5695,9 +5708,9 @@ function runtime_recordNodeObjectPrototypes() {
 	const util = Processes.getBuiltinModule("node:util");
 	const net = Processes.getBuiltinModule("node:net");
 	const data = [new URL("https://localhost/"), new URLSearchParams(), new TextDecoder(), new TextEncoder()];
-	if (typeof Blob === "function") ArrayMethods.push(data, new Blob([]));
-	if (typeof util.MIMEType === "function") ArrayMethods.push(data, new util.MIMEType("text/plain"));
-	if (typeof net.SocketAddress === "function") ArrayMethods.push(data, new net.SocketAddress());
+	if (typeof Blob === "function") listPush(data, new Blob([]));
+	if (typeof util.MIMEType === "function") listPush(data, new util.MIMEType("text/plain"));
+	if (typeof net.SocketAddress === "function") listPush(data, new net.SocketAddress());
 	// What a sample holds is Node's too: on older Node lines (22) a key keeps its native handle (`KeyObjectHandle`) in an own
 	// symbol property, and a `CryptoKey` keeps its `KeyObject` there.
 	const held = [];
@@ -5706,7 +5719,7 @@ function runtime_recordNodeObjectPrototypes() {
 		for (let ofIndex = 0, ofList = Reflect.ownKeys(sample); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
-			if (member !== null && typeof member === "object") ArrayMethods.push(held, member);
+			if (member !== null && typeof member === "object") listPush(held, member);
 		}
 	}
 	const isData = setFrom(concatLists(data, held));
@@ -5850,10 +5863,10 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
-				if ("value" in descriptor) ArrayMethods.push(pending, descriptor.value);
-				else ArrayMethods.push(pending, descriptor.get, descriptor.set);
+				if ("value" in descriptor) listPush(pending, descriptor.value);
+				else listPush(pending, descriptor.get, descriptor.set);
 			}
-			ArrayMethods.push(pending, Reflect.getPrototypeOf(member));
+			listPush(pending, Reflect.getPrototypeOf(member));
 		}
 		return true;
 	} catch {
@@ -6107,7 +6120,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		const paths = mapList(definer.leaves, (leaf) => splitText(String(leaf.____slothletInternal.apiPath ?? ""), "."));
 		const common = [];
 		for (let i = 0; ArrayMethods.every(paths, (parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++)
-			ArrayMethods.push(common, paths[0][i]);
+			listPush(common, paths[0][i]);
 		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target }, null, {
 			validationError: true
 		});
@@ -7278,14 +7291,14 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 		getOwnPropertyDescriptor: (target, prop) => {
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 			if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
-			return { ...descriptor, value: runtime_handIn(maker, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: runtime_handIn(maker, descriptor.value) };
 		},
 		defineProperty: (target, prop, descriptor) =>
 			Reflect.defineProperty(
 				target,
 				prop,
 				"value" in descriptor
-					? { ...descriptor, value: runtime_handOut(maker, runtime_runningLeafOf(maker, owner), descriptor.value) }
+					? { __proto__: null, ...descriptor, value: runtime_handOut(maker, runtime_runningLeafOf(maker, owner), descriptor.value) }
 					: descriptor
 			)
 	});
@@ -7628,7 +7641,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 					!(typeof keys === "string" ? StringMethods.includes(keys, key) : ArrayMethods.includes(keys, key)) &&
 					!Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable
 				)
-					ArrayMethods.push(keys, key);
+					listPush(keys, key);
 			}
 			return keys;
 		},
@@ -7721,15 +7734,16 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(original, key);
 		if (!descriptor) continue;
 		if (key === "prototype") {
-			Reflect.defineProperty(standIn, key, { value: descriptor.value, writable: descriptor.writable });
+			Reflect.defineProperty(standIn, key, { __proto__: null, value: descriptor.value, writable: descriptor.writable });
 			continue;
 		}
 		if (key === "name" || key === "length") {
-			Reflect.defineProperty(standIn, key, { ...descriptor, value: descriptor.value });
+			Reflect.defineProperty(standIn, key, { __proto__: null, ...descriptor, value: descriptor.value });
 			continue;
 		}
 		// Any other member is the original's, read and written through.
 		Reflect.defineProperty(standIn, key, {
+			__proto__: null,
 			get: () => runtime_handOut(maker, owner, Reflect.get(original, key)),
 			set: (value) => {
 				Reflect.set(original, key, runtime_handIn(maker, value));
@@ -8227,7 +8241,7 @@ function runtime_recordFunctionNode(wrapper) {
 	let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.slothlet);
 	if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.slothlet, (everyFunction = new WeakMap()));
 	const live = filterList(WeakMapMethods.get(everyFunction, impl) ?? [], (ref) => WeakRefMethods.deref(ref) !== undefined);
-	if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) ArrayMethods.push(live, new WeakRef(proxy));
+	if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) listPush(live, new WeakRef(proxy));
 	WeakMapMethods.set(everyFunction, impl, live);
 }
 
@@ -8335,7 +8349,7 @@ function runtime_classPrototypeSites(slothlet, prototype) {
 		const node = WeakRefMethods.deref(ref);
 		if (node === undefined) continue;
 		const site = runtime_prototypeSiteOf(resolveWrapper(node), "prototype");
-		if (!ArrayMethods.some(sites, (known) => known.key === site.key)) ArrayMethods.push(sites, site);
+		if (!ArrayMethods.some(sites, (known) => known.key === site.key)) listPush(sites, site);
 	}
 	return sites;
 }
@@ -8478,7 +8492,7 @@ function runtime_prototypeSiteOf(wrapper, prop) {
 	let site = MapMethods.get(sites.byProp, prop);
 	if (site === undefined) {
 		const parts = filterList(splitText(apiPath, "."), Boolean);
-		if (prop !== null) ArrayMethods.push(parts, prop);
+		if (prop !== null) listPush(parts, prop);
 		site = { parts, key: ArrayMethods.join(parts, "."), prop };
 		MapMethods.set(sites.byProp, prop, site);
 	}
@@ -8531,7 +8545,7 @@ function runtime_knownPrototype(slothlet, value) {
 	const sites = record === undefined ? [] : mapValuesToArray(record.sites);
 	for (let ofIndex = 0, ofList = classSites; ofIndex < ofList.length; ofIndex++) {
 		const site = ofList[ofIndex];
-		if (!(record == null ? undefined : MapMethods.has(record.sites, site.key))) ArrayMethods.push(sites, site);
+		if (!(record == null ? undefined : MapMethods.has(record.sites, site.key))) listPush(sites, site);
 	}
 	return { slothlet: instance, sites };
 }
@@ -8752,7 +8766,11 @@ function runtime_carrierView(value, reader, slothlet) {
 		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			Reflect.defineProperty(view, key, "value" in descriptor ? { ...descriptor, value: carry(descriptor.value) } : descriptor);
+			Reflect.defineProperty(
+				view,
+				key,
+				"value" in descriptor ? { __proto__: null, ...descriptor, value: carry(descriptor.value) } : descriptor
+			);
 		}
 		Objects.freeze(view);
 	} else {
@@ -8768,7 +8786,7 @@ function runtime_carrierView(value, reader, slothlet) {
 				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 				return !descriptor || !("value" in descriptor) || fixed(descriptor)
 					? descriptor
-					: { ...descriptor, value: carry(descriptor.value) };
+					: { __proto__: null, ...descriptor, value: carry(descriptor.value) };
 			}
 		});
 	}
@@ -9488,7 +9506,13 @@ function runtime_crossView(original, reader, slothlet, from) {
 			: Objects.create(CROSSING_SHADOW_PROTOTYPE);
 	// `util.inspect` reads a Proxy's target, never its traps: the hook has to be the shadow's own, or inherited by it.
 	if (CROSSING_INSPECT !== null && (isFunction || Arrays.isArray(original)))
-		Reflect.defineProperty(shadow, INSPECT_CUSTOM, { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false });
+		Reflect.defineProperty(shadow, INSPECT_CUSTOM, {
+			__proto__: null,
+			value: CROSSING_INSPECT,
+			configurable: true,
+			writable: true,
+			enumerable: false
+		});
 	const state = {
 		original,
 		reader,
@@ -9830,7 +9854,7 @@ function runtime_crossAssertWrite(state, prop, change) {
 	}
 	if (!held) return;
 	const parts = runtime_crossFromParts(state.from);
-	if (typeof prop === "string") ArrayMethods.push(parts, prop);
+	if (typeof prop === "string") listPush(parts, prop);
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
@@ -9868,7 +9892,9 @@ const CROSSING_INSPECT = isNode
  */
 const CROSSING_SHADOW_PROTOTYPE = Objects.create(
 	null,
-	CROSSING_INSPECT === null ? {} : { [INSPECT_CUSTOM]: { value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false } }
+	CROSSING_INSPECT === null
+		? {}
+		: { [INSPECT_CUSTOM]: { __proto__: null, value: CROSSING_INSPECT, configurable: true, writable: true, enumerable: false } }
 );
 
 /**
@@ -9931,7 +9957,7 @@ const CROSSING_HANDLER = {
 		if (state.pinned)
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
-				if (!ArrayMethods.includes(keys, key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) ArrayMethods.push(keys, key);
+				if (!ArrayMethods.includes(keys, key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) listPush(keys, key);
 			}
 		return keys;
 	},
@@ -11145,11 +11171,11 @@ function runtime_rootListing(slothlet, target, keys) {
 	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		if (host && !slothlet.handlers.permissionManager.isPrivateTarget(String(key))) {
-			ArrayMethods.push(listed, key);
+			listPush(listed, key);
 			continue;
 		}
 		const fixed = Reflect.getOwnPropertyDescriptor(target, key);
-		if ((fixed && !fixed.configurable) || !runtime_isReadRedacted(gate, key, null, null, true)) ArrayMethods.push(listed, key);
+		if ((fixed && !fixed.configurable) || !runtime_isReadRedacted(gate, key, null, null, true)) listPush(listed, key);
 	}
 	return listed;
 }
@@ -11178,13 +11204,13 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 		const gate = runtime_rootGate(slothlet);
 		if (runtime_isCodeMemberWithheld(gate, descriptor)) return undefined;
 		if (prop === "prototype" && "value" in descriptor)
-			return { ...descriptor, value: runtime_prototypeForReader(gate, descriptor.value, "prototype") };
+			return { __proto__: null, ...descriptor, value: runtime_prototypeForReader(gate, descriptor.value, "prototype") };
 		return descriptor;
 	}
 	const value = descriptor.value;
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
 	const node = resolveWrapper(value);
-	return node !== null && runtime_holdsValue(node) ? { ...descriptor, value: runtime_heldValue(node) } : descriptor;
+	return node !== null && runtime_holdsValue(node) ? { __proto__: null, ...descriptor, value: runtime_heldValue(node) } : descriptor;
 }
 
 /**
@@ -11247,7 +11273,7 @@ function runtime_rootShellDescriptor(descriptor, slothlet = null, prop = null) {
 	if (slothlet !== null && descriptor.writable === false && runtime_isRootFunctionAnswer(slothlet, prop) && runtime_pinsAsCode(value))
 		return { ...descriptor, value: runtime_pinnedCodeMember(runtime_rootGate(slothlet), value) };
 	const impl = resolveWrapper(value)?.____slothletInternal.impl;
-	return runtime_isHeldPrimitive(impl) ? { ...descriptor, value: impl } : descriptor;
+	return runtime_isHeldPrimitive(impl) ? { __proto__: null, ...descriptor, value: impl } : descriptor;
 }
 
 /**
@@ -11326,7 +11352,7 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
 	// A definition that changes nothing (freezing a root already frozen) is no write, as on a node (#667).
 	if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;
 	runtime_assertRootChange(slothlet, prop);
-	if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+	if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 	// A key only the target holds (its inspect hook) is the target's own.
 	if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
 	if (!runtime_rootTakesKey(target, prop)) return false;
@@ -11401,7 +11427,7 @@ function runtime_rootFixedMember(slothlet, prop, fixed, described) {
 	// A writable member is described with the value the reader may not read withheld, as a node describes one (#825).
 	if (described && runtime_rootWithheld(slothlet, prop)) return { ...fixed, value: undefined };
 	const value = runtime_rootMemberRead(slothlet, prop, slothlet.api[prop]);
-	return described ? { ...fixed, value } : value;
+	return described ? { __proto__: null, ...fixed, value } : value;
 }
 
 /**
@@ -12330,7 +12356,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 					for (let ofIndex = 0, ofList = Reflect.ownKeys(proto); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];
 						const descriptor = key === "constructor" ? undefined : Reflect.getOwnPropertyDescriptor(proto, key);
-						if (descriptor) Reflect.defineProperty(out.prototype, key, { ...descriptor, configurable: true });
+						if (descriptor) Reflect.defineProperty(out.prototype, key, { __proto__: null, ...descriptor, configurable: true });
 					}
 				}
 			} catch (error) {
@@ -12351,9 +12377,9 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 				// member stays hidden, shown only when inspect is asked for those.
 				const member =
 					"value" in descriptor
-						? { value: view[key], writable: true }
+						? { __proto__: null, value: view[key], writable: true }
 						: { get: descriptor.get && (() => view[key]), set: descriptor.set && ((next) => (view[key] = next)) };
-				Reflect.defineProperty(out, key, { ...member, enumerable: descriptor.enumerable, configurable: true });
+				Reflect.defineProperty(out, key, { __proto__: null, ...member, enumerable: descriptor.enumerable, configurable: true });
 			} catch (error) {
 				if (error?.code !== "PERMISSION_DENIED") throw error;
 			}
@@ -12361,6 +12387,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		return out;
 	};
 	Reflect.defineProperty(shadow, util.inspect.custom, {
+		__proto__: null,
 		// Called by hand, with none of inspect's arguments, it shows the node as `util.inspect` would.
 		value: (depth, options, inspect = util.inspect) => inspect(shown(), depth === undefined ? { ...options } : { ...options, depth }),
 		configurable: true
@@ -12459,7 +12486,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 		// A fixed member keeps what it holds; one the child can still write is refreshed with its value now.
 		if (held && !held.configurable && !("value" in held && held.writable)) return held;
-		const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+		const shown =
+			"value" in descriptor && !descriptor.writable ? { __proto__: null, ...descriptor, value: shownValue(descriptor.value) } : descriptor;
 		Reflect.defineProperty(shadow, prop, shown);
 		return shown;
 	};
@@ -12475,11 +12503,14 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// What the module holds, for every member: one the reader may not read is still refused when it is read.
 			if (key === util.inspect.custom) continue;
 			const descriptor = rawDescriptor(key);
-			const shown = "value" in descriptor && !descriptor.writable ? { ...descriptor, value: shownValue(descriptor.value) } : descriptor;
+			const shown =
+				"value" in descriptor && !descriptor.writable
+					? { __proto__: null, ...descriptor, value: shownValue(descriptor.value) }
+					: descriptor;
 			Reflect.defineProperty(shadow, key, shown);
 		}
 		// The hook is fixed with the shadow, so closing the view member by member (as `Object.freeze` does) finds it fixed.
-		Reflect.defineProperty(shadow, util.inspect.custom, { configurable: false, writable: false });
+		Reflect.defineProperty(shadow, util.inspect.custom, { __proto__: null, configurable: false, writable: false });
 		// The prototype the node holds, read without the reader's check: the shadow has to hold it, and the view checks
 		// it when it reports it (see getPrototypeOf below, #632). A closed emitter's shell holds its own prototype as a view
 		// no reader keeps: this view's reader is handed it as an open emitter's reader is (#667).
@@ -12522,7 +12553,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// node describes it in a call; only a fixed value, which must be reported as it is, is refused.
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 			if (Reflect.isExtensible(shadow) && !(held && !held.configurable)) return undefined;
-			if (held && "value" in held && (held.writable || held.configurable)) return { ...held, value: undefined };
+			if (held && "value" in held && (held.writable || held.configurable)) return { __proto__: null, ...held, value: undefined };
 			throw error;
 		}
 	};
@@ -12898,7 +12929,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) ArrayMethods.push(sources, { error, source });
+		if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) listPush(sources, { error, source });
 	};
 	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
 	let unobserved = null;
@@ -13137,7 +13168,7 @@ function createNamedProxyTarget(nameHint, fallback) {
 	return Objects.defineProperty(
 		FunctionMethods.bind(function () {}),
 		"name",
-		{ value: safeName, configurable: true }
+		{ __proto__: null, value: safeName, configurable: true }
 	);
 }
 
@@ -13477,7 +13508,7 @@ function runtime_adoptArrayIntegrity(wrapper) {
 				else if (Objects.isSealed(array)) Objects.seal(proxy);
 			}
 			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false)
-				Reflect.defineProperty(proxy, "length", { writable: false });
+				Reflect.defineProperty(proxy, "length", { __proto__: null, writable: false });
 		});
 	} finally {
 		internal.integritySyncing = syncing;
@@ -13695,6 +13726,7 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 	const parentArray = parent.____slothletInternal.impl;
 	const isVirtual = byIndex && Arrays.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
 	Objects.defineProperty(internal, "apiPath", {
+		__proto__: null,
 		configurable: true,
 		enumerable: true,
 		get() {
@@ -13929,7 +13961,7 @@ const RESTART_FORWARD_TRAPS = {
 	getOwnPropertyDescriptor: (live, target, prop) => {
 		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
 		const descriptor = Reflect.getOwnPropertyDescriptor(NativeObject(live), prop);
-		return descriptor ? { ...descriptor, configurable: true } : undefined;
+		return descriptor ? { __proto__: null, ...descriptor, configurable: true } : undefined;
 	},
 	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
 	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
@@ -14242,6 +14274,7 @@ function runtime_dataName(fn) {
 function runtime_defineProxyInspect(wrapper, target) {
 	if (Arrays.isArray(target)) {
 		Objects.defineProperty(target, util.inspect.custom, {
+			__proto__: null,
 			// Shown through the node, so each element is read as the caller reading it may: the caller's `inspect`
 			// is not trusted with the backing array, which a callback that returns its argument would take.
 			value: runtime_registerInspectHook(() => {
@@ -14262,6 +14295,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 	}
 	if (!(util.inspect.custom in target)) {
 		Objects.defineProperty(target, util.inspect.custom, {
+			__proto__: null,
 			value: runtime_registerInspectHook(function (...args) {
 				return runtime_inspectShown(wrapper, args);
 			}),
@@ -14282,6 +14316,7 @@ function runtime_defineProxyInspect(wrapper, target) {
  */
 function runtime_defineRootInspect(slothlet, target) {
 	Objects.defineProperty(target, util.inspect.custom, {
+		__proto__: null,
 		value: runtime_registerInspectHook(function (...args) {
 			return runtime_rootInspectShown(slothlet, args);
 		}),
@@ -14548,6 +14583,7 @@ class UnifiedWrapper extends ComponentBase {
 		// Add wrapper self-reference as getter AFTER ____slothletInternal is set (avoid circular reference in traversal)
 		const wrapper = this;
 		Objects.defineProperty(internal, "wrapper", {
+			__proto__: null,
 			// internal.wrapper is an old back-reference path no longer accessed by any internal code.
 			/* v8 ignore start */
 			get() {
@@ -14844,10 +14880,16 @@ class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			Objects.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
+			Objects.defineProperty(target, key, {
+				__proto__: null,
+				get: descriptor.get,
+				set: descriptor.set,
+				enumerable: true,
+				configurable: true
+			});
 			return;
 		}
-		Objects.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { __proto__: null, value: source[key], writable: false, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -14869,9 +14911,9 @@ class UnifiedWrapper extends ComponentBase {
 	static _memberDescriptor(source, key) {
 		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			return { ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
+			return { __proto__: null, ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
 		}
-		return { value: source[key], writable: true, enumerable: true, configurable: true };
+		return { __proto__: null, value: source[key], writable: true, enumerable: true, configurable: true };
 	}
 
 	/**
@@ -15404,7 +15446,7 @@ class UnifiedWrapper extends ComponentBase {
 			node = holder?.[segment];
 		}
 		if (node !== oldProxy) return;
-		Objects.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
+		Objects.defineProperty(holder, key, { __proto__: null, ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
 	}
 
 	/**
@@ -16458,12 +16500,7 @@ class UnifiedWrapper extends ComponentBase {
 							propKey: key
 						});
 					}
-					Objects.defineProperty(this, key, {
-						value: wrapped,
-						writable: false,
-						enumerable: true,
-						configurable: true
-					});
+					Objects.defineProperty(this, key, { __proto__: null, value: wrapped, writable: false, enumerable: true, configurable: true });
 					// Symbol keys are not used as API module names in practice.
 					/* v8 ignore next */
 					if (typeof key !== "symbol") {
@@ -16506,6 +16543,7 @@ class UnifiedWrapper extends ComponentBase {
 				// that regression while still covering whatever deferred/`_applyNewImpl`-reload
 				// interaction this branch exists for.
 				Objects.defineProperty(this, key, {
+					__proto__: null,
 					get: () => {
 						const currentImpl = this.____slothletInternal.impl;
 						return currentImpl ? currentImpl[key] : undefined;
@@ -16522,12 +16560,7 @@ class UnifiedWrapper extends ComponentBase {
 				// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
 				// builtin live (mutating the same Map is visible from every reference to it); nothing
 				// further is needed the way the primitive branch above needs a live accessor.
-				Objects.defineProperty(this, key, {
-					value: value,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
 				// `keepImplProperties` is always false when called from ___setImpl; this guard is unreachable.
 				/* v8 ignore next */
 				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
@@ -16535,12 +16568,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// wrapped is falsy but not null - shouldn't happen, but define value anyway
-				Objects.defineProperty(this, key, {
-					value: value,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
 				// wrapped=false (shouldn't happen) — `keepImplProperties` is always false when called from ___setImpl; guard is unreachable.
 				/* v8 ignore next */
 				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
@@ -16588,12 +16616,7 @@ class UnifiedWrapper extends ComponentBase {
 				const key = ofList[ofIndex];
 				if (!(key in this)) {
 					const child = existingWrapper[key];
-					Objects.defineProperty(this, key, {
-						value: child,
-						writable: false,
-						enumerable: true,
-						configurable: true
-					});
+					Objects.defineProperty(this, key, { __proto__: null, value: child, writable: false, enumerable: true, configurable: true });
 				}
 			}
 
@@ -16995,7 +17018,7 @@ class UnifiedWrapper extends ComponentBase {
 		const waitingTarget = createNamedProxyTarget(`${wrapper.____slothletInternal.apiPath}_waitingProxy`, "waitingProxyTarget");
 		// Its `name` is writable, as a bound function's `length` and `name` are not, so that only a freeze makes the target
 		// read as frozen: a seal or a preventExtensions leaves it as it was (#653, see runtime_lockAsStandIn).
-		Reflect.defineProperty(waitingTarget, "name", { writable: true });
+		Reflect.defineProperty(waitingTarget, "name", { __proto__: null, writable: true });
 		// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
 		// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
@@ -17005,7 +17028,7 @@ class UnifiedWrapper extends ComponentBase {
 		const nodePath = () => runtime_standInPath(wrapper, propChain);
 		const assertChange = (prop) => {
 			const parts = filterList(splitText(nodePath(), "."), Boolean);
-			if (typeof prop === "string") ArrayMethods.push(parts, prop);
+			if (typeof prop === "string") listPush(parts, prop);
 			runtime_assertOwnedWriteAt(wrapper, parts);
 		};
 		// What the code reading now (its module, or the host) last did to `prop` through a stand-in for this node while it
@@ -17020,13 +17043,13 @@ class UnifiedWrapper extends ComponentBase {
 				const change = pending[i];
 				if (change.prop !== prop || change.by !== reader) continue;
 				if (change.chain.length !== propChain.length || ArrayMethods.some(change.chain, (key, index) => key !== propChain[index])) continue;
-				if (change.op === "set") member = { value: change.payload, writable: true, enumerable: true, configurable: true };
+				if (change.op === "set") member = { __proto__: null, value: change.payload, writable: true, enumerable: true, configurable: true };
 				else if (change.op === "defineProperty") {
 					const { get, set, value, writable, enumerable } = change.payload;
 					member =
 						"get" in change.payload || "set" in change.payload
-							? { get, set, enumerable: enumerable === true, configurable: true }
-							: { value, writable: writable === true, enumerable: enumerable === true, configurable: true };
+							? { __proto__: null, get, set, enumerable: enumerable === true, configurable: true }
+							: { __proto__: null, value, writable: writable === true, enumerable: enumerable === true, configurable: true };
 				} else if (change.op === "deleteProperty") member = null;
 			}
 			return member;
@@ -19159,12 +19182,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (wrapped && (isInherited || typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function")) return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
-				Objects.defineProperty(wrapper, prop, {
-					value: wrapped,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				Objects.defineProperty(wrapper, prop, { __proto__: null, value: wrapped, writable: false, enumerable: true, configurable: true });
 				return wrapped;
 			}
 
@@ -19844,6 +19862,7 @@ class UnifiedWrapper extends ComponentBase {
 					if (!reader || !hookDescriptor.configurable) return hookDescriptor;
 					const hook = hookDescriptor.value;
 					return {
+						__proto__: null,
 						...hookDescriptor,
 						value: function (...args) {
 							// Shown as to a module, whoever calls the copy later: it never hands out the module's code (#632).
@@ -19883,7 +19902,7 @@ class UnifiedWrapper extends ComponentBase {
 					return { ...sealed, value: readNode() };
 				}
 				if (sealed && prop === "length" && Arrays.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
-					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
+					return { __proto__: null, ...sealed, value: wrapper.____slothletInternal.impl.length };
 				}
 				return engineCheck ? sealed : runtime_fixedDescriptor(wrapper, prop, sealed, asHeld, kept);
 			}
@@ -19905,7 +19924,7 @@ class UnifiedWrapper extends ComponentBase {
 					value !== null && (typeof value === "object" || typeof value === "function") ? readNode() : value;
 				if (fixed && !fixed.configurable) {
 					if (!fixed.writable) return engineCheck ? fixed : runtime_fixedDescriptor(wrapper, prop, fixed, asHeld, kept);
-					return { ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
+					return { __proto__: null, ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
 				}
 				if (withheld) return undefined;
 				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
@@ -19917,6 +19936,7 @@ class UnifiedWrapper extends ComponentBase {
 					// The reader's identity travels with the getter: called later with no caller of its own, it still reads as that module.
 					const reader = runtime_capturedReader(wrapper);
 					return {
+						__proto__: null,
 						get: () => runtime_readAsReader(wrapper, prop, node[prop], reader),
 						set: (value) => {
 							node[prop] = value;
@@ -19925,7 +19945,7 @@ class UnifiedWrapper extends ComponentBase {
 						configurable: true
 					};
 				}
-				return current && !current.configurable ? { ...current, configurable: true } : current;
+				return current && !current.configurable ? { __proto__: null, ...current, configurable: true } : current;
 			}
 
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
@@ -19946,7 +19966,7 @@ class UnifiedWrapper extends ComponentBase {
 				// whose own `length` is not the function's); it is configurable on the target, so the invariants allow it.
 				const fn = runtime_functionOf(wrapper.____slothletInternal.impl);
 				if (prop === "length" && fn !== null && ownDesc.configurable && runtime_isBuiltinFunctionMember(wrapper, prop)) {
-					return { ...ownDesc, value: fn.length };
+					return { __proto__: null, ...ownDesc, value: fn.length };
 				}
 				return ownDesc;
 			}
@@ -19962,7 +19982,7 @@ class UnifiedWrapper extends ComponentBase {
 			// non-configurability ... which is either non-existent or configurable in the proxy target".
 			// Report such a virtualized descriptor as configurable (the only invariant-legal shape);
 			// undefined and already-configurable descriptors pass through unchanged.
-			const virtualizeDescriptor = (desc) => (desc && !desc.configurable ? { ...desc, configurable: true } : desc);
+			const virtualizeDescriptor = (desc) => (desc && !desc.configurable ? { __proto__: null, ...desc, configurable: true } : desc);
 
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
@@ -19980,6 +20000,7 @@ class UnifiedWrapper extends ComponentBase {
 					// the member answers it.
 					const heldNode = resolveWrapper(described.value);
 					return {
+						__proto__: null,
 						...described,
 						value: heldNode && runtime_holdsValue(heldNode) ? runtime_heldValue(heldNode) : described.value,
 						writable: runtime_reportsWritable(wrapper, prop)
@@ -20134,10 +20155,9 @@ class UnifiedWrapper extends ComponentBase {
 				const uw_ordered = [];
 				for (let ofIndex = 0, ofList = ["length", "name", "prototype"]; ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
-					if (SetMethods.has(keys, key)) ArrayMethods.push(uw_ordered, key);
+					if (SetMethods.has(keys, key)) listPush(uw_ordered, key);
 				}
-				for (const key of setValues(keys))
-					if (key !== "length" && key !== "name" && key !== "prototype") ArrayMethods.push(uw_ordered, key);
+				for (const key of setValues(keys)) if (key !== "length" && key !== "name" && key !== "prototype") listPush(uw_ordered, key);
 				return uw_ordered;
 			}
 			return setToArray(keys);
@@ -20236,6 +20256,7 @@ class UnifiedWrapper extends ComponentBase {
 				// written through it, which a fresh node over the module's element would not (#603 review).
 				if (isOwnElement && runtime_isPosition(prop)) {
 					Objects.defineProperty(wrapper, prop, {
+						__proto__: null,
 						value: moved.____slothletInternal.proxy,
 						writable: false,
 						enumerable: true,
@@ -20324,6 +20345,7 @@ class UnifiedWrapper extends ComponentBase {
 						const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
 							Objects.defineProperty(wrapper, prop, {
+								__proto__: null,
 								get: () => {
 									const currentImpl = wrapper.____slothletInternal.impl;
 									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
@@ -20416,12 +20438,7 @@ class UnifiedWrapper extends ComponentBase {
 						stored = wrapped;
 					}
 				}
-				Objects.defineProperty(wrapper, prop, {
-					value: stored,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				Objects.defineProperty(wrapper, prop, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
 				// Remember a genuine user assignment by key, so adopting a (re)materialized impl never mistakes
 				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
 				if (!inBuild) {
@@ -20910,6 +20927,7 @@ class UnifiedWrapper extends ComponentBase {
 						key,
 						isArrayAccessor
 							? {
+									__proto__: null,
 									get: frontsModuleObject && typeof descriptor.get !== "function" ? undefined : () => node[key],
 									set:
 										frontsModuleObject && typeof descriptor.set !== "function"
@@ -20921,6 +20939,7 @@ class UnifiedWrapper extends ComponentBase {
 									configurable: true
 								}
 							: {
+									__proto__: null,
 									value: runtime_shellValue(wrapper, key),
 									writable: Arrays.isArray(target) ? descriptor.writable !== false : true,
 									enumerable: descriptor.enumerable,
@@ -20966,7 +20985,7 @@ class UnifiedWrapper extends ComponentBase {
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return descriptor;
 				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value, access);
-				return bound === descriptor.value ? descriptor : { ...descriptor, value: bound };
+				return bound === descriptor.value ? descriptor : { __proto__: null, ...descriptor, value: bound };
 			},
 			ownKeys: ownKeysTrap,
 			set: setTrap,
@@ -21021,6 +21040,7 @@ class UnifiedWrapper extends ComponentBase {
 					const member = getOwnPropertyDescriptorTrap(target, prop, false);
 					if (member && "value" in member) {
 						shellDescriptor = {
+							__proto__: null,
 							value: runtime_shellValue(wrapper, prop),
 							writable: true,
 							enumerable: member.enumerable,
@@ -21191,6 +21211,7 @@ class UnifiedWrapper extends ComponentBase {
 // would instead create an enumerable property, diverging from class-method
 // semantics.
 Objects.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
+	__proto__: null,
 	value: UnifiedWrapper.prototype.____inspectCustom,
 	writable: true,
 	enumerable: false,
