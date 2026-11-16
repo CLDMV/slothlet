@@ -80,11 +80,13 @@ function observe(value) {
 	shown.back = [Object.getPrototypeOf(value) === first, typeof value.toString];
 	Object.setPrototypeOf(value, prototype);
 	Object.freeze(value);
+	// A closed node or root reports a checked view of the prototype it was given, to the host too: compared by what the
+	// reported prototype holds.
 	shown.closed = [
-		Object.getPrototypeOf(value) === prototype,
+		Object.getPrototypeOf(value).inherited,
 		value.inherited,
 		Reflect.setPrototypeOf(value, {}),
-		Reflect.setPrototypeOf(value, prototype)
+		Reflect.setPrototypeOf(value, Object.getPrototypeOf(value))
 	];
 	return shown;
 }
@@ -133,16 +135,77 @@ function observeRoot(value) {
 	shown.back = [Object.getPrototypeOf(value) === first, typeof value.call];
 	Object.setPrototypeOf(value, prototype);
 	Object.preventExtensions(value);
+	// A closed node or root reports a checked view of the prototype it was given, to the host too: compared by what the
+	// reported prototype holds.
 	shown.closed = [
-		Object.getPrototypeOf(value) === prototype,
+		Object.getPrototypeOf(value).inherited,
 		value.inherited,
 		Reflect.setPrototypeOf(value, {}),
-		Reflect.setPrototypeOf(value, prototype)
+		Reflect.setPrototypeOf(value, Object.getPrototypeOf(value))
 	];
 	return shown;
 }
 
+/** Rules letting one leaf of the writer read one member the root inherits, and its lister list it. */
+const ROOT_RULES = [
+	{ caller: "w.ops.protoRead", target: "inherited", effect: "allow" },
+	{ caller: "w.ops.protoListed", target: "inherited", effect: "allow" }
+];
+
 export const rows = [
+	{
+		title: "the prototype a module is handed of the api root reads and lists each member as the root does",
+		configs: matrix(),
+		async run(env, config) {
+			const checks = [];
+			for (const root of ["objroot", "fnroot"]) {
+				const files = root === "objroot" ? ["data.mjs", "pnum.mjs", "tool.mjs"] : ["data.mjs", "pnum.mjs", "root.mjs", "tool.mjs"];
+				const api = await env.compose({
+					fixture: "api_tests/api_test_api_root_integrity",
+					root,
+					files,
+					options: {
+						mode: config.mode,
+						runtime: config.runtime,
+						permissions: { attribution: config.attribution, defaultPolicy: "deny", rules: ROOT_RULES }
+					}
+				});
+				try {
+					await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+					await api.w.ops;
+					const prototype = { inherited: 5, unruled: 6 };
+					Object.setPrototypeOf(api, prototype);
+					const throughRoot = api.w.ops.protoRead("given", "unruled", api, 0);
+					checks.push(
+						[`${root}: the host's is the object`, [Object.getPrototypeOf(api) === prototype, api.unruled], [true, 6]],
+						[`${root}: read through the root`, api.w.ops.protoRead("given", "inherited", api, 0), 5],
+						[`${root}: read from the prototype`, api.w.ops.protoRead("given", "inherited", api, 1), 5],
+						[`${root}: refused through the root`, throughRoot.code, "PERMISSION_DENIED"],
+						[`${root}: refused from the prototype the same way`, api.w.ops.protoRead("given", "unruled", api, 1), throughRoot],
+						[`${root}: another leaf`, api.w.ops.protoPeek("given", "inherited", api, 1).code, "PERMISSION_DENIED"],
+						[
+							`${root}: listed`,
+							api.w.ops.protoListed("given", api, prototype, ["inherited", "unruled"]),
+							{
+								same: false,
+								stable: true,
+								keys: ["inherited"],
+								ownKeys: ["inherited"],
+								forIn: ["inherited"],
+								spread: ["inherited"],
+								json: '{"inherited":5}',
+								has: [true, true],
+								described: [true, false]
+							}
+						]
+					);
+				} finally {
+					await api.shutdown();
+				}
+			}
+			return checks;
+		}
+	},
 	{
 		title: "a function api root takes, reports, inherits from and closes with a prototype as a plain function does",
 		configs: matrix(),
@@ -198,7 +261,8 @@ export const rows = [
 			const rules = paths.flatMap((path) => [
 				{ caller: "reader.reader.read", target: `${path}.inherited`, effect: "allow" },
 				{ caller: "reader.reader.read", target: `${path}.ownData`, effect: "allow" },
-				{ caller: "reader.reader.call", target: `${path}.hello`, effect: "allow" }
+				{ caller: "reader.reader.call", target: `${path}.hello`, effect: "allow" },
+				{ caller: "reader.reader.listed", target: `${path}.inherited`, effect: "allow" }
 			]);
 			const api = await build(env, config, { defaultPolicy: "deny", rules });
 			try {
@@ -238,8 +302,34 @@ export const rows = [
 						[
 							`${path}: shown`,
 							await settled(() => api.reader.reader.shown(path, "unruled", prototype)),
-							{ has: true, own: false, same: true }
-						]
+							{ has: true, own: false, same: false }
+						],
+						// The prototype the module is handed reads and lists each member as the node does; the host has the object.
+						[`${path}: the host's is the object`, Object.getPrototypeOf(node) === prototype, true],
+						[`${path}: read from the prototype`, await settled(() => api.reader.reader.read(path, "inherited", 1)), 5],
+						[
+							`${path}: refused from the prototype as through the node`,
+							await settled(() => api.reader.reader.refusal(path, "unruled", 1)),
+							await settled(() => api.reader.reader.refusal(path, "unruled", 0))
+						],
+						[`${path}: refused`, (await settled(() => api.reader.reader.refusal(path, "unruled", 1))).code, "PERMISSION_DENIED"],
+						[
+							`${path}: listed`,
+							await settled(() => api.reader.reader.listed(path, prototype, ["inherited", "unruled", "hello"])),
+							{
+								same: false,
+								stable: true,
+								keys: ["inherited", "hello", "bye"],
+								ownKeys: ["inherited", "hello", "bye"],
+								forIn: ["inherited", "hello", "bye"],
+								viewForIn: ["inherited", "hello", "bye"],
+								spread: ["inherited", "hello", "bye"],
+								json: '{"inherited":5}',
+								has: [true, true, true],
+								described: [true, false, true]
+							}
+						],
+						[`${path}: a write through it`, await settled(() => api.reader.reader.write(path, "written", 1)), "LOOSE_SET_NOT_OWNED"]
 					);
 				}
 				checks.push(["another module's change", await settled(() => api.reader.reader.change("grp")), "LOOSE_SET_NOT_OWNED"]);

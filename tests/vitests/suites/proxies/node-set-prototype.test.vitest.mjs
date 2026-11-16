@@ -173,12 +173,14 @@ function observeClosed(value, how) {
 	const prototype = makePrototype("none");
 	Object.setPrototypeOf(value, prototype);
 	Object[how](value);
+	// A closed node reports a checked view of the prototype it was given, to the host too, so the two are compared by
+	// what the reported prototype holds rather than by identity.
 	return {
-		reported: [Object.getPrototypeOf(value) === prototype, value.__proto__ === prototype],
+		reported: [Object.getPrototypeOf(value).inherited, value.__proto__.inherited, Object.getPrototypeOf(value) === value.__proto__],
 		reads: [value.inherited, value.hello(), "inherited" in value, inheritedNames(value)],
 		another: [Reflect.setPrototypeOf(value, {}), Reflect.setPrototypeOf(value, null), attempt(() => Object.setPrototypeOf(value, {}))],
-		same: Reflect.setPrototypeOf(value, prototype),
-		still: [Object.getPrototypeOf(value) === prototype, value.inherited]
+		same: Reflect.setPrototypeOf(value, Object.getPrototypeOf(value)),
+		still: [Object.getPrototypeOf(value).inherited, value.inherited]
 	};
 }
 
@@ -417,6 +419,23 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		expect(await api.sub.lay.untouched()).toBe(true);
 	});
 
+	it("a module is handed the prototype itself with the permission system off or disabled, and its own view of it with it on", async () => {
+		const prototype = { inherited: 5 };
+		for (const overrides of permissions ? [undefined] : [undefined, { mode: "disabled" }]) {
+			await build(overrides);
+			for (const path of ["ev", "leaf.only", "sub.lay"]) {
+				const node = path.split(".").reduce((holder, key) => holder[key], api);
+				Object.setPrototypeOf(node, prototype);
+				expect(Object.getPrototypeOf(node)).toBe(prototype);
+				const shown = await api.reader.listed(path, prototype, ["inherited"]);
+				expect([shown.same, shown.stable, shown.keys, shown.has]).toEqual([!permissions, true, ["inherited"], [true]]);
+				expect(await api.reader.read(path, "inherited", 1)).toBe(5);
+			}
+			await api.shutdown();
+		}
+		api = null;
+	});
+
 	it("another module's code meets the node's write rules first", async () => {
 		await build();
 		const before = await api.ev.prototypes();
@@ -454,7 +473,13 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 			{ caller: "reader.read", target: `${path}.inherited`, effect: "allow" },
 			{ caller: "reader.read", target: `${path}.ownData`, effect: "allow" },
 			{ caller: "reader.call", target: `${path}.hello`, effect: "allow" },
-			{ caller: "reader.call", target: `${path}.ownHello`, effect: "allow" }
+			{ caller: "reader.call", target: `${path}.ownHello`, effect: "allow" },
+			{ caller: "reader.listed", target: `${path}.inherited`, effect: "allow" },
+			{ caller: "reader.viewKeys", target: `${path}.inherited`, effect: "allow" },
+			// A closed function node lists its function's own members only to a module that may call it.
+			{ caller: "reader.listed", target: path, effect: "allow" },
+			{ caller: "reader.read", target: `${path}.deepRuled`, effect: "allow" },
+			{ caller: "reader.listed", target: `${path}.deepRuled`, effect: "allow" }
 		]);
 		/**
 		 * The node at a dotted path.
@@ -501,10 +526,84 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 			}
 			expect(await api.reader.call(path, "bye")).toEqual(await api.reader.call(path, "ownBye"));
 			expect(await api.reader.call(path, "hello")).toEqual(await api.reader.call(path, "ownHello"));
-			// An inherited member is `in` the node and never among its own keys, and the prototype is reported as it is.
+			// An inherited member is `in` the node and never among its own keys, whoever reads; the module is handed its own
+			// view of the prototype, never the object.
 			for (const name of ["inherited", "unruled"]) {
-				expect(await api.reader.shown(path, name, prototype), name).toEqual({ has: true, own: false, same: true });
+				expect(await api.reader.shown(path, name, prototype), name).toEqual({ has: true, own: false, same: false });
 			}
+		});
+
+		it.each(PATHS)("%s: the prototype a module is handed reads and lists each member as the node does", async (path) => {
+			await build({ defaultPolicy: "deny", rules });
+			const deep = { deepRuled: 1, deepUnruled: 2 };
+			const prototype = Object.assign(Object.create(deep), {
+				inherited: 5,
+				unruled: 6,
+				hello() {
+					return "hi";
+				}
+			});
+			const node = at(path);
+			expect(Reflect.setPrototypeOf(node, prototype)).toBe(true);
+			// The host is handed the object itself.
+			expect(Object.getPrototypeOf(node)).toBe(prototype);
+			expect(node.__proto__).toBe(prototype);
+			// A module reads a member from the prototype under the rule it reads it through the node under, and is refused
+			// the same way where it has none.
+			expect(await api.reader.read(path, "inherited", 1)).toBe(5);
+			expect(await api.reader.read(path, "unruled", 1)).toEqual({ threw: "PERMISSION_DENIED" });
+			expect(await api.reader.peek(path, "inherited", 1)).toEqual({ threw: "PERMISSION_DENIED" });
+			const throughNode = await api.reader.refusal(path, "unruled", 0);
+			expect(throughNode.code).toBe("PERMISSION_DENIED");
+			expect(await api.reader.refusal(path, "unruled", 1)).toEqual(throughNode);
+			// Each prototype further up is read the same way.
+			expect(await api.reader.read(path, "deepRuled", 2)).toBe(1);
+			expect(await api.reader.read(path, "deepRuled", 1)).toBe(1);
+			expect(await api.reader.read(path, "deepUnruled", 2)).toEqual({ threw: "PERMISSION_DENIED" });
+			expect(await api.reader.refusal(path, "deepUnruled", 2)).toEqual(await api.reader.refusal(path, "deepUnruled", 0));
+			// Its listings leave out what the module may not read; `in` answers as for a member of the node's own.
+			expect(await api.reader.listed(path, prototype, ["inherited", "unruled", "hello", "deepRuled", "deepUnruled"])).toEqual({
+				same: false,
+				stable: true,
+				keys: ["inherited", "hello"],
+				ownKeys: ["inherited", "hello"],
+				forIn: ["inherited", "hello", "deepRuled"],
+				viewForIn: ["inherited", "hello", "deepRuled"],
+				spread: ["inherited", "hello"],
+				json: '{"inherited":5}',
+				has: [true, true, true, true, true],
+				described: [true, false, true, false, false]
+			});
+			// A write through it is a write at the node's path: refused to a module that does not own the node.
+			expect(await api.reader.write(path, "written", 1)).toBe("LOOSE_SET_NOT_OWNED");
+			expect(Object.hasOwn(prototype, "written")).toBe(false);
+		});
+
+		it("the module owning the node writes through the prototype it is handed, onto the object", async () => {
+			await build({ defaultPolicy: "deny", rules });
+			const prototype = { inherited: 5 };
+			expect(await api.ev.change("ns", prototype)).toBe("done");
+			expect(await api.ev.write("written", 1)).toBe("done");
+			expect(prototype.written).toBe(1);
+		});
+
+		it.each(PATHS)("%s: a closed node holds the checked prototype for every holder", async (path) => {
+			await build({ defaultPolicy: "deny", rules });
+			const prototype = { inherited: 5, unruled: 6 };
+			const node = at(path);
+			Object.setPrototypeOf(node, prototype);
+			Object.freeze(node);
+			// The host reads through it; the object itself is no longer what the closed node reports.
+			expect(Object.getPrototypeOf(node)).not.toBe(prototype);
+			expect(Object.getPrototypeOf(node)).toBe(Object.getPrototypeOf(node));
+			expect([Object.getPrototypeOf(node).inherited, Object.getPrototypeOf(node).unruled, node.unruled]).toEqual([5, 6, 6]);
+			// It takes only the prototype it reports now.
+			expect(Reflect.setPrototypeOf(node, Object.getPrototypeOf(node))).toBe(true);
+			expect(Reflect.setPrototypeOf(node, prototype)).toBe(false);
+			expect(Reflect.setPrototypeOf(node, {})).toBe(false);
+			expect(await api.reader.read(path, "inherited", 1)).toBe(5);
+			expect(await api.reader.read(path, "unruled", 1)).toEqual({ threw: "PERMISSION_DENIED" });
+			expect(await api.reader.viewKeys(path)).toEqual(["inherited"]);
 		});
 
 		it("the module that set the prototype reads what it inherits as it reads its own member", async () => {

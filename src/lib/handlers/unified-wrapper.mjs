@@ -815,6 +815,8 @@ function runtime_isPlainMember(value) {
  */
 function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	// A reader's view of a prototype a node was given is handed on as it is: it checks each read and change itself.
+	if (GIVEN_VIEWS.has(value)) return value;
 	// A function of the module's an api node stands for is that node, read under its own rules (a prototype's
 	// `constructor`, say).
 	if (typeof value === "function") {
@@ -1937,6 +1939,10 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			const impl = inner?.____slothletInternal.impl;
 			if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isClassInstance(impl) && runtime_readsEngineProto(impl))
 				return shownPrototype(value);
+		}
+		// A node whose prototype is its own record's answers `__proto__` with what it reports, as it is handed out.
+		if (prop === "__proto__" && value !== null && typeof value === "object" && inner && !hasOwn(node, prop)) {
+			if (runtime_ownsPrototype(inner) && value === Reflect.getPrototypeOf(node)) return value;
 		}
 		if (prop === Symbol.hasInstance && value === undefined && typeof node === "function") {
 			hasInstance ??= (instance) => runtime_selfHasInstance(Reflect.get(node, "prototype"), instance);
@@ -4152,6 +4158,296 @@ function runtime_moduleInheritance(wrapper, prop) {
 	if (object === null) return null;
 	const prototype = Reflect.getPrototypeOf(object);
 	return prototype !== null && prototype !== Objects.prototype && Reflect.has(prototype, prop) ? prototype : null;
+}
+
+/**
+ * The views module code is handed of prototypes given to a node or to the api root (see {@link runtime_givenView}),
+ * each with what it stands for.
+ * @type {WeakMap<object, {value: object|Function, gate: object, node: object|null, reader: object}>}
+ * @private
+ */
+const GIVEN_VIEWS = new WeakMap();
+
+/**
+ * The object a view of a given prototype stands for ({@link runtime_givenView}), or the value itself when it is no
+ * such view: a view handed back in (`Object.setPrototypeOf(node, view)`) is the object.
+ * @param {*} value - The value.
+ * @returns {*} What is behind it.
+ * @private
+ */
+function runtime_behindGivenView(value) {
+	return GIVEN_VIEWS.get(value)?.value ?? value;
+}
+
+/**
+ * Whether a value handed out of a given prototype is handed out as it is: nothing a view is made of, one of
+ * slothlet's own values, or the language's own.
+ * @param {*} value - The value.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_givenAsIs(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
+	return INTRINSICS.has(value) || runtime_isSlothletValue(value) || GIVEN_VIEWS.has(value);
+}
+
+/**
+ * The read gate's verdict on a member read from a given prototype, at the path a member of the node by that name is
+ * read at: decided for whoever reads now, and, when that is no module (a callback the host runs), for the module the
+ * view was handed to, so a view a module kept reads no more than the module may.
+ * @param {{gate: object, reader: object}} record - The view's record.
+ * @param {string|symbol} prop - The member's key.
+ * @returns {{allowed: boolean, caller: string|null, target: string}} The verdict, with the path decided.
+ * @private
+ */
+function runtime_givenReadDecision(record, prop) {
+	const { gate, reader } = record;
+	const target = runtime_memberPathOf(gate, prop);
+	const pm = gate.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return { allowed: true, caller: null, target };
+	const live = runtime_readGateDecision(gate, target, undefined);
+	if (!live.allowed || live.caller !== null || !reader?.____slothletInternal) return { ...live, target };
+	if (gate.slothlet.handlers.apiManager.isRemovedCaller(reader)) {
+		return { allowed: false, caller: String(reader.____slothletInternal.apiPath ?? ""), target };
+	}
+	return { ...runtime_readGateFor(gate, target, reader, { context: null }), target };
+}
+
+/**
+ * Whether a member a given prototype holds is left out of what its view lists and describes: data the reader may not
+ * read, and a getter whose path it may not read, as a node leaves them out of its own listing (see
+ * {@link runtime_isReadRedacted}). Read by descriptor: nothing of the prototype runs.
+ * @param {{value: object, gate: object, reader: object}} record - The view's record.
+ * @param {string|symbol} prop - The member's key.
+ * @returns {boolean} True when it is left out.
+ * @private
+ */
+function runtime_givenWithheld(record, prop) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(record.value, prop);
+	if (!descriptor) return false;
+	const isData = "value" in descriptor;
+	if (isData ? !runtime_isTerminalData(descriptor.value) : typeof descriptor.get !== "function") return false;
+	return !runtime_givenReadDecision(record, prop).allowed;
+}
+
+/**
+ * A member read from a given prototype, as the reader is handed it: data once the reader may read it at the node's
+ * path plus the member's name, a function as the node at that path a read through the node hands out (call-gated
+ * there), and an object as a view of its own one level down, whose members are read beneath that path.
+ * @param {{value: object, gate: object, node: object|null, reader: object, members: Map}} record - The view's record.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - What the prototype answered.
+ * @returns {*} What the reader is handed.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not read the member.
+ * @private
+ */
+function runtime_givenMember(record, prop, value) {
+	if (value === undefined) return undefined;
+	if (runtime_isTerminalData(value)) {
+		const decision = runtime_givenReadDecision(record, prop);
+		if (!decision.allowed) throw new record.gate.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: decision.target });
+		return value;
+	}
+	if (runtime_givenAsIs(value)) return value;
+	if (typeof value === "function") {
+		// The engine's own functions are no one's code; any other is read as a member of the node is.
+		if (runtime_isBuiltinFunction(value) || record.node === null || typeof record.node.___createChildWrapper !== "function") return value;
+		return record.node.___createChildWrapper(prop, value) ?? value;
+	}
+	const held = record.members.get(prop);
+	if (held !== undefined && held.value === value) return held.view;
+	const gate = record.gate;
+	const beneath = {
+		slothlet: gate.slothlet,
+		SlothletError: gate.SlothletError,
+		____slothletInternal: { apiPath: runtime_memberPathOf(gate, prop), filePath: gate.____slothletInternal.filePath ?? null, impl: value }
+	};
+	const view = runtime_givenView(beneath, null, value, record.reader, record.assertWrite);
+	record.members.set(prop, { value, view });
+	return view;
+}
+
+/**
+ * A prototype given to a node or to the api root, as module code reading that node is handed it: a view that reads
+ * each member under the rules a member of the node by that name is read under, leaves out of its listings what the
+ * reader may not read, answers `in` as the node does for a member of its own, and holds a change made through it to
+ * the rules of a write at the node's path. The host is handed the object itself, and so is everyone while the
+ * permission system is off. A prototype further up the chain is viewed the same way, at the same path.
+ * @param {object} gate - What the read gate decides against: the node's wrapper, or a stand-in holding the path
+ *   (see {@link runtime_rootGate}).
+ * @param {object|null} node - The node's wrapper, which hands out the functions the prototype holds; null beneath it
+ *   and at the root.
+ * @param {object|Function} value - The prototype.
+ * @param {object} reader - The module the view is handed to, or the reader standing for every holder of a closed node.
+ * @param {function(): void} assertWrite - Refuses a change the code running now may not make at the node's path.
+ * @returns {object} The view.
+ * @private
+ */
+function runtime_givenView(gate, node, value, reader, assertWrite) {
+	const record = { value, gate, node, reader, assertWrite, members: new Map(), link: null };
+	const shadow = {};
+	const view = new NativeProxy(shadow, {
+		get: (_, prop, receiver) => runtime_givenMember(record, prop, Reflect.get(value, prop, receiver === view ? view : receiver)),
+		has: (_, prop) => Reflect.has(value, prop),
+		ownKeys: () => Reflect.ownKeys(value).filter((key) => !runtime_givenWithheld(record, key)),
+		getOwnPropertyDescriptor: (_, prop) => {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+			if (!descriptor || runtime_givenWithheld(record, prop)) return undefined;
+			// The view holds nothing fixed, so each member is described as one that can still change.
+			if ("value" in descriptor) return { ...descriptor, value: runtime_givenMember(record, prop, descriptor.value), configurable: true };
+			return {
+				get: typeof descriptor.get === "function" ? () => view[prop] : undefined,
+				set:
+					typeof descriptor.set === "function"
+						? (written) => {
+								view[prop] = written;
+							}
+						: undefined,
+				enumerable: descriptor.enumerable,
+				configurable: true
+			};
+		},
+		getPrototypeOf: () => {
+			const link = Reflect.getPrototypeOf(value);
+			if (runtime_givenAsIs(link)) return link;
+			if (record.link === null || record.link.value !== link) {
+				record.link = { value: link, view: runtime_givenView(gate, node, link, reader, assertWrite) };
+			}
+			return record.link.view;
+		},
+		set: (_, prop, written, receiver) => {
+			// A write reaching the view from an object that inherits from it lands on that object, as plain JS has it.
+			if (receiver !== view) return Reflect.set(value, prop, written, receiver);
+			assertWrite();
+			return Reflect.set(value, prop, runtime_behindGivenView(runtime_unwrapSelfView(written)));
+		},
+		defineProperty: (_, prop, descriptor) => {
+			assertWrite();
+			// The view holds nothing fixed: a definition that would fix a member is made on the object itself, not here.
+			if (descriptor.configurable !== true && !Reflect.getOwnPropertyDescriptor(value, prop)?.configurable) return false;
+			return Reflect.defineProperty(value, prop, descriptor);
+		},
+		deleteProperty: (_, prop) => {
+			assertWrite();
+			return Reflect.deleteProperty(value, prop);
+		},
+		setPrototypeOf: (_, prototype) => {
+			assertWrite();
+			return Reflect.setPrototypeOf(value, runtime_behindGivenView(runtime_unwrapSelfView(prototype)));
+		},
+		// A view stays open: the object is closed on the object itself.
+		preventExtensions: () => {
+			assertWrite();
+			return false;
+		}
+	});
+	GIVEN_VIEWS.set(view, record);
+	return view;
+}
+
+/**
+ * The prototype a node was given, as whoever reads the node now is handed it (see {@link runtime_givenView}): the
+ * object itself to the host and while the permission system is off, and to module code its own view, the same one on
+ * every read, kept on the node's record for as long as the node has that prototype.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object|Function|null} prototype - The prototype the node was given.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+ * @returns {object|Function|null} What the reader is handed.
+ * @private
+ */
+function runtime_givenPrototypeFor(wrapper, prototype, kept = null) {
+	if (runtime_givenAsIs(prototype)) return prototype;
+	const slothlet = wrapper.slothlet;
+	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
+	const reader = runtime_selfModuleReader(slothlet) ?? kept?.reader ?? null;
+	if (reader === null || reader === HOST_READER) return prototype;
+	return runtime_givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, reader, () =>
+		runtime_assertOwnedWrite(wrapper, null)
+	);
+}
+
+/**
+ * The view of a given prototype kept for a reader on a record (a node's, or the api root's): made once per prototype
+ * and reader.
+ * @param {object} holder - The record: its `prototypeViews` holds the views of the prototype it has now.
+ * @param {object} gate - What the read gate decides against.
+ * @param {object|null} node - The node's wrapper, or null at the root.
+ * @param {object|Function} prototype - The prototype.
+ * @param {object} reader - Who the view is for.
+ * @param {function(): void} assertWrite - Refuses a change the code running now may not make at the path.
+ * @returns {object} The view.
+ * @private
+ */
+function runtime_givenViewOn(holder, gate, node, prototype, reader, assertWrite) {
+	let views = holder.prototypeViews;
+	if (views === undefined || views === null || views.of !== prototype) {
+		views = { of: prototype, byReader: new WeakMap() };
+		holder.prototypeViews = views;
+	}
+	let view = views.byReader.get(reader);
+	if (view === undefined) {
+		view = runtime_givenView(gate, node, prototype, reader, assertWrite);
+		views.byReader.set(reader, view);
+	}
+	return view;
+}
+
+/**
+ * The prototype a closed node's shell holds when the node was given one: a view standing for every holder of the node
+ * (the host too), since a closed node reports its shell's prototype to all of them, whether the permission system is on
+ * now or not; each read through it is decided for whoever makes it. The language's own prototypes are held as they are.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object|Function|null} prototype - The prototype the node was given.
+ * @returns {object|Function|null} What the shell holds.
+ * @private
+ */
+function runtime_givenShellPrototype(wrapper, prototype) {
+	if (runtime_givenAsIs(prototype)) return prototype;
+	return runtime_givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, SEALED_SHELL_READER, () =>
+		runtime_assertOwnedWrite(wrapper, null)
+	);
+}
+
+/**
+ * The api root's given prototype, as whoever reads the root now is handed it (see {@link runtime_givenPrototypeFor}),
+ * kept on the root's own record.
+ * @param {object} slothlet - The instance.
+ * @param {object} holder - The root's record of its views.
+ * @param {object|Function|null} prototype - The prototype.
+ * @param {boolean} [closed=false] - Whether the view is for the closed root's target, which every holder is handed.
+ * @returns {object|Function|null} What the reader is handed.
+ * @internal
+ */
+function runtime_rootPrototypeFor(slothlet, holder, prototype, closed = false) {
+	if (runtime_givenAsIs(prototype)) return prototype;
+	let reader = SEALED_SHELL_READER;
+	if (!closed) {
+		if (!slothlet.handlers?.permissionManager?.isEnabled()) return prototype;
+		reader = runtime_selfModuleReader(slothlet);
+		if (reader === null || reader === HOST_READER) return prototype;
+	}
+	return runtime_givenViewOn(holder, runtime_rootGate(slothlet), null, prototype, reader, () => runtime_assertRootChange(slothlet, null));
+}
+
+/**
+ * A member the api root inherits from a prototype it was given, as module code reading the root is handed it: under
+ * the rules a member of the root by that name is read under (see {@link runtime_givenMember}). The host, and everyone
+ * while the permission system is off, reads it as the root reads any member.
+ * @param {object} slothlet - The instance.
+ * @param {object} holder - The root's record of its views.
+ * @param {object|Function} prototype - The prototype the member was read from.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - What the prototype answered.
+ * @returns {*} What the reader is handed.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not read the member.
+ * @internal
+ */
+function runtime_rootInheritedRead(slothlet, holder, prototype, prop, value) {
+	const viewed = runtime_rootPrototypeFor(slothlet, holder, prototype);
+	const record = GIVEN_VIEWS.get(viewed);
+	if (record === undefined || record.value !== prototype || typeof value === "function")
+		return runtime_rootMemberRead(slothlet, prop, value);
+	return runtime_givenMember(record, prop, value);
 }
 
 /**
@@ -7401,8 +7697,9 @@ function runtime_classPrototypeSites(slothlet, prototype) {
 function runtime_functionNodePrototype(wrapper, fn) {
 	const prototype = runtime_ownsPrototype(wrapper) ? runtime_recordedPrototype(wrapper) : Objects.getPrototypeOf(fn);
 	if (prototype === null || prototype === Functions.prototype) return prototype;
-	// One given to the node is no part of the module's function: it is reported as it is.
-	if (runtime_prototypeGiven(wrapper)) return prototype;
+	// One given to the node is no part of the module's function: the host is handed it as it is, and module code its
+	// own view of it (see runtime_givenView).
+	if (runtime_prototypeGiven(wrapper)) return runtime_givenPrototypeFor(wrapper, prototype);
 	if (typeof prototype !== "function") {
 		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
 	}
@@ -10251,8 +10548,9 @@ function runtime_rootClose(slothlet, target, isCallable, prototype) {
 	// alone closes then, and from then on holds the keys the root has (see runtime_rootTakesKey).
 	if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
 	// A closed root reports its target's prototype (invariant): a function root's is its function's, or the one the
-	// root was given.
-	if (isCallable) Reflect.setPrototypeOf(target, prototype);
+	// root was given, which an object root's target holds already. One it was given is held as the view every holder of
+	// the closed root reads it through (see runtime_rootPrototypeFor).
+	if (isCallable || prototype !== undefined) Reflect.setPrototypeOf(target, prototype);
 	for (const key of Reflect.ownKeys(api))
 		Reflect.defineProperty(target, key, runtime_rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key)));
 	return Reflect.preventExtensions(target);
@@ -11358,7 +11656,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			const fixed = Reflect.getPrototypeOf(shadow);
 			// Checked for whoever reads it now, as the view's other traps and its open branch are: a view handed on to another
 			// module answers that module as the node would, never as the module that kept it.
-			if (inner) {
+			// A view of a prototype the node was given checks each read made through it itself.
+			if (inner && !GIVEN_VIEWS.has(fixed)) {
 				const behind = runtime_behindMemberView(fixed);
 				runtime_enforceCodeMember(runtime_prototypeCheckedBy(inner, behind), behind);
 			}
@@ -19273,8 +19572,11 @@ class UnifiedWrapper extends ComponentBase {
 				return runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, unclassed), null);
 			}
 			let prototype = heldPrototype();
-			// A node's own prototype, a module's value's or none, is reported as it is to every reader.
-			if (prototype === null || runtime_ownsPrototype(wrapper)) return prototype;
+			// A node's own prototype is reported as it is to the host; one it was given is handed to module code as that
+			// module's view of it (see runtime_givenView).
+			if (prototype === null) return null;
+			if (runtime_ownsPrototype(wrapper))
+				return runtime_prototypeGiven(wrapper) ? runtime_givenPrototypeFor(wrapper, prototype, kept) : prototype;
 			// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 			// the node, as its `constructor` is read (#632). Any other caller is reported a stand-in inheriting from the
 			// nearest prototype above it holding none of the module's code, so `instanceof` against the language's or
@@ -19330,6 +19632,10 @@ class UnifiedWrapper extends ComponentBase {
 				} else if (typeof array === "function") Reflect.setPrototypeOf(target, runtime_functionNodePrototype(wrapper, array));
 				// A lazy namespace's shell is a function, built before its value was known: it takes the namespace's prototype.
 				else if (runtime_ownsPrototype(wrapper)) Reflect.setPrototypeOf(target, runtime_recordedPrototype(wrapper));
+				// A prototype the node was given is held as the view every holder of the closed node reads it through.
+				if (runtime_prototypeGiven(wrapper)) {
+					Reflect.setPrototypeOf(target, runtime_givenShellPrototype(wrapper, runtime_recordedPrototype(wrapper)));
+				}
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				const frontsModuleObject = !Arrays.isArray(target) && runtime_moduleObjectOf(wrapper) !== null;
 				for (const key of keys) {
@@ -19566,7 +19872,7 @@ class UnifiedWrapper extends ComponentBase {
 					return runtime_unwrapSelfView(proto) === (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : heldPrototype());
 				}
 				// The one its value came with is the node's again as it was before any was given.
-				const given = runtime_unwrapSelfView(proto);
+				const given = runtime_behindGivenView(runtime_unwrapSelfView(proto));
 				runtime_recordedPrototype(wrapper);
 				internal.prototypeGiven = given !== (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : Objects.prototype);
 				internal.prototype = given;
@@ -19848,6 +20154,9 @@ export function internals(consumer) {
 		runtime_rootListing,
 		runtime_rootMemberDescriptor,
 		runtime_rootMemberRead,
+		runtime_rootPrototypeFor,
+		runtime_rootInheritedRead,
+		runtime_behindGivenView,
 		runtime_rootTakesKey,
 		runtime_selfChangeTarget,
 		runtime_selfFrameworkView,

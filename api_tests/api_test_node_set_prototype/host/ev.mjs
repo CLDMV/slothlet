@@ -84,3 +84,18 @@ export function read(name) {
 		return { threw: error?.code ?? error?.name ?? "threw" };
 	}
 }
+
+/**
+ * Write a member onto the prototype this file's own namespace reports to its module.
+ * @param {string} name - The member's name.
+ * @param {*} value - Its value.
+ * @returns {string} `"done"`, or the code or name of what it threw.
+ */
+export function write(name, value) {
+	try {
+		Object.getPrototypeOf(self.ev)[name] = value;
+		return "done";
+	} catch (error) {
+		return error?.code ?? error?.name ?? "threw";
+	}
+}

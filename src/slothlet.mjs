@@ -128,6 +128,9 @@ const {
 	runtime_rootListing,
 	runtime_rootMemberDescriptor,
 	runtime_rootMemberRead,
+	runtime_rootPrototypeFor,
+	runtime_rootInheritedRead,
+	runtime_behindGivenView,
 	runtime_rootTakesKey,
 	runtime_unwrapSelfView
 } = unifiedWrapperInternals("slothlet");
@@ -1296,6 +1299,18 @@ class Slothlet {
 				rootPrototypeNow();
 				return rootPrototype.given && !Objects.prototype.hasOwnProperty.call(this.api, prop);
 			};
+			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
+			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
+			// Whether the root has a prototype it was given (an object root starts with `Object.prototype`).
+			const rootGiven = () =>
+				isCallable ? (rootPrototypeNow(), rootPrototype.given) : Reflect.getPrototypeOf(this.api) !== Objects.prototype;
+			// The views module code is handed of a prototype the root was given, kept for as long as the root has it, and
+			// the prototype as whoever reads the root now is handed it: the host the object, a module its own view.
+			const rootViews = { prototypeViews: null };
+			const rootReported = (target) => {
+				if (!this.api || !Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
+				return rootGiven() ? runtime_rootPrototypeFor(this, rootViews, rootHeld()) : rootHeld();
+			};
 			// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
 			runtime_defineRootInspect(this, proxyTarget);
 
@@ -1311,15 +1326,21 @@ class Slothlet {
 							// A key only the target holds (its inspect hook, which `util.inspect` reads through the proxy when the root
 							// is the target of another proxy) is the target's.
 							if (fixed && typeof prop === "symbol" && !(prop in this.api)) return fixed.value;
-							// A function root's `__proto__` is the prototype it reports, as a function's is.
-							if (isCallable && prop === "__proto__" && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
-								const from = rootPrototypeNow();
+							// The root's `__proto__` is the prototype it reports, as an object's or a function's is.
+							if (prop === "__proto__" && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
+								const from = rootHeld();
 								return from === null ? undefined : Reflect.get(from, prop, this.boundApi);
 							}
-							// A member a function root inherits from a prototype it was given is read from there, on the root.
+							// A member a function root inherits from a prototype it was given is read from there, on the root, and
+							// one an object root inherits from one through its api: either under the rules a member of the root is.
 							if (rootInherits(prop)) {
 								const from = rootPrototype.prototype;
-								return runtime_rootMemberRead(this, prop, from === null ? undefined : Reflect.get(from, prop, this.boundApi));
+								if (from === null) return runtime_rootMemberRead(this, prop, undefined);
+								return runtime_rootInheritedRead(this, rootViews, from, prop, Reflect.get(from, prop, this.boundApi));
+							}
+							if (!isCallable && rootGiven() && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
+								const from = rootHeld();
+								if (from !== null) return runtime_rootInheritedRead(this, rootViews, from, prop, this.api[prop]);
 							}
 							return runtime_rootMemberRead(this, prop, this.api[prop]);
 						},
@@ -1366,15 +1387,14 @@ class Slothlet {
 						},
 						// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it,
 						// or the one the root was given.
-						getPrototypeOf: (target) =>
-							isCallable && this.api && Reflect.isExtensible(target) ? rootPrototypeNow() : Reflect.getPrototypeOf(target),
+						getPrototypeOf: (target) => rootReported(target),
 						// A prototype set on an object root is set on the api, whose members inherit from it, and on its target, which
 						// reports it. A function root takes it on its own record, and its function keeps the one it has.
 						setPrototypeOf: (target, proto) => {
 							if (!this.api) return Reflect.setPrototypeOf(target, proto);
 							runtime_assertRootChange(this, null);
-							proto = runtime_unwrapSelfView(proto);
 							if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+							proto = runtime_behindGivenView(runtime_unwrapSelfView(proto));
 							if (isCallable) {
 								rootPrototypeNow();
 								rootPrototype.given = proto !== Reflect.getPrototypeOf(this.api);
@@ -1386,7 +1406,12 @@ class Slothlet {
 						// Closing the root closes the api (see runtime_rootClose).
 						preventExtensions: (target) =>
 							this.api
-								? runtime_rootClose(this, target, isCallable, isCallable ? rootPrototypeNow() : undefined)
+								? runtime_rootClose(
+										this,
+										target,
+										isCallable,
+										rootGiven() ? runtime_rootPrototypeFor(this, rootViews, rootHeld(), true) : rootHeld()
+									)
 								: Reflect.preventExtensions(target),
 						getOwnPropertyDescriptor: (target, prop) => {
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);

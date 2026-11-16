@@ -49,14 +49,27 @@ export function change(which) {
 const at = (path) => path.split(".").reduce((node, key) => node[key], self);
 
 /**
+ * The prototype a node reports to this module, any number of links up.
+ * @param {string} path - The node's path.
+ * @param {number} [links=1] - How many links up.
+ * @returns {object|null} The prototype.
+ */
+function prototypeOf(path, links = 1) {
+	let value = at(path);
+	for (let i = 0; i < links; i++) value = Object.getPrototypeOf(value);
+	return value;
+}
+
+/**
  * Read a member through a node, as this leaf.
  * @param {string} path - The node's path.
  * @param {string} name - The member's name.
+ * @param {number} [links=0] - Read it from the prototype the node reports, this many links up, rather than the node.
  * @returns {*} The member, or `{ threw: code }` when the read was refused.
  */
-export function read(path, name) {
+export function read(path, name, links = 0) {
 	try {
-		return at(path)[name];
+		return prototypeOf(path, links)[name];
 	} catch (error) {
 		return { threw: error?.code ?? error?.name ?? "threw" };
 	}
@@ -66,11 +79,12 @@ export function read(path, name) {
  * Read a member through a node, as another leaf of the same module.
  * @param {string} path - The node's path.
  * @param {string} name - The member's name.
+ * @param {number} [links=0] - Read it from the prototype the node reports, this many links up, rather than the node.
  * @returns {*} The member, or `{ threw: code }` when the read was refused.
  */
-export function peek(path, name) {
+export function peek(path, name, links = 0) {
 	try {
-		return at(path)[name];
+		return prototypeOf(path, links)[name];
 	} catch (error) {
 		return { threw: error?.code ?? error?.name ?? "threw" };
 	}
@@ -102,6 +116,83 @@ export function shown(path, name, prototype) {
 	try {
 		const node = at(path);
 		return { has: name in node, own: Reflect.ownKeys(node).includes(name), same: Object.getPrototypeOf(node) === prototype };
+	} catch (error) {
+		return { threw: error?.code ?? error?.name ?? "threw" };
+	}
+}
+
+/**
+ * How a read of a member is refused: through the node, or from the prototype the node reports.
+ * @param {string} path - The node's path.
+ * @param {string} name - The member's name.
+ * @param {number} links - `0` for the node, or how many links up its prototypes.
+ * @returns {{code: string, message: string}|{read: *}} The refusal, or what was read.
+ */
+export function refusal(path, name, links) {
+	try {
+		return { read: prototypeOf(path, links)[name] };
+	} catch (error) {
+		return { code: error?.code ?? error?.name, message: String(error?.message) };
+	}
+}
+
+/**
+ * What the prototype a node reports to this module lists, and whether it is the given object.
+ * @param {string} path - The node's path.
+ * @param {object} prototype - The object the node was given.
+ * @param {string[]} names - Names to ask for one by one.
+ * @returns {object} What it shows.
+ */
+export function listed(path, prototype, names) {
+	try {
+		const node = at(path);
+		const view = Object.getPrototypeOf(node);
+		const own = Object.keys(node);
+		const forIn = [];
+		for (const name in node) if (!own.includes(name)) forIn.push(name);
+		const viewForIn = [];
+		for (const name in view) viewForIn.push(name);
+		return {
+			same: view === prototype,
+			stable: view === Object.getPrototypeOf(node) && view === node.__proto__,
+			keys: Object.keys(view),
+			ownKeys: Reflect.ownKeys(view).filter((key) => typeof key === "string"),
+			forIn,
+			viewForIn,
+			spread: Object.keys({ ...view }),
+			json: JSON.stringify(view),
+			has: names.map((name) => name in view),
+			described: names.map((name) => Object.getOwnPropertyDescriptor(view, name) !== undefined)
+		};
+	} catch (error) {
+		return { threw: error?.code ?? error?.name ?? "threw", message: String(error?.message) };
+	}
+}
+
+/**
+ * Write a member onto the prototype a node reports to this module.
+ * @param {string} path - The node's path.
+ * @param {string} name - The member's name.
+ * @param {*} value - Its value.
+ * @returns {string} `"done"`, or the code or name of what it threw.
+ */
+export function write(path, name, value) {
+	try {
+		Object.getPrototypeOf(at(path))[name] = value;
+		return "done";
+	} catch (error) {
+		return error?.code ?? error?.name ?? "threw";
+	}
+}
+
+/**
+ * The names the prototype a node reports to this module lists as its own.
+ * @param {string} path - The node's path.
+ * @returns {string[]|{threw: string}} The names.
+ */
+export function viewKeys(path) {
+	try {
+		return Object.keys(Object.getPrototypeOf(at(path)));
 	} catch (error) {
 		return { threw: error?.code ?? error?.name ?? "threw" };
 	}

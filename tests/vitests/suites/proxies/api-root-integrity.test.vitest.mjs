@@ -174,12 +174,14 @@ function observeClosedPrototype(value, how) {
 	const prototype = { inherited: 5 };
 	Object.setPrototypeOf(value, prototype);
 	Object[how](value);
+	// A closed root reports a checked view of the prototype it was given, to the host too, so the two are compared by
+	// what the reported prototype holds rather than by identity.
 	return {
-		reported: [Object.getPrototypeOf(value) === prototype, value.__proto__ === prototype],
+		reported: [Object.getPrototypeOf(value).inherited, value.__proto__.inherited, Object.getPrototypeOf(value) === value.__proto__],
 		reads: [value.inherited, "inherited" in value, inheritedNames(value)],
 		another: [Reflect.setPrototypeOf(value, {}), Reflect.setPrototypeOf(value, null), Reflect.setPrototypeOf(value, Function.prototype)],
-		same: Reflect.setPrototypeOf(value, prototype),
-		still: [Object.getPrototypeOf(value) === prototype, value.inherited]
+		same: Reflect.setPrototypeOf(value, Object.getPrototypeOf(value)),
+		still: [Object.getPrototypeOf(value).inherited, value.inherited]
 	};
 }
 
@@ -371,6 +373,88 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				expect(api.inherited).toBeUndefined();
 				expect(await api()).toBe("root");
 			});
+
+			describe("a prototype given to the root, as a module is handed it", () => {
+				/** Rules letting one leaf of the writer read one inherited member, and its lister list it. */
+				const rules = [
+					{ caller: "w.ops.protoRead", target: "inherited", effect: "allow" },
+					{ caller: "w.ops.protoListed", target: "inherited", effect: "allow" },
+					{ caller: "w.ops.protoKeys", target: "inherited", effect: "allow" },
+					{ caller: "w.ops.protoRead", target: "deepRuled", effect: "allow" },
+					// The writer reaches the root through `self.slothlet.diag.getAPI()` too.
+					{ caller: "w.**", target: "slothlet.diag", effect: "allow" },
+					{ caller: "w.**", target: "slothlet.diag.**", effect: "allow" }
+				];
+				const NAMES_ASKED = ["inherited", "unruled", "deepRuled", "deepUnruled"];
+
+				it("reads and lists each member as the root reads it, and leaves the rest out", async () => {
+					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					const prototype = Object.assign(Object.create({ deepRuled: 1, deepUnruled: 2 }), { inherited: 5, unruled: 6 });
+					Object.setPrototypeOf(api, prototype);
+					// The host is handed the object itself, and reads everything.
+					expect(Object.getPrototypeOf(api)).toBe(prototype);
+					expect(api.__proto__).toBe(prototype);
+					expect([api.inherited, api.unruled, api.deepUnruled]).toEqual([5, 6, 2]);
+					for (const via of ["given", "api"]) {
+						// A module reads a member from the prototype under the rule it reads it through the root under.
+						expect(api.w.ops.protoRead(via, "inherited", api, 0)).toBe(5);
+						expect(api.w.ops.protoRead(via, "inherited", api, 1)).toBe(5);
+						expect(api.w.ops.protoRead(via, "deepRuled", api, 2)).toBe(1);
+						const throughRoot = api.w.ops.protoRead(via, "unruled", api, 0);
+						expect(throughRoot.code).toBe("PERMISSION_DENIED");
+						expect(api.w.ops.protoRead(via, "unruled", api, 1)).toEqual(throughRoot);
+						expect(api.w.ops.protoRead(via, "deepUnruled", api, 2)).toEqual(api.w.ops.protoRead(via, "deepUnruled", api, 0));
+						expect(api.w.ops.protoRead(via, "deepUnruled", api, 2).code).toBe("PERMISSION_DENIED");
+						expect(api.w.ops.protoPeek(via, "inherited", api, 1).code).toBe("PERMISSION_DENIED");
+						// Its listings leave out what the module may not read; `in` answers as for a member of the root's own.
+						expect(api.w.ops.protoListed(via, api, prototype, NAMES_ASKED)).toEqual({
+							same: false,
+							stable: true,
+							keys: ["inherited"],
+							ownKeys: ["inherited"],
+							forIn: ["inherited"],
+							spread: ["inherited"],
+							json: '{"inherited":5}',
+							has: [true, true, true, true],
+							described: [true, false, false, false]
+						});
+						// A write through it is a write at the root, which the writer does not own.
+						expect(api.w.ops.protoWrite(via, api)).not.toBe("done");
+					}
+					expect(Object.hasOwn(prototype, "written")).toBe(false);
+				});
+
+				it("a closed root holds the checked prototype for every holder", async () => {
+					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					const prototype = { inherited: 5, unruled: 6 };
+					Object.setPrototypeOf(api, prototype);
+					Object.freeze(api);
+					expect(Object.getPrototypeOf(api)).not.toBe(prototype);
+					expect(Object.getPrototypeOf(api)).toBe(Object.getPrototypeOf(api));
+					expect([Object.getPrototypeOf(api).inherited, Object.getPrototypeOf(api).unruled, api.unruled]).toEqual([5, 6, 6]);
+					expect(Reflect.setPrototypeOf(api, Object.getPrototypeOf(api))).toBe(true);
+					expect(Reflect.setPrototypeOf(api, prototype)).toBe(false);
+					expect(api.w.ops.protoRead("given", "inherited", api, 1)).toBe(5);
+					expect(api.w.ops.protoRead("given", "unruled", api, 1).code).toBe("PERMISSION_DENIED");
+					expect(api.w.ops.protoKeys("given", api)).toEqual(["inherited"]);
+				});
+			});
+
+			it.runIf(attribution === "precise")(
+				"a module is handed the root's prototype itself with the permission system off or disabled",
+				async () => {
+					for (const permissions of [undefined, { mode: "disabled" }]) {
+						api = await build(root, { mode, runtime, permissions });
+						const prototype = { inherited: 5 };
+						Object.setPrototypeOf(api, prototype);
+						const shown = api.w.ops.protoListed("given", api, prototype, ["inherited"]);
+						expect([shown.same, shown.stable, shown.keys]).toEqual([true, true, ["inherited"]]);
+						expect(api.w.ops.protoRead("given", "inherited", api, 1)).toBe(5);
+						await api.shutdown();
+					}
+					api = null;
+				}
+			);
 
 			it("refuses a reload of a closed root, which cannot take the members a rebuild makes, and still shuts down", async () => {
 				api = await build(root, { mode, runtime });
