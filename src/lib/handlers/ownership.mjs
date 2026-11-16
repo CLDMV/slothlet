@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-19T06:53:40-07:00 (1792418020)
+ *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,9 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean } from "@cldmv/slothlet/helpers/intrinsics";
+const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/ownership");
 
 /**
  * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"
@@ -93,7 +95,7 @@ function ownDataKeys(value) {
 	for (const key of Reflect.ownKeys(value)) {
 		if (typeof key !== "string") continue;
 		try {
-			const descriptor = Object.getOwnPropertyDescriptor(value, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(value, key);
 			if (descriptor && descriptor.enumerable && "value" in descriptor) keys.push(key);
 		} catch {
 			// A namespace binding still in its temporal dead zone throws on inspection — skip it.
@@ -114,7 +116,7 @@ function namespaceKeys(mod) {
 	for (const key of Reflect.ownKeys(mod)) {
 		if (typeof key !== "string") continue;
 		try {
-			if (Object.getOwnPropertyDescriptor(mod, key)?.enumerable) keys.push(key);
+			if (Objects.getOwnPropertyDescriptor(mod, key)?.enumerable) keys.push(key);
 		} catch {
 			// Temporal-dead-zone binding — skip it.
 		}
@@ -147,7 +149,7 @@ function readBinding(mod, key) {
  */
 function readOwnData(value, key) {
 	try {
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(value, key);
 		return descriptor && "value" in descriptor ? descriptor.value : undefined;
 	} catch {
 		return undefined;
@@ -172,7 +174,7 @@ function readOwnData(value, key) {
  */
 function readWithoutMaterializing(proxy, inner, key) {
 	let stored;
-	const own = Object.getOwnPropertyDescriptor(inner, key);
+	const own = Objects.getOwnPropertyDescriptor(inner, key);
 	// A member that is a getter is read only when the program reads it, as in plain JavaScript; running
 	// it here would run user code at load, and a getter that throws would fail the load.
 	if (own && typeof own.get === "function") return undefined;
@@ -182,7 +184,7 @@ function readWithoutMaterializing(proxy, inner, key) {
 		const impl = inner.____slothletInternal?.impl;
 		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
 			// The same holds for a getter the module's value owns (#585 review).
-			if (typeof Object.getOwnPropertyDescriptor(impl, key)?.get === "function") return undefined;
+			if (typeof Objects.getOwnPropertyDescriptor(impl, key)?.get === "function") return undefined;
 			stored = impl[key];
 		}
 	}
@@ -253,7 +255,7 @@ export class OwnershipManager extends ComponentBase {
 		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
 		// a second mount of it) yields new value identities, while wrappers from an earlier load may
 		// still be looked up against the earlier ones.
-		const isCommonJS = filePath.endsWith(".cjs") || Object.prototype.hasOwnProperty.call(mod, "module.exports");
+		const isCommonJS = filePath.endsWith(".cjs") || Objects.prototype.hasOwnProperty.call(mod, "module.exports");
 		let entry = this.exportIndex.get(filePath);
 		if (!entry) {
 			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };
@@ -335,7 +337,7 @@ export class OwnershipManager extends ComponentBase {
 		const entry = this.exportIndex.get(filePath);
 		if (!entry) return;
 		if (self && !entry.values.has(content)) entry.values.set(content, self);
-		if (members && Object.keys(members).length > 0) {
+		if (members && Objects.keys(members).length > 0) {
 			entry.members.set(content, { ...(entry.members.get(content) || {}), ...members });
 		}
 	}
@@ -389,7 +391,7 @@ export class OwnershipManager extends ComponentBase {
 	resolveExportPathByKey(filePath, key, value) {
 		if (typeof filePath !== "string") return null;
 		const found = this.exportIndex.get(filePath)?.keys.get(key);
-		return found && Object.is(found.value, value) ? [...found.exportPath] : null;
+		return found && Objects.is(found.value, value) ? [...found.exportPath] : null;
 	}
 
 	/**
@@ -720,7 +722,7 @@ export class OwnershipManager extends ComponentBase {
 		if (existingEntry) {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
-			existingEntry.timestamp = Date.now();
+			existingEntry.timestamp = this.clock.now();
 			// Do not downgrade a known value to `undefined`: the same path is registered more than
 			// once for a leaf (a namespace/marker registration omits the value while the leaf's own
 			// registration carries the callable), and under lazy the value-less one can arrive last.
@@ -851,7 +853,7 @@ export class OwnershipManager extends ComponentBase {
 		const entry = {
 			moduleID,
 			source,
-			timestamp: Date.now(),
+			timestamp: this.clock.now(),
 			value,
 			filePath,
 			exportPath,
@@ -1046,6 +1048,36 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Drop every module's entries for the paths strictly below `apiPath` (#799).
+	 * @param {string} apiPath - The path whose subtree left the api.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * `remove(apiPath)` takes the whole live subtree off the api, whoever owns each node, while
+	 * {@link OwnershipManager#removePath} drops only the entry at the path itself. Without this, the entries below
+	 * stay recorded: a later add at the path stacks over them, and removing that add reverts its members to the
+	 * removed module's values instead of removing them.
+	 *
+	 * @example
+	 * ownership.removePath("extra", "base");
+	 * ownership.removeSubtree("extra"); // "extra.ping" is no longer anyone's
+	 */
+	removeSubtree(apiPath) {
+		const prefix = `${apiPath}.`;
+		for (const [path, stack] of [...this.pathToModule]) {
+			if (!path.startsWith(prefix)) continue;
+			for (const entry of stack) {
+				const pathSet = this.moduleToPath.get(entry.moduleID);
+				if (!pathSet) continue;
+				pathSet.delete(path);
+				if (pathSet.size === 0) this.moduleToPath.delete(entry.moduleID);
+			}
+			this.pathToModule.delete(path);
+		}
+	}
+
+	/**
 	 * Get current owner of API path
 	 * @param {string} apiPath - API path to check
 	 * @returns {Object|null} Current owner entry or null
@@ -1095,7 +1127,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getModulePaths(moduleID) {
-		return Array.from(this.moduleToPath.get(moduleID) || []);
+		return Arrays.from(this.moduleToPath.get(moduleID) || []);
 	}
 
 	/**
@@ -1129,11 +1161,11 @@ export class OwnershipManager extends ComponentBase {
 		return {
 			totalModules: this.moduleToPath.size,
 			totalPaths: this.pathToModule.size,
-			modules: Array.from(this.moduleToPath.entries()).map(([id, paths]) => ({
+			modules: Arrays.from(this.moduleToPath.entries()).map(([id, paths]) => ({
 				moduleID: id,
 				pathCount: paths.size
 			})),
-			conflictedPaths: Array.from(this.pathToModule.entries())
+			conflictedPaths: Arrays.from(this.pathToModule.entries())
 				.filter(([_, stack]) => stack.length > 1)
 				.map(([path, stack]) => ({
 					apiPath: path,
@@ -1208,7 +1240,7 @@ export class OwnershipManager extends ComponentBase {
 		// `api.slothlet.api.add()` resolved and made what add() returned depend on timing (#462). Such a
 		// child registers its own descendants when it materializes.
 		const inner = resolveWrapper(api);
-		const entries = inner ? Object.keys(api).map((key) => [key, readWithoutMaterializing(api, inner, key)]) : Object.entries(api);
+		const entries = inner ? Objects.keys(api).map((key) => [key, readWithoutMaterializing(api, inner, key)]) : Objects.entries(api);
 		for (const [key, value] of entries) {
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
@@ -1221,7 +1253,7 @@ export class OwnershipManager extends ComponentBase {
 				this.#confirm(moduleID, childPath, value, claims);
 
 				// Recurse for objects (not functions with properties)
-				if (typeof value === "object" && !Array.isArray(value)) {
+				if (typeof value === "object" && !Arrays.isArray(value)) {
 					this.registerSubtree(value, moduleID, childPath, { collisionMode, visited });
 				}
 			}
@@ -1420,7 +1452,7 @@ export class OwnershipManager extends ComponentBase {
 		}
 
 		// Recursively revert children
-		for (const [key, value] of Object.entries(api)) {
+		for (const [key, value] of Objects.entries(api)) {
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {
@@ -1432,7 +1464,7 @@ export class OwnershipManager extends ComponentBase {
 				revert(childPath);
 
 				// Recurse for objects (not functions with properties)
-				if (typeof value === "object" && !Array.isArray(value)) {
+				if (typeof value === "object" && !Arrays.isArray(value)) {
 					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
 				}
 			}
@@ -1572,8 +1604,8 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	exportState() {
 		return {
-			moduleToPath: Array.from(this.moduleToPath.entries()).map(([id, paths]) => [id, Array.from(paths)]),
-			pathToModule: Array.from(this.pathToModule.entries())
+			moduleToPath: Arrays.from(this.moduleToPath.entries()).map(([id, paths]) => [id, Arrays.from(paths)]),
+			pathToModule: Arrays.from(this.pathToModule.entries())
 		};
 	}
 

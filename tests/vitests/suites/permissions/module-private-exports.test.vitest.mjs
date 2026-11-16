@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-15T20:14:02-08:00 (1794802442)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,18 +55,18 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		expect(await api.billing.quote.total(100)).toBe(125); // 100 * (1 + 0.2) + 5
 	});
 
-	it("denies another module the private members, audited like any denial", async () => {
+	it("lets another folder of the same module read the private members, with no refusal audited", async () => {
 		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
 		const denials = [];
 		api.slothlet.lifecycle.on("permission:denied", (payload) => denials.push(payload));
 
 		const peek = await api.reporting.peek.rate();
-		expect(peek.rate).toBeUndefined();
-		expect(peek.error).toBe("PERMISSION_DENIED");
+		expect(peek.rate).toBe(0.2);
+		expect(peek.error).toBeNull();
 		expect(
 			denials.some((d) => d.target === "billing.internals.__rate"),
-			"the refusal is audited, not silent"
-		).toBe(true);
+			"no refusal is audited"
+		).toBe(false);
 	});
 
 	it("denies the host by default and redacts privates from its enumeration", async () => {
@@ -97,7 +97,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		expect(Object.keys(internals).sort()).toEqual(["__rate", "_fee", "_scale", "currency"]);
 	});
 
-	it("is absolute: an explicit allow rule for the private target grants nothing", async () => {
+	it("decides privacy before the rules: another folder of the same module reads the member under a deny default", async () => {
 		api = await slothlet({
 			mode,
 			base: BASE,
@@ -114,7 +114,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		// Privacy resolves BEFORE rules: the module boundary is not negotiable by configuration,
 		// only by the owning module renaming its export public.
 		const peek = await api.reporting.peek.rate();
-		expect(peek.error).toBe("PERMISSION_DENIED");
+		expect(peek.error).toBeNull();
 	});
 
 	it("stays fully public when permissions are not configured", async () => {

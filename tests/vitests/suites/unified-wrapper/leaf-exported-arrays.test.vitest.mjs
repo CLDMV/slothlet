@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import nodeUtil from "node:util";
+import { util as platformUtil } from "@cldmv/slothlet/helpers/platform";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
@@ -1122,8 +1122,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		it("a proxy array's virtual element keeps its index without asking whether the array is a proxy", () => {
 			const held = api.box.virtualList[0];
 			expect(held.__slothletPath).toBe("box.virtualList.0");
-			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it.
-			const spy = vi.spyOn(nodeUtil.types, "isProxy").mockReturnValue(false);
+			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it. slothlet asks through
+			// the copy of `util.types` it took when it loaded, so the stand-in goes on that copy.
+			const spy = vi.spyOn(platformUtil.types, "isProxy").mockReturnValue(false);
 			try {
 				expect(held.__slothletPath).toBe("box.virtualList.0");
 			} finally {

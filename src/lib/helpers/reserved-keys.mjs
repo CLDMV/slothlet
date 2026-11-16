@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:35:16-07:00 (1792384516)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Framework-reserved property names, as plain Sets in a module with no imports.
+ * @fileoverview Framework-reserved property names, as plain Sets in a module whose only import is helpers/intrinsics (no top-level await).
  * @module @cldmv/slothlet/helpers/reserved-keys
  * @internal
  *
@@ -27,12 +27,15 @@
  * require(esm), which rejects any module graph containing top-level await.
  */
 
+import { Objects, Set, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+
 /**
  * Property names reserved by the slothlet wrapper machinery — served as
  * `ComponentBase.INTERNAL_KEYS`; see that static for what each group is used for.
  * @type {Set<string>}
  */
-export const WRAPPER_INTERNAL_KEYS = new Set([
+const WRAPPER_INTERNAL_KEYS = new Set([
 	// 4-underscore: true private state
 	"____slothletInternal",
 	"____slothlet",
@@ -76,7 +79,7 @@ export const WRAPPER_INTERNAL_KEYS = new Set([
  * `IMPL_METADATA_KEYS` from `#handlers/unified-wrapper`. Matched by exact name, never by prefix.
  * @type {Set<string>}
  */
-export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 
 /**
  * Whether a property name belongs to the framework rather than to a module's exports.
@@ -108,14 +111,14 @@ export function isFrameworkReservedKey(key) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_WRITE_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes, which only the host's write rules may name (#625).
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_INTERNAL_WRITE_KEYS = Object.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+const FRAMEWORK_INTERNAL_WRITE_KEYS = Objects.freeze(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
 
 /**
  * The literal prefix of a write rule's path pattern: its segments before the first one holding a glob character.
@@ -164,7 +167,69 @@ export function isFrameworkWriteTarget(pattern) {
  * dataMemberOf({ get x() { return 1; }, y: 2 }, "y"); // 2 — and "x" gives undefined without running the getter
  */
 export function dataMemberOf(owner, key) {
-	const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+	const descriptor = Objects.getOwnPropertyDescriptor(owner, key);
 	if (!descriptor) return owner[key];
-	return Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
+	return Objects.hasOwn(descriptor, "value") ? descriptor.value : undefined;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/factories/component-base",
+			"lib/handlers/permission-manager",
+			"lib/handlers/unified-wrapper",
+			"lib/helpers/defaults"
+		])
+	)
+		throw ownBindingsRefusal("lib/helpers/reserved-keys", import.meta.url);
+	return {
+		get IMPL_METADATA_KEYS() {
+			return IMPL_METADATA_KEYS;
+		},
+		get WRAPPER_INTERNAL_KEYS() {
+			return WRAPPER_INTERNAL_KEYS;
+		}
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof WRAPPER_INTERNAL_KEYS} */
+const guarded_WRAPPER_INTERNAL_KEYS = guardInternal(WRAPPER_INTERNAL_KEYS, "WRAPPER_INTERNAL_KEYS", import.meta.url);
+/** @type {typeof IMPL_METADATA_KEYS} */
+const guarded_IMPL_METADATA_KEYS = guardInternal(IMPL_METADATA_KEYS, "IMPL_METADATA_KEYS", import.meta.url);
+export { guarded_WRAPPER_INTERNAL_KEYS as WRAPPER_INTERNAL_KEYS, guarded_IMPL_METADATA_KEYS as IMPL_METADATA_KEYS };

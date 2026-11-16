@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-15T20:14:27-08:00 (1794802467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -221,27 +221,30 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	// ── Module-private targets + no self-call bypass ─────────────────────────────
 
-	it("denies a module-private target outright — even under private.host allow, where checkAccess judges as the host", async () => {
+	it("allows a module-private target to a supplied caller of the same module, under private.host allow too", async () => {
 		api = await build({ defaultPolicy: "allow", rules: [], private: { host: "allow" } }, PRIVATE);
+		// Ownership is recorded as a lazy folder loads; a silent query answers for loaded paths.
+		await api.reporting.peek.rate();
 		const audit = collectAudit(api);
 		const { checkCall, checkAccess } = api.slothlet.permissions.global;
 
-		expect(checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(false);
-		expect(checkCall("reporting.peek", "billing.internals.__rate")).toBe(false);
+		expect(checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(true);
+		expect(checkCall("reporting.peek", "billing.internals.__rate")).toBe(true);
 		// The supplied caller is a module without a file: the host policy does not apply to it. The
 		// silent query has no caller identity at all and IS judged as the host (existing behaviour).
 		expect(checkAccess("reporting.peek", "billing.internals._scale")).toBe(true);
 
 		await settle();
-		expect(audit).toContainEqual({
+		expect(audit).not.toContainEqual({
 			event: "permission:denied",
 			payload: expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: "checkCall" })
 		});
 	});
 
-	it("denies a module-private target under the default host policy too", async () => {
+	it("allows a module-private target to a supplied caller of the same module under the default host policy too", async () => {
 		api = await build({ defaultPolicy: "allow", rules: [] }, PRIVATE);
-		expect(api.slothlet.permissions.global.checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(false);
+		await api.reporting.peek.rate();
+		expect(api.slothlet.permissions.global.checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(true);
 	});
 
 	it("never applies the self-call bypass: the supplied caller has no source file", async () => {

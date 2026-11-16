@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,13 +20,43 @@
  */
 
 // NO static imports of esbuild/typescript - only dynamic imports when needed
-import fs from "fs";
-import path from "path";
-import { writeFile, mkdir, readdir, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
+import * as nodeFs from "fs";
+import * as nodePath from "path";
+import * as nodeFsPromises from "node:fs/promises";
+import * as nodeCrypto from "node:crypto";
+import * as nodeOs from "node:os";
+import * as nodeUrl from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import {
+	JSON,
+	Map,
+	Set,
+	Promises,
+	Dates,
+	encodeURIComponent,
+	Number,
+	RegExp,
+	Uint8Array,
+	Buffers,
+	NativeProcess,
+	Processes,
+	Objects,
+	Reflect
+} from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFs });
+const path = Objects.freeze({ ...nodePath });
+const { writeFile, mkdir, readdir, rm } = nodeFsPromises;
+const { createHash } = nodeCrypto;
+const { tmpdir } = nodeOs;
+const { pathToFileURL } = nodeUrl;
+// The methods of the hash objects `createHash` makes, from one made now.
+const HASH_PROTOTYPE = Objects.getPrototypeOf(createHash("sha256"));
+const HASH_UPDATE = HASH_PROTOTYPE.update;
+const HASH_DIGEST = HASH_PROTOTYPE.digest;
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -149,7 +179,7 @@ export async function transformTypeScript(filePath, options = {}) {
 export function createDataUrl(code) {
 	// Use proper JavaScript MIME type
 	const encoded = encodeURIComponent(code);
-	const timestamp = Date.now();
+	const timestamp = Dates.now();
 	return `data:text/javascript;charset=utf-8,${encoded}#t=${timestamp}`;
 }
 
@@ -199,7 +229,7 @@ function findPackageRoot(startPath) {
  */
 function isProcessAlive(pid) {
 	try {
-		process.kill(pid, 0);
+		Processes.kill(pid, 0);
 		return true;
 	} catch (err) {
 		// Fail-safe: only a confirmed ESRCH means dead; anything else → alive.
@@ -262,7 +292,7 @@ const LEGACY_FALLBACK_MIN_AGE_MS = 24 * 60 * 60 * 1000;
  * @private
  */
 function getSecureFallbackRoot() {
-	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${process.pid}-`)));
+	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${NativeProcess.pid}-`)));
 }
 
 /**
@@ -273,7 +303,7 @@ function getSecureFallbackRoot() {
  * @private
  */
 function ownedByCurrentUser(stats) {
-	return typeof process.getuid !== "function" || stats.uid === process.getuid();
+	return typeof Processes.getuid !== "function" || stats.uid === Processes.getuid();
 }
 
 /**
@@ -290,15 +320,15 @@ function ownedByCurrentUser(stats) {
  * @returns {Promise<void>}
  * @public
  */
-export async function sweepStaleFallbackRoots() {
+async function sweepStaleFallbackRoots() {
 	let entries;
 	try {
 		entries = await readdir(tmpdir(), { withFileTypes: true });
 	} catch {
 		return;
 	}
-	const now = Date.now();
-	await Promise.allSettled(
+	const now = Dates.now();
+	await Promises.allSettled(
 		entries.map(async (entry) => {
 			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
 			const fullPath = path.join(tmpdir(), entry.name);
@@ -310,7 +340,7 @@ export async function sweepStaleFallbackRoots() {
 			if (!stats.isDirectory() || !ownedByCurrentUser(stats)) return;
 			if (owned) {
 				const pid = Number(owned[1]);
-				if (pid === process.pid || isProcessAlive(pid)) return;
+				if (pid === NativeProcess.pid || isProcessAlive(pid)) return;
 			} else {
 				if (now - stats.mtimeMs < LEGACY_FALLBACK_MIN_AGE_MS) return;
 				let caches = [];
@@ -339,7 +369,7 @@ export async function sweepStaleFallbackRoots() {
  * @returns {Promise<boolean>} True when the root was removed.
  * @public
  */
-export async function releaseSecureFallbackRoot() {
+async function releaseSecureFallbackRoot() {
 	const root = secureFallbackRoot;
 	if (!root || pendingFallbackWrites > 0) return false;
 	let remaining = [];
@@ -377,8 +407,8 @@ function sweepStaleSlothletCache(projectRoot) {
 		} catch {
 			return;
 		}
-		const currentPid = process.pid;
-		await Promise.allSettled(
+		const currentPid = NativeProcess.pid;
+		await Promises.allSettled(
 			entries.map(async (entry) => {
 				if (!entry.isDirectory()) return;
 				const match = entry.name.match(/^(\d+)-/);
@@ -762,7 +792,7 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const projectRoot = packageRoot ?? getSecureFallbackRoot();
 		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
 		await sweepStaleSlothletCache(projectRoot);
-		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${instanceID}`);
 		await mkdir(cacheDir, { recursive: true });
 		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
 	} finally {
@@ -837,12 +867,17 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	 */
 	const cacheName = (file) => {
 		const hash = createHash("sha256");
+		const update = (part) => Reflect.apply(HASH_UPDATE, hash, [part]);
 		// The NUL separators prevent path/code boundary collisions.
 		for (const member of [...closureOf(file)].sort()) {
-			hash.update(member).update("\0").update(transformed.get(member)).update("\0");
+			update(member);
+			update("\0");
+			update(transformed.get(member));
+			update("\0");
 		}
-		hash.update("entry\0").update(file);
-		return `${hash.digest("hex").slice(0, 16)}.mjs`;
+		update("entry\0");
+		update(file);
+		return `${Reflect.apply(HASH_DIGEST, hash, ["hex"]).slice(0, 16)}.mjs`;
 	};
 
 	// Phase 3 — rewrite each file's specifiers and write it to its cache file (the caller already
@@ -999,7 +1034,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  */
 function convertCompilerOptions(ts, compilerOptions) {
 	if (!compilerOptions) return {};
-	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, process.cwd());
+	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, Processes.cwd());
 	if (errors.length > 0) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
@@ -1029,10 +1064,10 @@ function convertCompilerOptions(ts, compilerOptions) {
 function withAbsoluteMapSource(code, absolutePath) {
 	const marker = "//# sourceMappingURL=data:application/json;base64,";
 	const index = code.lastIndexOf(marker);
-	const map = JSON.parse(Buffer.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
+	const map = JSON.parse(Buffers.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
 	map.sources = [absolutePath];
 	delete map.sourceRoot;
-	return code.slice(0, index) + marker + Buffer.from(JSON.stringify(map), "utf8").toString("base64");
+	return code.slice(0, index) + marker + Buffers.from(JSON.stringify(map), "utf8").toString("base64");
 }
 
 /**
@@ -1053,3 +1088,50 @@ export function formatDiagnostics(diagnostics, ts) {
 		return message;
 	});
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/processors/typescript", import.meta.url);
+	return { releaseSecureFallbackRoot };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof sweepStaleFallbackRoots} */
+const guarded_sweepStaleFallbackRoots = guardInternal(sweepStaleFallbackRoots, "sweepStaleFallbackRoots", import.meta.url);
+/** @type {typeof releaseSecureFallbackRoot} */
+const guarded_releaseSecureFallbackRoot = guardInternal(releaseSecureFallbackRoot, "releaseSecureFallbackRoot", import.meta.url);
+export { guarded_sweepStaleFallbackRoots as sweepStaleFallbackRoots, guarded_releaseSecureFallbackRoot as releaseSecureFallbackRoot };

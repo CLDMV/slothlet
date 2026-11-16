@@ -260,3 +260,47 @@ export async function probeIdentityViaRun() {
 export async function probeIdentityViaScope() {
 	return self.slothlet.scope({ context: {}, fn: () => identityProbe() });
 }
+
+/**
+ * What the most recent {@link accessHook} invocation was allowed: `id.consumer`, then `id.producer`.
+ * @type {Array<boolean|string>|null}
+ */
+let hookProbedAccess = null;
+
+/**
+ * A `before`-hook handler that records whether the identity it runs under may reach `id.consumer` and `id.producer`.
+ * The rules deny the first to the consumer and the second to the producer, so the pair tells the consumer alone
+ * (`[false, true]`) from the producer alone (`[true, false]`) and from the consumer's code held to the producer's
+ * call (`[false, false]`).
+ * @returns {void}
+ */
+function accessHook() {
+	try {
+		hookProbedAccess = [self.slothlet.permissions.self.access("id.consumer"), self.slothlet.permissions.self.access("id.producer")];
+	} catch (err) {
+		hookProbedAccess = [err?.code ?? "error"];
+	}
+}
+
+/**
+ * Register {@link accessHook} as a `before` hook.
+ * @param {string} pattern - The api path to hook.
+ * @param {object} [options] - Hook options (`{ lockCaller: false }` opts out of the pin).
+ * @returns {*} The registration.
+ * @example
+ * await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+ */
+export function registerAccessHook(pattern, options) {
+	hookProbedAccess = null;
+	return self.slothlet.hook.on(`before:${pattern}`, accessHook, options);
+}
+
+/**
+ * What the last {@link accessHook} run recorded.
+ * @returns {Array<boolean|string>|null} The pair, or null when the hook has not fired.
+ * @example
+ * await api.consumer.probe.getHookProbedAccess(); // [false, true]
+ */
+export function getHookProbedAccess() {
+	return hookProbedAccess;
+}

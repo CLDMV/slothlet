@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:20-07:00 (1791091700)
+ *	@Last modified time: 2026-11-16T00:38:06-08:00 (1794818286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,11 +150,12 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
 
-		// The held namespace is still the live node at its path. (Under lazy, the deeper references were taken
-		// through a not-yet-materialized parent and are waiting proxies, so only their behavior is comparable.)
+		// Under eager the held namespace is still the live node at its path. Under lazy, `vault` was taken before
+		// the node loaded, so it is the waiting proxy; once loaded the node takes eager's object form (#811), so
+		// a fresh read is another object and only behavior is comparable, as for the deeper references.
 		// Every held reference now runs launcher's code.
-		expect(api.launcher.session.vault).toBe(vault);
 		if (config.mode === "eager") {
+			expect(api.launcher.session.vault).toBe(vault);
 			expect(api.launcher.session.vault.lock).toBe(lock);
 			expect(api.launcher.session.vault.lock.open).toBe(open);
 			expect(api.launcher.session.store.create).toBe(create);
@@ -162,6 +163,25 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 		expect([await open(), await lock.open(), await vault.lock.open()]).toEqual(["ext-open", "ext-open", "ext-open"]);
 		expect([await create(), await store.destroy()]).toEqual(["ext-create", "ext-destroy"]);
 		expect(Object.keys(vault)).toEqual(["lock"]);
+	});
+
+	it.each([
+		["the original leaves were never called", false],
+		["the original leaves were called before the overwrite", true]
+	])("reads a member the restored namespace does not hold as undefined when %s", async (_label, touchFirst) => {
+		api = await slothlet({ ...config, base: BASE, silent: true });
+		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		if (touchFirst) expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
+		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		expect(await api.launcher.session.vault.lock.open()).toBe("shadow-open");
+
+		expect(await api.slothlet.api.remove("shadow")).toBe(true);
+
+		// As in eager: no member there, so the read is undefined and a read below it is the engine's TypeError. Lazy
+		// handed out a stand-in that read the node again for each member, without end.
+		expect(api.launcher.session.vault.missing).toBeUndefined();
+		expect(() => api.launcher.session.vault.missing.deeper).toThrow(TypeError);
+		expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
 	});
 
 	it("keeps values set by hand on the overwritten namespace, after the restored keys", async () => {

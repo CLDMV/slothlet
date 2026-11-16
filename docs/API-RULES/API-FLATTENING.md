@@ -28,7 +28,7 @@ This is the **top level** of slothlet's three-tier documentation system:
 
 ## Overview
 
-API flattening automatically removes unnecessary nesting levels when certain patterns are detected. Instead of `api.math.math.add()`, you get `api.math.add()`. The system analyzes your file structure and applies **eight flattening patterns** to create the most ergonomic API possible.
+API flattening automatically removes unnecessary nesting levels when certain patterns are detected. Instead of `api.math.math.add()`, you get `api.math.add()`. The system analyzes your file structure and applies **nine flattening patterns** to create the most ergonomic API possible.
 
 **Key Benefits:**
 
@@ -41,17 +41,17 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 
 ## Table of Contents
 
-- [The Eight Flattening Patterns](#the-eight-flattening-patterns)
+- [The Nine Flattening Patterns](#the-nine-flattening-patterns)
 - [Visual Decision Tree](#visual-decision-tree)
 - [Benefits and Examples](#benefits-and-examples)
 - [Advanced Scenarios](#advanced-scenarios)
 - [Cross-Reference Guide](#cross-reference-guide)
 
-> This document covers the **8 flattening-specific patterns** (F01-F08) which are a subset of the **13 comprehensive API rules** (Rules 1-13) in [../API-RULES.md](../API-RULES.md). The complete rules cover all API behaviors including non-flattening cases.
+> This document covers the **9 flattening-specific patterns** (F01-F09) which are a subset of the comprehensive API rules in [../API-RULES.md](../API-RULES.md). The complete rules cover all API behaviors including non-flattening cases.
 
 ---
 
-## The Eight Flattening Patterns
+## The Nine Flattening Patterns
 
 ### Mapping to Comprehensive Rules
 
@@ -63,6 +63,7 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 - **F06** → Rule 11 (AddApi Special File Pattern)
 - **F07** → Rule 12 (Module Ownership and Selective API Overwriting)
 - **F08** → Rule 13 (AddApi Path Deduplication Flattening)
+- **F09** → Rule 22 (Same-Named Folder Deduplication)
 
 **Non-Flattening Rules** (Rules 2-6, 9): Export handling, mixed exports, function naming, empty modules, self-referential protection.
 
@@ -101,9 +102,9 @@ api.math.subtract(5, 2); // ✅ 3
 
 ### F02: Index File Pattern
 
-**When:** A folder contains only `index.mjs` (or common generic filenames such as `main`, `default`)
-**Result:** Index file becomes transparent; content promoted to folder level
-**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) / [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | **Technical**: [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten)
+**When:** A folder below the api root holds a single file with a generic name (`index`, `main`, `default`, `singlefile`), and that file has exactly one named export
+**Result:** The generic file becomes transparent; its export is promoted to the folder. A generic file with more than one export, or with sibling files, keeps its own name.
+**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) / [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | **Technical**: [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten), [C14](API-RULES-CONDITIONS.md#c14-parent-level-flattening---generic-filenames)
 
 **Example:**
 
@@ -113,7 +114,19 @@ utils/
 ```
 
 ```javascript
-// File: utils/index.mjs
+// File: utils/index.mjs (the folder's only file)
+export function format(str) {
+	return str.toUpperCase();
+}
+
+api.utils.format("hello"); // ✅ "HELLO"
+// NOT: api.utils.index.format("hello") ❌
+```
+
+With a second export the file keeps its name:
+
+```javascript
+// File: tools/index.mjs (the folder's only file)
 export function format(str) {
 	return str.toUpperCase();
 }
@@ -121,12 +134,11 @@ export function validate(data) {
 	return !!data;
 }
 
-api.utils.format("hello"); // ✅ "HELLO"
-api.utils.validate(true); // ✅ true
-// NOT: api.utils.index.format("hello") ❌
+api.tools.index.format("hello"); // ✅ "HELLO"
+api.tools.index.validate(true); // ✅ true
 ```
 
-**Why:** Index files are folder entry points - the `index` name should be transparent to API consumers. Same applies to other generic names like `main` and `default`.
+**Why:** A generic name says nothing about what a single export is, so a folder holding nothing else names it. A file of several exports is a namespace of its own, and stays one.
 
 ---
 
@@ -186,15 +198,27 @@ api.logger("Hello World"); // ✅ callable
 api.logger.utils.debug("x"); // utils.mjs still accessible
 ```
 
+The default is the folder's value even when the file also has a named export called like the folder: that export is a member, as it is in the module's namespace.
+
+```javascript
+// File: logger/logger.mjs
+export default function logger(message) {}
+function format(message) {}
+export { format as logger };
+
+api.logger("Hello"); // ✅ runs `logger`
+api.logger.logger("Hello"); // ✅ runs `format`
+```
+
 **Why:** When names match and there's a default export, the function becomes the namespace itself.
 
 ---
 
 ### F05: Single File with Root-Level Default
 
-**When:** A folder has one file with a default export (filenames need not match)
-**Result:** Default export promoted to folder name as a clean callable entry point
-**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)
+**When:** A folder has one file and nothing else, and the file's default export is a function (filenames need not match, and neither does the function's name; a generic name such as `index.mjs` counts too)
+**Result:** Default export promoted to folder name as a clean callable entry point; the file's other exports attach to it as members
+**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening) | **Technical**: [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)
 
 **Example:**
 
@@ -214,6 +238,22 @@ export default function processor(input) {
 api.processor("hello"); // ✅ "HELLO"
 // NOT: api.processor.process("hello") ❌
 ```
+
+```javascript
+// File: e/x.mjs (the folder's only file)
+export default function run() {}
+export function helper() {}
+
+api.e(); // ✅ runs `run`
+api.e.helper(); // ✅ the other exports are members of the folder's function
+// NOT: api.e.x() / api.e.x.helper() ❌
+```
+
+This holds in eager and lazy mode, at every depth, at initial load and under `api.slothlet.api.add()`. Permission rules, hook patterns and `__metadata.apiPath` name the folder's path (`e`, `e.helper`).
+
+**Not promoted:** a default export that is not a function (an object, a `Map`, a `Date`, a primitive) keeps the file's level (`e/x.mjs` exporting `default { a }` is `api.e.x.a`), as does a single file with no default export (`e/x.mjs` exporting `function x` is `api.e.x()`; see [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)). A folder holding a second file or a subfolder keeps every file at its own level.
+
+**Null and undefined defaults:** a file whose module value is a primitive, `null` or `undefined` (a lone `export default null`) reads as that value at its node, at the root and in a mount alike: `e/x.mjs` exporting `default null` is `api.e.x === null`, and a folder whose only file is named for it and exports `default undefined` is `api.e === undefined`. The member stays listed and `in` finds it. A `null` default beside named exports keeps them all under the file's node, with the `null` under `default`.
 
 **Why:** When a folder's entire purpose is captured by a single default export, the folder name becomes the semantic identifier.
 
@@ -318,9 +358,51 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // NOT: api.config.config.getNestedConfig() ❌
 ```
 
-**Guard - Direct Child Only:** Rule only applies when the matching subfolder is a **direct child** of the mounted folder. Deeper nesting (e.g. `folder/config/config/config.mjs`) is intentional and not flattened.
+**Guard - Direct Child Only:** Rule only applies to the **direct child** of the mounted folder, and hoists it once. A folder of the same name inside it is intentional nesting and stays: `folder/config/{server.mjs, config/x.mjs}` mounted at `config` is `api.config.server` and `api.config.config.x`. A direct child that holds nothing but a same-named folder is one level ([F09](#f09-same-named-folder-deduplication)), so `folder/config/config/config.mjs` mounted at `config` is `api.config.*`, as `folder/config/config.mjs` is.
 
 **Why:** When you mount a folder at a path named `config`, a direct `config/config.mjs` inside it would create redundant `api.config.config.*` nesting.
+
+---
+
+### F09: Same-Named Folder Deduplication
+
+**When:** A folder's only entry is a folder of the same name
+**Result:** The two are one level: the outer folder is dropped and the inner one stands for it
+**Detailed Coverage**: [API-RULES Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication) | **Technical**: [C26](API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)
+
+**Example:**
+
+```text
+api/
+├── e/
+│   └── e/
+│       └── x.mjs        → api.e.x          (not api.e.e.x)
+├── deep/
+│   └── deep/
+│       ├── part.mjs     → api.deep.part
+│       └── other.mjs    → api.deep.other
+└── c/
+    ├── z.mjs            → api.c.z
+    └── c/
+        └── x.mjs        → api.c.c.x        (z.mjs sits beside c/c/, so both levels stay)
+```
+
+```javascript
+api.e.x.where(); // ✅ one level
+api.deep.part.where(); // ✅ one level
+api.c.c.x.where(); // ✅ both levels: the outer folder holds something else too
+// NOT: api.e.e.x.where() ❌
+```
+
+**Under a mount:** mounted at the folder's own name, the folder is one level before [F08](#f08-addapi-path-deduplication-flattening) hoists it, so the mount builds what the base load builds: `e/e/e.mjs` added at `e` is `api.e.a`, never `api.e.e.a`.
+
+**Guard - Only Entry:** The outer folder must hold nothing but the same-named folder. A file or another folder beside it keeps both levels, and a FILE named after its folder is F01's case, not this one. The rule repeats while it holds (`t/t/t/x.mjs` → `api.t.x`), applies at every depth, in eager and lazy mode, at initial load and under `api.slothlet.api.add()`.
+
+**One path everywhere:** The path a node records (`__metadata.apiPath`, what a permission rule or a hook pattern has to name, what ownership tracks) is the path it is reached at: `e.x.where` above, never `e.e.x.where`.
+
+**Why:** `e/e/` adds a level that carries nothing. This is the 2.x shape; 3.0.0 through 3.24.0 kept both levels (see #743).
+
+> **If you call `api.x.x.*` for such a folder:** drop the repeated segment (`api.x.*`), and name the same path in permission rules and hook patterns.
 
 ---
 
@@ -342,31 +424,27 @@ flowchart TD
     D -->|Yes| E[✓ Flatten: F04\nDefault in matching file]
     D -->|No| F[✓ Flatten: F01\nFolder/file name match]
 
-    C -->|No| G{Is file named 'index'\nor other generic name?}
-    G -->|Yes| H[✓ Flatten: F02\nIndex/generic file pattern]
-    G -->|No| I{Single named export?}
-
-    I -->|Yes| J{Export name matches folder?}
-    J -->|Yes| K[✓ Flatten: F03\nNamed export match]
-    J -->|No| L{Has default export?}
-
+    C -->|No| L{Default export\nis a function?}
     L -->|Yes| M[✓ Flatten: F05\nSingle file default]
-    L -->|No| Z
+    L -->|No| G{Is file named 'index'\nor other generic name?}
 
-    I -->|No| N{Has default export?}
-    N -->|Yes| M
-    N -->|No| Z
+    G -->|Yes| H[✓ Flatten: F02\nIndex/generic file pattern]
+    G -->|No| I{Single named export\nmatching folder?}
+
+    I -->|Yes| K[✓ Flatten: F03\nNamed export match]
+    I -->|No| Z
 ```
 
 **Decision Tree Logic:**
 
 1. **F06 Priority**: Always check for `addapi.mjs` files first - special case
 2. **F08 Check**: AddApi path deduplication (direct subfolder match)
-3. **F01 & F04**: Folder/file name matching (with and without default export)
-4. **F02**: Index / generic filename transparency
-5. **F03**: Single named export matching folder
-6. **F05**: Single file default export promotion
-7. **Default**: No flattening when no rules match
+3. **F09**: A folder holding only a same-named folder is one level (applied before the folder's files are looked at)
+4. **F01 & F04**: Folder/file name matching (with and without default export)
+5. **F05**: Single file default export promotion (the default export is a function; any file name)
+6. **F02**: Index / generic filename transparency
+7. **F03**: Single named export matching folder
+8. **Default**: No flattening when no rules match: the file keeps its own level
 
 ---
 
@@ -406,7 +484,7 @@ Auto-flattened objects (F03):
 config/settings.mjs → api.config.*   ← object spread to parent level
 
 Index transparency (F02):
-utils/index.mjs → api.utils.*        ← index name disappears
+utils/index.mjs → api.utils.format   ← the folder's only file, one export: index name disappears
 ```
 
 ### Plugin System Pattern
@@ -428,17 +506,17 @@ api.database.seed(); // ✅
 
 ### Multi-File Directory Handling
 
-When a folder has multiple files, only files that match specific patterns flatten. Others keep their namespace:
+When a folder has multiple files, only files that match specific patterns flatten. Others keep their namespace, a generic file among them (F02 applies only to a folder's only file):
 
 ```text
 authentication/
-├── index.mjs     [F02 - transparent]
+├── index.mjs     [keeps its name: it has siblings]
 ├── providers.mjs [standard namespace]
 └── tokens.mjs    [standard namespace]
 ```
 
 ```javascript
-api.authentication.login(); // From index.mjs (F02)
+api.authentication.index.login(); // From index.mjs
 api.authentication.providers.google(); // From providers.mjs
 api.authentication.tokens.validate(); // From tokens.mjs
 ```
@@ -487,3 +565,4 @@ When a module exports an object that contains a key matching the filename/namesp
 | **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                                                                                      | [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)                                 | `api_tests/api_smart_flatten_addapi`                      |
 | **F07** | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting)                                                                   | [C19-C22](API-RULES-CONDITIONS.md#c19)                                                           | `src/lib/handlers/ownership.mjs`                          |
 | **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)                                                                             | [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)                                     | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| **F09** | [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)                                                                                  | [C26](API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)                               | `api_tests/api_test_folder_dedupe`                        |

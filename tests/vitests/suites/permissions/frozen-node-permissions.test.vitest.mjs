@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(leaked(outcomes, "SECRET")).toBe(false);
 		expect(outcomes.direct.error).toBe("PERMISSION_DENIED");
 		expect(outcomes.descriptor.error).toBe("PERMISSION_DENIED");
-		expect(outcomes.json.error).toBe("PERMISSION_DENIED");
+		expect(outcomes.json).toEqual({ value: "{}" });
 		expect(api.secrets.key).toBe("SECRET");
 	});
 
@@ -114,7 +114,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		const rules = [{ caller: "rogue.**", target: "secrets.pair.second.**", effect: "deny" }];
 		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
 		await api.secrets;
-		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" }, second: {} });
+		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" } });
 	});
 
 	it("a function an array member holds keeps its reader's identity when called later past an unpatched boundary", async () => {

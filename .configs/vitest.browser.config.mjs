@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:27-07:00 (1791090867)
+ *	@Last modified time: 2026-11-15T18:52:03-08:00 (1794797523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,22 +30,40 @@ import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateBrowserAssets } from "../src/lib/helpers/generate-manifest.mjs";
+import { generateBrowserAssets, generateManifest } from "../src/lib/helpers/generate-manifest.mjs";
 
 const slothletCondition = "slothlet-dev";
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = resolve(REPO, "api_tests/api_test_browser");
 const FIXTURE_REL = "api_tests/api_test_browser";
+// A leaf whose helper files use slothlet's internal exports, inside and outside the module's folder.
+const HELPER_REL = "api_tests/api_test_browser_internal_helper/api";
+// A callable api root: its function's own members by every route, and its own code's reads.
+const ROUTES_REL = "api_tests/api_test_function_member_routes/base";
+const ROOT_LEAF_REL = "api_tests/api_test_root_own_leaf/plain";
+const SELF_FN_REL = "api_tests/api_test_self_parity/fnroot";
+const SELF_OBJ_REL = "api_tests/api_test_self_parity/objroot";
 
 export default defineConfig(async () => {
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.
 	const { manifest, importmap } = await generateBrowserAssets(FIXTURE_DIR, { slothletBase: "/" });
+	const helperManifest = await generateManifest(resolve(REPO, HELPER_REL));
+	const routesManifest = await generateManifest(resolve(REPO, ROUTES_REL));
+	const rootLeafManifest = await generateManifest(resolve(REPO, ROOT_LEAF_REL));
+	const selfFnManifest = await generateManifest(resolve(REPO, SELF_FN_REL));
+	const selfObjManifest = await generateManifest(resolve(REPO, SELF_OBJ_REL));
 
 	// slothlet resolves internal modules at runtime via `import(<computed bare specifier>)`, which vite
 	// can't statically rewrite — so the browser needs an importmap for them. Point it at the vite-served
 	// /src/* URLs (rewrite the default /dist/*) so those modules still go through vite's transform and
 	// their v8 coverage maps to src/** (the whole reason this beats the raw-source playwright-smoke).
-	const imports = Object.fromEntries(Object.entries(importmap.imports).map(([k, v]) => [k, v.replace("/dist/lib/", "/src/lib/")]));
+	// The importmap maps slothlet's own specifiers under `scopes` for slothlet's own files, so the page gets
+	// the whole object, `scopes` included.
+	const toSrc = (entries) => Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v.replace("/dist/lib/", "/src/lib/")]));
+	const imports = toSrc(importmap.imports);
+	const scopes = Object.fromEntries(
+		Object.entries(importmap.scopes ?? {}).map(([scope, entries]) => [scope.replace("/dist/", "/src/"), toSrc(entries)])
+	);
 
 	/** Expose the node-built fixture manifest + its served base path to browser tests. */
 	const fixtureManifestPlugin = {
@@ -55,13 +73,20 @@ export default defineConfig(async () => {
 		},
 		load(id) {
 			if (id === "\0virtual:browser-fixture-manifest") {
-				return `export const manifest = ${JSON.stringify(manifest)};\nexport const fixtureRel = ${JSON.stringify(FIXTURE_REL)};\n`;
+				return (
+					`export const manifest = ${JSON.stringify(manifest)};\nexport const fixtureRel = ${JSON.stringify(FIXTURE_REL)};\n` +
+					`export const helperManifest = ${JSON.stringify(helperManifest)};\nexport const helperRel = ${JSON.stringify(HELPER_REL)};\n` +
+					`export const routesManifest = ${JSON.stringify(routesManifest)};\nexport const routesRel = ${JSON.stringify(ROUTES_REL)};\n` +
+					`export const rootLeafManifest = ${JSON.stringify(rootLeafManifest)};\nexport const rootLeafRel = ${JSON.stringify(ROOT_LEAF_REL)};\n` +
+					`export const selfFnManifest = ${JSON.stringify(selfFnManifest)};\nexport const selfFnRel = ${JSON.stringify(SELF_FN_REL)};\n` +
+					`export const selfObjManifest = ${JSON.stringify(selfObjManifest)};\nexport const selfObjRel = ${JSON.stringify(SELF_OBJ_REL)};\n`
+				);
 			}
 		},
 		// Inject slothlet's importmap into the tester page (head-prepend, before any module script) so
 		// the runtime dynamic bare-specifier imports resolve to the vite-served src modules.
 		transformIndexHtml() {
-			return [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports }), injectTo: "head-prepend" }];
+			return [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports, scopes }), injectTo: "head-prepend" }];
 		}
 	};
 

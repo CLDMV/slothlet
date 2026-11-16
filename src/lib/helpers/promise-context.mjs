@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T23:03:14-08:00 (1793775794)
+ *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,9 @@
 
 import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { inheritsFrom } from "@cldmv/slothlet/helpers/platform";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Objects, WeakSet, Promise, Promises, Symbols, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of
@@ -49,7 +51,7 @@ import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/he
  * @type {symbol}
  * @private
  */
-const ORIGINAL_THEN = Symbol.for("slothlet.promise.originalThen");
+const ORIGINAL_THEN = Symbols.for("slothlet.promise.originalThen");
 
 /**
  * Follow patched `then` functions down to the one they replaced.
@@ -92,7 +94,7 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
 		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
-		return NATIVE_THEN.call(Promise.resolve(promise), onFulfilled, onRejected);
+		return NATIVE_THEN.call(Promises.resolve(promise), onFulfilled, onRejected);
 	}
 }
 
@@ -143,9 +145,9 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
  * @returns {void}
  * @public
  */
-export function enablePromisePatching() {
+function enablePromisePatching() {
 	if (installed) return;
-	const descriptor = Object.getOwnPropertyDescriptor(Promise.prototype, "then");
+	const descriptor = Objects.getOwnPropertyDescriptor(Promise.prototype, "then");
 	// A host that froze or replaced `then` with something exotic keeps it as it is: this patch is
 	// best-effort like the others, not a requirement.
 	if (!descriptor || typeof descriptor.value !== "function" || !descriptor.configurable) return;
@@ -164,11 +166,11 @@ export function enablePromisePatching() {
 			return original.call(this, fulfilled, rejected);
 		}
 	}.then;
-	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
+	Objects.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
 	THEN_WRAPPERS.add(wrapper);
 	markLayer(wrapper, layer);
 
-	Object.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
+	Objects.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
 	installed = { layer, wrapper };
 }
 
@@ -183,9 +185,56 @@ export function enablePromisePatching() {
  * @returns {void}
  * @public
  */
-export function disablePromisePatching() {
+function disablePromisePatching() {
 	if (!installed) return;
 	const restore = closeLayer(installed.layer, runtime_descriptorValue);
-	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Object.defineProperty(Promise.prototype, "then", restore);
+	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Objects.defineProperty(Promise.prototype, "then", restore);
 	installed = null;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/promise-context", import.meta.url);
+	return { disablePromisePatching, enablePromisePatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enablePromisePatching} */
+const guarded_enablePromisePatching = guardInternal(enablePromisePatching, "enablePromisePatching", import.meta.url);
+/** @type {typeof disablePromisePatching} */
+const guarded_disablePromisePatching = guardInternal(disablePromisePatching, "disablePromisePatching", import.meta.url);
+export { guarded_enablePromisePatching as enablePromisePatching, guarded_disablePromisePatching as disablePromisePatching };

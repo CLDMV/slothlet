@@ -14,13 +14,13 @@
  */
 
 /**
- * @fileoverview Fixture (#581): a folder whose only entry is a same-named folder; it stays nested (`x.foo.foo`).
- * @module api_test_same_named_folder.x.foo.foo.get
+ * @fileoverview Fixture (#581, #743): a folder whose only entry is a same-named folder; the two are one level (`x.foo`).
+ * @module api_test_same_named_folder.x.foo.get
  */
 
 /**
  * @returns {string} Marker naming this leaf.
  */
 export function get() {
-	return "x.foo.foo.get";
+	return "x.foo.get";
 }

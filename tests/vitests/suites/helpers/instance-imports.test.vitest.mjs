@@ -152,6 +152,12 @@ describe("Helpers > instance-imports (#518)", () => {
 			expect(installInstanceImportHooks({}, registry)).toBe(false);
 			expect(installInstanceImportHooks(undefined, registry)).toBe(false);
 		});
+
+		it("returns false on a host with neither API for the process's own registration too", () => {
+			// No test of this file registers the hooks with Node itself, so the process has none yet.
+			expect(installInstanceImportHooks({})).toBe(false);
+			expect(installInstanceImportHooks(undefined)).toBe(false);
+		});
 	});
 
 	describe("slothletInstanceImports (vite plugin)", () => {

@@ -33,6 +33,7 @@
 | [Rule 19](../API-RULES.md#rule-19-versioned-mounts)                               | Versioned Mounts                                 | -             | V01, V02, V03, V04, V05, V06, V07, V08                          | `src/lib/handlers/version-manager.mjs` |
 | [Rule 20](../API-RULES.md#rule-20-stackable-routines--cascades)                   | Stackable Routines & Cascades                    | -             | T01, T02, T03, T04, T05, T06, T07, T08, T09, T10                | `src/lib/handlers/routine-manager.mjs` |
 | [Rule 21](../API-RULES.md#rule-21-reserved-keys--built-in-surface)                | Reserved Keys & Built-in Surface                 | -             | B01, B02, B03, B04                                              | `src/lib/builders/api_builder.mjs`     |
+| [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)                | Same-Named Folder Deduplication                  | F09           | C26                                                             | `src/lib/builders/modes-processor.mjs` |
 
 <!-- /MAPPING:RULES -->
 
@@ -52,6 +53,7 @@
 | [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)           | Rule 11                 | C24                 |
 | [F07: Ownership and Module Identity](API-FLATTENING.md#f07-ownership-and-module-identity)       | Rule 12                 | O14, O15            |
 | [F08: AddApi Path Deduplication](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)    | Rule 13                 | C25                 |
+| [F09: Same-Named Folder Deduplication](API-FLATTENING.md#f09-same-named-folder-deduplication)   | Rule 22                 | C26                 |
 
 ---
 
@@ -85,6 +87,7 @@
 | [C23](API-RULES-CONDITIONS.md#c23-root-contributor-collapse)                          | Rule 8            |
 | [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)                      | Rule 11           |
 | [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)                          | Rule 13           |
+| [C26](API-RULES-CONDITIONS.md#c26-same-named-folder-deduplication)                    | Rule 22           |
 
 Non-`C##` series (`G/N/O/M/V/T/B`) tie to their rules directly in the traceability matrix above and are documented in their per-family condition files.
 

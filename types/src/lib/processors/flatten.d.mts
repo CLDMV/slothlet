@@ -93,7 +93,8 @@ export class Flatten extends ComponentBase {
      * with it. A member is an own property, enumerable or not, or one a prototype the module defines
      * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
      * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
-     * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+     * a named `toString` or `call` is not a conflict; nor is a function default's own `name`, `length` or
+     * `prototype` as the language gave it, so a named `name` export is the node's `name`. Every path that combines a default with its named
      * exports asks this one question, so the outcome does not depend on the path.
      * @param {unknown} value - The module's default export.
      * @param {string} key - The named export's key.
@@ -221,7 +222,9 @@ export class Flatten extends ComponentBase {
      * Decide whether a named export should be attached to a callable default export.
      *
      * Returns false when the named export is the same reference as the default (re-export
-     * pattern), or when the export key matches the function name (self-referential export).
+     * pattern: `export { calc }` beside `export default function calc`). A different value whose key
+     * matches the default function's name (`export { calc2 as calc }`) is an ordinary member, as it is
+     * in the module's namespace.
      *
      * @param {string} key - Named export key.
      * @param {unknown} value - Named export value.

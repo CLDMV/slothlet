@@ -1,4 +1,21 @@
 /**
+ * How many settle hooks slothlet has installed on the engine to follow promises and not yet stopped, for a test that
+ * checks a followed promise is let go.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * settleHookCount(); // 0 while no promise is followed
+ */
+export function settleHookCount(): number;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -14,6 +31,25 @@
  */
 export class LiveContextManager {
     instances: Map<any, any>;
+    /**
+     * Whether a flow a call starts carries that call however long it runs: not here. Once the call that started an
+     * async function has returned, nothing says which call that was when the function picks up again (see
+     * frameDefiner in frame-placement).
+     * @type {boolean}
+     * @internal
+     */
+    get carriesFlowCaller(): boolean;
+    /**
+     * The call that started the flow running now, once that call has returned: the module call the promise whose
+     * reaction is running was created in, directly or in a flow it started. Null for a flow the host started, and where
+     * Node's promise hooks are not available (a browser), or no live instance has permissions on.
+     * @returns {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}|null} The starting call's record.
+     * @internal
+     */
+    runningFlowStarter(): {
+        wrapper: object;
+        ceiling?: object | ReadonlyArray<object> | null;
+    } | null;
     /**
      * How many stores have a call suspended right now, across every instance.
      * @type {number}
@@ -114,6 +150,37 @@ export class LiveContextManager {
      */
     public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;
     /**
+     * Run the load of a module file, remembered as in progress until it settles (#726): what the file's top level
+     * registers meanwhile (a timer, a listener, a reaction) is pinned to the load, and runs later as the file's module.
+     * The async manager carries the same identity in a store.
+     *
+     * @param {object} loading - The load (see createModuleLoad).
+     * @param {function(): *} fn - What loads the file.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runModuleLoad(loading: object, fn: () => any): any;
+    /**
+     * Whether nothing slothlet entered is executing on an instance's store: no call, no pin to the host, no code run as
+     * no module. Code running then was started by nothing slothlet entered, so only its frames can say whose it is.
+     * @param {string} instanceID - The instance.
+     * @returns {boolean} True when nothing is entered.
+     * @internal
+     */
+    isAmbient(instanceID: string): boolean;
+    /**
+     * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+     * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+     * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+     * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+     * runs.
+     * @returns {string|null} The instance's id.
+     * @internal
+     * @example
+     * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+     */
+    runningInstanceID(): string | null;
+    /**
      * Run `fn` outside every instance (#597), as the async manager does: no instance is active while its synchronous
      * body runs, so code an instance that has shut down made reaches no instance's api through the active one.
      * @param {Function} fn - What to run.
@@ -147,10 +214,11 @@ export class LiveContextManager {
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
+     * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: Object): Object;
+    public initialize(instanceID: string, config?: Object, clock?: import("@cldmv/slothlet/helpers/clock").Clock): Object;
     /**
      * Run function with instance context active (live mode)
      * @param {string} instanceID - Instance to run in context of
@@ -177,13 +245,17 @@ export class LiveContextManager {
      *   (#597): the call is always checked for code another module made running inside it.
      * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
      *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
+     * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
+     *   file registered while it loaded (#726).
+     * @param {object|null} [loading=null] - The load itself, with `load`: what the file's own code registers in the
+     *   callback is pinned to it again.
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean): any;
+    } | null, attribute?: boolean, madeCode?: boolean, follow?: boolean, load?: object | null, loading?: object | null): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *
@@ -316,11 +388,26 @@ export class LiveContextManager {
     #private;
 }
 /**
+ * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
+ */
+export type CapturedPromiseHooks = {
+    /**
+     * - Installs a hook run when any promise settles; returns what stops it.
+     */
+    onSettled: (arg0: (arg0: Promise<any>) => void) => () => void;
+    /**
+     * - Installs a set of promise hooks; returns what stops them. Absent where the engine has none.
+     */
+    createHook?: ((arg0: object) => () => void) | undefined;
+};
+import { parseStackFrame } from "#handlers/frame-placement";
+import { toComparablePath } from "#handlers/frame-placement";
+/** @type {typeof liveContextManager} */
+declare const guarded_liveContextManager: typeof liveContextManager;
+/**
  * Singleton live context manager
  * @public
  */
-export const liveContextManager: LiveContextManager;
-import { parseStackFrame } from "#handlers/frame-placement";
-import { toComparablePath } from "#handlers/frame-placement";
-export { parseStackFrame, toComparablePath };
+declare const liveContextManager: LiveContextManager;
+export { parseStackFrame, toComparablePath, guarded_liveContextManager as liveContextManager };
 //# sourceMappingURL=context-live.d.mts.map

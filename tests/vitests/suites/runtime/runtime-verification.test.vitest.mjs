@@ -255,12 +255,13 @@ describe("Runtime Implementation Verification", () => {
 		instances.push(api);
 
 		// exerciseInstanceIDDispatcherTraps accesses instanceID from @cldmv/slothlet/runtime
-		// dispatcher, covering the get and has traps at lines 128-133.
-		// Live runtime has no instanceID export so the falsy branch fires (returns undefined/false).
+		// dispatcher, covering the get and has traps.
+		// The live runtime exports instanceID as the async runtime does (#764): inside a call it reads as the id.
 		const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
 
-		expect(result.id).toBeUndefined();
-		expect(result.hasProp).toBe(false);
+		expect(typeof result.id).toBe("function");
+		expect(result.id()).toBe(api.slothlet.instanceID);
+		expect(result.hasProp).toBe(true);
 		expect(result.hasMissing).toBe(false);
 	});
 

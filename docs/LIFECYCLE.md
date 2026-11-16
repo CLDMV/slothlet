@@ -467,11 +467,13 @@ A routine's `name` is resolved **relative to a mount point** by default — a mo
 
 | Name form                                                                                                  | Resolves against                                                                                          | Lazy-mode materialization cost                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bare, e.g. `"initialize"`                                                                                  | Each mount's own top level only                                                                           | **None** — a mount's own top level is always constructed eagerly, in either mode                                                                                                                                                                                                                                                      |
+| Bare, e.g. `"initialize"`                                                                                  | Each mount's own top level only                                                                           | Only the node it names at each mount's top level: the node is always built, but a lazy node's own value (a callable folder's function) is loaded before the routine runs, or before its cascade takes that node's place at the root                                                                                                   |
 | Dotted, mount-relative (`recursive: false`, default), e.g. `"admin.initialize"`, `"admin.*"`, `"a{a,b}.*"` | The pattern's matches within each mount, relative to that mount                                           | Only what each `.`-segment actually requires: a literal segment resolves that one child; a single-level wildcard (`*`/`?`) enumerates just its own level; `{}` expands into concrete alternatives up front (`"a{a,b}.*"` walks only `aa`/`ab`, never a sibling `ac`) — none of these touch a sibling subtree the pattern doesn't name |
 | Dotted, mount-relative, containing `**` (`recursive: false`), e.g. `"admin.**"`                            | Every depth under wherever the pattern's literal/wildcard prefix narrows to                               | That prefix's own subtree, in full — but never a sibling of that prefix (`"admin.**"` walks all of `admin`, never an unrelated `quiet` under the same mount)                                                                                                                                                                          |
 | Mount-relative, `recursive: true`, or a `!`-negated name                                                   | The name at any depth within each mount's own subtree (`recursive: true`), or a computed complement (`!`) | That mount's entire subtree — unbounded from the mount's own root, not from any narrowing prefix                                                                                                                                                                                                                                      |
 | Root-anchored (`^` prefix), e.g. `"^ext.*.initialize"`                                                     | The full absolute api path, crossing mount boundaries                                                     | The entire composed tree (not mount-scoped at all)                                                                                                                                                                                                                                                                                    |
+
+A `**` that is a whole segment matches any number of segments, none included, as in hooks and permission rules: `"admin.**"` also matches a function at `admin` itself, and `"^ext.**.initialize"` also matches `ext.initialize`.
 
 `recursive` has no effect on a `^`-anchored name — that form already expresses depth directly via `*` vs `**` in the pattern.
 
@@ -611,17 +613,18 @@ The legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-c
 
 ## Module Type Inspection
 
-In eager mode, `typeof api.math` accurately reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode this is not the case** - the proxy target is always a function to make namespaces callable, so `typeof` always returns `"function"` regardless of what the module exports.
+In eager mode, `typeof api.math` reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode a node that has not loaded yet** is always a function, because a Proxy's form is fixed when it is made and a folder may turn out callable: `typeof` returns `"function"` until the node loads. Once it has loaded, a node holding no function is rebuilt on the form eager gives it, so `typeof api.math` is `"object"`, `Function.prototype.toString` refuses it and calling it throws a `TypeError`, as in eager mode. A reference taken before the load (`const math = api.math`) keeps the function form and reads through to the loaded node; read the node again, or take it from `await api.math`, to get the loaded form.
 
-Use `__type` and `api.slothlet.types` symbols to check actual module state.
+Use `__type` and `api.slothlet.types` symbols to check a node's state without depending on whether it has loaded.
 
 ### `__type` property
 
 ```javascript
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
-// typeof is always "function" in lazy mode (proxy target)
+// Before the node loads, typeof is "function" in lazy mode (proxy target)
 console.log(typeof api.math); // "function" - even if math module exports an object
+// once loaded: typeof (await api.math) === "object" for an object export
 
 // __type returns the real implementation type
 console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
@@ -653,6 +656,18 @@ if (api.math.__type === UNMATERIALIZED) {
 } else {
 	console.log("Loaded, type:", api.math.__type); // "object" or "function"
 }
+```
+
+### A kept folder that loads as a primitive
+
+A folder whose only file is named like it and exports a primitive by default (`zz/count/count.mjs` with `export default 7`) reads as that value once loaded. A reference to the folder's node taken before it loaded is an object, and JavaScript cannot turn an object into a primitive, so that reference stays an object: `typeof kept` is `"function"` and `kept === 7` is false. Everything else answers as the value: `await kept` gives `7`, `kept.valueOf()`, `String(kept)`, `` `${kept}` ``, `kept + 1`, `kept == 7` and `JSON.stringify(kept)` give what they give for `7`, the value's own methods run on it (`kept.toFixed(1)`), and `kept.__type` is `"number"`. A fresh read, `api.zz.count`, is the plain `7`. A module the rules deny the folder is refused each of these, the `await` included.
+
+```javascript
+const kept = api.zz.count; // the folder has not loaded yet
+await kept; // 7
+`${kept}`; // "7"
+kept.__type; // "number"
+api.zz.count === 7; // true
 ```
 
 ---

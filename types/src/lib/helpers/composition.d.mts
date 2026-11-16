@@ -78,16 +78,6 @@ export function layerForwards(layer: object | Function, key: PropertyKey): boole
  */
 export function layerUnderlying(layer: object | Function): object | Function;
 /**
- * Register how to recognize an api node (see {@link isApiNode}).
- * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
- * @returns {void}
- * @package
- *
- * @example
- * setApiNodeCheck((value) => proxyRegistry.has(value));
- */
-export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
-/**
  * The version of a module's value the build may change, without the change reaching the module's
  * export (see the module description for the rule).
  * @param {unknown} value - The module's value.
@@ -104,6 +94,17 @@ export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
 export function copyForComposition(value: unknown, { addsMembers }?: {
     addsMembers?: boolean | undefined;
 }): unknown;
+/**
+ * The object a copy {@link copyForComposition} made was copied from, so a node built from the copy can find the
+ * module's own object behind it (a copy of a copy leads there in two steps).
+ * @param {unknown} copy - A value.
+ * @returns {object|undefined} The object it was copied from, or undefined for anything that is no such copy.
+ * @package
+ *
+ * @example
+ * copySourceOf(copyForComposition(mod.config)) === mod.config; // true
+ */
+export function copySourceOf(copy: unknown): object | undefined;
 /**
  * The same layer laid over another value: what the layer holds and hides, over `underlying` (#597). Used where the
  * value a layer composes over is replaced by a stand-in for it.
@@ -130,4 +131,25 @@ export function layerOnto(layered: object, underlying: object | Function): objec
  * const instance = relayer(impl, [["sib", { value: sib }], ["extra", { value: extra }]]);
  */
 export function relayer(layered: object, members: Array<[PropertyKey, PropertyDescriptor]>): object;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+export { guarded_setApiNodeCheck as setApiNodeCheck };
+/** @type {typeof setApiNodeCheck} */
+declare const guarded_setApiNodeCheck: typeof setApiNodeCheck;
+/**
+ * Register how to recognize an api node (see {@link isApiNode}).
+ * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * setApiNodeCheck((value) => proxyRegistry.has(value));
+ */
+declare function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
 //# sourceMappingURL=composition.d.mts.map

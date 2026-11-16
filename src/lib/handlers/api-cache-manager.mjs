@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:40-07:00 (1791821800)
+ *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { Objects, Arrays, Map, WeakSet, Dates } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -221,7 +222,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * // ["base_abc123", "plugins_xyz789", ...]
 	 */
 	getAllModuleIDs() {
-		return Array.from(this.caches.keys());
+		return Arrays.from(this.caches.keys());
 	}
 
 	/**
@@ -281,7 +282,7 @@ export class ApiCacheManager extends ComponentBase {
 		visited.add(api);
 		let count = 0;
 
-		for (const [key, value] of Object.entries(api)) {
+		for (const [key, value] of Objects.entries(api)) {
 			// Skip the framework's reserved names; a module's `_`/`__`-prefixed export is a member and counts.
 			if (isFrameworkReservedKey(key)) {
 				continue;
@@ -366,8 +367,11 @@ export class ApiCacheManager extends ComponentBase {
 		// used by the live API, and applyRootContributor's Object.assign overwrites the live
 		// API's properties with fresh wrappers (destroying custom properties and proxy identity).
 		// The moduleID itself must remain unchanged for ownership/metadata consistency.
+		// A single-file add is rebuilt as the add built it: its folder, filtered to that one file, its exports at the
+		// mount path.
+		const file = entry.file ?? null;
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
-			dir: entry.folderPath,
+			dir: file ? file.dir : entry.folderPath,
 			// #471: the base entry of an instance with no base directory rebuilds to an empty root.
 			noBase: entry.folderPath === null,
 			mode: entry.mode,
@@ -378,7 +382,8 @@ export class ApiCacheManager extends ComponentBase {
 			hidden: entry.hidden ?? null,
 			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "api",
-			cacheBust: Date.now(),
+			cacheBust: Dates.now(),
+			...(file ? { fileFilter: (fileName) => fileName === file.name, rootUnwrap: true } : {}),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
 			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors
 			// the add-time intermediate key (last endpoint segment) so the flatten matches the add.
@@ -395,7 +400,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_CACHE_REBUILT_SUCCESSFULLY",
 			moduleID,
-			timestamp: Date.now()
+			timestamp: this.clock.now()
 		});
 
 		return freshApi;

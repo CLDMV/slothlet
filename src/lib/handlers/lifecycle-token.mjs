@@ -38,12 +38,15 @@
  * @package
  */
 
+import { Symbol, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+
 /**
  * Module-private map of Slothlet instance → per-instance capability token.
  * Never exported — the only way to interact with it is through the three functions below.
  *
  * @type {WeakMap<object, symbol>}
  */
+
 const instanceTokens = new WeakMap();
 
 /**

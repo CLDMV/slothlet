@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T00:00:00-07:00 (1791356400)
+ *	@Last modified time: 2026-11-13T21:48:45-08:00 (1794635325)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,22 +74,25 @@ afterEach(async () => {
 describe("scheduleMacrotask (#578)", () => {
 	it("uses setImmediate when the host has it", async () => {
 		const immediate = vi.fn((fn) => realSetTimeout(fn, 0));
-		vi.stubGlobal("setImmediate", immediate);
-		const ran = new Promise((resolve) => scheduleMacrotask(resolve));
+		// The schedulers handed in: scheduleMacrotask uses the host's as they were when slothlet loaded, not the globals.
+		const ran = new Promise((resolve) =>
+			scheduleMacrotask(resolve, { setImmediate: immediate, MessageChannel, setTimeout: realSetTimeout })
+		);
 		await ran;
 		expect(immediate).toHaveBeenCalledTimes(1);
 	});
 
 	it("falls back to a MessageChannel post when setImmediate is absent", async () => {
-		vi.stubGlobal("setImmediate", undefined);
 		const timeout = vi.fn(realSetTimeout);
-		vi.stubGlobal("setTimeout", timeout);
 		const order = [];
 		const ran = new Promise((resolve) =>
-			scheduleMacrotask(() => {
-				order.push("task");
-				resolve();
-			})
+			scheduleMacrotask(
+				() => {
+					order.push("task");
+					resolve();
+				},
+				{ setImmediate: undefined, MessageChannel, setTimeout: timeout }
+			)
 		);
 		// A macrotask runs after the current microtasks drain.
 		queueMicrotask(() => order.push("microtask"));
@@ -99,11 +102,8 @@ describe("scheduleMacrotask (#578)", () => {
 	});
 
 	it("falls back to setTimeout when neither setImmediate nor MessageChannel exists", async () => {
-		vi.stubGlobal("setImmediate", undefined);
-		vi.stubGlobal("MessageChannel", undefined);
 		const timeout = vi.fn(realSetTimeout);
-		vi.stubGlobal("setTimeout", timeout);
-		await new Promise((resolve) => scheduleMacrotask(resolve));
+		await new Promise((resolve) => scheduleMacrotask(resolve, { setImmediate: undefined, MessageChannel: undefined, setTimeout: timeout }));
 		expect(timeout).toHaveBeenCalledTimes(1);
 		expect(timeout.mock.calls[0][1]).toBe(0);
 	});

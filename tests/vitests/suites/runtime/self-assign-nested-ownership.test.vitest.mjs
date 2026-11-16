@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
+ *	@Last modified time: 2026-11-10T21:30:06-08:00 (1794375006)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -615,7 +615,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 		expect(outcome.now).toBe("LOOSE_SET_NOT_OWNED");
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => outcome.later()).toThrow(/LOOSE_SET_NOT_OWNED/);
+			// `later` came back inside plain data, so it is the supplier's own function, run here by the host outside any
+			// call: the write goes through the view the supplier kept, which has no standing to write another module's
+			// node (#726). Still refused.
+			expect(() => outcome.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 		});
 		expect(await api.svc[name].read()).toBe(`${name}-secret`);
 	});
@@ -759,9 +762,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 						node.useSecret = () => "pwned-by-hook";
 					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 				}
+				// The test's own code writing through the api a hook kept: host code with no standing over the view.
 				expect(() => {
 					kept.api.callee = { pwned: true };
-				}).toThrow(/LOOSE_SET_NOT_OWNED/);
+				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 			});
 			expect(await api.callee.ops.useSecret()).toBe("callee-original");
 			// What the hook handed back unchanged is what the call returned: the host may still write through it.
@@ -857,7 +861,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountSideChannels({ diagnostics: true });
 		const kept = await api.evil.x.keepFrameworkFn(how);
 		withSuppressedSlothletErrorOutputSync(() => {
-			expect(() => kept.later()).toThrow(/LOOSE_SET_NOT_OWNED/);
+			// `later` is a function in returned data, run by the host outside any call (#726): refused through the kept
+			// view, which has no standing.
+			expect(() => kept.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});

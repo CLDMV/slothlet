@@ -618,13 +618,10 @@ export function exerciseContextDispatcherTraps() {
  * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
  */
 export function exerciseInstanceIDDispatcherTraps() {
-	// get trap (lines 128-130 in runtime.mjs): instanceID[prop]
-	// When live runtime is active, liveRuntimeModule.instanceID is undefined,
-	// so the trap returns undefined for any prop access.
+	// get trap in runtime.mjs: instanceID[prop], answered by the active runtime's instanceID.
 	const id = instanceID.toString;
 
-	// has trap (lines 131-133): prop in instanceID
-	// When liveRuntimeModule.instanceID is undefined, the trap returns false.
+	// has trap: prop in instanceID, answered by the active runtime's instanceID.
 	const hasProp = "length" in instanceID;
 	const hasMissing = "__nonexistent__" in instanceID;
 

@@ -53,6 +53,7 @@ export class ModuleManager extends ComponentBase {
      *
      * @param {DiscoverOptions} [options]
      * @returns {Promise<DiscoverResult[]>} Validated discovery results in walk order (apply `sortModules()` for deterministic ordering).
+     * @throws {SlothletError} `MODULE_DISCOVERY_REQUIRES_NODE` in a browser, which has no filesystem to walk.
      */
     discover(options?: DiscoverOptions): Promise<DiscoverResult[]>;
     /**
@@ -127,7 +128,7 @@ export type AddModuleOptions = {
     /**
      * - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
      */
-    collisionMode?: "replace" | "skip" | "warn" | "merge" | "merge-replace" | "error" | undefined;
+    collisionMode?: "error" | "skip" | "warn" | "replace" | "merge" | "merge-replace" | undefined;
     /**
      * - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
      */
@@ -141,7 +142,7 @@ export type AddModulesOptions = {
     /**
      * - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
      */
-    collisionMode?: "replace" | "skip" | "warn" | "merge" | "merge-replace" | "error" | undefined;
+    collisionMode?: "error" | "skip" | "warn" | "replace" | "merge" | "merge-replace" | undefined;
     /**
      * - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
      */

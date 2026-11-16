@@ -232,7 +232,7 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		expect(inst?.constructor?.name).toBe("multiply");
 	});
 
-	test("throws INVALID_CONFIG_NOT_A_FUNCTION when materialised impl is a plain object (line 3490)", async () => {
+	test("throws the engine's TypeError, as eager does, when materialised impl is a plain object (#811)", async () => {
 		// Materialise database explicitly — impl becomes a plain namespace object.
 		// The eager fallback finds no function (neither impl nor impl.default) and throws.
 		const { default: slothlet } = await import("@cldmv/slothlet");
@@ -246,8 +246,10 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		} catch (e) {
 			caught = e;
 		}
-		expect(caught).not.toBeNull();
-		expect(caught.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+		// The loaded namespace is rebuilt on eager's object target (#811), and the reference held from before the load
+		// forwards to it: constructing it throws what `new` of an object does, as eager's `new api.database()` does.
+		expect(caught).toBeInstanceOf(TypeError);
+		expect(caught.code).toBeUndefined();
 	});
 });
 

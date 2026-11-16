@@ -1,4 +1,16 @@
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof enableEventTargetPropertyPatching} */
+declare const guarded_enableEventTargetPropertyPatching: typeof enableEventTargetPropertyPatching;
+/** @type {typeof disableEventTargetPropertyPatching} */
+declare const guarded_disableEventTargetPropertyPatching: typeof disableEventTargetPropertyPatching;
+/**
  * Pin `on*` handler assignments to the module that makes them.
  *
  * Called once globally when the first instance is created; later calls are ignored, matching how the
@@ -8,7 +20,7 @@
  * @returns {void}
  * @public
  */
-export function enableEventTargetPropertyPatching(): void;
+declare function enableEventTargetPropertyPatching(): void;
 /**
  * Restore the original `on*` handler accessors.
  *
@@ -19,5 +31,6 @@ export function enableEventTargetPropertyPatching(): void;
  * @returns {void}
  * @public
  */
-export function disableEventTargetPropertyPatching(): void;
+declare function disableEventTargetPropertyPatching(): void;
+export { guarded_enableEventTargetPropertyPatching as enableEventTargetPropertyPatching, guarded_disableEventTargetPropertyPatching as disableEventTargetPropertyPatching };
 //# sourceMappingURL=eventtarget-property-context.d.mts.map

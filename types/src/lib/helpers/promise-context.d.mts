@@ -22,6 +22,18 @@ export function nativeThen(promise: Promise<any>, onFulfilled?: Function, onReje
  */
 export function engineThenOf(fn: any): Function | null;
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof enablePromisePatching} */
+declare const guarded_enablePromisePatching: typeof enablePromisePatching;
+/** @type {typeof disablePromisePatching} */
+declare const guarded_disablePromisePatching: typeof disablePromisePatching;
+/**
  * Pin promise reactions to the module that registers them.
  *
  * Called once globally when the first instance is created; later calls are ignored, matching the other
@@ -31,7 +43,7 @@ export function engineThenOf(fn: any): Function | null;
  * @returns {void}
  * @public
  */
-export function enablePromisePatching(): void;
+declare function enablePromisePatching(): void;
 /**
  * Restore the original `Promise.prototype.then`.
  *
@@ -43,5 +55,6 @@ export function enablePromisePatching(): void;
  * @returns {void}
  * @public
  */
-export function disablePromisePatching(): void;
+declare function disablePromisePatching(): void;
+export { guarded_enablePromisePatching as enablePromisePatching, guarded_disablePromisePatching as disablePromisePatching };
 //# sourceMappingURL=promise-context.d.mts.map

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-15T20:12:17-08:00 (1794802337)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -414,7 +414,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(paths).toContain("billing.internals.__rate");
 	});
 
-	it("hides another module's privates from a MODULE caller", async () => {
+	it("shows the privates of its own module to a MODULE caller in another folder", async () => {
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
 
 		// Called from inside introspect/, so the caller is a module rather than the host. Reaching
@@ -423,8 +423,8 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(seen.error).toBeNull();
 		expect(
 			seen.paths.some((p) => /\.__?[a-z]/i.test(p)),
-			"no other module's private is disclosed"
-		).toBe(false);
+			"its own module's privates are listed"
+		).toBe(true);
 	});
 
 	it("refuses includePrivate to a MODULE caller", async () => {

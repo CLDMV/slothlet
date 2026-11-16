@@ -48,7 +48,9 @@
  */
 
 import { translate } from "@cldmv/slothlet/i18n";
-import { WRAPPER_INTERNAL_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
+import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
+const reservedKeysOwn = reservedKeysInternals("lib/factories/component-base");
 
 /**
  * Base class for Slothlet component classes.
@@ -152,6 +154,18 @@ export class ComponentBase {
 	 */
 	get ____config() {
 		return this.____slothlet.config;
+	}
+
+	/**
+	 * The clock of the instance: where components read the time and schedule their deferred work (the `clock` option).
+	 * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
+	 *   for an instance (a test's stand-in) that has none.
+	 * @internal
+	 * @example
+	 * const stamp = this.clock.now();
+	 */
+	get clock() {
+		return this.#slothlet.clock ?? DEFAULT_CLOCK;
 	}
 
 	/**
@@ -305,5 +319,5 @@ export class ComponentBase {
 	 * @type {Set<string>}
 	 * @static
 	 */
-	static INTERNAL_KEYS = WRAPPER_INTERNAL_KEYS;
+	static INTERNAL_KEYS = reservedKeysOwn.WRAPPER_INTERNAL_KEYS;
 }

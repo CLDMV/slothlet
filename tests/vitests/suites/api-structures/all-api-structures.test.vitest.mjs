@@ -302,7 +302,12 @@ describe("All API Structures Validation", () => {
 			// Compare critical aspects for consistency
 			expect(lazyStructure.apiType, `${folder} (${matrixName}): API type should be consistent`).toBe(eagerStructure.apiType);
 
-			expect(lazyStructure.callablePathsCount, `${folder} (${matrixName}): Callable path count should be consistent`).toBe(
+			// Which paths one mode lists and the other does not, so a failed count says where the two apis differ.
+			const onlyLazy = lazyStructure.callablePaths.filter((entry) => !eagerStructure.callablePaths.includes(entry));
+			const onlyEager = eagerStructure.callablePaths.filter((entry) => !lazyStructure.callablePaths.includes(entry));
+			const difference = `only in lazy: [${onlyLazy.join(", ")}], only in eager: [${onlyEager.join(", ")}]`;
+
+			expect(lazyStructure.callablePathsCount, `${folder} (${matrixName}): Callable path count should be consistent (${difference})`).toBe(
 				eagerStructure.callablePathsCount
 			);
 

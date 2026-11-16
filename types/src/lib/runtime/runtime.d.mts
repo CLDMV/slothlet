@@ -23,6 +23,9 @@ export class SlothletSelf {
  * giving API modules access to all other API methods without import cycles.
  * Typed as {@link SlothletSelf}, which generated api types extend.
  *
+ * Each instance's files get the form its api root takes, as the host's `api` does: an object for an object root, a
+ * function for a function root, which `self(...)` and `new self(...)` call under the root's call rule (#803).
+ *
  * @memberof module:@cldmv/slothlet/runtime
  * @type {SlothletSelf}
  * @example
@@ -30,7 +33,7 @@ export class SlothletSelf {
  * // Inside an API function:
  * const result = await self.math.add(1, 2);
  */
-export const self: SlothletSelf;
+export let self: SlothletSelf;
 /**
  * The current ambient context object. Seeded at instance startup via `config.context` and
  * persists for the lifetime of the instance. `api.slothlet.context.run()` and `.scope()` can

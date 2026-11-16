@@ -18,7 +18,7 @@
  *
  * @description
  * Tests the uncovered branches in unified-wrapper.mjs including:
- * - `__type` returning "number", "string", "boolean" for primitive default exports
+ * - a file's primitive default export at the api root reading as its value ("number", "string", "boolean")
  * - `Symbol.toStringTag` returning "Function" or "Object" based on impl type
  * - `.name` property derived from the API path
  * - `.length` property reflecting actual function arity
@@ -32,9 +32,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
-// ─── Primitive __type tests ────────────────────────────────────────────────
+// ─── Primitive default exports at the root ─────────────────────────────────
 
-describe.each(getMatrixConfigs())("Proxy __type Primitives > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs())("Proxy primitive defaults at the root > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
@@ -51,26 +51,22 @@ describe.each(getMatrixConfigs())("Proxy __type Primitives > Config: '$name'", (
 		}
 	});
 
-	it("should return __type 'number' for a numeric default export", async () => {
-		// In lazy mode, materialize first
-		if (config.mode === "lazy") {
-			await api.numval._materialize();
-		}
-		expect(api.numval.__type).toBe("number");
+	it("should read a numeric default export at the root as its value", async () => {
+		expect(api.numval).toBe(42);
+		expect(await api.numval).toBe(42);
+		expect(api.numval).toBe(42);
 	});
 
-	it("should return __type 'string' for a string default export", async () => {
-		if (config.mode === "lazy") {
-			await api.strval._materialize();
-		}
-		expect(api.strval.__type).toBe("string");
+	it("should read a string default export at the root as its value", async () => {
+		expect(api.strval).toBe("hello");
+		expect(await api.strval).toBe("hello");
+		expect(api.strval).toBe("hello");
 	});
 
-	it("should return __type 'boolean' for a boolean default export", async () => {
-		if (config.mode === "lazy") {
-			await api.boolval._materialize();
-		}
-		expect(api.boolval.__type).toBe("boolean");
+	it("should read a boolean default export at the root as its value", async () => {
+		expect(api.boolval).toBe(true);
+		expect(await api.boolval).toBe(true);
+		expect(api.boolval).toBe(true);
 	});
 });
 

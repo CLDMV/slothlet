@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:53-07:00 (1791424193)
+ *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,6 +20,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
+import { Objects, JSON, Symbols, Error, Errors, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -111,31 +112,31 @@ export class SlothletError extends Error {
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
-		Object.defineProperty(this, "code", {
+		Objects.defineProperty(this, "code", {
 			value: code,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "context", {
+		Objects.defineProperty(this, "context", {
 			value: context,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "originalError", {
+		Objects.defineProperty(this, "originalError", {
 			value: originalError,
 			enumerable: false,
 			writable: false
 		});
 
-		Object.defineProperty(this, "hint", {
+		Objects.defineProperty(this, "hint", {
 			value: translatedHint,
 			enumerable: false,
 			writable: false
 		});
 
-		Error.captureStackTrace(this, SlothletError);
+		Errors.captureStackTrace(this, SlothletError);
 	}
 
 	/**
@@ -152,7 +153,7 @@ export class SlothletError extends Error {
 
 		// Add only critical details
 		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
-		const detailKeys = Object.keys(this.context).filter((k) => criticalKeys.includes(k));
+		const detailKeys = Objects.keys(this.context).filter((k) => criticalKeys.includes(k));
 
 		if (detailKeys.length > 0) {
 			output += "\nDetails:\n";
@@ -168,7 +169,7 @@ export class SlothletError extends Error {
 	 * Custom inspect for console.log/console.error
 	 * @returns {string} Formatted error for display
 	 */
-	[Symbol.for("nodejs.util.inspect.custom")]() {
+	[Symbols.for("nodejs.util.inspect.custom")]() {
 		return this.toString() + `\n${this.stack}`;
 	}
 
@@ -229,15 +230,16 @@ export class SlothletWarning {
 
 		// Emit warning to console unless suppressed
 		if (!SlothletWarning.suppressConsole) {
-			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
 			// Show context if provided (exclude synthetic 'key' field from display)
-			if (Object.keys(contextData).length > 0) {
-				console.warn("Context:", contextData);
+			if (Objects.keys(contextData).length > 0) {
+				globalThis.console.warn("Context:", contextData);
 			}
 
 			if (hasCause) {
-				console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
+				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
@@ -325,19 +327,20 @@ export class SlothletDebug {
 		// Format label
 		const label = `[DEBUG:${code.toUpperCase()}]`;
 
+		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 		if (hasTranslation) {
-			console.log(`${label} ${translatedMessage}`);
+			globalThis.console.log(`${label} ${translatedMessage}`);
 		} else if (message) {
 			// Backwards compat: raw message string (no key provided, no category key found)
-			console.log(`${label} ${message}`);
+			globalThis.console.log(`${label} ${message}`);
 		} else {
 			// No message or translation - dump raw context
-			console.log(label, contextParams);
+			globalThis.console.log(label, contextParams);
 		}
 
 		// Show interpolation params / extra context if present (never show 'key' or 'message')
-		if ((hasTranslation || message) && Object.keys(contextParams).length > 0) {
-			console.log(`${label} Context:`, contextParams);
+		if ((hasTranslation || message) && Objects.keys(contextParams).length > 0) {
+			globalThis.console.log(`${label} Context:`, contextParams);
 		}
 	}
 
@@ -346,7 +349,7 @@ export class SlothletDebug {
 	 * @returns {string} Debug info
 	 */
 	toString() {
-		return `[SlothletDebug] flags: ${Object.keys(this.debugFlags)
+		return `[SlothletDebug] flags: ${Objects.keys(this.debugFlags)
 			.filter((k) => this.debugFlags[k])
 			.join(", ")}`;
 	}

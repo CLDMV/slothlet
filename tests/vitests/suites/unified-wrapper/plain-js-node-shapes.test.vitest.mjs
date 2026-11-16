@@ -224,9 +224,19 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 			expect(oddShapeReads(api.owner)).toEqual(plain);
 		});
 
-		// V8's structured serializer refuses every Proxy (`#<Object> could not be cloned`), and a node is one by design: it
-		// cannot hand out the module's object itself, which would skip the read and write rules for everything it holds.
-		it.todo("clones a frozen export with structuredClone (blocked: V8 refuses to serialize any Proxy)");
+		// V8's structured serializer refuses every Proxy, and a node is one by design: it cannot hand out the module's object
+		// itself, which would skip the read and write rules for everything it holds. The cloning functions are wrapped while
+		// an instance is up, and copy a node's data by reading it through the node (#751).
+		it("clones a frozen export with structuredClone", async () => {
+			api = await load();
+			const plain = await plainOwner();
+			const cloned = (owner) => {
+				const box = structuredClone(owner.frozenBox);
+				const list = structuredClone(owner.frozenList);
+				return [box, Object.isFrozen(box), list, Array.isArray(list), Object.isFrozen(list)];
+			};
+			expect(cloned(api.owner)).toEqual(cloned(plain));
+		});
 
 		if (permissions) {
 			it("refuses another module's changes to members it does not own", async () => {

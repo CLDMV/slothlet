@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:59:41-08:00 (1793851181)
+ *	@Last modified time: 2026-11-10T21:30:04-08:00 (1794375004)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -162,7 +162,8 @@ describe.each(CONFIGS)("Node's streams a module hands out (#708) — $mode / $ru
 		const socket = await api.maker.keptSocket(port);
 		socket.on("error", () => {});
 		try {
-			expect(types.isProxy(socket)).toBe(true);
+			// A stand-in only while the permission system is on: with it off nothing a module returns is wrapped (#726).
+			expect(types.isProxy(socket)).toBe(permissions);
 			expect(socket.tag()).toBe("kept");
 			expect(() => socket.setKeepAlive(true, 1000)).not.toThrow();
 			expect(() => socket.setNoDelay(true)).not.toThrow();
@@ -184,7 +185,7 @@ describe.each(CONFIGS)("Node's streams a module hands out (#708) — $mode / $ru
 		const socket = await api.maker.keptSocket(port);
 		socket.on("error", () => {});
 		try {
-			expect(types.isProxy(socket)).toBe(true);
+			expect(types.isProxy(socket)).toBe(permissions);
 			expect(() => socket.setKeepAlive(true, 1000)).not.toThrow();
 			expect(typeof socket.address().port).toBe("number");
 		} finally {
@@ -210,21 +211,23 @@ describe.each(CONFIGS)("Node's streams a module hands out (#708) — $mode / $ru
 
 	it("hands another module a socket of the module's own class, its native methods working through the stand-in", async () => {
 		await create();
-		expect(await api.user.keptSocket(port)).toEqual({ proxy: true, tag: "kept", destroyed: true });
+		expect(await api.user.keptSocket(port)).toEqual({ proxy: permissions, tag: "kept", destroyed: true });
 	});
 
 	it("keeps a stream of the module's own class as the module's, working", async () => {
 		await create();
 		const stream = await api.maker.tagged();
-		expect(types.isProxy(stream)).toBe(true);
+		expect(types.isProxy(stream)).toBe(permissions);
 		expect(stream.tag()).toBe("tagged");
 		await drain(stream);
 	});
 
-	it("keeps a stream carrying the module's own transform as the module's, working", async () => {
+	it("hands out a stream of Node's own class carrying the module's transform as the stream itself, working", async () => {
 		await create();
 		const stream = await api.maker.transformed();
-		expect(types.isProxy(stream)).toBe(true);
+		// An instance of Node's own class holding an option function is data, as `return new PassThrough({ transform })`
+		// is in plain JavaScript: only a value that is itself a module's code is a stand-in (#726).
+		expect(types.isProxy(stream)).toBe(false);
 		await drain(stream);
 	});
 });

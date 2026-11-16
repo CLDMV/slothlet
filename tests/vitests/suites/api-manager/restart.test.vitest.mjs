@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:26:43-07:00 (1791736003)
+ *	@Last modified time: 2026-11-14T09:09:11-08:00 (1794676151)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -532,11 +532,11 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		await create();
 		// Lazy: a namespace read before materialization is a waiting proxy, which is not constructible —
 		// the same as a fresh read, so materialize the namespace first (before and after the restart).
-		if (config.mode === "lazy") await api.factory.Widget;
-		const Widget = api.factory.Widget;
+		if (config.mode === "lazy") await api.factory;
+		const Widget = api.factory;
 		expect(new Widget().generation).toBe(api.conn.generation);
 		await api.slothlet.restart();
-		if (config.mode === "lazy") await api.factory.Widget;
+		if (config.mode === "lazy") await api.factory;
 		const instance = new Widget();
 		expect(instance.generation).toBe(api.conn.generation);
 	});

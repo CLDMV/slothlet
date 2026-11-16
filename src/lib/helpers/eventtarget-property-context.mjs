@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-15T18:55:14-08:00 (1794797714)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,10 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, isActiveLayer, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Objects, WeakMap, WeakSet, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { isSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -126,7 +129,7 @@ function runtime_patchHandlerProperty(ctor, propName) {
  * @private
  */
 function runtime_patchHandlerAccessor(proto, propName) {
-	const descriptor = proto && Object.getOwnPropertyDescriptor(proto, propName);
+	const descriptor = proto && Objects.getOwnPropertyDescriptor(proto, propName);
 	// Absent on this host's prototype, not an IDL-style accessor, or non-configurable: nothing to patch.
 	// Covers a host that lacks the interface entirely, an exotic embedder that exposes the handler as a
 	// plain data property instead, and a host that locked the accessor down — redefining a
@@ -181,7 +184,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		return result;
 	};
 
-	Object.defineProperty(proto, propName, {
+	Objects.defineProperty(proto, propName, {
 		configurable: descriptor.configurable,
 		enumerable: descriptor.enumerable,
 		get: wrapperGet,
@@ -203,7 +206,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
  * @returns {void}
  * @public
  */
-export function enableEventTargetPropertyPatching() {
+function enableEventTargetPropertyPatching() {
 	if (isPatchingEnabled) return;
 
 	for (const [ctorName, propNames] of PATCHED_INTERFACES) {
@@ -225,7 +228,7 @@ export function enableEventTargetPropertyPatching() {
  * @private
  */
 function runtime_ownHandlerNames(target) {
-	return Object.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
+	return Objects.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
 }
 
 /**
@@ -240,19 +243,26 @@ function runtime_ownHandlerNames(target) {
  * @private
  */
 function runtime_patchDiscoveredHandlers() {
-	const EventTargetCtor = globalThis.EventTarget;
+	const EventTargetCtor = EventTarget;
 	// A host without EventTarget has no DOM-style handlers to discover; the named list still applies.
 	if (typeof EventTargetCtor !== "function") return;
 	const base = EventTargetCtor.prototype;
 
-	for (const name of Object.getOwnPropertyNames(globalThis)) {
-		const value = Object.getOwnPropertyDescriptor(globalThis, name)?.value;
-		if (typeof value !== "function" || !value.prototype || !Object.prototype.isPrototypeOf.call(base, value.prototype)) continue;
+	for (const name of Objects.getOwnPropertyNames(globalThis)) {
+		const value = Objects.getOwnPropertyDescriptor(globalThis, name)?.value;
+		// Slothlet's own Proxies (a function root's `self`, #803) are no interface, and are not read here.
+		if (
+			typeof value !== "function" ||
+			isSlothletProxy(value) ||
+			!value.prototype ||
+			!Objects.prototype.isPrototypeOf.call(base, value.prototype)
+		)
+			continue;
 		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (Object.prototype.isPrototypeOf.call(base, globalThis)) {
+	if (Objects.prototype.isPrototypeOf.call(base, globalThis)) {
 		for (const propName of runtime_ownHandlerNames(globalThis)) runtime_patchHandlerAccessor(globalThis, propName);
 	}
 }
@@ -267,17 +277,75 @@ function runtime_patchDiscoveredHandlers() {
  * @returns {void}
  * @public
  */
-export function disableEventTargetPropertyPatching() {
+function disableEventTargetPropertyPatching() {
 	if (!isPatchingEnabled) return;
 
 	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
 		const restore = closeLayer(layer, runtime_descriptorGetter);
-		const current = Object.getOwnPropertyDescriptor(proto, propName);
+		const current = Objects.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {
-			Object.defineProperty(proto, propName, restore);
+			Objects.defineProperty(proto, propName, restore);
 		}
 	}
 
 	patched.length = 0;
 	isPatchingEnabled = false;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/eventtarget-property-context", import.meta.url);
+	return { disableEventTargetPropertyPatching, enableEventTargetPropertyPatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enableEventTargetPropertyPatching} */
+const guarded_enableEventTargetPropertyPatching = guardInternal(
+	enableEventTargetPropertyPatching,
+	"enableEventTargetPropertyPatching",
+	import.meta.url
+);
+/** @type {typeof disableEventTargetPropertyPatching} */
+const guarded_disableEventTargetPropertyPatching = guardInternal(
+	disableEventTargetPropertyPatching,
+	"disableEventTargetPropertyPatching",
+	import.meta.url
+);
+export {
+	guarded_enableEventTargetPropertyPatching as enableEventTargetPropertyPatching,
+	guarded_disableEventTargetPropertyPatching as disableEventTargetPropertyPatching
+};

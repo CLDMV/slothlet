@@ -45,7 +45,7 @@ import { relay } from "../../../../api_tests/api_test_host_record_leaf/node_modu
 import { invoke as sharedInvoke } from "../../../../api_tests/api_test_host_record_leaf/node_modules/ext-pkg/index.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_record_leaf");
-const PROBE = path.join(FIXTURE, "probe-records.mjs");
+const PROBE = path.join(FIXTURE, "__probe-records.mjs");
 
 const RULES = [
 	{ caller: "ext.b.**", target: "host.records.**", effect: "allow" },

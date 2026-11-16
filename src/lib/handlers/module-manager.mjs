@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:13:22-07:00 (1792822402)
+ *	@Last modified time: 2026-11-15T21:09:19-08:00 (1794805759)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,9 +37,11 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { runtime_selfModuleReader } from "#handlers/unified-wrapper";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+import { Arrays, Math, Map, Promises, Number, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`
@@ -139,8 +141,16 @@ export class ModuleManager extends ComponentBase {
 	 *
 	 * @param {DiscoverOptions} [options]
 	 * @returns {Promise<DiscoverResult[]>} Validated discovery results in walk order (apply `sortModules()` for deterministic ordering).
+	 * @throws {SlothletError} `MODULE_DISCOVERY_REQUIRES_NODE` in a browser, which has no filesystem to walk.
 	 */
 	async discover(options = {}) {
+		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
+		// rather than fail on a missing Node builtin (#817). addDiscovered() and addModule(name) run it too.
+		if (this.slothlet.envTarget === "browser") {
+			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: "api.slothlet.api.modules.discover()" }, null, {
+				validationError: true
+			});
+		}
 		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts
@@ -241,7 +251,7 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
 	 */
 	async addModules(items, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
-		if (!Array.isArray(items)) {
+		if (!Arrays.isArray(items)) {
 			throw new SlothletError(
 				"INVALID_ARGUMENT",
 				{
@@ -305,7 +315,7 @@ export class ModuleManager extends ComponentBase {
 		await this.slothlet.handlers.routineManager?.rebuildStacks(this.slothlet.api);
 		// Emit modules:loaded with the same shape returned to the caller.
 		// For throw/rollback, outcome is the mounted array; for best-effort, it's the aggregate.
-		const loadedPayload = Array.isArray(outcome) ? { mounted: outcome } : { mounted: outcome.mounted, failed: outcome.failed };
+		const loadedPayload = Arrays.isArray(outcome) ? { mounted: outcome } : { mounted: outcome.mounted, failed: outcome.failed };
 		await this.#emit("modules:loaded", loadedPayload);
 		return outcome;
 	}
@@ -462,9 +472,9 @@ export class ModuleManager extends ComponentBase {
 		const manifest = discoverResult.manifest;
 		const declaredRules = manifest.permissions;
 		const declaredEvents = manifest.events;
-		const manifestRules = Array.isArray(declaredRules) ? Array.from(declaredRules, (rule) => permissionManager.snapshotRule(rule)) : [];
-		const manifestEvents = Array.isArray(declaredEvents)
-			? Array.from(declaredEvents, (rule) => permissionManager.snapshotEventRule(rule))
+		const manifestRules = Arrays.isArray(declaredRules) ? Arrays.from(declaredRules, (rule) => permissionManager.snapshotRule(rule)) : [];
+		const manifestEvents = Arrays.isArray(declaredEvents)
+			? Arrays.from(declaredEvents, (rule) => permissionManager.snapshotEventRule(rule))
 			: [];
 		const rulePlacements = manifestRules.map((rule) => permissionManager.placeModuleRule(rule, writer));
 		const eventPlacements = manifestEvents.map((rule) => permissionManager.placeModuleRule({ target: rule?.event }, writer));
@@ -497,7 +507,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = rulePlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
-			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+			history?.push({ type: "addPermissionRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: this.clock.now() });
 		});
 		manifestEvents.forEach((rule, i) => {
 			const placed = eventPlacements[i].writer
@@ -505,7 +515,7 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = eventPlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
-			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: Date.now() });
+			history?.push({ type: "addEventRule", rule: placed, ownerModuleID: moduleID, ruleId, layer, timestamp: this.clock.now() });
 		});
 
 		const result = {
@@ -592,7 +602,7 @@ export class ModuleManager extends ComponentBase {
 	 */
 	#findExactMountAt(dottedPath) {
 		const history = this.slothlet?.handlers?.apiManager?.state?.addHistory;
-		if (!Array.isArray(history)) return null;
+		if (!Arrays.isArray(history)) return null;
 		for (let i = history.length - 1; i >= 0; i--) {
 			const entry = history[i];
 			if (entry?.apiPath === dottedPath) return entry;
@@ -669,8 +679,8 @@ export class ModuleManager extends ComponentBase {
 			}
 		};
 
-		const workers = Array.from({ length: Math.min(concurrency, resolved.length) }, () => worker());
-		await Promise.all(workers);
+		const workers = Arrays.from({ length: Math.min(concurrency, resolved.length) }, () => worker());
+		await Promises.all(workers);
 
 		if (firstError) {
 			if (onFailure === "rollback") {
@@ -738,8 +748,8 @@ function pickHighestSemver(versions) {
 		String(v)
 			.split(/[.\-+]/)
 			.map((p) => {
-				const n = Number.parseInt(p, 10);
-				return Number.isFinite(n) ? n : 0;
+				const n = Numbers.parseInt(p, 10);
+				return Numbers.isFinite(n) ? n : 0;
 			});
 	let best = versions[0];
 	let bestSegs = segs(best);

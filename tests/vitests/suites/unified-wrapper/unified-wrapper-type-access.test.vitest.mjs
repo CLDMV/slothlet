@@ -132,9 +132,11 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
+		// Held before its impl becomes a primitive: a primitive member is read as its value, not as the node.
+		const node = _api.math;
 		wrapper.____slothletInternal.impl = "hello";
 		try {
-			expect(_api.math.__type).toBe("string");
+			expect(node.__type).toBe("string");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -144,9 +146,11 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
+		// Held before its impl becomes a primitive: a primitive member is read as its value, not as the node.
+		const node = _api.math;
 		wrapper.____slothletInternal.impl = 42;
 		try {
-			expect(_api.math.__type).toBe("number");
+			expect(node.__type).toBe("number");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -156,9 +160,11 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
+		// Held before its impl becomes a primitive: a primitive member is read as its value, not as the node.
+		const node = _api.math;
 		wrapper.____slothletInternal.impl = true;
 		try {
-			expect(_api.math.__type).toBe("boolean");
+			expect(node.__type).toBe("boolean");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -168,9 +174,11 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
+		// Held before its impl becomes a primitive: a primitive member is read as its value, not as the node.
+		const node = _api.math;
 		wrapper.____slothletInternal.impl = Symbol("test");
 		try {
-			expect(_api.math.__type).toBe("symbol");
+			expect(node.__type).toBe("symbol");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -180,9 +188,11 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
+		// Held before its impl becomes a primitive: a primitive member is read as its value, not as the node.
+		const node = _api.math;
 		wrapper.____slothletInternal.impl = 9007199254740991n;
 		try {
-			expect(_api.math.__type).toBe("bigint");
+			expect(node.__type).toBe("bigint");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}

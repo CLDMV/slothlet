@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-15T19:48:32-08:00 (1794800912)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,6 +101,10 @@ async function main() {
 		await testMainExport(tempDir);
 		console.log("✅ Main export validated");
 
+		console.log("\n4. Testing self's type for a function root and an object root...");
+		await testSelfRootTypes(tempDir);
+		console.log("✅ self types as the api root (callable for a function root only)");
+
 		console.log("\n🎉 All TypeScript definitions validated successfully!");
 		console.log(`✅ Tested ${testCount + 1} exports individually`);
 		console.log("✅ Ready for CI/production deployment");
@@ -172,6 +176,84 @@ export { moduleType, hasExports, exportCount };
 		console.error(tscError.stdout || tscError.stderr || tscError.message);
 		throw new Error(`TypeScript validation failed for ${moduleName}`, { cause: tscError });
 	}
+}
+
+/**
+ * Type-checks one generated api declaration with a file that uses `self` and the host's `api` (#803).
+ * @internal
+ * @private
+ * @param {string} dir - Directory holding the generated `api.d.ts`.
+ * @param {string} body - The checked file's statements.
+ * @returns {void}
+ * @throws {Error} If the check fails
+ */
+function checkSelfProgram(dir, body) {
+	const testFile = join(dir, "check.mts");
+	writeFileSync(
+		testFile,
+		`import { self } from "@cldmv/slothlet/runtime";\nimport slothlet from "@cldmv/slothlet";\nimport type {} from "./api.js";\n${body}\nexport {};\n`,
+		"utf8"
+	);
+	try {
+		execSync(
+			`npx tsc --noEmit --strict --allowJs --moduleResolution bundler --customConditions slothlet-dev --module esnext --target es2022 "${testFile}" "${join(dir, "api.d.ts")}"`,
+			{ stdio: "pipe", encoding: "utf8", cwd: process.cwd() }
+		);
+	} catch (tscError) {
+		console.error(`    ❌ ${dir} failed:`);
+		console.error(tscError.stdout || tscError.stderr || tscError.message);
+		throw new Error(`TypeScript validation failed for ${dir}`, { cause: tscError });
+	}
+}
+
+/**
+ * Tests that `self` (and the host's `api`) types as the api root (#803): callable with the root function's own
+ * parameters and result when the root file exports a function, and not callable for an object root.
+ * @internal
+ * @private
+ * @param {string} tempDir - Temporary directory path
+ * @async
+ * @returns {Promise<void>}
+ * @throws {Error} If a check fails
+ */
+async function testSelfRootTypes(tempDir) {
+	const { generateTypes } = await import("@cldmv/slothlet/typegen");
+	const fixtures = join(process.cwd(), "api_tests", "api_test_self_parity");
+
+	const fnDir = join(tempDir, "self-fnroot");
+	mkdirSync(fnDir, { recursive: true });
+	await generateTypes({ dir: join(fixtures, "fnroot"), output: join(fnDir, "api.d.ts"), interfaceName: "FnRootApi" });
+	checkSelfProgram(
+		fnDir,
+		[
+			"export function leaf(): number {",
+			"\tconst doubled: number = self(2);",
+			"\t// @ts-expect-error The root takes a number.",
+			'\tself("two");',
+			"\treturn doubled + self.math.add(1, 2);",
+			"}",
+			"export async function host(): Promise<number> {",
+			'\tconst api = await slothlet({ base: "./api" });',
+			"\treturn api(2);",
+			"}"
+		].join("\n")
+	);
+	console.log("   ✅ function root: self(2) is a number");
+
+	const objDir = join(tempDir, "self-objroot");
+	mkdirSync(objDir, { recursive: true });
+	await generateTypes({ dir: join(fixtures, "objroot"), output: join(objDir, "api.d.ts"), interfaceName: "ObjRootApi" });
+	checkSelfProgram(
+		objDir,
+		[
+			"export function leaf(): number {",
+			"\t// @ts-expect-error An object root is not callable.",
+			"\tself(2);",
+			"\treturn self.math.add(1, 2);",
+			"}"
+		].join("\n")
+	);
+	console.log("   ✅ object root: self is not callable");
 }
 
 /**

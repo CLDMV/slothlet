@@ -381,14 +381,17 @@ api.slothlet.hook.on("database.*:error", handler);
 
 ### Supported Pattern Syntax
 
-| Syntax        | Description                                | Example            |
-| ------------- | ------------------------------------------ | ------------------ |
-| `exact.path`  | Exact match                                | `"math.add"`       |
-| `namespace.*` | All functions in namespace                 | `"math.*"`         |
-| `*.funcName`  | Function name in any namespace             | `"*.add"`          |
-| `**`          | All functions                              | `"**"`             |
-| `{a,b,c}`     | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
-| `!pattern`    | Negation - matches anything except pattern | `"!internal.*"`    |
+| Syntax         | Description                                | Example            |
+| -------------- | ------------------------------------------ | ------------------ |
+| `exact.path`   | Exact match                                | `"math.add"`       |
+| `namespace.*`  | All functions in namespace                 | `"math.*"`         |
+| `*.funcName`   | Function name in any namespace             | `"*.add"`          |
+| `**`           | All functions                              | `"**"`             |
+| `namespace.**` | The namespace itself and everything below  | `"db.**"`          |
+| `{a,b,c}`      | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern`     | Negation - matches anything except pattern | `"!internal.*"`    |
+
+A `**` that is a whole segment matches any number of segments, none included, as in permission rules, routine names and `hidden` globs: `db.**` matches `db` itself (a callable folder's own function) as well as `db.query` and `db.pool.open`, `**.add` matches `add`, and `a.**.b` matches `a.b`. Several in a row say the same as one (`a.**.**` is `a.**`). A `*` is always exactly one segment.
 
 ### Pattern Examples
 
@@ -506,7 +509,7 @@ For around hooks, "runs first" means "outermost": the first around hook in this 
 
 ## Permissions and Pinning
 
-When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`, `"db.*:around"`), and `:hook` as the type matches any hook type on that path. An `around` hook is gated exactly like a `before` hook — it can rewrite the call and prevent it — so grant `:around` as deliberately. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state). A pinned `around` handler runs as its owner, but the rest of the pipeline its `next()` runs belongs to the intercepted call: the target still sees that call's own caller. Every handler is called as a plain function, with no `this`: it is never handed its own registration.
+When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`, `"db.*:around"`), and `:hook` as the type matches any hook type on that path. When several hook rules match, the most specific one decides: a specific type (`:before`) over `:hook`, then the pattern naming more literal segments (`db.write.**:before` over `db.**:before`), then the higher layer, then the last registered. Adding the rules in a different order never changes the outcome. An `around` hook is gated exactly like a `before` hook — it can rewrite the call and prevent it — so grant `:around` as deliberately. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state). A pinned `around` handler runs as its owner, but the rest of the pipeline its `next()` runs belongs to the intercepted call: the target still sees that call's own caller. Every handler is called as a plain function, with no `this`: it is never handed its own registration.
 
 A hook a module registered goes with the module: once the module is removed the hook no longer fires, with or without permissions, whoever is mounted at its old path or under its old moduleID since, and across a reload. Code the removed module kept cannot register a new one.
 

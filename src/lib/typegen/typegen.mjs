@@ -34,10 +34,15 @@
  * `predev` scripts) and ships the generated `.d.ts` alongside (or instead of)
  * the source. Slothlet does NOT auto-regenerate types at load time.
  */
-import path from "node:path";
+import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes as writeDeclarationFile } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { Arrays, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const path = Objects.freeze({ ...nodePath });
 
 /**
  * Generate a TypeScript declaration file (`.d.ts`) for a Slothlet API directory.
@@ -72,7 +77,7 @@ export async function generateTypes(options = {}) {
 	// Public API: callers may pass null / true / a primitive accidentally. JSDoc
 	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
 	// TypeError escape from `options.dir` dereference.
-	if (options === null || typeof options !== "object" || Array.isArray(options)) {
+	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
 			{

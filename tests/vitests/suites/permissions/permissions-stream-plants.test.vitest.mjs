@@ -26,7 +26,7 @@
  * compiles at run time (`eval`, `new Function`) belongs to no module and is refused either way.
  *
  * Files are told apart only under Node's own loader (vite transforms the modules it loads), so the fixture runs in a
- * child process: `api_tests/api_test_stream_plants/probe.mjs`.
+ * child process: `api_tests/api_test_stream_plants/__probe.mjs`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -34,7 +34,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stream_plants/probe.mjs");
+const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stream_plants/__probe.mjs");
 
 // The module's own functions, planted directly.
 const OWN_CODE = ["onwrite", "readableState", "events", "on", "writeCallback", "handle", "global"];

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T21:05:50-08:00 (1794287150)
+ *	@Last modified time: 2026-11-15T21:09:15-08:00 (1794805755)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,10 +32,29 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
+import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { DELIVERY_REASONS } from "#handlers/event-manager";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
+import { getLanguage, t, translate, internals as translationsInternals } from "@cldmv/slothlet/i18n";
 import {
-	TYPE_STATES,
+	Reflect,
+	Objects,
+	Arrays,
+	Functions,
+	Math,
+	NativeProxy,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	URL,
+	String,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
+const {
 	resolveWrapper,
-	isCallableValue,
 	runtime_selfModuleCeilings,
 	runtime_selfModuleReader,
 	runtime_selfRootView,
@@ -45,13 +64,25 @@ import {
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller,
-	isSlothletWrapped
-} from "#handlers/unified-wrapper";
-import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { runtime_codeWritersOnStack } from "#handlers/frame-placement";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
-import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
+	runtime_codeLabel,
+	runtime_inheritsBuiltin,
+	runtime_isLanguageNameDescriptor,
+	runtime_nodeBehind,
+	runtime_unwrapSelfView
+} = unifiedWrapperInternals("lib/builders/api_builder");
+const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
+const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
+const { initI18n, setLanguage, setLanguageAsync } = translationsInternals("lib/builders/api_builder");
+
+/** The key `util.inspect` reads a custom hook from (the platform shim gives the same one in a browser). */
+const INSPECT_KEY = Symbols.for("nodejs.util.inspect.custom");
+
+/**
+ * The inspect hooks the slothlet namespace put on its own objects.
+ * @type {WeakSet<Function>}
+ */
+const NAMESPACE_INSPECT_HOOKS = new WeakSet();
 
 /**
  * Root members the framework itself serves on the api, handed to module code as they are (#625).
@@ -190,7 +221,7 @@ function runtime_ownerModuleIDs(identity) {
  *   for an array whose first non-string element is at index `n`, or `typeof value` otherwise.
  */
 function describeScopeReceived(value) {
-	if (Array.isArray(value)) {
+	if (Arrays.isArray(value)) {
 		const badIndex = value.findIndex((entry) => typeof entry !== "string");
 		if (badIndex !== -1) {
 			return `array with non-string entry (${typeof value[badIndex]} at index ${badIndex})`;
@@ -213,7 +244,7 @@ function runtime_resolveAddFolder(slothlet, folderPath) {
 	const resolver = slothlet.helpers?.resolver;
 	if (!resolver || slothlet.envTarget === "browser") return folderPath;
 	const resolve = (entry) => (typeof entry === "string" && entry ? resolver.resolvePathFromCaller(entry) : entry);
-	return Array.isArray(folderPath) ? folderPath.map(resolve) : resolve(folderPath);
+	return Arrays.isArray(folderPath) ? folderPath.map(resolve) : resolve(folderPath);
 }
 
 /**
@@ -228,7 +259,7 @@ function runtime_resolveAddFolder(slothlet, folderPath) {
  */
 function runtime_buildAsNoModule(slothlet, build, folderPath) {
 	const contextManager = slothlet.contextManager;
-	const roots = (Array.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string" && root);
+	const roots = (Arrays.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string" && root);
 	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build, { slothlet, roots }) : build();
 }
 
@@ -288,59 +319,89 @@ function makeCopyOnWriteSelf(parentSelf) {
 		}
 		return real;
 	};
-	return markSlothletProxy(
-		new Proxy(
-			{},
-			{
-				get(_t, prop) {
-					return read(prop);
-				},
-				set(_t, prop, value) {
-					overlay.set(prop, value);
-					childViews.delete(prop);
-					return true;
-				},
-				has(_t, prop) {
-					return overlay.has(prop) || prop in parentSelf;
-				},
-				// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
-				// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
-				// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
-				deleteProperty(_t, prop) {
-					overlay.delete(prop);
-					childViews.delete(prop);
-					return true;
-				},
-				defineProperty(_t, prop, descriptor) {
-					if (!("value" in descriptor)) return false;
-					overlay.set(prop, descriptor.value);
-					childViews.delete(prop);
-					return true;
-				},
-				ownKeys() {
-					const keys = new Set(Reflect.ownKeys(parentSelf));
-					for (const k of overlay.keys()) keys.add(k);
-					return [...keys];
-				},
-				getOwnPropertyDescriptor(_t, prop) {
-					if (overlay.has(prop)) {
-						return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
-					}
-					const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
-					// Always configurable — the proxy target is an empty object, so a
-					// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
-					// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
-					if (!desc) return undefined;
-					return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
-				},
-				// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
-				// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
-				preventExtensions() {
-					return false;
-				}
+	// A function root's view is a function too (#803): called or constructed, it calls the root as `self` does outside
+	// the scope, and it reports the root's prototype. The target is a bound function, as the api root's own is.
+	const callable = typeof parentSelf === "function";
+	const callTraps = callable
+		? {
+				apply: (_t, thisArg, args) => Reflect.apply(parentSelf, thisArg, args),
+				construct: (_t, args) => Reflect.construct(parentSelf, args),
+				getPrototypeOf: () => Reflect.getPrototypeOf(parentSelf)
 			}
-		)
+		: {};
+	return markSlothletProxy(
+		new NativeProxy(copyOnWriteShell(callable ? function () {}.bind() : {}, parentSelf), {
+			...callTraps,
+			get(_t, prop) {
+				return read(prop);
+			},
+			set(_t, prop, value) {
+				overlay.set(prop, value);
+				childViews.delete(prop);
+				return true;
+			},
+			has(_t, prop) {
+				return overlay.has(prop) || prop in parentSelf;
+			},
+			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
+			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
+			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
+			deleteProperty(_t, prop) {
+				overlay.delete(prop);
+				childViews.delete(prop);
+				return true;
+			},
+			defineProperty(_t, prop, descriptor) {
+				if (!("value" in descriptor)) return false;
+				overlay.set(prop, descriptor.value);
+				childViews.delete(prop);
+				return true;
+			},
+			ownKeys() {
+				const keys = new Set(Reflect.ownKeys(parentSelf));
+				for (const k of overlay.keys()) keys.add(k);
+				return [...keys];
+			},
+			getOwnPropertyDescriptor(_t, prop) {
+				if (overlay.has(prop)) {
+					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+				}
+				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
+				// Always configurable — the proxy target is an empty object, so a
+				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
+				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
+				if (!desc) return undefined;
+				return "value" in desc ? { ...desc, value: read(prop), configurable: true } : { ...desc, configurable: true };
+			},
+			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
+			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
+			preventExtensions() {
+				return false;
+			}
+		})
 	);
+}
+
+/**
+ * The target of a scope's copy-on-write view of `self` (#803), holding the hook Node's `util.inspect` reads: Node shows a
+ * Proxy's target rather than what its traps report, so the hook hands it the `self` the view reads through, which shows
+ * what the reading code may read, as `self` shows outside the scope. What the scope wrote to its own overlay is not
+ * shown.
+ * @param {object|Function} shell - The empty target.
+ * @param {object} parentSelf - The `self` the view reads through.
+ * @returns {object|Function} The target.
+ * @private
+ */
+function copyOnWriteShell(shell, parentSelf) {
+	Objects.defineProperty(shell, INSPECT_KEY, {
+		value: function inspectScopeSelf() {
+			return parentSelf;
+		},
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+	return shell;
 }
 
 /**
@@ -356,15 +417,15 @@ function makeCopyOnWriteSelf(parentSelf) {
  * runtime_captureShell(async () => {}); // an arrow function
  */
 function runtime_captureShell(fn) {
-	if (Object.hasOwn(fn, "prototype")) return function slothlet_capturedFunction() {};
+	if (Objects.hasOwn(fn, "prototype")) return function slothlet_capturedFunction() {};
 	let constructible = true;
 	try {
 		// A construct trap answers without running or reading the function: `new` refuses a target that cannot be constructed.
-		new new Proxy(fn, { construct: () => ({}) })();
+		new new NativeProxy(fn, { construct: () => ({}) })();
 	} catch {
 		constructible = false;
 	}
-	if (constructible) return Function.prototype.bind.call(function slothlet_capturedFunction() {}, null);
+	if (constructible) return Functions.prototype.bind.call(function slothlet_capturedFunction() {}, null);
 	return () => {};
 }
 
@@ -407,7 +468,7 @@ export class ApiBuilder extends ComponentBase {
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_BUILD_FINAL_API_CALLED",
 			diagnostics: this.____config.diagnostics,
-			userApiKeys: Object.keys(userApi)
+			userApiKeys: Objects.keys(userApi)
 		});
 
 		// No clone needed - all exports are already instance-specific UnifiedWrapper proxies
@@ -427,8 +488,8 @@ export class ApiBuilder extends ComponentBase {
 		// discarding a user-exported shutdown/destroy function that was fresh-assigned by
 		// applyRootContributor's Object.assign() just before buildFinalAPI was called.
 		if (this.slothlet._ownBuiltins) {
-			for (const [key, ref] of Object.entries(this.slothlet._ownBuiltins)) {
-				if (ref && Object.prototype.hasOwnProperty.call(userApi, key) && userApi[key] === ref) {
+			for (const [key, ref] of Objects.entries(this.slothlet._ownBuiltins)) {
+				if (ref && Objects.prototype.hasOwnProperty.call(userApi, key) && userApi[key] === ref) {
 					try {
 						delete userApi[key];
 					} catch (_) {
@@ -452,7 +513,7 @@ export class ApiBuilder extends ComponentBase {
 		// never reach it, so a lazy one must not count toward the materialization total, or remaining
 		// never reaches 0 and materialize.wait() never resolves (#588). It is parked, not discarded, so a load
 		// that still reaches it (in the background, or at shutdown) parks the wrappers it makes too (#585 review).
-		for (const hook of Object.values(this.slothlet.userHooks)) {
+		for (const hook of Objects.values(this.slothlet.userHooks)) {
 			const hookWrapper = resolveWrapper(hook);
 			if (!hookWrapper) continue;
 			hookWrapper.___trackLazyLoad("park");
@@ -481,7 +542,7 @@ export class ApiBuilder extends ComponentBase {
 
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_SLOTHLET_NAMESPACE_CREATED",
-			namespaceKeys: Object.keys(slothletNamespace),
+			namespaceKeys: Objects.keys(slothletNamespace),
 			hasDiag: !!slothletNamespace.diag
 		});
 
@@ -497,14 +558,14 @@ export class ApiBuilder extends ComponentBase {
 
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_BUILT_INS_ATTACHED",
-			userApiKeys: Object.keys(userApi),
+			userApiKeys: Objects.keys(userApi),
 			hasSlothlet: !!userApi.slothlet,
 			hasDiag: !!userApi.slothlet?.diag
 		});
 
 		// Now create destroy with dynamic user hooks
 		const destroyWithApi = this.createDestroyFunction(userApi);
-		Object.defineProperty(userApi, "destroy", {
+		Objects.defineProperty(userApi, "destroy", {
 			value: destroyWithApi,
 			enumerable: true,
 			writable: false,
@@ -519,7 +580,7 @@ export class ApiBuilder extends ComponentBase {
 			destroy: destroyWithApi
 		};
 		// Module code reads these through `self` as views that run as the module (#625).
-		for (const [name, member] of Object.entries(this.slothlet._ownBuiltins)) runtime_registerFrameworkMember(member, this.slothlet, name);
+		for (const [name, member] of Objects.entries(this.slothlet._ownBuiltins)) runtime_registerFrameworkMember(member, this.slothlet, name);
 
 		return userApi;
 	}
@@ -605,7 +666,7 @@ export class ApiBuilder extends ComponentBase {
 				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
 				/* v8 ignore stop */
 				if (
-					!genuineWrappers.has(ceiling) ||
+					!trustedRootOwn.genuineWrappers.has(ceiling) ||
 					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
 				) {
 					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
@@ -818,14 +879,16 @@ export class ApiBuilder extends ComponentBase {
 			// reports it read-only, as the function does, and hands out the function's own prototype object.
 			for (const key of Reflect.ownKeys(underlying)) {
 				if (Reflect.getOwnPropertyDescriptor(underlying, key)?.configurable !== false) continue;
-				if (Object.hasOwn(shell, key) && key !== "prototype") continue;
+				if (Objects.hasOwn(shell, key) && key !== "prototype") continue;
 				try {
 					mirror(key);
 				} catch (error) {
-					if (!(error instanceof slothlet.SlothletError)) throw error;
+					// Only a refusal of slothlet's own is passed over.
+					const refusal = slothlet.SlothletError;
+					if (!(error instanceof refusal)) throw error;
 				}
 			}
-			const captured = new Proxy(shell, {
+			const captured = new NativeProxy(shell, {
 				apply(_target, thisArg, args) {
 					return asReader(() => Reflect.apply(value, thisArg, args));
 				},
@@ -978,12 +1041,26 @@ export class ApiBuilder extends ComponentBase {
 				return routeCache.get(routePath);
 			}
 
-			const proxy = new Proxy(value, {
+			const proxy = new NativeProxy(value, {
 				get(target, prop, receiver) {
 					if (typeof prop !== "string") {
 						const result = Reflect.get(target, prop, receiver);
+						// The namespace's own inspect hook, as it is: it shows whoever calls it only what that code may read.
+						if (prop === INSPECT_KEY && NAMESPACE_INSPECT_HOOKS.has(result)) return result;
 						return createInternalRouteProxy(result, routePath, seen);
 					}
+
+					// A name the object does not hold itself reads as in plain JS, as at an api node: undefined when nothing has it
+					// (serializers and Node 22/24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
+					// language's own prototypes give every object or function (`constructor`, `toString`) as it is.
+					const own = Reflect.getOwnPropertyDescriptor(target, prop);
+					if (!own) {
+						if (!Reflect.has(target, prop)) return undefined;
+						if (runtime_inheritsBuiltin(target, prop)) return Reflect.get(target, prop, receiver);
+					}
+					// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the
+					// function: consoles and formatters read them of every function they show.
+					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, own)) return own.value;
 
 					const childRoutePath = `${routePath}.${prop}`;
 					let deniedError = null;
@@ -1015,7 +1092,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Proxy invariants: for non-configurable, non-writable data props,
 					// the trap must return the exact underlying value.
-					const descriptor = Object.getOwnPropertyDescriptor(target, prop);
+					const descriptor = Objects.getOwnPropertyDescriptor(target, prop);
 					if (descriptor && "value" in descriptor && descriptor.configurable === false && descriptor.writable === false) {
 						return descriptor.value;
 					}
@@ -1032,10 +1109,22 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor;
 					}
 
+					// A function's own `name` and `length` are described without a check, as they are read (see get).
+					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, descriptor)) return descriptor;
+
 					const childRoutePath = `${routePath}.${prop}`;
 
 					if (isMetaProperty(prop)) {
-						enforceInternalPermission(childRoutePath);
+						try {
+							enforceInternalPermission(childRoutePath);
+						} catch (error) {
+							// A function's own `prototype` is fixed (non-configurable), so a listing has to report it: it is
+							// described with its value withheld, as the invariants allow for a writable member, and a read of it
+							// stays refused. Any other refused member is refused as before.
+							if (error?.code !== "PERMISSION_DENIED" || descriptor.configurable || !("value" in descriptor) || !descriptor.writable)
+								throw error;
+							return { ...descriptor, value: undefined };
+						}
 						return descriptor;
 					}
 
@@ -1152,8 +1241,42 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.preventExtensions(target);
 				},
 
+				// The members listed are the ones the reader is given, as `Object.keys` of a plain object lists what reading it
+				// gives: a member whose read or description would be refused is left out, so listing the namespace, spreading it
+				// or taking its entries never throws. A member the target fixes (non-configurable, or any of a closed target) is
+				// listed whatever the reader may, as a Proxy has to.
 				ownKeys(target) {
-					return Reflect.ownKeys(target);
+					const keys = Reflect.ownKeys(target);
+					if (!Reflect.isExtensible(target)) return keys;
+					return keys.filter((prop) => {
+						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+						if (!descriptor?.configurable) return true;
+						// A member named like a function's own (`slothlet.caller`, `lockCaller.caller`) is described only to a reader
+						// that may read it (see getOwnPropertyDescriptor), so it is listed only to that reader.
+						if (isMetaProperty(prop)) {
+							try {
+								enforceInternalPermission(`${routePath}.${prop}`);
+								return true;
+							} catch (error) {
+								if (error?.code !== "PERMISSION_DENIED") throw error;
+								return false;
+							}
+						}
+						// The inspect hook is slothlet's, not a member of the namespace.
+						if (prop === INSPECT_KEY) return !NAMESPACE_INSPECT_HOOKS.has(descriptor.value);
+						if (typeof prop !== "string") return true;
+						const childRoutePath = `${routePath}.${prop}`;
+						try {
+							enforceInternalPermission(childRoutePath);
+							return true;
+						} catch (error) {
+							if (error?.code !== "PERMISSION_DENIED") throw error;
+						}
+						// Denied, yet reached through it: a namespace an allow rule on a member below it opens, which the `get` and
+						// `getOwnPropertyDescriptor` traps both hand out.
+						const value = "value" in descriptor ? descriptor.value : undefined;
+						return value !== null && typeof value === "object" && canTraverseInternalNamespace(childRoutePath);
+					});
 				},
 
 				apply(target, thisArg, argArray) {
@@ -1170,6 +1293,133 @@ export class ApiBuilder extends ComponentBase {
 			routeCache.set(routePath, markSlothletProxy(proxy));
 			routeProxyTargets.set(proxy, value);
 			return proxy;
+		};
+
+		/**
+		 * The namespace as the route proxies hand it out, set once it is built: what an inspect hook reads through.
+		 * @type {object|null}
+		 */
+		let namespaceRoutes = null;
+
+		/**
+		 * Objects in the namespace that are not this namespace's own and never take its hook: the ones the host handed
+		 * slothlet (`reference`, `context`) and the one every instance shares (`types`). They are still shown inside it.
+		 * @type {Set<object>}
+		 */
+		const notHooked = new Set([slothlet.reference, slothlet.context, TYPE_STATES].filter((value) => value && typeof value === "object"));
+
+		/**
+		 * What `util.inspect` shows for a label: the text as it is, as it shows `[Function: name]` or `[Getter]`.
+		 * @param {string} text - The text.
+		 * @returns {object} The label.
+		 */
+		const inspectLabel = (text) => Objects.freeze(Objects.create(null, { [INSPECT_KEY]: { value: () => text } }));
+
+		/**
+		 * A namespace object as `util.inspect` shows it to the code inspecting it now: the members that code lists, each
+		 * read through the route proxy as it reads it, a function and an accessor by their form (nothing is run), and a
+		 * nested object the same way to the depth asked for. A plain copy, so `util.inspect` formats no route proxy and no
+		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 22/24 one level of it only).
+		 * @param {object} view - The route proxy over `raw`, as the reader reaches it.
+		 * @param {object} raw - The namespace object.
+		 * @param {string} routePath - Its route (`slothlet.env`).
+		 * @param {number|null} depth - Levels still to show; null for all.
+		 * @param {Map<object, object>} made - The copies made so far, so a cycle shows as one.
+		 * @returns {object} The copy.
+		 */
+		const namespaceShown = (view, raw, routePath, depth, made) => {
+			const shown = Reflect.getPrototypeOf(raw) === null ? Objects.create(null) : {};
+			made.set(raw, shown);
+			// A frozen object (the environment snapshot) lists every member, so listing it is refused once a rule denies one
+			// of them: its names are then taken from the object itself, and each is still read through the route proxy.
+			let keys;
+			try {
+				keys = Objects.keys(view);
+			} catch (error) {
+				if (error?.code !== "PERMISSION_DENIED") throw error;
+				keys = Objects.keys(raw);
+			}
+			for (const key of keys) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
+				/* v8 ignore next -- a key the route proxy lists is one of the object's own */
+				if (!descriptor) continue;
+				const childRoutePath = `${routePath}.${key}`;
+				try {
+					if (!("value" in descriptor)) {
+						enforceInternalPermission(childRoutePath);
+						shown[key] = inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+						continue;
+					}
+					const value = view[key];
+					const held = descriptor.value;
+					if (typeof held === "function") shown[key] = inspectLabel(runtime_codeLabel(held));
+					else if (held === null || typeof held !== "object") shown[key] = value;
+					else if (made.has(held)) shown[key] = made.get(held);
+					else if (depth === null || depth > 0)
+						shown[key] = namespaceShown(value, held, childRoutePath, depth === null ? null : depth - 1, made);
+					else shown[key] = inspectLabel(Arrays.isArray(held) ? "[Array]" : "[Object]");
+				} catch (error) {
+					if (error?.code !== "PERMISSION_DENIED") throw error;
+				}
+			}
+			return shown;
+		};
+
+		/**
+		 * Give a namespace object the `util.inspect` hook that shows it as {@link namespaceShown} does, to whoever inspects
+		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 22/24), so
+		 * without it a module would be shown members it may not read, or Node 22/24 would list the next proxy itself.
+		 * @param {object} raw - The namespace object.
+		 * @param {string} routePath - Its route.
+		 * @returns {void}
+		 */
+		const defineNamespaceInspect = (raw, routePath) => {
+			const hook = function slothlet_namespaceInspect(depth) {
+				if (typeof depth === "number" && depth < 0) return inspectLabel("[Object]");
+				let view = namespaceRoutes;
+				try {
+					for (const key of routePath.split(".").slice(1)) view = view[key];
+				} catch (error) {
+					if (error?.code !== "PERMISSION_DENIED") throw error;
+					return {};
+				}
+				return namespaceShown(view, raw, routePath, typeof depth === "number" ? depth : null, new Map());
+			};
+			NAMESPACE_INSPECT_HOOKS.add(hook);
+			Reflect.defineProperty(raw, INSPECT_KEY, { value: hook, writable: false, enumerable: false, configurable: true });
+		};
+
+		/**
+		 * Give every object of slothlet's own in the namespace its inspect hook (see {@link defineNamespaceInspect}).
+		 * @param {object} raw - A namespace object.
+		 * @param {string} routePath - Its route.
+		 * @returns {void}
+		 */
+		const hookNamespace = (raw, routePath) => {
+			if (raw === null || typeof raw !== "object" || notHooked.has(raw) || !Reflect.isExtensible(raw)) return;
+			if (Reflect.getOwnPropertyDescriptor(raw, INSPECT_KEY)) return;
+			const prototype = Reflect.getPrototypeOf(raw);
+			if (prototype !== null && prototype !== Reflect.getPrototypeOf({})) return;
+			defineNamespaceInspect(raw, routePath);
+			for (const key of Reflect.ownKeys(raw)) {
+				if (typeof key !== "string") continue;
+				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
+				if ("value" in descriptor) hookNamespace(descriptor.value, `${routePath}.${key}`);
+			}
+		};
+
+		/**
+		 * The environment snapshot as the namespace holds it: a frozen copy carrying the inspect hook, which the frozen
+		 * snapshot cannot take.
+		 * @param {object|null} snapshot - The instance's snapshot.
+		 * @returns {object|null} The copy.
+		 */
+		const inspectableSnapshot = (snapshot) => {
+			if (!snapshot) return snapshot;
+			const copy = Objects.create(Reflect.getPrototypeOf(snapshot));
+			for (const key of Reflect.ownKeys(snapshot)) Reflect.defineProperty(copy, key, Reflect.getOwnPropertyDescriptor(snapshot, key));
+			defineNamespaceInspect(copy, "slothlet.env");
+			return Objects.freeze(copy);
 		};
 
 		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
@@ -1296,7 +1546,7 @@ export class ApiBuilder extends ComponentBase {
 							}
 							// Strip the locked options so the override does not take effect.
 							effectiveOptions = {};
-							for (const key of Object.keys(options)) {
+							for (const key of Objects.keys(options)) {
 								if (!LOCKED_ADD_OPTIONS.includes(key)) effectiveOptions[key] = options[key];
 							}
 						}
@@ -1447,11 +1697,11 @@ export class ApiBuilder extends ComponentBase {
 					// wrong-shaped bag gets a named error rather than a raw TypeError from the first
 					// property read.
 					const normalizedOptions = options == null ? {} : options;
-					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+					if (typeof normalizedOptions !== "object" || Arrays.isArray(normalizedOptions)) {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "options",
 							expected: "object with optional boolean details/includePrivate",
-							received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+							received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
 							validationError: true
 						});
 					}
@@ -1552,10 +1802,13 @@ export class ApiBuilder extends ComponentBase {
 							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
 							if (seen.has(node)) continue;
 							seen.add(node);
-							if (typeof node._materialize === "function" && node.__materialized === false) {
-								await node._materialize();
+							// Settling is slothlet's own bookkeeping: the node's state is read from its wrapper, not through the
+							// caller's view, where a `__`-named marker would be held to the caller's rules (#816).
+							const raw = resolveWrapper(runtime_nodeBehind(runtime_unwrapSelfView(node)));
+							if (raw && raw.____slothletInternal.state.materialized === false) {
+								await raw._materialize();
 							}
-							const childKeys = new Set(Object.keys(node));
+							const childKeys = new Set(Objects.keys(node));
 							// Read after the materialize await: that is what registers this node's children,
 							// and a concurrent remove() may have deleted the record set entirely (the
 							// post-settle re-check below turns that into the named error).
@@ -2142,7 +2395,7 @@ export class ApiBuilder extends ComponentBase {
 						instanceID: slothlet.instanceID,
 						managerType,
 						instancesMapSize: slothlet.contextManager.instances.size,
-						instancesMapKeys: Array.from(slothlet.contextManager.instances.keys()),
+						instancesMapKeys: Arrays.from(slothlet.contextManager.instances.keys()),
 						baseContext: slothlet.context
 					};
 
@@ -2504,7 +2757,7 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers ? Objects.keys(slothlet.handlers).join(", ") : "undefined",
 							validationError: true
 						});
 					}
@@ -2564,12 +2817,12 @@ export class ApiBuilder extends ComponentBase {
 						ancestors.add(source);
 						try {
 							const normalized = {};
-							for (const [key, nestedValue] of Object.entries(source)) {
+							for (const [key, nestedValue] of Objects.entries(source)) {
 								const fullKey = prefix ? `${prefix}.${key}` : key;
 								validateGlobalMetadataKeyPath(fullKey);
-								const nestedProto = nestedValue && typeof nestedValue === "object" ? Object.getPrototypeOf(nestedValue) : null;
-								const isPlainNested = nestedProto === Object.prototype || nestedProto === null;
-								if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue) && isPlainNested) {
+								const nestedProto = nestedValue && typeof nestedValue === "object" ? Objects.getPrototypeOf(nestedValue) : null;
+								const isPlainNested = nestedProto === Objects.prototype || nestedProto === null;
+								if (nestedValue && typeof nestedValue === "object" && !Arrays.isArray(nestedValue) && isPlainNested) {
 									normalized[key] = normalizeGlobalMetadataObject(nestedValue, fullKey, ancestors);
 									continue;
 								}
@@ -2581,10 +2834,10 @@ export class ApiBuilder extends ComponentBase {
 						}
 					};
 
-					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
+					if (keyOrObj && typeof keyOrObj === "object" && !Arrays.isArray(keyOrObj)) {
 						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
 						slothlet.handlers.permissionManager.assertGlobalMetadataWrite(caller);
-						for (const [key, nestedValue] of Object.entries(normalizedMetadata)) {
+						for (const [key, nestedValue] of Objects.entries(normalizedMetadata)) {
 							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
 						}
 						return;
@@ -2633,7 +2886,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
-								? Object.keys(slothlet.handlers).join(", ")
+								? Objects.keys(slothlet.handlers).join(", ")
 								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
 									/* v8 ignore next */
 									"undefined",
@@ -2710,7 +2963,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
-								? Object.keys(slothlet.handlers).join(", ")
+								? Objects.keys(slothlet.handlers).join(", ")
 								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
 									/* v8 ignore next */
 									"undefined",
@@ -2824,7 +3077,7 @@ export class ApiBuilder extends ComponentBase {
 				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers ? Objects.keys(slothlet.handlers).join(", ") : "undefined",
 							validationError: true
 						});
 					}
@@ -2984,23 +3237,6 @@ export class ApiBuilder extends ComponentBase {
 			 * // Inside a module leaf, reports that module's own path:
 			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
 			 */
-			/**
-			 * Whether a value is one of slothlet's own wrappers: a value slothlet made and hands out in place of a
-			 * module's or the host's, whether a Proxy (an api node, a view, a version dispatcher, a class-instance
-			 * wrapper, a stand-in) or a stand-in that is not one (a module's async or generator function, generator,
-			 * or promise, a frozen copy of a frozen value handed from one module to another, a callable node's own
-			 * `valueOf`). A Proxy wrapped around one of slothlet's is not slothlet's. Answered from slothlet's own
-			 * registries: no trap of the value runs, and replacing `WeakMap` or `WeakSet` methods afterwards changes
-			 * no answer. Code that copies values between modules can let slothlet's own wrappers through and still
-			 * refuse every other Proxy. Allowed to modules by a built-in rule: it reveals nothing about any module.
-			 * @param {*} value - The value to ask about.
-			 * @returns {boolean} True only for one of slothlet's own wrappers.
-			 * @example
-			 * api.slothlet.wrapped(api.math); // true
-			 * api.slothlet.wrapped(new Proxy({}, {})); // false
-			 */
-			wrapped: (value) => isSlothletWrapped(value),
-
 			caller: () => {
 				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
 				// `queueMicrotask`, so a DIFFERENT instance's active flow (a nested slothlet() boot, or a
@@ -3196,7 +3432,7 @@ export class ApiBuilder extends ComponentBase {
 									ownerModuleID,
 									ruleId,
 									layer: ruleLayer,
-									timestamp: Date.now()
+									timestamp: slothlet.clock.now()
 								});
 							}
 							return ruleId;
@@ -3230,7 +3466,7 @@ export class ApiBuilder extends ComponentBase {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
-									timestamp: Date.now()
+									timestamp: slothlet.clock.now()
 								});
 							}
 							return result;
@@ -3270,7 +3506,7 @@ export class ApiBuilder extends ComponentBase {
 			 * api.slothlet.env.NODE_ENV    // => "production"
 			 * api.slothlet.env.PORT        // => undefined (not captured)
 			 */
-			env: slothlet.envSnapshot,
+			env: inspectableSnapshot(slothlet.envSnapshot),
 
 			/**
 			 * Version management API for versioned API paths.
@@ -3436,7 +3672,7 @@ export class ApiBuilder extends ComponentBase {
 							ownerModuleID,
 							ruleId,
 							layer,
-							timestamp: Date.now()
+							timestamp: slothlet.clock.now()
 						});
 					}
 
@@ -3487,7 +3723,7 @@ export class ApiBuilder extends ComponentBase {
 							type: "removePermissionRule",
 							ruleId,
 							callerModuleID,
-							timestamp: Date.now()
+							timestamp: slothlet.clock.now()
 						});
 					}
 
@@ -3544,7 +3780,7 @@ export class ApiBuilder extends ComponentBase {
 						// Code supplied to another module's call registers for both modules, and the call it runs
 						// inside owns a new name (#597).
 						const claimants = runtime_ownerModuleIDs(identity);
-						const ownerModuleID = Array.isArray(claimants) ? claimants[0] : claimants;
+						const ownerModuleID = Arrays.isArray(claimants) ? claimants[0] : claimants;
 						// A module's resolver runs AS that module: whatever it calls is attributed to the owner, not
 						// to the module whose call happened to trigger the resolve — under the call it was registered
 						// inside as its ceiling, when that was another module's (#597). `slothlet.instanceID` is read at
@@ -3562,7 +3798,7 @@ export class ApiBuilder extends ComponentBase {
 								name,
 								definition,
 								ownerModuleID,
-								timestamp: Date.now()
+								timestamp: slothlet.clock.now()
 							});
 						}
 					},
@@ -3601,7 +3837,7 @@ export class ApiBuilder extends ComponentBase {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
-								timestamp: Date.now()
+								timestamp: slothlet.clock.now()
 							});
 						}
 						return result;
@@ -4029,14 +4265,20 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {Array|Object}
 				 */
 				describe: (showAll = false) => {
+					// Read through the bound api, as `self` reads the root: a member the reader may not read is left
+					// out and refused there, as at any node, and a file's primitive default export is its value.
+					const root = slothlet.boundApi ?? userApi;
 					if (showAll) {
 						// Return full API structure (like v2 eager mode). Module code gets its own views of the
 						// nodes, as it reads them through `self`, never the nodes themselves (#625).
 						const reader = runtime_selfModuleReader(slothlet);
-						if (!reader) return { ...userApi };
+						if (!reader) return { ...root };
 						const described = {};
-						for (const key of Reflect.ownKeys(userApi)) {
-							const value = userApi[key];
+						for (const key of Reflect.ownKeys(root)) {
+							// A key the root lists but does not describe to the reader (the root function's own `prototype`
+							// to a reader that may not call the root) is not handed over, as a read of it is refused.
+							if (Reflect.getOwnPropertyDescriptor(root, key) === undefined) continue;
+							const value = root[key];
 							if (typeof key !== "string") described[key] = value;
 							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
 							else described[key] = runtime_selfView(value, reader);
@@ -4044,7 +4286,7 @@ export class ApiBuilder extends ComponentBase {
 						return described;
 					}
 					// Return top-level keys (like v2)
-					return Reflect.ownKeys(userApi);
+					return Reflect.ownKeys(root);
 				},
 
 				/**
@@ -4275,14 +4517,16 @@ export class ApiBuilder extends ComponentBase {
 		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
 		// Configurable (still read-only) so the view a module reads `self.slothlet` through can hand it
 		// over wrapped, as it does every other member: kept and called later, it runs as that module (#625).
-		Object.defineProperty(namespace.lockCaller, "caller", {
+		Objects.defineProperty(namespace.lockCaller, "caller", {
 			value: lockCallerCaller,
 			enumerable: true,
 			writable: false,
 			configurable: true
 		});
 
-		return createInternalRouteProxy(namespace, "slothlet");
+		hookNamespace(namespace, "slothlet");
+		namespaceRoutes = createInternalRouteProxy(namespace, "slothlet");
+		return namespaceRoutes;
 	}
 
 	/**
@@ -4429,13 +4673,13 @@ export class ApiBuilder extends ComponentBase {
 				// PROTECT_SENTINEL); `owners` binds a key to a named owner (a caller apiPath). Owner-locking
 				// is declared ONLY via scope()/run() options — never via run()'s positional args, whose 3rd+
 				// arguments are forwarded to the callback.
-				if (protect !== undefined && (!Array.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
+				if (protect !== undefined && (!Arrays.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
 					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: describeScopeReceived(protect) }, null, {
 						validationError: true
 					});
 				}
 				if (owners !== undefined) {
-					if (typeof owners !== "object" || owners === null || Array.isArray(owners)) {
+					if (typeof owners !== "object" || owners === null || Arrays.isArray(owners)) {
 						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: describeScopeReceived(owners) }, null, {
 							validationError: true
 						});
@@ -4444,7 +4688,7 @@ export class ApiBuilder extends ComponentBase {
 					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
 					// incorrect ownership matching (or a TypeError for a non-coercible value like a Symbol),
 					// so reject it up front rather than let it surface far from the actual mistake.
-					for (const [key, owner] of Object.entries(owners)) {
+					for (const [key, owner] of Objects.entries(owners)) {
 						if (typeof owner !== "string" || owner.length === 0) {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: `owners.${key}`,
@@ -4473,15 +4717,15 @@ export class ApiBuilder extends ComponentBase {
 					const base = parentOwners ?? null;
 					let child = base;
 					const claim = (key, owner) => {
-						const existing = child && Object.prototype.hasOwnProperty.call(child, key) ? child[key] : undefined;
+						const existing = child && Objects.prototype.hasOwnProperty.call(child, key) ? child[key] : undefined;
 						if (existing !== undefined && existing !== owner) {
 							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
 						}
-						if (child === base) child = base ? Object.assign(Object.create(null), base) : Object.create(null);
+						if (child === base) child = base ? Objects.assign(Objects.create(null), base) : Objects.create(null);
 						child[key] = owner;
 					};
-					if (Array.isArray(protect)) for (const k of protect) claim(k, PROTECT_SENTINEL);
-					if (owners && typeof owners === "object") for (const [k, o] of Object.entries(owners)) claim(k, o);
+					if (Arrays.isArray(protect)) for (const k of protect) claim(k, trustedRootOwn.PROTECT_SENTINEL);
+					if (owners && typeof owners === "object") for (const [k, o] of Objects.entries(owners)) claim(k, o);
 					return child;
 				};
 
@@ -4541,7 +4785,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4575,8 +4819,8 @@ export class ApiBuilder extends ComponentBase {
 					// is the trusted base store and which carries no module caller) stays trusted. A
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
-					if (currentStore[TRUSTED_ROOT] === true) {
-						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 					}
 
 					// Register child instance
@@ -4643,7 +4887,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create temporary child instance
-					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 					const childStore = {
 						instanceID: childInstanceID,
@@ -4677,8 +4921,8 @@ export class ApiBuilder extends ComponentBase {
 					// is the trusted base store and which carries no module caller) stays trusted. A
 					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
 					// as an inter-module call regardless of this marker.
-					if (currentStore[TRUSTED_ROOT] === true) {
-						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
+						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
 					}
 
 					// Register child instance
@@ -4780,7 +5024,7 @@ export class ApiBuilder extends ComponentBase {
 			const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
 
 			for (const obj of objectsToClear) {
-				const keys = Object.keys(obj);
+				const keys = Objects.keys(obj);
 				for (const key of keys) {
 					try {
 						delete obj[key];
@@ -4807,7 +5051,7 @@ export class ApiBuilder extends ComponentBase {
 	attachBuiltins(userApi, builtins) {
 		// Attach slothlet namespace
 		// Note: Using configurable: true for vitest compatibility (worker reuse)
-		Object.defineProperty(userApi, "slothlet", {
+		Objects.defineProperty(userApi, "slothlet", {
 			value: builtins.slothlet,
 			enumerable: true,
 			writable: false,
@@ -4815,7 +5059,7 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		// Attach root-level shutdown (convenience)
-		Object.defineProperty(userApi, "shutdown", {
+		Objects.defineProperty(userApi, "shutdown", {
 			value: builtins.shutdown,
 			enumerable: true,
 			writable: false,
@@ -4828,7 +5072,7 @@ export class ApiBuilder extends ComponentBase {
 		// Kept as a fallback for any future caller that pre-builds the destroy fn.
 		/* v8 ignore start */
 		if (builtins.destroy !== null) {
-			Object.defineProperty(userApi, "destroy", {
+			Objects.defineProperty(userApi, "destroy", {
 				value: builtins.destroy,
 				enumerable: true,
 				writable: false,

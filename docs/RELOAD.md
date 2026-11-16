@@ -84,6 +84,8 @@ await api.slothlet.api.add("", "./extra-root");
 await api.slothlet.api.add(null, "./extra-root");
 ```
 
+An `add()` of a module that was removed before loads its files from disk again, so edits made in between are picked up (see [ESM / CJS Cache Busting](#esm--cjs-cache-busting)).
+
 ### Synthetic / in-memory leaves (no filesystem)
 
 `add()` also accepts inline content in place of a path — useful in browser mode, tests, or when composing behavior programmatically. The value flows through the same flatten + wrap pipeline a file would, so `self` / `context` / hooks / permissions apply identically, in both eager and lazy mode.
@@ -103,6 +105,13 @@ await api.tools.ping(); // "pong"
 // that happen to share an option name. The 2nd arg is never scanned for options.
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
 await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
+
+// A default function with named exports → the function at the apiPath, the named exports as its members
+await api.slothlet.api.add("calc", {
+	exports: { default: (n) => n * 2, half: (n) => n / 2 }
+});
+await api.calc(4); // 8
+await api.calc.half(4); // 2
 
 // Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
 // (here a custom moduleID), exactly as if passed third. `exports` must be present.
@@ -167,11 +176,11 @@ await api.slothlet.api.remove(pathOrModuleID);
 await api.slothlet.api.remove(moduleID, apiPath); // scoped: only this module's nodes under apiPath
 ```
 
-| Form               | Example                     | Behavior                                                                                                                                     |
-| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node                           |
-| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                       |
-| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched |
+| Form               | Example                     | Behavior                                                                                                                                                                                                                                                                                                              |
+| ------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node. When another module also holds the path itself (a later add replaced it), only the path's current owner comes off, as with `remove(moduleID, apiPath)`, and the path reverts to the earlier owner |
+| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                                                                                                                                                                                                |
+| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched                                                                                                                                                                          |
 
 ```javascript
 // Remove a namespace by path (whole subtree)
@@ -186,9 +195,13 @@ await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
 await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api.shop.b intact
 ```
 
+A path removed whole is gone for every module that held something under it: a later `add()` at that path is then its only owner, so removing that add removes the path again rather than bringing back what the first removal took.
+
 The scoped `remove(moduleID, apiPath)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `apiPath` with `INVALID_ARGUMENT`.
 
 Removing a module emits `impl:removed` lifecycle events for each affected path, triggers metadata cleanup for those paths, and cleans up the wrapper state.
+
+Adding the module again after a removal loads its files from disk afresh, edits included, and their top level runs again (see [ESM / CJS Cache Busting](#esm--cjs-cache-busting)).
 
 ---
 
@@ -205,6 +218,8 @@ await api.slothlet.api.reload(pathOrModuleID, options);
 | Base module | `null` / `undefined` / `""` / `"."` | Reloads all initially-loaded `dir` modules                 |
 | API path    | `"plugins"`                         | Reloads all caches that contribute to or include that path |
 | moduleID    | `"core-plugins"`                    | Reloads that single cache entry                            |
+
+An add of a single file reloads by its moduleID or its path like any other: the file is read again and its exports stay where the add mounted them.
 
 **Resolution order for path-based reload:**
 
@@ -337,6 +352,8 @@ Slothlet forces fresh module loading on every rebuild rather than serving cached
 **ESM**: A reload timestamp (`&_reload=…`) is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file. Bare package imports are not reloaded.
 
 **Helpers** (relative / `file:` modules a leaf imports or requires) are one copy per instance, not per reload. A partial reload — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)`, or a reload by moduleID — re-imports the reloaded leaves against the instance's existing helper copy, so helper state is preserved and reloaded leaves keep sharing it with the rest of the instance. A full reload, `api.slothlet.reload()`, rotates the instance ID and gives every leaf one fresh helper copy. **Edits to helper code need a full reload** (a changed TypeScript helper is the exception: it is re-transpiled to a new cache file). See [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
+
+**Adding a removed module again** works the same way. An `add()` under a moduleID that was added before and has since been removed (no mount of it is left) imports its files with a reload stamp, so it runs the code on disk now and each file's top level runs again; without it Node's cache would serve the import of the removed module. A first `add()` is a plain import, and an `add()` under a moduleID that still has a live mount (the same module mounted at a second path) is not imported again, so a live module never gets a second copy. The same rules as a partial reload apply to helpers: the instance's helper copy is kept. A path added again under a new moduleID is imported under that moduleID's own URL, so it is fresh as well.
 
 This means `reload()` is suitable as a real hot-reload trigger in development workflows - simply editing a source file and calling `reload()` is sufficient.
 
@@ -473,6 +490,7 @@ A held reference keeps the `typeof` it had when it was taken (a proxy's callabil
 - A throwing `mode: "shutdown"` routine or root `shutdown` hook does not stop the restart; the old instance is still torn down, the new one is built, and the error is re-thrown once `restarted` has been emitted.
 - If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained.
 - `restart()` throws `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`.
+- `restart()`, like `api.slothlet.reload()`, throws `API_ROOT_CLOSED` when the host has sealed, frozen or closed the api root to new members (`Object.seal(api)` and the like): a closed root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes. `api.slothlet.api.add()` of a new member at the root is refused the same way; members below the root still reload and take adds.
 
 ### Permissions and the seal
 

@@ -104,6 +104,15 @@ export class ComponentBase {
      */
     get ____config(): object;
     /**
+     * The clock of the instance: where components read the time and schedule their deferred work (the `clock` option).
+     * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
+     *   for an instance (a test's stand-in) that has none.
+     * @internal
+     * @example
+     * const stamp = this.clock.now();
+     */
+    get clock(): import("@cldmv/slothlet/helpers/clock").Clock;
+    /**
      * Get Slothlet instance ID.
      * @returns {string} Slothlet instance identifier.
      * @package

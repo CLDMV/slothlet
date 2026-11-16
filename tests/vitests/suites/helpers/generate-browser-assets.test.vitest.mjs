@@ -41,6 +41,14 @@ import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 const API_DIR = "api_tests/api_test_browser";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
+/**
+ * What slothlet's own files resolve through an importmap: its top-level `imports` and the `scopes` that map
+ * slothlet's own specifiers for them.
+ * @param {{imports: Record<string,string>, scopes?: Record<string, Record<string,string>>}} importmap - The importmap.
+ * @returns {Record<string,string>} The specifiers slothlet's own files resolve, by specifier.
+ */
+const ownResolution = (importmap) => Object.assign({}, importmap.imports, ...Object.values(importmap.scopes ?? {}));
+
 describe("generateBrowserAssets (#123)", () => {
 	it("returns both the API manifest and slothlet's own importmap", async () => {
 		const { manifest, importmap } = await generateBrowserAssets(API_DIR);
@@ -52,7 +60,7 @@ describe("generateBrowserAssets (#123)", () => {
 
 		// Importmap covers slothlet's own modules.
 		expect(importmap.imports["@cldmv/slothlet"]).toBeDefined();
-		expect(importmap.imports["@cldmv/slothlet/helpers/config"]).toBeDefined();
+		expect(ownResolution(importmap)["@cldmv/slothlet/helpers/config"]).toBeDefined();
 		// Every entry is a real module/locale URL.
 		for (const url of Object.values(importmap.imports)) {
 			expect(url.endsWith(".mjs") || url.endsWith(".json")).toBe(true);
@@ -81,9 +89,9 @@ describe("generateBrowserAssets (#123)", () => {
 
 	it("includes every shipped i18n locale", async () => {
 		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/" });
-		const locales = Object.keys(importmap.imports).filter((k) => k.startsWith("@cldmv/slothlet/i18n/language/"));
+		const locales = Object.keys(ownResolution(importmap)).filter((k) => k.startsWith("@cldmv/slothlet/i18n/language/"));
 		expect(locales.length).toBeGreaterThanOrEqual(10);
-		expect(importmap.imports["@cldmv/slothlet/i18n/language/en-us.json"]).toMatch(/en-us\.json$/);
+		expect(ownResolution(importmap)["@cldmv/slothlet/i18n/language/en-us.json"]).toMatch(/en-us\.json$/);
 	});
 
 	it("throws when slothletBase is provided but not a string", async () => {
@@ -105,7 +113,7 @@ describe("generateImportMap (#123)", () => {
 	it("maps every public module export — flat and per-file wildcard — so no browser endpoint 404s (#137)", async () => {
 		const { readFileSync, readdirSync } = await import("node:fs");
 		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
-		const { imports } = await generateImportMap("/");
+		const imports = ownResolution(await generateImportMap("/"));
 
 		// (a) Every flat (non-wildcard) module export resolves — including the bare runtime aggregator,
 		// which slothlet's internals never import directly. The JSON schema export is tooling-only (not a
@@ -147,7 +155,7 @@ describe("generateImportMap (#123)", () => {
 	it("maps the internal-only `imports` field (#handlers/* #factories/*) so the browser resolves slothlet's private specifiers (H1)", async () => {
 		const { readFileSync } = await import("node:fs");
 		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
-		const { imports } = await generateImportMap("/");
+		const imports = ownResolution(await generateImportMap("/"));
 
 		// The package `imports` field carries `#handlers/*` / `#factories/*`. Browsers accept
 		// `#`-prefixed importmap keys, so every internal module must appear keyed by its literal
@@ -157,6 +165,33 @@ describe("generateImportMap (#123)", () => {
 		expect(hashKeys.length).toBeGreaterThan(0);
 		expect(imports["#handlers/context-async"]).toMatch(/\.mjs$/);
 		expect(imports["#factories/context"]).toMatch(/\.mjs$/);
+	});
+
+	it("maps slothlet's own specifiers for slothlet's own files alone, and the main entry and the runtime for every script", async () => {
+		const { imports, scopes } = await generateImportMap("/");
+		expect(Object.keys(imports).sort()).toEqual(
+			[
+				"@cldmv/slothlet",
+				"@cldmv/slothlet/helpers/manifest-resolver",
+				"@cldmv/slothlet/runtime",
+				"@cldmv/slothlet/runtime/async",
+				"@cldmv/slothlet/runtime/live"
+			]
+				.concat(Object.keys(imports).filter((k) => k.startsWith("@cldmv/slothlet-i18n/")))
+				.sort()
+		);
+		// Every scope is one of slothlet's code folders or entry files, served under the base.
+		expect(Object.keys(scopes).length).toBeGreaterThan(0);
+		for (const prefix of Object.keys(scopes)) expect(prefix).toMatch(/^\/(?:(?:src|dist)\/|index\.[cm]js$)/);
+		// What a scope maps resolves only for those files: none of it is in the page-wide `imports`.
+		for (const scope of Object.values(scopes)) {
+			expect(scope["@cldmv/slothlet/helpers/instance-imports"]).toMatch(/\.mjs$/);
+			expect(scope["#handlers/context-async"]).toMatch(/\.mjs$/);
+			for (const spec of Object.keys(scope)) expect(imports[spec]).toBeUndefined();
+		}
+		// The files slothlet's own entries live in are all inside a scope, so they resolve slothlet's other specifiers.
+		for (const url of Object.values(imports).filter((u) => !u.includes("slothlet-i18n")))
+			expect(Object.keys(scopes).some((prefix) => (prefix.endsWith("/") ? url.startsWith(prefix) : url === prefix))).toBe(true);
 	});
 });
 
@@ -478,7 +513,7 @@ describe("exports packaging (#209)", () => {
 	// generated importmap can never carry a URL that 404s by construction.
 	it("every slothlet importmap URL maps to a file that exists on disk", async () => {
 		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/pkg/" });
-		const entries = Object.entries(importmap.imports).filter(([, url]) => url.startsWith("/pkg/"));
+		const entries = Object.entries(ownResolution(importmap)).filter(([, url]) => url.startsWith("/pkg/"));
 		expect(entries.length).toBeGreaterThan(0);
 		for (const [spec, url] of entries) {
 			const rel = url.slice("/pkg/".length);

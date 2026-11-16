@@ -135,6 +135,50 @@ function ensureDevEnvFlags() {
 }
 
 /**
+ * Api paths whose contents the tool never prints, relative to the api root. `slothlet.env` is the process
+ * environment: printing it writes every environment variable (a CI job's included) to the output and, through
+ * the structures test's failure message, to the test log (#759). The node is shown as present, its contents not.
+ * @type {Set<string>}
+ * @internal
+ */
+const WITHHELD_PATHS = new Set(["slothlet.env"]);
+
+/**
+ * Whether a displayed path (the api folder's name, then the api path) names a node whose contents are withheld.
+ * @param {string} displayPath - The path as the structure display builds it, e.g. `api_test.slothlet.env`.
+ * @returns {boolean} True for a withheld node.
+ * @internal
+ */
+function isWithheldDisplayPath(displayPath) {
+	const dot = displayPath.indexOf(".");
+	return dot !== -1 && WITHHELD_PATHS.has(displayPath.slice(dot + 1));
+}
+
+/**
+ * The api as the tool prints it with `util.inspect`: the root's members as they are, each withheld path's contents
+ * replaced by a marker. `util.inspect(api)` shows the root's members (`slothlet.env` included) as the host reads them,
+ * so the printed api is built from them rather than the api itself.
+ * @param {object|Function} api - The api.
+ * @returns {object} What the tool prints.
+ * @internal
+ */
+function printableApi(api) {
+	const withheld = { [util.inspect.custom]: () => "[withheld]" };
+	const shown = { ...api };
+	for (const withheldPath of WITHHELD_PATHS) {
+		const parts = withheldPath.split(".");
+		let holder = shown;
+		for (const part of parts.slice(0, -1)) {
+			if (holder[part] === null || typeof holder[part] !== "object") break;
+			holder = holder[part] = { ...holder[part] };
+		}
+		const last = parts[parts.length - 1];
+		if (Object.hasOwn(holder, last)) holder[last] = withheld;
+	}
+	return shown;
+}
+
+/**
  * Display the structure of an object or function recursively.
  * @param {any} obj - Object to inspect
  * @param {string} [path=""] - Current path for display
@@ -189,7 +233,8 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 					const value = obj[prop];
 					const newPath = path ? `${path}.${prop}` : prop;
 					results.push(`${indent}  ${chalk.yellow(prop)}:`);
-					results.push(...inspectApiStructure(value, newPath, depth + 2, maxDepth, visited));
+					if (isWithheldDisplayPath(newPath)) results.push(`${indent}    ${chalk.gray("[contents not shown]")}`);
+					else results.push(...inspectApiStructure(value, newPath, depth + 2, maxDepth, visited));
 				} catch (_) {
 					results.push(`${indent}  ${chalk.yellow(prop)}: ${chalk.red("[error accessing]")}`);
 				}
@@ -221,7 +266,9 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 
 					results.push(`${indent}${chalk.yellow(key)}: ${typeInfo}`);
 
-					if (depth < maxDepth) {
+					if (isWithheldDisplayPath(newPath)) {
+						results.push(`${indent}  ${chalk.gray("[contents not shown]")}`);
+					} else if (depth < maxDepth) {
 						results.push(...inspectApiStructure(value, newPath, depth + 1, maxDepth, visited));
 					}
 				} catch (_) {
@@ -355,7 +402,7 @@ async function inspectApi(apiName, options = {}) {
 			// console.log(api.utilities.helpers);
 			// process.exit(0);
 			const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-			console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+			console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
 			}
@@ -363,7 +410,7 @@ async function inspectApi(apiName, options = {}) {
 		}
 
 		const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-		console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+		console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 
 		// Display basic info
 		console.log(chalk.bold("API Type:"), typeof api);
@@ -502,10 +549,13 @@ function isCallableNode(value) {
  * @param {number} depth - Current depth.
  * @param {number} maxDepth - Depth past which a node is reported as `max-depth`.
  * @param {Set<unknown>} [ancestors] - Nodes on the current path, to report cycles.
+ * @param {string} [apiPath] - The node's api path (`""` for the root), to withhold the nodes {@link WITHHELD_PATHS} names.
  * @returns {object} The node's shape.
  * @internal
  */
-function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
+function describeApiShape(value, depth, maxDepth, ancestors = new Set(), apiPath = "") {
+	// A withheld node keeps its type and nothing else, as the structures test blanks a volatile value (#759).
+	if (WITHHELD_PATHS.has(apiPath)) return { type: value === null ? "null" : typeof value, withheld: true };
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
 		// JSON writes NaN and both infinities as null and -0 as 0, so they are kept as strings: two apis
 		// differing only in them would otherwise print the same shape (#585 review).
@@ -529,7 +579,7 @@ function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
 	const members = {};
 	for (const key of Object.keys(value).sort()) {
 		try {
-			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors);
+			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors, apiPath ? `${apiPath}.${key}` : key);
 		} catch (error) {
 			members[key] = { type: "error", message: error?.message };
 		}

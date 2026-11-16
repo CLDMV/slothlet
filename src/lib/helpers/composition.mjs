@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:57:08-08:00 (1794185828)
+ *	@Last modified time: 2026-11-13T21:48:02-08:00 (1794635282)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,6 +45,8 @@
  * write to the value would.
  */
 import { util } from "@cldmv/slothlet/helpers/platform";
+import { Reflect, Objects, Arrays, Functions, NativeProxy, Map, Set, WeakMap, Number } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Whether a property key is an array index, the keys an array's `length` follows.
@@ -67,6 +69,13 @@ function isArrayIndex(key) {
  * @private
  */
 const LAYERS = new WeakMap();
+
+/**
+ * The plain object each copy {@link copyForComposition} made was copied from (see {@link copySourceOf}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const COPY_SOURCES = new WeakMap();
 
 /**
  * Recognizes an api node: a slothlet wrapper proxy, which a layer hands back as it is rather than
@@ -135,7 +144,7 @@ export function layerHeldKeys(layer) {
 const BOUND_ORIGINALS = new WeakMap();
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
-const weakMapHas = Function.prototype.call.bind(WeakMap.prototype.has);
+const weakMapHas = Functions.prototype.call.bind(WeakMap.prototype.has);
 
 /**
  * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
@@ -204,7 +213,7 @@ export function layerUnderlying(layer) {
  * @example
  * setApiNodeCheck((value) => proxyRegistry.has(value));
  */
-export function setApiNodeCheck(check) {
+function setApiNodeCheck(check) {
 	isApiNode = check;
 }
 
@@ -216,9 +225,9 @@ export function setApiNodeCheck(check) {
  * @private
  */
 function hasOwnClass(value) {
-	if (value === null || typeof value !== "object" || Array.isArray(value) || util.types.isProxy(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto !== null && proto !== Object.prototype;
+	if (value === null || typeof value !== "object" || Arrays.isArray(value) || util.types.isProxy(value)) return false;
+	const proto = Objects.getPrototypeOf(value);
+	return proto !== null && proto !== Objects.prototype;
 }
 
 /**
@@ -280,7 +289,7 @@ function layerOver(underlying, members = [], hidden = []) {
 	const added = new Map();
 	const removed = new Set(hidden);
 	const bound = new Map();
-	const isArray = Array.isArray(underlying);
+	const isArray = Arrays.isArray(underlying);
 	const isCallable = typeof underlying === "function";
 	const forwards = (key) => !added.has(key) && !removed.has(key);
 	// A method runs on the value itself, which is the receiver its private fields and internal slots
@@ -292,7 +301,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		if (typeof value !== "function" || isApiNode(value)) return value;
 		const cached = bound.get(key);
 		if (cached?.original === value) return cached.fn;
-		const fn = new Proxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
+		const fn = new NativeProxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
 		bound.set(key, { original: value, fn });
 		BOUND_ORIGINALS.set(fn, value);
 		return fn;
@@ -320,7 +329,7 @@ function layerOver(underlying, members = [], hidden = []) {
 		return true;
 	};
 	for (const [key, descriptor] of members) hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
-	const layer = new Proxy(shell, {
+	const layer = new NativeProxy(shell, {
 		get(_shell, key, receiver) {
 			if (!added.has(key)) return forwards(key) ? read(key) : undefined;
 			const member = added.get(key);
@@ -443,9 +452,9 @@ function layerOver(underlying, members = [], hidden = []) {
  */
 function copyArray(value) {
 	const copy = [];
-	const { length, ...members } = Object.getOwnPropertyDescriptors(value);
-	Object.defineProperties(copy, members);
-	Object.defineProperty(copy, "length", length);
+	const { length, ...members } = Objects.getOwnPropertyDescriptors(value);
+	Objects.defineProperties(copy, members);
+	Objects.defineProperty(copy, "length", length);
 	return copy;
 }
 
@@ -460,9 +469,9 @@ function copyArray(value) {
 function runtime_holdsMember(value, key) {
 	// A Proxy's getPrototypeOf trap can lead the walk back to a value it already passed; it stops there.
 	const seen = new Set();
-	for (let current = value; current !== null && !seen.has(current); current = Object.getPrototypeOf(current)) {
+	for (let current = value; current !== null && !seen.has(current); current = Objects.getPrototypeOf(current)) {
 		seen.add(current);
-		if (Object.getOwnPropertyDescriptor(current, key)) return true;
+		if (Objects.getOwnPropertyDescriptor(current, key)) return true;
 	}
 	return false;
 }
@@ -499,19 +508,35 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (typeof value === "function") return addsMembers ? layerOver(value) : value;
 	// An instance of an Array subclass may hold private fields no copy reproduces: it is kept as itself,
 	// as a class instance is (#585 review).
-	if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) return addsMembers ? layerOver(value) : value;
-	if (Array.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
+	if (Arrays.isArray(value) && Objects.getPrototypeOf(value) !== Arrays.prototype) return addsMembers ? layerOver(value) : value;
+	if (Arrays.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	// A browser cannot tell a Proxy from the object it fronts, so the check above misses one there. A callable
 	// `then` that no own or inherited member holds can only come from a trap: such a value is layered, as a
 	// Proxy is in Node, so it keeps answering `then` and is refused as a thenable like it would be when awaited.
 	if (!runtime_holdsMember(value, "then") && typeof value.then === "function") return layerOver(value);
-	const descriptors = Object.getOwnPropertyDescriptors(value);
+	const descriptors = Objects.getOwnPropertyDescriptors(value);
 	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
 	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
 	// the value's descriptors, so a member the value would refuse to delete or redefine is refused too.
-	if (addsMembers) for (const descriptor of Object.values(descriptors)) descriptor.configurable = true;
-	return Object.create(Object.getPrototypeOf(value), descriptors);
+	if (addsMembers) for (const descriptor of Objects.values(descriptors)) descriptor.configurable = true;
+	const copy = Objects.create(Objects.getPrototypeOf(value), descriptors);
+	COPY_SOURCES.set(copy, value);
+	return copy;
+}
+
+/**
+ * The object a copy {@link copyForComposition} made was copied from, so a node built from the copy can find the
+ * module's own object behind it (a copy of a copy leads there in two steps).
+ * @param {unknown} copy - A value.
+ * @returns {object|undefined} The object it was copied from, or undefined for anything that is no such copy.
+ * @package
+ *
+ * @example
+ * copySourceOf(copyForComposition(mod.config)) === mod.config; // true
+ */
+export function copySourceOf(copy) {
+	return copy !== null && typeof copy === "object" ? COPY_SOURCES.get(copy) : undefined;
 }
 
 /**
@@ -554,3 +579,48 @@ export function relayer(layered, members) {
 		prior?.removed ?? []
 	);
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/handlers/unified-wrapper"])) throw ownBindingsRefusal("lib/helpers/composition", import.meta.url);
+	return { setApiNodeCheck };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setApiNodeCheck} */
+const guarded_setApiNodeCheck = guardInternal(setApiNodeCheck, "setApiNodeCheck", import.meta.url);
+export { guarded_setApiNodeCheck as setApiNodeCheck };

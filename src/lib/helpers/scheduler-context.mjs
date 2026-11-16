@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,9 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { Reflect, Objects } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.
@@ -77,12 +79,12 @@ function runtime_carryOwnExtras(wrapper, original) {
 		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
-		const descriptor = Object.getOwnPropertyDescriptor(original, key);
+		const descriptor = Objects.getOwnPropertyDescriptor(original, key);
 		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
 		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
 		// stays an accessor, and a non-enumerable key stays non-enumerable.
-		Object.defineProperty(wrapper, key, descriptor);
+		Objects.defineProperty(wrapper, key, descriptor);
 	}
 }
 
@@ -126,9 +128,10 @@ function runtime_patchScheduler(host, name) {
  * @returns {void}
  * @public
  */
-export function enableSchedulerPatching() {
+function enableSchedulerPatching() {
 	if (isPatchingEnabled) return;
 
+	// The current globals: the patch installs over whatever the host has there now, and restores it.
 	runtime_patchScheduler(globalThis, "setTimeout");
 	runtime_patchScheduler(globalThis, "setInterval");
 	runtime_patchScheduler(globalThis, "setImmediate");
@@ -154,7 +157,7 @@ export function enableSchedulerPatching() {
  * @returns {void}
  * @public
  */
-export function disableSchedulerPatching() {
+function disableSchedulerPatching() {
 	if (!isPatchingEnabled) return;
 
 	for (const { host, name, layer, wrapper } of patched) {
@@ -165,3 +168,50 @@ export function disableSchedulerPatching() {
 	patched.length = 0;
 	isPatchingEnabled = false;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/scheduler-context", import.meta.url);
+	return { disableSchedulerPatching, enableSchedulerPatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enableSchedulerPatching} */
+const guarded_enableSchedulerPatching = guardInternal(enableSchedulerPatching, "enableSchedulerPatching", import.meta.url);
+/** @type {typeof disableSchedulerPatching} */
+const guarded_disableSchedulerPatching = guardInternal(disableSchedulerPatching, "disableSchedulerPatching", import.meta.url);
+export { guarded_enableSchedulerPatching as enableSchedulerPatching, guarded_disableSchedulerPatching as disableSchedulerPatching };

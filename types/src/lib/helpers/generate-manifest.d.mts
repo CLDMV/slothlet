@@ -76,8 +76,8 @@ export function generateManifest(dir: string): Promise<{
  *   node_modules location (slothlet installed as a dependency, node_modules served at the web
  *   root). Override with a CDN URL, an Electron protocol path, or `"/"` when the package is served
  *   at the web root.
- * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
- *   The API manifest and slothlet's own browser importmap.
+ * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string>, scopes: Object<string, Object<string,string>> } }>}
+ *   The API manifest and slothlet's own browser importmap (see {@link generateImportMap} for its `scopes`).
  *
  * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *
@@ -105,6 +105,11 @@ export function generateBrowserAssets(apiDir: string, options?: {
         imports: {
             [x: string]: string;
         };
+        scopes: {
+            [x: string]: {
+                [x: string]: string;
+            };
+        };
     };
 }>;
 /**
@@ -119,16 +124,26 @@ export function generateBrowserAssets(apiDir: string, options?: {
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
  * the build process — then rebased onto `slothletBase` (where the package is served).
  *
+ * Slothlet's own files are slothlet's: `imports` maps only what any script of the page may import (the main entry,
+ * the runtime and the manifest resolver), and every other specifier of slothlet's is mapped under `scopes`, for
+ * slothlet's own files alone (its code folders and entry files under `slothletBase`). An api file, or any other
+ * script, importing one of them by its specifier fails to resolve it. Inline the whole object, `scopes` included.
+ *
  * @param {string} [slothletBase="/node_modules/@cldmv/slothlet/"] - URL/path prefix where the
  *   `@cldmv/slothlet` package is served in the browser. Defaults to the conventional node_modules
  *   location; override with a CDN URL, an Electron protocol path, or `"/"` when the package is
  *   served at the web root.
- * @returns {Promise<{ imports: Object<string,string> }>} An importmap object ready to inline as
- *   `<script type="importmap">`.
+ * @returns {Promise<{ imports: Object<string,string>, scopes: Object<string, Object<string,string>> }>} An importmap
+ *   object ready to inline as `<script type="importmap">`.
  */
 export function generateImportMap(slothletBase?: string): Promise<{
     imports: {
         [x: string]: string;
+    };
+    scopes: {
+        [x: string]: {
+            [x: string]: string;
+        };
     };
 }>;
 /**

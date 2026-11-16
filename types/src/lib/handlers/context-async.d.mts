@@ -1,11 +1,42 @@
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/**
  * AsyncLocalStorage-based context manager for async runtime
  * Uses ALS for full context isolation across async operations
  * @public
  */
 export class AsyncContextManager {
-    als: any;
+    store: any;
+    dormant: DormantStore | null;
     instances: Map<any, any>;
+    /**
+     * The manager's `AsyncLocalStorage`: the store once it has been made, a stand-in before that which answers that no
+     * store is active and makes the store when one is run (see {@link AsyncContextManager#openStore}). Null in a browser.
+     * @type {AsyncLocalStorage|DormantStore|null}
+     * @public
+     */
+    public get als(): any | DormantStore | null;
+    /**
+     * Make the manager's `AsyncLocalStorage`, once: called when an instance selects the async runtime, before any of its
+     * files load. The scripts of Node's own that run a store's callback are sampled first (see `sampleStoreScripts` in
+     * `handlers/frame-placement`), so they are known before slothlet's store runs anything.
+     * @returns {AsyncLocalStorage|null} The store; null in a browser.
+     * @internal
+     */
+    openStore(): any | null;
+    /**
+     * Whether a flow a call starts carries that call however long it runs: an async function a module started and let
+     * go of runs in the store of the call that started it.
+     * @type {boolean}
+     * @internal
+     */
+    get carriesFlowCaller(): boolean;
     /**
      * Register the EventEmitter context checker
      * Must be called AFTER EventEmitter patching is enabled
@@ -16,10 +47,11 @@ export class AsyncContextManager {
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
+     * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: Object): Object;
+    public initialize(instanceID: string, config?: Object, clock?: import("@cldmv/slothlet/helpers/clock").Clock): Object;
     /**
      * Run function with instance context active
      * @param {string} instanceID - Instance to run in context of
@@ -107,6 +139,42 @@ export class AsyncContextManager {
      * @internal
      */
     runUnattributed(instanceID: string, fn: () => any): any;
+    /**
+     * Run the load of a module file inside a store that names the file's module (#726), so what the file starts while
+     * it loads (a timer, a listener, an async resource, an `AsyncLocalStorage.snapshot()`) carries the module as its
+     * caller when it runs later, instead of running in no store, where it would count as the host's. The module's node
+     * does not exist while the file loads and can change with a reload, so the store's identity is read from the load
+     * whenever it is asked for. While there is none the store has no `self`, and its code is refused as code no one
+     * accounts for.
+     *
+     * @param {{instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} loading - The load (see createModuleLoad).
+     * @param {function(): *} fn - What loads the file.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runModuleLoad(loading: {
+        instanceID: () => (string | null);
+        wrapper: () => (object | null);
+        record: () => (object | null);
+    }, fn: () => any): any;
+    /**
+     * Whether no flow of an instance is active: no store at all, or another instance's. Code running then was started
+     * by nothing slothlet entered, so only its frames can say whose it is.
+     * @param {string} instanceID - The instance.
+     * @returns {boolean} True when no store of the instance is active.
+     * @internal
+     */
+    isAmbient(instanceID: string): boolean;
+    /**
+     * The instance whose flow is running: the one the active store belongs to (a call, a hook, a `run()` or `scope()`
+     * callback, a file's load), or null when no store is active. Code of a file that carries no instance tag (a
+     * CommonJS file two instances load) is that instance's while its flow runs.
+     * @returns {string|null} The instance's id.
+     * @internal
+     * @example
+     * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+     */
+    runningInstanceID(): string | null;
     /**
      * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
      * instance that has shut down made reaches no instance's api and no module's identity.
@@ -215,9 +283,53 @@ export class AsyncContextManager {
     public getDiagnostics(): Object;
     #private;
 }
+export { guarded_asyncContextManager as asyncContextManager };
+/**
+ * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
+ * run outside every store runs as it is, and running a store (`run`, `enterWith`) makes the real one first. Reading the
+ * manager on the live runtime (the runtime dispatcher asks it whether a store is active) therefore makes no store: on
+ * Node 22 one that has run switches async hooks on for the whole process.
+ * @private
+ */
+declare class DormantStore {
+    /**
+     * @param {AsyncContextManager} manager - The manager it stands in for.
+     */
+    constructor(manager: AsyncContextManager);
+    manager: AsyncContextManager;
+    /**
+     * @returns {undefined} No store is active before one has been made.
+     */
+    getStore(): undefined;
+    /**
+     * @param {*} store - The store.
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned.
+     */
+    run(store: any, fn: Function, ...args: any[]): any;
+    /**
+     * @param {*} store - The store.
+     * @returns {void}
+     */
+    enterWith(store: any): void;
+    /**
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned: no store is active, so it runs as it is.
+     */
+    exit(fn: Function, ...args: any[]): any;
+    /**
+     * Nothing to switch off before a store has been made.
+     * @returns {void}
+     */
+    disable(): void;
+}
+/** @type {typeof asyncContextManager} */
+declare const guarded_asyncContextManager: typeof asyncContextManager;
 /**
  * Singleton async context manager
  * @public
  */
-export const asyncContextManager: AsyncContextManager;
+declare const asyncContextManager: AsyncContextManager;
 //# sourceMappingURL=context-async.d.mts.map

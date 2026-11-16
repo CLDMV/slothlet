@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:36-07:00 (1792378296)
+ *	@Last modified time: 2026-11-15T18:55:18-08:00 (1794797718)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,11 +36,18 @@
  */
 
 // Import context managers
-import { asyncRuntime, liveRuntime } from "#factories/context";
-import { markSlothletProxy } from "#handlers/framework-internals";
-import { recordSharedExports } from "#handlers/shared-values";
+import { internals as contextInternals } from "#factories/context";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { internals as sharedValuesInternals } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
+import { Reflect, NativeProxy, Objects, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime");
+const { recordSharedExports } = sharedValuesInternals("lib/runtime/runtime");
+const { registerOwnModule, registerSelfForms, callableSelfOf, bindInstanceSelf, SELF_BIND_KEY } =
+	instanceImportsInternals("lib/runtime/runtime");
+const { asyncRuntime, liveRuntime } = contextInternals("lib/runtime/runtime");
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -57,6 +64,11 @@ function getCurrentRuntime() {
 	// live when a live instance has a stale currentInstanceID from a previous call.
 	const asyncCtx = asyncRuntime.tryGetContext();
 	if (asyncCtx) {
+		// A file's load runs in a store of its own. An instance on the live runtime which that file built and called is
+		// not that load: while one of its modules is executing, its own runtime answers.
+		if (asyncCtx.moduleLoad && liveRuntime.runningInstanceID() !== null && liveRuntime.getCallerIdentity()?.currentWrapper) {
+			return liveRuntimeModule;
+		}
 		return asyncRuntimeModule;
 	}
 
@@ -91,9 +103,124 @@ function getCurrentRuntime() {
 export class SlothletSelf {}
 
 /**
+ * The target behind `self`: an empty object, or an empty function for a callable `self`, holding only the hook Node's `util.inspect` reads, which shows a Proxy's
+ * target rather than what its traps report. The hook hands `util.inspect` the api `self` stands for in the running
+ * code's context, which shows what that code may read of it, as the api root shows (a member it may not read left
+ * out). Outside any context it shows an empty object.
+ * @param {object|Function} [shell={}] - The target to give the hook: an object, or a function for a callable `self`.
+ * @returns {object|Function} The target.
+ * @private
+ */
+function runtime_selfShell(shell = {}) {
+	Objects.defineProperty(shell, Symbols.for("nodejs.util.inspect.custom"), {
+		value: function inspectSelf() {
+			const ctx = getCurrentRuntime() === liveRuntimeModule ? liveRuntime.tryGetContext() : asyncRuntime.tryGetContext();
+			return ctx?.self ?? {};
+		},
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+	return shell;
+}
+
+/**
+ * Bind an instance's file's `self` to the instance's form, for this runtime file (#803, see `bindInstanceSelf` in
+ * `helpers/instance-imports`).
+ * @param {string} instanceID - The instance.
+ * @param {function(object): void} assign - Sets the binding.
+ * @returns {void}
+ * @private
+ */
+const bindHere = (instanceID, assign) => bindInstanceSelf(import.meta.url, instanceID, assign);
+
+/**
+ * The traps both forms of `self` share: each forwards to the active runtime's `self`.
+ * @type {ProxyHandler<object>}
+ * @private
+ */
+const selfTraps = {
+	get(_, prop) {
+		// The binder an instance's file is given its own `self` through (#803), answered whoever reads it.
+		if (prop === SELF_BIND_KEY) return bindHere;
+		const runtime = getCurrentRuntime();
+		return runtime.self[prop];
+	},
+	ownKeys() {
+		const runtime = getCurrentRuntime();
+		return Reflect.ownKeys(runtime.self);
+	},
+	has(_, prop) {
+		const runtime = getCurrentRuntime();
+		return prop in runtime.self;
+	},
+	getOwnPropertyDescriptor(_, prop) {
+		const runtime = getCurrentRuntime();
+		const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+		// If the property exists, return a descriptor that's always configurable
+		// to avoid proxy invariant violations (since the proxy target is an empty object)
+		if (desc) {
+			return { ...desc, configurable: true };
+		}
+		return undefined;
+	},
+	// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
+	// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
+	deleteProperty(_, prop) {
+		return Reflect.deleteProperty(getCurrentRuntime().self, prop);
+	},
+	defineProperty(_, prop, descriptor) {
+		return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
+	},
+	setPrototypeOf(_, proto) {
+		return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
+	},
+	preventExtensions() {
+		return Reflect.preventExtensions(getCurrentRuntime().self);
+	},
+	set(_, prop, value) {
+		// Forward to the active per-runtime self proxy. Without this trap, JS
+		// defaults to setting on the empty `{}` target — silently lost since
+		// `get` reads from the live runtime self, not the target.
+		const runtime = getCurrentRuntime();
+		runtime.self[prop] = value;
+		return true;
+	}
+};
+
+/**
+ * `self` for an api whose root is an object: an object target, as the api root's own is.
+ * @type {Proxy}
+ * @private
+ */
+const objectSelf = new NativeProxy(runtime_selfShell(), selfTraps);
+
+/**
+ * `self` for an api whose root is a function (#803): a call or construction goes to the active runtime's callable
+ * `self`, which holds it to the root's call rule.
+ * @type {Proxy}
+ * @private
+ */
+const callableSelf = new NativeProxy(runtime_selfShell(function () {}.bind()), {
+	...selfTraps,
+	apply(_, thisArg, args) {
+		return Reflect.apply(callableSelfOf(getCurrentRuntime()), thisArg, args);
+	},
+	construct(_, args) {
+		return Reflect.construct(callableSelfOf(getCurrentRuntime()), args);
+	},
+	getPrototypeOf() {
+		return Reflect.getPrototypeOf(callableSelfOf(getCurrentRuntime()));
+	}
+});
+
+/**
  * Live binding to the current API instance. Resolves to the running Slothlet proxy,
  * giving API modules access to all other API methods without import cycles.
  * Typed as {@link SlothletSelf}, which generated api types extend.
+ *
+ * Each instance's files get the form its api root takes, as the host's `api` does: an object for an object root, a
+ * function for a function root, which `self(...)` and `new self(...)` call under the root's call rule (#803).
  *
  * @memberof module:@cldmv/slothlet/runtime
  * @type {SlothletSelf}
@@ -102,55 +229,7 @@ export class SlothletSelf {}
  * // Inside an API function:
  * const result = await self.math.add(1, 2);
  */
-export const self = new Proxy(
-	{},
-	{
-		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.self[prop];
-		},
-		ownKeys() {
-			const runtime = getCurrentRuntime();
-			return Reflect.ownKeys(runtime.self);
-		},
-		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return prop in runtime.self;
-		},
-		getOwnPropertyDescriptor(_, prop) {
-			const runtime = getCurrentRuntime();
-			const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
-			// If the property exists, return a descriptor that's always configurable
-			// to avoid proxy invariant violations (since the proxy target is an empty object)
-			if (desc) {
-				return { ...desc, configurable: true };
-			}
-			return undefined;
-		},
-		// A change to `self` itself is the active runtime's `self`'s to make: it applies the rule a top-level
-		// `self.X = …` follows and never changes the object behind `self`, which every instance shares (#625).
-		deleteProperty(_, prop) {
-			return Reflect.deleteProperty(getCurrentRuntime().self, prop);
-		},
-		defineProperty(_, prop, descriptor) {
-			return Reflect.defineProperty(getCurrentRuntime().self, prop, descriptor);
-		},
-		setPrototypeOf(_, proto) {
-			return Reflect.setPrototypeOf(getCurrentRuntime().self, proto);
-		},
-		preventExtensions() {
-			return Reflect.preventExtensions(getCurrentRuntime().self);
-		},
-		set(_, prop, value) {
-			// Forward to the active per-runtime self proxy. Without this trap, JS
-			// defaults to setting on the empty `{}` target — silently lost since
-			// `get` reads from the live runtime self, not the target.
-			const runtime = getCurrentRuntime();
-			runtime.self[prop] = value;
-			return true;
-		}
-	}
-);
+export let self = objectSelf;
 
 /**
  * The current ambient context object. Seeded at instance startup via `config.context` and
@@ -167,7 +246,7 @@ export const self = new Proxy(
  * // context.run() overrides it only for the duration of that one call:
  * await api.slothlet.context.run({ userId: 42 }, myFn);
  */
-export const context = new Proxy(
+export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
@@ -204,23 +283,30 @@ export const context = new Proxy(
  * import { instanceID } from "@cldmv/slothlet/runtime";
  * console.log(instanceID); // e.g. "slothlet-1"
  */
-export const instanceID = new Proxy(
+export const instanceID = new NativeProxy(
 	{},
 	{
+		// Both runtimes export `instanceID` alike: read as the id inside a call, as nothing outside one (#764).
 		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? runtime.instanceID[prop] : undefined;
+			return getCurrentRuntime().instanceID[prop];
 		},
 		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.instanceID ? prop in runtime.instanceID : false;
+			return prop in getCurrentRuntime().instanceID;
 		}
 	}
 );
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);
+for (const proxy of [objectSelf, callableSelf, context, instanceID]) markSlothletProxy(proxy);
+
+// Each instance's files get the form of `self` its api root takes (#803).
+registerSelfForms(import.meta.url, runtimeNamespace, { object: objectSelf, callable: callableSelf }, (form) => {
+	self = form;
+});
 
 // The runtime is made by no module and shared by every instance: a module handing it out hands out the runtime itself
 // (#597).
 recordSharedExports(runtimeNamespace);
+
+// One runtime per process: a second loader asked for this file is given this module (#760).
+registerOwnModule(import.meta.url, runtimeNamespace);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T09:59:41-08:00 (1794160781)
+ *	@Last modified time: 2026-11-15T17:10:24-08:00 (1794791424)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,9 +54,42 @@
  * load check (the path a real consumer uses), not the coverage justification.
  */
 
+import {
+	Reflect,
+	Objects,
+	Functions,
+	JSON,
+	Map,
+	Set,
+	WeakMap,
+	WeakSet,
+	Promise,
+	Symbol,
+	Promises,
+	Symbols,
+	Boolean,
+	Date,
+	Errors,
+	Error,
+	Number,
+	RegExp,
+	String,
+	ArrayBuffer,
+	ArrayBuffers,
+	DataView,
+	SharedArrayBuffer,
+	BigInt,
+	setTimeout,
+	NativeProcess,
+	CryptoKey,
+	setImmediate,
+	MessageChannel
+} from "@cldmv/slothlet/helpers/intrinsics";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+
 // Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
 // browser run exercises that arm (the node run cannot — `process` is always present there).
-const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
+const isNode = typeof NativeProcess !== "undefined" && Boolean(NativeProcess?.versions?.node);
 
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
@@ -90,7 +123,7 @@ let AsyncResource = null;
 let createRequire = null;
 
 if (isNode) {
-	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promise.all([
+	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promises.all([
 		import("node:fs"),
 		import("node:fs/promises"),
 		import("node:path"),
@@ -100,25 +133,67 @@ if (isNode) {
 		import("node:async_hooks"),
 		import("node:module")
 	]);
-	fs = fsMod;
-	fsp = fspMod;
-	path = pathMod;
-	url = urlMod;
-	util = utilMod;
+	// Frozen copies of the namespaces, taken now: slothlet's files read their members when they run, and code that
+	// replaces `fs.readFileSync` or `path.join` on Node's module object later (and refreshes the namespaces with
+	// `module.syncBuiltinESMExports()`) does not reach them.
+	fs = Objects.freeze({ ...fsMod });
+	fsp = Objects.freeze({ ...fspMod });
+	path = Objects.freeze({ ...pathMod });
+	url = Objects.freeze({ ...urlMod });
+	// `util.types` is an object of its own on Node's module, and `util.inspect.custom` a member of the function: both
+	// taken now too. The `inspect` here calls Node's own. The copy of `util.types` is slothlet's own object, which only
+	// slothlet's files reach (tests stand in a browser's answers on it), so it is not frozen.
+	const nodeInspect = utilMod.inspect;
+	const inspect = function inspect(...args) {
+		return Reflect.apply(nodeInspect, undefined, args);
+	};
+	Objects.defineProperty(inspect, "custom", { value: nodeInspect.custom, enumerable: true });
+	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
 	({ createRequire } = moduleMod);
 	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
 	// What every generator object and every async generator object inherits from.
-	const GENERATOR_PROTOTYPES = [Object.getPrototypeOf(function* () {}).prototype, Object.getPrototypeOf(async function* () {}).prototype];
+	const GENERATOR_PROTOTYPES = [Objects.getPrototypeOf(function* () {}).prototype, Objects.getPrototypeOf(async function* () {}).prototype];
+	// What every generator function and every async generator function inherits from.
+	const GENERATOR_FUNCTION_PROTOTYPES = [Objects.getPrototypeOf(function* () {}), Objects.getPrototypeOf(async function* () {})];
+	// What every `Map` iterator and every `Set` iterator inherits from.
+	const MAP_ITERATOR = Objects.getPrototypeOf(new Map()[Symbol.iterator]());
+	const SET_ITERATOR = Objects.getPrototypeOf(new Set()[Symbol.iterator]());
+	/**
+	 * A brand check made by calling one of a kind's own methods on the value: the method reads only the internal data of
+	 * an object of its kind and throws a `TypeError` for anything else.
+	 * @param {Function} method - The method, taken now so replacing it later changes no answer.
+	 * @param {Array<*>} [args] - What to call it with.
+	 * @returns {function(*): boolean} The check.
+	 */
+	const brand =
+		(method, args = []) =>
+		(value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			try {
+				Reflect.apply(method, value, args);
+				return true;
+			} catch {
+				return false;
+			}
+		};
+	/** The getter of an accessor a kind's prototype holds. */
+	const getterOf = (prototype, name) => Objects.getOwnPropertyDescriptor(prototype, name).get;
+	const IS_REGEXP = brand(getterOf(RegExp.prototype, "source"));
+	const IS_ARRAY_BUFFER = brand(getterOf(ArrayBuffer.prototype, "byteLength"));
+	const IS_SHARED_ARRAY_BUFFER =
+		typeof SharedArrayBuffer === "function" ? brand(getterOf(SharedArrayBuffer.prototype, "byteLength")) : () => false;
+	const IS_DATA_VIEW = brand(getterOf(DataView.prototype, "byteLength"));
+	const BOXED_BRANDS = [Number, String, Boolean, Symbol, BigInt].map((kind) => brand(kind.prototype.valueOf));
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
 	// that always returns false only loses detection of *arbitrary user* proxies —
 	// a documented browser limitation, not a correctness bug for slothlet internals.
 	util = {
-		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
+		inspect: Objects.assign((value) => value, { custom: Symbols.for("nodejs.util.inspect.custom") }),
 		types: {
 			isProxy: () => false,
 			// A native promise of any realm (an iframe's), by its built-in tag: the browser stand-in for
@@ -128,7 +203,7 @@ if (isNode) {
 			isPromise: (value) => {
 				if (inheritsFrom(value, Promise)) return true;
 				try {
-					return Object.prototype.toString.call(value) === "[object Promise]";
+					return Objects.prototype.toString.call(value) === "[object Promise]";
 				} catch {
 					return false;
 				}
@@ -143,7 +218,34 @@ if (isNode) {
 			isGeneratorObject: (value) =>
 				value !== null &&
 				typeof value === "object" &&
-				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value))
+				GENERATOR_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, value)),
+			// Prototype check: the browser stand-in for Node's brand check of a generator function, an async one included.
+			isGeneratorFunction: (fn) =>
+				typeof fn === "function" && GENERATOR_FUNCTION_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, fn)),
+			// The rest are the engine's own brand checks, made by calling a method of the kind that reads nothing but the
+			// object's internal data and throws for any other object: none of a value's own code runs, and a Proxy never
+			// passes, as with Node's checks.
+			isMap: brand(Map.prototype.has, [undefined]),
+			isSet: brand(Set.prototype.has, [undefined]),
+			isWeakMap: brand(WeakMap.prototype.has, [undefined]),
+			isWeakSet: brand(WeakSet.prototype.has, [undefined]),
+			isDate: brand(Date.prototype.getTime),
+			isRegExp: (value) => value !== RegExp.prototype && IS_REGEXP(value),
+			isArrayBuffer: IS_ARRAY_BUFFER,
+			isSharedArrayBuffer: IS_SHARED_ARRAY_BUFFER,
+			isAnyArrayBuffer: (value) => IS_ARRAY_BUFFER(value) || IS_SHARED_ARRAY_BUFFER(value),
+			isArrayBufferView: (value) => ArrayBuffers.isView(value),
+			isDataView: IS_DATA_VIEW,
+			isTypedArray: (value) => ArrayBuffers.isView(value) && !IS_DATA_VIEW(value),
+			isBoxedPrimitive: (value) => value !== null && typeof value === "object" && BOXED_BRANDS.some((is) => is(value)),
+			// `Error.isError` where the engine has it; the prototype chain otherwise, which an object merely inheriting
+			// from `Error.prototype` passes too.
+			isNativeError: typeof Errors.isError === "function" ? (value) => Errors.isError(value) : (value) => inheritsFrom(value, Error),
+			isMapIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
+			isSetIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(SET_ITERATOR, value),
+			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
+			isKeyObject: () => false,
+			isCryptoKey: (value) => typeof CryptoKey === "function" && inheritsFrom(value, CryptoKey)
 		}
 	};
 }
@@ -219,35 +321,53 @@ async function loadJsonBrowser(ref) {
 }
 
 /**
+ * The macrotask schedulers of this host, as they were when slothlet loaded.
+ * @type {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}}
+ * @private
+ */
+const MACROTASK_HOSTS = Objects.freeze({ setImmediate, MessageChannel, setTimeout });
+
+/**
  * Run `fn` on a later macrotask, in any host.
  *
  * @description
  * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
  * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
  * macrotask primitive the host offers, in order:
- * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
- *   installed by `helpers/scheduler-context` is the one used;
+ * - `setImmediate` (Node);
  * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
  * - `setTimeout(fn, 0)` as the last resort.
  *
- * All three run `fn` only after the current call stack and every queued microtask have drained,
- * which is the guarantee callers rely on.
+ * The schedulers are the host's as they were when slothlet loaded, and `fn` is pinned to its caller as the
+ * context-carrying versions installed by `helpers/scheduler-context` pin a callback. All three run `fn` only after the
+ * current call stack and every queued microtask have drained, which is the guarantee callers rely on.
+ *
+ * An instance whose host gave it a `setTimeout` in the `clock` option (see `helpers/clock`) runs its deferred work on
+ * that timer instead, so a host faking timers drives it with its own clock.
  *
  * @param {Function} fn - Callback to run.
+ * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
+ *   schedulers to pick from: the host's own unless a test hands in others.
+ * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock.
  * @returns {void}
  * @internal
  *
  * @example
- * scheduleMacrotask(() => patchAfterAssignment());
+ * scheduleMacrotask(() => patchAfterAssignment(), undefined, this.clock);
  */
-function scheduleMacrotask(fn) {
-	const immediate = globalThis.setImmediate;
-	if (typeof immediate === "function") {
-		immediate(fn);
+function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS, clock = undefined) {
+	if (clock?.hostTimers) {
+		clock.setTimeout(pinToCurrentCaller(fn), 0);
 		return;
 	}
-	if (typeof globalThis.MessageChannel === "function") {
-		const channel = new globalThis.MessageChannel();
+	// Called detached: a browser's schedulers refuse any receiver but the global object.
+	const { setImmediate: immediate, MessageChannel: Channel, setTimeout: timeout } = hosts;
+	if (typeof immediate === "function") {
+		immediate(pinToCurrentCaller(fn));
+		return;
+	}
+	if (typeof Channel === "function") {
+		const channel = new Channel();
 		channel.port1.onmessage = () => {
 			// Closing the port releases it; in Node an open port would keep the event loop alive.
 			channel.port1.close();
@@ -256,7 +376,7 @@ function scheduleMacrotask(fn) {
 		channel.port2.postMessage(null);
 		return;
 	}
-	setTimeout(fn, 0);
+	timeout(pinToCurrentCaller(fn), 0);
 }
 
 /**
@@ -264,7 +384,7 @@ function scheduleMacrotask(fn) {
  * @type {Function}
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Function.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
 
 /**
  * The language's own `Reflect.apply`, taken when this file loads, before any module runs: a module replacing
@@ -290,6 +410,31 @@ function inheritsFrom(value, ctor) {
 	return REFLECT_APPLY(INTRINSIC_HAS_INSTANCE, ctor, [value]);
 }
 
+/**
+ * The folder, name and extension of a file's path, in any host.
+ *
+ * @description
+ * Node answers with `node:path` (`dirname`, `basename`, `extname`), so a Windows path splits on either separator. A
+ * browser has no `node:path`; there a file is named by a URL or a `/`-separated path, so the parts come from the
+ * string: the folder is everything before the last `/` (`.` for a bare name and `/` for a name right after a leading
+ * `/`, as `path.dirname` answers), the name everything after it, and the extension the name's last `.` onward. A
+ * name whose only dot is its first character has no extension, as `path.extname(".mjs")` answers.
+ *
+ * @param {string} filePath - A filesystem path (Node), or a URL or `/`-separated path (browser).
+ * @returns {{dir: string, name: string, ext: string}} The folder, the file's name with its extension, and the extension.
+ * @internal
+ *
+ * @example
+ * fileParts("https://example.com/api/calc.mjs"); // { dir: "https://example.com/api", name: "calc.mjs", ext: ".mjs" }
+ */
+function fileParts(filePath) {
+	if (isNode) return { dir: path.dirname(filePath), name: path.basename(filePath), ext: path.extname(filePath) };
+	const cut = filePath.lastIndexOf("/");
+	const name = filePath.slice(cut + 1);
+	const dot = name.lastIndexOf(".");
+	return { dir: cut < 0 ? "." : filePath.slice(0, cut) || "/", name, ext: dot > 0 ? name.slice(dot) : "" };
+}
+
 export {
 	isNode,
 	fs,
@@ -302,6 +447,7 @@ export {
 	AsyncResource,
 	createRequire,
 	loadJson,
+	fileParts,
 	scheduleMacrotask,
 	inheritsFrom
 };

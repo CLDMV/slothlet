@@ -1,11 +1,10 @@
 /**
- * Live binding to the current API (self-reference)
+ * Live binding to the current API (self-reference). In live mode, this directly references the active instance
+ * without AsyncLocalStorage. Each instance's files get the form its api root takes: an object for an object root, a
+ * function for a function root (#803). This file's own binding, which a file of no instance imports (a browser's
+ * leaves among them), is the callable form while every running instance has a function root.
  * @type {Proxy}
  * @public
- *
- * @description
- * A proxy that provides direct access to the current instance's API.
- * In live mode, this directly references the active instance without AsyncLocalStorage.
  *
  * @example
  * import { self } from "@cldmv/slothlet/runtime/live";
@@ -14,7 +13,7 @@
  *   return self.otherFunction();
  * }
  */
-export const self: ProxyConstructor;
+export let self: ProxyConstructor;
 /**
  * User-provided context object
  * @type {Proxy}
@@ -35,4 +34,22 @@ export const self: ProxyConstructor;
  * }
  */
 export const context: ProxyConstructor;
+/**
+ * Current instance ID
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides access to the current slothlet instance ID, as the async runtime's `instanceID` does: it
+ * reads as the id inside a call (`String(instanceID)`, `${instanceID}`), and every member reads as undefined outside
+ * one. Useful for debugging and tracking which instance is handling a request.
+ *
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function getInstanceInfo() {
+ *   return { instanceID: String(instanceID) };
+ * }
+ */
+export const instanceID: ProxyConstructor;
 //# sourceMappingURL=runtime-livebindings.d.mts.map

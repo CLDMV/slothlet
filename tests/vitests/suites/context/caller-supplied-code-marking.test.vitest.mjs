@@ -19,8 +19,8 @@
  * @description
  * A call is checked only when it is handed a receiver or an argument that can carry its caller's code: an
  * object or a function that is not one of slothlet's own api nodes. Deciding that must never run the value's
- * code, and a call that is not checked never reads the stack. The stack reads are counted through the
- * `prepareStackTrace` hook every capture sets and restores.
+ * code, and a call that is not checked never reads the stack. The stack reads are counted by slothlet's own
+ * count of the stacks it reads.
  *
  * @module tests/vitests/suites/context/caller-supplied-code-marking
  */
@@ -28,6 +28,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
+import { stackReadCount } from "@cldmv/slothlet/helpers/stack-read";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -43,30 +44,14 @@ function deepFreeze(value) {
 }
 
 /**
- * Count stack captures made while `fn` runs: every capture installs its own `prepareStackTrace` for its
- * duration, so the setter sees each one.
+ * Count stack reads made while `fn` runs: slothlet counts every stack it reads (`stackReadCount`).
  * @param {function(): Promise<*>} fn - Work to measure.
  * @returns {Promise<{captures: number, result: *}>} The count and the work's result.
  */
 async function countCaptures(fn) {
-	const original = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
-	let current = original?.value;
-	let captures = 0;
-	Object.defineProperty(Error, "prepareStackTrace", {
-		configurable: true,
-		get: () => current,
-		set: (value) => {
-			if (typeof value === "function" && value.name === "runtime_structuredFrames") captures++;
-			current = value;
-		}
-	});
-	try {
-		const result = await fn();
-		return { captures, result };
-	} finally {
-		if (original) Object.defineProperty(Error, "prepareStackTrace", original);
-		else delete Error.prepareStackTrace;
-	}
+	const before = stackReadCount();
+	const result = await fn();
+	return { captures: stackReadCount() - before, result };
 }
 
 describe("Caller-supplied code (#597) > marking a call", () => {

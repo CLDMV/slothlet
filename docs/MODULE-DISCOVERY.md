@@ -98,7 +98,7 @@ All methods live at `api.slothlet.api.modules.*`.
 
 ### `discover(options?) → Promise<DiscoverResult[]>`
 
-Walks the filesystem for slothlet modules. Returns validated `DiscoverResult[]` and replaces the per-instance discovery cache.
+Walks the filesystem for slothlet modules. Returns validated `DiscoverResult[]` and replaces the per-instance discovery cache. Discovery needs Node: in a browser, `discover()`, `addDiscovered()` and an `addModule(name)` that has to discover are refused with `MODULE_DISCOVERY_REQUIRES_NODE`. Mount modules there with `api.slothlet.api.add()` from the manifest.
 
 ```js
 const found = await api.slothlet.api.modules.discover({
@@ -269,6 +269,7 @@ All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/e
 | `MODULE_RESERVED_MOUNTPATH`              | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)            |
 | `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                 |
 | `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mountPath collision and `collisionMode: "error"`      |
+| `MODULE_DISCOVERY_REQUIRES_NODE`         | Discovery was asked for in a browser, which has no filesystem to walk          |
 
 ---
 

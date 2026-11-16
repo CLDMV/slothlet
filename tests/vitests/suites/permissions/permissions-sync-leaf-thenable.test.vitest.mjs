@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T07:41:01-08:00 (1793720461)
+ *	@Last modified time: 2026-11-10T21:29:58-08:00 (1794374998)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -237,7 +237,9 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > $na
 			expect(await api.b.give.drain(), label).not.toContainEqual(expect.objectContaining({ ok: true }));
 			expect(await api.a.use.fails("failWithGetter", "whoami", how, inherited, prop)).toBe(true);
 			for (const outcome of await api.b.give.drain()) {
-				if (outcome.ok) expect(outcome.value, label).toMatch(/^b\.give\./);
+				// The getter and the helper it calls are written outside every export of b/give.mjs, and no leaf's frame is
+				// below them when slothlet reads the failure: they run as the file's module, never as a leaf and never as `a`.
+				if (outcome.ok) expect(outcome.value, label).toBe("b.give");
 			}
 		});
 
@@ -358,7 +360,7 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > exa
 				expect(await api.b.give.drain(), label).not.toContainEqual(expect.objectContaining({ ok: true }));
 				expect(await api.a.use.fails("failWith", kind, "whoami", how)).toBe(true);
 				for (const outcome of await api.b.give.drain()) {
-					if (outcome.ok) expect(outcome.value, label).toMatch(/^b\.give\./);
+					if (outcome.ok) expect(outcome.value, label).toBe("b.give");
 				}
 			});
 		});
@@ -478,7 +480,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 						await api.a.use.fails("made", kind, target);
 						const outcomes = await api.b.give.drain();
 						if (target === "secret") expect(outcomes, kind).not.toContainEqual(expect.objectContaining({ ok: true }));
-						else for (const outcome of outcomes) if (outcome.ok) expect(outcome.value, kind).toMatch(/^b\.give\./);
+						else for (const outcome of outcomes) if (outcome.ok) expect(outcome.value, kind).toBe("b.give");
 						for (const id of ["i599-made-after", "i599-made-before", "i599-made-always", "i599-made-around"]) api.slothlet.hook.off(id);
 					}
 				});

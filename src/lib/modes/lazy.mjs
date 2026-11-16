@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,6 +20,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
+import { Arrays, String } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Lazy mode component - builds APIs with deferred (on-demand) loading.
@@ -118,9 +119,9 @@ export class LazyMode extends ComponentBase {
 		// A non-null preloadedStructure must honor the internal `{ files: [], directories: [] }` contract;
 		// a malformed value would otherwise throw a confusing TypeError deep in processFiles, so fail fast
 		// with a structured error instead (#136 review).
-		if (preloadedStructure != null && (!Array.isArray(preloadedStructure.files) || !Array.isArray(preloadedStructure.directories))) {
-			const filesType = Array.isArray(preloadedStructure.files) ? "array" : typeof preloadedStructure.files;
-			const directoriesType = Array.isArray(preloadedStructure.directories) ? "array" : typeof preloadedStructure.directories;
+		if (preloadedStructure != null && (!Arrays.isArray(preloadedStructure.files) || !Arrays.isArray(preloadedStructure.directories))) {
+			const filesType = Arrays.isArray(preloadedStructure.files) ? "array" : typeof preloadedStructure.files;
+			const directoriesType = Arrays.isArray(preloadedStructure.directories) ? "array" : typeof preloadedStructure.directories;
 			const received = `{ files: ${filesType}, directories: ${directoriesType} }`;
 			throw new this.SlothletError("INVALID_CONFIG_PRELOADED_STRUCTURE", { received }, null, { validationError: true });
 		}

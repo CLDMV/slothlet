@@ -27,6 +27,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { self } from "@cldmv/slothlet/runtime";
 
 const bus = new EventEmitter();
 let listenerResult;
@@ -78,4 +79,14 @@ export function viaEmitter(callback, thisArg, args = []) {
  */
 export function viaDirect(callback, thisArg, args = []) {
 	return callback.apply(thisArg ?? undefined, args ?? []);
+}
+
+/**
+ * Call {@link viaDirect} through `self`, so a hook on `producer.relay.viaDirect` fires inside this module's call.
+ * @returns {*} What `viaDirect` returned.
+ * @example
+ * await api.producer.relay.viaSelf();
+ */
+export function viaSelf() {
+	return self.producer.relay.viaDirect(() => 0);
 }

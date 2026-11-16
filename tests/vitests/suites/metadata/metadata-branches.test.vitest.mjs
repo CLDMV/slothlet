@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-15T21:11:22-08:00 (1794805882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,9 +19,8 @@
  * @description
  * Directly instantiates Metadata to cover two code paths never reached in integration tests:
  *
- * - Lines 121-122: `tagSystemMetadata()` — when `systemData.sourceFolder` is absent but
- *   `systemData.filePath` is provided, the sourceFolder is derived by calling
- *   `path.dirname(systemData.filePath)` through `this.slothlet.helpers.resolver.path`.
+ * - `tagSystemMetadata()` stores the `sourceFolder` its caller gives and derives none from
+ *   `systemData.filePath` (#818).
  *
  * - Line 144: `getSystemMetadata()` — early-return `null` when `target` is falsy (null,
  *   undefined, 0, empty string, etc.).
@@ -108,22 +107,22 @@ describe("Metadata.getSystemMetadata — returns null for falsy target (line 144
 
 // ─── tagSystemMetadata — derive sourceFolder from filePath (lines 121-122) ───
 
-describe("Metadata.tagSystemMetadata — derives sourceFolder from filePath when absent (lines 121-122)", () => {
-	it("sets sourceFolder to path.dirname(filePath) when sourceFolder is not provided", () => {
+describe("Metadata.tagSystemMetadata — keeps the sourceFolder its caller gives (#818)", () => {
+	it("stores no sourceFolder when only a filePath is given", () => {
 		const { mock, token } = makeMockWithToken();
 		const meta = new Metadata(mock);
 		const fn = function computeTotal() {};
 
-		// Provide filePath but NO sourceFolder → lines 121-122 fire
+		// Provide filePath but NO sourceFolder: nothing is derived from the path
 		meta.tagSystemMetadata(fn, { filePath: "/project/src/math/add.mjs", moduleID: "math", apiPath: "math.add" }, token);
 
 		const result = meta.getSystemMetadata(fn);
 
 		expect(result).not.toBeNull();
-		expect(result.sourceFolder).toBe("/project/src/math");
+		expect(result.sourceFolder).toBeUndefined();
 	});
 
-	it("uses exact dirname of the filePath", () => {
+	it("keeps the filePath it is given", () => {
 		const { mock, token } = makeMockWithToken();
 		const meta = new Metadata(mock);
 		const fn2 = function fetchUsers() {};
@@ -132,7 +131,8 @@ describe("Metadata.tagSystemMetadata — derives sourceFolder from filePath when
 
 		const result = meta.getSystemMetadata(fn2);
 
-		expect(result.sourceFolder).toBe("/api/users");
+		expect(result.filePath).toBe("/api/users/index.mjs");
+		expect(result.sourceFolder).toBeUndefined();
 	});
 
 	it("does NOT derive sourceFolder when one is already provided", () => {

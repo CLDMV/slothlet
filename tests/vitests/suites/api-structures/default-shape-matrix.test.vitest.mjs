@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:31:20-07:00 (1791865880)
+ *	@Last modified time: 2026-11-14T11:13:40-08:00 (1794683620)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -147,7 +147,8 @@ const PATHS = {
 	},
 	addapi: { file: "x/addapi.mjs", extra: { "x/s.mjs": `export const s = () => "s";` }, node: (api) => api.x, siblings: ["s"] },
 	mount: { file: "__mount/addapi.mjs", mount: "__mount", node: (api) => api.m },
-	single: { file: "c/only.mjs", node: (api) => api.c.only }
+	// A single-file folder whose default export is a function is that function (F05, #773).
+	single: { file: "c/only.mjs", node: (api, shape) => (shape.callable ? api.c : api.c.only) }
 };
 
 /**

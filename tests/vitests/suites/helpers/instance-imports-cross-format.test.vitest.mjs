@@ -24,6 +24,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import * as nodeModule from "node:module";
+import { fileURLToPath } from "node:url";
 import { scanCommonJSExports, commonJSExportNames } from "@cldmv/slothlet/helpers/cjs-export-names";
 import {
 	requireInInstance,
@@ -35,11 +36,28 @@ import {
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
+/** Import a module with Node's own loader: the function is a CommonJS file's. */
+const nativeImport = createRequire(import.meta.url)(fileURLToPath(new URL("../runtime/fixtures/native-import.cjs", import.meta.url)));
+
 /**
- * The process-wide instance-import state (documented global of helpers/instance-imports).
- * @returns {object} The state.
+ * Run a function while the CommonJS scope of an instance is active: from inside a file loaded through the instance's
+ * private cache, whose only statement calls it. What slothlet keeps about a running require is its own, so a test
+ * gets a scope active the way an instance does, by requiring a file in it.
+ * @param {string} file - A CommonJS file whose body is `module.exports = globalThis[Symbol.for("slothlet.test.inScope")]();`.
+ * @param {string} instanceID - The instance ID.
+ * @param {Function} body - The function.
+ * @returns {*} What the function returned.
  */
-const state = () => globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+const inScope = (file, instanceID, body) => {
+	const key = Symbol.for("slothlet.test.inScope");
+	globalThis[key] = body;
+	try {
+		return requireInInstance(file, instanceID, { fresh: true });
+	} finally {
+		delete globalThis[key];
+		releaseInstanceScope(instanceID);
+	}
+};
 
 /**
  * Names found by the scan, as an array.
@@ -185,6 +203,10 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		);
 		write("bridge.mjs", "import helper from './helper.cjs'; export { helper };");
 		write("reexporting.cjs", "module.exports = require('./helper.cjs');");
+		// Exports a key no scan of the source finds, and one named `default`.
+		write("late.cjs", "exports.bump = () => {}; exports['la' + 'te'] = 1; exports.default = 2;");
+		write("number.cjs", "module.exports = 42;");
+		write("in-scope.cjs", 'module.exports = globalThis[Symbol.for("slothlet.test.inScope")]();');
 	});
 
 	afterAll(async () => {
@@ -273,12 +295,16 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		expect(fresh).toContain('export { n0 as "bump" };');
 		expect(fresh).toContain("export default m;");
 		expect(fresh).toContain('export { m as "module.exports" };');
-		state().scopes.set("unit-w", new Map([[helper, { loaded: true, exports: { bump() {}, late: 1, default: 2 } }]]));
-		const withLoaded = commonJSWrapperSource(helper, "unit-w", new TextEncoder().encode("exports.bump = 1;"));
+		// A copy the instance has loaded: its keys are `bump`, `late` and `default`.
+		const late = path.join(root, "late.cjs");
+		requireInInstance(late, "unit-w");
+		const withLoaded = commonJSWrapperSource(late, "unit-w", new TextEncoder().encode("exports.bump = 1;"));
 		expect(withLoaded).toContain('as "late"');
 		expect(withLoaded).not.toContain('as "default"');
-		state().scopes.set("unit-w", new Map([[helper, { loaded: true, exports: 42 }]]));
-		expect(commonJSWrapperSource(helper, "unit-w", "exports.only = 1;")).toContain('as "only"');
+		// A loaded copy whose exports are no object contributes no key.
+		const number = path.join(root, "number.cjs");
+		requireInInstance(number, "unit-w");
+		expect(commonJSWrapperSource(number, "unit-w", "exports.only = 1;")).toContain('as "only"');
 		// A re-export is followed into the required file.
 		expect(commonJSWrapperSource(path.join(root, "reexporting.cjs"), "unit-w", null)).toContain('as "bump"');
 		releaseInstanceScope("unit-w");
@@ -343,6 +369,82 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 			expect(hooks.load("file:///x.js?slothlet_instance=a&slothlet_require=1", {}, () => cjs)).toBe(cjs);
 		});
 
+		describe("a require() an instance's ES module makes with createRequire (#755)", () => {
+			const req = new Set(["require", "node"]);
+			const at = (url) => () => ({ url });
+			/**
+			 * Run the CommonJS stub the load hook generated, as Node runs a CommonJS module's source.
+			 * @param {string} source - The stub's source.
+			 * @returns {object} The stub's `module`, with what it exported.
+			 */
+			const runStub = (source) => {
+				const stub = { id: "/stub.cjs", filename: "/stub.cjs", exports: {} };
+				new Function("module", source)(stub);
+				return stub;
+			};
+
+			it("marks the require of a file of the instance, and leaves an import, a JSON file and an addon as they are", () => {
+				const parentURL = `${new URL(`file://${path.join(root, "esm-plain.mjs")}`).href}?slothlet_instance=unit-mr`;
+				const helper = new URL(`file://${path.join(root, "helper.cjs")}`).href;
+				const marked = `${helper}?slothlet_instance=unit-mr&slothlet_module_require=1`;
+				expect(hooks.resolve("./helper.cjs", { parentURL, conditions: req }, at(helper)).url).toBe(marked);
+				expect(hooks.resolve("./helper.cjs", { parentURL, conditions: ["import"] }, at(helper)).url).toBe(
+					`${helper}?slothlet_instance=unit-mr`
+				);
+				for (const ext of ["json", "node"]) {
+					const file = new URL(`file://${path.join(root, `data.${ext}`)}`).href;
+					expect(hooks.resolve(`./data.${ext}`, { parentURL, conditions: req }, at(file)).url).toBe(`${file}?slothlet_instance=unit-mr`);
+				}
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("answers it with a stub that returns the instance's copy of a CommonJS file", () => {
+				const helper = path.join(root, "helper.cjs");
+				const target = `${new URL(`file://${helper}`).href}?slothlet_instance=unit-mr`;
+				const load = () => hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				const out = load();
+				expect(out.format).toBe("commonjs");
+				expect(out.source).toContain(`.requireFromModule(${JSON.stringify(target)}, "commonjs", module);`);
+				const first = runStub(out.source).exports;
+				expect(first.bump()).toBe(1);
+				// Required again, the stub hands out the same copy: one per instance.
+				expect(runStub(load().source).exports).toBe(first);
+				// A stub's code runs once: the ticket in it is taken.
+				expect(() => runStub(out.source)).toThrow(TypeError);
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("takes the stub out of Node's require cache, and nothing else", () => {
+				const helper = path.join(root, "helper.cjs");
+				const target = `${new URL(`file://${helper}`).href}?slothlet_instance=unit-mr`;
+				const cache = createRequire(import.meta.url).cache;
+				const out = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				const stub = { id: helper, filename: helper, exports: {} };
+				cache[helper] = stub;
+				new Function("module", out.source)(stub);
+				expect(cache[helper]).toBeUndefined();
+				// An entry that is not the stub's own stays.
+				const hostCopy = { id: helper, exports: { host: true }, loaded: true };
+				cache[helper] = hostCopy;
+				const again = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "commonjs", source: "" }));
+				new Function("module", again.source)({ id: helper, filename: helper, exports: {} });
+				expect(cache[helper]).toBe(hostCopy);
+				delete cache[helper];
+				releaseInstanceScope("unit-mr");
+			});
+
+			it("answers the require of an ES module with the copy an import of it gives", async () => {
+				const file = path.join(root, "esm-plain.mjs");
+				const target = `${new URL(`file://${file}`).href}?slothlet_instance=unit-mr`;
+				const out = hooks.load(`${target}&slothlet_module_require=1`, {}, () => ({ format: "module", source: "" }));
+				expect(out.source).toContain(`.requireFromModule(${JSON.stringify(target)}, "module", module);`);
+				const required = runStub(out.source).exports;
+				const imported = await nativeImport(target);
+				expect(required.bump).toBe(imported.bump);
+				releaseInstanceScope("unit-mr");
+			});
+		});
+
 		it("wraps an instance-marked CommonJS module, reading the file when the loader gave no source", () => {
 			const helper = path.join(root, "helper.cjs");
 			const url = `${new URL(`file://${helper}`).href}?slothlet_instance=unit-h`;
@@ -354,11 +456,9 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 		});
 
 		it("marks only relative require()s from the active scope's files that resolve to a possible ES module", () => {
-			const s = state();
-			const outer = s.active;
 			const leaf = path.join(root, "leaf.cjs");
-			s.active = { instanceID: "a b", anchor: leaf };
-			try {
+			// The scope of instance `a b`, anchored at a file beside the leaf.
+			inScope(path.join(root, "in-scope.cjs"), "a b", () => {
 				const parentURL = new URL(`file://${leaf}`).href;
 				const req = new Set(["require", "node"]);
 				const at = (url) => () => ({ url });
@@ -383,9 +483,7 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 				expect(hooks.resolve("./x.mjs", { conditions: req }, at(esm)).url).toBe(esm);
 				const pkgFile = new URL(`file://${path.join(root, "node_modules/pkg/x.mjs")}`).href;
 				expect(hooks.resolve("./node_modules/pkg/x.mjs", { parentURL, conditions: req }, at(pkgFile)).url).toBe(pkgFile);
-			} finally {
-				s.active = outer;
-			}
+			});
 		});
 	});
 

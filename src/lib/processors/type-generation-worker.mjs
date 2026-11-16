@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,11 +30,17 @@
  * Importing the module does nothing; only running it as the process's entry script starts a build.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import * as nodeUrl from "node:url";
+import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { JSON, NativeProcess, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const { fileURLToPath } = nodeUrl;
+const { resolve } = nodePath;
 
 /**
  * IPC sender to the parent process (`process.send` in the fork).
@@ -98,4 +104,4 @@ export function runIfEntry(argv1, configJson, send, exit) {
 	return runTypeGeneration(configJson, send).then(exit);
 }
 
-runIfEntry(process.argv[1], process.env.SLOTHLET_CONFIG, process.send?.bind(process), process.exit.bind(process));
+runIfEntry(NativeProcess.argv[1], NativeProcess.env.SLOTHLET_CONFIG, Processes.send, Processes.exit);

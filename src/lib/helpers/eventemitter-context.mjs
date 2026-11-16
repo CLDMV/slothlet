@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T16:02:57-07:00 (1791846177)
+ *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,8 +32,11 @@
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { recordSharedExports } from "../handlers/shared-values.mjs";
+import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
+import { Arrays, Map, Set, WeakMap, WeakRef, FinalizationRegistry } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { recordSharedExports } = sharedValuesInternals("lib/helpers/eventemitter-context");
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -49,7 +52,7 @@ let isInApiContext = null;
  * @param {Function} checker - Function that returns true if in API context
  * @public
  */
-export function setApiContextChecker(checker) {
+function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
 /**
@@ -705,7 +708,7 @@ function runtime_patchRemoveAllListeners() {
  *
  * @public
  */
-export function enableEventEmitterPatching() {
+function enableEventEmitterPatching() {
 	// Browser host: no node:events EventEmitter to patch — exercised by the vitest browser compose.
 	if (!EventEmitter) return;
 	if (isPatchingEnabled) {
@@ -730,7 +733,7 @@ export function enableEventEmitterPatching() {
  *
  * @public
  */
-export function disableEventEmitterPatching() {
+function disableEventEmitterPatching() {
 	// Browser host: no node:events, nothing was patched — bail early. shutdown() calls this
 	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
@@ -793,7 +796,7 @@ function runtime_plainOnce(emitter, event, listener) {
  *
  * @public
  */
-export function cleanupEventEmitterResources() {
+function cleanupEventEmitterResources() {
 	// Browser host: no node:events, nothing was tracked — bail early. shutdown() calls this
 	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
@@ -832,7 +835,7 @@ export function cleanupEventEmitterResources() {
 					const entry = events[event];
 					if (typeof entry === "function") {
 						if (restore.has(entry)) events[event] = restore.get(entry);
-					} else if (Array.isArray(entry)) {
+					} else if (Arrays.isArray(entry)) {
 						for (let index = 0; index < entry.length; index++) {
 							if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
 						}
@@ -854,3 +857,60 @@ export function cleanupEventEmitterResources() {
 	// WeakMap lets GC reclaim on its own once it's unreferenced.
 	trackedEmitters.clear();
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/handlers/context-async", "lib/handlers/context-live", "slothlet"]))
+		throw ownBindingsRefusal("lib/helpers/eventemitter-context", import.meta.url);
+	return { cleanupEventEmitterResources, disableEventEmitterPatching, enableEventEmitterPatching, setApiContextChecker };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setApiContextChecker} */
+const guarded_setApiContextChecker = guardInternal(setApiContextChecker, "setApiContextChecker", import.meta.url);
+/** @type {typeof enableEventEmitterPatching} */
+const guarded_enableEventEmitterPatching = guardInternal(enableEventEmitterPatching, "enableEventEmitterPatching", import.meta.url);
+/** @type {typeof disableEventEmitterPatching} */
+const guarded_disableEventEmitterPatching = guardInternal(disableEventEmitterPatching, "disableEventEmitterPatching", import.meta.url);
+/** @type {typeof cleanupEventEmitterResources} */
+const guarded_cleanupEventEmitterResources = guardInternal(cleanupEventEmitterResources, "cleanupEventEmitterResources", import.meta.url);
+export {
+	guarded_setApiContextChecker as setApiContextChecker,
+	guarded_enableEventEmitterPatching as enableEventEmitterPatching,
+	guarded_disableEventEmitterPatching as disableEventEmitterPatching,
+	guarded_cleanupEventEmitterResources as cleanupEventEmitterResources
+};

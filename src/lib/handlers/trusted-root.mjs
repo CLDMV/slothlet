@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
+ *	@Last modified time: 2026-11-13T21:47:59-08:00 (1794635279)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,14 +37,29 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { markSlothletProxy } from "#handlers/framework-internals";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import {
+	Reflect,
+	Objects,
+	Arrays,
+	Math,
+	NativeProxy,
+	Map,
+	WeakMap,
+	WeakSet,
+	Symbol,
+	Dates,
+	String
+} from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-root");
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
  * @type {symbol}
  * @internal
  */
-export const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
+const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
 
 /**
  * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
@@ -52,7 +67,7 @@ export const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
  * @type {WeakSet<object>}
  * @internal
  */
-export const genuineWrappers = new WeakSet();
+const genuineWrappers = new WeakSet();
 
 /**
  * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
@@ -60,7 +75,7 @@ export const genuineWrappers = new WeakSet();
  * @type {WeakMap<Function, object>}
  * @internal
  */
-export const implWrappers = new WeakMap();
+const implWrappers = new WeakMap();
 
 /**
  * Every ceiling chain {@link combineCeilings} built: a frozen list of the calls code supplied to another call
@@ -97,7 +112,7 @@ const CEILING_TRIE = { next: new WeakMap(), chain: null };
  * @type {ReadonlyArray<object>}
  * @private
  */
-const NO_CEILING = Object.freeze([]);
+const NO_CEILING = Objects.freeze([]);
 
 /**
  * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
@@ -152,7 +167,7 @@ export function combineCeilings(...parts) {
 		node = child;
 	}
 	if (!node.chain) {
-		node.chain = Object.freeze(members);
+		node.chain = Objects.freeze(members);
 		CEILING_CHAINS.add(node.chain);
 	}
 	return node.chain;
@@ -180,7 +195,7 @@ export function identityCeilings(identity) {
  * @type {symbol}
  * @internal
  */
-export const PROTECT_SENTINEL = Symbol("slothlet.protect");
+const PROTECT_SENTINEL = Symbol("slothlet.protect");
 
 /**
  * Enforce owner-locking on a top-level runtime `context` set-trap write. If `prop` is an owner-locked
@@ -194,7 +209,7 @@ export const PROTECT_SENTINEL = Symbol("slothlet.protect");
  * @throws {SlothletError} CONTEXT_KEY_PROTECTED when the write is not permitted by the key's owner.
  * @internal
  */
-export function enforceContextKeyWrite(ctx, prop) {
+function enforceContextKeyWrite(ctx, prop) {
 	// A top-level write: the key that owns the write and the path reported in the error are the same.
 	enforceOwnedContextWrite(ctx, prop, String(prop));
 }
@@ -231,7 +246,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !Object.prototype.hasOwnProperty.call(owners, ownerKey)) return;
+	if (!owners || !Objects.prototype.hasOwnProperty.call(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
@@ -268,7 +283,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
  * @throws {SlothletError} PERMISSION_DENIED when who is executing cannot be told.
  * @internal
  */
-export function writersOf(store) {
+function writersOf(store) {
 	const slothlet = store?.slothlet;
 	const identity = slothlet?.contextManager?.getCallerIdentity?.(slothlet.instanceID) ?? {
 		currentWrapper: store?.currentWrapper ?? null,
@@ -309,9 +324,9 @@ const PROTECTED_VIEW_CACHE = Symbol("slothlet.protectedViewCache");
  */
 function isWrappableContextValue(value) {
 	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value)) return true;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	if (Arrays.isArray(value)) return true;
+	const proto = Objects.getPrototypeOf(value);
+	return proto === Objects.prototype || proto === null;
 }
 
 /**
@@ -359,7 +374,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	const cached = cache.get(value);
 	if (cached) return cached;
 	const view = markSlothletProxy(
-		new Proxy(value, {
+		new NativeProxy(value, {
 			get(target, prop, receiver) {
 				// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
 				return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
@@ -399,9 +414,9 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  * @returns {*} The raw value, or a protected view when the key is owner-locked and wrappable.
  * @internal
  */
-export function readProtectedContextValue(ctx, prop, getContext) {
+function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && Object.prototype.hasOwnProperty.call(owners, prop)) {
+	if (owners && Objects.prototype.hasOwnProperty.call(owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];
@@ -422,16 +437,16 @@ export function readProtectedContextValue(ctx, prop, getContext) {
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
  */
-export function buildCapturedFlowStore(instances, instanceID, captured) {
+function buildCapturedFlowStore(instances, instanceID, captured) {
 	const baseStore = instances.get(instanceID);
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
 			instanceID,
-			availableInstances: Array.from(instances.keys()).join(", ") || "none"
+			availableInstances: Arrays.from(instances.keys()).join(", ") || "none"
 		});
 	}
 	const childStore = {
-		instanceID: `${instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+		instanceID: `${instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`,
 		context: captured.context,
 		self: baseStore.self,
 		config: baseStore.config,
@@ -446,7 +461,98 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		__contextOwners: captured.contextOwners
 	};
 	if (captured.trusted) {
-		Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
 	}
 	return childStore;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
+			"lib/handlers/context-async",
+			"lib/handlers/context-live",
+			"lib/handlers/frame-placement",
+			"lib/handlers/unified-wrapper",
+			"lib/runtime/runtime-asynclocalstorage",
+			"lib/runtime/runtime-livebindings",
+			"slothlet"
+		])
+	)
+		throw ownBindingsRefusal("lib/handlers/trusted-root", import.meta.url);
+	return {
+		get PROTECT_SENTINEL() {
+			return PROTECT_SENTINEL;
+		},
+		get TRUSTED_ROOT() {
+			return TRUSTED_ROOT;
+		},
+		buildCapturedFlowStore,
+		enforceContextKeyWrite,
+		get genuineWrappers() {
+			return genuineWrappers;
+		},
+		get implWrappers() {
+			return implWrappers;
+		},
+		readProtectedContextValue,
+		writersOf
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof genuineWrappers} */
+const guarded_genuineWrappers = guardInternal(genuineWrappers, "genuineWrappers", import.meta.url);
+/** @type {typeof implWrappers} */
+const guarded_implWrappers = guardInternal(implWrappers, "implWrappers", import.meta.url);
+/** @type {typeof enforceContextKeyWrite} */
+const guarded_enforceContextKeyWrite = guardInternal(enforceContextKeyWrite, "enforceContextKeyWrite", import.meta.url);
+/** @type {typeof writersOf} */
+const guarded_writersOf = guardInternal(writersOf, "writersOf", import.meta.url);
+/** @type {typeof readProtectedContextValue} */
+const guarded_readProtectedContextValue = guardInternal(readProtectedContextValue, "readProtectedContextValue", import.meta.url);
+/** @type {typeof buildCapturedFlowStore} */
+const guarded_buildCapturedFlowStore = guardInternal(buildCapturedFlowStore, "buildCapturedFlowStore", import.meta.url);
+export {
+	guarded_genuineWrappers as genuineWrappers,
+	guarded_implWrappers as implWrappers,
+	guarded_enforceContextKeyWrite as enforceContextKeyWrite,
+	guarded_writersOf as writersOf,
+	guarded_readProtectedContextValue as readProtectedContextValue,
+	guarded_buildCapturedFlowStore as buildCapturedFlowStore
+};

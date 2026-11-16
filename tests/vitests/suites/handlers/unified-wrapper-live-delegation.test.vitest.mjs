@@ -209,7 +209,8 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		// module untouched.
 		api.cache.store.tag = "v1";
 		expect(api.cache.store.tag).toBe("v1");
-		expect(Object.getOwnPropertyDescriptor(api.cache.store, "tag")).toMatchObject({ value: "v1", writable: false });
+		// The member is described as an assigned member of an object is: it takes another write (#749).
+		expect(Object.getOwnPropertyDescriptor(api.cache.store, "tag")).toMatchObject({ value: "v1", writable: true });
 
 		expect(await api.cache.store.get("k")).toEqual({ ok: true, module: "cache", action: "get", key: "k" });
 	});

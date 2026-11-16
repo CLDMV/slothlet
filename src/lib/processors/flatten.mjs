@@ -30,13 +30,34 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { Reflect, Objects, Arrays, Functions, Set } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
+const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
+
+/**
+ * Whether `descriptor` is one the language gives every function of its kind for `key`: its `name` and
+ * `length` (read-only, not enumerable) and its `prototype` (not enumerable, not configurable). Those
+ * are the language's, like the members of `Function.prototype`, so a named export of that name is an
+ * ordinary member of the node and does not conflict with the default. A `static name()` method, a
+ * `name` getter or an enumerable `name` the module assigned is the module's own and still conflicts.
+ * @param {PropertyKey} key - The member's key.
+ * @param {PropertyDescriptor} descriptor - The function's own descriptor for it.
+ * @returns {boolean} True when the language gave it.
+ * @private
+ *
+ * @example
+ * isLanguageFunctionMember("name", Reflect.getOwnPropertyDescriptor(function calc() {}, "name")); // true
+ */
+function isLanguageFunctionMember(key, descriptor) {
+	if (!("value" in descriptor) || descriptor.enumerable) return false;
+	if (key === "name" || key === "length") return descriptor.writable === false;
+	return key === "prototype" && descriptor.configurable === false;
+}
 
 /**
  * Flattening decision processor
@@ -277,7 +298,7 @@ export class Flatten extends ComponentBase {
 	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
 	 */
 	primitiveDefaultNamespace(value, mod, moduleKeys) {
-		if (!Object.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
+		if (!Objects.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
 		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
 		const namespace = { default: value };
 		for (const key of moduleKeys) namespace[key] = mod[key];
@@ -303,7 +324,8 @@ export class Flatten extends ComponentBase {
 	 * with it. A member is an own property, enumerable or not, or one a prototype the module defines
 	 * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
 	 * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
-	 * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+	 * a named `toString` or `call` is not a conflict; nor is a function default's own `name`, `length` or
+	 * `prototype` as the language gave it, so a named `name` export is the node's `name`. Every path that combines a default with its named
 	 * exports asks this one question, so the outcome does not depend on the path.
 	 * @param {unknown} value - The module's default export.
 	 * @param {string} key - The named export's key.
@@ -324,7 +346,8 @@ export class Flatten extends ComponentBase {
 		) {
 			seen.add(node);
 			if (LANGUAGE_PROTOTYPES.has(node)) return false;
-			if (Reflect.getOwnPropertyDescriptor(node, key)) return true;
+			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
+			if (descriptor) return !(node === value && typeof value === "function" && isLanguageFunctionMember(key, descriptor));
 		}
 		return false;
 	}
@@ -355,7 +378,7 @@ export class Flatten extends ComponentBase {
 			holdMember(target, key, value);
 			return;
 		}
-		Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+		Objects.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -458,7 +481,7 @@ export class Flatten extends ComponentBase {
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
 			// A function default gets a callable layer that holds the named exports, and an object default is
@@ -487,19 +510,19 @@ export class Flatten extends ComponentBase {
 			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
 			if (primitiveNamespace) {
 				const members = {};
-				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				for (const key of Objects.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+			if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
 					// The copy carries the default object's own members.
-					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
+					for (const key of Objects.keys(mod.default)) members[key] = ["default", key];
 				}
 				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
 				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
@@ -525,12 +548,12 @@ export class Flatten extends ComponentBase {
 		if (isSelfReferential) {
 			if (mod[moduleName]) return { moduleContent: mod[moduleName], origins: { self: [moduleName], members: {} } };
 			const members = {};
-			for (const key of Object.keys(mod)) members[key] = [key];
+			for (const key of Objects.keys(mod)) members[key] = [key];
 			return { moduleContent: mod, origins: { self: null, members } };
 		}
 
 		// Hybrid pattern: default + named exports
-		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
+		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
@@ -587,7 +610,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
+		if (Objects.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }
@@ -672,7 +695,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 7 (F02, F03) - C12: Object auto-flatten (single named export matching filename)
-		if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
+		if (moduleName === categoryName && mod && typeof mod === "object" && !Arrays.isArray(mod) && currentDepth > 0) {
 			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 				return {
 					shouldFlatten: true,
@@ -692,7 +715,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 10 (F02) - C14: Parent-level flattening (generic filenames)
-		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
+		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Arrays.isArray(mod)) {
 			const genericFilenames = ["singlefile", "index", "main", "default"];
 			const isGenericFilename = genericFilenames.includes(moduleName.toLowerCase());
 
@@ -768,7 +791,9 @@ export class Flatten extends ComponentBase {
 	 * Decide whether a named export should be attached to a callable default export.
 	 *
 	 * Returns false when the named export is the same reference as the default (re-export
-	 * pattern), or when the export key matches the function name (self-referential export).
+	 * pattern: `export { calc }` beside `export default function calc`). A different value whose key
+	 * matches the default function's name (`export { calc2 as calc }`) is an ordinary member, as it is
+	 * in the module's namespace.
 	 *
 	 * @param {string} key - Named export key.
 	 * @param {unknown} value - Named export value.
@@ -781,15 +806,6 @@ export class Flatten extends ComponentBase {
 		if (!key || key === "default") {
 			return false;
 		}
-		if (value === defaultFunc || value === originalDefault) {
-			return false;
-		}
-		if (typeof defaultFunc === "function" && key === defaultFunc.name) {
-			return false;
-		}
-		if (typeof originalDefault === "function" && key === originalDefault.name) {
-			return false;
-		}
-		return true;
+		return value !== defaultFunc && value !== originalDefault;
 	}
 }
