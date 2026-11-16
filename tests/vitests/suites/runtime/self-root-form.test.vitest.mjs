@@ -1,0 +1,303 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/self-root-form.test.vitest.mjs
+ *	@Date: 2026-11-15T17:13:59-08:00 (1794791639)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-15T18:56:59-08:00 (1794797819)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A module's `self` takes the form the host's `api` takes for the same instance (#803).
+ *
+ * @description
+ * For a function root (`root.mjs` exporting a function, an async arrow among them) `self` is callable as `api` is:
+ * `typeof`, `Object.prototype.toString`, `instanceof`, the prototype, and a call or construction of it, by every route.
+ * For an object root it stays an object. Each operation is run on `self` inside a module and on `api` in the host, and
+ * the two answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`). A full
+ * `JSON.stringify(self)` is left out of the comparison: a module is refused the `slothlet.permissions` namespace's
+ * `toJSON`, with or without a deny rule, so it differs from the host's by the permission system, not by the form.
+ */
+
+import path from "node:path";
+import util from "node:util";
+import { fileURLToPath } from "node:url";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { readFileSync } from "node:fs";
+// The host's own copy: run by the host, a file an instance loaded is taken for that module's code while a call of the
+// instance is suspended (an async root's call, made by a row of the report).
+import { shape } from "../../../../api_tests/api_test_self_parity/host/shape.mjs";
+
+const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_self_parity");
+const DENIED = "threw:PERMISSION_DENIED";
+
+/** The rows a call or construction of the root answers. */
+const CALL_ROWS = ["directCall", "reflectApply", "construct", "reflectConstruct", "dotCall", "dotApply", "bound"];
+
+const CONFIGS = ["eager", "lazy"].flatMap((mode) =>
+	["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
+);
+
+const ROOTS = [
+	{ folder: "fnroot", typeof: "function", tag: "[object Function]" },
+	{ folder: "asyncroot", typeof: "function", tag: "[object AsyncFunction]" },
+	{ folder: "objroot", typeof: "object", tag: "[object Object]" }
+];
+
+const POLICIES = [
+	{ label: "permissions off", permissions: () => undefined },
+	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }) },
+	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }) },
+	{
+		label: "permissions on, default deny, the probe allowed everything",
+		permissions: (attribution) => ({ attribution, defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "**", effect: "allow" }] })
+	}
+];
+
+/**
+ * What `api` answers in the host, without the full serialization (see the file overview).
+ * @param {object} api - The api.
+ * @returns {Record<string, *>} What each operation gave.
+ */
+const hostShape = (api) => {
+	const { jsonFullKind: _, ...rows } = shape(api, { inspect: util.inspect });
+	return rows;
+};
+
+/**
+ * What `self` answers inside the probe module, without the full serialization.
+ * @param {object} api - The api.
+ * @returns {Promise<Record<string, *>>} What each operation gave.
+ */
+const moduleShape = async (api) => {
+	const { jsonFullKind: _, ...rows } = await api.probe.report(util.inspect);
+	return rows;
+};
+
+it("the host's copy of the report is the modules' copy", () => {
+	const code = (file) => readFileSync(path.join(FIXTURE, file), "utf8").split("\nexport function shape")[1];
+	expect(code("host/shape.mjs")).toBe(code("shape.mjs"));
+});
+
+describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+	describe.each(ROOTS)("root $folder", (root) => {
+		describe.each(POLICIES)("$label", (policy) => {
+			let api;
+
+			beforeAll(async () => {
+				api = await slothlet({
+					base: path.join(FIXTURE, root.folder),
+					mode,
+					runtime,
+					silent: true,
+					permissions: policy.permissions(attribution)
+				});
+			}, 60000);
+
+			afterAll(async () => {
+				await api?.shutdown?.();
+				api = null;
+			}, 60000);
+
+			it("self answers every operation as the host's api does", async () => {
+				expect(await moduleShape(api)).toEqual(hostShape(api));
+			});
+
+			it("self is of the root's kind", async () => {
+				const rows = await moduleShape(api);
+				expect(rows.typeof).toBe(root.typeof);
+				expect(rows.toStringTag).toBe(root.tag);
+				expect(rows.mathAdd).toBe(5);
+			});
+		});
+
+		describe("permissions on, the probe refused the root", () => {
+			let api;
+
+			beforeAll(async () => {
+				api = await slothlet({
+					base: path.join(FIXTURE, root.folder),
+					mode,
+					runtime,
+					silent: true,
+					permissions: {
+						attribution,
+						rules: [
+							{ caller: "probe.**", target: "**", effect: "deny" },
+							{ caller: "probe.**", target: "math.**", effect: "allow" }
+						]
+					}
+				});
+			}, 60000);
+
+			afterAll(async () => {
+				await api?.shutdown?.();
+				api = null;
+			}, 60000);
+
+			it("every route calling or constructing the root is refused, as self.call() is; the form is the root's", async () => {
+				const rows = await moduleShape(api);
+				expect(rows.typeof).toBe(root.typeof);
+				expect(rows.mathAdd).toBe(5);
+				if (root.typeof === "function") {
+					for (const row of CALL_ROWS) expect([row, rows[row]]).toEqual([row, DENIED]);
+				} else {
+					for (const row of CALL_ROWS) expect([row, rows[row]]).toEqual([row, hostShape(api)[row]]);
+				}
+			});
+		});
+	});
+});
+
+describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
+	it("instances of both kinds running at once each give their files the form of their own api", async () => {
+		const fn = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const obj = await slothlet({ base: path.join(FIXTURE, "objroot"), runtime, silent: true });
+		try {
+			expect(await moduleShape(fn)).toEqual(hostShape(fn));
+			expect(await moduleShape(obj)).toEqual(hostShape(obj));
+			expect((await moduleShape(fn)).typeof).toBe("function");
+			expect((await moduleShape(obj)).typeof).toBe("object");
+		} finally {
+			await fn.shutdown();
+			await obj.shutdown();
+		}
+	});
+
+	it("a file of a folder beneath the root, taking self at its top level, takes the callable form", async () => {
+		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		try {
+			const rows = await api.sub.capture.report();
+			expect(rows.typeof).toBe("function");
+			expect(rows.directCall).toBe(4);
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("a CommonJS file reading self from the runtime's namespace takes the callable form", async () => {
+		const api = await slothlet({ base: path.join(FIXTURE, "cjsroot"), runtime, silent: true });
+		try {
+			expect(await api.cjsprobe.report()).toEqual({
+				typeof: "function",
+				toStringTag: "[object Function]",
+				instanceofFunction: true,
+				directCall: 4,
+				dotCall: 4,
+				mathAdd: 5
+			});
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("a full reload keeps the form, from the reloaded files' first import", async () => {
+		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		try {
+			await api.slothlet.reload();
+			expect(await moduleShape(api)).toEqual(hostShape(api));
+			expect((await api.sub.capture.report()).typeof).toBe("function");
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("a partial reload keeps the form", async () => {
+		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		try {
+			await api.slothlet.api.reload("probe");
+			expect(await moduleShape(api)).toEqual(hostShape(api));
+		} finally {
+			await api.shutdown();
+		}
+	});
+});
+
+describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime) => {
+	describe.each(["fnroot", "objroot"])("root %s", (folder) => {
+		it.each(["partial", "full"])("with %s isolation, self answers as the host's api does", async (isolation) => {
+			const api = await slothlet({ base: path.join(FIXTURE, folder), runtime, silent: true });
+			try {
+				const rows = await api.slothlet.scope({ context: {}, isolation, fn: () => moduleShape(api) });
+				expect(rows).toEqual(hostShape(api));
+			} finally {
+				await api.shutdown();
+			}
+		});
+	});
+});
+
+describe.each(["async", "live"])("a callable self on the global object > %s", (runtime) => {
+	it("a later instance's scan of the global object's interfaces passes over it", async () => {
+		const first = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const key = "__slothletSelfParity803";
+		try {
+			globalThis[key] = (await first.probe.expose()).self;
+			expect(typeof globalThis[key]).toBe("function");
+			await first.shutdown();
+			const second = await slothlet({ base: path.join(FIXTURE, "objroot"), runtime, silent: true });
+			expect(await second.math.add(1, 2)).toBe(3);
+			await second.shutdown();
+		} finally {
+			delete globalThis[key];
+		}
+	});
+});
+
+describe.each(CONFIGS)("self() runs the root as the api root > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+	const SECRET = "SECRET";
+	const OWN_LEAF_POLICIES = [
+		{ label: "default allow, no rule", permissions: { rules: [] }, expected: SECRET },
+		{
+			label: "every caller denied the vault",
+			permissions: { rules: [{ caller: "**", target: "vault.**", effect: "deny" }] },
+			expected: DENIED
+		},
+		{
+			label: "the reader denied the vault",
+			permissions: { rules: [{ caller: "reader.**", target: "vault.**", effect: "deny" }] },
+			expected: SECRET
+		},
+		{
+			label: "the reader refused the call of the root",
+			permissions: {
+				rules: [
+					{ caller: "reader.**", target: "**", effect: "deny" },
+					{ caller: "reader.**", target: "vault.**", effect: "allow" }
+				]
+			},
+			expected: DENIED
+		},
+		{ label: "permissions off", permissions: undefined, expected: SECRET },
+		{ label: "permissions disabled", permissions: { mode: "disabled" }, expected: SECRET }
+	];
+
+	describe.each(OWN_LEAF_POLICIES)("$label", (policy) => {
+		let api;
+
+		beforeAll(async () => {
+			const permissions = policy.permissions === undefined ? undefined : { attribution, ...policy.permissions };
+			api = await slothlet({ base: path.join(FIXTURE, "ownleaf"), mode, runtime, silent: true, permissions });
+		}, 60000);
+
+		afterAll(async () => {
+			await api?.shutdown?.();
+			api = null;
+		}, 60000);
+
+		it("self() answers as self.call() does", async () => {
+			expect(await api.reader.callRoot()).toBe(policy.expected);
+		});
+
+		it("Reflect.apply(self, …) answers as self.call() does", async () => {
+			expect(await api.reader.reflectRoot()).toBe(policy.expected);
+		});
+	});
+});
