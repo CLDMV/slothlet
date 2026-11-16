@@ -1413,9 +1413,12 @@ function createFramePlacer(candidates) {
 		// the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#597) — a module of
 		// its own, which the call did not enter — so it is placed by who imports it, as any other file is.
 		const frameModule = runtime_frameModuleTag(frame.line);
+		// A leaf's file an api file imported itself is no leaf's: it is placed as a helper file of the module is.
+		const copy = runtime_leafFileCopyOf(frame) !== null;
 		const byFile = filterList(
 			candidates,
 			(entry) =>
+				!copy &&
 				isEntryLocation(frame.path, entry) &&
 				(!frameInstance || !entry.family || entry.family === frameInstance) &&
 				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
@@ -4139,6 +4142,9 @@ function runtime_definerAt(frames, running) {
 				helper ??= owner;
 				continue;
 			}
+			// A leaf's file an api file imported itself, in a browser, where nothing records which api file that was: it is
+			// no one's code, and is refused rather than taken for the page's.
+			if (copy && !isNode && !helper) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
 			// The host's code, or a package's, called it: no leaf did.
 			return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		}
@@ -4691,8 +4697,54 @@ const UNTOLD_COPY = Objects.freeze({});
  * @private
  */
 function runtime_leafFileCopyOf(frame) {
-	if (!isNode || frame.evaluated || typeof frame.line !== "string") return null;
+	if (frame.evaluated || typeof frame.line !== "string") return null;
 	if (Objects.hasOwn(frame, "leafFileCopy")) return frame.leafFileCopy;
+	const found = isNode ? runtime_nodeLeafFileCopyOf(frame) : runtime_browserLeafFileCopyOf(frame);
+	Objects.defineProperty(frame, "leafFileCopy", { __proto__: null, value: found, enumerable: false });
+	return found;
+}
+
+/**
+ * {@link runtime_leafFileCopyOf} in a browser, where no import is recorded and scripts carry no hash: a frame carrying
+ * no instance tag at a leaf's file that the instance's loader imported only under its tags (an `http:`, `https:` or
+ * `file:` URL always gets them). A sibling's relative import of the file resolves to its plain URL, a module of its own.
+ * A leaf imported from a URL that carries no tag (a `blob:` or `data:` URL, an import-map name) runs under that URL,
+ * which an import of the file by another name does not share, and is not told apart here.
+ * @param {{path: string, line: string}} frame - A frame.
+ * @returns {object|null} The instance, {@link UNTOLD_COPY} when more than one running instance could be it, or null.
+ * @private
+ */
+function runtime_browserLeafFileCopyOf(frame) {
+	if (runtime_frameInstanceTag(frame.line)) return null;
+	let found = null;
+	for (let ofIndex = 0, ofList = mapValues(LIVE_INSTANCES); ofIndex < ofList.length; ofIndex++) {
+		const slothlet = WeakRefMethods.deref(ofList[ofIndex]);
+		if (!slothlet || !runtime_instanceRuns(slothlet)) continue;
+		const leaves = runtime_leavesAtFile(slothlet, frame.path, null, null);
+		if (!leaves.length) continue;
+		const tagged = ArrayMethods.every(leaves, (wrapper) => {
+			const filePath = wrapper.____slothletInternal?.filePath;
+			const urls = wrapper.slothlet?.processors?.loader?.importedLocationsFor?.(filePath);
+			return (
+				urls != null &&
+				SetMethods.size(urls) > 0 &&
+				ArrayMethods.every(setToArray(urls), (url) => RegExpMethods.exec(/[?&]slothlet_instance=/, String(url)) !== null)
+			);
+		});
+		if (!tagged) continue;
+		if (found) return UNTOLD_COPY;
+		found = slothlet;
+	}
+	return found;
+}
+
+/**
+ * {@link runtime_leafFileCopyOf} under Node.
+ * @param {{path: string, line: string, location?: string, hash?: string|null, key?: string|null}} frame - A frame.
+ * @returns {object|null} The instance, {@link UNTOLD_COPY} when more than one running instance could be it, or null.
+ * @private
+ */
+function runtime_nodeLeafFileCopyOf(frame) {
 	let found = null;
 	const tag = runtime_frameInstanceTag(frame.line);
 	const helperScript = !tag && Boolean(frame.hash && frame.key && loadedScriptLookup(frame.key, frame.hash).helper);
@@ -4720,7 +4772,6 @@ function runtime_leafFileCopyOf(frame) {
 			found = slothlet;
 		}
 	}
-	Objects.defineProperty(frame, "leafFileCopy", { __proto__: null, value: found, enumerable: false });
 	return found;
 }
 
