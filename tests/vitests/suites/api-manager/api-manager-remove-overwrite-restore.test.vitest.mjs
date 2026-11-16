@@ -150,11 +150,12 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
 
-		// The held namespace is still the live node at its path. (Under lazy, the deeper references were taken
-		// through a not-yet-materialized parent and are waiting proxies, so only their behavior is comparable.)
+		// Under eager the held namespace is still the live node at its path. Under lazy, `vault` was taken before
+		// the node loaded, so it is the waiting proxy; once loaded the node takes eager's object form (#811), so
+		// a fresh read is another object and only behavior is comparable, as for the deeper references.
 		// Every held reference now runs launcher's code.
-		expect(api.launcher.session.vault).toBe(vault);
 		if (config.mode === "eager") {
+			expect(api.launcher.session.vault).toBe(vault);
 			expect(api.launcher.session.vault.lock).toBe(lock);
 			expect(api.launcher.session.vault.lock.open).toBe(open);
 			expect(api.launcher.session.store.create).toBe(create);
