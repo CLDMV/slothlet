@@ -182,9 +182,8 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 				const expected = hostRead(api, where, key);
 				// Plain JS: a function's own descriptor holds what reading the member gives.
 				expect(expected.descriptor, `${where}.${key} descriptor`).toBe(expected.dot);
-				// A module's `self` is an object over the api root, callable root or not (#803), so it reads as one.
-				const held = where === "" ? { ...expected, held: "object" } : expected;
-				expect(await probe("read", where, key), `${where}.${key}`).toEqual(unheld.includes(where) ? UNHELD : held);
+				// A module's `self` takes the api root's form (#803), so over a callable root it reads as the host's api does.
+				expect(await probe("read", where, key), `${where}.${key}`).toEqual(unheld.includes(where) ? UNHELD : expected);
 			}
 		});
 
