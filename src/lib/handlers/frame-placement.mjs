@@ -1272,8 +1272,8 @@ function describeCall(wrapper) {
 		// Leaf segment of the api path — the function name as it appears in a stack frame.
 		fnName:
 			typeof apiPath === "string"
-				? StringMethods.slice(apiPath, ArrayMethods.lastIndexOf(apiPath, ".") + 1)
-				: copyList(apiPath, ArrayMethods.lastIndexOf(apiPath, ".") + 1),
+				? StringMethods.slice(apiPath, StringMethods.lastIndexOf(apiPath, ".") + 1)
+				: copyList(apiPath, StringMethods.lastIndexOf(apiPath, ".") + 1),
 		// The names the function goes by on a stack: its api key, and its own name when that differs.
 		fnNames: runtime_entryNames(apiPath, wrapper)
 	};
@@ -3791,7 +3791,7 @@ function createModuleLoad(slothlet, filePath, moduleID) {
 			if (!instances?.has) return null;
 			for (let id = slothlet.instanceID; id;) {
 				if (MapMethods.has(instances, id)) return id;
-				const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+				const reloaded = StringMethods.lastIndexOf(id, "_reload_");
 				id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 			}
 			return null;
@@ -4001,7 +4001,7 @@ function runtime_instanceRuns(slothlet) {
 	if (!instances?.has) return false;
 	for (let id = slothlet.instanceID; id;) {
 		if (MapMethods.has(instances, id)) return true;
-		const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+		const reloaded = StringMethods.lastIndexOf(id, "_reload_");
 		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 	}
 	return false;
