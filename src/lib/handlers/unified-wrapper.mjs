@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:58:58-08:00 (1794805138)
+ *	@Last modified time: 2026-11-16T00:37:00-08:00 (1794818220)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17764,11 +17764,14 @@ class UnifiedWrapper extends ComponentBase {
 				wrapper.____slothletInternal.state.materialized &&
 				!isInternalProp2 &&
 				!hasOwn(wrapper, prop) &&
-				wrapper.____slothletInternal.impl &&
-				// A Proxy answers reads through its get trap, which can serve members its `in` check does not
-				// report; the read below asks it, as eager does (#585 review).
-				!util.types.isProxy(wrapper.____slothletInternal.impl) &&
-				!runtime_implHas(wrapper, wrapper.____slothletInternal.impl, prop) &&
+				// A loaded namespace whose members live on the wrapper alone holds no impl: a remove that restored an
+				// overwritten namespace leaves it so. It holds nothing else, so it waits for nothing.
+				((wrapper.____slothletInternal.impl === null && !wrapper.____slothletInternal.state.inFlight) ||
+					(wrapper.____slothletInternal.impl &&
+						// A Proxy answers reads through its get trap, which can serve members its `in` check does not
+						// report; the read below asks it, as eager does (#585 review).
+						!util.types.isProxy(wrapper.____slothletInternal.impl) &&
+						!runtime_implHas(wrapper, wrapper.____slothletInternal.impl, prop))) &&
 				runtime_moduleInheritance(wrapper, prop) === null
 			) {
 				return undefined;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:20-07:00 (1791091700)
+ *	@Last modified time: 2026-11-16T00:38:06-08:00 (1794818286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -162,6 +162,25 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 		expect([await open(), await lock.open(), await vault.lock.open()]).toEqual(["ext-open", "ext-open", "ext-open"]);
 		expect([await create(), await store.destroy()]).toEqual(["ext-create", "ext-destroy"]);
 		expect(Object.keys(vault)).toEqual(["lock"]);
+	});
+
+	it.each([
+		["the original leaves were never called", false],
+		["the original leaves were called before the overwrite", true]
+	])("reads a member the restored namespace does not hold as undefined when %s", async (_label, touchFirst) => {
+		api = await slothlet({ ...config, base: BASE, silent: true });
+		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		if (touchFirst) expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
+		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		expect(await api.launcher.session.vault.lock.open()).toBe("shadow-open");
+
+		expect(await api.slothlet.api.remove("shadow")).toBe(true);
+
+		// As in eager: no member there, so the read is undefined and a read below it is the engine's TypeError. Lazy
+		// handed out a stand-in that read the node again for each member, without end.
+		expect(api.launcher.session.vault.missing).toBeUndefined();
+		expect(() => api.launcher.session.vault.missing.deeper).toThrow(TypeError);
+		expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
 	});
 
 	it("keeps values set by hand on the overwritten namespace, after the restored keys", async () => {
