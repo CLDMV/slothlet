@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
+ *	@Last modified time: 2026-11-15T17:10:24-08:00 (1794791424)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -410,6 +410,31 @@ function inheritsFrom(value, ctor) {
 	return REFLECT_APPLY(INTRINSIC_HAS_INSTANCE, ctor, [value]);
 }
 
+/**
+ * The folder, name and extension of a file's path, in any host.
+ *
+ * @description
+ * Node answers with `node:path` (`dirname`, `basename`, `extname`), so a Windows path splits on either separator. A
+ * browser has no `node:path`; there a file is named by a URL or a `/`-separated path, so the parts come from the
+ * string: the folder is everything before the last `/` (`.` for a bare name and `/` for a name right after a leading
+ * `/`, as `path.dirname` answers), the name everything after it, and the extension the name's last `.` onward. A
+ * name whose only dot is its first character has no extension, as `path.extname(".mjs")` answers.
+ *
+ * @param {string} filePath - A filesystem path (Node), or a URL or `/`-separated path (browser).
+ * @returns {{dir: string, name: string, ext: string}} The folder, the file's name with its extension, and the extension.
+ * @internal
+ *
+ * @example
+ * fileParts("https://example.com/api/calc.mjs"); // { dir: "https://example.com/api", name: "calc.mjs", ext: ".mjs" }
+ */
+function fileParts(filePath) {
+	if (isNode) return { dir: path.dirname(filePath), name: path.basename(filePath), ext: path.extname(filePath) };
+	const cut = filePath.lastIndexOf("/");
+	const name = filePath.slice(cut + 1);
+	const dot = name.lastIndexOf(".");
+	return { dir: cut < 0 ? "." : filePath.slice(0, cut) || "/", name, ext: dot > 0 ? name.slice(dot) : "" };
+}
+
 export {
 	isNode,
 	fs,
@@ -422,6 +447,7 @@ export {
 	AsyncResource,
 	createRequire,
 	loadJson,
+	fileParts,
 	scheduleMacrotask,
 	inheritsFrom
 };

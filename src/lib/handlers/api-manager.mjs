@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T23:00:34-08:00 (1794726034)
+ *	@Last modified time: 2026-11-15T17:10:09-08:00 (1794791409)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,12 +60,11 @@ import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
-// enters the static-import graph in browser bundles. ApiManager methods that
-// rely on `fs`/`path` (filesystem-backed add/reload/remove) are Node-only —
-// browser mode mounts from the manifest tree and does not touch the filesystem.
-// fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
-// the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
-import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
+// enters the static-import graph in browser bundles. fsp (fs/promises) is resolved in the platform
+// module (#123) and is null in a browser, where add/reload/remove mount from the manifest tree and never
+// touch the filesystem. A file's folder, name and extension come from `fileParts`, which answers in both
+// hosts: a browser adds and reloads single files too (#805).
+import { fsp, fileParts, util } from "@cldmv/slothlet/helpers/platform";
 import {
 	Reflect,
 	Objects,
@@ -3137,7 +3136,7 @@ export class ApiManager extends ComponentBase {
 
 			if (isFile) {
 				// Validate file extension for files
-				const ext = path.extname(resolvedPath);
+				const { ext } = fileParts(resolvedPath);
 				if (![".mjs", ".cjs", ".js"].includes(ext)) {
 					throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
 						path: resolvedPath,
@@ -3207,8 +3206,8 @@ export class ApiManager extends ComponentBase {
 		let fileFilter = null;
 
 		if (isFile) {
-			dirForBuild = path.dirname(resolvedFolderPath);
-			const fileName = path.basename(resolvedFolderPath);
+			const { dir, name: fileName } = fileParts(resolvedFolderPath);
+			dirForBuild = dir;
 			fileFilter = (file) => file === fileName;
 		}
 
@@ -3816,7 +3815,7 @@ export class ApiManager extends ComponentBase {
 				syntheticExports: isSynthetic ? syntheticExports : null,
 				// A single-file add: the folder its build scans and the one file it loads there, so a reload builds
 				// it the way the add did, not by scanning the file's path as a folder.
-				file: isFile ? { dir: dirForBuild, name: path.basename(resolvedFolderPath) } : null,
+				file: isFile ? { dir: dirForBuild, name: fileParts(resolvedFolderPath).name } : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
 				hidden: restOptions.hidden ?? null,
