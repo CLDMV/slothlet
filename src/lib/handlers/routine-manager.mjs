@@ -1866,7 +1866,10 @@ export class RoutineManager extends ComponentBase {
 				const cascade = this.#buildCascadeCallable(routine.name);
 				await this.#loadCascadeSlot(api, routine.name);
 				try {
-					api[routine.name] = cascade;
+					// The framework's own install: the root holds the cascade as it is, not as a member the host assigned.
+					runtime_frameworkWrite(api, () => {
+						api[routine.name] = cascade;
+					});
 				} catch {
 					// Best-effort — see above.
 				}
