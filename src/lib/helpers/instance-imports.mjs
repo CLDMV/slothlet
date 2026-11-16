@@ -2031,9 +2031,16 @@ async function viteImportRefusal(specifier, file) {
 async function viteCapabilityRefusal(importer) {
 	try {
 		const { SlothletError } = await import("@cldmv/slothlet/errors");
-		return new SlothletError("CAPABILITY_REFUSED", { caller: importer, capability: "imports", route: "import" }, null, {
-			validationError: true
-		});
+		const { translate } = await import("@cldmv/slothlet/i18n");
+		// The vite server holds none of the instance's rules: the import is no leaf's it could decide for.
+		const refusal = new SlothletError(
+			"CAPABILITY_REFUSED",
+			{ caller: importer, capability: "imports", route: "import", reason: translate("CAPABILITY_REASON_UNATTRIBUTED") },
+			null,
+			{ validationError: true }
+		);
+		refusal.context.reasonCode = "unattributed";
+		return refusal;
 	} catch {
 		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
 		const error = new PristineError(`CAPABILITY_REFUSED: imports (import) ${importer}`);

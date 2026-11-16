@@ -2297,7 +2297,10 @@ export class PermissionManager extends ComponentBase {
 			conditionMatched: winner?.condition != null
 		});
 		const reason = translate(CAPABILITY_REASONS[reasonCode]);
-		throw new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason, reasonCode });
+		const error = new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason });
+		// Carried for code that branches on why; the message reads the translated `reason`.
+		error.context.reasonCode = reasonCode;
+		throw error;
 	}
 
 	/**
