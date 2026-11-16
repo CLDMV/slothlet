@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:37:00-08:00 (1794818220)
+ *	@Last modified time: 2026-11-16T02:51:26-08:00 (1794826286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -13291,11 +13291,13 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	const internal = wrapper.____slothletInternal;
 	const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
-	// A lazy node not loaded yet shows itself. impl is always null (not undefined) at this point; the || undefined
-	// branch is never evaluated.
+	// A lazy node not loaded yet shows itself, a function proxy, which an inspector shows as a function without asking
+	// it again. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
+	// does: one that showed itself would be asked again by an inspector that inspects what a hook returns, without end.
+	// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
 	/* v8 ignore next */
-	if (internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined))
-		return internal.proxy;
+	const unloaded = internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
+	if (unloaded && typeof internal.proxy === "function") return internal.proxy;
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
@@ -13725,6 +13727,8 @@ class UnifiedWrapper extends ComponentBase {
 		// A lazy proxy's handler and installed traps while its value is unknown, for ___settleLazyProxy().
 		internal.lazyProxyHandler = null;
 		internal.lazyProxyTraps = null;
+		// A settled lazy node's lazy proxy, kept by ___settleLazyProxy() for ___unsettleLazyProxy(); null otherwise.
+		internal.settledFrom = null;
 
 		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340): initialImpl
 		// becomes the wrapper's live impl reference verbatim, so a `self.X = obj` assignment (and
@@ -14407,6 +14411,8 @@ class UnifiedWrapper extends ComponentBase {
 		internal.proxy = newProxy;
 		internal.proxyHandler = null;
 		internal.proxyTraps = null;
+		// A callable node keeps its callable proxy through a reset; the lazy proxy a settle kept is not taken back (#811).
+		internal.settledFrom = null;
 		_proxyRegistry.set(newProxy, wrapper);
 
 		// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
@@ -14439,6 +14445,8 @@ class UnifiedWrapper extends ComponentBase {
 		const oldProxy = internal.proxy;
 		const oldTraps = internal.lazyProxyTraps;
 		const handler = internal.lazyProxyHandler;
+		// Kept so a reload that resets the node to unloaded can give it its lazy proxy back (see ___unsettleLazyProxy).
+		const lazy = { proxy: oldProxy, handler, traps: oldTraps, ownTraps: { ...oldTraps }, isCallableLocked: internal.isCallableLocked };
 		internal.lazyProxyHandler = null;
 		internal.lazyProxyTraps = null;
 		internal.isCallableLocked = true;
@@ -14457,8 +14465,43 @@ class UnifiedWrapper extends ComponentBase {
 			internal.proxyHandler = handler;
 			internal.proxyTraps = traps;
 		}
+		internal.settledFrom = { ...lazy, settledProxy: newProxy, settledTraps: traps };
 		runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
 		wrapper.___replaceInParent(oldProxy, newProxy);
+	}
+
+	/**
+	 * Give a settled lazy node its lazy proxy back once a reload resets it to unloaded (#811).
+	 *
+	 * @description
+	 * {@link UnifiedWrapper#___settleLazyProxy} rebuilt the loaded node on eager's target. A node reset to unloaded
+	 * holds nothing again, so it takes the form an unloaded lazy node has: its lazy proxy, on a function target, since
+	 * what it loads next may be callable. That proxy runs its own traps again and is put back in the parent, so a
+	 * reference taken before the first load is the node again, as before the load; the settled proxy forwards to the
+	 * node's proxy from then on. A node upgraded to callable since it settled keeps its callable proxy (see
+	 * {@link UnifiedWrapper#___upgradeToCallableProxy}).
+	 *
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___unsettleLazyProxy(); // in ___resetLazy
+	 */
+	___unsettleLazyProxy() {
+		const wrapper = this;
+		const internal = wrapper.____slothletInternal;
+		const settled = internal.settledFrom;
+		internal.settledFrom = null;
+		if (settled === null) return;
+		Objects.assign(settled.traps, settled.ownTraps);
+		runtime_forwardHandlerTo(settled.settledTraps, () => internal.proxy);
+		internal.proxy = settled.proxy;
+		internal.proxyHandler = null;
+		internal.proxyTraps = null;
+		internal.lazyProxyHandler = settled.handler;
+		internal.lazyProxyTraps = settled.traps;
+		internal.isCallableLocked = settled.isCallableLocked;
+		wrapper.___replaceInParent(settled.settledProxy, settled.proxy);
 	}
 
 	/**
@@ -14620,6 +14663,8 @@ class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.invalid = false;
 		this.____slothletInternal.state.materialized = false;
 		this.____slothletInternal.state.inFlight = false;
+		// Unloaded again, so it takes an unloaded lazy node's form again (#811).
+		this.___unsettleLazyProxy();
 		// Unloaded again, so it counts as unloaded again until it next loads (#588).
 		this.___trackLazyLoad("rearm");
 

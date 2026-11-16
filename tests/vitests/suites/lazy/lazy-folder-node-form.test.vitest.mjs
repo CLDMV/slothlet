@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T02:52:10-08:00 (1794826330)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -130,5 +130,43 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("Lazy > a loaded folder node's
 		expect(Object.keys(held)).toEqual(Object.keys(api.deep));
 		expect(held.inner.walk(1, 2, 3)).toBe("1/2/3");
 		expect(typeof api.deep).toBe("object");
+	});
+
+	it("takes an unloaded node's form again when a reload resets it, and stays printable", async () => {
+		const api = await slothlet({ ...config, base: DIR, silent: true, api: { mutations: { reload: true } } });
+		apis = [api];
+		const held = api.deep;
+		await api.deep;
+		const loaded = api.deep;
+		expect(typeof loaded).toBe("object");
+		await api.slothlet.api.reload(".");
+		// Unloaded again: the lazy proxy it was before the load, in its form.
+		expect(api.deep).toBe(held);
+		expect(typeof api.deep).toBe("function");
+		// A failed comparison prints both values; neither may recurse without end.
+		expect(() => expect(loaded).toBe(held)).toThrow(/expected/);
+		expect(() => expect(held).toBe(loaded)).toThrow(/expected/);
+		// Loaded again, both references read the node's members.
+		await api.deep;
+		await api.deep.inner;
+		expect(typeof api.deep).toBe("object");
+		expect(Object.keys(loaded)).toEqual(Object.keys(api.deep));
+		expect(loaded.inner.walk(1, 2, 3)).toBe("1/2/3");
+		expect(held.inner.walk(1, 2, 3)).toBe("1/2/3");
+	});
+
+	it("prints a loaded node held past its remove as eager prints it", async () => {
+		const shown = {};
+		for (const mode of ["lazy", "eager"]) {
+			const api = await slothlet({ ...config, mode, base: DIR, silent: true, api: { mutations: { remove: true } } });
+			apis.push(api);
+			await api.deep;
+			const loaded = api.deep;
+			await api.slothlet.api.remove("deep");
+			// A failed comparison prints the value; it may not recurse without end.
+			expect(() => expect(loaded).toBe(null), mode).toThrow(/expected/);
+			shown[mode] = util.inspect(loaded, { depth: 0 });
+		}
+		expect(shown.lazy).toBe(shown.eager);
 	});
 });
