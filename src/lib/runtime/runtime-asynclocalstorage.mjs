@@ -50,7 +50,16 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { Reflect, NativeObject, NativeProxy, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	FunctionMethods,
+	NativeObject,
+	NativeProxy,
+	Reflect,
+	setFrom,
+	SetMethods,
+	String,
+	Symbol
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } = instanceImportsInternals(
 	"lib/runtime/runtime-asynclocalstorage"
 );
@@ -169,8 +178,8 @@ const selfTraps = {
 		// to avoid proxy invariant violations (since the proxy target is an empty object)
 		if (desc) {
 			return "value" in desc
-				? { ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
-				: { ...desc, configurable: true };
+				? { __proto__: null, ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
+				: { __proto__: null, ...desc, configurable: true };
 		}
 		return undefined;
 	},
@@ -191,7 +200,7 @@ const selfTraps = {
 		const target = runtime_selfChangeTarget(ctx, prop);
 		// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
 		if (descriptor.configurable === false) return false;
-		if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+		if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 		return Reflect.defineProperty(target, prop, descriptor);
 	},
 	// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
@@ -299,7 +308,7 @@ const objectSelf = new NativeProxy({}, selfTraps);
  * @type {Function}
  * @private
  */
-const callableTarget = function () {}.bind();
+const callableTarget = FunctionMethods.bind(function () {});
 
 /**
  * `self` for an api whose root is a function (#803): a call or construction of it is one of the api root, held to the
@@ -467,7 +476,10 @@ export const instanceID = new NativeProxy(
 );
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [objectSelf, callableSelf, context, instanceID]) markSlothletProxy(proxy);
+for (let ofIndex = 0, ofList = [objectSelf, callableSelf, context, instanceID]; ofIndex < ofList.length; ofIndex++) {
+	const proxy = ofList[ofIndex];
+	markSlothletProxy(proxy);
+}
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for an async instance (#726).
 registerRuntimeSelf(asyncRuntime, objectSelf, callableSelf);
 // Each instance's files get the form of `self` its api root takes (#803).

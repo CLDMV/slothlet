@@ -1330,7 +1330,7 @@ class Slothlet {
 			// A bound function for a callable root, as an api node's own target is: callable and constructible, with no
 			// `prototype` of its own, so the traps report the root's function as it is (an async function, an arrow, a
 			// bound function or a method has none) without breaking an invariant of the target's.
-			const proxyTarget = isCallable ? function () {}.bind() : {};
+			const proxyTarget = isCallable ? FunctionMethods.bind(function () {}) : {};
 			// A function root's prototype, on a record of the root's own as a function node's is on its node's: the root
 			// file's function's until the root is given one (`Object.setPrototypeOf(api, …)`), which the record then holds,
 			// so the function is never changed through the root. A load that gives the root a value starts it again.
@@ -1347,7 +1347,7 @@ class Slothlet {
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
 				rootPrototypeNow();
-				return rootPrototype.given && !Objects.prototype.hasOwnProperty.call(this.api, prop);
+				return rootPrototype.given && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop);
 			};
 			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
 			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
@@ -1377,7 +1377,7 @@ class Slothlet {
 							// is the target of another proxy) is the target's.
 							if (fixed && typeof prop === "symbol" && !(prop in this.api)) return fixed.value;
 							// The root's `__proto__` is the prototype it reports, as an object's or a function's is.
-							if (prop === "__proto__" && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
+							if (prop === "__proto__" && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop)) {
 								const from = rootHeld();
 								return from === null ? undefined : Reflect.get(from, prop, this.boundApi);
 							}
@@ -1388,7 +1388,7 @@ class Slothlet {
 								if (from === null) return runtime_rootMemberRead(this, prop, undefined);
 								return runtime_rootInheritedRead(this, rootViews, from, prop, Reflect.get(from, prop, this.boundApi));
 							}
-							if (!isCallable && rootGiven() && !Objects.prototype.hasOwnProperty.call(this.api, prop)) {
+							if (!isCallable && rootGiven() && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop)) {
 								const from = rootHeld();
 								if (from !== null) return runtime_rootInheritedRead(this, rootViews, from, prop, this.api[prop]);
 							}
@@ -1476,7 +1476,7 @@ class Slothlet {
 							// A closed root reports every member it holds (proxy invariant): one the reader may not read is described
 							// with its value withheld (#825).
 							if (fixed && !Reflect.isExtensible(target)) {
-								if (runtime_rootWithheld(this, prop)) return { ...fixed, value: undefined };
+								if (runtime_rootWithheld(this, prop)) return { __proto__: null, ...fixed, value: undefined };
 								runtime_rootMemberRead(this, prop, this.api?.[prop]);
 								return fixed;
 							}
