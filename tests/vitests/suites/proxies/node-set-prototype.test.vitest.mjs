@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:46:27-08:00 (1794818787)
+ *	@Last modified time: 2026-11-16T01:52:39-08:00 (1794822759)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -590,11 +590,9 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 			node.ownNothing = { a: 1 };
 			node.ownPartly = { a: 1, b: 2 };
 			// Plain JS lists both members; the module may read nothing beneath `nothing` and one leaf of `partly`, so
-			// `nothing` is left out, and `partly` is listed holding the leaf it may read. A function node leaves out
-			// `ownNothing` the same way; a composed namespace still lists an object the host assigned to it.
-			const { own, ...listing } = await api.reader.objectListing(path);
-			if (path !== "ev") expect(own).toEqual(["ownPartly"]);
-			expect(listing).toEqual({
+			// `nothing` is left out as `ownNothing` is, and `partly` is listed holding the leaf it may read.
+			expect(await api.reader.objectListing(path)).toEqual({
+				own: ["ownPartly"],
 				keys: ["partly"],
 				ownKeys: ["partly"],
 				forIn: ["partly"],

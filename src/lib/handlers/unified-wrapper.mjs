@@ -3771,9 +3771,62 @@ function runtime_dataReadOptions(slothlet) {
 const DATA_MEMBER_NODES = new WeakMap();
 
 /**
+ * Objects written to an api node after the api was built (an assignment or definition outside a build), which are data
+ * whoever wrote them (#826): a node a module's file never exported holds them as it holds a module's data.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const ASSIGNED_DATA = new WeakSet();
+
+/**
+ * Record an object written to a node outside a build as data (see {@link ASSIGNED_DATA}): a plain object or array, never
+ * a node, a Proxy or a function.
+ * @param {object} wrapper - The node written to.
+ * @param {*} value - The value written.
+ * @returns {void}
+ * @private
+ */
+function runtime_markAssignedData(wrapper, value) {
+	if (value === null || typeof value !== "object" || wrapper.slothlet?.____buildDepth > 0) return;
+	if (util.types.isProxy(value) || resolveWrapper(value) !== null || runtime_isTerminalData(value)) return;
+	ASSIGNED_DATA.add(value);
+}
+
+/**
+ * Whether a value is plain data: an object whose prototype is `Object.prototype` or null, or an array, and no Proxy.
+ * @param {*} value - The value.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isPlainData(value) {
+	if (value === null || typeof value !== "object" || util.types.isProxy(value)) return false;
+	if (Arrays.isArray(value)) return true;
+	const prototype = Objects.getPrototypeOf(value);
+	return prototype === Objects.prototype || prototype === null;
+}
+
+/**
+ * Whether a node holds data written to the api after it was built, or data such a value holds (see
+ * {@link ASSIGNED_DATA}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_holdsAssignedData(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	return (
+		internal.userAssigned === true ||
+		internal.assignedData === true ||
+		ASSIGNED_DATA.has(internal.impl) ||
+		(internal.sourceValue !== undefined && ASSIGNED_DATA.has(internal.sourceValue))
+	);
+}
+
+/**
  * Whether a node stands for an object member of a module's data: a plain object or array a file exports by name, or
- * one such a value holds, or one a file's default export holds. A folder, a file's own node (its default export
- * included), a function, a built-in data value and a value no file exported are not. A rule naming such a member's
+ * one such a value holds, or one a file's default export holds, and an object assigned to a node after the api was
+ * built, or one such an object holds (#826). A folder, a file's own node (its default export included), a function and
+ * a built-in data value are not. A rule naming such a member's
  * path exactly is about the member, so it covers what the member holds, as reading the member itself is traversal.
  * Decided once per value the node holds.
  * @param {object|null} wrapper - The node's wrapper, or null when no node is there.
@@ -3797,8 +3850,7 @@ function runtime_isDataMemberNode(wrapper) {
 		impl !== null &&
 		typeof impl === "object" &&
 		!runtime_isTerminalData(impl) &&
-		Arrays.isArray(exportPath) &&
-		exportPath.length > (exportPath[0] === "default" ? 1 : 0);
+		((Arrays.isArray(exportPath) && exportPath.length > (exportPath[0] === "default" ? 1 : 0)) || runtime_holdsAssignedData(wrapper));
 	DATA_MEMBER_NODES.set(wrapper, { impl, member });
 	return member;
 }
@@ -10027,6 +10079,7 @@ const ANY_MEMBER_SEGMENT = "\u0000member";
  *   reading now.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
  * @param {object|null} [access] - The read of `self` this is part of, when it was resolved already.
+ * @param {*} [member] - The member's value, when the caller has it.
  * @returns {boolean} Whether the reader may read nothing there.
  * @private
  *
@@ -10034,10 +10087,15 @@ const ANY_MEMBER_SEGMENT = "\u0000member";
  * // rule: deny reader.** → owner.config.nested.**
  * Object.keys(self.owner.config); // ["prim", "open"], as for a denied primitive member
  */
-function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null) {
+function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null, member = undefined) {
 	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
-	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say.
-	if (!runtime_isDataMemberNode(runtime_nodeAtPath(wrapper.slothlet, targetPath))) return false;
+	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say. An
+	// object written to the api after it was built is data too, and so is a plain object or array no node stands for
+	// yet, which only data holds (#826).
+	const memberNode =
+		runtime_nodeAtPath(wrapper.slothlet, targetPath) ?? (member !== null && typeof member === "object" ? resolveWrapper(member) : null);
+	const unwrappedData = memberNode === null && (runtime_holdsAssignedData(wrapper) || runtime_isPlainData(member));
+	if (!runtime_isDataMemberNode(memberNode) && !unwrappedData) return false;
 	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
 	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept, access);
 	if (beneath.allowed) return false;
@@ -10125,7 +10183,7 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	if (listing && "value" in desc && typeof prop === "string") {
 		const member = runtime_unwrapLeafValue(desc.value);
 		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member))
-			return runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access);
+			return runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access, member);
 	}
 	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
 	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
@@ -10880,7 +10938,11 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
 			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-		} else if (value !== null && typeof value === "object" && runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
+		} else if (
+			value !== null &&
+			typeof value === "object" &&
+			runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept, null, value)
+		) {
 			// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
 			delete own()[key];
 		} else if (Arrays.isArray(value)) {
@@ -15874,6 +15936,8 @@ class UnifiedWrapper extends ComponentBase {
 		// The value the child was built from (before any clone), so a parent array can tell whether the
 		// element its cached child fronts is still the one at that index (#602).
 		nestedWrapper.____slothletInternal.sourceValue = value;
+		// What an object assigned to the api after it was built holds is data, as the object is (#826).
+		if (ASSIGNED_DATA.has(value) || runtime_holdsAssignedData(this)) nestedWrapper.____slothletInternal.assignedData = true;
 		// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
 		nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? runtime_moduleObjectFor(nestedWrapper, value, true) : null;
 		// Return proxy to maintain consistency with external assignments
@@ -16029,6 +16093,9 @@ class UnifiedWrapper extends ComponentBase {
 		};
 		const changeThroughStandIn = (op, prop, payload) => {
 			assertChange(prop);
+			// An object written through the stand-in is data, as one written to the loaded node is (#826).
+			if (op === "set") runtime_markAssignedData(wrapper, runtime_unwrapSelfView(payload));
+			else if (op === "defineProperty" && "value" in payload) runtime_markAssignedData(wrapper, runtime_unwrapSelfView(payload.value));
 			const change = { chain: [...propChain], op, prop, payload };
 			if (wrapper.____slothletInternal.state.materialized) return runtime_applyStandInChange(wrapper, change, false, replayHolders);
 			runtime_queueStandInChange(wrapper, change);
@@ -19071,6 +19138,8 @@ class UnifiedWrapper extends ComponentBase {
 			value = runtime_unwrapSelfView(value);
 			// A value another module or the host writes onto the node is theirs, handed to this one (#597).
 			runtime_markWritten(wrapper, value);
+			// An object written after the api was built is data (#826).
+			runtime_markAssignedData(wrapper, value);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -19880,6 +19949,8 @@ class UnifiedWrapper extends ComponentBase {
 				runtime_assertOwnedWrite(wrapper, prop);
 				// A view `self` handed out stands for its node: the node is what is defined (#625).
 				if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+				// An object defined after the api was built is data, as one assigned is (#826).
+				if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (target === wrapper || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
