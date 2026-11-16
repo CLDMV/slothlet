@@ -3080,8 +3080,10 @@ function installViteLoadedRegistry(target) {
 	if (current && !current.configurable) return typeof current.value?.importersOf === "function" ? current.value : null;
 	/** @type {Map<string, Set<string>>} */
 	const records = new Map();
+	let accepted = 0;
 	const keep = (record) => {
 		if (!record) return;
+		accepted++;
 		let importers = MapMethods.get(records, record.path);
 		if (!importers) MapMethods.set(records, record.path, (importers = new Set()));
 		for (let i = 0; i < record.importers.length; i++) SetMethods.add(importers, record.importers[i]);
@@ -3107,7 +3109,9 @@ function installViteLoadedRegistry(target) {
 		importersOf: Objects.freeze((path) => {
 			const found = MapMethods.get(records, path);
 			return found ? setMembers(found) : null;
-		})
+		}),
+		// How many records it accepted: the permission baseline's sign that the vite plugin is loaded.
+		recorded: Objects.freeze(() => accepted)
 	});
 	Objects.defineProperty(target, key, { __proto__: null, value: registry, enumerable: false, writable: false, configurable: false });
 	return registry;

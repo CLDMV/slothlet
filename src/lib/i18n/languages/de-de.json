@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "Das Hook-Muster '{pattern}' konnte keiner registrierten Version zugeordnet werden.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "Der Versions-Dispatch benötigt einen versionierten Mount, der den Pfad des Musters abdeckt (api.add(path, source, options, { version })). Ein Dispatcher muss ein registriertes Tag, ein Array davon oder nichts (für die Standardversion) zurückgeben — oder entfernen Sie die Option versioned/versionDispatcher, um das Muster wörtlich zu registrieren.",
 		"HOOK_VERSION_UNKNOWN_TAG": "Der Versions-Dispatch für das Hook-Muster '{pattern}' hat '{version}' gewählt, das keine registrierte Version ist.",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Der Dispatcher muss aus den in allVersions übergebenen registrierten Tags wählen. Registrieren Sie zuerst den Mount (api.add mit einer Version) oder korrigieren Sie den Rückgabewert des Dispatchers."
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Der Dispatcher muss aus den in allVersions übergebenen registrierten Tags wählen. Registrieren Sie zuerst den Mount (api.add mit einer Version) oder korrigieren Sie den Rückgabewert des Dispatchers.",
+		"PERMISSION_STRICT_FIXED": "Der Berechtigungsmodus \"strict\" wird in der Konfiguration gewählt und kann zur Laufzeit nicht geändert werden (control.{method}).",
+		"HINT_PERMISSION_STRICT_FIXED": "Setzen Sie permissions.mode stattdessen in der Konfiguration: Nach dem Start einer Instanz kann strict weder verlassen noch betreten werden.",
+		"PERMISSION_BASELINE_UNMET": "Der Berechtigungsmodus \"strict\" verweigert den Start: Diese Basisprüfungen sind nicht erfüllt: {checks}.",
+		"HINT_PERMISSION_BASELINE_UNMET": "Starten Sie die Instanz mit dem Modus \"on\" und lesen Sie in api.slothlet.permissions.control.report() den Grund jeder Prüfung; docs/PERMISSIONS.md nennt, was jede braucht.",
+		"WARNING_PERMISSION_BASELINE_UNMET": "Die Berechtigungs-Basisprüfung \"{check}\" ist nicht erfüllt: {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "Jede Prüfung ist eine Tatsache darüber, wie der Host slothlet ausführt; docs/PERMISSIONS.md nennt, was jede braucht. Im Modus \"strict\" würde die Instanz nicht starten.",
+		"BASELINE_CSP_EVAL_ALLOWED": "Die Seite erlaubt, Code aus Zeichenketten zu erzeugen: Ihre Content Security Policy erlaubt 'unsafe-eval', oder sie hat keine.",
+		"BASELINE_CSP_BLOB_ALLOWED": "Die Seite führt Skripte von blob:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
+		"BASELINE_CSP_DATA_ALLOWED": "Die Seite führt Skripte von data:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "Der Prozess erlaubt, Code aus Zeichenketten zu erzeugen: Starten Sie Node mit --disallow-code-generation-from-strings.",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet konnte keinen eigenen Realm zum Lesen von Aufrufstapeln anlegen.",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das slothletInstanceImports()-Plugin von slothlet in der vitest-Konfiguration."
 	},
 	"metadata": {
 		"code": "de-de",

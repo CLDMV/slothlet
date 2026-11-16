@@ -28,6 +28,7 @@ import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-ma
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+import { runBaseline } from "@cldmv/slothlet/helpers/permission-baseline";
 import {
 	isFrameworkWriteTarget,
 	writeTargetLiteralPrefix,
@@ -510,6 +511,21 @@ export class PermissionManager extends ComponentBase {
 	#disabled = false;
 
 	/**
+	 * Whether the mode is `"strict"`: as on, chosen in the config only, so `enable()` and `disable()` refuse.
+	 * @type {boolean}
+	 * @private
+	 */
+	#strict = false;
+
+	/**
+	 * What the permission baseline found when the instance started (see {@link runBaseline}), or null when no check ran
+	 * (the mode was off or disabled).
+	 * @type {{met: boolean, checks: Array<{id: string, met: boolean, reason: string|null}>}|null}
+	 * @private
+	 */
+	#baseline = null;
+
+	/**
 	 * Audit level: "default" or "verbose".
 	 * @type {string}
 	 * @private
@@ -735,8 +751,9 @@ export class PermissionManager extends ComponentBase {
 			// The "allow" fallback in || is uncovered when all tests supply defaultPolicy explicitly.
 			/* v8 ignore next */
 			this.#defaultPolicy = permConfig.defaultPolicy || "allow";
-			this.#enabled = permConfig.mode ? permConfig.mode === "on" : permConfig.enabled !== false;
+			this.#enabled = permConfig.mode ? permConfig.mode === "on" || permConfig.mode === "strict" : permConfig.enabled !== false;
 			this.#disabled = permConfig.mode === "disabled";
+			this.#strict = permConfig.mode === "strict";
 			this.#audit = permConfig.audit || "default";
 			this.#readGating = permConfig.readGating !== false;
 			this.#capture = permConfig.references?.capture !== false;
@@ -2782,6 +2799,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.enable();
 	 */
 	enable() {
+		this.#assertNotStrict("enable");
 		this.#assertNotSealed();
 		this.#enabled = true;
 		this.#endedOn = false;
@@ -2789,6 +2807,17 @@ export class PermissionManager extends ComponentBase {
 		// The event pool follows the mode: levels resolved under the old one are resolved again.
 		this.#eventRulesEpoch++;
 		this.#clearCache();
+	}
+
+	/**
+	 * Throw if the mode is `"strict"`, which is chosen in the config only and cannot be left or entered at runtime.
+	 * @param {string} method - The control method called.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_STRICT_FIXED under strict.
+	 * @private
+	 */
+	#assertNotStrict(method) {
+		if (this.#strict) throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method }, null, { validationError: true });
 	}
 
 	/**
@@ -2863,6 +2892,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.disable();
 	 */
 	disable() {
+		this.#assertNotStrict("disable");
 		this.#assertNotSealed();
 		this.#enabled = false;
 		this.#endedOn = false;
@@ -2896,16 +2926,75 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
-	 * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
-	 * cover), or `"disabled"` (nothing applies).
+	 * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
+	 * strict. Under on, each check not met is one warning (unless the instance is silent); under strict, any check not
+	 * met refuses the start.
+	 * @param {"node"|"browser"} envTarget - Where the instance runs.
+	 * @param {{silent?: boolean}} [options] - The instance's options.
+	 * @returns {Promise<void>}
+	 * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
+	 * @example
+	 * await pm.checkBaseline("node", { silent: false });
+	 */
+	async checkBaseline(envTarget, { silent = false } = {}) {
+		this.#baseline = null;
+		if (!this.#enabled) return;
+		const baseline = await runBaseline(envTarget);
+		this.#baseline = baseline;
+		if (baseline.met) return;
+		const unmet = filterList(baseline.checks, (entry) => !entry.met);
+		if (this.#strict) {
+			throw new this.SlothletError(
+				"PERMISSION_BASELINE_UNMET",
+				{
+					checks: ArrayMethods.join(
+						mapList(unmet, (entry) => entry.id),
+						", "
+					)
+				},
+				null,
+				{
+					validationError: true
+				}
+			);
+		}
+		if (silent) return;
+		for (let ofIndex = 0, ofList = unmet; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			new this.SlothletWarning("WARNING_PERMISSION_BASELINE_UNMET", { check: entry.id, reason: entry.reason });
+		}
+	}
+
+	/**
+	 * The mode, what the permission baseline found when the instance started, and the capabilities rules open.
+	 * @returns {{mode: string, baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}
+	 *   The report; `baseline.met` is null when no check ran (the mode was off or disabled at start).
+	 * @example
+	 * pm.report(); // { mode: "on", baseline: { met: true, checks: [...] }, capabilities: [...] }
+	 */
+	report() {
+		const baseline = this.#baseline;
+		return {
+			mode: this.mode(),
+			baseline: baseline
+				? { met: baseline.met, checks: mapList(baseline.checks, (entry) => ({ id: entry.id, met: entry.met, reason: entry.reason })) }
+				: { met: null, checks: [] },
+			// The capabilities and the callers rules open each to, where this copy has them.
+			capabilities: typeof this.capabilityReport === "function" ? this.capabilityReport() : []
+		};
+	}
+
+	/**
+	 * The permission system's mode: `"on"` (every rule applies), `"strict"` (as on, chosen in the config only, with the
+	 * permission baseline met), `"off"` (only the built-in rules that keep module code off the framework's own namespace,
+	 * root functions, and keys on api nodes, and the host rules on what they cover), or `"disabled"` (nothing applies).
 	 *
-	 * @returns {"on"|"off"|"disabled"} The mode.
+	 * @returns {"on"|"strict"|"off"|"disabled"} The mode.
 	 * @example
 	 * pm.mode(); // "off" with no permissions config
 	 */
 	mode() {
-		if (this.#enabled) return "on";
+		if (this.#enabled) return this.#strict ? "strict" : "on";
 		return this.#disabled ? "disabled" : "off";
 	}
 
@@ -3054,6 +3143,7 @@ export class PermissionManager extends ComponentBase {
 		if (this.#enabled) this.#endedOn = true;
 		this.#enabled = false;
 		this.#disabled = false;
+		this.#strict = false;
 		this.#eventRulesEpoch++;
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";

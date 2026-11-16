@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "O padrão de hook '{pattern}' não pôde ser resolvido para uma versão registrada.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "O despacho por versão precisa de uma montagem versionada cobrindo o caminho do padrão (api.add(path, source, options, { version })). Um despachante deve retornar uma tag registrada, um array delas, ou nada para usar a versão padrão — ou remova a opção versioned/versionDispatcher para registrar o padrão literalmente.",
 		"HOOK_VERSION_UNKNOWN_TAG": "O despacho por versão para o padrão de hook '{pattern}' selecionou '{version}', que não é uma versão registrada.",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "O despachante deve escolher entre as tags registradas recebidas em allVersions. Registre primeiro a montagem (api.add com uma versão) ou corrija o valor de retorno do despachante."
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "O despachante deve escolher entre as tags registradas recebidas em allVersions. Registre primeiro a montagem (api.add com uma versão) ou corrija o valor de retorno do despachante.",
+		"PERMISSION_STRICT_FIXED": "O modo de permissões \"strict\" é escolhido na configuração e não pode ser alterado em tempo de execução (control.{method}).",
+		"HINT_PERMISSION_STRICT_FIXED": "Defina permissions.mode na configuração: depois que uma instância inicia, não é possível sair de strict nem entrar nele.",
+		"PERMISSION_BASELINE_UNMET": "O modo de permissões \"strict\" se recusa a iniciar: estas verificações básicas não foram atendidas: {checks}.",
+		"HINT_PERMISSION_BASELINE_UNMET": "Inicie a instância com o modo \"on\" e leia api.slothlet.permissions.control.report() para ver o motivo de cada verificação; docs/PERMISSIONS.md diz o que cada uma precisa.",
+		"WARNING_PERMISSION_BASELINE_UNMET": "A verificação básica de permissões \"{check}\" não foi atendida: {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "Cada verificação é um fato sobre como o host executa o slothlet; docs/PERMISSIONS.md diz o que cada uma precisa. No modo \"strict\" a instância não iniciaria.",
+		"BASELINE_CSP_EVAL_ALLOWED": "a página permite criar código a partir de strings: sua Content Security Policy permite 'unsafe-eval', ou ela não tem nenhuma.",
+		"BASELINE_CSP_BLOB_ALLOWED": "a página executa scripts de URLs blob:: sua Content Security Policy os permite, ou ela não tem nenhuma.",
+		"BASELINE_CSP_DATA_ALLOWED": "a página executa scripts de URLs data:: sua Content Security Policy os permite, ou ela não tem nenhuma.",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "o processo permite criar código a partir de strings: inicie o Node com --disallow-code-generation-from-strings.",
+		"BASELINE_NODE_STACK_REALM_MISSING": "o slothlet não conseguiu criar um realm próprio para ler pilhas de chamadas.",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "execução sob vitest sem o plugin slothletInstanceImports() do slothlet na configuração do vitest."
 	},
 	"metadata": {
 		"code": "pt-br",

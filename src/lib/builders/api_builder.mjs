@@ -2173,7 +2173,7 @@ export class ApiBuilder extends ComponentBase {
 					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]}
 					 */
 					sort: function slothlet_modules_sort(results, comparator) {
-						return slothlet.handlers.moduleManager.sort(results, comparator);
+						return ArrayMethods.sort(slothlet.handlers.moduleManager, results, comparator);
 					},
 
 					/**
@@ -2237,7 +2237,7 @@ export class ApiBuilder extends ComponentBase {
 						// The calling module, read before the discovery's await loses it (#625).
 						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
-						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
+						const ordered = ArrayMethods.sort(slothlet.handlers.moduleManager, found, comparator);
 						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
 					},
 
@@ -4233,12 +4233,13 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
-					 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that
-					 * keep module code off the framework's own namespace, root functions, and keys on api nodes), or
-					 * `"disabled"` (nothing applies). `enable()` turns it on and `disable()` off; disabled is chosen in
-					 * the config only.
+					 * The permission system's mode: `"on"` (every rule applies), `"strict"` (as on, with the permission
+					 * baseline met), `"off"` (only the built-in rules that keep module code off the framework's own
+					 * namespace, root functions, and keys on api nodes), or `"disabled"` (nothing applies). `enable()` turns
+					 * it on and `disable()` off; disabled and strict are chosen in the config only, and under strict both
+					 * refuse with `PERMISSION_STRICT_FIXED`.
 					 *
-					 * @returns {"on"|"off"|"disabled"} The mode.
+					 * @returns {"on"|"strict"|"off"|"disabled"} The mode.
 					 * @public
 					 * @example
 					 * api.slothlet.permissions.control.mode; // "off" with no permissions config
@@ -4358,6 +4359,24 @@ export class ApiBuilder extends ComponentBase {
 						/* v8 ignore stop */
 
 						slothlet.handlers.permissionManager.seal();
+					},
+
+					/**
+					 * The permission system's mode, what the permission baseline found when the instance started, and the
+					 * capabilities rules open to module code. A met baseline means only that the checks slothlet can make
+					 * passed: code that ran before slothlet (a page's own scripts, an extension, a compromised dependency)
+					 * can have replaced globals or faked what the checks read (docs/PERMISSIONS.md).
+					 *
+					 * @returns {{mode: "on"|"strict"|"off"|"disabled", baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}
+					 *   The report. `baseline.met` is null and `baseline.checks` empty when no check ran (the mode was off
+					 *   or disabled when the instance started); `reason` is null for a check that is met.
+					 * @public
+					 * @example
+					 * const { mode, baseline } = api.slothlet.permissions.control.report();
+					 * if (!baseline.met) console.warn(baseline.checks.filter((check) => !check.met));
+					 */
+					report: function slothlet_permissions_control_report() {
+						return slothlet.handlers.permissionManager.report();
 					},
 
 					/**

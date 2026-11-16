@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "フックパターン '{pattern}' を登録済みバージョンに解決できませんでした。",
 		"HINT_HOOK_VERSION_UNRESOLVED": "バージョンディスパッチには、パターンのパスをカバーするバージョン付きマウントが必要です (api.add(path, source, options, { version }))。ディスパッチャーは登録済みタグ、その配列、または既定バージョンを使う場合は何も返さない必要があります — あるいは versioned/versionDispatcher オプションを外してパターンをそのまま登録してください。",
 		"HOOK_VERSION_UNKNOWN_TAG": "フックパターン '{pattern}' のバージョンディスパッチが、登録されていないバージョン '{version}' を選択しました。",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "ディスパッチャーは allVersions で渡された登録済みタグから選択する必要があります。先にマウントを登録するか (バージョン付き api.add)、ディスパッチャーの戻り値を修正してください。"
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "ディスパッチャーは allVersions で渡された登録済みタグから選択する必要があります。先にマウントを登録するか (バージョン付き api.add)、ディスパッチャーの戻り値を修正してください。",
+		"PERMISSION_STRICT_FIXED": "権限モード \"strict\" は設定で選ぶもので、実行時には変更できません (control.{method})。",
+		"HINT_PERMISSION_STRICT_FIXED": "代わりに設定で permissions.mode を指定してください。インスタンスの開始後は strict を抜けることも入ることもできません。",
+		"PERMISSION_BASELINE_UNMET": "権限モード \"strict\" は開始を拒否しました。次の基本チェックが満たされていません: {checks}。",
+		"HINT_PERMISSION_BASELINE_UNMET": "モード \"on\" でインスタンスを開始し、api.slothlet.permissions.control.report() で各チェックの理由を確認してください。各チェックに必要なことは docs/PERMISSIONS.md にあります。",
+		"WARNING_PERMISSION_BASELINE_UNMET": "権限の基本チェック \"{check}\" が満たされていません: {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "各チェックはホストが slothlet をどう実行しているかについての事実です。各チェックに必要なことは docs/PERMISSIONS.md にあります。モード \"strict\" ではインスタンスは開始しません。",
+		"BASELINE_CSP_EVAL_ALLOWED": "このページは文字列からのコード生成を許可しています。Content Security Policy が 'unsafe-eval' を許可しているか、ポリシーがありません。",
+		"BASELINE_CSP_BLOB_ALLOWED": "このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
+		"BASELINE_CSP_DATA_ALLOWED": "このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "このプロセスは文字列からのコード生成を許可しています。Node を --disallow-code-generation-from-strings 付きで起動してください。",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet はコールスタックを読むための独自の realm を作れませんでした。",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の slothletInstanceImports() プラグインがないまま vitest で実行しています。"
 	},
 	"metadata": {
 		"code": "ja-jp",

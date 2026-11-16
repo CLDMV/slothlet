@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "Шаблон hook '{pattern}' не удалось сопоставить с зарегистрированной версией.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "Диспетчеризация по версии требует версионированного монтирования, покрывающего путь шаблона (api.add(path, source, options, { version })). Диспетчер должен вернуть зарегистрированный тег, массив тегов или ничего — для версии по умолчанию; либо уберите опцию versioned/versionDispatcher, чтобы зарегистрировать шаблон буквально.",
 		"HOOK_VERSION_UNKNOWN_TAG": "Диспетчеризация по версии для шаблона hook '{pattern}' выбрала '{version}' — это не зарегистрированная версия.",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Диспетчер должен выбирать из зарегистрированных тегов, переданных в allVersions. Сначала зарегистрируйте монтирование (api.add с версией) или исправьте возвращаемое значение диспетчера."
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Диспетчер должен выбирать из зарегистрированных тегов, переданных в allVersions. Сначала зарегистрируйте монтирование (api.add с версией) или исправьте возвращаемое значение диспетчера.",
+		"PERMISSION_STRICT_FIXED": "Режим разрешений \"strict\" задаётся в конфигурации и не может быть изменён во время выполнения (control.{method}).",
+		"HINT_PERMISSION_STRICT_FIXED": "Задайте permissions.mode в конфигурации: после запуска экземпляра из strict нельзя выйти и в него нельзя войти.",
+		"PERMISSION_BASELINE_UNMET": "Режим разрешений \"strict\" отказывается запускаться: не выполнены базовые проверки: {checks}.",
+		"HINT_PERMISSION_BASELINE_UNMET": "Запустите экземпляр в режиме \"on\" и прочитайте причину каждой проверки в api.slothlet.permissions.control.report(); в docs/PERMISSIONS.md указано, что нужно каждой.",
+		"WARNING_PERMISSION_BASELINE_UNMET": "Базовая проверка разрешений \"{check}\" не выполнена: {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "Каждая проверка — это факт о том, как хост запускает slothlet; в docs/PERMISSIONS.md указано, что нужно каждой. В режиме \"strict\" экземпляр не запустился бы.",
+		"BASELINE_CSP_EVAL_ALLOWED": "страница разрешает создавать код из строк: её Content Security Policy разрешает 'unsafe-eval' или отсутствует.",
+		"BASELINE_CSP_BLOB_ALLOWED": "страница выполняет скрипты с адресов blob:: её Content Security Policy разрешает их или отсутствует.",
+		"BASELINE_CSP_DATA_ALLOWED": "страница выполняет скрипты с адресов data:: её Content Security Policy разрешает их или отсутствует.",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "процесс разрешает создавать код из строк: запустите Node с флагом --disallow-code-generation-from-strings.",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet не смог создать собственный realm для чтения стеков вызовов.",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина slothletInstanceImports() от slothlet в конфигурации vitest."
 	},
 	"metadata": {
 		"code": "ru-ru",

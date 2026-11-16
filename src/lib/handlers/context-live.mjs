@@ -1842,7 +1842,7 @@ export class LiveContextManager {
 		MapMethods.set(this.instances, instanceID, store);
 		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
 		const permissions = config?.permissions;
-		if (permissions && (permissions.mode ? permissions.mode === "on" : permissions.enabled !== false)) {
+		if (permissions && (permissions.mode ? permissions.mode === "on" || permissions.mode === "strict" : permissions.enabled !== false)) {
 			store.__recordsFlowStarters = true;
 			this.#holdFlowStarters();
 		}

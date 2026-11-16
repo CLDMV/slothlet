@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "钩子模式 '{pattern}' 无法解析到已注册的版本。",
 		"HINT_HOOK_VERSION_UNRESOLVED": "版本调度需要一个覆盖该模式路径的版本化挂载 (api.add(path, source, options, { version }))。调度器必须返回已注册的标签、标签数组，或不返回任何内容以使用默认版本 — 或者去掉 versioned/versionDispatcher 选项以按字面注册该模式。",
 		"HOOK_VERSION_UNKNOWN_TAG": "钩子模式 '{pattern}' 的版本调度选择了 '{version}'，但它不是已注册的版本。",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "调度器必须从 allVersions 中提供的已注册标签中选择。请先注册挂载（带版本的 api.add），或修正调度器的返回值。"
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "调度器必须从 allVersions 中提供的已注册标签中选择。请先注册挂载（带版本的 api.add），或修正调度器的返回值。",
+		"PERMISSION_STRICT_FIXED": "权限模式 \"strict\" 在配置中选择，运行时不能更改 (control.{method})。",
+		"HINT_PERMISSION_STRICT_FIXED": "请改为在配置中设置 permissions.mode：实例启动后，既不能退出 strict，也不能进入 strict。",
+		"PERMISSION_BASELINE_UNMET": "权限模式 \"strict\" 拒绝启动：以下基线检查未通过：{checks}。",
+		"HINT_PERMISSION_BASELINE_UNMET": "以模式 \"on\" 启动实例，并在 api.slothlet.permissions.control.report() 中查看每项检查的原因；docs/PERMISSIONS.md 列出了每项检查的要求。",
+		"WARNING_PERMISSION_BASELINE_UNMET": "权限基线检查 \"{check}\" 未通过：{reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "每项检查都是关于宿主如何运行 slothlet 的事实；docs/PERMISSIONS.md 列出了每项检查的要求。在模式 \"strict\" 下实例不会启动。",
+		"BASELINE_CSP_EVAL_ALLOWED": "该页面允许从字符串生成代码：其 Content Security Policy 允许 'unsafe-eval'，或者没有策略。",
+		"BASELINE_CSP_BLOB_ALLOWED": "该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
+		"BASELINE_CSP_DATA_ALLOWED": "该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "该进程允许从字符串生成代码：请使用 --disallow-code-generation-from-strings 启动 Node。",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet 无法创建自己的 realm 来读取调用栈。",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 slothletInstanceImports() 插件。"
 	},
 	"metadata": {
 		"code": "zh-cn",

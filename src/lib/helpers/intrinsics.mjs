@@ -186,6 +186,17 @@ export const Arrays = staticsOf(globalThis.Array);
  */
 export const Functions = staticsOf(globalThis.Function);
 
+/**
+ * The `Function` constructor, as it was when slothlet loaded: for checking whether the host lets code be made from a
+ * string (the permission baseline), whatever `globalThis.Function` holds afterwards.
+ * @type {FunctionConstructor}
+ * @internal
+ * @example
+ * import { NativeFunction } from "@cldmv/slothlet/helpers/intrinsics";
+ * new NativeFunction("return 1"); // throws EvalError where code from strings is refused
+ */
+export const NativeFunction = globalThis.Function;
+
 /** @type {JSON} */
 const NativeJSON = staticsOf(globalThis.JSON);
 /** @type {Math} */
@@ -375,6 +386,17 @@ export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
  * const href = new URL("./a.mjs", import.meta.url).href;
  */
 export const URL = globalThis.URL;
+
+/**
+ * `URL.createObjectURL` and `URL.revokeObjectURL`, as they were when slothlet loaded (absent where the host has none).
+ * Unbound: call them with `URL` as `this`.
+ * @type {{createObjectURL?: function(Blob): string, revokeObjectURL?: function(string): void}}
+ * @internal
+ * @example
+ * import { URL, URLs } from "@cldmv/slothlet/helpers/intrinsics";
+ * const href = Reflect.apply(URLs.createObjectURL, URL, [blob]);
+ */
+export const URLs = pickedStaticsOf(globalThis.URL, ["createObjectURL", "revokeObjectURL"]);
 
 /**
  * The `URLSearchParams` constructor, as it was when slothlet loaded.

@@ -503,6 +503,17 @@ export function runUnformatted(run) {
 }
 
 /**
+ * Whether stacks are read from a realm of slothlet's own (see {@link makeRealm}), not through the global `Error`.
+ * @returns {boolean} True on Node, where one could be made.
+ * @internal
+ * @example
+ * ownRealmInUse(); // true on Node
+ */
+export function ownRealmInUse() {
+	return PRIVATE !== null;
+}
+
+/**
  * How many stacks {@link readStack} has read, for a test that checks which calls read the stack.
  * @type {number}
  * @private

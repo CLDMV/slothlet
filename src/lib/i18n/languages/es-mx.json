@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "El patrón de gancho '{pattern}' no pudo resolverse a una versión registrada.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "El despacho por versión necesita un montaje versionado que cubra la ruta del patrón (api.add(path, source, options, { version })). Un despachador debe devolver una etiqueta registrada, un array de ellas, o nada para tomar la versión por defecto — o quita la opción versioned/versionDispatcher para registrar el patrón literalmente.",
 		"HOOK_VERSION_UNKNOWN_TAG": "El despacho por versión para el patrón de gancho '{pattern}' seleccionó '{version}', que no es una versión registrada.",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "El despachador debe elegir entre las etiquetas registradas recibidas en allVersions. Registra primero el montaje (api.add con una versión) o corrige el valor devuelto por el despachador."
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "El despachador debe elegir entre las etiquetas registradas recibidas en allVersions. Registra primero el montaje (api.add con una versión) o corrige el valor devuelto por el despachador.",
+		"PERMISSION_STRICT_FIXED": "El modo de permisos \"strict\" se elige en la configuración y no se puede cambiar en tiempo de ejecución (control.{method}).",
+		"HINT_PERMISSION_STRICT_FIXED": "Establezca permissions.mode en la configuración: una vez iniciada una instancia, no se puede salir de strict ni entrar en él.",
+		"PERMISSION_BASELINE_UNMET": "El modo de permisos \"strict\" se niega a iniciar: no se cumplen estas comprobaciones básicas: {checks}.",
+		"HINT_PERMISSION_BASELINE_UNMET": "Inicie la instancia con el modo \"on\" y consulte api.slothlet.permissions.control.report() para ver el motivo de cada comprobación; docs/PERMISSIONS.md indica lo que necesita cada una.",
+		"WARNING_PERMISSION_BASELINE_UNMET": "La comprobación básica de permisos \"{check}\" no se cumple: {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "Cada comprobación es un hecho sobre cómo el host ejecuta slothlet; docs/PERMISSIONS.md indica lo que necesita cada una. Con el modo \"strict\" la instancia no se iniciaría.",
+		"BASELINE_CSP_EVAL_ALLOWED": "la página permite crear código a partir de cadenas: su Content Security Policy permite 'unsafe-eval', o no tiene ninguna.",
+		"BASELINE_CSP_BLOB_ALLOWED": "la página ejecuta scripts de URL blob:: su Content Security Policy los permite, o no tiene ninguna.",
+		"BASELINE_CSP_DATA_ALLOWED": "la página ejecuta scripts de URL data:: su Content Security Policy los permite, o no tiene ninguna.",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "el proceso permite crear código a partir de cadenas: inicie Node con --disallow-code-generation-from-strings.",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet no pudo crear un realm propio para leer las pilas de llamadas.",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "se ejecuta con vitest sin el plugin slothletInstanceImports() de slothlet en la configuración de vitest."
 	},
 	"metadata": {
 		"code": "es-mx",

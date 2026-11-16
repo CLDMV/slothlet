@@ -557,7 +557,19 @@
 		"HOOK_VERSION_UNRESOLVED": "Le motif de hook '{pattern}' n'a pas pu être résolu vers une version enregistrée.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "La répartition par version nécessite un montage versionné couvrant le chemin du motif (api.add(path, source, options, { version })). Un dispatcher doit renvoyer un tag enregistré, un tableau de tags, ou rien pour prendre la version par défaut — ou retirez l'option versioned/versionDispatcher pour enregistrer le motif littéralement.",
 		"HOOK_VERSION_UNKNOWN_TAG": "La répartition par version pour le motif de hook '{pattern}' a sélectionné '{version}', qui n'est pas une version enregistrée.",
-		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Le dispatcher doit choisir parmi les tags enregistrés fournis dans allVersions. Enregistrez d'abord le montage (api.add avec une version) ou corrigez la valeur de retour du dispatcher."
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Le dispatcher doit choisir parmi les tags enregistrés fournis dans allVersions. Enregistrez d'abord le montage (api.add avec une version) ou corrigez la valeur de retour du dispatcher.",
+		"PERMISSION_STRICT_FIXED": "Le mode de permissions \"strict\" est choisi dans la configuration et ne peut pas être changé à l'exécution (control.{method}).",
+		"HINT_PERMISSION_STRICT_FIXED": "Définissez permissions.mode dans la configuration : une fois une instance démarrée, on ne peut ni quitter strict ni y entrer.",
+		"PERMISSION_BASELINE_UNMET": "Le mode de permissions \"strict\" refuse de démarrer : ces vérifications de base ne sont pas satisfaites : {checks}.",
+		"HINT_PERMISSION_BASELINE_UNMET": "Démarrez l'instance en mode \"on\" et lisez api.slothlet.permissions.control.report() pour la raison de chaque vérification ; docs/PERMISSIONS.md indique ce que chacune demande.",
+		"WARNING_PERMISSION_BASELINE_UNMET": "La vérification de base des permissions \"{check}\" n'est pas satisfaite : {reason}",
+		"HINT_WARNING_PERMISSION_BASELINE_UNMET": "Chaque vérification est un fait sur la façon dont l'hôte exécute slothlet ; docs/PERMISSIONS.md indique ce que chacune demande. En mode \"strict\", l'instance ne démarrerait pas.",
+		"BASELINE_CSP_EVAL_ALLOWED": "la page permet de créer du code à partir de chaînes : sa Content Security Policy autorise 'unsafe-eval', ou elle n'en a pas.",
+		"BASELINE_CSP_BLOB_ALLOWED": "la page exécute des scripts d'URL blob: : sa Content Security Policy les autorise, ou elle n'en a pas.",
+		"BASELINE_CSP_DATA_ALLOWED": "la page exécute des scripts d'URL data: : sa Content Security Policy les autorise, ou elle n'en a pas.",
+		"BASELINE_NODE_CODE_GENERATION_ALLOWED": "le processus permet de créer du code à partir de chaînes : démarrez Node avec --disallow-code-generation-from-strings.",
+		"BASELINE_NODE_STACK_REALM_MISSING": "slothlet n'a pas pu créer de realm à lui pour lire les piles d'appels.",
+		"BASELINE_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin slothletInstanceImports() de slothlet dans la configuration de vitest."
 	},
 	"metadata": {
 		"code": "fr-fr",
