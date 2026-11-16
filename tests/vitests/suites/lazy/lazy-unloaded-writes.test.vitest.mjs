@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T21:20:09-08:00 (1794201609)
+ *	@Last modified time: 2026-11-15T22:53:59-08:00 (1794812039)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -107,7 +107,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(mode, options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, diagnostics: true, ...options });
 		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 		await api.slothlet.api.add("writer", path.join(FIXTURE, "writer"), { moduleID: "writer" });
 		await api.slothlet.api.add("intruder", path.join(FIXTURE, "writer"), { moduleID: "intruder" });
@@ -355,10 +355,9 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("refuses a new member through a stand-in closed to extension once the node loads, and warns", async () => {
-		const warned = SlothletWarning.captured.length;
 		SlothletWarning.suppressConsole = true;
 		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			const inner = api.holder.deep.inner;
 			Object.preventExtensions(inner);
@@ -367,7 +366,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			expect(await settled(api.holder.deep.inner)).toBe("LAZY_WRITE_REFUSED");
 			const node = api.holder.deep.inner;
 			expect([node.leaf, node.added, Object.isExtensible(node)]).toEqual([5, undefined, false]);
-			const warnings = SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.inner"]);
 			expect(warnings[0].cause).toBeInstanceOf(TypeError);
 		} finally {
@@ -376,15 +375,14 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("warns of a refused change that nothing awaits", async () => {
-		const warned = SlothletWarning.captured.length;
 		SlothletWarning.suppressConsole = true;
 		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			api.holder.deep.cfg.getterOnly.g = 2;
 			// Loaded through another member, not through a stand-in the refused change was made on.
 			await api.holder.deep.cfg.plain;
-			const warnings = SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 			expect(warnings.map((warning) => [warning.context.apiPath, warning.context.operation])).toEqual([
 				["holder.deep.cfg.getterOnly", "set"]
 			]);
@@ -394,35 +392,35 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("warns of nothing when the instance is silent", async () => {
-		const warned = SlothletWarning.captured.length;
 		SlothletWarning.suppressConsole = true;
 		try {
 			await load("lazy");
 			api.holder.deep.cfg.getterOnly.g = 2;
 			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
-			expect(SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
+			expect(api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
 		}
 	});
 
 	it.each(["freeze", "seal"])("closes an object node with %s once it loads, refusing nothing, as eager mode does", async (kind) => {
-		const warned = SlothletWarning.captured.length;
+		const refusals = []; // per instance (#819): gathered from each instance before it shuts down
 		SlothletWarning.suppressConsole = true;
 		try {
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime });
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
 				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 				const made = outcome(() => Object[kind](api.holder.deep.cfg.plain));
 				const awaited = await settled(api.holder.deep.cfg.plain);
 				reports[mode] = [made, awaited, lockState(api.holder.deep.cfg.plain), api.holder.deep.cfg.plain.p];
+				refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
 				await api.slothlet.shutdown();
 				api = null;
 			}
 			expect(reports.lazy).toEqual(reports.eager);
 			expect(reports.lazy).toEqual(["done", "ok", kind === "freeze" ? "frozen" : "sealed", 1]);
-			expect(SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
+			expect(refusals).toEqual([]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
 		}
@@ -532,14 +530,13 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("makes a write queued before a module reload before the reload, so a refused one is still reported", async () => {
-		const warned = SlothletWarning.captured.length;
 		SlothletWarning.suppressConsole = true;
 		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 			api.holder.deep.cfg.getterOnly.g = 2;
 			await api.slothlet.api.reload("holder");
-			const warnings = SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.cfg.getterOnly"]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
@@ -547,23 +544,24 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("handles a whole-instance reload as eager mode does, with nothing left to replay or refuse", async () => {
-		const warned = SlothletWarning.captured.length;
+		const refusals = []; // per instance (#819): gathered from each instance before it shuts down
 		SlothletWarning.suppressConsole = true;
 		try {
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime });
+				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
 				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
 				api.holder.deep.inner.planted = 1;
 				await api.slothlet.reload();
 				const awaited = await settled(api.holder.deep.inner);
 				reports[mode] = [awaited, api.holder.deep.inner.planted];
+				refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
 				await api.slothlet.shutdown();
 				api = null;
 			}
 			expect(reports.lazy).toEqual(reports.eager);
 			expect(reports.lazy[0]).toBe("ok");
-			expect(SlothletWarning.captured.slice(warned).filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
+			expect(refusals).toEqual([]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
 		}

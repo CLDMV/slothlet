@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:10-07:00 (1791090910)
+ *	@Last modified time: 2026-11-15T22:54:03-08:00 (1794812043)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -344,18 +344,19 @@ describe("silent gates init-time console warnings, not events", () => {
 			base: TEST_DIRS.API_TEST_RESERVED_NAME,
 			mode: "eager",
 			silent: true,
+			diagnostics: true,
 			lifecycle: { "impl:warning": (payload) => events.push(payload) }
 		});
-		// Console warning is silent-gated → never constructed → not captured.
-		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		// Console warning is silent-gated → never constructed → not captured (on this instance, #819).
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
 		// The event is additive → fires even under silent.
 		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 
 	it("without silent, the reserved-property console warning IS emitted (control)", async () => {
-		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager" });
-		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager", diagnostics: true });
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T18:01:17-08:00 (1794016877)
+ *	@Last modified time: 2026-11-15T20:45:55-08:00 (1794804355)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -613,12 +613,13 @@ function parseErrorThrows(content, filePath) {
 	//   new this.slothlet.SlothletError(...)    - via double-hop (handler/builder classes)
 	//   new slothlet.SlothletError(...)         - closure variable (api_builder.mjs)
 	//   new wrapper.slothlet.SlothletError(...) - via proxy wrapper (unified-wrapper.mjs)
+	//   (`instanceof slothlet.SlothletError` is a type check, not a throw site, and is excluded)
 	// Same patterns for SlothletWarning.
 	// NOTE: the non-throw SlothletError alternative may produce duplicate allErrors entries
 	// for throw-sites already matched by the first alternative; this is harmless since
 	// usedErrorCodes is a Set (deduplicates) and Total Errors display uses a separate filter.
 	const throwPattern =
-		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
+		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?<!instanceof\s)(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
 
 	const throwStarts = [];
 	let match;

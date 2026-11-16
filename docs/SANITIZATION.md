@@ -409,11 +409,11 @@ sanitizePropertyName("parse-xml-to-json", {
 
 ## Runtime Convenience Method
 
-When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** - identical to what Slothlet uses when building API paths from filenames:
+When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** - identical to what Slothlet uses when building API paths from filenames (the options are the instance's `sanitize` config, see [CONFIGURATION.md](CONFIGURATION.md#sanitize)):
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	sanitize: {
 		rules: { upper: ["http", "api"] }
 	}

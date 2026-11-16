@@ -27,7 +27,7 @@ All three operations are enabled by default and individually gated by the `api.m
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	api: {
 		mutations: {
 			add: true, // default
@@ -303,7 +303,7 @@ On next access:     api.math.add    ← materializes fresh, returns fn_v2
 
 If a lazy namespace **has already been materialized** when reload runs, the `___resetLazy` path still applies - the wrapper is reset, children are cleared, and the next access loads fresh content. The previously-materialized function objects are eligible for garbage collection once no other references hold them.
 
-**Root-level files are always eager even in lazy mode.** A `math.mjs` in the root `dir` (not inside a subdirectory) is loaded eagerly and follows the eager reload path (`___setImpl`) even when `mode: "lazy"` is configured. Only subdirectory wrappers use the lazy reset path.
+**Root-level files are always eager even in lazy mode.** A `math.mjs` in the root `base` (not inside a subdirectory) is loaded eagerly and follows the eager reload path (`___setImpl`) even when `mode: "lazy"` is configured. Only subdirectory wrappers use the lazy reset path.
 
 ### Summary Table
 
@@ -324,7 +324,7 @@ If a lazy namespace **has already been materialized** when reload runs, the `___
 The API object returned by `slothlet()` is a **stable proxy** that forwards property access to an internal `_currentApi` object. This means the same variable remains valid across reloads, `add()` calls, and `remove()` operations:
 
 ```javascript
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 
 // Add something at runtime
 api.myProp = "custom";
@@ -364,7 +364,7 @@ This means `reload()` is suitable as a real hot-reload trigger in development wo
 Every `api.slothlet.api.add()` and `api.slothlet.api.remove()` call is recorded in the instance's operation history in chronological order. A full base module reload (`reload()` / `reload(".")`) rebuilds the core API from disk and then **replays the operation history** in order, restoring all runtime additions:
 
 ```javascript
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 
 await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
 await api.slothlet.api.add("tools", "./tools");
@@ -408,7 +408,7 @@ await api.slothlet.api.remove("billing-module");
 You can inspect ownership at runtime when `diagnostics: true`:
 
 ```javascript
-const api = await slothlet({ dir: "./api", diagnostics: true });
+const api = await slothlet({ base: "./api", diagnostics: true });
 api.slothlet.diag.owner.get("plugins.auth");
 // Set { "auth-module" }
 ```

@@ -69,7 +69,7 @@ Configure permissions when creating a slothlet instance:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny", // "allow" (default) or "deny"
 		mode: "on", // "on" (default with a permissions config), "off", or "disabled"
@@ -906,7 +906,7 @@ Rules in `config.permissions.rules` are registered first and form the base layer
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		rules: [
@@ -951,7 +951,7 @@ That default is the built-in rule `{ caller: "**", target: "slothlet.permissions
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: { rules: [{ caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" }] }
 });
 ```
@@ -1167,7 +1167,7 @@ Read gating is **on by default** whenever a `permissions` block is configured. A
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		rules: [{ caller: "trusted.**", target: "db.secrets.token", effect: "allow" }]
@@ -1252,7 +1252,7 @@ Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` n
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: { enabled: true },
 	permissions: {
 		enabled: true,
@@ -1291,7 +1291,7 @@ The host grants a write in its config or with `api.slothlet.permissions.addRule`
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		rules: [
 			// `reports` may write into `cache`, which `cache` itself owns.
@@ -1325,7 +1325,7 @@ They are defaults. The host lifts one with a rule of equal or higher specificity
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		rules: [
 			// Only the `config` module may set one extra member on the namespace.
@@ -1655,7 +1655,7 @@ Each slothlet instance creates its own `PermissionManager` with its own rules, c
 ```javascript
 // Instance A: deny callers → admin
 const apiA = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "allow",
 		rules: [{ caller: "callers.**", target: "admin.**", effect: "deny" }]
@@ -1664,7 +1664,7 @@ const apiA = await slothlet({
 
 // Instance B: allow everything
 const apiB = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: { defaultPolicy: "allow", rules: [] }
 });
 
@@ -1701,7 +1701,7 @@ Absent-caller denials surface as `PERMISSION_DENIED` (fail-closed enforcement); 
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		audit: "verbose",

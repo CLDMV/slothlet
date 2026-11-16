@@ -11,6 +11,7 @@ All metadata is deeply frozen with recursive `Object.freeze()`. No code can modi
 ## Table of Contents
 
 - [Metadata Types](#metadata-types)
+- [Init Metadata](#init-metadata)
 - [Setting Metadata at Load Time](#setting-metadata-at-load-time)
 - [Runtime Metadata API](#runtime-metadata-api)
 - [Runtime Introspection](#runtime-introspection)
@@ -56,12 +57,25 @@ System metadata always wins regardless of user metadata scope.
 
 ---
 
+## Init Metadata
+
+The `metadata` option of `slothlet()` seeds metadata at startup. Each key is set as global metadata, so every later `api.slothlet.api.add()` inherits it, and the whole object is also registered as user metadata for the base module:
+
+```javascript
+const api = await slothlet({ base: "./api", metadata: { team: "platform", tier: "internal" } });
+console.log(api.math.add.__metadata.team); // "platform"
+```
+
+System fields still win over init metadata.
+
+---
+
 ## Setting Metadata at Load Time
 
 Pass a metadata object as the third argument to `api.slothlet.api.add()`:
 
 ```javascript
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 
 await api.slothlet.api.add("plugins.trusted", "./trusted-plugins", {
 	trusted: true,
@@ -356,7 +370,7 @@ api.slothlet.metadata.setFor("plugins", "version", "2.0.0");
 In lazy mode, modules are not loaded until first call. Metadata is only available after a function has been materialized:
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 await api.slothlet.api.add("plugins", "./plugins", { trusted: true });
 
 // Module not yet loaded - only proxy exists

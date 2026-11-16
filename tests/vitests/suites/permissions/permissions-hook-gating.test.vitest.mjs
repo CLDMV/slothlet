@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-15T22:54:54-08:00 (1794812094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		SlothletWarning.clearCaptured();
 	});
 
-	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, ...(permissions ? { permissions } : {}) });
+	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, diagnostics: true, ...(permissions ? { permissions } : {}) });
 	// Takes a thunk so the call happens INSIDE try — a synchronous throw (lazy/live modes) is caught
 	// the same as a promise rejection (async modes).
 	const tryCall = async (fn) => {
@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // forced back on
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("the pin runtime switch is host-only when permissions are enabled", async () => {
@@ -151,11 +151,11 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	it("host pin.disable() lets a module register an unpinned hook (no force-pin, no warn)", async () => {
 		api = await boot(null);
 		api.slothlet.hook.pin.disable();
-		SlothletWarning.clearCaptured();
+		api.slothlet.diag.SlothletWarning.clearCaptured();
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // honored, not forced
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
 	it("host-registered hooks fire regardless of permissions (no owner identity to gate)", async () => {
@@ -196,21 +196,21 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("hook: { pin: false } config permits unpinned module hooks", async () => {
-		api = await slothlet({ ...config, base: DIR, hook: { enabled: true, pin: false } });
-		SlothletWarning.clearCaptured();
+		api = await slothlet({ ...config, base: DIR, hook: { enabled: true, pin: false }, diagnostics: true });
+		api.slothlet.diag.SlothletWarning.clearCaptured();
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // config disabled pin enforcement
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
 	it("force-pin under silent ignores lockCaller:false without warning", async () => {
-		api = await slothlet({ ...config, base: DIR, hook: true, silent: true });
-		SlothletWarning.clearCaptured();
+		api = await slothlet({ ...config, base: DIR, hook: true, silent: true, diagnostics: true });
+		api.slothlet.diag.SlothletWarning.clearCaptured();
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // still force-pinned
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
 	});
 
 	it("a before-only hook rule denies an after-hook on the same path (per-type)", async () => {

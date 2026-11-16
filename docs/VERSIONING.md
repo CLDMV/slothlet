@@ -46,13 +46,13 @@ Configure the version discriminator when creating a slothlet instance:
 ```javascript
 // String discriminator (default behavior — looks up key in caller's version metadata)
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	versionDispatcher: "version"
 });
 
 // Function discriminator (full control)
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	versionDispatcher: (allVersions, caller) => {
 		if (caller.metadata.role === "admin") return "v2";
 		return caller.version ?? null;
@@ -61,7 +61,7 @@ const api = await slothlet({
 
 // Not set / undefined — behaves exactly like versionDispatcher: "version"
 const api = await slothlet({
-	dir: "./api"
+	base: "./api"
 });
 ```
 
@@ -128,7 +128,7 @@ The discriminator runs inside the dispatcher proxy every time a property is acce
 ### String Discriminator
 
 ```javascript
-const api = await slothlet({ dir: "./api", versionDispatcher: "version" });
+const api = await slothlet({ base: "./api", versionDispatcher: "version" });
 ```
 
 At dispatch time, Slothlet reads `caller.versionMetadata["version"]` and uses that as the version tag. If the returned value is not a registered tag for the path, falls through to the default.
@@ -137,7 +137,7 @@ At dispatch time, Slothlet reads `caller.versionMetadata["version"]` and uses th
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	versionDispatcher: (allVersions, caller) => {
 		// allVersions — { [versionTag]: { version, default, metadata, versionMetadata } }
 		// caller      — { version, default, metadata, versionMetadata }
@@ -459,7 +459,7 @@ Hook registration participates in the same dispatch seam as calls: `api.slothlet
 import { slothlet } from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api/base",
+	base: "./api/base",
 	versionDispatcher: "version"
 });
 

@@ -417,7 +417,7 @@ beforeAll(() => {
 		"\t\tawait reg.shutdown();",
 		"\t}",
 		"}",
-		"console.log(JSON.stringify(out));"
+		"process.stdout.write(`${JSON.stringify(out)}\n`);"
 	]);
 });
 

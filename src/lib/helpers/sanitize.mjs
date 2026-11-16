@@ -240,7 +240,7 @@ export class Sanitize extends ComponentBase {
 	 * with glob patterns, case preservation, and intelligent segment handling.
 	 *
 	 * @param {string} input - String to sanitize
-	 * @param {Object} [options={}] - Sanitization configuration
+	 * @param {Object} [options] - Sanitization configuration. Omit it to use the instance's `sanitize` config (defaults when there is none)
 	 * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
 	 * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
 	 * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers
@@ -284,8 +284,11 @@ export class Sanitize extends ComponentBase {
 	 *   }
 	 * }); // "getAPIStatus"
 	 */
-	sanitizePropertyName(input, options = {}) {
-		const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = options;
+	sanitizePropertyName(input, options) {
+		// No explicit options: use the instance's `sanitize` config, so every name the loader derives from a
+		// file or folder follows it (#814). The standalone export has no instance and falls back to defaults.
+		const effective = options ?? this.slothlet?.config?.sanitize ?? {};
+		const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = effective;
 
 		// Normalize rules to string arrays
 		const leaveRules = (rules.leave || []).map((s) => String(s));

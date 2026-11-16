@@ -22,7 +22,7 @@ export class Sanitize extends ComponentBase {
      * with glob patterns, case preservation, and intelligent segment handling.
      *
      * @param {string} input - String to sanitize
-     * @param {Object} [options={}] - Sanitization configuration
+     * @param {Object} [options] - Sanitization configuration. Omit it to use the instance's `sanitize` config (defaults when there is none)
      * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
      * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
      * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers

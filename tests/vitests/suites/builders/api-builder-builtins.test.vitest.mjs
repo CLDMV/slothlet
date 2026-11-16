@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-15T22:52:35-08:00 (1794811955)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,6 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -407,9 +406,6 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 	it("loading an API folder with a file named 'slothlet' emits a reserved-name warning (line 108)", async () => {
 		// api_test_reserved_name/slothlet.mjs causes userApi.slothlet to be set
 		// before the built-in slothlet namespace is attached, triggering the warning.
-		// Clear captured warnings before test to avoid interference from other tests
-		SlothletWarning.clearCaptured();
-
 		// Built WITHOUT `silent` on purpose: the reserved-property console warning now honors `silent`
 		// (like every other SlothletWarning site — #196 review), so a silent build no longer emits it.
 		// This test verifies the warning IS emitted for a reserved name; the silent-gating + the
@@ -422,7 +418,7 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 		});
 
 		// WARNING_RESERVED_PROPERTY_CONFLICT captured by SlothletWarning
-		const warnings = Array.from(SlothletWarning.captured || []);
+		const warnings = Array.from(api.slothlet.diag.SlothletWarning.captured || []); // per instance (#819)
 		const hasReservedWarning = warnings.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
 		expect(hasReservedWarning).toBe(true);
 	});

@@ -66,16 +66,11 @@ describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", 
 		expect(result).toBe(5);
 	});
 
-	it("registered hooks are never invoked when hook:false (fast-path at line 377 skips all hooks)", async () => {
-		// Register a hook — it is stored, but getHooksForPath returns [] early at line 377
-		let hookCalled = false;
-		api.slothlet.hook.on("**:before", () => {
-			hookCalled = true;
-		});
-
-		await api.math.add(2, 3);
-		// Hook must NOT have fired because the fast-path returned [] without iterating
-		expect(hookCalled).toBe(false);
+	it("api.slothlet.hook is absent when hook:false, and API calls still return their results (#821)", async () => {
+		// With hook off (and diagnostics not true) the hook namespace is not exposed at all,
+		// so there is nothing to register; calls run straight through.
+		expect(api.slothlet.hook).toBeUndefined();
+		expect(await api.math.add(2, 3)).toBe(5);
 	});
 });
 

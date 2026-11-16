@@ -569,7 +569,7 @@ if (moduleKeys.includes("addapi")) {
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	api: {
 		collision: {
 			initial: "merge", // During initial API build

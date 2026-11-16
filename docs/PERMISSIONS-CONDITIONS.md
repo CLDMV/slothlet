@@ -270,7 +270,7 @@ Isolate tenants from each other's resources using conditions on shared API paths
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		rules: [
@@ -313,7 +313,7 @@ With `defaultPolicy: "deny"`, conditions can open specific paths per context rat
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		rules: [
@@ -336,7 +336,7 @@ A context-level condition can express "may this caller reach `project.get` at al
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
 		defaultPolicy: "deny",
 		rules: [
