@@ -10937,6 +10937,54 @@ function runtime_rootTakesKey(target, prop) {
 }
 
 /**
+ * The node the api root holds in place of an object or function the host assigns or defines on it, as one assigned
+ * through `self` (see ApiManager#setOwnedProperty) and one assigned on any node (wrap-on-set) is held: read, listed
+ * and serialized at the member's name, written only by who owns it, called only by who may call it. `null` for a value
+ * held as it is: a primitive, a built-in data object, a proxy or a node, a framework key, and any assignment the
+ * framework makes itself or during a build.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - The value assigned.
+ * @returns {object|null} The node's proxy, or `null`.
+ * @private
+ *
+ * @example
+ * api.ownNothing = { a: 1 }; // the root holds a node at `ownNothing`; a module reads `self.ownNothing.a` under its rules
+ */
+function runtime_rootMemberNode(slothlet, prop, value) {
+	if (typeof prop !== "string" || SELF_FRAMEWORK_ROOTS.has(prop) || isFrameworkReservedKey(prop)) return null;
+	if (slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(slothlet.boundApi)) return null;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	if (util.types.isProxy(value) || resolveWrapper(value) !== null || UnifiedWrapper._staysValue(value)) return null;
+	const node = new UnifiedWrapper(slothlet, {
+		mode: slothlet.config?.mode ?? "eager",
+		apiPath: prop,
+		moduleID: null,
+		isCallable: typeof value === "function"
+	});
+	node.___setImpl(value, null);
+	return node.createProxy();
+}
+
+/**
+ * Assign a member of the api root, as an assignment on the api object: an object or function the host assigns is held
+ * as a node (see {@link runtime_rootMemberNode}).
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - The value assigned.
+ * @returns {boolean} Whether it was assigned.
+ * @throws {SlothletError} When module code may not change the member (see {@link runtime_assertRootChange}).
+ * @internal
+ */
+function runtime_rootAssign(slothlet, target, prop, value) {
+	runtime_assertRootChange(slothlet, prop);
+	if (!runtime_rootTakesKey(target, prop)) return false;
+	value = runtime_unwrapSelfView(value);
+	return Reflect.set(slothlet.api, prop, runtime_rootMemberNode(slothlet, prop, value) ?? value);
+}
+
+/**
  * Define a member of the api root, as a definition on the api object: on the api itself, and on the root proxy's target
  * too where the invariants bind it (a member made non-configurable, and every member once the root is closed).
  * @param {object} slothlet - The instance.
@@ -10956,6 +11004,15 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
 	// A key only the target holds (its inspect hook) is the target's own.
 	if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
 	if (!runtime_rootTakesKey(target, prop)) return false;
+	// An object or function defined on the root is held as a node, as one assigned to it is, unless the definition fixes
+	// it (read-only and non-configurable): the language requires the root to hand that value out as it was defined.
+	if ("value" in descriptor) {
+		const current = Reflect.getOwnPropertyDescriptor(api, prop);
+		const configurable = "configurable" in descriptor ? descriptor.configurable : (current?.configurable ?? false);
+		const writable = "writable" in descriptor ? descriptor.writable : current && "value" in current ? current.writable : false;
+		const node = configurable || writable ? runtime_rootMemberNode(slothlet, prop, descriptor.value) : null;
+		if (node !== null) descriptor = { ...descriptor, value: node };
+	}
 	if (!Reflect.defineProperty(api, prop, descriptor)) return false;
 	const held = Reflect.getOwnPropertyDescriptor(api, prop);
 	if (held.configurable && Reflect.isExtensible(target)) return true;
@@ -20862,6 +20919,7 @@ export function internals(consumer) {
 		runtime_rootCallCheck,
 		runtime_rootClose,
 		runtime_rootDefine,
+		runtime_rootAssign,
 		runtime_rootFixedMember,
 		runtime_rootListing,
 		runtime_rootMemberDescriptor,

@@ -124,6 +124,7 @@ const {
 	runtime_rootCallCheck,
 	runtime_rootClose,
 	runtime_rootDefine,
+	runtime_rootAssign,
 	runtime_rootFixedMember,
 	runtime_rootListing,
 	runtime_rootMemberDescriptor,
@@ -132,7 +133,6 @@ const {
 	runtime_rootPrototypeFor,
 	runtime_rootInheritedRead,
 	runtime_behindGivenView,
-	runtime_rootTakesKey,
 	runtime_unwrapSelfView
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
@@ -1348,8 +1348,7 @@ class Slothlet {
 						// A change to the root is a change to the api, held to the rules the same change at a node is held to.
 						set: (target, prop, value) => {
 							if (!this.api) return true;
-							runtime_assertRootChange(this, prop);
-							return runtime_rootTakesKey(target, prop) && Reflect.set(this.api, prop, runtime_unwrapSelfView(value));
+							return runtime_rootAssign(this, target, prop, value);
 						},
 						has: (target, prop) => {
 							if (!this.api) return false;
