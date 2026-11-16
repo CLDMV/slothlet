@@ -18,18 +18,20 @@
  * for the code of the file that compiled it (#693).
  *
  * @description
- * The stacks are the formats the engines write. SpiderMonkey names the file and line code was compiled at, then what
- * compiled it (MDN, `Error.prototype.stack`): `@file line 7 > eval:1:1`, `anonymous@file line 7 > Function:1:1`.
- * JavaScriptCore gives eval and `Function` code no location: `eval code@`, `anonymous@`, with the built-in that ran it
- * as `eval@[native code]`. A frame marked evaluated is never placed on a leaf (PERMISSIONS.md, "Evaluated code … is never
- * placed on the leaf").
+ * The stacks are the formats the engines write, captured from Firefox 159 and WebKit 27.2 under Playwright. SpiderMonkey
+ * names the file and line code was compiled at, then what compiled it: `@file line 7 > eval:1:1`,
+ * `anonymous@file line 7 > Function:3:8`, and a function declared inside such code the same way. JavaScriptCore gives
+ * eval and `Function` code, and every function declared inside it, no location: `eval code@`, `anonymous@`, `inner@`,
+ * with the built-in that ran it as `eval@[native code]`. A frame marked evaluated is never placed on a leaf
+ * (PERMISSIONS.md, "Evaluated code … is never placed on the leaf").
  * @module tests/vitests/suites/context/stack-text-frames
  */
 
 import { describe, it, expect } from "vitest";
 import { textFrames } from "#handlers/frame-placement";
 
-const FILE = "http://localhost:5173/api/good/good.mjs";
+const FILE = "http://localhost/api/good/good.mjs";
+const PAGE = "http://localhost/page.html";
 
 /**
  * The frames of a stack, as `[path, evaluated]` pairs.
@@ -61,8 +63,27 @@ describe("stack text frames > SpiderMonkey (Firefox)", () => {
 		]);
 	});
 
-	it("marks any other compiled step (a timer's string handler) evaluated", () => {
-		expect(marks(`@${FILE} line 9 > setTimeout handler:1:1`)).toEqual([[`${FILE} line 9 > setTimeout handler`, true]]);
+	it("marks a function declared inside Function code evaluated", () => {
+		expect(
+			marks(`grab@${PAGE}:2:25\ninner@${PAGE} line 8 > Function:3:34\nanonymous@${PAGE} line 8 > Function:3:44\n@${PAGE}:8:72\n`)
+		).toEqual([
+			[PAGE, false],
+			[`${PAGE} line 8 > Function`, true],
+			[`${PAGE} line 8 > Function`, true],
+			[PAGE, false]
+		]);
+	});
+
+	it("marks any other compiled step evaluated", () => {
+		expect(marks(`@${FILE} line 9 > injectedScript:1:1`)).toEqual([[`${FILE} line 9 > injectedScript`, true]]);
+	});
+
+	it("marks eval code a module file runs evaluated, below the module's own frame", () => {
+		expect(marks(`run@${FILE}:1:31\n@${PAGE} line 19 > eval:1:1\n@${PAGE}:19:26\n`)).toEqual([
+			[FILE, false],
+			[`${PAGE} line 19 > eval`, true],
+			[PAGE, false]
+		]);
 	});
 
 	it("does not take a function name that names a file for the location", () => {
@@ -88,10 +109,21 @@ describe("stack text frames > JavaScriptCore (Safari)", () => {
 		]);
 	});
 
-	it("marks Function code, which has no location, evaluated", () => {
-		expect(marks(`anonymous@\nrun@${FILE}:7:6`)).toEqual([
+	it("marks Function code, and a function declared inside it, which have no location, evaluated", () => {
+		expect(marks(`grab@${PAGE}:2:34\ninner@\nanonymous@\nglobal code@${PAGE}:8:72`)).toEqual([
+			[PAGE, false],
 			["", true],
-			[FILE, false]
+			["", true],
+			[PAGE, false]
+		]);
+	});
+
+	it("marks nested eval code evaluated", () => {
+		expect(marks(`grab@${PAGE}:2:34\neval code@\neval@[native code]\neval code@\neval@[native code]\nglobal code@${PAGE}:6:18`)).toEqual([
+			[PAGE, false],
+			["", true],
+			["", true],
+			[PAGE, false]
 		]);
 	});
 
