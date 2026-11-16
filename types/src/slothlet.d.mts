@@ -75,7 +75,8 @@ export type SlothletOptions = {
      * - Context propagation runtime.
      * - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
      * - `"live"` — Experimental live bindings.
-     * Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
+     * Also accepted (case-insensitive): `"asynclocal"` / `"asynclocalstorage"` as aliases for `"async"`; `"livebindings"` / `"experimental"` as aliases for `"live"`.
+     * Any other value silently falls back to `"async"`.
      */
     runtime?: "async" | "live" | undefined;
     /**
@@ -109,11 +110,24 @@ export type SlothletOptions = {
      */
     reference?: object | null | undefined;
     /**
-     * - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
+     * - Defaults for `api.slothlet.scope()` / `api.slothlet.context.scope()` runs.
+     * `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
+     * `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
      */
     scope?: {
-        merge: "shallow" | "deep";
+        merge?: "shallow" | "deep";
+        isolation?: "partial" | "full";
     } | undefined;
+    /**
+     * - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
+     */
+    metadata?: object | null | undefined;
+    /**
+     * - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
+     * `lowerFirst` (default `true`), `preserveAllUpper` (default `false`), `preserveAllLower` (default `false`) and `rules` (`{ leave?, leaveInsensitive?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).
+     * Applies to every file and folder name the loader derives and to `api.slothlet.sanitize()`. See [SANITIZATION.md](docs/SANITIZATION.md).
+     */
+    sanitize?: object | undefined;
     /**
      * - API build and mutation settings.
      */
@@ -128,8 +142,9 @@ export type SlothletOptions = {
             api: string;
         } | undefined;
         /**
-         * - Enable or disable runtime mutation methods on `api.slothlet.api`.
-         * Object with boolean keys `add`, `remove`, `reload` (all default `true`).
+         * - Enable or disable runtime mutation surfaces.
+         * Object with boolean keys: `add`, `remove`, `reload` (`api.slothlet.api.*`), `permissions` (`api.slothlet.permissions.*` rule changes) and `events` (`api.slothlet.event.rules.*`), all default `true`;
+         * and `allowCollisionOverride` (default `false`), which must be `true` before `api.slothlet.api.add()` honors a per-call `collisionMode` / `mutateExisting` / `recordHistory`.
          */
         mutations?: object | undefined;
     } | undefined;
@@ -138,7 +153,7 @@ export type SlothletOptions = {
      * - `false` — disabled (default).
      * - `true` — enabled, all endpoints.
      * - `string` — enabled with a default glob pattern.
-     * - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
+     * - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean, pin?: boolean }` (`pin` defaults to `true`).
      */
     hook?: string | boolean | object | undefined;
     /**
@@ -218,7 +233,7 @@ export type SlothletOptions = {
     events?: object | undefined;
     /**
      * - Enable verbose internal logging. `true` enables all categories.
-     * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
+     * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context`, `initialization`, `materialize`, `versioning`, `permissions` to target specific subsystems.
      */
     debug?: boolean | object | undefined;
     /**
