@@ -8681,7 +8681,31 @@ function runtime_moduleKey(wrapper) {
  * @private
  */
 function runtime_crossKey(reader) {
-	return reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader) : reader;
+	return reader?.____slothletInternal && reader.slothlet ? runtime_viewGroup(reader) : reader;
+}
+
+/**
+ * The functions of a module that share the views made of other modules' values: those the write rules answer alike
+ * (the same rules name them, see `PermissionManager#writeRulesFor`). A write another module's code makes through such
+ * a view, a built-in one of them hands on to run included, is held to the rules of whoever holds the view, so a view
+ * is shared only where that answer is the same. Most modules have one group, the module's record itself.
+ * @param {object} reader - A module's wrapper.
+ * @returns {{owner: object}} The group's record: the module's record (see {@link runtime_makerOf}) for functions the
+ *   rules answer as the first of its wrappers, else one record per answer, whose `owner` is the first function of it.
+ * @private
+ */
+function runtime_viewGroup(reader) {
+	const maker = runtime_makerOf(reader);
+	if (maker.owner === reader) return maker;
+	const permissionManager = reader.slothlet.handlers?.permissionManager;
+	if (!permissionManager) return maker;
+	const rulesOf = (wrapper) => permissionManager.writeRulesFor(String(wrapper.____slothletInternal?.apiPath ?? ""));
+	const mine = rulesOf(reader);
+	if (mine === rulesOf(maker.owner)) return maker;
+	maker.viewGroups ??= new Map();
+	let group = maker.viewGroups.get(mine);
+	if (!group) maker.viewGroups.set(mine, (group = { owner: reader }));
+	return group;
 }
 
 /**
@@ -8771,12 +8795,12 @@ function runtime_isWrittenClassPrototype(value) {
  */
 function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
-	// One view per module: the first of its wrappers stands for all of them, and each write is still decided for the
-	// module executing it. Whether the reader holds the object itself is the reader's own answer: files loaded from one
+	// One view per module, or per group of its functions the write rules answer alike ({@link runtime_viewGroup}): the
+	// first of the group stands for all of it, and each write is still decided for the module executing it. Whether the reader holds the object itself is the reader's own answer: files loaded from one
 	// folder share a module, and the one standing for it may hold what a rule refuses this one. A file a write rule
 	// keeps apart from the one standing for its module gets a view of its own, so a write through it that another
 	// module's code makes (a bound built-in it hands on) is still held to what the file may write.
-	let standing = reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader).owner : reader;
+	let standing = reader?.____slothletInternal && reader.slothlet ? runtime_viewGroup(reader).owner : reader;
 	if (standing !== reader && !runtime_asOneModule(slothlet, standing, reader)) standing = reader;
 	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet, standing);
 	let site = CROSSED_PROTOTYPE_PATHS.get(prototype);

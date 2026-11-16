@@ -616,6 +616,13 @@ export class PermissionManager extends ComponentBase {
 	#readSubtreeCache = new Map();
 
 	/**
+	 * The write rules naming each caller path ({@link writeRulesFor}), keyed by caller path. Cleared on every rule change.
+	 * @type {Map<string, string>}
+	 * @private
+	 */
+	#writeRulesForCache = new Map();
+
+	/**
 	 * Ids of the built-in rules keeping module code off the framework's own keys on api nodes (`**.<key>:write`). They
 	 * match a key at any depth, so {@link writeSubtree} leaves them out: they guard what an api node carries, and a
 	 * value beneath a node's path is no node.
@@ -2285,6 +2292,26 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * The write rules whose caller pattern matches `callerPath`, as one string of their ids: two callers given the same
+	 * string are answered alike by the write rules for every write either could make. Kept until the rules change.
+	 *
+	 * @param {string} callerPath - Api path of a module's function.
+	 * @returns {string} The ids, in the order the rules were added; empty while the system is off or no rule names it.
+	 * @example
+	 * pm.writeRulesFor("reader.x") === pm.writeRulesFor("reader.y"); // true when no write rule tells the two apart
+	 */
+	writeRulesFor(callerPath) {
+		if (!this.#enabled) return "";
+		const cached = this.#writeRulesForCache.get(callerPath);
+		if (cached !== undefined) return cached;
+		const ids = [];
+		for (const entry of this.#writeRules.values()) if (this.#getCompiledPattern(entry.caller)(callerPath)) ids.push(entry.id);
+		const signature = ids.join("\u0000");
+		this.#writeRulesForCache.set(callerPath, signature);
+		return signature;
+	}
+
+	/**
 	 * What the write rules say about every write `callerPath` could make at `targetPath` or anywhere beneath it (#667),
 	 * read from the rule set alone and kept until the rules change: `"deny"` when a rule could refuse one of them (a
 	 * deny whose pattern can reach the subtree, or one with a condition), `"grant"` when allows cover the whole subtree
@@ -3593,6 +3620,7 @@ export class PermissionManager extends ComponentBase {
 		this.#writeCache.clear();
 		this.#subtreeCache.clear();
 		this.#readSubtreeCache.clear();
+		this.#writeRulesForCache.clear();
 		this.#ruleEpoch++;
 	}
 
