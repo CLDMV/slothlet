@@ -115,7 +115,7 @@ Load with fast mode (install `esbuild`):
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: true // enables fast mode
 });
 
@@ -207,7 +207,7 @@ Fast mode uses esbuild to strip TypeScript syntax and transpile to JavaScript. I
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "fast",
 		target: "es2022",
@@ -228,7 +228,7 @@ Strict mode uses the TypeScript compiler (`tsc`) to transpile and type-check you
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		target: "es2020"
@@ -246,7 +246,7 @@ How strict the check is can be tuned with [`strict`](#strict), [`module`](#modul
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		strict: true,
@@ -266,7 +266,7 @@ Both `types.output` and `types.interfaceName` are required when `types` is speci
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		types: {
@@ -359,7 +359,7 @@ import fs from "fs";
 import path from "path";
 
 const outputPath = "./types/api.d.ts";
-const api = await slothlet({ dir: "./api", typescript: { mode: "strict", types: { output: outputPath, interfaceName: "MyAPI" } } });
+const api = await slothlet({ base: "./api", typescript: { mode: "strict", types: { output: outputPath, interfaceName: "MyAPI" } } });
 
 // ...use api...
 

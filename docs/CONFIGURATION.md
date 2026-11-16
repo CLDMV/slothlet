@@ -25,14 +25,19 @@ const api = await slothlet({
 		mutations: {
 			add: true,
 			remove: true,
-			reload: true
+			reload: true,
+			permissions: true,
+			events: true,
+			allowCollisionOverride: false
 		}
 	},
 
 	// Context
 	context: null,
 	reference: null,
-	scope: { merge: "shallow" }, // "shallow" | "deep"
+	scope: { merge: "shallow", isolation: "partial" }, // merge: "shallow" | "deep"; isolation: "partial" | "full"
+	metadata: null, // init metadata applied to every function
+	sanitize: {}, // file-name to api-key rules, see SANITIZATION.md
 
 	// Hooks
 	hook: false, // boolean | string | object
@@ -101,10 +106,17 @@ Controls when API modules are loaded and materialized.
 - **`"eager"`** - All modules are loaded and the API is fully built on initialization. Safe for all runtimes.
 - **`"lazy"`** - Modules are loaded on first access via a Proxy. Reduces startup time for large APIs.
 
-Also accepted: `"immediate"` / `"preload"` (aliases for `"eager"`); `"deferred"` / `"proxy"` (aliases for `"lazy"`).
+Aliases, matched case-insensitively:
+
+| Value                      | Same as   |
+| -------------------------- | --------- |
+| `"immediate"`, `"preload"` | `"eager"` |
+| `"deferred"`, `"proxy"`    | `"lazy"`  |
+
+Any other value falls back to `"eager"`.
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 ```
 
 See [LIFECYCLE.md](LIFECYCLE.md) for lazy mode behavior, proxy semantics, and materialization details.
@@ -123,10 +135,17 @@ Selects the context-propagation runtime.
 
 The live runtime creates no `AsyncLocalStorage`: slothlet makes its store when the first instance on the async runtime is created. On Node 22, where a store that has run switches async hooks on for the whole process, a process whose instances all use the live runtime leaves async hooks off.
 
-Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` (aliases for `"async"`).
+Aliases, matched case-insensitively:
+
+| Value                                 | Same as   |
+| ------------------------------------- | --------- |
+| `"asynclocal"`, `"asynclocalstorage"` | `"async"` |
+| `"livebindings"`, `"experimental"`    | `"live"`  |
+
+Any other value (including `"als"` and `"node"`) is not recognized and silently falls back to `"async"`.
 
 ```javascript
-const api = await slothlet({ dir: "./api", runtime: "async" });
+const api = await slothlet({ base: "./api", runtime: "async" });
 ```
 
 See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for context runtime details.
@@ -185,11 +204,11 @@ const api = await slothlet({ base: "./api", helpers: "module" });
 **Type**: `number` | `Infinity`
 **Default**: `Infinity`
 
-Limits how many directory levels deep slothlet scans when building the API from `dir`. Useful for monorepo layouts or large directory trees where you want to restrict which subdirectories become API namespaces.
+Limits how many directory levels deep slothlet scans when building the API from `base`. Useful for monorepo layouts or large directory trees where you want to restrict which subdirectories become API namespaces.
 
 ```javascript
 // Only scan top-level dir and one level deep
-const api = await slothlet({ dir: "./api", apiDepth: 1 });
+const api = await slothlet({ base: "./api", apiDepth: 1 });
 ```
 
 Setting `Infinity` (default) scans all subdirectories.
@@ -201,13 +220,13 @@ Setting `Infinity` (default) scans all subdirectories.
 **Type**: `string` | `string[]`
 **Default**: none
 
-Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any number of segments, none included: `tools/**` names `tools` itself, a root file `tools.mjs` included, as well as everything in the folder), `?` (one char), `{a,b}` (alternation), `!` (negation).
+Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `base`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any number of segments, none included: `tools/**` names `tools` itself, a root file `tools.mjs` included, as well as everything in the folder), `?` (one char), `{a,b}` (alternation), `!` (negation).
 
 > **Match the on-disk name, not the API key.** Globs are tested against the raw directory/file name as it appears on disk, _before_ it is sanitized into a JavaScript-safe API property. A folder `draft-notes` (surfaced as `api.draftNotes`) is hidden with `hidden: "draft-notes"`, not `hidden: "draftNotes"`.
 
 ```javascript
 // Hide a folder, a nested subtree, and one file
-const api = await slothlet({ dir: "./api", hidden: ["drafts", "internal/**", "math.scratch"] });
+const api = await slothlet({ base: "./api", hidden: ["drafts", "internal/**", "math.scratch"] });
 ```
 
 `api.slothlet.api.add(path, dir, { hidden })` accepts the same option per call, with globs relative to the **added** folder.
@@ -228,7 +247,7 @@ Before v3.11, the `.`/`__` hidden-name rule applied only to files; folders with 
 
 ```javascript
 // Temporary: keep loading .legacy/ as api.legacy while migrating
-const api = await slothlet({ dir: "./api", scanHiddenFolders: true });
+const api = await slothlet({ base: "./api", scanHiddenFolders: true });
 ```
 
 ---
@@ -255,7 +274,7 @@ Use the object form to specify different strategies for the initial API build vs
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	api: {
 		collision: {
 			initial: "merge", // During initial build
@@ -299,7 +318,7 @@ Disable all mutations to create a locked, immutable API:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	api: {
 		mutations: { add: false, remove: false, reload: false, permissions: false }
 	}
@@ -321,7 +340,7 @@ An object that is merged into the per-request context available inside async API
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { db, logger }
 });
 ```
@@ -339,7 +358,7 @@ An object whose properties are merged directly into the root of the built API an
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	reference: { db, config }
 });
 
@@ -351,20 +370,80 @@ api.config; // ✅
 
 ### `scope`
 
-**Type**: `{ merge: "shallow" | "deep" }`
-**Default**: `undefined`
+**Type**: `{ merge?: "shallow" | "deep", isolation?: "partial" | "full" }`
+**Default**: `undefined` (`merge` behaves as `"shallow"`, `isolation` as `"partial"`)
 
-Controls how per-request scope data is merged.
+Sets the defaults for `api.slothlet.scope()` runs. Both can be overridden per call.
 
-- **`"shallow"`** - Top-level keys are merged (default when scope is provided)
-- **`"deep"`** - Deep recursive merge of all nested keys
+- **`merge`**
+  - **`"shallow"`** - Top-level keys are merged (default when scope is provided)
+  - **`"deep"`** - Deep recursive merge of all nested keys
+  - Any other value throws `INVALID_CONFIG`.
+- **`isolation`**
+  - **`"partial"`** (default) - The scope shares `self` with the rest of the api, so a write through `self` inside the scope is visible outside it.
+  - **`"full"`** - The scope gets a copy-on-write `self`: writes made inside the scope stay inside it.
+  - Any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
-	scope: { merge: "deep" }
+	base: "./api",
+	scope: { merge: "deep", isolation: "full" }
 });
 ```
+
+See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for how scopes work.
+
+---
+
+### `metadata`
+
+**Type**: `object` | `null`
+**Default**: `null`
+
+Init metadata. Every key is set as global metadata, so it is inherited by every later `api.slothlet.api.add()`, and is also registered as user metadata for the base module. System metadata fields still win over these keys.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	metadata: { team: "platform", tier: "internal" }
+});
+```
+
+See [METADATA.md](METADATA.md#init-metadata) for lookup priority and the runtime metadata API.
+
+---
+
+## Sanitization
+
+### `sanitize`
+
+**Type**: `{ lowerFirst?: boolean, preserveAllUpper?: boolean, preserveAllLower?: boolean, rules?: { leave?: string[], leaveInsensitive?: string[], upper?: string[], lower?: string[] } }`
+**Default**: `{}`
+
+Options for `sanitizePropertyName()`, the function that turns names into api property names (`auto-ip` becomes `autoIp`). The instance keeps this object and applies it in `api.slothlet.sanitize(str)`, and it is carried through reloads of added modules.
+
+> **Current behavior:** the loader does not pass this object when it names files and folders while building the api; it calls `sanitizePropertyName()` with its defaults. So today `sanitize` changes what `api.slothlet.sanitize()` returns, not the keys a scan produces.
+
+| Option                   | Default | Effect                                                          |
+| ------------------------ | ------- | --------------------------------------------------------------- |
+| `lowerFirst`             | `true`  | Lowercase the first character of the first segment              |
+| `preserveAllUpper`       | `false` | Keep an all-uppercase name as it is (`COMMON_APPS`)             |
+| `preserveAllLower`       | `false` | Keep an all-lowercase name as it is, underscores included       |
+| `rules.leave`            | none    | Segments kept exactly as written, case-sensitive, globs allowed |
+| `rules.leaveInsensitive` | none    | Same, case-insensitive                                          |
+| `rules.upper`            | none    | Segments forced to UPPERCASE                                    |
+| `rules.lower`            | none    | Segments forced to lowercase                                    |
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	sanitize: { rules: { upper: ["*-ip"] } }
+});
+
+api.slothlet.sanitize("auto-ip"); // "autoIP"
+```
+
+See [SANITIZATION.md](SANITIZATION.md) for pattern matching, rule precedence and examples.
 
 ---
 
@@ -464,21 +543,21 @@ const api = await slothlet({ base: "./api", permissions: { defaultPolicy: "allow
 
 ### `hook`
 
-**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors, pin }`
+**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors, pin }` (an object is enabled unless `enabled: false`)
 **Default**: `false`
 
 Enables the hook system, which intercepts API function calls.
 
 ```javascript
 // Simple enable
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Enable with a default pattern filter
-const api = await slothlet({ dir: "./api", hook: "database.*" });
+const api = await slothlet({ base: "./api", hook: "database.*" });
 
 // Full object form
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: {
 		enabled: true,
 		pattern: "**", // Default glob filter for hooks
@@ -503,7 +582,7 @@ Enables verbose internal logging. `true` enables all categories. Pass an object 
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	debug: {
 		builder: false, // API tree construction
 		api: false, // api.slothlet.api.* operations
@@ -530,7 +609,7 @@ const api = await slothlet({
 Suppresses all console output from slothlet — warnings, deprecation notices, and init-time diagnostics — consistently across every warning site. It gates **only console output**: `impl:warning` / `impl:error` lifecycle events still fire regardless of `silent` (see [LIFECYCLE.md](LIFECYCLE.md)), and it does not affect `debug` logging.
 
 ```javascript
-const api = await slothlet({ dir: "./api", silent: true });
+const api = await slothlet({ base: "./api", silent: true });
 ```
 
 ---
@@ -543,7 +622,7 @@ const api = await slothlet({ dir: "./api", silent: true });
 Enables the `api.slothlet.diag.*` namespace for runtime introspection. Intended for testing and debugging - do not enable in production.
 
 ```javascript
-const api = await slothlet({ dir: "./api", diagnostics: true });
+const api = await slothlet({ base: "./api", diagnostics: true });
 
 // Now available:
 api.slothlet.diag.describe();
@@ -563,7 +642,7 @@ Construction-time lifecycle subscribers, registered on the lifecycle emitter **b
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	lifecycle: {
 		"impl:warning": (data) => console.warn(`[init] ${data.code}: ${data.message}`),
 		"impl:error": [onError, auditError],
@@ -585,7 +664,7 @@ A non-plain-object value (array, class instance, primitive) throws at constructi
 When `true`, expands into two implicit `routines` entries reproducing this option's original scope — a literally-named `shutdown` / `destroy` leaf found anywhere in the API tree, crossing every mount boundary, invoked deepest-first — and sets the effective `autoRoutines` to `true` (unless `autoRoutines` is given explicitly, which always wins). Any existing `shutdown` / `destroy`-mode routine, including the built-in `shutdown` default, is dropped in favor of these, since a root-anchored routine of the same mode strictly subsumes a narrower one. Nested hooks remain directly callable regardless of this option.
 
 ```javascript
-const api = await slothlet({ dir: "./api", collectLifecycleHooks: true });
+const api = await slothlet({ base: "./api", collectLifecycleHooks: true });
 // api.shutdown() now also fires nested shutdown() leaves, deepest-first — implemented as an
 // implicit `{ name: "^**.shutdown", mode: "shutdown", order: "depth" }` routine.
 ```
@@ -601,13 +680,13 @@ A **routine** is a named cross-module runnable: every mounted module exporting a
 
 Each entry normalizes to `{ name, mode, recursive, order, cascade }`: a bare `"name"` string (mode `"manual"`), `"name:mode"` (split on the first colon), or `{ name, mode?, recursive?, order?, cascade? }` — `recursive`/`order`/`cascade` are only settable via the object form. Providing `routines` at all **replaces** the built-in defaults — pass `[]` to disable every routine, or spread `slothlet.defaults.routines` to extend rather than replace them. `cascade` (default `true`) governs the root run-all: set `cascade: false` for a **per-entity** routine, where the host invokes exactly one co-owner via `api.<path>.<name>.for(key)` (and discovers the co-owners via `.contributors`) instead of a run-all cascade — see [LIFECYCLE.md](LIFECYCLE.md#per-entity-routines-cascade-false-forkey-and-contributors).
 
-By default, `name` is resolved **relative to a mount point** (a top-level `dir`-scan entry, or an `api.slothlet.api.add()` target) — a bare name only matches a mount's own top level, never anything nested. A dotted name (`"admin.initialize"`) matches a fixed relative sub-path, or with `recursive: true` matches that name at any depth within the mount. A `^`-prefixed name (`"^ext.*.initialize"`) is root-anchored: matched via glob (`*`, `**`, `{}`, `!`) against the full absolute api path, crossing mount boundaries. `order` controls the root cascade's grouping order — `"mount"` (registration order) or `"depth"` (deepest-matching-path first); defaults to `"depth"` for `shutdown`/`destroy`, `"mount"` for `startup`/`manual`.
+By default, `name` is resolved **relative to a mount point** (a top-level `base`-scan entry, or an `api.slothlet.api.add()` target) — a bare name only matches a mount's own top level, never anything nested. A dotted name (`"admin.initialize"`) matches a fixed relative sub-path, or with `recursive: true` matches that name at any depth within the mount. A `^`-prefixed name (`"^ext.*.initialize"`) is root-anchored: matched via glob (`*`, `**`, `{}`, `!`) against the full absolute api path, crossing mount boundaries. `order` controls the root cascade's grouping order — `"mount"` (registration order) or `"depth"` (deepest-matching-path first); defaults to `"depth"` for `shutdown`/`destroy`, `"mount"` for `startup`/`manual`.
 
 ```javascript
-const api = await slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+const api = await slothlet({ base: "./api", routines: [...slothlet.defaults.routines, "launch"] });
 // extends the defaults with a new "launch" (manual) routine
 
-const api2 = await slothlet({ dir: "./api", routines: [] });
+const api2 = await slothlet({ base: "./api", routines: [] });
 // disables initialize/shutdown routine behavior entirely
 ```
 
@@ -623,7 +702,7 @@ See [LIFECYCLE.md](LIFECYCLE.md#routines) for the full contract — name matchin
 TEMPORARY v3-compat gate (see [LIFECYCLE.md](LIFECYCLE.md#autoroutines)): every configured routine is always stacked and directly callable regardless of this flag — only the _automatic_ firing (`startup` at compose end, `shutdown`/`destroy` at dispose) is gated, so upgrading to a slothlet version carrying routines changes no observable behavior by default. `collectLifecycleHooks: true` also sets the effective value to `true` unless this option is given explicitly. Planned to default to `true` in v4.
 
 ```javascript
-const api = await slothlet({ dir: "./api", autoRoutines: true });
+const api = await slothlet({ base: "./api", autoRoutines: true });
 // "startup"-mode routines now auto-run at compose end; "shutdown"/"destroy"-mode routines auto-run at dispose.
 ```
 
@@ -639,7 +718,7 @@ Whether two or more modules' contributions colliding at the exact same composed 
 Deliberately independent of `collisionMode`: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `stackRoutines: true` is set. The root cascade runs every matching contribution across **distinct** api paths regardless of this flag; where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would.
 
 ```javascript
-const api = await slothlet({ dir: "./api", stackRoutines: true });
+const api = await slothlet({ base: "./api", stackRoutines: true });
 await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
 await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api"); // also exports "initialize"
 
@@ -662,9 +741,9 @@ Enables internal tracking features.
 | `materialization` | `false` | Track which lazy-mode API paths have been materialized |
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy", tracking: true });
+const api = await slothlet({ base: "./api", mode: "lazy", tracking: true });
 // or
-const api = await slothlet({ dir: "./api", mode: "lazy", tracking: { materialization: true } });
+const api = await slothlet({ base: "./api", mode: "lazy", tracking: { materialization: true } });
 ```
 
 ---
@@ -678,7 +757,7 @@ When using `mode: "lazy"`, immediately begins materializing all API paths in the
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
 	backgroundMaterialize: true
 });
@@ -739,8 +818,8 @@ Process-wide work that belongs to no instance keeps the functions slothlet loade
 Enables TypeScript **module loading** — transpilation of `.ts`/`.mts` files in the API directory. `true` or `"fast"` uses esbuild (no type checking); `"strict"` uses `tsc` (type-checks, and can optionally emit a `.d.ts`). Declaration generation is a sub-feature of strict mode, not what this flag turns on by itself.
 
 ```javascript
-const api = await slothlet({ dir: "./api", typescript: true }); // fast mode (esbuild)
-const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode (tsc)
+const api = await slothlet({ base: "./api", typescript: true }); // fast mode (esbuild)
+const api = await slothlet({ base: "./api", typescript: "strict" }); // strict mode (tsc)
 ```
 
 See [TYPESCRIPT.md](TYPESCRIPT.md) for the full TypeScript configuration reference, modes, peer dependencies, and generated type file details.
@@ -752,7 +831,7 @@ See [TYPESCRIPT.md](TYPESCRIPT.md) for the full TypeScript configuration referen
 Available only when `diagnostics: true` is set. Provides runtime introspection for testing and debugging.
 
 ```javascript
-const api = await slothlet({ dir: "./api", diagnostics: true });
+const api = await slothlet({ base: "./api", diagnostics: true });
 const diag = api.slothlet.diag;
 ```
 
@@ -879,7 +958,7 @@ When a fix is suppressed:
 ```javascript
 // Suppress the C03 fix and restore pre-fix nesting
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	suppressFixes: ["C03_116"]
 });
 // api.notifications.helpers.formatPhone(...) — pre-fix (nested, broken)

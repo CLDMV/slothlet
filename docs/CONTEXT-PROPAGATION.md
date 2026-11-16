@@ -34,7 +34,7 @@ The runtime exports `self`, `context`, and `instanceID`. Note that `reference` i
 ```javascript
 // Reference data is merged directly into the API - accessible via self
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	reference: {
 		md5: (str) => crypto.createHash("md5").update(str).digest("hex"),
 		version: "3.0.0",
@@ -235,7 +235,7 @@ Executes a callback function with isolated context data. `.run()` is shorthand f
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "myApp", version: "1.0" }
 });
 
@@ -275,7 +275,7 @@ Executes a function with isolated context using structured options.
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { timeout: 5000 } }
 });
 
@@ -360,7 +360,7 @@ Owner-locked keys protect **who the caller is** (an authenticated `userId`, a ve
 Child `self` is the shared base `self`. Mutations to API state inside `.run()` / `.scope()` **persist** afterward — by design. The API surface is shared; context is isolated.
 
 ```javascript
-const api = await slothlet({ dir: "./api" }); // default: partial isolation
+const api = await slothlet({ base: "./api" }); // default: partial isolation
 ```
 
 #### Full Isolation
@@ -369,7 +369,7 @@ Child `self` is a **copy-on-write view** over the base `self`: reads pass throug
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	scope: { isolation: "full" }
 });
 ```
@@ -380,7 +380,7 @@ The isolation mode can be overridden on a per-call basis regardless of the insta
 
 ```javascript
 // Instance default: partial
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 
 // Override to full isolation for this specific call
 await api.slothlet.context.scope({
@@ -397,7 +397,7 @@ await api.slothlet.context.scope({
 Set `scope: false` to disable `.run()` and `.scope()` entirely. Any attempt to call them will throw at runtime.
 
 ```javascript
-const api = await slothlet({ dir: "./api", scope: false });
+const api = await slothlet({ base: "./api", scope: false });
 ```
 
 ### Context Isolation Guarantees
@@ -410,7 +410,7 @@ Per-request context is deep-cloned (via the function-tolerant `deepClone`) befor
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { count: 0 } }
 });
 
@@ -429,8 +429,8 @@ console.log(base.config.count); // 0 - parent context unchanged
 When calling `api.slothlet.context.get()` from inside another instance's `.run()` block, the called instance returns its own **base context** - not the calling instance's child context. This provides clear instance isolation.
 
 ```javascript
-const api1 = await slothlet({ dir: "./api1", context: { app: "one" } });
-const api2 = await slothlet({ dir: "./api2", context: { app: "two" } });
+const api1 = await slothlet({ base: "./api1", context: { app: "one" } });
+const api2 = await slothlet({ base: "./api2", context: { app: "two" } });
 
 await api1.slothlet.context.run({ userId: 100 }, async () => {
 	// api1.slothlet.context.get() → { app: "one", userId: 100 } ✅
@@ -453,7 +453,7 @@ Nested `.run()` calls within the same instance inherit from their parent scope:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "MyApp", level: 0 }
 });
 
@@ -480,7 +480,7 @@ Top-level properties are merged; nested objects are replaced wholesale:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { timeout: 5000, retries: 3 }, user: "alice" }
 });
 
@@ -514,7 +514,7 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "MyApp", version: "1.0.0", environment: "production" }
 });
 
@@ -563,7 +563,7 @@ export function error(message) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "SaaS Platform", sharedConfig: { apiVersion: "v1" } }
 });
 
@@ -649,7 +649,7 @@ export function startServer(port = 3000) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { user: "alice", session: "tcp-session" }
 });
 
@@ -715,7 +715,7 @@ export function createProcessor(config) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { user: "alice", requestId: "req-123" }
 });
 

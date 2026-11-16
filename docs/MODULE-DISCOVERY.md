@@ -21,7 +21,7 @@ If you're loading slothlet modules from local source files in a single repo, you
 ```js
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 
 // Discover, sort, and mount everything matching the convention in one call:
 await api.slothlet.api.modules.addDiscovered({

@@ -161,7 +161,7 @@ export function add(a, b) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const result = api.rootMath.add(2, 3); // 5
 ```
 
@@ -192,7 +192,7 @@ export function subtract(a, b) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const sum = api.math.add(2, 3); // ✅ not api.math.math.add()
 const diff = api.math.subtract(5, 2);
 ```
@@ -231,7 +231,7 @@ function processGamma(data) {
 module.exports = { processGamma };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.multi.alpha.processAlpha("test");
 api.multi.beta.processBeta("test");
 api.multi.gamma.processGamma("test"); // CJS works seamlessly
@@ -269,7 +269,7 @@ module.exports = function(value) {
 };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.funcmod("Alice");         // "Hello, Alice!"
 api.multi_func.alpha(5);      // 10
 api.multi_func.beta(5);       // 15
@@ -311,7 +311,7 @@ export function callBoth(data) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.interop.esmModule.esmFunction("test");
 api.interop.cjsModule.cjsFunction("test");
 api.interop.mixed.callBoth("test");
@@ -359,7 +359,7 @@ logger.error = (msg) => console.error(`[ERROR] ${msg}`);
 export { logger };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.exportDefault("Hello"); // Direct call
 api.exportDefault.info("Info"); // Method call
 api.exportDefault.error("Error"); // Method call
@@ -455,7 +455,7 @@ function parseDate(str) {
 module.exports = { parseDate };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const formatted = api.nested.date.formatDate(new Date());
 const parsed = api.nested.dateUtil.parseDate("2025-12-30");
 ```
@@ -516,7 +516,7 @@ function buildUrl(base, path) {
 module.exports = { buildUrl };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.util.controller.handleRequest({ data: "test" });
 api.util.extract.extractData({ key: "value" }, "key");
 api.util.url.parser.parseUrl("https://example.com");
@@ -659,7 +659,7 @@ export function getHTTPStatus(code) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.task.autoIP({ mode: "dhcp" }); // not .autoIp
 api.util.parseJSON('{"key": "value"}'); // not .parseJson
 api.api.getHTTPStatus(200); // not .getHttpStatus
@@ -696,7 +696,7 @@ export function multiply(a: number, b: number): number {
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: { mode: "fast" } // uses esbuild
 });
 
@@ -712,7 +712,7 @@ npm install typescript
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: { mode: "strict" } // uses tsc, respects tsconfig.json
 });
 ```

@@ -2312,7 +2312,8 @@ export default slothlet;
  * @property {"async"|"live"} [runtime="async"] - Context propagation runtime.
  *   - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
  *   - `"live"` — Experimental live bindings.
- *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
+ *   Also accepted (case-insensitive): `"asynclocal"` / `"asynclocalstorage"` as aliases for `"async"`; `"livebindings"` / `"experimental"` as aliases for `"live"`.
+ *   Any other value silently falls back to `"async"`.
  * @property {"instance"|"module"} [helpers="instance"] - How often a helper file (a file an api file imports that is no api file itself) is loaded.
  *   - `"instance"` — once per instance: every api file importing the helper shares one copy, and so its module state.
  *   - `"module"` — once per importing api file: each api file gets its own copy of every helper it imports, so helper state is not shared between api files, and the permission system can tell which api file a helper's code runs for. Node and the vite plugin only; a browser build keeps one copy.
@@ -2325,18 +2326,25 @@ export default slothlet;
  *   folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
  * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
  * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
- * @property {{merge: "shallow"|"deep"}} [scope] - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
+ * @property {{merge?: "shallow"|"deep", isolation?: "partial"|"full"}} [scope] - Defaults for `api.slothlet.scope()` / `api.slothlet.context.scope()` runs.
+ *   `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
+ *   `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
+ * @property {object|null} [metadata] - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
+ * @property {object} [sanitize] - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
+ *   `lowerFirst` (default `true`), `preserveAllUpper` (default `false`), `preserveAllLower` (default `false`) and `rules` (`{ leave?, leaveInsensitive?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).
+ *   Currently read by `api.slothlet.sanitize()` only; the loader names files and folders with the defaults. See [SANITIZATION.md](docs/SANITIZATION.md).
  * @property {object} [api] - API build and mutation settings.
  * @property {string|{initial: string, api: string}} [api.collision="merge"] - Collision strategy when two modules export the same path.
  *   Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`.
  *   Pass an object to use different strategies for the initial build vs. runtime `api.slothlet.api.add()` calls.
- * @property {object} [api.mutations={add:true,remove:true,reload:true}] - Enable or disable runtime mutation methods on `api.slothlet.api`.
- *   Object with boolean keys `add`, `remove`, `reload` (all default `true`).
+ * @property {object} [api.mutations={add:true,remove:true,reload:true,permissions:true,events:true,allowCollisionOverride:false}] - Enable or disable runtime mutation surfaces.
+ *   Object with boolean keys: `add`, `remove`, `reload` (`api.slothlet.api.*`), `permissions` (`api.slothlet.permissions.*` rule changes) and `events` (`api.slothlet.event.rules.*`), all default `true`;
+ *   and `allowCollisionOverride` (default `false`), which must be `true` before `api.slothlet.api.add()` honors a per-call `collisionMode` / `mutateExisting` / `recordHistory`.
  * @property {boolean|string|object} [hook=false] - Hook system configuration.
  *   - `false` — disabled (default).
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
- *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
+ *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean, pin?: boolean }` (`pin` defaults to `true`).
  * @property {object|"on"|"off"|"disabled"|boolean} [permissions] - Permission system configuration. Omit it and the system is off entirely. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`, `true` and `false` mean `"on"` and `"off"`; any other string or non-object value throws `INVALID_CONFIG`. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
  * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
  * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
@@ -2368,7 +2376,7 @@ export default slothlet;
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
  * @property {object} [permissions.events] - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
- *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
+ *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context`, `initialization`, `materialize`, `versioning`, `permissions` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
  * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Because they come from the config, `api.slothlet.restart()` subscribes them again on the new instance, so they also receive the new instance's `init` and `restarted` events (runtime `lifecycle.on` subscribers are dropped with the old instance). Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.

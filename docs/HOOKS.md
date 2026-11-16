@@ -43,19 +43,19 @@ Hooks are configured when creating a slothlet instance:
 ```javascript
 // Enable hooks (simple boolean)
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: true
 });
 
 // Enable with default pattern filter
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: "database.*" // Only intercept database functions by default
 });
 
 // Full configuration object
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: {
 		enabled: true,
 		pattern: "**",
@@ -80,7 +80,7 @@ Error hooks **always receive errors** regardless of this setting. `suppressError
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: { enabled: true, suppressErrors: true }
 });
 
@@ -177,7 +177,7 @@ api.slothlet.hook.on(
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Before hook: Modify arguments
 api.slothlet.hook.on(
@@ -520,7 +520,7 @@ A hook a module registered goes with the module: once the module is removed the 
 Enable and disable hooks at runtime without unregistering them:
 
 ```javascript
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Disable all hooks
 api.slothlet.hook.disable();
@@ -899,6 +899,9 @@ Register a hook.
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
+- `options.pattern` (string, optional) - Path pattern that overrides the one parsed from `typePattern`
+- `options.versioned` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versionDispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
+- `options.versionDispatcher` (Function, optional) - `(allVersions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
 - `options.lockCaller` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 - `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.
 

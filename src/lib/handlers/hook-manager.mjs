@@ -531,6 +531,7 @@ export class HookManager extends ComponentBase {
 	 * @param {function} handler - Hook handler function
 	 * @param {object} [options={}] - Hook options
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
+	 * @param {string} [options.pattern] - Path pattern; overrides the pattern parsed from `typePattern` when supplied
 	 * @param {number} [options.priority=0] - Higher = earlier execution
 	 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" ({@link HOOK_SUBSETS})
 	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
@@ -541,6 +542,11 @@ export class HookManager extends ComponentBase {
 	 *   `before` hook, typically none, so a `self.*` call inside it has no context).
 	 *   No effect when the hook is registered outside a module (no caller identity to
 	 *   capture) or when `handler` is already a `lockCaller`-wrapped function.
+	 * @param {boolean} [options.async] - Declare the handler asynchronous when its async-ness cannot be detected (a plain function returning a Promise)
+	 * @param {boolean} [options.versioned=false] - Resolve `pattern` (written against the logical path) through the instance's configured `versionDispatcher`,
+	 *   registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
+	 * @param {function(object, object): (string|string[]|null|undefined)} [options.versionDispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
+	 *   overriding the instance's. Implies versioned registration. Returning nothing takes the default-version resolution a call would.
 	 * @returns {string} Hook ID
 	 * @public
 	 *
