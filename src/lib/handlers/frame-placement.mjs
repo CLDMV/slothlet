@@ -3898,7 +3898,11 @@ function runtime_importedUnder(wrapper, location) {
 	if (typeof loader?.importedUnderQuery !== "function") return true;
 	const at = location.indexOf("?");
 	if (at === -1) return false;
-	return loader.importedUnderQuery(wrapper.____slothletInternal.filePath, location.slice(at + 1).replace(/#.*$/, ""));
+	const query = location.slice(at + 1).replace(/#.*$/, "");
+	if (loader.importedUnderQuery(wrapper.____slothletInternal.filePath, query)) return true;
+	// A lazy folder's node keeps the folder as its path while its function's code runs from the file it was written in.
+	const sourceFile = LEAF_SOURCE_FILES.get(wrapper);
+	return sourceFile !== undefined && loader.importedUnderQuery(sourceFile, query);
 }
 
 /**
@@ -4300,6 +4304,14 @@ function runtime_guardsForeignCode(record) {
 const LEAF_FILES = new WeakMap();
 
 /**
+ * The file a wrapper is indexed at when it is not the wrapper's own `filePath` (see {@link registerLeafFile}): a lazy
+ * folder's node, whose function's code runs from the folder's file.
+ * @type {WeakMap<object, string>}
+ * @private
+ */
+const LEAF_SOURCE_FILES = new WeakMap();
+
+/**
  * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
  * @param {object} wrapper - A genuine wrapper.
  * @param {string} [at] - The file to index it at, when it is not the wrapper's own `filePath`: a lazy folder whose only
@@ -4315,6 +4327,7 @@ function registerLeafFile(wrapper, at = undefined) {
 		LIVE_INSTANCES.set(slothlet.instanceID, new WeakRef(slothlet));
 	let files = LEAF_FILES.get(slothlet);
 	if (!files) LEAF_FILES.set(slothlet, (files = new Map()));
+	if (at !== undefined) LEAF_SOURCE_FILES.set(wrapper, at);
 	const reference = new WeakRef(wrapper);
 	// The file itself, and where its code actually runs from when that is another file: a TypeScript leaf runs from
 	// the compiled copy slothlet wrote for it, so that copy's frames are the leaf's.
