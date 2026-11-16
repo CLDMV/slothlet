@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:48:09-08:00 (1794800889)
+ *	@Last modified time: 2026-11-16T02:43:04-08:00 (1794825784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -789,20 +789,22 @@ export class ModesProcessor extends ComponentBase {
 		const modes_noteRootKind = isRoot && !apiPathPrefix && !populateDirectly && !this.slothlet.boundApi;
 		let modes_rootFunctions = 0;
 		/**
-		 * Load one file's exports.
+		 * Load one file's exports. They come back held in a box: an async function that returned them would adopt them,
+		 * calling a `then` member a synthetic export carries, which the build refuses by name below (#571) and must never
+		 * run or wait on.
 		 * @param {object} file - The file entry.
-		 * @returns {Promise<object>} Its exports.
+		 * @returns {Promise<{exports: object}>} Its exports, boxed.
 		 */
 		const modes_loadExports = async (file) => {
 			// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 			// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 			// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
-			if (file.synthetic) return file.exports;
+			if (file.synthetic) return { exports: file.exports };
 			const loadedNamespace = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
 			// Index where each exported value sits in the namespace, so every wrapper built from this
 			// file can record its module origin (#484).
 			this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
-			return this.slothlet.processors.loader.extractExports(loadedNamespace, file.path);
+			return { exports: this.slothlet.processors.loader.extractExports(loadedNamespace, file.path) };
 		};
 		// A single root file whose source plainly makes its default export a function is loaded before its siblings, so
 		// they get the callable form from their first import. Only the order the files are evaluated in changes; they are
@@ -812,7 +814,7 @@ export class ModesProcessor extends ComponentBase {
 			const candidates = files.filter((file) => !file.synthetic && defaultExportLooksCallable(file.path));
 			if (candidates.length === 1) {
 				try {
-					const preloaded = await modes_loadExports(candidates[0]);
+					const { exports: preloaded } = await modes_loadExports(candidates[0]);
 					modes_preloaded.set(candidates[0], preloaded);
 					if (typeof preloaded?.default === "function") setInstanceSelfKind(this.slothlet.instanceID, true);
 				} catch {
@@ -835,7 +837,7 @@ export class ModesProcessor extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 				// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 				// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
-				const exports = modes_preloaded.has(file) ? modes_preloaded.get(file) : await modes_loadExports(file);
+				const exports = modes_preloaded.has(file) ? modes_preloaded.get(file) : (await modes_loadExports(file)).exports;
 				// The first root file with a function default makes the root a function; a second makes it a namespace.
 				if (modes_noteRootKind && typeof exports?.default === "function") {
 					modes_rootFunctions++;
