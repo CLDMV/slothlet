@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
+ *	@Last modified time: 2026-11-15T21:09:19-08:00 (1794805759)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -264,13 +264,8 @@ export class Metadata extends ComponentBase {
 			fullModuleID = `${systemData.moduleID}${MODULE_ID_SEPARATOR}${apiPathSlashes}`;
 		}
 
-		// Derive sourceFolder from filePath if not provided
-		let sourceFolder = systemData.sourceFolder;
-		if (!sourceFolder && systemData.filePath) {
-			// Extract directory from filePath
-			const pathModule = this.slothlet.helpers.resolver.path;
-			sourceFolder = pathModule.dirname(systemData.filePath);
-		}
+		// The folder the node was composed from, as its caller gives it: every caller passes one.
+		const sourceFolder = systemData.sourceFolder;
 
 		// Store in secure WeakMap (inaccessible externally)
 		const frozenSystem = Objects.freeze({
