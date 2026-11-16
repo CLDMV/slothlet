@@ -576,7 +576,8 @@ export class ApiManager extends ComponentBase {
 			}
 			const holders = [raw, raw.____slothletInternal.impl];
 			let next;
-			for (const holder of holders) {
+			for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+				const holder = ofList[ofIndex];
 				if (!holder || (typeof holder !== "object" && typeof holder !== "function")) continue;
 				const descriptor = Reflect.getOwnPropertyDescriptor(holder, parts[index]);
 				if (descriptor && "value" in descriptor) {
@@ -4254,7 +4255,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	#collectRolledBackNodes(rollbacks) {
 		const callable = [];
-		for (const { apiPath } of rollbacks) {
+		for (let ofIndex = 0, ofList = rollbacks; ofIndex < ofList.length; ofIndex++) {
+			const { apiPath } = ofList[ofIndex];
 			const live = resolveWrapper(this.#memberAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
 			if (!live) continue;
 			const impl = live.____slothletInternal.impl;
@@ -4810,9 +4812,10 @@ export class ApiManager extends ComponentBase {
 				const rollback = ofList[ofIndex];
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
-				for (const tree of [this.slothlet.api, this.slothlet.boundApi]) {
+				for (let ofIndex = 0, ofList = [this.slothlet.api, this.slothlet.boundApi]; ofIndex < ofList.length; ofIndex++) {
+					const tree = ofList[ofIndex];
 					const live = resolveWrapper(this.#memberAtPath(tree, parts));
-					if (!live || restoredWrappers.has(live)) continue;
+					if (!live || SetMethods.has(restoredWrappers, live)) continue;
 					const sources = this.#survivingContributions(rollback.apiPath, live);
 					if (sources.length === 0) continue;
 					await this.#restoreInto(live, sources, rollback.apiPath, restoreContext, { impl: previousImpl, moduleID: rollback.restoredTo });
@@ -4916,7 +4919,7 @@ export class ApiManager extends ComponentBase {
 					// Get the existing wrapper and update its _impl — unless the restore above already did.
 					const existingWrapper = this.#memberAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
-					if (existingWrapperRaw && !restoredWrappers.has(existingWrapperRaw)) {
+					if (existingWrapperRaw && !SetMethods.has(restoredWrappers, existingWrapperRaw)) {
 						restoreFile(existingWrapperRaw);
 						// Pass the restored moduleID for correct ownership tracking
 						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
@@ -4924,7 +4927,7 @@ export class ApiManager extends ComponentBase {
 					// Also update boundApi
 					const existingBoundWrapper = this.#memberAtPath(this.slothlet.boundApi, parts);
 					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
-					if (existingBoundWrapperRaw && !restoredWrappers.has(existingBoundWrapperRaw)) {
+					if (existingBoundWrapperRaw && !SetMethods.has(restoredWrappers, existingBoundWrapperRaw)) {
 						restoreFile(existingBoundWrapperRaw);
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}

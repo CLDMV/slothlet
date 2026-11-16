@@ -1229,7 +1229,7 @@ export class LiveContextManager {
 				const placement = place(frame);
 				// So is code placed by its plain path that does not run the file's own source (#691).
 				if (isUnverifiedCode(frame, placement)) continue;
-				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
+				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) listPush(below, frame);
 				if (!placement) {
 					if (!byName) {
 						const named = filterList(candidates, (entry) => runtime_namesEntry(frame.head, entry));
