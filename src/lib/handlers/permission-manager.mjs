@@ -61,20 +61,6 @@ const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permissi
 const PRINCIPAL_PRUNE_THRESHOLD = 1024;
 
 /**
- * Auto-incrementing counter for rule IDs.
- * @type {number}
- */
-let ruleIdCounter = 0;
-
-/**
- * Monotonic registration sequence for rules. Used as the final tiebreak (last-registered wins
- * WITHIN a layer) so it is robust against `Date.now()` collisions when several rules register in
- * the same millisecond (e.g. the config-rules loop). Strictly increasing across the process.
- * @type {number}
- */
-let ruleRegistrationSeq = 0;
-
-/**
  * Hook types that may appear as a permission-target suffix in the `pattern:type` form.
  * `hook` is the "any type" wildcard. Mirrors HookManager's registrable types so a hook and the
  * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
@@ -404,6 +390,23 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#callRules = new Map();
+
+	/**
+	 * Counter behind this instance's auto-generated rule ids (`perm-N`, `evt-N`). Per instance (#822), so a second
+	 * instance numbers its rules from the same start rather than from where the first one left off.
+	 * @type {number}
+	 * @private
+	 */
+	#ruleIdCounter = 0;
+
+	/**
+	 * This instance's monotonic registration sequence for rules. It is the final tiebreak (last-registered wins
+	 * WITHIN a layer), robust against `Date.now()` collisions when several rules register in the same millisecond
+	 * (the config-rules loop). Per instance (#822): it only ever orders this instance's rules.
+	 * @type {number}
+	 * @private
+	 */
+	#ruleRegistrationSeq = 0;
 
 	/**
 	 * The write rules (`pattern:write`, #625), scanned only for a module's write.
@@ -842,7 +845,7 @@ export class PermissionManager extends ComponentBase {
 		this.#validateRule(rule);
 		this.#trackConditionPins(rule.condition);
 
-		const id = ruleId || `perm-${++ruleIdCounter}`;
+		const id = ruleId || `perm-${++this.#ruleIdCounter}`;
 		// Detect the hook-target suffix form (`pattern:type`). When present the rule gates hook
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
@@ -868,7 +871,7 @@ export class PermissionManager extends ComponentBase {
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
 			registeredAt: this.clock.now(),
-			registrationSeq: ++ruleRegistrationSeq
+			registrationSeq: ++this.#ruleRegistrationSeq
 		};
 
 		this.#rules.set(id, entry);
@@ -961,7 +964,7 @@ export class PermissionManager extends ComponentBase {
 		this.#validateEventRule(rule);
 		this.#trackConditionPins(rule.condition);
 
-		const id = ruleId || `evt-${++ruleIdCounter}`;
+		const id = ruleId || `evt-${++this.#ruleIdCounter}`;
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
 		const entry = {
 			id,
@@ -973,7 +976,7 @@ export class PermissionManager extends ComponentBase {
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
 			registeredAt: this.clock.now(),
-			registrationSeq: ++ruleRegistrationSeq
+			registrationSeq: ++this.#ruleRegistrationSeq
 		};
 
 		this.#eventRules.set(id, entry);
