@@ -67,14 +67,14 @@ const REFUSED = {
 	prototype: DENIED,
 	constructorTag: DENIED,
 	constructorRun: DENIED,
-	name: DENIED,
-	length: DENIED,
+	name: plainRoot.name,
+	length: String(plainRoot.length),
 	source: DENIED,
 	call: DENIED,
 	apply: DENIED,
 	bind: DENIED,
 	describePrototype: "none",
-	describeName: "none"
+	describeName: "described"
 };
 
 const POLICIES = [

@@ -9760,13 +9760,11 @@ function runtime_rootMemberRead(slothlet, prop, value) {
 		}
 	}
 	// The root function's own answers, where the root holds no member by the name: its `prototype` and `toString` hold
-	// its code and are checked as a call of the root, and its `name` and `length` are read through the gate, as a
-	// function node answers each of them (see the node's get trap).
+	// its code and are checked as a call of the root, and its `name` and `length` are read without a check, as a
+	// function node answers each of them (see runtime_isBuiltinFunctionMember).
 	if (runtime_isRootFunctionAnswer(slothlet, prop)) {
 		const gate = runtime_rootGate(slothlet);
-		if (prop === "name" || prop === "length") {
-			if (runtime_readsGated(slothlet)) runtime_enforceReadGate(gate, prop, value);
-		} else runtime_enforceCodeMember(gate, value);
+		if (prop !== "name" && prop !== "length") runtime_enforceCodeMember(gate, value);
 		// The `prototype` is handed out as a function node hands its own: its `constructor` is the root.
 		if (prop === "prototype") return runtime_prototypeForReader(gate, value, "prototype");
 		return value;

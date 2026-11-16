@@ -70,11 +70,8 @@ describe.each(["eager", "lazy"])("the api and self.slothlet as plain objects in 
 		}
 	});
 
-	// With the permission system on, a console that formats a value by reading it (as vitest's does) is refused reading
-	// the `name` of a function whose path the rules cover (`slothlet.hook.on.name` under the built-in rules), so this
-	// runs with the system off, as by default.
 	it("logs the root, a node and the namespace with console.log, for a module and the host", async () => {
-		const api = await boot(false);
+		const api = await boot();
 		try {
 			for (const path of ["self", "slothlet", "slothlet.api", "math", "advanced"]) expect(api.viewer.logged(path), path).toBe("logged");
 			expect(() => console.log(api, api.slothlet, api.math)).not.toThrow();
