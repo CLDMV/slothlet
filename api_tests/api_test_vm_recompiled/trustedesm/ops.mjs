@@ -55,3 +55,15 @@ export function who() {
 export function run(fn) {
 	return fn();
 }
+
+/**
+ * Run the function left on the global object under the name given, as code that calls whatever it finds there.
+ * @param {string} name - The global's name.
+ * @returns {*} What it returned.
+ * @public
+ * @example
+ * api.trusted.ops.runGlobal("planted");
+ */
+export function runGlobal(name) {
+	return globalThis[name]();
+}

@@ -62,4 +62,16 @@ function run(fn) {
 	return fn();
 }
 
-module.exports = { read, who, run };
+/**
+ * Run the function left on the global object under the name given, as code that calls whatever it finds there.
+ * @param {string} name - The global's name.
+ * @returns {*} What it returned.
+ * @public
+ * @example
+ * api.trusted.ops.runGlobal("planted");
+ */
+function runGlobal(name) {
+	return globalThis[name]();
+}
+
+module.exports = { read, who, run, runGlobal };

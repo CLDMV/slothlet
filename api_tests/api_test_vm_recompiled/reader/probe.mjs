@@ -180,3 +180,32 @@ export async function own(kind, name = "read") {
 	const copy = await copyOf(kind);
 	return attempt(() => copy[name]());
 }
+
+/**
+ * Leave a function compiled with `vm` on the global object, for the trusted modules to find and run. It calls the
+ * vault's secret through the reader's own `self`, and names no module, so what it does is refused wherever it runs.
+ * @param {string} name - The global's name.
+ * @param {string} [body] - The function's body: an expression reading `self`.
+ * @param {string} [filename="planted.js"] - The file name it is compiled under.
+ * @returns {void}
+ * @public
+ * @example
+ * api.reader.probe.plantGlobal("planted");
+ */
+export function plantGlobal(name, body = "self.vault.secret.secret()", filename = "planted.js") {
+	globalThis[name] = vm.runInThisContext(`(self) => () => ${body}`, { filename })(self);
+}
+
+/**
+ * Hand the trusted module's `run` a function compiled with `vm` under a file name given, which calls the vault's
+ * secret through the reader's own `self`.
+ * @param {string} filename - The file name it is compiled under.
+ * @returns {Promise<{ok: boolean, value?: *, code?: string}>} The outcome.
+ * @public
+ * @example
+ * await api.reader.probe.plantIn("planted.js"); // { ok: false, code: "PERMISSION_DENIED" }
+ */
+export async function plantIn(filename) {
+	const fn = vm.runInThisContext("(self) => () => self.vault.secret.secret()", { filename })(self);
+	return attempt(() => self.trusted.ops.run(fn));
+}

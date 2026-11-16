@@ -32,6 +32,7 @@ import {
 	handsOutAsModule,
 	attributesResults,
 	isForeignScript,
+	isUnverifiedCode,
 	isHandedOut,
 	isRunnerFrame,
 	parseStackFrame,
@@ -1174,6 +1175,8 @@ export class LiveContextManager {
 				if (isForeignScript(frame)) continue;
 				if (frame.async) syncEnded = true;
 				const placement = place(frame);
+				// So is code placed by its plain path that does not run the file's own source (#691).
+				if (isUnverifiedCode(frame, placement)) continue;
 				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
 				if (!placement) {
 					if (!byName) {

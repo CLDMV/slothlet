@@ -916,6 +916,19 @@ function runtime_runsFileSource(frame) {
 }
 
 /**
+ * Whether a frame the frame placer placed by its plain path alone (a module's folder, a CommonJS file) does not run
+ * that file's own source (#597, #691): code compiled under a file name in a module's folder that is not there, or
+ * whose source is something else. Such code is no module's, wherever it is read.
+ * @param {{path: string, hash: string|null, key: string|null}} frame - A frame.
+ * @param {{unverified?: boolean}|null} placement - What the placer answered for it.
+ * @returns {boolean} True when the frame cannot be the code its placement names.
+ * @internal
+ */
+export function isUnverifiedCode(frame, placement) {
+	return Boolean(placement?.unverified) && !runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame);
+}
+
+/**
  * The script keys that frames of one capture run under in two different scripts, among locations with no script
  * known: one of them is not the location's own code, and which cannot be told (#597).
  * @param {Array<object>} frames - Frames.
@@ -4478,7 +4491,7 @@ function runtime_foreignCodeRunning(record, capture = null) {
 				return UNACCOUNTED_SUPPLIER;
 			}
 			const placement = cached.place(frame);
-			if (placement?.matches.length) return null;
+			if (placement?.matches.length) return isUnverifiedCode(frame, placement) ? UNACCOUNTED_SUPPLIER : null;
 			if (!whole) return undefined;
 			// Code of no module's folder and no instance: a file some module loaded is that module's. A package the call's
 			// own code loads, and the host's own code, act for the code that called them, as Node's own code does: the next
@@ -4548,6 +4561,8 @@ function runtime_unaccountedInside(record) {
 			}
 			if (frame.async || isRunnerFrame(frame)) return null;
 			const placement = place(frame);
+			// Code placed by its plain path that does not run the file's own source is no one's (#691).
+			if (placement?.matches.length && isUnverifiedCode(frame, placement)) return UNACCOUNTED_SUPPLIER;
 			// Code of no instance (the host's, a package's) and the leaf's own run as the leaf, as before.
 			if (!placement || placement.matches.length) continue;
 			return UNACCOUNTED_SUPPLIER;

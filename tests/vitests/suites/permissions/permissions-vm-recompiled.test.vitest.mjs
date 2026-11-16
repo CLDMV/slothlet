@@ -132,6 +132,31 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.handIn(kind))).toEqual(DENIED);
 		});
 
+		it.each([
+			["a name no file holds", "planted.js"],
+			["a missing file in the trusted module's folder", path.join(DIR, "trusted", "nothere.cjs")],
+			["the trusted module's own file", path.join(DIR, "trusted", "ops.cjs")],
+			["a missing file in the vault's folder", path.join(DIR, "base", "vault", "nothere.mjs")]
+		])("vm code under %s, left for the trusted module to run, runs as no module", async (_label, filename) => {
+			await build();
+			await api.reader.probe.plantGlobal("__slothletVmCopyPlanted", undefined, filename);
+			try {
+				const outcome = await withSuppressedSlothletErrorOutput(() => attempt(() => api.trusted.ops.runGlobal("__slothletVmCopyPlanted")));
+				// Refused: with no call it can be placed in, the live runtime gives it no `self` at all.
+				expect(outcome.ok).toBe(false);
+				expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome.code);
+			} finally {
+				delete globalThis.__slothletVmCopyPlanted;
+			}
+		});
+
+		it("vm code under a missing file in the trusted module's folder, handed to its call, is refused", async () => {
+			await build();
+			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.plantIn(path.join(DIR, "trusted", "nothere.cjs")))).toEqual(
+				DENIED
+			);
+		});
+
 		it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: run in the reader's own call, the copy is refused", async (kind) => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.own(kind))).toEqual(DENIED);
