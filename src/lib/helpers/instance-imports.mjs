@@ -3513,7 +3513,8 @@ function hostScriptRegistration(code, id) {
 
 /**
  * The statement that registers the script vite compiled a file into (#714): it pushes an `Error` the file's own
- * top-level code creates.
+ * top-level code creates. Once slothlet fixed the registry in place, its `push` ignores what it is handed and captures the
+ * stack itself, from slothlet's own realm.
  * @type {string}
  * @private
  */
@@ -3547,17 +3548,21 @@ function isPackageFile(id) {
 }
 
 /**
- * The code of the virtual module that records who loaded a file (#714): one statement that creates an `Error`, freezes
- * it with the importers as its message, and pushes it. The plugin writes the code, from the imports it resolved, so no
- * file's code can say what it says; slothlet reads the file it is about from the frame of the `Error`, the virtual
- * module's own.
+ * The code of the virtual module that records who loaded a file (#714): it hands the registry the importers' ids as
+ * JSON, and the registry captures the stack itself, from slothlet's own realm; before slothlet fixed the registry in
+ * place, it pushes an `Error` frozen with the importers as its message instead. The plugin writes the code, from the
+ * imports it resolved, so no file's code can say what it says; slothlet reads the file it is about from the frame of the
+ * virtual module's own code.
  * @param {Array<string>} importers - The ids of the modules recorded as loading the file.
  * @returns {string} The code.
  * @private
  */
 function loadedBySource(importers) {
 	const registry = `globalThis[Symbol.for(${JSON.stringify(VITE_LOADED_BY)})]`;
-	return `const record = Object.freeze(new Error(${JSON.stringify(JSON.stringify(importers))}));\n(${registry} ??= []).push(record);\n`;
+	const json = JSON.stringify(JSON.stringify(importers));
+	// Once slothlet fixed the registry, `record` takes the importers and captures the stack itself; before, an Error is
+	// pushed for slothlet to read when it loads.
+	return `const registry = ${registry};\nif (typeof registry?.record === "function") registry.record(${json});\nelse (${registry} ??= []).push(Object.freeze(new Error(${json})));\n`;
 }
 
 /**

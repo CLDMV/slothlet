@@ -23,12 +23,18 @@
  * slothlet's exported reader hands it (`ownRealm`: slothlet then reads from a new realm of its own). slothlet reads call stacks from a source module code cannot reach, so afterwards each step answers as
  * with nothing changed: `good` still calls the node only it may call, `settler` is still refused the vault, and the
  * host's own listeners, stream writes and timers work.
+ *
+ * Under vitest with the `slothletInstanceImports()` plugin (#714), the host's own files vite evaluates after the settings
+ * were fixed still register: the late-files fixture runs in a vitest of its own (`vitest.fixed.config.mjs`) with
+ * `Error.prepareStackTrace` and `Error.stackTraceLimit` fixed in place before its late imports, and gives the answers
+ * `permissions-vite-late-files` gives with nothing changed.
  * @module tests/vitests/suites/permissions/permissions-stack-settings-fixed
  */
 
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { describe, it, expect } from "vitest";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stack_settings");
@@ -72,4 +78,53 @@ describe.each(matrix)("stack settings fixed in place by a module > $mode / $runt
 		},
 		180_000
 	);
+});
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+const LATE_FIXTURE = path.join(ROOT, "api_tests", "api_test_vite_late_files");
+const LATE_CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
+/** What each call of a host-built context gives when the host's code runs as the module's call. */
+const HOST_ANSWERS = {
+	pin: { ok: true, value: "function" },
+	meta: { ok: true, value: null },
+	emit: { ok: true, value: "emitted" },
+	hostLeaf: { ok: true, value: "echo:x" }
+};
+
+/**
+ * Run the late-files fixture in a vitest of its own, with the stack settings fixed in place, and read what it printed.
+ * @returns {{status: number|null, out: Record<string, unknown>|null, stderr: string}} The child's status and answers.
+ */
+function lateCallsFixed() {
+	const env = { ...process.env };
+	for (const key of Object.keys(env)) if (key.startsWith("VITEST") || key === "TINYPOOL_WORKER_ID") delete env[key];
+	const result = spawnSync(
+		process.execPath,
+		[
+			"--conditions=slothlet-dev",
+			path.join(ROOT, "node_modules", "vitest", "vitest.mjs"),
+			"run",
+			"--config",
+			path.join(LATE_FIXTURE, "vitest", "vitest.fixed.config.mjs")
+		],
+		{ cwd: ROOT, env, encoding: "utf8", timeout: 300_000 }
+	);
+	const line = stripVTControlCharacters(String(result.stdout))
+		.split("\n")
+		.find((text) => text.startsWith("LATE-CALLS "));
+	return { status: result.status, out: line ? JSON.parse(line.slice("LATE-CALLS ".length)) : null, stderr: String(result.stderr) };
+}
+
+describe("stack settings fixed in place > host files vite evaluates afterwards (#714)", () => {
+	it("register, and run as Node's own loader runs them", () => {
+		const { status, out, stderr } = lateCallsFixed();
+		expect(out, stderr).not.toBeNull();
+		expect(status).toBe(0);
+		for (const config of LATE_CONFIGS) {
+			expect(out[`${config}/late`], config).toEqual(HOST_ANSWERS);
+			expect(out[`${config}/importing`], config).toEqual(HOST_ANSWERS);
+			expect(out[`${config}/handed`], config).toEqual({ ok: true, value: "caller.setup" });
+			expect(out[`${config}/json`], config).toEqual({ ok: true, value: "late-files-manifest" });
+		}
+	}, 320_000);
 });

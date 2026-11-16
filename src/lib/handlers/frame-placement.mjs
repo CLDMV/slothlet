@@ -59,7 +59,7 @@ import {
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { hasEngineStack, readStack, stackBudget } from "@cldmv/slothlet/helpers/stack-read";
+import { hasEngineStack, readStack, stackBudget, unreadError } from "@cldmv/slothlet/helpers/stack-read";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const {
 	instanceCommonJSFiles,
@@ -2607,18 +2607,31 @@ const PRISTINE_STACK_GET = Objects.getOwnPropertyDescriptor(new PristineError(),
 const READ_REGISTRATIONS = new WeakSet();
 
 /**
- * The script a registration's error was created in, when the registration is genuine (#714): a native error whose
- * stack is still unread, created by a file's own top-level code — its first frame, compiled code with a script hash,
- * not code compiled from a string — that vitest's or vite's runner was evaluating: the next frame that is not Node's
- * own code is a file of the `vitest` or `vite` package running that file's own source. Code a module compiled with `vm` under a host file's name
- * and registered itself has its own frame, not the runner's, below it.
- * @param {unknown} entry - What was pushed.
- * @param {boolean} [called=false] - The error was created by slothlet's own code on being called, not by the file: the
- *   frames of slothlet's own at the top are passed over, and the file's is the first below them.
- * @returns {{key: string, hash: string, location: string}|null} The script, with the location its frame names, or null.
+ * The errors the registries captured themselves on being called by a registration (#714), from slothlet's own realm
+ * (see `helpers/stack-read`), so the frames do not depend on the global `Error` and its stack settings: slothlet's own
+ * frames sit on top, and the registering file's below them.
+ * @type {WeakSet<object>}
  * @private
  */
-function runtime_registeredScript(entry, called = false) {
+const OWN_CAPTURES = new WeakSet();
+
+/**
+ * The frames of what registrations pushed before slothlet fixed the registry in place, read when it did (before any
+ * module's code could run), by what was pushed.
+ * @type {WeakMap<object, object|null>}
+ * @private
+ */
+const EARLY_READS = new WeakMap();
+
+/**
+ * The frames of a registration's error, read with slothlet's own formatter, when its stack is still the engine's own
+ * and unread; null otherwise.
+ * @param {unknown} entry - What was pushed.
+ * @returns {object|null} The frames (see {@link runtime_structuredFrames}), or null.
+ * @private
+ */
+function runtime_registrationFrames(entry) {
+	if (EARLY_READS.has(entry)) return EARLY_READS.get(entry);
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
 	if (!hasEngineStack(entry)) return null;
@@ -2630,7 +2643,26 @@ function runtime_registeredScript(entry, called = false) {
 		},
 		{ error: entry }
 	)?.value;
-	if (!READ_REGISTRATIONS.has(frames)) return null;
+	return READ_REGISTRATIONS.has(frames) ? frames : null;
+}
+
+/**
+ * The script a registration's error was created in, when the registration is genuine (#714): a native error whose
+ * stack is still unread, created by a file's own top-level code — its first frame, compiled code with a script hash,
+ * not code compiled from a string — that vitest's or vite's runner was evaluating: the next frame that is not Node's
+ * own code is a file of the `vitest` or `vite` package running that file's own source. Code a module compiled with `vm` under a host file's name
+ * and registered itself has its own frame, not the runner's, below it.
+ * @param {unknown} entry - What was pushed.
+ * @param {boolean} [called=false] - The error was created by slothlet's own code on being called, not by the file: the
+ *   frames of slothlet's own at the top are passed over, and the file's is the first below them. Always so for an error
+ *   a registry captured itself ({@link OWN_CAPTURES}).
+ * @returns {{key: string, hash: string, location: string}|null} The script, with the location its frame names, or null.
+ * @private
+ */
+function runtime_registeredScript(entry, called = false) {
+	const frames = runtime_registrationFrames(entry);
+	if (frames === null) return null;
+	if (OWN_CAPTURES.has(entry)) called = true;
 	let own = null;
 	let runner = null;
 	for (const frame of frames) {
@@ -2662,6 +2694,13 @@ function runtime_registeredScript(entry, called = false) {
 const VITE_HOST_REGISTRY = isNode ? installViteHostRegistry(globalThis) : null;
 
 /**
+ * The frame budget of a registry's own capture: slothlet's frames, the registering file's and the runner's below it.
+ * @type {number}
+ * @private
+ */
+const REGISTRATION_FRAMES = 64;
+
+/**
  * Fix the registry of {@link VITE_HOST_REGISTRY} on a global object (#714): take over what registrations already
  * pushed onto a plain array there, and put in its place, unchangeable, an array with a frozen `registered(key, hash)`
  * reader. A registry another copy of slothlet already fixed is used as it is.
@@ -2679,8 +2718,13 @@ function installViteHostRegistry(target) {
 	if (current && !current.configurable) return typeof current.value?.registered === "function" ? current.value : null;
 	const queue = [];
 	// What registrations pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
+	// Their stacks are read now, before any module's code can change the global stack settings.
 	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
-		for (let i = 0; i < current.value.length; i++) queue[queue.length] = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
+		for (let i = 0; i < current.value.length; i++) {
+			const entry = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
+			if (entry !== null && typeof entry === "object") EARLY_READS.set(entry, runtime_registrationFrames(entry));
+			queue[queue.length] = entry;
+		}
 	}
 	/** @type {Map<string, Set<string>>} */
 	const scripts = new Map();
@@ -2699,6 +2743,21 @@ function installViteHostRegistry(target) {
 	};
 	Objects.defineProperty(queue, "registered", {
 		value: Objects.freeze(registered),
+		enumerable: false,
+		writable: false,
+		configurable: false
+	});
+	// A registration calls `push` on the registry from the file's own top-level code: what it hands over is not read, and
+	// the registry captures the stack itself from slothlet's own realm, whatever the global stack settings hold.
+	Objects.defineProperty(queue, "push", {
+		value: Objects.freeze(() => {
+			const captured = unreadError(REGISTRATION_FRAMES);
+			if (captured !== null) {
+				OWN_CAPTURES.add(captured);
+				queue[queue.length] = captured;
+			}
+			return queue.length;
+		}),
 		enumerable: false,
 		writable: false,
 		configurable: false
@@ -2745,15 +2804,27 @@ function runtime_runsRunnerTransform(frame) {
  * @private
  */
 function runtime_loadedRecord(entry) {
-	const script = runtime_registeredScript(entry);
-	const prefix = `\0${LOADED_BY_SPECIFIER}`;
-	if (typeof script?.location !== "string" || !script.location.startsWith(prefix) || !Objects.isFrozen(entry)) return null;
-	const loaded = queryParam(script.location.slice(prefix.length), "id");
+	if (!Objects.isFrozen(entry)) return null;
 	const message = Objects.getOwnPropertyDescriptor(entry, "message");
-	if (!loaded || typeof message?.value !== "string") return null;
+	return typeof message?.value === "string" ? runtime_loadedFrom(runtime_registeredScript(entry), message.value) : null;
+}
+
+/**
+ * The record of who loaded a file, from the script that made it and the JSON of the importers' ids it gave: the script
+ * has to be the top-level code of the virtual module the vite plugin writes for the file (see {@link runtime_loadedRecord}).
+ * @param {{location: string}|null} script - The script, as {@link runtime_registeredScript} gives it.
+ * @param {string} json - The JSON of the importers' ids.
+ * @returns {{path: string, importers: Array<string>}|null} The file, in comparable form, and its importers, or null.
+ * @private
+ */
+function runtime_loadedFrom(script, json) {
+	const prefix = `\0${LOADED_BY_SPECIFIER}`;
+	if (typeof script?.location !== "string" || !script.location.startsWith(prefix)) return null;
+	const loaded = queryParam(script.location.slice(prefix.length), "id");
+	if (!loaded) return null;
 	let importers;
 	try {
-		importers = JSON_PARSE(message.value);
+		importers = JSON_PARSE(json);
 	} catch {
 		return null;
 	}
@@ -2780,8 +2851,7 @@ function installViteLoadedRegistry(target) {
 	if (current && !current.configurable) return typeof current.value?.importersOf === "function" ? current.value : null;
 	/** @type {Map<string, Set<string>>} */
 	const records = new Map();
-	const take = (entry) => {
-		const record = runtime_loadedRecord(entry);
+	const keep = (record) => {
 		if (!record) return;
 		let importers = records.get(record.path);
 		if (!importers) records.set(record.path, (importers = new Set()));
@@ -2789,12 +2859,21 @@ function installViteLoadedRegistry(target) {
 	};
 	// What records were pushed before slothlet loaded; a Proxy in its place is not read, as reading it would run its traps.
 	if (Arrays.isArray(current?.value) && !util.types.isProxy(current.value)) {
-		for (let i = 0; i < current.value.length; i++) take(Objects.getOwnPropertyDescriptor(current.value, i)?.value);
+		for (let i = 0; i < current.value.length; i++) keep(runtime_loadedRecord(Objects.getOwnPropertyDescriptor(current.value, i)?.value));
 	}
 	const registry = Objects.freeze({
 		push: Objects.freeze((...entries) => {
-			for (let i = 0; i < entries.length; i++) take(entries[i]);
+			for (let i = 0; i < entries.length; i++) keep(runtime_loadedRecord(entries[i]));
 			return 0;
+		}),
+		// The record a virtual module makes once slothlet fixed the registry: the JSON of the importers, with the stack
+		// captured here from slothlet's own realm, whatever the global stack settings hold.
+		record: Objects.freeze((json) => {
+			if (typeof json !== "string") return;
+			const captured = unreadError(REGISTRATION_FRAMES);
+			if (captured === null) return;
+			OWN_CAPTURES.add(captured);
+			keep(runtime_loadedFrom(runtime_registeredScript(captured), json));
 		}),
 		importersOf: Objects.freeze((path) => {
 			const found = records.get(path);
