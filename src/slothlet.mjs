@@ -1265,8 +1265,8 @@ class Slothlet {
 		// permission config that can be on is up, and unwrapped with the last.
 		if (this.config?.permissions && this.config.permissions.mode !== "disabled") {
 			const instanceID = this.instanceID;
-			registerCapabilityCheck(instanceID, (name, route, importer) =>
-				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null)
+			registerCapabilityCheck(instanceID, (name, route, importer, filename) =>
+				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename)
 			);
 			this.#capabilityHolder = instanceID;
 		}

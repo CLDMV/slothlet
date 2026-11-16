@@ -52,3 +52,25 @@ export async function attempt(route) {
 export async function attemptToo(route) {
 	return attempt(route);
 }
+
+/**
+ * Compile `return 7` under a file name, by one of the routes that take one, and run it.
+ * @param {string} route - "compileFunction", "runInThisContext", "script" or "moduleCompile".
+ * @param {string} filename - The file name, a path or a `file:` URL.
+ * @returns {{ok: boolean, value?: number, code?: string, reason?: string}} The outcome.
+ * @public
+ * @example
+ * api.coder.probe.compileUnder("compileFunction", "/elsewhere/file.mjs"); // { ok: false, code: "CAPABILITY_REFUSED", … }
+ */
+export function compileUnder(route, filename) {
+	try {
+		if (route === "compileFunction") return { ok: true, value: vm.compileFunction("return 7", [], { filename })() };
+		if (route === "runInThisContext") return { ok: true, value: vm.runInThisContext("7", { filename }) };
+		if (route === "script") return { ok: true, value: new vm.Script("7", { filename }).runInThisContext() };
+		const module = new Module(filename);
+		module._compile("module.exports = 7;", filename);
+		return { ok: true, value: module.exports };
+	} catch (error) {
+		return { ok: false, code: error?.code ?? String(error), reason: error?.context?.reasonCode ?? error?.reasonCode };
+	}
+}

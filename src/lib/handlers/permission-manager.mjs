@@ -128,6 +128,17 @@ const CAPABILITY_PREFIX = "capability:";
 const CAPABILITIES = Objects.freeze(["code", "imports", "loader"]);
 
 /**
+ * Why a capability is refused, by the `reasonCode` a refusal carries: the translation key of each reason.
+ * @type {Readonly<Record<string, string>>}
+ */
+const CAPABILITY_REASONS = Objects.freeze({
+	"not-opened": "CAPABILITY_REASON_NOT_OPENED",
+	unattributed: "CAPABILITY_REASON_UNATTRIBUTED",
+	"foreign-filename": "CAPABILITY_REASON_FOREIGN_FILENAME",
+	binding: "CAPABILITY_REASON_BINDING"
+});
+
+/**
  * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
  * @type {string}
  */
@@ -2264,24 +2275,29 @@ export class PermissionManager extends ComponentBase {
 	 *   level), the reader standing for code no one accounts for, or null for the host.
 	 * @param {string} name - The capability.
 	 * @param {string} route - What the code used, for the error (`new Function`, `vm.runInThisContext`, …).
+	 * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason: code
+	 *   compiled under the name of a real file outside the caller's own folder, or through Node's binding, whose names
+	 *   cannot be read.
 	 * @returns {void}
-	 * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller.
+	 * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
 	 * @example
 	 * pm.assertCapability(leaf, "code", "new Function");
 	 */
-	assertCapability(caller, name, route) {
+	assertCapability(caller, name, route, refusal = null) {
 		if (caller === null || !this.#enabled) return;
 		const target = `${CAPABILITY_PREFIX}${name}`;
 		const callerPath = caller?.____slothletInternal ? String(caller.____slothletInternal.apiPath ?? "") : null;
 		const winner = callerPath === null ? null : this.#capabilityWinner(callerPath, target);
-		if (winner?.effect === "allow") return;
+		if (winner?.effect === "allow" && refusal === null) return;
+		const reasonCode = refusal ?? (callerPath === null ? "unattributed" : "not-opened");
 		this.#emitAuditEvent("permission:denied", {
 			caller: callerPath,
 			target,
 			rule: winner ? this.#serializeRule(winner) : null,
 			conditionMatched: winner?.condition != null
 		});
-		throw new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route });
+		const reason = translate(CAPABILITY_REASONS[reasonCode]);
+		throw new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason, reasonCode });
 	}
 
 	/**

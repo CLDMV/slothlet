@@ -160,6 +160,7 @@ import {
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { isEngineStackAccessor, runUnformatted } from "@cldmv/slothlet/helpers/stack-read";
+import { namesForeignFile, BINDING_NAME } from "@cldmv/slothlet/helpers/capability-context";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
@@ -464,13 +465,15 @@ function runtime_selfModuleReader(slothlet) {
  * @param {string} route - What the code used, for the error.
  * @param {string|null} [moduleFile=null] - A file of this instance's the code is known to belong to (an import it
  *   makes as it links), so that code is never taken for the host's.
+ * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
+ *   caller's own folder is refused even where a rule opens the capability.
  * @returns {void}
  * @throws {SlothletError} `CAPABILITY_REFUSED`.
  * @internal
  * @example
  * runtime_assertCapability(slothlet, "code", "new Function");
  */
-function runtime_assertCapability(slothlet, name, route, moduleFile = null) {
+function runtime_assertCapability(slothlet, name, route, moduleFile = null, filename = null) {
 	const permissionManager = slothlet?.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled?.()) return;
 	const contextManager = slothlet.contextManager;
@@ -493,6 +496,12 @@ function runtime_assertCapability(slothlet, name, route, moduleFile = null) {
 	// A file of the instance's linking an import: its own code, whatever the stack says (nothing of the file's runs yet).
 	if (caller === null && moduleFile !== null) caller = UNATTRIBUTED_READER;
 	permissionManager.assertCapability(caller, name, route);
+	// Opened for the caller: compiling under the name of a real file outside its own folder is still refused, since the
+	// code would be placed as that file's (a package's, another module's, the host's).
+	if (filename === null || caller === null || caller === UNATTRIBUTED_READER) return;
+	if (namesForeignFile(filename, caller.____slothletInternal?.filePath ?? null)) {
+		permissionManager.assertCapability(caller, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
+	}
 }
 
 /**

@@ -59,14 +59,15 @@ const CAPABILITIES = {
 		"script",
 		"createScript",
 		"moduleCompile",
-		"binding",
 		"stringTimeout",
 		"stringInterval"
 	],
 	imports: ["dataImport"],
 	loader: ["registerHooks"]
 };
-const REFUSED_ONLY = { loader: ["register"] };
+// Node's `contextify` binding compiles under names that cannot be checked, so it stays refused where the capability is
+// opened (see permissions-capability-filenames).
+const REFUSED_ONLY = { code: ["binding"], loader: ["register"] };
 
 const REFUSED = { ok: false, code: "CAPABILITY_REFUSED" };
 const OPEN = { caller: "**", target: "**", effect: "allow" };
@@ -232,6 +233,15 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			expect(
 				JSON.stringify({ code: error?.code, cause: error?.cause?.code ?? error?.originalError?.code, message: String(error?.message) })
 			).toContain("CAPABILITY_REFUSED");
+		});
+
+		it("Node's contextify binding stays refused to a leaf the capability is opened for", async () => {
+			await build({
+				defaultPolicy: "deny",
+				attribution,
+				rules: [OPEN, { caller: "coder.probe.attempt", target: "capability:code", effect: "allow" }]
+			});
+			expect(await withSuppressedSlothletErrorOutput(() => api.coder.probe.attempt("binding"))).toEqual(REFUSED);
 		});
 
 		it("an unknown capability is not a rule", async () => {

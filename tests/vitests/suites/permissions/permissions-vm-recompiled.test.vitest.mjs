@@ -50,6 +50,16 @@ const RULES = [
 const DENIED = { ok: false, code: "PERMISSION_DENIED" };
 
 /**
+ * What a copy compiled in module code under the trusted module's real file name answers: the compile itself is refused
+ * even where `capability:code` is opened (D8 ruling). Copies a real load makes (`require`, `import`) are refused later,
+ * as no module's code.
+ * @param {string} kind - How the copy is made.
+ * @returns {{ok: false, code: string}} The refusal.
+ */
+const refusalFor = (kind) => (["compileFunction", "moduleCompile", "sourceTextModule"].includes(kind) ? CAPABILITY_REFUSED : DENIED);
+const CAPABILITY_REFUSED = { ok: false, code: "CAPABILITY_REFUSED" };
+
+/**
  * Whether this engine gives a stack frame the hash of the script it runs in.
  * @type {boolean}
  */
@@ -119,7 +129,7 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 		it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: run by the host, the copy is refused", async (kind) => {
 			await build();
 			const { fn } = await api.reader.probe.give(kind);
-			expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
+			expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(refusalFor(kind));
 		});
 
 		it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: run by the host, the vault does not see the trusted module", async (kind) => {
@@ -131,7 +141,7 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 
 		it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: handed to the trusted module's call, the copy is refused", async (kind) => {
 			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.handIn(kind))).toEqual(DENIED);
+			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.handIn(kind))).toEqual(refusalFor(kind));
 		});
 
 		it.each([
@@ -144,9 +154,10 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 			await api.reader.probe.plantGlobal("__slothletVmCopyPlanted", undefined, filename);
 			try {
 				const outcome = await withSuppressedSlothletErrorOutput(() => attempt(() => api.trusted.ops.runGlobal("__slothletVmCopyPlanted")));
-				// Refused: with no call it can be placed in, the live runtime gives it no `self` at all.
+				// Refused: with no call it can be placed in, the live runtime gives it no `self` at all; under a real file name of
+				// another module's, the compile itself is refused (D8 ruling).
 				expect(outcome.ok).toBe(false);
-				expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome.code);
+				expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF", "CAPABILITY_REFUSED"]).toContain(outcome.code);
 			} finally {
 				delete globalThis.__slothletVmCopyPlanted;
 			}
@@ -161,7 +172,7 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 
 		it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: run in the reader's own call, the copy is refused", async (kind) => {
 			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.own(kind))).toEqual(DENIED);
+			expect(await withSuppressedSlothletErrorOutput(() => api.reader.probe.own(kind))).toEqual(refusalFor(kind));
 		});
 	});
 });
@@ -206,7 +217,8 @@ describe.each(getMatrixConfigs())(
 				for (const ops of [api.trusted.ops, api.trustedesm.ops]) {
 					const outcome = await withSuppressedSlothletErrorOutput(() => attempt(() => ops[via]("__slothletVmPlantedEsm")));
 					expect(outcome.ok).toBe(false);
-					expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome.code);
+					// The compile under another module's real file is refused itself (D8 ruling).
+					expect(outcome.code).toBe("CAPABILITY_REFUSED");
 				}
 			});
 		});

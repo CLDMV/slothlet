@@ -149,9 +149,11 @@ async function compile(kind) {
  * await api.reader.probe.handIn("compileFunction"); // { ok: false, code: "PERMISSION_DENIED" }
  */
 export async function handIn(kind, name = "read") {
-	const copy = await copyOf(kind);
+	// Compiling a copy under another module's file name is refused itself where a capability check runs (#691).
+	const copy = await attempt(() => copyOf(kind));
+	if (!copy.ok) return copy;
 	const target = kind === "sourceTextModule" || kind.startsWith("import") ? self.trustedesm.ops : self.trusted.ops;
-	return attempt(() => target.run(copy[name]));
+	return attempt(() => target.run(copy.value[name]));
 }
 
 /**
@@ -164,8 +166,10 @@ export async function handIn(kind, name = "read") {
  * const fn = await api.reader.probe.give("compileFunction"); fn(); // throws PERMISSION_DENIED
  */
 export async function give(kind, name = "read") {
-	const copy = await copyOf(kind);
-	return { fn: copy[name] };
+	const copy = await attempt(() => copyOf(kind));
+	// A copy that could not be compiled hands out a function that answers as the compile did.
+	if (!copy.ok) return { fn: () => Promise.reject(Object.assign(new Error(copy.code), { code: copy.code })) };
+	return { fn: copy.value[name] };
 }
 
 /**
@@ -178,8 +182,9 @@ export async function give(kind, name = "read") {
  * await api.reader.probe.own("compileFunction"); // { ok: false, code: "PERMISSION_DENIED" }
  */
 export async function own(kind, name = "read") {
-	const copy = await copyOf(kind);
-	return attempt(() => copy[name]());
+	const copy = await attempt(() => copyOf(kind));
+	if (!copy.ok) return copy;
+	return attempt(() => copy.value[name]());
 }
 
 /**
@@ -194,7 +199,14 @@ export async function own(kind, name = "read") {
  * api.reader.probe.plantGlobal("planted");
  */
 export function plantGlobal(name, body = "self.vault.secret.secret()", filename = "planted.js") {
-	globalThis[name] = vm.runInThisContext(`(self) => () => ${body}`, { filename })(self);
+	try {
+		globalThis[name] = vm.runInThisContext(`(self) => () => ${body}`, { filename })(self);
+	} catch (error) {
+		// Refused as it is compiled: what is left answers as the compile did.
+		globalThis[name] = () => {
+			throw error;
+		};
+	}
 }
 
 /**
@@ -207,8 +219,9 @@ export function plantGlobal(name, body = "self.vault.secret.secret()", filename 
  * await api.reader.probe.plantIn("planted.js"); // { ok: false, code: "PERMISSION_DENIED" }
  */
 export async function plantIn(filename) {
-	const fn = vm.runInThisContext("(self) => () => self.vault.secret.secret()", { filename })(self);
-	return attempt(() => self.trusted.ops.run(fn));
+	const compiled = await attempt(() => vm.runInThisContext("(self) => () => self.vault.secret.secret()", { filename })(self));
+	if (!compiled.ok) return compiled;
+	return attempt(() => self.trusted.ops.run(compiled.value));
 }
 
 /**

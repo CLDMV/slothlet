@@ -91,15 +91,17 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 		describe.each(["zz-not-real.mjs", "ops.mjs", "__lib/helper.cjs"])("%s", (file) => {
 			it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: is not the callee's own code", async (kind) => {
 				await build();
-				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file))).toEqual(DENIED);
+				// Under a real file of the callee's, the compile itself is refused, whatever the rules (D8 ruling).
+				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file))).toEqual(
+					file === "zz-not-real.mjs" ? DENIED : { ok: false, code: "CAPABILITY_REFUSED" }
+				);
 			});
 
 			it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: the vault sees the supplier", async (kind) => {
 				await build();
-				expect(await api.supplier.probe.forgedInFolder(kind, file, "whoami")).toEqual({
-					ok: true,
-					value: "supplier.probe.forgedInFolder"
-				});
+				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file, "whoami"))).toEqual(
+					file === "zz-not-real.mjs" ? { ok: true, value: "supplier.probe.forgedInFolder" } : { ok: false, code: "CAPABILITY_REFUSED" }
+				);
 			});
 		});
 

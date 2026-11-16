@@ -43,6 +43,7 @@ import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/he
 import {
 	ArrayMethods,
 	decodeURIComponent,
+	FunctionMethods,
 	listPush,
 	listSplice,
 	Map,
@@ -52,6 +53,7 @@ import {
 	Objects,
 	Processes,
 	Reflect,
+	RegExpMethods,
 	StringMethods,
 	Symbol,
 	URL,
@@ -81,9 +83,100 @@ const CHECKS = new Map();
  * @example
  * checkCapability("code", "setTimeout");
  */
-export function checkCapability(name, route, importer = null) {
+export function checkCapability(name, route, importer = null, filename = null) {
 	if (MapMethods.size(CHECKS) === 0) return;
-	for (const check of mapValues(CHECKS)) check(name, route, importer);
+	for (const check of mapValues(CHECKS)) check(name, route, importer, filename);
+}
+
+/**
+ * `node:fs`, `node:path` and `node:url`, as slothlet loaded: what a file name compiled under is resolved with.
+ * @type {{fs: object|null, path: object|null, url: object|null}}
+ * @private
+ */
+const FILES = (() => {
+	const fs = runtime_builtin("node:fs");
+	const path = runtime_builtin("node:path");
+	const url = runtime_builtin("node:url");
+	return {
+		realpath: fs?.realpathSync ? FunctionMethods.bind(fs.realpathSync, fs) : null,
+		exists: fs?.existsSync ? FunctionMethods.bind(fs.existsSync, fs) : null,
+		resolve: path?.resolve ? FunctionMethods.bind(path.resolve, path) : null,
+		dirname: path?.dirname ? FunctionMethods.bind(path.dirname, path) : null,
+		sep: path?.sep ?? "/",
+		fileURLToPath: url?.fileURLToPath ? FunctionMethods.bind(url.fileURLToPath, url) : null
+	};
+})();
+
+/**
+ * A name code is compiled under, as the real path of the file it names, or null for a name no file holds (or where
+ * Node's file system is not there to tell). A `file:` URL is read as the file it names; a relative name is resolved
+ * against the working directory; a symbolic link and `..` are followed to the file.
+ * @param {*} filename - The name given.
+ * @returns {string|null} The file's real path, or null.
+ * @private
+ */
+function runtime_realFile(filename) {
+	if (typeof filename !== "string" || filename === "" || !FILES.realpath || !FILES.resolve) return null;
+	let candidate = filename;
+	try {
+		if (RegExpMethods.exec(/^file:/i, candidate) !== null) {
+			if (!FILES.fileURLToPath) return null;
+			candidate = FILES.fileURLToPath(RegExpMethods.symbolReplace(/[?#].*$/, candidate, ""));
+		} else if (RegExpMethods.exec(/^[a-z][a-z0-9+.-]+:/i, candidate) !== null) return null;
+		candidate = FILES.resolve(candidate);
+		if (!FILES.exists(candidate)) return null;
+		return FILES.realpath(candidate);
+	} catch {
+		/* v8 ignore next -- a name the file system cannot resolve names no file code could be taken for. */
+		return null;
+	}
+}
+
+/**
+ * Whether code compiled under a name would name a real file outside a leaf's own folder: the folder holding the file
+ * the leaf was built from, and everything beneath it. A name no file holds, or a file in that folder, is not.
+ * @param {*} filename - The name code is compiled under.
+ * @param {string} leafFile - The leaf's file.
+ * @returns {boolean} True for a file outside the folder.
+ * @internal
+ * @example
+ * namesForeignFile("/app/node_modules/pkg/index.js", "/app/api/ext/render.mjs"); // true
+ */
+export function namesForeignFile(filename, leafFile) {
+	if (filename === BINDING_NAME) return true;
+	const target = runtime_realFile(filename);
+	if (target === null) return false;
+	const own = typeof leafFile === "string" ? runtime_realFile(leafFile) : null;
+	if (own === null || !FILES.dirname) return true;
+	const folder = FILES.dirname(own);
+	return target !== folder && !StringMethods.startsWith(target, StringMethods.endsWith(folder, FILES.sep) ? folder : folder + FILES.sep);
+}
+
+/**
+ * The file name a `vm` function or `Module#_compile` is asked to compile under: its `filename` option or argument, a
+ * `vm.SourceTextModule`'s `identifier`.
+ * @param {string} key - The function.
+ * @param {Array<*>} args - Its arguments.
+ * @returns {*} The name, or undefined when none is given.
+ * @private
+ */
+function runtime_compiledName(key, args) {
+	const option = (value, field) => (typeof value === "string" ? value : value && typeof value === "object" ? value[field] : undefined);
+	switch (key) {
+		case "runInThisContext":
+		case "createScript":
+		case "Script":
+			return option(args[1], "filename");
+		case "runInNewContext":
+		case "runInContext":
+			return option(args[2], "filename");
+		case "compileFunction":
+			return option(args[2], "filename");
+		case "SourceTextModule":
+			return option(args[1], "identifier");
+		default:
+			return args[1];
+	}
 }
 
 /**
@@ -226,6 +319,14 @@ function runtime_calledByNodeLoader() {
 }
 
 /**
+ * What Node's `contextify` binding is checked as compiling under: a name {@link namesForeignFile} always finds foreign,
+ * since the names the binding is later given cannot be read where it is taken.
+ * @type {symbol}
+ * @internal
+ */
+export const BINDING_NAME = Symbol("slothlet.capability.binding");
+
+/**
  * Install every wrapper. Idempotent.
  * @returns {void}
  * @private
@@ -261,16 +362,17 @@ function runtime_enable() {
 			ofIndex++
 		) {
 			const key = ofList[ofIndex];
-			runtime_install(VM, key, () => checkCapability("code", `vm.${key}`));
+			runtime_install(VM, key, (args) => checkCapability("code", `vm.${key}`, null, runtime_compiledName(key, args) ?? null));
 		}
 	}
 	// `Module#_compile` is how Node's own loader runs every CommonJS file: only a call from anything else is checked.
-	runtime_install(MODULE_PROTOTYPE, "_compile", () => {
-		if (!runtime_calledByNodeLoader()) checkCapability("code", "Module#_compile");
+	runtime_install(MODULE_PROTOTYPE, "_compile", (args) => {
+		if (!runtime_calledByNodeLoader()) checkCapability("code", "Module#_compile", null, runtime_compiledName("_compile", args) ?? null);
 	});
 	// Of Node's bindings, only the one that compiles strings is the capability.
 	runtime_install(globalThis.process, "binding", (args) => {
-		if (args[0] === "contextify") checkCapability("code", "process.binding('contextify')");
+		// It compiles under any name it is given, which cannot be read here: a file name it is given counts as foreign.
+		if (args[0] === "contextify") checkCapability("code", "process.binding('contextify')", null, BINDING_NAME);
 	});
 	if (NODE_MODULE) {
 		runtime_install(NODE_MODULE, "registerHooks", () => checkCapability("loader", "module.registerHooks"));
