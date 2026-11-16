@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
+ *	@Last modified time: 2026-11-15T18:55:50-08:00 (1794797750)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,8 @@ const {
 	runtime_selfFrameworkView,
 	runtime_frameworkViewCaller,
 	runtime_codeLabel,
-	runtime_inheritsBuiltin
+	runtime_inheritsBuiltin,
+	runtime_isLanguageNameDescriptor
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
@@ -1020,10 +1021,14 @@ export class ApiBuilder extends ComponentBase {
 					// A name the object does not hold itself reads as in plain JS, as at an api node: undefined when nothing has it
 					// (serializers and Node 22/24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
 					// language's own prototypes give every object or function (`constructor`, `toString`) as it is.
-					if (!Reflect.getOwnPropertyDescriptor(target, prop)) {
+					const own = Reflect.getOwnPropertyDescriptor(target, prop);
+					if (!own) {
 						if (!Reflect.has(target, prop)) return undefined;
 						if (runtime_inheritsBuiltin(target, prop)) return Reflect.get(target, prop, receiver);
 					}
+					// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the
+					// function: consoles and formatters read them of every function they show.
+					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, own)) return own.value;
 
 					const childRoutePath = `${routePath}.${prop}`;
 					let deniedError = null;
@@ -1071,6 +1076,9 @@ export class ApiBuilder extends ComponentBase {
 					if (typeof prop !== "string") {
 						return descriptor;
 					}
+
+					// A function's own `name` and `length` are described without a check, as they are read (see get).
+					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, descriptor)) return descriptor;
 
 					const childRoutePath = `${routePath}.${prop}`;
 

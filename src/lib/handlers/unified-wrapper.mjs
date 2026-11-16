@@ -3603,6 +3603,8 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!runtime_isTerminalData(resolvedValue)) return;
+	// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the function.
+	if (runtime_isBuiltinFunctionMember(wrapper, prop)) return;
 
 	const targetPath = runtime_memberPathOf(wrapper, prop);
 	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access);
@@ -3829,6 +3831,49 @@ function runtime_valueHoldsName(wrapper, prop) {
 		holder = Reflect.getPrototypeOf(holder);
 	}
 	return false;
+}
+
+/**
+ * Whether `descriptor` is the `name` or `length` the language gives every function: a string or number value, not
+ * writable and not enumerable. A `name` getter, or an enumerable one the module assigned, is the module's own.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {PropertyDescriptor|undefined} descriptor - The function's own descriptor for it.
+ * @returns {boolean} True when the language gave it.
+ * @internal
+ *
+ * @example
+ * runtime_isLanguageNameDescriptor("length", Reflect.getOwnPropertyDescriptor(function add(a, b) {}, "length")); // true
+ */
+function runtime_isLanguageNameDescriptor(prop, descriptor) {
+	if (prop !== "name" && prop !== "length") return false;
+	if (!descriptor || !("value" in descriptor) || descriptor.writable || descriptor.enumerable) return false;
+	return typeof descriptor.value === (prop === "name" ? "string" : "number");
+}
+
+/**
+ * Whether a read of `prop` off a node is of its function's own `name` or `length`, which every function has and
+ * which consoles and formatters read of every function they show: such a read is answered without a permission check,
+ * as plain JS answers it. A member the module provides by that name (an export, a folder entry, a value that holds
+ * one) is the module's data, and stays held to the rules.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @returns {boolean} True for the function's own `name` or `length`.
+ * @private
+ *
+ * @example
+ * // math.mjs: export function add(a, b) {}
+ * runtime_isBuiltinFunctionMember(addWrapper, "length"); // true: read without a check
+ */
+function runtime_isBuiltinFunctionMember(wrapper, prop) {
+	if (prop !== "name" && prop !== "length") return false;
+	const internal = wrapper.____slothletInternal;
+	if (runtime_hasOwnMember(wrapper, prop) || runtime_valueHoldsName(wrapper, prop)) return false;
+	const fn = runtime_functionOf(internal.impl);
+	// A module's own Proxy answers for itself, so what it holds there is not taken to be the language's.
+	if (fn !== null) return !util.types.isProxy(fn) && runtime_isLanguageNameDescriptor(prop, Reflect.getOwnPropertyDescriptor(fn, prop));
+	// A node holding no function that is still a function to the language (a lazy node's stand-in) answers the
+	// stand-in's `name` and `length`: its path's last segment, and 0.
+	return typeof internal.proxy === "function";
 }
 
 /**
@@ -9365,6 +9410,8 @@ function runtime_loadedAsNamespace(wrapper) {
 function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
+	// A function's own `name` and `length` are never withheld (see runtime_isBuiltinFunctionMember).
+	if (runtime_isBuiltinFunctionMember(wrapper, prop)) return false;
 	const impl = wrapper.____slothletInternal?.impl;
 	// The non-object/function arm guards a wrapper whose impl is a primitive. Every wrapper the read
 	// gate is consulted for is built over an object or a function — a primitive becomes a terminal value
@@ -9784,7 +9831,10 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 	if (runtime_readsGated(slothlet)) {
 		const gate = runtime_rootGate(slothlet);
 		const decided = runtime_isHostRead(gate) && !slothlet.handlers.permissionManager.isPrivateTarget(String(prop));
-		if (!decided && runtime_isReadRedacted(gate, prop)) return undefined;
+		// The root function's own `name` and `length` are described as they are read, without a check (see
+		// runtime_rootMemberRead); a member the root lists by that name is the module's and is decided as any other.
+		const builtin = typeof slothlet.api === "function" && runtime_isLanguageNameDescriptor(prop, descriptor);
+		if (!decided && !builtin && runtime_isReadRedacted(gate, prop)) return undefined;
 	}
 	// The root function's own `prototype` and `toString`, described only to a reader that may call the root, as a function
 	// node describes its own.
@@ -18041,6 +18091,12 @@ class UnifiedWrapper extends ComponentBase {
 			// The function target's own `name` / `length` are configurable, so a member by that name
 			// (`tool/name/`) is described as the member, as the get trap reads it (#571).
 			if (ownDesc && !(ownDesc.configurable && runtime_hasOwnMember(wrapper, prop))) {
+				// The function's own `length` is described as a read answers it, from the function (the target is a stand-in
+				// whose own `length` is not the function's); it is configurable on the target, so the invariants allow it.
+				const fn = runtime_functionOf(wrapper.____slothletInternal.impl);
+				if (prop === "length" && fn !== null && ownDesc.configurable && runtime_isBuiltinFunctionMember(wrapper, prop)) {
+					return { ...ownDesc, value: fn.length };
+				}
 				return ownDesc;
 			}
 
@@ -19432,6 +19488,7 @@ export function internals(consumer) {
 		runtime_frameworkWrite,
 		runtime_inheritsBuiltin,
 		runtime_isCallerLocked,
+		runtime_isLanguageNameDescriptor,
 		runtime_markCallerLocked,
 		runtime_nodeBehind,
 		runtime_registerFrameworkMember,
