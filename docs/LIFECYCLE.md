@@ -613,17 +613,18 @@ The legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-c
 
 ## Module Type Inspection
 
-In eager mode, `typeof api.math` accurately reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode this is not the case** - the proxy target is always a function to make namespaces callable, so `typeof` always returns `"function"` regardless of what the module exports.
+In eager mode, `typeof api.math` reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode a node that has not loaded yet** is always a function, because a Proxy's form is fixed when it is made and a folder may turn out callable: `typeof` returns `"function"` until the node loads. Once it has loaded, a node holding no function is rebuilt on the form eager gives it, so `typeof api.math` is `"object"`, `Function.prototype.toString` refuses it and calling it throws a `TypeError`, as in eager mode. A reference taken before the load (`const math = api.math`) keeps the function form and reads through to the loaded node; read the node again, or take it from `await api.math`, to get the loaded form.
 
-Use `__type` and `api.slothlet.types` symbols to check actual module state.
+Use `__type` and `api.slothlet.types` symbols to check a node's state without depending on whether it has loaded.
 
 ### `__type` property
 
 ```javascript
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
-// typeof is always "function" in lazy mode (proxy target)
+// Before the node loads, typeof is "function" in lazy mode (proxy target)
 console.log(typeof api.math); // "function" - even if math module exports an object
+// once loaded: typeof (await api.math) === "object" for an object export
 
 // __type returns the real implementation type
 console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)

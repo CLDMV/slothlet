@@ -13646,18 +13646,16 @@ class UnifiedWrapper extends ComponentBase {
 		if (this.____slothletInternal.proxyTraps !== null && UnifiedWrapper._isCallableImpl(newImpl)) {
 			this.___upgradeToCallableProxy();
 		}
-		// A lazy node is built on a function target before its value is known. Once the value is an array or
-		// a non-null primitive, the node is rebuilt on the target eager gives it (the array, or the wrapper), so a loaded
-		// lazy node is what eager builds (#585 review).
+		// A lazy node is built on a function target before its value is known. Once the value is an array, a
+		// non-null primitive or a namespace object, the node is rebuilt on the target eager gives it (an array or an
+		// object shell), so a loaded lazy node is what eager builds (#585 review, #811).
 		if (this.____slothletInternal.lazyProxyTraps) {
 			const settledImpl = this.____slothletInternal.impl;
 			if (UnifiedWrapper._isCallableImpl(newImpl)) {
 				this.____slothletInternal.lazyProxyHandler = null;
 				this.____slothletInternal.lazyProxyTraps = null;
-			} else if (
-				Arrays.isArray(settledImpl) ||
-				(settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")
-			) {
+			} else if (settledImpl != null && typeof settledImpl !== "function") {
+				// An array, a primitive or a namespace object (#811): eager builds each on a target that is no function.
 				// null is not settled on: a node being cleared (remove, reload) passes through it.
 				this.___settleLazyProxy();
 			}
@@ -13781,11 +13779,12 @@ class UnifiedWrapper extends ComponentBase {
 	 *
 	 * @description
 	 * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
-	 * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
-	 * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
-	 * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
-	 * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
-	 * to callable does (#533).
+	 * loads, and a Proxy's target is fixed when it is created. Eager builds an array on an array shell (so
+	 * `Array.isArray` sees it) and any other non-callable value, a namespace object included (#811), on an
+	 * object shell. Once a lazy node loads such a value, a proxy is built from the same handler on that
+	 * target and put in the parent in place of the lazy one, which forwards every operation to it from then
+	 * on, as a namespace upgraded to callable does (#533). A reference taken before the load keeps the lazy
+	 * proxy's form (`typeof` reads `"function"`) and reads through to the node.
 	 *
 	 * @returns {void}
 	 * @private
@@ -19446,7 +19445,7 @@ class UnifiedWrapper extends ComponentBase {
 			wrapper.____slothletInternal.proxyTraps = proxyTraps;
 		} else if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.isCallableLocked) {
 			// Kept for a lazy node built on a function target before its value is known:
-			// ___settleLazyProxy() rebuilds it on eager's target once the value is an array or a primitive.
+			// ___settleLazyProxy() rebuilds it on eager's target once the value is known to be no function.
 			wrapper.____slothletInternal.lazyProxyHandler = proxyHandler;
 			wrapper.____slothletInternal.lazyProxyTraps = proxyTraps;
 		}
