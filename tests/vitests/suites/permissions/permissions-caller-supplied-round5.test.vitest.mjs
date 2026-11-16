@@ -343,7 +343,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			const instance = await api.supplier.bag.shape("instance");
 			expect(instance instanceof C).toBe(true);
 			expect(instance.constructor).toBe(C);
-			expect(instance.m).toBe(made.m);
+			// Each instance has a stand-in of its own of each method, the same one every read (D1).
+			expect(instance.m).toBe(instance.m);
+			expect(instance.m).not.toBe(made.m);
 		});
 
 		it("a returned generator function and async function report their kind", async () => {

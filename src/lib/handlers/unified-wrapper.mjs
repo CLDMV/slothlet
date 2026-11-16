@@ -5560,6 +5560,30 @@ function runtime_originOf(standIn) {
 }
 
 /**
+ * For each stand-in of a method read through an object's stand-in, that object and its stand-in (D1): each object gets
+ * stand-ins of its own methods, so a method knows which object it was read from.
+ * @type {WeakMap<Function, {instance: object, holder: object}>}
+ * @private
+ */
+const METHOD_RECEIVERS = new WeakMap();
+
+/**
+ * The call a stand-in being run was handed to alone, for {@link runtime_runAsMaker} (see {@link runtime_originOf}). A
+ * method read through an object's stand-in answers for that object: run on it, the object's call; run with any other
+ * receiver (another object, a method of another object called on this one, the class's own method read through the
+ * class), none.
+ * @param {Function} standIn - The stand-in being run.
+ * @param {*} receiver - Its receiver, as handed to its module.
+ * @returns {object|null} The call, or null.
+ * @private
+ */
+function runtime_callOrigin(standIn, receiver) {
+	const bound = WeakMapMethods.get(METHOD_RECEIVERS, standIn);
+	if (bound === undefined) return runtime_originOf(standIn);
+	return receiver === bound.instance ? runtime_originOf(bound.holder) : null;
+}
+
+/**
  * The views a module is handed of a caller's plain array or object holding the module's own stand-ins (see
  * {@link runtime_inboundView}), with the caller's value behind each.
  * @type {WeakMap<object, {maker: object, original: object}>}
@@ -7202,7 +7226,6 @@ setInboundOriginal((value) => {
  */
 function runtime_handIn(maker, value, owner = maker.owner) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	runtime_noteMoved(value);
 	// A crossing view handed in stands for a value: this module's own comes back as itself, another module's stays a
 	// view, decided for this module.
 	const crossing = WeakMapMethods.get(CROSSINGS, value);
@@ -7211,10 +7234,14 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 		const own = WeakMapMethods.get(STAND_IN_RECORDS, behind) ?? WeakMapMethods.get(INBOUND_VIEWS, behind);
 		if (own?.maker === maker) return own.original;
 		if (WeakMapMethods.has(maker.made, behind)) return behind;
+		runtime_noteMoved(value);
 		return runtime_crossTo(value, owner, crossing.slothlet, crossing.from);
 	}
 	const record = WeakMapMethods.get(STAND_IN_RECORDS, value) ?? WeakMapMethods.get(INBOUND_VIEWS, value);
-	if (record) return record.maker === maker ? record.original : value;
+	// Back with the module that made it (a method's receiver, say), a stand-in is its value again: it went nowhere new.
+	if (record?.maker === maker) return record.original;
+	runtime_noteMoved(value);
+	if (record) return value;
 	if (runtime_isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return value;
 	if (WeakMapMethods.has(maker.made, value)) return value;
 	// A prototype of a module's, or plain data holding one, reaches this one as reading it would (#667).
@@ -7466,6 +7493,35 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	/** Run an operation on the original: as the module for its own Proxy. */
 	const exec = isProxy ? (operation) => asMaker(operation, false) : (operation) => operation();
 	const out = (value) => runtime_handOut(maker, owner, value);
+	/**
+	 * This object's own stand-ins of the methods read through it (D1), made when first read.
+	 * @type {WeakMap<Function, Function>|null}
+	 */
+	let methods = null;
+	/**
+	 * A function read through this object's stand-in: when it would be handed out as a stand-in of its own, the object's
+	 * own stand-in of it, which records the object (see runtime_callOrigin). Only a method (a function with no
+	 * `prototype` of its own, or a generator) is: a class, a constructor function and the `constructor` member keep the
+	 * stand-in every holder shares, as do the members of a node's value, a function and a Proxy.
+	 */
+	const memberOut = (value, prop) => {
+		const shared = out(value);
+		if (isFunction || isProxy || asNode || prop === "constructor" || typeof value !== "function" || typeof shared !== "function")
+			return shared;
+		// Read by descriptor from a function that is not a Proxy: nothing of the module's runs.
+		if (util.types.isProxy(value) || (Objects.hasOwn(value, "prototype") && !util.types.isGeneratorFunction(value))) return shared;
+		const record = WeakMapMethods.get(STAND_IN_RECORDS, shared);
+		if (record?.original !== value || WeakMapMethods.has(METHOD_RECEIVERS, shared)) return shared;
+		methods ??= new WeakMap();
+		const existing = WeakMapMethods.get(methods, value);
+		if (existing) return existing;
+		const own =
+			util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)
+				? runtime_kindStandIn(record.maker, record.owner, value, methods)
+				: runtime_membrane(record.maker, record.owner, value, false, methods);
+		WeakMapMethods.set(METHOD_RECEIVERS, own, { instance: original, holder: standIn });
+		return own;
+	};
 	/** The receiver a reflection is made through: the stand-in or another of the module's is the value behind it. */
 	const receiverOf = (receiver) => (receiver === standIn ? original : runtime_handIn(maker, receiver));
 	/**
@@ -7559,7 +7615,16 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 						const value = Reflect.apply(descriptor.get, receiver, []);
 						return holderIsMade ? out(value) : value;
 					}
-					return runAs(owner, descriptor.get, receiver, []);
+					// A getter read on this object answers for it as its methods do (see runtime_callOrigin).
+					return runtime_runAsMaker(
+						owner,
+						descriptor.get,
+						receiver,
+						[],
+						true,
+						asNode,
+						receiver === original ? runtime_originOf(standIn) : null
+					);
 				}
 				const value = descriptor.value;
 				// A native binding's method needs the object itself as its receiver, whether or not its holder was handed in (#708).
@@ -7577,7 +7642,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 					}
 					return source;
 				}
-				return out(value);
+				return memberOut(value, prop);
 			}
 			holder = Reflect.getPrototypeOf(holder);
 		}
@@ -7607,7 +7672,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		apply: (_shadow, thisArg, args) => {
 			const receiver = receiverOf(thisArg);
 			const handed = runtime_handInAll(maker, args);
-			return runtime_runAsMaker(owner, original, receiver, handed, true, asNode, runtime_originOf(standIn));
+			return runtime_runAsMaker(owner, original, receiver, handed, true, asNode, runtime_callOrigin(standIn, receiver));
 		},
 		construct: (_shadow, args, newTarget) => {
 			const target = newTarget === standIn ? original : runtime_handIn(maker, newTarget);
@@ -7704,7 +7769,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	standIn = new NativeProxy(shadow, handler);
 	WeakMapMethods.set(made, original, standIn);
 	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
-	if (isFunction) runtime_recordStandInOrigin(standIn);
+	if (!asNode) runtime_recordStandInOrigin(standIn);
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
 	if (leaf) WeakMapMethods.set(trustedRootOwn.implWrappers, standIn, leaf);
@@ -7729,7 +7794,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	const run = (thisArg, args) => {
 		const receiver = runtime_handIn(maker, thisArg);
 		const handed = runtime_handInAll(maker, args);
-		return runtime_runAsMaker(owner, original, receiver, handed, true, false, runtime_originOf(standIn));
+		return runtime_runAsMaker(owner, original, receiver, handed, true, false, runtime_callOrigin(standIn, receiver));
 	};
 	const isGenerator = util.types.isGeneratorFunction(original);
 	const isAsync = util.types.isAsyncFunction(original);
