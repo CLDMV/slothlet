@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:48:19-08:00 (1794800899)
+ *	@Last modified time: 2026-11-16T02:15:26-08:00 (1794824126)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -923,6 +923,104 @@ const SELF_KINDS = new Map();
 const SELF_BINDINGS = new Map();
 
 /**
+ * The api root an instance's host closed (`Object.preventExtensions`, `Object.seal`, `Object.freeze`), by instance ID,
+ * with the form of `self` its files are given from then on, per runtime file URL (#827): see {@link closeInstanceSelf}.
+ * @type {Map<string, {target: object|Function, forms: Map<string, object>}>}
+ * @private
+ */
+const SELF_CLOSED = new Map();
+
+/**
+ * The form of `self` an instance's files are given for one runtime file once the instance's api root is closed (#827):
+ * a Proxy over the closed root's own target, whose every operation goes through the runtime file's form of `self` (so
+ * each read and change is decided as through `self` before), and which answers what the language requires of a closed
+ * object (`Object.isExtensible`, the keys it lists, each member it holds fixed, its prototype) as the closed root does.
+ * `Object.isExtensible`, `Object.isSealed` and `Object.isFrozen` of `self` then answer as they do of the host's `api`.
+ * @param {object|Function} form - The runtime file's form of `self` for the instance's kind of root.
+ * @param {object|Function} target - The closed root's own target.
+ * @returns {object|Function} The form.
+ * @private
+ */
+function closedSelfForm(form, target) {
+	// What the target holds fixed, as the closed root reports it: a value or accessor it may no longer change is the
+	// target's; one it holds writable is the one read through `self`, as the language lets a closed object answer.
+	const describe = (prop, described) => {
+		const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+		if (!fixed) return described === undefined ? undefined : { ...described, configurable: true };
+		if (fixed.configurable)
+			return described === undefined
+				? { ...fixed, ...("value" in fixed ? { value: undefined } : {}) }
+				: { ...described, configurable: true };
+		if (!("value" in fixed) || !fixed.writable) return fixed;
+		return { ...fixed, value: described && "value" in described ? described.value : undefined };
+	};
+	return new NativeProxy(target, {
+		get(t, prop) {
+			const value = Reflect.get(form, prop);
+			const fixed = Reflect.getOwnPropertyDescriptor(t, prop);
+			return fixed && !fixed.configurable && "value" in fixed && !fixed.writable ? fixed.value : value;
+		},
+		has: (t, prop) => Reflect.has(form, prop) || Reflect.getOwnPropertyDescriptor(t, prop) !== undefined,
+		ownKeys: (t) => {
+			const keys = Reflect.ownKeys(form);
+			return Reflect.isExtensible(t) ? keys : Reflect.ownKeys(t);
+		},
+		getOwnPropertyDescriptor: (_, prop) => describe(prop, Reflect.getOwnPropertyDescriptor(form, prop)),
+		defineProperty: (_, prop, descriptor) => Reflect.defineProperty(form, prop, descriptor),
+		deleteProperty: (_, prop) => Reflect.deleteProperty(form, prop),
+		set: (_, prop, value) => Reflect.set(form, prop, value),
+		getPrototypeOf: (t) => (Reflect.isExtensible(t) ? Reflect.getPrototypeOf(form) : Reflect.getPrototypeOf(t)),
+		setPrototypeOf: (t, prototype) =>
+			Reflect.setPrototypeOf(form, prototype) || (!Reflect.isExtensible(t) && Reflect.getPrototypeOf(t) === prototype),
+		// Closing `self` is decided as closing it was; a root already closed is closed, as closing it again answers.
+		preventExtensions: (t) => {
+			Reflect.preventExtensions(form);
+			return !Reflect.isExtensible(t);
+		},
+		apply: (_, thisArg, args) => Reflect.apply(form, thisArg, args),
+		construct: (_, args) => Reflect.construct(form, args)
+	});
+}
+
+/**
+ * The form of `self` an instance's files are given for one runtime file now: its closed form once its root is closed
+ * (see {@link closeInstanceSelf}), and otherwise the form of its kind of root.
+ * @param {string} instanceID - The instance.
+ * @param {string} url - The runtime file's URL.
+ * @returns {object|Function|undefined} The form, or undefined when the runtime file made none.
+ * @private
+ */
+function instanceSelfForm(instanceID, url) {
+	const forms = SELF_FORMS.get(url);
+	if (!forms) return undefined;
+	const form = SELF_KINDS.get(instanceID) ? forms.callable : forms.object;
+	const closed = SELF_CLOSED.get(instanceID);
+	if (!closed) return form;
+	let made = closed.forms.get(url);
+	if (made === undefined) closed.forms.set(url, (made = closedSelfForm(form, closed.target)));
+	return made;
+}
+
+/**
+ * Give an instance's files a `self` closed as its api root now is (#827), once the host closed the root: every `self`
+ * binding already given to its files, and each given later, takes the closed form (see {@link closedSelfForm}). The
+ * runtime files' own `self` exports, which every instance shares, stay open.
+ * @param {string} instanceID - The instance.
+ * @param {object|Function} target - The closed root's own target.
+ * @returns {void}
+ * @internal
+ */
+function closeInstanceSelf(instanceID, target) {
+	if (typeof instanceID !== "string" || target === null || (typeof target !== "object" && typeof target !== "function")) return;
+	if (SELF_CLOSED.get(instanceID)?.target === target) return;
+	SELF_CLOSED.set(instanceID, { target, forms: new Map() });
+	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+		const form = instanceSelfForm(instanceID, url);
+		if (form) for (const set of setters) set(form);
+	}
+}
+
+/**
  * Record the two forms of `self` one of slothlet's runtime entry files made (#803), and the setter of its own `self`
  * export. Called by each of those files once, before {@link registerOwnModule}. The file's own `self` is given the form
  * every running instance's root shares (see {@link sharedSelfCallable}).
@@ -991,15 +1089,18 @@ function setInstanceSelfKind(instanceID, callable) {
 	if (callable === null) {
 		SELF_KINDS.delete(instanceID);
 		SELF_BINDINGS.delete(instanceID);
+		SELF_CLOSED.delete(instanceID);
 		rebindSharedSelf();
 		return;
 	}
 	const kind = Boolean(callable);
 	if (SELF_KINDS.get(instanceID) === kind) return;
 	SELF_KINDS.set(instanceID, kind);
+	// A root closed before its kind changed is closed no more once the api is built again.
+	SELF_CLOSED.delete(instanceID);
 	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
-		const forms = SELF_FORMS.get(url);
-		if (forms) for (const set of setters) set(kind ? forms.callable : forms.object);
+		const form = instanceSelfForm(instanceID, url);
+		if (form) for (const set of setters) set(form);
 	}
 	rebindSharedSelf();
 }
@@ -1032,7 +1133,7 @@ function bindInstanceSelf(url, instanceID, assign) {
 	let setters = byURL.get(url);
 	if (!setters) byURL.set(url, (setters = new Set()));
 	setters.add(assign);
-	assign(SELF_KINDS.get(instanceID) ? forms.callable : forms.object);
+	assign(instanceSelfForm(instanceID, url));
 }
 
 /**
@@ -3777,6 +3878,7 @@ export function internals(consumer) {
 		registerSelfForms,
 		callableSelfOf,
 		bindInstanceSelf,
+		closeInstanceSelf,
 		SELF_BIND_KEY,
 		setInstanceSelfKind,
 		defaultExportLooksCallable,

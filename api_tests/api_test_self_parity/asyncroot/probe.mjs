@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:54:22-08:00 (1794797662)
+ *	@Last modified time: 2026-11-16T02:14:10-08:00 (1794824050)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,4 +23,16 @@ import { shape } from "../shape.mjs";
  */
 export function report(inspect) {
 	return shape(self, { inspect });
+}
+
+/**
+ * Whether `self` is extensible, sealed and frozen, as this module sees it.
+ * @returns {Array<boolean>|string} The three answers, or the code of what threw.
+ */
+export function closed() {
+	try {
+		return [Object.isExtensible(self), Object.isSealed(self), Object.isFrozen(self)];
+	} catch (error) {
+		return `threw:${error?.code ?? error?.name}`;
+	}
 }

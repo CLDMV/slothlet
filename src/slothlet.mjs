@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:13:57-08:00 (1794820437)
+ *	@Last modified time: 2026-11-16T02:15:30-08:00 (1794824130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -148,7 +148,7 @@ const { enablePromisePatching, disablePromisePatching } = promiseContextInternal
 const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
 const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
-const { claimInstanceScope, setInstanceSelfKind } = instanceImportsInternals("slothlet");
+const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
 const { forgetInstanceScripts, recordInstanceOwner } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
 
@@ -1405,15 +1405,18 @@ class Slothlet {
 							return Reflect.setPrototypeOf(this.api, proto) && Reflect.setPrototypeOf(target, proto);
 						},
 						// Closing the root closes the api (see runtime_rootClose).
-						preventExtensions: (target) =>
-							this.api
-								? runtime_rootClose(
-										this,
-										target,
-										isCallable,
-										rootGiven() ? runtime_rootPrototypeFor(this, rootViews, rootHeld(), true) : rootHeld()
-									)
-								: Reflect.preventExtensions(target),
+						preventExtensions: (target) => {
+							if (!this.api) return Reflect.preventExtensions(target);
+							const closed = runtime_rootClose(
+								this,
+								target,
+								isCallable,
+								rootGiven() ? runtime_rootPrototypeFor(this, rootViews, rootHeld(), true) : rootHeld()
+							);
+							// A module's `self` is closed as the root it stands for is (#827).
+							if (closed) closeInstanceSelf(this.instanceID, target);
+							return closed;
+						},
 						getOwnPropertyDescriptor: (target, prop) => {
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 							if (fixed && !fixed.configurable) return runtime_rootFixedMember(this, prop, fixed, true);

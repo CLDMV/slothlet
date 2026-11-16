@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:04:02-08:00 (1794805442)
+ *	@Last modified time: 2026-11-16T02:17:41-08:00 (1794824261)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -205,6 +205,31 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 				}
 			});
 		});
+	});
+});
+
+describe.each(CONFIGS)("self is closed as the api root is > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+	describe.each(ROOTS)("root $folder", (root) => {
+		it.each(POLICIES.flatMap((policy) => ["preventExtensions", "seal", "freeze"].map((how) => [policy.label, how, policy])))(
+			"%s, %s: Object.isExtensible, isSealed and isFrozen of self answer as they do of api (#827)",
+			async (_label, how, policy) => {
+				const api = await slothlet({
+					base: path.join(FIXTURE, root.folder),
+					mode,
+					runtime,
+					silent: true,
+					permissions: policy.permissions(attribution)
+				});
+				try {
+					await api.probe;
+					expect(await api.probe.closed()).toEqual([true, false, false]);
+					Object[how](api);
+					expect(await api.probe.closed()).toEqual([Object.isExtensible(api), Object.isSealed(api), Object.isFrozen(api)]);
+				} finally {
+					await api.shutdown();
+				}
+			}
+		);
 	});
 });
 
