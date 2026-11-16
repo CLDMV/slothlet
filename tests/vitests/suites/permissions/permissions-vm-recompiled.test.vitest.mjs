@@ -246,5 +246,13 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 				expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
 			}
 		);
+
+		it("the reader's copy, loaded as the trusted module's helper copy and run by the host, is refused", async () => {
+			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", rules: RULES } });
+			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
+			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+			const { fn } = await api.reader.probe.helperCopy();
+			expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
+		});
 	});
 });

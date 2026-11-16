@@ -1826,6 +1826,15 @@ function checkModuleImport(specifier, importer) {
 		let file = text;
 		if (!text.startsWith("file:") && !(text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text))) file = new URL(text, importer).href;
 		if (isSlothletInternal(file)) throw importRefusal(text, file);
+		// A URL the module wrote out naming an instance, under vite, which does not name the module importing by it: it
+		// loses the tags only slothlet gives and is an edge of that instance's import graph from this module, as Node's
+		// resolve hook has it (#691).
+		const instanceID = text.includes(MARKER) ? new URLSearchParams(splitQuery(text)[1] ?? "").get("slothlet_instance") : null;
+		if (instanceID) {
+			const untagged = withoutWrittenTags(text);
+			if (typeof importer === "string") recordImport(instanceID, importer, withoutWrittenTags(file));
+			return untagged;
+		}
 	}
 	return specifier;
 }
@@ -2325,11 +2334,21 @@ const WRITTEN_TAGS = [...HELPER_TAGS, "module"];
  * @private
  */
 function withoutWrittenHelperTags(parent, child) {
-	if (typeof child !== "string" || !child.includes(MARKER)) return child;
-	if (!WRITTEN_TAGS.some((key) => new URLSearchParams(splitQuery(child)[1] ?? "").has(key))) return child;
 	if (typeof parent === "string" && OWN_PREFIXES.some((prefix) => toSlashPath(parent).startsWith(prefix))) return child;
 	// Slothlet's loader imports a leaf from its own files; a first import with no importer is the host's entry.
 	if (typeof parent !== "string") return child;
+	return withoutWrittenTags(child);
+}
+
+/**
+ * A resolved child without the tags only slothlet gives (see {@link WRITTEN_TAGS}).
+ * @param {string} child - The resolved child URL or id.
+ * @returns {string} `child`, without them.
+ * @private
+ */
+function withoutWrittenTags(child) {
+	if (typeof child !== "string" || !child.includes(MARKER)) return child;
+	if (!WRITTEN_TAGS.some((key) => new URLSearchParams(splitQuery(child)[1] ?? "").has(key))) return child;
 	const [childBase, childQuery = ""] = splitQuery(child);
 	const childParams = new URLSearchParams(childQuery);
 	for (const key of WRITTEN_TAGS) childParams.delete(key);

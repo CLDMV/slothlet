@@ -212,6 +212,30 @@ export async function plantIn(filename) {
 }
 
 /**
+ * Import the trusted ES module's helper under the tags of a copy loaded for the trusted module's api file (`helpers:
+ * "module"`), written out by this module, and hand its function out for the host to run.
+ * @returns {Promise<{fn: Function}>} The function.
+ * @public
+ * @example
+ * const { fn } = await api.reader.probe.helperCopy(); fn(); // throws PERMISSION_DENIED
+ */
+export async function helperCopy() {
+	const url = await esmLocation();
+	const [base, query = ""] = url.split("?");
+	const params = new URLSearchParams(query);
+	const helper = new URL("../shared/peek.mjs", base.startsWith("file:") ? base : `file://${base}`);
+	const tags = new URLSearchParams({
+		slothlet_instance: params.get("slothlet_instance"),
+		slothlet_helpers: "module",
+		slothlet_for: fileURLToPath(base.startsWith("file:") ? base : `file://${base}`),
+		slothlet_mount: params.get("module") ?? ""
+	});
+	const spec = base.startsWith("file:") ? `${helper.href}?${tags}` : `${fileURLToPath(helper)}?${tags}`;
+	const copy = await import(spec);
+	return { fn: copy.peek };
+}
+
+/**
  * Hand out the helper this module and the trusted ES module both import, for the host to run.
  * @returns {{fn: Function}} The helper's function.
  * @public
