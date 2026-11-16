@@ -91,7 +91,13 @@ export default defineConfig([
 	{
 		files: ["src/**/*.{js,mjs,cjs}"],
 		plugins: { slothlet: capturedIntrinsics },
-		rules: { "slothlet/captured-intrinsics": "error" }
+		rules: {
+			"slothlet/captured-intrinsics": "error",
+			// The methods built-in values inherit, and the iteration `for…of`, spread and destructuring do: called through
+			// the copies helpers/intrinsics took at load. `framesOf` (frame placement, the live runtime) hands out a walk of
+			// a stack capture that steps its generator with those copies.
+			"slothlet/captured-prototype-methods": ["error", { safeIterators: ["framesOf"] }]
+		}
 	},
 	{
 		files: ["**/test/**/*test.js"],
