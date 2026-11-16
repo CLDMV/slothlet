@@ -88,7 +88,7 @@ import {
 	NativeProxy,
 	WeakSet
 } from "@cldmv/slothlet/helpers/intrinsics";
-import { readStack, stackText } from "@cldmv/slothlet/helpers/stack-read";
+import { readStack, stackText, unreadError } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -2775,15 +2775,9 @@ function setCallerCheck(check) {
  * @private
  */
 function requireCJSFromRunner(filePath, instanceID) {
-	const previousLimit = PristineError.stackTraceLimit;
-	PristineError.stackTraceLimit = 64;
-	let entry;
-	try {
-		entry = new PristineError();
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-	}
-	const location = CALLER_CHECK?.(entry) ?? null;
+	// Made by slothlet's own realm where there is one (see helpers/stack-read), whatever the global stack settings hold.
+	const entry = unreadError(64);
+	const location = entry === null ? null : (CALLER_CHECK?.(entry) ?? null);
 	if (typeof location === "string") {
 		const [base, query = ""] = splitQuery(location);
 		const params = new URLSearchParams(query);

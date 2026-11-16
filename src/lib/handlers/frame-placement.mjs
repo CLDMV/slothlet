@@ -59,7 +59,7 @@ import {
 	Processes
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { readStack } from "@cldmv/slothlet/helpers/stack-read";
+import { hasEngineStack, readStack, stackBudget } from "@cldmv/slothlet/helpers/stack-read";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const {
 	instanceCommonJSFiles,
@@ -589,7 +589,7 @@ function runtime_structuredFrames(_error, callSites) {
 		// The same frames after the one at an index, converted only from there (see runtime_framesAfter).
 		after: (index) => runtime_siteFrames(callSites, false, index + 1),
 		structured: true,
-		truncated: callSites.length >= PristineError.stackTraceLimit,
+		truncated: callSites.length >= stackBudget(),
 		// Whether the outermost frame is a builtin's, which has no location: what began the job is the engine's own.
 		trailingGap: callSites.length > 0 && runtime_isBuiltinSite(callSites[callSites.length - 1])
 	};
@@ -2590,7 +2590,7 @@ const READ_REGISTRATIONS = new WeakSet();
 function runtime_registeredScript(entry, called = false) {
 	// An engine whose errors carry no `stack` getter cannot tell an unread stack from one a script wrote: nothing is taken.
 	if (!PRISTINE_STACK_GET || !util.types.isNativeError(entry)) return null;
-	if (Objects.getOwnPropertyDescriptor(entry, "stack")?.get !== PRISTINE_STACK_GET) return null;
+	if (!hasEngineStack(entry)) return null;
 	const frames = readStack(
 		(error, sites) => {
 			const read = runtime_structuredFrames(error, sites);
