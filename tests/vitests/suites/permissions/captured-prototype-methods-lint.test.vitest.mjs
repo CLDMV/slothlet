@@ -15,8 +15,9 @@
 
 /**
  * @fileoverview The lint rule `slothlet/captured-prototype-methods` reports every call of a method a built-in value
- * inherits, and every `for…of`, spread, array destructuring and `yield*` that walks a value with its iterator, in
- * slothlet's own code; all of `src/` passes it with no exemptions.
+ * inherits, every `for…of`, spread, array destructuring and `yield*` that walks a value with its iterator, every array
+ * write that goes through a setter or species module code can add, and every property descriptor slothlet makes that
+ * inherits `Object.prototype`, in slothlet's own code; all of `src/` passes it with no exemptions.
  */
 
 import path from "node:path";
@@ -69,7 +70,12 @@ describe("slothlet/captured-prototype-methods", () => {
 		["const [a] = list;", "pattern"],
 		["new Set(list);", "construct"],
 		["Arrays.from(set);", "iterating"],
-		["Promises.all(list);", "iterating"]
+		["Promises.all(list);", "iterating"],
+		["ArrayMethods.push(list, 1);", "arrayWrite"],
+		["ArrayMethods.splice(list, 0, 1);", "arrayWrite"],
+		["Reflect.defineProperty(value, 'a', { value: 1, writable: true });", "descriptor"],
+		["Reflect.defineProperty(value, 'a', { get: fn });", "descriptor"],
+		["const copy = { ...value, value: 1 };", "descriptor"]
 	])("reports %s", (body, id) => {
 		expect(lint(body, IMPORTS)).toContain(id);
 	});
@@ -80,8 +86,8 @@ describe("slothlet/captured-prototype-methods", () => {
 
 	it("leaves the copies taken at load, the safe walks and slothlet's own objects alone", () => {
 		const body = [
-			"ArrayMethods.push(list, 1);",
 			"MapMethods.get(map, 1);",
+			"Reflect.defineProperty(value, 'a', { __proto__: null, value: 1, writable: true });",
 			"for (const entry of mapEntries(map)) entry;",
 			"for (const member of setValues(set)) member;",
 			"for (const x of listSteps(list)) x;",

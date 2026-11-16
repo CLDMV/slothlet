@@ -557,6 +557,10 @@ const prototypeRule = {
 			delegate:
 				"`yield*` walks the value with its iterator, which module code can replace. Loop over it by index or through a safe iterator.",
 			iterating: "`{{text}}` walks its argument with the argument's iterator, which module code can replace. Use {{use}}.",
+			arrayWrite:
+				"`ArrayMethods.{{name}}` writes elements through any setter module code put at an index of the shared prototypes, or reads the array's `constructor` and `Symbol.species`. Use {{use}} from @cldmv/slothlet/helpers/intrinsics.",
+			descriptor:
+				"A property descriptor slothlet makes inherits `Object.prototype`, where module code can add `get`, `set` or `value`: give it `__proto__: null`.",
 			construct:
 				"`new {{name}}(…)` with an argument walks it with its iterator, which module code can replace. Construct it empty and add with the copies taken at load (setFrom, mapFrom)."
 		}
@@ -634,10 +638,59 @@ const prototypeRule = {
 			}
 			return false;
 		};
+		const ARRAY_WRITES = {
+			push: "listPush",
+			unshift: "listUnshift",
+			splice: "listSplice",
+			concat: "concatLists",
+			slice: "copyList",
+			map: "mapList",
+			filter: "filterList",
+			flat: "concatLists",
+			flatMap: "mapList and concatLists"
+		};
+		const DESCRIPTOR_KEYS = new Set(["writable", "enumerable", "configurable"]);
+		const keyName = (property) =>
+			property.type === "Property" && !property.computed
+				? property.key.type === "Identifier"
+					? property.key.name
+					: property.key.type === "Literal"
+						? String(property.key.value)
+						: null
+				: null;
 		return {
+			ObjectExpression(node) {
+				if (atTopLevel(node)) return;
+				const names = node.properties.map(keyName);
+				if (names.includes("__proto__")) return;
+				const parent = node.parent;
+				const calleeName =
+					parent?.type === "CallExpression" && parent.arguments[2] === node
+						? parent.callee.type === "MemberExpression" && !parent.callee.computed
+							? parent.callee.property.name
+							: parent.callee.type === "Identifier"
+								? parent.callee.name
+								: ""
+						: "";
+				const spreadDescriptor =
+					node.properties.some((p) => p.type === "SpreadElement") && names.some((k) => k === "value" || k === "get" || k === "set");
+				if (calleeName === "defineProperty" || spreadDescriptor || names.some((k) => DESCRIPTOR_KEYS.has(k))) {
+					context.report({ node, messageId: "descriptor" });
+				}
+			},
 			CallExpression(node) {
 				const callee = node.callee.type === "ChainExpression" ? node.callee.expression : node.callee;
 				if (callee.type !== "MemberExpression") return;
+				if (
+					callee.object.type === "Identifier" &&
+					callee.object.name === "ArrayMethods" &&
+					!callee.computed &&
+					Object.hasOwn(ARRAY_WRITES, callee.property.name) &&
+					!atTopLevel(node)
+				) {
+					context.report({ node, messageId: "arrayWrite", data: { name: callee.property.name, use: ARRAY_WRITES[callee.property.name] } });
+					return;
+				}
 				const name = callee.computed ? (callee.property.type === "Literal" ? String(callee.property.value) : null) : callee.property.name;
 				if (name === null || callee.property.type === "PrivateIdentifier") return;
 				// Captured statics that iterate.
