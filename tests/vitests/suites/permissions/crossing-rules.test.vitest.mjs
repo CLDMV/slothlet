@@ -60,6 +60,16 @@ const DENY_GUEST_WRITES = [
 	{ caller: "guest.**", target: "keeper:write", effect: "deny" }
 ];
 
+/**
+ * Refuses one of three files loaded from one folder every write to another of them, the owner's.
+ * @param {string} file - The file refused.
+ * @returns {object[]} The rules.
+ */
+const denyKinWrites = (file) => [
+	{ caller: `${file}.**`, target: "owner.**:write", effect: "deny" },
+	{ caller: `${file}.**`, target: "owner:write", effect: "deny" }
+];
+
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => ATTRIBUTIONS.map((attribution) => ({ mode, runtime, attribution }))));
 
 describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
@@ -114,6 +124,42 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		// Plain JavaScript: both files hold the instance itself, and the write lands.
 		expect(await api.guest.reach("__open_")).toEqual({ returned: "written", callback: "written", stored: "written" });
 		expect(await api.keeper.landed("__open_")).toEqual(["returned", "callback", "stored"]);
+	});
+
+	it.each(["aside", "reader"])(
+		"keeps a class a node exports from a file of the same folder a rule refuses the write, by every route (%s)",
+		async (file) => {
+			api = await slothlet({
+				base: join(FIXTURE, "kin"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+			});
+			// The rule names the write, so each is refused as a write the rule denies, whether the file loaded before the owner's
+			// or after it, and whatever the other files of the folder may write.
+			expect(await api[file].reach()).toEqual({
+				node: "PERMISSION_DENIED",
+				constructed: "PERMISSION_DENIED",
+				returned: "PERMISSION_DENIED",
+				nested: "PERMISSION_DENIED",
+				method: "PERMISSION_DENIED"
+			});
+			expect(await api.owner.landed("__kin_")).toEqual([]);
+		}
+	);
+
+	it("leaves a class a node exports to a file of the same folder where no rule stands between them", async () => {
+		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		// Plain JavaScript: every write lands.
+		expect(await api.reader.reach()).toEqual({
+			node: "written",
+			constructed: "written",
+			returned: "written",
+			nested: "written",
+			method: "written"
+		});
+		expect(await api.owner.landed("__kin_")).toEqual(["constructed", "returned", "nested", "hello", "inst"]);
 	});
 
 	it("keeps the owner's code from a view a module holds past the instance's shutdown", async () => {

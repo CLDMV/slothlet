@@ -8178,10 +8178,12 @@ function runtime_classInstanceOf(prototype) {
  * @param {object|null} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}), or a reader
  *   standing for no module.
  * @param {object|null} [slothlet] - The instance it crossed in, when known.
+ * @param {object|null} [viewFor] - Who the view is made for when the reader does not hold the object itself: the
+ *   reader, or the wrapper standing for the reader's module so every leaf of it gets the same view.
  * @returns {*} What the reader gets.
  * @private
  */
-function runtime_prototypeHandedTo(value, reader, slothlet = null) {
+function runtime_prototypeHandedTo(value, reader, slothlet = null, viewFor = reader) {
 	if (slothlet && !runtime_guardOn(slothlet)) return value;
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
@@ -8191,7 +8193,7 @@ function runtime_prototypeHandedTo(value, reader, slothlet = null) {
 	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
 	// decided where it would be refused.
 	const refused = known.sites.find((site) => !runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value, false)) ?? first;
-	return runtime_selfMemberOf(value, reader, known.slothlet, refused.parts, refused.prop);
+	return runtime_selfMemberOf(value, viewFor, known.slothlet, refused.parts, refused.prop);
 }
 
 /**
@@ -8662,9 +8664,10 @@ function runtime_isWrittenClassPrototype(value) {
 function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
 	// One view per module: the first of its wrappers stands for all of them, and each write is still decided for the
-	// module executing it.
+	// module executing it. Whether the reader holds the object itself is the reader's own answer: files loaded from one
+	// folder share a module, and the one standing for it may hold what a rule refuses this one.
 	const standing = reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader).owner : reader;
-	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, standing, slothlet);
+	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet, standing);
 	let site = CROSSED_PROTOTYPE_PATHS.get(prototype);
 	if (site === undefined || (!site.known && from?.____slothletInternal)) {
 		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
