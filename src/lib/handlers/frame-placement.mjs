@@ -47,6 +47,8 @@ import {
 	functionSource,
 	generatorSteps,
 	JSON,
+	listPush,
+	listSplice,
 	listSteps,
 	Map,
 	mapEntries,
@@ -169,7 +171,7 @@ function sha256(data, encoding) {
 function mapValues(map) {
 	const values = [];
 	try {
-		Reflect.apply(MAP_FOREACH, map, [(value) => ArrayMethods.push(values, value)]);
+		Reflect.apply(MAP_FOREACH, map, [(value) => listPush(values, value)]);
 	} catch {
 		return [];
 	}
@@ -185,7 +187,7 @@ function mapValues(map) {
 function setMembers(set) {
 	const members = [];
 	try {
-		Reflect.apply(SET_FOREACH, set, [(member) => ArrayMethods.push(members, member)]);
+		Reflect.apply(SET_FOREACH, set, [(member) => listPush(members, member)]);
 	} catch {
 		return [];
 	}
@@ -403,10 +405,10 @@ function runtime_moduleRoots(cacheManager) {
 		const { folderPath } = cacheManager.get(moduleID);
 		// No base directory (`base: null`) and in-memory modules have no folder to own files by.
 		if (typeof folderPath !== "string" || StringMethods.startsWith(folderPath, "synthetic:")) continue;
-		ArrayMethods.push(roots, { moduleID, root: toComparablePath(folderPath) });
+		listPush(roots, { moduleID, root: toComparablePath(folderPath) });
 		// A root reached through a symlink: frames name its files by their real path.
 		const realRoot = runtime_realComparablePath(folderPath);
-		if (realRoot) ArrayMethods.push(roots, { moduleID, root: realRoot });
+		if (realRoot) listPush(roots, { moduleID, root: realRoot });
 	}
 	// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
 	const sorted = ArrayMethods.sort(
@@ -620,7 +622,7 @@ export function textFrames(text, limit) {
 		const unlocated = !trimmed.startsWith("at ") && trimmed.endsWith("@");
 		const frame = unlocated ? { head: trimmed.slice(0, -1), path: "" } : parseStackFrame(line);
 		if (frame) {
-			ArrayMethods.push(frames, {
+			listPush(frames, {
 				...frame,
 				line,
 				async: /^at async /.test(trimmed),
@@ -1086,7 +1088,7 @@ function runtime_ownDefault(impl) {
  * @private
  */
 function slothlet_enterLeaf(wrapper, fn, thisArg, args) {
-	ArrayMethods.push(ENTERING, { wrapper, learnable: runtime_isLearnable(fn) });
+	listPush(ENTERING, { wrapper, learnable: runtime_isLearnable(fn) });
 	try {
 		return Reflect.apply(fn, thisArg, args);
 	} finally {
@@ -1361,7 +1363,7 @@ function createFramePlacer(candidates) {
 			for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
 				if (!SetMethods.has(seen, importer)) {
 					SetMethods.add(seen, importer);
-					ArrayMethods.push(queue, importer);
+					listPush(queue, importer);
 				}
 			}
 		}
@@ -1507,17 +1509,17 @@ function runtime_rootSpellings(root) {
 		if (segment === "" || segment === ".") continue;
 		if (segment === "..") {
 			if (segments.length && segments[segments.length - 1] !== "..") ArrayMethods.pop(segments);
-			else if (!absolute) ArrayMethods.push(segments, segment);
+			else if (!absolute) listPush(segments, segment);
 			continue;
 		}
-		ArrayMethods.push(segments, segment);
+		listPush(segments, segment);
 	}
 	const collapsed = (absolute ? "/" : "") + ArrayMethods.join(segments, "/");
 	const spellings = [];
 	// An empty root (or `/`) would own every absolute path; it owns nothing.
-	if (collapsed && collapsed !== "/") ArrayMethods.push(spellings, collapsed);
+	if (collapsed && collapsed !== "/") listPush(spellings, collapsed);
 	const real = runtime_realComparablePath(root);
-	if (real && real !== collapsed) ArrayMethods.push(spellings, real);
+	if (real && real !== collapsed) listPush(spellings, real);
 	return spellings;
 }
 
@@ -1540,14 +1542,14 @@ function stackHoldsInstanceCode(sources) {
 	const roots = [];
 	for (let ofIndex = 0, ofList = sources; ofIndex < ofList.length; ofIndex++) {
 		const { family, slothlet, roots: building } = ofList[ofIndex];
-		ArrayMethods.push(locations, runtime_commonJSLocations(family), runtime_importGraphEntry(family).files);
+		listPush(locations, runtime_commonJSLocations(family), runtime_importGraphEntry(family).files);
 		const loader = slothlet?.processors?.loader;
-		if (loader) ArrayMethods.push(locations, runtime_loadedLocations(loader));
+		if (loader) listPush(locations, runtime_loadedLocations(loader));
 		const cache = slothlet?.handlers?.apiCacheManager;
 		if (cache)
 			for (let ofIndex = 0, ofList = runtime_moduleRoots(cache); ofIndex < ofList.length; ofIndex++) {
 				const { root } = ofList[ofIndex];
-				ArrayMethods.push(roots, root);
+				listPush(roots, root);
 			}
 		for (let ofIndex = 0, ofList = building; ofIndex < ofList.length; ofIndex++) {
 			const root = ofList[ofIndex];
@@ -1862,7 +1864,7 @@ function handedLeafFunctions(thisArg, args) {
 		value = inboundOriginal(value);
 		if (typeof value === "function") {
 			const wrapper = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
-			if (wrapper) ArrayMethods.push((found ??= []), wrapper);
+			if (wrapper) listPush((found ??= []), wrapper);
 			return;
 		}
 		if (
@@ -1922,8 +1924,8 @@ function supplierChainCeiling(record) {
 	const parts = [];
 	for (let current = record, depth = 0; current?.flagged && current.parent && depth < MAX_CHAIN; current = current.parent, depth++) {
 		if (current.parent.wrapper && WeakSetMethods.has(trustedRootOwn.genuineWrappers, current.parent.wrapper))
-			ArrayMethods.push(parts, current.parent.wrapper);
-		if (current.parent.ceiling) ArrayMethods.push(parts, current.parent.ceiling);
+			listPush(parts, current.parent.wrapper);
+		if (current.parent.ceiling) listPush(parts, current.parent.ceiling);
 	}
 	return parts.length ? Reflect.apply(combineCeilings, undefined, parts) : null;
 }
@@ -1994,7 +1996,7 @@ function resolveSupplier(record, capture = null) {
 	// in runs as the caller (see runtime_isFilelessLeafCode).
 	const fileless = runtime_isHostObjectLeaf(leaf, leafDescription.filePath);
 	if (!fileless && leafDescription.filePath)
-		ArrayMethods.push(chain, { ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
+		listPush(chain, { ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
@@ -2004,7 +2006,7 @@ function resolveSupplier(record, capture = null) {
 		const description = describeCall(wrapper);
 		// A call with no file (an in-memory module) has no frames of its own to be placed on.
 		if (!description.filePath) continue;
-		ArrayMethods.push(chain, {
+		listPush(chain, {
 			...description,
 			currentWrapper: wrapper,
 			family: wrapper.slothlet.instanceID,
@@ -2032,7 +2034,7 @@ function resolveSupplier(record, capture = null) {
 	const collect = (frames) => {
 		const range = [];
 		for (const frame of framesOf(frames)) {
-			ArrayMethods.push(range, frame);
+			listPush(range, frame);
 			if ((frame.enter && StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame))
 				return { range, complete: true };
 		}
@@ -2549,10 +2551,10 @@ function runtime_runnerTaggedImporters(path) {
 			const location = toComparablePath(id);
 			const query = splitText(id, "?")[1] ?? "";
 			const family = queryParam(query, "slothlet_instance");
-			if (family) ArrayMethods.push(found, { family, mount: queryParam(query, "module"), location });
+			if (family) listPush(found, { family, mount: queryParam(query, "module"), location });
 			else if (!SetMethods.has(seen, location)) {
 				SetMethods.add(seen, location);
-				ArrayMethods.push(queue, location);
+				listPush(queue, location);
 			}
 		}
 	}
@@ -2585,7 +2587,7 @@ function runtime_packageImportingLeaves(slothlet, path) {
 			// A module's copy of any instance names the module's file: an untagged file is loaded once per process, by
 			// whichever instance came first, and is the same module's code for every instance built from that file.
 			if (instance) {
-				ArrayMethods.push(reached, { location, tagged: true, mount: queryParam(query, "module") });
+				listPush(reached, { location, tagged: true, mount: queryParam(query, "module") });
 				continue;
 			}
 			// A file the instance runs under its plain path (a CommonJS leaf, or one of its helpers) carries no tag to match.
@@ -2593,12 +2595,12 @@ function runtime_packageImportingLeaves(slothlet, path) {
 				SetMethods.has(commonJS, location) ||
 				(WeakMapMethods.get(LEAF_FILES, slothlet) == null ? undefined : MapMethods.has(WeakMapMethods.get(LEAF_FILES, slothlet), location))
 			) {
-				ArrayMethods.push(reached, { location, tagged: false, mount: null });
+				listPush(reached, { location, tagged: false, mount: null });
 				continue;
 			}
 			if (!SetMethods.has(seen, location)) {
 				SetMethods.add(seen, location);
-				ArrayMethods.push(queue, location);
+				listPush(queue, location);
 			}
 		}
 	}
@@ -2622,7 +2624,7 @@ function runtime_packageImportingLeaves(slothlet, path) {
 			for (const importer of setValues(MapMethods.get(graph, file))) {
 				if (!SetMethods.has(files, importer)) {
 					SetMethods.add(files, importer);
-					ArrayMethods.push(walk, importer);
+					listPush(walk, importer);
 				}
 			}
 		}
@@ -2954,10 +2956,11 @@ function installViteHostRegistry(target) {
 			SetMethods.add(hashes, script.hash);
 		}
 		// What was read is dropped; anything pushed while reading stays for the next read.
-		ArrayMethods.splice(queue, 0, pending);
+		listSplice(queue, 0, pending);
 		return (MapMethods.get(scripts, scriptKey) == null ? undefined : SetMethods.has(MapMethods.get(scripts, scriptKey), hash)) === true;
 	};
 	Objects.defineProperty(queue, "registered", {
+		__proto__: null,
 		value: Objects.freeze(registered),
 		enumerable: false,
 		writable: false,
@@ -3096,7 +3099,7 @@ function installViteLoadedRegistry(target) {
 			return found ? setMembers(found) : null;
 		})
 	});
-	Objects.defineProperty(target, key, { value: registry, enumerable: false, writable: false, configurable: false });
+	Objects.defineProperty(target, key, { __proto__: null, value: registry, enumerable: false, writable: false, configurable: false });
 	return registry;
 }
 
@@ -3336,7 +3339,7 @@ function runtime_replayable(frames) {
 					done = true;
 					return;
 				}
-				ArrayMethods.push(read, next.value);
+				listPush(read, next.value);
 				yield next.value;
 			}
 		}
@@ -3367,7 +3370,7 @@ const LEAF_RANGES = new WeakMap();
  */
 function runtime_asSource(text) {
 	const starts = [0];
-	for (let i = StringMethods.indexOf(text, "\n"); i !== -1; i = StringMethods.indexOf(text, "\n", i + 1)) ArrayMethods.push(starts, i + 1);
+	for (let i = StringMethods.indexOf(text, "\n"); i !== -1; i = StringMethods.indexOf(text, "\n", i + 1)) listPush(starts, i + 1);
 	return { text, starts, names: null };
 }
 
@@ -3555,7 +3558,7 @@ function runtime_leafRange(leaf, source) {
 					at !== -1 && places.length < 64;
 					at = StringMethods.indexOf(source.text, own, at + 1)
 				)
-					ArrayMethods.push(places, at);
+					listPush(places, at);
 				if (places.length) {
 					const exportPath = leaf.____slothletInternal.exportPath;
 					const exported = Arrays.isArray(exportPath) && exportPath.length ? String(exportPath[exportPath.length - 1]) : null;
@@ -3847,7 +3850,7 @@ function loadOnStack(loads) {
 				if (!mount || !loading.moduleID || loading.moduleID === mount) return loading;
 				continue;
 			}
-			if (tag) ArrayMethods.push(sameInstance, loading);
+			if (tag) listPush(sameInstance, loading);
 		}
 		if (!sameInstance.length) return null;
 		// A helper copy loaded for one api file (`helpers: "module"`) is evaluated by that file's load.
@@ -3870,7 +3873,7 @@ function loadOnStack(loads) {
 			for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
 				if (SetMethods.has(seen, importer)) continue;
 				SetMethods.add(seen, importer);
-				ArrayMethods.push(queue, importer);
+				listPush(queue, importer);
 			}
 		}
 		const importing = filterList(sameInstance, (loading) => SetMethods.has(seen, toComparablePath(loading.filePath)));
@@ -4320,7 +4323,7 @@ function runtime_helperCopyOf(family, frame) {
 			if (importer === loadedFor.path) return loadedFor;
 			if (SetMethods.has(seen, importer)) continue;
 			SetMethods.add(seen, importer);
-			ArrayMethods.push(queue, importer);
+			listPush(queue, importer);
 		}
 	}
 	return null;
@@ -4371,7 +4374,7 @@ function runtime_helperImporters(helper) {
 		for (const importer of setValues(MapMethods.get(graph, ArrayMethods.pop(queue)))) {
 			if (SetMethods.has(seen, importer)) continue;
 			SetMethods.add(seen, importer);
-			ArrayMethods.push(queue, importer);
+			listPush(queue, importer);
 		}
 	}
 	return seen;
@@ -4445,13 +4448,13 @@ function isLeafFileFunction(fn, leaves) {
 			) {
 				const key = ofList[ofIndex];
 				const text = loadedScriptText(key, null);
-				if (typeof text === "string") ArrayMethods.push(texts, text);
+				if (typeof text === "string") listPush(texts, text);
 			}
 		}
 		// Nothing recorded for the file (a loader slothlet's hook does not see): the file as it can be read.
 		if (!texts.length && isNode && !StringMethods.startsWith(filePath, "synthetic:")) {
 			const source = runtime_sourceOf(filePath);
-			if (source) ArrayMethods.push(texts, source.text);
+			if (source) listPush(texts, source.text);
 		}
 		if (ArrayMethods.some(texts, (text) => StringMethods.includes(text, own))) {
 			inLeaf = true;
@@ -4929,7 +4932,7 @@ function runtime_supplierAnswer(record, supplier) {
 		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
-		ArrayMethods.push(parts, current.wrapper, current.ceiling);
+		listPush(parts, current.wrapper, current.ceiling);
 	}
 	const members = filterList(
 		ceilingMembers(Reflect.apply(combineCeilings, undefined, parts)),
@@ -5049,7 +5052,7 @@ function sampleStoreScripts() {
 	try {
 		const storage = new Storage();
 		// Its own `run`: Node's `exit` can call `this.run`, which reads the prototype a module may have changed.
-		Objects.defineProperty(storage, "run", { value: run, writable: true, configurable: true });
+		Objects.defineProperty(storage, "run", { __proto__: null, value: run, writable: true, configurable: true });
 		Reflect.apply(run, storage, [{}, runtime_sampleNodeScripts]);
 		Reflect.apply(run, storage, [{}, () => Reflect.apply(exit, storage, [runtime_sampleNodeScripts])]);
 	} catch {
