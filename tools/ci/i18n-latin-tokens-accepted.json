@@ -261,6 +261,11 @@
 		]
 	},
 	"tokens": [
+		"Object",
+		"defineProperty",
+		"key",
+		"node",
+		"value",
 		"slothlet",
 		"Slothlet",
 		"HookManager",

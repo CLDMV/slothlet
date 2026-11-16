@@ -69,6 +69,8 @@
 		"HINT_MODULE_THENABLE_NAME": "名为 then 的成员会使其命名空间成为 thenable：每次 await 该命名空间都会调用该成员，而不是解析命名空间。请重命名该文件或文件夹。",
 		"API_MEMBER_THEN_RESERVED": "无法在 '{apiPath}' 上设置可调用的 'then'：它会使该 API 节点可被 await。",
 		"HINT_API_MEMBER_THEN_RESERVED": "API 节点上的 then 方法会在每次 await 该节点时被调用，而不是解析该节点。保存数据的 then 没有问题。请为该方法使用其他名称。",
+		"API_MEMBER_FIXED_OBJECT": "权限开启时，无法一步将 '{apiPath}' 定义为持有对象或函数的只读且不可配置成员：该值将不得不原样交出，无法检查。",
+		"HINT_API_MEMBER_FIXED_OBJECT": "请先赋值该成员，再将其锁定：{apiPath} = value; Object.defineProperty(node, key, { writable: false, configurable: false })。",
 		"MODULE_RESERVED_EXPORT": "模块导出 '{name}' 使用了保留名称，无法加载。",
 		"HINT_MODULE_RESERVED_EXPORT": "保留的导出名称是框架自己的包装器句柄（_materialize、__impl 等），这样的导出总会被它们遮蔽。请重命名该导出。",
 		"MODULE_THENABLE_EXPORT": "'{location}' 有一个可调用的 'then'，会使其 API 节点可被 await，因此无法加载。",

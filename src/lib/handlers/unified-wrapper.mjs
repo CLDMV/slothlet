@@ -11528,6 +11528,7 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
 		const current = Reflect.getOwnPropertyDescriptor(api, prop);
 		const configurable = "configurable" in descriptor ? descriptor.configurable : (current?.configurable ?? false);
 		const writable = "writable" in descriptor ? descriptor.writable : current && "value" in current ? current.writable : false;
+		if (!configurable && !writable) runtime_refuseFixedObjectDefinition(slothlet, "", prop, descriptor.value);
 		const node = configurable || writable ? runtime_rootMemberNode(slothlet, prop, descriptor.value) : null;
 		if (node !== null) descriptor = { __proto__: null, ...descriptor, value: node };
 	}
@@ -13957,6 +13958,61 @@ function runtime_shellValue(wrapper, prop) {
 }
 
 /**
+ * Whether a definition on a node leaves the member fixed: read-only and non-configurable once applied, taking what the
+ * definition leaves out from the member as the node holds it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} target - The node's proxy target.
+ * @param {string|symbol} prop - The member.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {boolean} True when the member ends up fixed.
+ * @private
+ */
+function runtime_definitionFixes(wrapper, target, prop, descriptor) {
+	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
+	const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
+	const known = shell ?? current;
+	const configurable = "configurable" in descriptor ? descriptor.configurable : known ? known.configurable : false;
+	const writable =
+		"writable" in descriptor
+			? descriptor.writable
+			: known && "value" in known
+				? !(wrapper.____slothletInternal.readOnlyKeys ? SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop) : false) &&
+					(shell ? shell.writable : true)
+				: false;
+	return !configurable && !writable;
+}
+
+/**
+ * Refuse, while the permission system is on, a definition that fixes a member (read-only and non-configurable) holding
+ * an object or function in one step, on a node or the api root: the language requires the node to report and hand out
+ * that very value, so nothing beneath it could be read, listed or written under the rules (D3). Assigning the member
+ * and then fixing it (`Object.defineProperty(node, key, { writable: false, configurable: false })`) keeps it a node.
+ * A primitive, a built-in data object (read as one value under the rules), an api node, and every definition the
+ * framework makes or makes during a build, are defined as asked; so is everything while the system is off or disabled.
+ * @param {object} slothlet - The instance.
+ * @param {string} apiPath - The path of the node defined on (`""` for the root).
+ * @param {string|symbol} prop - The member.
+ * @param {*} value - The value defined.
+ * @returns {void}
+ * @throws {SlothletError} `API_MEMBER_FIXED_OBJECT` when the definition is refused.
+ * @private
+ *
+ * @example
+ * Object.defineProperty(self.box, "late", { value: { a: 1 }, writable: false, configurable: false }); // refused
+ * self.box.late = { a: 1 };
+ * Object.defineProperty(self.box, "late", { writable: false, configurable: false }); // fixed, still checked beneath
+ */
+function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
+	if (!slothlet.handlers?.permissionManager?.isEnabled()) return;
+	if (slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(slothlet.boundApi)) return;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+	if (resolveWrapper(value) !== null || UnifiedWrapper._staysValue(value)) return;
+	throw new slothlet.SlothletError("API_MEMBER_FIXED_OBJECT", { apiPath: apiPath ? `${apiPath}.${String(prop)}` : String(prop) }, null, {
+		validationError: true
+	});
+}
+
+/**
  * The node a data definition on a node holds in place of the object or function it defines, as a value assigned to
  * the node is held (wrap-on-set): `null` for a value held as it is (a primitive, a built-in data object, a proxy, a
  * node), for any definition during a build, and for a member the definition leaves fixed (read-only and
@@ -13978,18 +14034,8 @@ function runtime_definedValueNode(wrapper, target, prop, descriptor) {
 	const value = descriptor.value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
 	if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
+	if (runtime_definitionFixes(wrapper, target, prop, descriptor)) return null;
 	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
-	const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
-	const known = shell ?? current;
-	const configurable = "configurable" in descriptor ? descriptor.configurable : known ? known.configurable : false;
-	const writable =
-		"writable" in descriptor
-			? descriptor.writable
-			: known && "value" in known
-				? !(wrapper.____slothletInternal.readOnlyKeys ? SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop) : false) &&
-					(shell ? shell.writable : true)
-				: false;
-	if (!configurable && !writable) return null;
 	const currentNode = current && "value" in current ? resolveWrapper(current.value) : null;
 	if (currentNode && hasOwn(currentNode.____slothletInternal, "sourceValue") && currentNode.____slothletInternal.sourceValue === value)
 		return current.value;
@@ -21198,6 +21244,10 @@ class UnifiedWrapper extends ComponentBase {
 				if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+				// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.
+				if ("value" in descriptor && !FRAMEWORK_WRITES.has(wrapper) && runtime_definitionFixes(wrapper, target, prop, descriptor)) {
+					runtime_refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
+				}
 				// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is
 				// read through it is gated at its own path and a write through it is held to its owner. The module's own
 				// object keeps the value itself.

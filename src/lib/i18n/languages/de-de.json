@@ -69,6 +69,8 @@
 		"HINT_MODULE_THENABLE_NAME": "Ein Member namens then macht seinen Namespace thenable: Jedes await auf den Namespace würde es aufrufen, statt den Namespace aufzulösen. Benennen Sie die Datei oder den Ordner um.",
 		"API_MEMBER_THEN_RESERVED": "Ein aufrufbares 'then' kann nicht auf '{apiPath}' gesetzt werden: Es würde diesen API-Knoten awaitbar machen.",
 		"HINT_API_MEMBER_THEN_RESERVED": "Eine then-Methode auf einem API-Knoten würde bei jedem await des Knotens aufgerufen, statt ihn aufzulösen. Ein then mit Daten ist unproblematisch. Verwenden Sie für die Methode einen anderen Namen.",
+		"API_MEMBER_FIXED_OBJECT": "'{apiPath}' kann bei aktivierten Berechtigungen nicht in einem Schritt schreibgeschützt und nicht konfigurierbar mit einem Objekt oder einer Funktion definiert werden: Der Wert müsste ungeprüft herausgegeben werden.",
+		"HINT_API_MEMBER_FIXED_OBJECT": "Weisen Sie das Mitglied zuerst zu und sperren Sie es dann: {apiPath} = value; Object.defineProperty(node, key, { writable: false, configurable: false }).",
 		"MODULE_RESERVED_EXPORT": "Der Modulexport '{name}' verwendet einen reservierten Namen und kann nicht geladen werden.",
 		"HINT_MODULE_RESERVED_EXPORT": "Reservierte Exportnamen sind die eigenen Wrapper-Handles des Frameworks (_materialize, __impl, ...), von denen ein solcher Export stets verdeckt würde. Benennen Sie den Export um.",
 		"MODULE_THENABLE_EXPORT": "'{location}' hat ein aufrufbares 'then', das seinen API-Knoten awaitbar machen würde, und kann nicht geladen werden.",

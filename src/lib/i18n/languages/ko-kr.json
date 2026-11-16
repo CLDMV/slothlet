@@ -69,6 +69,8 @@
 		"HINT_MODULE_THENABLE_NAME": "then이라는 이름의 멤버는 네임스페이스를 thenable로 만듭니다. 네임스페이스를 await할 때마다 네임스페이스를 확인하는 대신 해당 멤버가 호출됩니다. 파일 또는 폴더 이름을 변경하세요.",
 		"API_MEMBER_THEN_RESERVED": "'{apiPath}'에 호출 가능한 'then'을 설정할 수 없습니다. 해당 API 노드를 await할 수 있게 됩니다.",
 		"HINT_API_MEMBER_THEN_RESERVED": "API 노드의 then 메서드는 노드를 확인하는 대신 노드를 await할 때마다 호출됩니다. 데이터를 담은 then은 괜찮습니다. 메서드에 다른 이름을 사용하십시오.",
+		"API_MEMBER_FIXED_OBJECT": "권한이 켜져 있는 동안에는 '{apiPath}'을(를) 객체나 함수를 담은 읽기 전용, 구성 불가 멤버로 한 번에 정의할 수 없습니다. 값을 검사 없이 그대로 넘겨야 하기 때문입니다.",
+		"HINT_API_MEMBER_FIXED_OBJECT": "먼저 멤버를 할당한 다음 잠그세요: {apiPath} = value; Object.defineProperty(node, key, { writable: false, configurable: false }).",
 		"MODULE_RESERVED_EXPORT": "모듈 내보내기 '{name}'은(는) 예약된 이름을 사용하므로 로드할 수 없습니다.",
 		"HINT_MODULE_RESERVED_EXPORT": "예약된 내보내기 이름은 프레임워크 자체의 래퍼 핸들(_materialize, __impl, ...)이며, 그러한 내보내기는 항상 이것에 가려집니다. 내보내기 이름을 바꾸십시오.",
 		"MODULE_THENABLE_EXPORT": "'{location}'에 호출 가능한 'then'이 있어 해당 API 노드를 await할 수 있게 되므로 로드할 수 없습니다.",

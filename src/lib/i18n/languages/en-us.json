@@ -69,6 +69,8 @@
 		"HINT_MODULE_THENABLE_NAME": "A member named then makes its namespace thenable: every await of the namespace would call it instead of resolving the namespace. Rename the file or folder.",
 		"API_MEMBER_THEN_RESERVED": "Cannot set a callable 'then' on '{apiPath}': it would make that api node awaitable.",
 		"HINT_API_MEMBER_THEN_RESERVED": "A then method on an api node would be called by every await of the node instead of resolving it. A then holding data is fine. Use a different name for the method.",
+		"API_MEMBER_FIXED_OBJECT": "Cannot define '{apiPath}' read-only and non-configurable holding an object or function in one step while permissions are on: it would have to be handed out as it is, unchecked.",
+		"HINT_API_MEMBER_FIXED_OBJECT": "Assign the member first, then lock it: {apiPath} = value; Object.defineProperty(node, key, { writable: false, configurable: false }).",
 		"MODULE_RESERVED_EXPORT": "Module export '{name}' uses a reserved name and cannot be loaded.",
 		"HINT_MODULE_RESERVED_EXPORT": "Reserved export names are the framework's own wrapper handles (_materialize, __impl, ...), which such an export could only ever be shadowed by. Rename the export.",
 		"MODULE_THENABLE_EXPORT": "'{location}' has a callable 'then', which would make its api node awaitable, and cannot be loaded.",

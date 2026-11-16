@@ -69,6 +69,8 @@
 		"HINT_MODULE_THENABLE_NAME": "then という名前のメンバーがあると名前空間が thenable になり、名前空間を await するたびに名前空間を解決する代わりにそのメンバーが呼び出されます。ファイルまたはフォルダーの名前を変更してください。",
 		"API_MEMBER_THEN_RESERVED": "'{apiPath}' に呼び出し可能な 'then' を設定できません。その API ノードが await 可能になってしまいます。",
 		"HINT_API_MEMBER_THEN_RESERVED": "API ノードの then メソッドは、ノードを解決する代わりにノードを await するたびに呼び出されます。データを持つ then は問題ありません。メソッドには別の名前を使用してください。",
+		"API_MEMBER_FIXED_OBJECT": "権限が有効な間は、'{apiPath}' をオブジェクトまたは関数を保持する読み取り専用かつ構成不可のメンバーとして一度に定義できません。値をそのまま、検査なしで渡すことになるためです。",
+		"HINT_API_MEMBER_FIXED_OBJECT": "まずメンバーを代入してからロックしてください: {apiPath} = value; Object.defineProperty(node, key, { writable: false, configurable: false }).",
 		"MODULE_RESERVED_EXPORT": "モジュールのエクスポート '{name}' は予約名を使用しているため読み込めません。",
 		"HINT_MODULE_RESERVED_EXPORT": "予約されたエクスポート名は、フレームワーク自身のラッパーハンドル (_materialize、__impl など) で、そのエクスポートは常にそれらに隠されてしまいます。エクスポート名を変更してください。",
 		"MODULE_THENABLE_EXPORT": "'{location}' に呼び出し可能な 'then' があり、その API ノードが await 可能になってしまうため読み込めません。",
