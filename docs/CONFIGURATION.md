@@ -420,9 +420,7 @@ See [METADATA.md](METADATA.md#init-metadata) for lookup priority and the runtime
 **Type**: `{ lowerFirst?: boolean, preserveAllUpper?: boolean, preserveAllLower?: boolean, rules?: { leave?: string[], leaveInsensitive?: string[], upper?: string[], lower?: string[] } }`
 **Default**: `{}`
 
-Options for `sanitizePropertyName()`, the function that turns names into api property names (`auto-ip` becomes `autoIp`). The instance keeps this object and applies it in `api.slothlet.sanitize(str)`, and it is carried through reloads of added modules.
-
-> **Current behavior:** the loader does not pass this object when it names files and folders while building the api; it calls `sanitizePropertyName()` with its defaults. So today `sanitize` changes what `api.slothlet.sanitize()` returns, not the keys a scan produces.
+Controls how file and folder names become api property names (`auto-ip.mjs` becomes `autoIp`). It takes the same options as `sanitizePropertyName()` and applies to everything the loader names (initial build, `api.slothlet.api.add()`, reloads, browser mode) and to `api.slothlet.sanitize(str)` alike.
 
 | Option                   | Default | Effect                                                          |
 | ------------------------ | ------- | --------------------------------------------------------------- |
@@ -440,6 +438,7 @@ const api = await slothlet({
 	sanitize: { rules: { upper: ["*-ip"] } }
 });
 
+// auto-ip.mjs -> api.autoIP, net-ip/ -> api.netIP
 api.slothlet.sanitize("auto-ip"); // "autoIP"
 ```
 

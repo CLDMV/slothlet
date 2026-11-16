@@ -409,7 +409,7 @@ sanitizePropertyName("parse-xml-to-json", {
 
 ## Runtime Convenience Method
 
-When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** - the options are the instance's `sanitize` config (see [CONFIGURATION.md](CONFIGURATION.md#sanitize); the loader does not currently pass them when naming files):
+When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** - identical to what Slothlet uses when building API paths from filenames (the options are the instance's `sanitize` config, see [CONFIGURATION.md](CONFIGURATION.md#sanitize)):
 
 ```javascript
 const api = await slothlet({
@@ -424,6 +424,8 @@ api.slothlet.sanitize("get-http-status"); // "getHTTPStatus"
 api.slothlet.sanitize("post-api-data"); // "postAPIData"
 api.slothlet.sanitize("my-module"); // "myModule"
 ```
+
+This is useful for predicting exactly what API path a given filename will produce at runtime.
 
 > [!NOTE]
 > `api.slothlet.sanitize()` only accepts a string. It does not accept an options object - the options come from the instance config. Use the standalone `sanitizePropertyName` export if you need to pass custom options directly.

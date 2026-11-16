@@ -2332,7 +2332,7 @@ export default slothlet;
  * @property {object|null} [metadata] - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
  * @property {object} [sanitize] - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
  *   `lowerFirst` (default `true`), `preserveAllUpper` (default `false`), `preserveAllLower` (default `false`) and `rules` (`{ leave?, leaveInsensitive?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).
- *   Currently read by `api.slothlet.sanitize()` only; the loader names files and folders with the defaults. See [SANITIZATION.md](docs/SANITIZATION.md).
+ *   Applies to every file and folder name the loader derives and to `api.slothlet.sanitize()`. See [SANITIZATION.md](docs/SANITIZATION.md).
  * @property {object} [api] - API build and mutation settings.
  * @property {string|{initial: string, api: string}} [api.collision="merge"] - Collision strategy when two modules export the same path.
  *   Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`.
