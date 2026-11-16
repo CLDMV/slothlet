@@ -38,7 +38,8 @@ import {
 	SetMethods,
 	splitText,
 	String,
-	StringMethods
+	StringMethods,
+	stringOf
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -354,7 +355,7 @@ export function translate(errorCode, params = {}) {
 		const ofEntry = ofList[ofIndex],
 			key = ofEntry[0],
 			value = ofEntry[1];
-		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? String(value) : "");
+		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? stringOf(value) : "");
 	}
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)

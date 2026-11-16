@@ -25,11 +25,12 @@ import {
 	Error,
 	Errors,
 	filterList,
-	JSON,
+	jsonOf,
 	listPush,
 	Objects,
-	String,
+	Reflect,
 	StringMethods,
+	stringOf,
 	Symbols
 } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -57,20 +58,18 @@ export class SlothletError extends Error {
 	 * Renders a thrown value for message interpolation.
 	 *
 	 * @param {unknown} thrown - Whatever the guarded code threw.
-	 * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
-	 *   any other value JSON-serialized (falling back to String() for unserializable values).
+	 * @returns {string} A human-readable rendering: an Error's own message, a string as itself, and
+	 *   any other value's own data JSON-serialized (falling back to its `String()` text).
 	 */
 	static #describeThrown(thrown) {
-		if (thrown instanceof Error) return thrown.message;
-		if (typeof thrown === "string") return thrown;
-		try {
-			// Circular structures and BigInts refuse JSON serialization; String() below still
-			// yields a usable rendering for them, so the throw is guarded rather than surfaced.
-			return JSON.stringify(thrown) ?? String(thrown);
-		} catch {
-			/* v8 ignore next */
-			return String(thrown);
+		// Read without running code the thrown value carries (a `toJSON`, a getter, a `toString`): see helpers/intrinsics
+		// `jsonOf` and `stringOf`.
+		if (thrown instanceof Error) {
+			const message = Reflect.getOwnPropertyDescriptor(thrown, "message");
+			return message && typeof message.value === "string" ? message.value : stringOf(thrown);
 		}
+		if (typeof thrown === "string") return thrown;
+		return jsonOf(thrown) ?? stringOf(thrown);
 	}
 
 	constructor(code, context = {}, originalError = null, options = {}) {
@@ -154,7 +153,7 @@ export class SlothletError extends Error {
 			output += "\nDetails:\n";
 			for (let ofIndex = 0, ofList = detailKeys; ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
-				output += `  ${key}: ${this.context[key]}\n`;
+				output += `  ${key}: ${stringOf(this.context[key])}\n`;
 			}
 		}
 
