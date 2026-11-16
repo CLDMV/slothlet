@@ -352,6 +352,25 @@ const LOADED_TEXTS = new Map();
 const SEALS = new Map();
 
 /**
+ * The CommonJS sources an instance's scope loads that are no leaf's own load (see {@link scopeLoadKind}), by script key,
+ * the newest {@link SCRIPTS_PER_KEY} each: a helper file, and a leaf's file a sibling api file requires itself, which
+ * is a helper of that sibling's, before or after slothlet loads the leaf. Frame placement holds a frame at a leaf's file
+ * running one of these to the files that import it, as a helper file's code. Kept apart from {@link LOADED_SCRIPTS},
+ * so the leaf's own loads stay listed however many of these load.
+ * @type {Map<string, Array<string>>}
+ * @private
+ */
+const HELPER_SCRIPTS = new Map();
+
+/**
+ * The random value each script key's helper loads are sealed with (see {@link HELPER_SCRIPTS}): another value than the
+ * key's own loads take, so a helper load of a leaf's file is never the leaf's script.
+ * @type {Map<string, string>}
+ * @private
+ */
+const HELPER_SEALS = new Map();
+
+/**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
  * slashes, no query, the real path Node resolves to), the URLs of the files that import it — a module's instance copy
  * with its tags, a package file, the host's own — and, when the named importer is a file nothing loaded through the
@@ -579,7 +598,7 @@ function requireShared(url, stub) {
 
 /**
  * The reader of {@link LOADED_SCRIPTS} on the shared object: whether a key has sources recorded and whether a given
- * one is among them, a copy of them, how many keys have any, and the files importing a package file (see
+ * one is among them (and whether it is one of the key's helper loads, see {@link HELPER_SCRIPTS}), a copy of them, how many keys have any, and the files importing a package file (see
  * {@link PACKAGE_IMPORTERS}). Nothing it offers adds or drops a source or an import, so a module reaching the shared
  * object cannot have code it compiled under another file's name taken for that file (#597). Only the copy that
  * recorded them drops an instance's, when it shuts down.
@@ -589,21 +608,26 @@ function requireShared(url, stub) {
 const SCRIPTS_READER = Objects.freeze({
 	lookup: (key, hash) => {
 		const hashes = MapMethods.get(LOADED_SCRIPTS, key);
+		const helpers = MapMethods.get(HELPER_SCRIPTS, key);
+		const helper = hash !== undefined && Boolean(helpers == null ? undefined : ArrayMethods.includes(helpers, hash));
 		return {
-			known: Boolean(hashes?.length),
-			has: hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))
+			known: Boolean(hashes?.length || helpers?.length),
+			has: helper || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
+			helper
 		};
 	},
-	hashes: (key) => copyList(MapMethods.get(LOADED_SCRIPTS, key) ?? []),
+	hashes: (key) => concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []),
 	text: (key, hash) => {
 		const texts = MapMethods.get(LOADED_TEXTS, key);
 		if (!texts) return undefined;
 		if (hash !== undefined && hash !== null) return MapMethods.get(texts, hash);
-		// No hash to go by (an engine that reports none): the newest source loaded under the key.
-		const newest = MapMethods.get(LOADED_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(LOADED_SCRIPTS, key), -1);
+		// No hash to go by (an engine that reports none): the newest source loaded under the key, its own loads first.
+		const newest =
+			(MapMethods.get(LOADED_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(LOADED_SCRIPTS, key), -1)) ??
+			(MapMethods.get(HELPER_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(HELPER_SCRIPTS, key), -1));
 		return newest === undefined ? undefined : MapMethods.get(texts, newest);
 	},
-	count: () => MapMethods.size(LOADED_SCRIPTS),
+	count: () => SetMethods.size(setFrom(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)))),
 	packageImporters: (path) => setToArray(MapMethods.get(PACKAGE_IMPORTERS, packageKey(path)))
 });
 
@@ -2655,26 +2679,23 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 }
 
 /**
- * Whether a CommonJS file Node is loading is one an instance's scope loads as its own (see {@link scopeRequire}): a
- * file required while a scope is active, other than an api file of the instance, which is the instance's only when
- * the scope is loading it as its leaf.
+ * How an instance's scope loads a CommonJS file Node is loading (see {@link scopeRequire}): `"leaf"` for the file the
+ * scope is loading as its leaf, `"helper"` for any other file required while a scope is active (a helper file, or a
+ * leaf's file an api file requires itself, before or after slothlet loads that leaf), null outside every scope.
  * @param {string} url - The file's URL.
- * @returns {boolean} True when it is.
+ * @returns {"leaf"|"helper"|null} How it loads.
  * @private
  */
-function isScopeLoad(url) {
+function scopeLoadKind(url) {
 	const active = ACTIVE;
-	if (active === null) return false;
+	if (active === null) return null;
 	let filePath;
 	try {
 		filePath = NODE.url.fileURLToPath(splitQuery(url)[0]);
 	} catch {
-		return false;
+		return null;
 	}
-	if (active.fresh && filePath === active.anchor) return true;
-	return !(MapMethods.get(LEAVES, active.instanceID) == null
-		? undefined
-		: SetMethods.has(MapMethods.get(LEAVES, active.instanceID), filePath));
+	return active.fresh && filePath === active.anchor ? "leaf" : "helper";
 }
 
 /**
@@ -2792,11 +2813,18 @@ function releaseScope(instanceID) {
 		if (held.instanceID === instanceID) MapMethods.delete(TICKETS, ticket);
 	}
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
-	for (const key of mapKeys(LOADED_SCRIPTS)) {
+	for (
+		let ofIndex = 0, ofList = concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS));
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const key = ofList[ofIndex];
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
 		MapMethods.delete(LOADED_SCRIPTS, key);
 		MapMethods.delete(LOADED_TEXTS, key);
 		MapMethods.delete(SEALS, key);
+		MapMethods.delete(HELPER_SCRIPTS, key);
+		MapMethods.delete(HELPER_SEALS, key);
 	}
 }
 
@@ -3363,10 +3391,11 @@ function setScriptKey(keyOf) {
  * stripped.
  * @param {string} url - The module URL, query included.
  * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
+ * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}): its hash is listed there.
  * @returns {void}
  * @private
  */
-function recordLoadedSource(url, result) {
+function recordLoadedSource(url, result, helper = false) {
 	let text = loadedText(result);
 	if (text === null) return;
 	if (isTypeScriptLoad(result)) {
@@ -3385,14 +3414,19 @@ function recordLoadedSource(url, result) {
 	}
 	const hash = HOST.sha256(text);
 	const key = scriptKeyOf(url);
-	let hashes = MapMethods.get(LOADED_SCRIPTS, key);
-	if (!hashes) MapMethods.set(LOADED_SCRIPTS, key, (hashes = []));
+	// A helper load is listed apart from the file's own loads (see HELPER_SCRIPTS).
+	const lists = helper ? HELPER_SCRIPTS : LOADED_SCRIPTS;
+	let hashes = MapMethods.get(lists, key);
+	if (!hashes) MapMethods.set(lists, key, (hashes = []));
 	rememberNewest(hashes, hash);
 	// The text itself, for where each leaf's function sits in it (see LOADED_TEXTS); only the sources still listed.
 	let texts = MapMethods.get(LOADED_TEXTS, key);
 	if (!texts) MapMethods.set(LOADED_TEXTS, key, (texts = new Map()));
 	MapMethods.set(texts, hash, text);
-	for (const known of mapKeys(texts)) if (!ArrayMethods.includes(hashes, known)) MapMethods.delete(texts, known);
+	const own = MapMethods.get(LOADED_SCRIPTS, key) ?? [];
+	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
+	for (const known of mapKeys(texts))
+		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
 }
 
 /**
@@ -3417,26 +3451,29 @@ function loadedText(result) {
  * as no copy made from the file can (#691). It ends the text, so no line or column of the file's own code moves.
  * @param {string} url - The module URL, query included.
  * @param {object} result - The load hook's result.
+ * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}), sealed with the key's helper
+ *   value.
  * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
  * @private
  */
-function sealLoadedSource(url, result) {
+function sealLoadedSource(url, result, helper = false) {
 	const text = loadedText(result);
 	if (text === null) return result;
 	const key = scriptKeyOf(url);
-	let seal = MapMethods.get(SEALS, key);
-	if (seal === undefined) MapMethods.set(SEALS, key, (seal = HOST.randomUUID()));
+	const seals = helper ? HELPER_SEALS : SEALS;
+	let seal = MapMethods.get(seals, key);
+	if (seal === undefined) MapMethods.set(seals, key, (seal = HOST.randomUUID()));
 	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
-	recordLoadedSource(url, sealed);
+	recordLoadedSource(url, sealed, helper);
 	return sealed;
 }
 
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
  * @internal
  */
 function loadedScriptLookup(key, hash) {
@@ -3723,9 +3760,9 @@ const HOOKS = Objects.freeze({
 		if (StringMethods.includes(url, MARKER)) return loadInstanceModule(url, context, nextLoad);
 		const result = nextLoad(url, context);
 		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
-		// is another module of the file, and so is a leaf's file evaluated in the scope other than as that leaf (#691).
-		if (StringMethods.startsWith(url, "file:") && isScopeLoad(url) && shouldRecordCommonJS(url, result))
-			return sealLoadedSource(url, result);
+		// is another module of the file (#691). A leaf's file an api file requires itself is a helper of that file's.
+		const kind = StringMethods.startsWith(url, "file:") ? scopeLoadKind(url) : null;
+		if (kind !== null && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result, kind === "helper");
 		return result;
 	}
 });

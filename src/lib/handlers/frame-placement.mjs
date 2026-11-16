@@ -2165,7 +2165,12 @@ function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = 
 		passedCode = true;
 		if (frame.async || isRunnerFrame(frame)) break;
 		if (frame.evaluated || StringMethods.startsWith(frame.path, "node:") || isForeignScript(frame)) continue;
-		const leaves = slothlet ? runtime_leavesAt(slothlet, frame) : runtime_leavesAtLocation(frame.path, frame.line);
+		// A leaf's file an api file loaded itself is no leaf's (see runtime_leavesAt).
+		const leaves = slothlet
+			? runtime_leavesAt(slothlet, frame)
+			: runtime_leafFileCopyOf(frame)
+				? []
+				: runtime_leavesAtLocation(frame.path, frame.line);
 		if (!leaves?.length) continue;
 		for (
 			let ofIndex = 0, ofList = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, position));
@@ -4122,9 +4127,11 @@ function runtime_definerAt(frames, running) {
 		// `import` of it by a module, the host or a package), which slothlet loaded for no leaf: code no one accounts for,
 		// as frame placement reads it inside a call (#691).
 		if (runtime_isUntaggedCopy(frame)) return { unplaced: true };
-		const leaves = runtime_leavesAtLocation(frame.path, frame.line, running, frame.location ?? null);
+		// A leaf's file an api file loaded itself runs as a helper file of that api file's, below.
+		const copy = runtime_leafFileCopyOf(frame) !== null;
+		const leaves = copy ? null : runtime_leavesAtLocation(frame.path, frame.line, running, frame.location ?? null);
 		if (leaves === null) {
-			if (runtime_isInstanceFile(frame.path)) return { unplaced: true, shared: true };
+			if (!copy && runtime_isInstanceFile(frame.path)) return { unplaced: true, shared: true };
 			// A helper file of an instance that is no api file (one a leaf imports): its code runs for the leaf whose code
 			// called it, so the walk goes on outward to the first frame of a leaf's file.
 			const owner = runtime_helperOwner(frame, helper?.slothlet ?? null);
@@ -4352,7 +4359,8 @@ function runtime_helperOwner(frame, only = null) {
 		const slothlet = WeakRefMethods.deref(reference);
 		if (!slothlet || (only && slothlet !== only) || !runtime_instanceRuns(slothlet)) continue;
 		if (tag ? id !== tag : !SetMethods.has(runtime_commonJSLocations(id), frame.path)) continue;
-		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
+		// A leaf's file is a helper only where an api file of the instance loaded it itself.
+		if (runtime_leavesAtFile(slothlet, frame.path, null, null).length && runtime_leafFileCopyOf(frame) !== slothlet) continue;
 		// A CommonJS helper two running instances load carries no tag to tell them apart (#735): it is no one's here.
 		if (found) return null;
 		// A copy loaded for one api file (`helpers: "module"`) names it.
@@ -4496,6 +4504,8 @@ function isLeafFileFunction(fn, leaves) {
 function runtime_helperModules(helper) {
 	const modules = new Set();
 	for (const file of setValues(runtime_helperImporters(helper))) {
+		// The helper's own file stands for nothing: a leaf's file an api file loaded itself is held to that api file alone.
+		if (file === helper.path) continue;
 		const leaves = runtime_leavesAtFile(helper.slothlet, file, null, helper.importer?.mount ?? null);
 		if (!leaves.length) continue;
 		for (let ofIndex = 0, ofList = runtime_fileModuleOf(leaves); ofIndex < ofList.length; ofIndex++) {
@@ -4657,7 +4667,61 @@ function registerLeafFile(wrapper, at = undefined) {
  * @private
  */
 function runtime_leavesAt(slothlet, frame) {
+	// A leaf's file an api file loaded itself is a helper of that file's, and no leaf's.
+	if (runtime_leafFileCopyOf(frame)) return [];
 	return runtime_leavesAtFile(slothlet, frame.path, runtime_frameInstanceTag(frame.line), runtime_frameModuleTag(frame.line));
+}
+
+/**
+ * What {@link runtime_leafFileCopyOf} answers for a CommonJS file's helper load that more than one running instance
+ * holds a leaf of.
+ * @type {object}
+ * @private
+ */
+const UNTOLD_COPY = Objects.freeze({});
+
+/**
+ * The running instance whose api file loaded a leaf's file itself, when a frame runs in what that load evaluated: a
+ * module of the file other than the one slothlet loaded the leaf from, which is a helper the api file imports, as any
+ * other file it imports is (#691). An ES module's is told by its tags (the instance's, with none of the mounts the
+ * instance's loader imported the file under); a CommonJS file's, which runs under its plain path, by its script, one
+ * the instance's scope loaded as no leaf. The leaf's own load is never one. Null for any other frame.
+ * @param {{path: string, line: string, location?: string, hash?: string|null, key?: string|null, evaluated?: boolean}} frame - A frame.
+ * @returns {object|null} The instance, {@link UNTOLD_COPY} when more than one running instance could be it, or null.
+ * @private
+ */
+function runtime_leafFileCopyOf(frame) {
+	if (!isNode || frame.evaluated || typeof frame.line !== "string") return null;
+	if (Objects.hasOwn(frame, "leafFileCopy")) return frame.leafFileCopy;
+	let found = null;
+	const tag = runtime_frameInstanceTag(frame.line);
+	const helperScript = !tag && Boolean(frame.hash && frame.key && loadedScriptLookup(frame.key, frame.hash).helper);
+	if (tag || helperScript) {
+		for (const ofEntry of mapEntries(LIVE_INSTANCES)) {
+			const id = ofEntry[0],
+				reference = ofEntry[1];
+			if (tag && id !== tag) continue;
+			const slothlet = WeakRefMethods.deref(reference);
+			if (!slothlet || !runtime_instanceRuns(slothlet)) continue;
+			if (!runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
+			if (tag) {
+				const mount = runtime_frameModuleTag(frame.line);
+				let leaves = runtime_leavesAtFile(slothlet, frame.path, tag, mount);
+				if (mount && typeof frame.location === "string")
+					leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, frame.location));
+				if (leaves.length) continue;
+			} else if (!SetMethods.has(runtime_commonJSLocations(id), frame.path)) continue;
+			// A CommonJS file two running instances load carries nothing to tell them apart: still no leaf's, and no one
+			// instance's helper either, as a CommonJS helper they both load is not (#735).
+			if (found) {
+				found = UNTOLD_COPY;
+				break;
+			}
+			found = slothlet;
+		}
+	}
+	Objects.defineProperty(frame, "leafFileCopy", { __proto__: null, value: found, enumerable: false });
+	return found;
 }
 
 /**
