@@ -18,7 +18,7 @@
  * @module @cldmv/slothlet/errors
  * @internal
  */
-import { translate } from "@cldmv/slothlet/i18n";
+import { translate, registerWarningClass } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
 import { Objects, JSON, Symbols, Error, Errors, String } from "@cldmv/slothlet/helpers/intrinsics";
 
@@ -303,6 +303,9 @@ export class SlothletWarning {
 		SlothletWarning.captured = [];
 	}
 }
+
+// The i18n module cannot import this one, so the process-level class is handed to it for the warnings it raises (#820).
+registerWarningClass(SlothletWarning);
 
 /**
  * Debug utility class for centralized conditional console output with i18n

@@ -1444,12 +1444,15 @@ export class ApiBuilder extends ComponentBase {
 			 * @type {I18nNamespace}
 			 */
 			i18n: {
-				setLanguage,
-				setLanguageAsync,
+				// A locale that fails to load is warned about through this instance: its warning class and `silent`.
+				setLanguage: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
+				setLanguageAsync: (lang) =>
+					setLanguageAsync(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
 				getLanguage,
 				translate,
 				t,
-				initI18n
+				initI18n: (options = {}) =>
+					initI18n({ SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true, ...options })
 			},
 
 			/**

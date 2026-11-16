@@ -1087,7 +1087,7 @@ class Slothlet {
 
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
-			initI18n({ language: this.config.i18n.language });
+			initI18n({ language: this.config.i18n.language, SlothletWarning: this.SlothletWarning, silent: this.config.silent === true });
 		}
 
 		// Re-initialise debug logger with the fully normalised config (includes all flags).
