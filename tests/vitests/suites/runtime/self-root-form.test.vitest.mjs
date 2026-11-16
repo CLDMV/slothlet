@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:51:30-08:00 (1794801090)
+ *	@Last modified time: 2026-11-15T21:04:02-08:00 (1794805442)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,28 +54,84 @@ const ROOTS = [
 ];
 
 const POLICIES = [
-	{ label: "permissions off", permissions: () => undefined },
-	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }) },
-	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }) },
+	// Off keeps the framework's built-in protections: a module is refused `slothlet.permissions.principal` and `control`.
+	{ label: "permissions off", permissions: () => undefined, exact: false },
+	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }), exact: true },
+	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }), exact: false },
 	{
 		label: "permissions on, default deny, the probe allowed everything",
-		permissions: (attribution) => ({ attribution, defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "**", effect: "allow" }] })
+		permissions: (attribution) => ({ attribution, defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "**", effect: "allow" }] }),
+		exact: false
 	}
 ];
+
+/**
+ * `util.inspect` with one member to a line, so a rendering that leaves members out is the full one less those lines.
+ * @param {*} value - The value.
+ * @returns {string} Its rendering.
+ */
+const inspect = (value) => util.inspect(value, { compact: false, depth: 3 });
 
 /**
  * What `api` answers in the host.
  * @param {object} api - The api.
  * @returns {Record<string, *>} What each operation gave.
  */
-const hostShape = (api) => shape(api, { inspect: util.inspect });
+const hostShape = (api) => shape(api, { inspect });
 
 /**
  * What `self` answers inside the probe module.
  * @param {object} api - The api.
  * @returns {Promise<Record<string, *>>} What each operation gave.
  */
-const moduleShape = (api) => api.probe.report(util.inspect);
+const moduleShape = (api) => api.probe.report(inspect);
+
+/**
+ * Whether one rendering is another less some of its lines, in the same order: what a module is shown of the api with
+ * the members it may not read left out (#807). A line's trailing comma is not compared, since the last member shown
+ * carries none.
+ * @param {string} shown - The module's rendering.
+ * @param {string} whole - The host's rendering.
+ * @returns {boolean} True when `shown` is `whole` less some lines.
+ */
+const isWholeLessLines = (shown, whole) => {
+	// An object every member of which is left out renders as `key: {}`: the host's `key: {` … `}` less its lines.
+	const strip = (text) =>
+		text
+			.split("\n")
+			.map((line) => line.replace(/,$/, ""))
+			.flatMap((line) => (/: \{\}$/.test(line) ? [line.slice(0, -1), `${line.match(/^\s*/)[0]}}`] : [line]));
+	const all = strip(whole);
+	let at = 0;
+	for (const line of strip(shown)) {
+		while (at < all.length && all[at] !== line) at++;
+		if (at === all.length) return false;
+		at++;
+	}
+	return true;
+};
+
+/**
+ * Compare `self`'s answers with `api`'s, permission checks aside (#803, #807): with the permission system disabled
+ * they are the host's exactly; otherwise the rendering leaves out what the module may not read (with the system off,
+ * the framework's built-in protections still apply), and every other answer is the host's.
+ * @param {Record<string, *>} rows - The module's answers.
+ * @param {Record<string, *>} host - The host's answers.
+ * @param {boolean} exact - Whether the module may read all the host does.
+ * @returns {void}
+ */
+const expectMirror = (rows, host, exact) => {
+	if (exact) {
+		expect(rows).toEqual(host);
+		return;
+	}
+	const { inspect: shown, ...rest } = rows;
+	const { inspect: whole, ...hostRest } = host;
+	expect(rest).toEqual(hostRest);
+	expect(isWholeLessLines(shown, whole)).toBe(true);
+	expect(shown).toMatch(/\bmath: \{/);
+	expect(shown).toMatch(/\bprobe: \{/);
+};
 
 it("the host's copy of the report is the modules' copy", () => {
 	const code = (file) => readFileSync(path.join(FIXTURE, file), "utf8").split("\nexport function shape")[1];
@@ -102,8 +158,8 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 				api = null;
 			}, 60000);
 
-			it("self answers every operation as the host's api does", async () => {
-				expect(await moduleShape(api)).toEqual(hostShape(api));
+			it("self answers every operation as the host's api does, less what the module may not read", async () => {
+				expectMirror(await moduleShape(api), hostShape(api), policy.exact);
 			});
 
 			it("self is of the root's kind", async () => {
@@ -157,8 +213,8 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 		const fn = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
 		const obj = await slothlet({ base: path.join(FIXTURE, "objroot"), runtime, silent: true });
 		try {
-			expect(await moduleShape(fn)).toEqual(hostShape(fn));
-			expect(await moduleShape(obj)).toEqual(hostShape(obj));
+			expectMirror(await moduleShape(fn), hostShape(fn), false);
+			expectMirror(await moduleShape(obj), hostShape(obj), false);
 			expect((await moduleShape(fn)).typeof).toBe("function");
 			expect((await moduleShape(obj)).typeof).toBe("object");
 		} finally {
@@ -168,7 +224,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	});
 
 	it("a file of a folder beneath the root, taking self at its top level, takes the callable form", async () => {
-		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const api = await slothlet({ base: path.join(FIXTURE, "subroot"), runtime, silent: true });
 		try {
 			const rows = await api.sub.capture.report();
 			expect(rows.typeof).toBe("function");
@@ -213,10 +269,16 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
 		try {
 			await api.slothlet.reload();
-			expect(await moduleShape(api)).toEqual(hostShape(api));
-			expect((await api.sub.capture.report()).typeof).toBe("function");
+			expectMirror(await moduleShape(api), hostShape(api), false);
 		} finally {
 			await api.shutdown();
+		}
+		const sub = await slothlet({ base: path.join(FIXTURE, "subroot"), runtime, silent: true });
+		try {
+			await sub.slothlet.reload();
+			expect((await sub.sub.capture.report()).typeof).toBe("function");
+		} finally {
+			await sub.shutdown();
 		}
 	});
 
@@ -224,7 +286,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
 		try {
 			await api.slothlet.api.reload("probe");
-			expect(await moduleShape(api)).toEqual(hostShape(api));
+			expectMirror(await moduleShape(api), hostShape(api), false);
 		} finally {
 			await api.shutdown();
 		}
@@ -237,7 +299,7 @@ describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime
 			const api = await slothlet({ base: path.join(FIXTURE, folder), runtime, silent: true });
 			try {
 				const rows = await api.slothlet.scope({ context: {}, isolation, fn: () => moduleShape(api) });
-				expect(rows).toEqual(hostShape(api));
+				expectMirror(rows, hostShape(api), false);
 			} finally {
 				await api.shutdown();
 			}
@@ -330,7 +392,7 @@ const jsonPaths = (value, at = "", out = []) => {
 
 const SETTINGS = { public: 1, hidden: 2, list: [1, { a: 1, b: 2 }] };
 const JSON_POLICIES = [
-	{ label: "permissions off", permissions: () => undefined, config: { settings: SETTINGS }, hidden: 2, principal: DENIED, whole: false },
+	{ label: "permissions off", permissions: () => undefined, config: { settings: SETTINGS }, hidden: 2, principal: "read", whole: false },
 	{
 		label: "permissions disabled",
 		permissions: () => ({ mode: "disabled" }),
