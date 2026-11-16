@@ -39,17 +39,28 @@
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
-	Reflect,
-	Objects,
+	ArrayMethods,
 	Arrays,
+	concatLists,
+	Dates,
+	filterList,
+	FunctionMethods,
+	Map,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
 	Math,
 	NativeProxy,
-	Map,
-	WeakMap,
-	WeakSet,
+	NumberMethods,
+	Objects,
+	Reflect,
+	String,
+	StringMethods,
 	Symbol,
-	Dates,
-	String
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-root");
@@ -127,7 +138,7 @@ const NO_CEILING = Objects.freeze([]);
  */
 export function ceilingMembers(ceiling) {
 	if (!ceiling) return NO_CEILING;
-	return CEILING_CHAINS.has(ceiling) ? ceiling : [ceiling];
+	return WeakSetMethods.has(CEILING_CHAINS, ceiling) ? ceiling : [ceiling];
 }
 
 /**
@@ -147,28 +158,34 @@ export function ceilingMembers(ceiling) {
 export function combineCeilings(...parts) {
 	let single = null;
 	let members = null;
-	for (const part of parts) {
-		for (const member of ceilingMembers(part)) {
-			if (member === single || members?.includes(member)) continue;
+	for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
+		const part = ofList[ofIndex];
+		for (let ofIndex = 0, ofList = ceilingMembers(part); ofIndex < ofList.length; ofIndex++) {
+			const member = ofList[ofIndex];
+			if (member === single || (members == null ? undefined : ArrayMethods.includes(members, member))) continue;
 			if (single === null && members === null) single = member;
-			else (members ??= [single]).push(member);
+			else ArrayMethods.push((members ??= [single]), member);
 		}
 	}
 	if (members === null) return single;
-	for (const member of members) if (!CEILING_ORDER.has(member)) CEILING_ORDER.set(member, nextCeilingOrder++);
-	members.sort((a, b) => CEILING_ORDER.get(a) - CEILING_ORDER.get(b));
+	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
+		const member = ofList[ofIndex];
+		if (!WeakMapMethods.has(CEILING_ORDER, member)) WeakMapMethods.set(CEILING_ORDER, member, nextCeilingOrder++);
+	}
+	ArrayMethods.sort(members, (a, b) => WeakMapMethods.get(CEILING_ORDER, a) - WeakMapMethods.get(CEILING_ORDER, b));
 	let node = CEILING_TRIE;
-	for (const member of members) {
-		let child = node.next.get(member);
+	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
+		const member = ofList[ofIndex];
+		let child = WeakMapMethods.get(node.next, member);
 		if (!child) {
 			child = { next: new WeakMap(), chain: null };
-			node.next.set(member, child);
+			WeakMapMethods.set(node.next, member, child);
 		}
 		node = child;
 	}
 	if (!node.chain) {
 		node.chain = Objects.freeze(members);
-		CEILING_CHAINS.add(node.chain);
+		WeakSetMethods.add(CEILING_CHAINS, node.chain);
 	}
 	return node.chain;
 }
@@ -187,7 +204,9 @@ export function combineCeilings(...parts) {
 export function identityCeilings(identity) {
 	if (!identity?.currentWrapper || !identity.ceiling) return NO_CEILING;
 	const members = ceilingMembers(identity.ceiling);
-	return members.includes(identity.currentWrapper) ? members.filter((member) => member !== identity.currentWrapper) : members;
+	return ArrayMethods.includes(members, identity.currentWrapper)
+		? filterList(members, (member) => member !== identity.currentWrapper)
+		: members;
 }
 
 /**
@@ -246,13 +265,13 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !Objects.prototype.hasOwnProperty.call(owners, ownerKey)) return;
+	if (!owners || !FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
 	// key, so supplied code can write a key only where both it and the leaf it runs inside could. Host writes have no
 	// writer.
-	const writers = writersOf(writerCtx).map((wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
+	const writers = mapList(writersOf(writerCtx), (wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
 	const writer = writers[0] ?? null;
 	if (owner === PROTECT_SENTINEL) {
 		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
@@ -262,7 +281,9 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	// A writer identity is an executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
 	// An owner name matches that leaf exactly OR as a module prefix (`callers.dataReader` owns every
 	// leaf under it), so a module can own a key without naming each of its functions.
-	const refused = writers.length ? writers.find((path) => !(path !== null && (path === owner || path.startsWith(owner + ".")))) : null;
+	const refused = writers.length
+		? ArrayMethods.find(writers, (path) => !(path !== null && (path === owner || StringMethods.startsWith(path, owner + "."))))
+		: null;
 	if (!writers.length || refused !== undefined) {
 		throw new SlothletError(
 			"CONTEXT_KEY_PROTECTED",
@@ -292,7 +313,7 @@ function writersOf(store) {
 	// A writer that cannot be told apart is no one's, and not the host either.
 	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
 	if (!identity.currentWrapper) return [];
-	return [identity.currentWrapper, ...identityCeilings(identity)];
+	return concatLists([identity.currentWrapper], identityCeilings(identity));
 }
 
 /**
@@ -369,9 +390,9 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	// never share one view across them.
 	let caches = ctx[PROTECTED_VIEW_CACHE];
 	if (!caches) caches = ctx[PROTECTED_VIEW_CACHE] = new Map();
-	let cache = caches.get(ownerKey);
-	if (!cache) caches.set(ownerKey, (cache = new WeakMap()));
-	const cached = cache.get(value);
+	let cache = MapMethods.get(caches, ownerKey);
+	if (!cache) MapMethods.set(caches, ownerKey, (cache = new WeakMap()));
+	const cached = WeakMapMethods.get(cache, value);
 	if (cached) return cached;
 	const view = markSlothletProxy(
 		new NativeProxy(value, {
@@ -397,7 +418,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 			}
 		})
 	);
-	cache.set(value, view);
+	WeakMapMethods.set(cache, value, view);
 	return view;
 }
 
@@ -416,7 +437,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  */
 function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && Objects.prototype.hasOwnProperty.call(owners, prop)) {
+	if (owners && FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];
@@ -438,15 +459,15 @@ function readProtectedContextValue(ctx, prop, getContext) {
  * @internal
  */
 function buildCapturedFlowStore(instances, instanceID, captured) {
-	const baseStore = instances.get(instanceID);
+	const baseStore = MapMethods.get(instances, instanceID);
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
 			instanceID,
-			availableInstances: Arrays.from(instances.keys()).join(", ") || "none"
+			availableInstances: ArrayMethods.join(mapKeysToArray(instances), ", ") || "none"
 		});
 	}
 	const childStore = {
-		instanceID: `${instanceID}__run_${Dates.now()}_${Math.random().toString(36).slice(2, 9)}`,
+		instanceID: `${instanceID}__run_${Dates.now()}_${StringMethods.slice(NumberMethods.toString(Math.random(), 36), 2, 9)}`,
 		context: captured.context,
 		self: baseStore.self,
 		config: baseStore.config,

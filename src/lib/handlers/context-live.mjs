@@ -42,19 +42,39 @@ import {
 	internals as framePlacementInternals
 } from "#handlers/frame-placement";
 import {
-	Reflect,
-	Objects,
-	Arrays,
-	Math,
-	Map,
-	Set,
-	WeakMap,
-	WeakRef,
-	Symbol,
+	appendList,
+	ArrayMethods,
 	Boolean,
+	concatLists,
+	copyList,
+	filterList,
 	FinalizationRegistry,
+	FinalizationRegistryMethods,
+	FunctionMethods,
+	Map,
+	mapEntriesToArray,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValuesToArray,
+	Math,
+	Objects,
+	Processes,
 	queueMicrotask,
-	Processes
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	StringMethods,
+	Symbol,
+	WeakMap,
+	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods,
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-live");
@@ -243,7 +263,10 @@ const FOLLOWED_COLLECTED =
 				runtime_forgetRef(families, ref);
 				runtime_unfollowed();
 				// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
-				for (const { onSettled } of follows) queueMicrotask(pinToCurrentCaller(onSettled));
+				for (let ofIndex = 0, ofList = follows; ofIndex < ofList.length; ofIndex++) {
+					const { onSettled } = ofList[ofIndex];
+					queueMicrotask(pinToCurrentCaller(onSettled));
+				}
 			})
 		: null;
 
@@ -276,22 +299,22 @@ function runtime_unfollowed() {
  * @private
  */
 function runtime_unfollowInstance(family) {
-	const refs = FOLLOWED_BY_FAMILY.get(family);
+	const refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
 	if (!refs) return;
-	FOLLOWED_BY_FAMILY.delete(family);
-	for (const ref of refs) {
-		const promise = ref.deref();
-		const follows = promise && FOLLOWED.get(promise);
+	MapMethods.delete(FOLLOWED_BY_FAMILY, family);
+	for (const ref of setValues(refs)) {
+		const promise = WeakRefMethods.deref(ref);
+		const follows = promise && WeakMapMethods.get(FOLLOWED, promise);
 		if (!follows) continue;
-		follows.families.delete(family);
-		const kept = follows.filter((follow) => follow.family !== family);
+		SetMethods.delete(follows.families, family);
+		const kept = filterList(follows, (follow) => follow.family !== family);
 		if (kept.length) {
-			follows.splice(0, follows.length, ...kept);
+			Reflect.apply(ArrayMethods.splice, undefined, concatLists([follows], concatLists([0, follows.length], kept)));
 			continue;
 		}
-		FOLLOWED.delete(promise);
+		WeakMapMethods.delete(FOLLOWED, promise);
 		runtime_forgetRef(follows.families, follows.ref);
-		FOLLOWED_COLLECTED?.unregister(follows);
+		FOLLOWED_COLLECTED == null ? undefined : FinalizationRegistryMethods.unregister(FOLLOWED_COLLECTED, follows);
 		runtime_unfollowed();
 	}
 }
@@ -313,7 +336,7 @@ function runtime_inertConstructor(fn, realmFunctionPrototype) {
 		if (util.types.isProxy(link)) return false;
 		const name = nameSeen ? undefined : Objects.getOwnPropertyDescriptor(link, "name");
 		if (name) {
-			if (!("value" in name) || (typeof name.value === "string" && /[{<]/.test(name.value))) return false;
+			if (!("value" in name) || (typeof name.value === "string" && RegExpMethods.exec(/[{<]/, name.value) !== null)) return false;
 			nameSeen = true;
 		}
 		const hasInstance = Objects.getOwnPropertyDescriptor(link, Symbol.hasInstance);
@@ -332,7 +355,8 @@ function runtime_inertConstructor(fn, realmFunctionPrototype) {
  * @private
  */
 function runtime_inspectablePromise(promise) {
-	for (const key of Reflect.ownKeys(promise)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(promise); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const own = Objects.getOwnPropertyDescriptor(promise, key);
 		if (!("value" in own)) return false;
 		if ((typeof own.value === "object" && own.value !== null) || typeof own.value === "function") return false;
@@ -340,15 +364,16 @@ function runtime_inspectablePromise(promise) {
 	const chain = [];
 	for (let link = promise; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		chain.push(link);
+		ArrayMethods.push(chain, link);
 	}
 	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
 	const realmObject = Objects.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
 	if (!realmObject || typeof realmObject.value !== "function" || util.types.isProxy(realmObject.value)) return false;
 	const realmFunctionPrototype = Objects.getPrototypeOf(realmObject.value);
-	for (const link of chain) {
+	for (let ofIndex = 0, ofList = chain; ofIndex < ofList.length; ofIndex++) {
+		const link = ofList[ofIndex];
 		const tag = Objects.getOwnPropertyDescriptor(link, Symbol.toStringTag);
-		if (tag && (!("value" in tag) || (typeof tag.value === "string" && /[{<]/.test(tag.value)))) return false;
+		if (tag && (!("value" in tag) || (typeof tag.value === "string" && RegExpMethods.exec(/[{<]/, tag.value) !== null))) return false;
 		const constructor = Objects.getOwnPropertyDescriptor(link, "constructor");
 		if (!constructor) continue;
 		if (!("value" in constructor)) return false;
@@ -369,9 +394,14 @@ function runtime_promiseState(promise) {
 	try {
 		if (!runtime_inspectablePromise(promise)) return "unknown";
 		const text = util.inspect(promise, { depth: 0, customInspect: false, showProxy: false, getters: false });
-		const brace = text.indexOf("{");
+		const brace = typeof text === "string" ? StringMethods.indexOf(text, "{") : ArrayMethods.indexOf(text, "{");
 		if (brace === -1) return "unknown";
-		return /^\{\s*<pending>\s*(?:,|\})/.test(text.slice(brace)) ? "pending" : "settled";
+		return RegExpMethods.exec(
+			/^\{\s*<pending>\s*(?:,|\})/,
+			typeof text === "string" ? StringMethods.slice(text, brace) : copyList(text, brace)
+		) !== null
+			? "pending"
+			: "settled";
 	} catch {
 		// An inspector that cannot read it says nothing of its state.
 		return "unknown";
@@ -398,30 +428,32 @@ function runtime_followSettled(promise, onSettled, family = null) {
 		queueMicrotask(pinToCurrentCaller(onSettled));
 		return true;
 	}
-	let follows = FOLLOWED.get(promise);
+	let follows = WeakMapMethods.get(FOLLOWED, promise);
 	if (!follows) {
 		const ref = typeof WeakRef === "function" ? new WeakRef(promise) : null;
 		follows = Objects.assign([], { ref, families: new Set() });
-		FOLLOWED.set(promise, follows);
+		WeakMapMethods.set(FOLLOWED, promise, follows);
 		followedCount++;
-		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref, follows }, follows);
+		FOLLOWED_COLLECTED == null
+			? undefined
+			: FinalizationRegistryMethods.register(FOLLOWED_COLLECTED, promise, { families: follows.families, ref, follows }, follows);
 	}
-	follows.push({ family, onSettled });
-	if (follows.ref && family !== null && !follows.families.has(family)) {
-		follows.families.add(family);
-		let refs = FOLLOWED_BY_FAMILY.get(family);
-		if (!refs) FOLLOWED_BY_FAMILY.set(family, (refs = new Set()));
-		refs.add(follows.ref);
+	ArrayMethods.push(follows, { family, onSettled });
+	if (follows.ref && family !== null && !SetMethods.has(follows.families, family)) {
+		SetMethods.add(follows.families, family);
+		let refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
+		if (!refs) MapMethods.set(FOLLOWED_BY_FAMILY, family, (refs = new Set()));
+		SetMethods.add(refs, follows.ref);
 	}
 	stopFollowing ??= PROMISE_HOOKS.onSettled((settled) => {
-		const done = FOLLOWED.get(settled);
+		const done = WeakMapMethods.get(FOLLOWED, settled);
 		if (!done) return;
-		FOLLOWED.delete(settled);
-		FOLLOWED_COLLECTED?.unregister(done);
+		WeakMapMethods.delete(FOLLOWED, settled);
+		FOLLOWED_COLLECTED == null ? undefined : FinalizationRegistryMethods.unregister(FOLLOWED_COLLECTED, done);
 		runtime_forgetRef(done.families, done.ref);
 		runtime_unfollowed();
 		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
-		for (const { onSettled: callback } of done) queueMicrotask(pinToCurrentCaller(callback));
+		for (let i = 0; i < done.length; i++) queueMicrotask(pinToCurrentCaller(done[i].onSettled));
 	});
 	return true;
 }
@@ -435,11 +467,11 @@ function runtime_followSettled(promise, onSettled, family = null) {
  */
 function runtime_forgetRef(families, ref) {
 	if (!ref) return;
-	for (const family of families) {
-		const refs = FOLLOWED_BY_FAMILY.get(family);
+	for (const family of setValues(families)) {
+		const refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
 		if (!refs) continue;
-		refs.delete(ref);
-		if (!refs.size) FOLLOWED_BY_FAMILY.delete(family);
+		SetMethods.delete(refs, ref);
+		if (!SetMethods.size(refs)) MapMethods.delete(FOLLOWED_BY_FAMILY, family);
 	}
 }
 
@@ -569,16 +601,16 @@ export class LiveContextManager {
 				init(promise) {
 					let starter = manager.#runningStarter;
 					if (manager.#syncDepth > 0) {
-						const entered = manager.instances.get(manager.#activeID)?.__enteredCalls;
+						const entered = MapMethods.get(manager.instances, manager.#activeID)?.__enteredCalls;
 						const top = entered?.[entered.length - 1];
 						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
 						else if (top?.wrapper) starter = top;
 					}
-					if (starter) FLOW_STARTERS.set(promise, starter);
+					if (starter) WeakMapMethods.set(FLOW_STARTERS, promise, starter);
 				},
 				// Reactions run one at a time from the microtask queue, never inside one another.
 				before(promise) {
-					manager.#runningStarter = FLOW_STARTERS.get(promise) ?? null;
+					manager.#runningStarter = WeakMapMethods.get(FLOW_STARTERS, promise) ?? null;
 				},
 				after() {
 					manager.#runningStarter = null;
@@ -606,7 +638,7 @@ export class LiveContextManager {
 	 * @internal
 	 */
 	get suspendedStoreCount() {
-		return this.#busyStores.size;
+		return SetMethods.size(this.#busyStores);
 	}
 
 	/**
@@ -616,7 +648,7 @@ export class LiveContextManager {
 	 */
 	get suspendedCallCount() {
 		let count = 0;
-		for (const store of this.#busyStores) count += this.#suspendedFor(store).size;
+		for (const store of setValues(this.#busyStores)) count += SetMethods.size(this.#suspendedFor(store));
 		return count;
 	}
 
@@ -652,7 +684,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#familyOf(instanceID) {
-		return this.instances.get(instanceID)?.parentInstanceID ?? instanceID;
+		return MapMethods.get(this.instances, instanceID)?.parentInstanceID ?? instanceID;
 	}
 
 	/**
@@ -665,11 +697,11 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#removedRunBase(id) {
-		if (id === null || this.instances.has(id)) return id;
-		const cut = id.lastIndexOf("__run_");
+		if (id === null || MapMethods.has(this.instances, id)) return id;
+		const cut = StringMethods.lastIndexOf(id, "__run_");
 		if (cut <= 0) return id;
-		const base = id.slice(0, cut);
-		return this.instances.has(base) ? base : id;
+		const base = StringMethods.slice(id, 0, cut);
+		return MapMethods.has(this.instances, base) ? base : id;
 	}
 
 	/**
@@ -679,27 +711,29 @@ export class LiveContextManager {
 	 */
 	#resolveActiveID() {
 		const raw = this.#removedRunBase(this.#activeID);
-		if (this.#syncDepth > 0 || this.#busyStores.size === 0) return raw;
+		if (this.#syncDepth > 0 || SetMethods.size(this.#busyStores) === 0) return raw;
 		const rawFamily = raw === null ? null : this.#familyOf(raw);
 		const families = new Set();
-		for (const store of this.#busyStores) families.add(store.parentInstanceID ?? store.instanceID);
-		if (families.size === 1 && families.has(rawFamily)) return raw;
+		for (const store of setValues(this.#busyStores)) SetMethods.add(families, store.parentInstanceID ?? store.instanceID);
+		if (SetMethods.size(families) === 1 && SetMethods.has(families, rawFamily)) return raw;
 
 		const candidates = new Set();
-		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
+		for (const store of setValues(this.#busyStores))
+			for (const entry of setValues(this.#suspendedFor(store))) SetMethods.add(candidates, entry);
 		let resolved = this.#resolveSuspendedFromStack(candidates);
 		// One of several calls, the stack not saying which: calls waiting on one store name it; calls of several are
 		// as code several instances account for.
-		if (resolved?.tied) resolved = new Set(resolved.tied.map((entry) => entry.store)).size === 1 ? resolved.tied[0] : AMBIGUOUS;
+		if (resolved?.tied)
+			resolved = SetMethods.size(setFrom(mapList(resolved.tied, (entry) => entry.store))) === 1 ? resolved.tied[0] : AMBIGUOUS;
 		// Code several instances' calls account for could be any of them: the field would pick one of them at
 		// random, so no instance is active and the access is refused.
-		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return families.size > 1 ? null : raw;
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return SetMethods.size(families) > 1 ? null : raw;
 		if (!resolved) return raw;
 		// The field names a run()/scope() store of the resolved instance: that flow's own store wins.
 		if (resolved.family === rawFamily && raw !== rawFamily) return raw;
 		const id = resolved.store.instanceID;
 		// The store can be gone already — a scope that exited while its call was still suspended.
-		return this.instances.has(id) ? id : raw;
+		return MapMethods.has(this.instances, id) ? id : raw;
 	}
 
 	/**
@@ -759,7 +793,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineFor(store) {
-		if (!Objects.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
+		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, store, "__baselineWrapper")) {
 			store.__baselineWrapper = store.currentWrapper ?? null;
 			// A replayed or scoped flow whose identity was code supplied from higher up keeps its ceiling (#597).
 			store.__baselineCeiling = store.currentCeiling ?? null;
@@ -839,7 +873,7 @@ export class LiveContextManager {
 		}
 
 		const suspended = this.#suspendedFor(store);
-		if (suspended.size === 0) return this.#baselineIdentity(store);
+		if (SetMethods.size(suspended) === 0) return this.#baselineIdentity(store);
 		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
 		// restored in settle order too, so once calls overlap it can name another call's caller.
 		//
@@ -848,8 +882,8 @@ export class LiveContextManager {
 		// was in flight, which nothing pinned — so it is resolved from the stack like any other (#601).
 		// A host-pinned entry has no frame to match and keeps its own answer. Code running as no module is told from the
 		// host's by the stack below.
-		if (suspended.size === 1) {
-			const [only] = suspended;
+		if (SetMethods.size(suspended) === 1) {
+			const only = setToArray(suspended)[0];
 			if (!only.filePath && !only.unattributed) return this.#entryIdentity(only);
 		}
 
@@ -909,7 +943,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#hasUnattributed(suspended) {
-		for (const entry of suspended) if (entry.unattributed) return true;
+		for (const entry of setValues(suspended)) if (entry.unattributed) return true;
 		return false;
 	}
 
@@ -924,14 +958,14 @@ export class LiveContextManager {
 	#unattributedOnStack(suspended) {
 		if (!this.#hasUnattributed(suspended)) return false;
 		const sources = new Map();
-		for (const entry of suspended) {
+		for (const entry of setValues(suspended)) {
 			if (!entry.unattributed) continue;
-			const source = sources.get(entry.family) ?? { family: entry.family, slothlet: entry.slothlet ?? null, roots: [] };
+			const source = MapMethods.get(sources, entry.family) ?? { family: entry.family, slothlet: entry.slothlet ?? null, roots: [] };
 			source.slothlet ??= entry.slothlet ?? null;
-			source.roots.push(...(entry.roots ?? []));
-			sources.set(entry.family, source);
+			appendList(source.roots, entry.roots ?? []);
+			MapMethods.set(sources, entry.family, source);
 		}
-		return stackHoldsInstanceCode([...sources.values()]);
+		return stackHoldsInstanceCode(mapValuesToArray(sources));
 	}
 
 	/**
@@ -974,18 +1008,19 @@ export class LiveContextManager {
 	#tiedIdentity(store, entries) {
 		let first = null;
 		const others = [];
-		for (const entry of entries) {
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
 			const identity = this.#entryIdentity(entry);
 			if (identity.unresolved || !identity.currentWrapper)
 				return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 			if (!first) first = identity;
-			else others.push(identity.currentWrapper, identity.ceiling ?? null);
-			others.push(supplierChainCeiling(identity.record));
+			else ArrayMethods.push(others, identity.currentWrapper, identity.ceiling ?? null);
+			ArrayMethods.push(others, supplierChainCeiling(identity.record));
 		}
 		return {
 			currentWrapper: first.currentWrapper,
 			callerWrapper: first.callerWrapper,
-			ceiling: combineCeilings(first.ceiling ?? null, ...others) ?? undefined,
+			ceiling: Reflect.apply(combineCeilings, undefined, concatLists([first.ceiling ?? null], others)) ?? undefined,
 			callerCeiling: first.callerCeiling
 		};
 	}
@@ -1019,7 +1054,7 @@ export class LiveContextManager {
 		if (!starter || !identity.currentWrapper || identity.unresolved) return identity;
 		const wrapper = starter.wrapper;
 		if (wrapper === identity.currentWrapper || wrapper?.slothlet !== identity.currentWrapper.slothlet) return identity;
-		if (!trustedRootOwn.genuineWrappers.has(wrapper)) return identity;
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper)) return identity;
 		// The starter is the call itself or a call it runs under: already held to.
 		for (let current = record, depth = 0; current && depth < 64; current = current.parent, depth++)
 			if (current === starter || current.wrapper === wrapper) return identity;
@@ -1074,7 +1109,7 @@ export class LiveContextManager {
 	#registrationIdentity(store) {
 		const suspended = this.#suspendedFor(store);
 		const entered = this.#enteredFor(store);
-		const inFlight = suspended.size > 0 || entered.length > 0;
+		const inFlight = SetMethods.size(suspended) > 0 || entered.length > 0;
 		if (store.__authoritativeWrapper) {
 			const identity = this.#authoritativeIdentity(store, null, null);
 			if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
@@ -1093,7 +1128,7 @@ export class LiveContextManager {
 				return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight, loading };
 			}
 		}
-		if (suspended.size === 0) {
+		if (SetMethods.size(suspended) === 0) {
 			const identity = this.#baselineIdentity(store);
 			if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
 			return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
@@ -1146,7 +1181,7 @@ export class LiveContextManager {
 	#resolveSuspendedFromStack(suspended, read = null) {
 		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
-		const candidates = [...suspended].filter((entry) => entry.filePath);
+		const candidates = filterList(setToArray(suspended), (entry) => entry.filePath);
 		if (!candidates.length) return null;
 		// Each frame is placed by the shared placer (see createFramePlacer).
 		const { place } = createFramePlacer(candidates);
@@ -1155,7 +1190,7 @@ export class LiveContextManager {
 		// different call, so the instance is part of what has to agree.
 		const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
 
-		const settle = (matches) => (new Set(matches.map(callKey)).size === 1 ? matches[0] : AMBIGUOUS);
+		const settle = (matches) => (SetMethods.size(setFrom(mapList(matches, callKey))) === 1 ? matches[0] : AMBIGUOUS);
 
 		// Returns the answer, or undefined when the frames read ran out before one could be given. The last read
 		// (`final`) answers from the frames it has.
@@ -1170,7 +1205,7 @@ export class LiveContextManager {
 			let below = [];
 			// Slothlet's own frames are passed over by their path alone, so they are read no further than that.
 			for (const frame of frames.lean?.() ?? frames) {
-				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+				if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;
 				if (frame.async) syncEnded = true;
@@ -1180,16 +1215,16 @@ export class LiveContextManager {
 				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
 				if (!placement) {
 					if (!byName) {
-						const named = candidates.filter((entry) => runtime_namesEntry(frame.head, entry));
+						const named = filterList(candidates, (entry) => runtime_namesEntry(frame.head, entry));
 						if (named.length) byName = named;
 					}
 					continue;
 				}
 				// A module's folder holding nothing suspended says nothing about which call is running.
 				if (placement.byModule && !placement.matches.length) continue;
-				if (syncEnded) awaiting.push({ frame, ...placement });
+				if (syncEnded) ArrayMethods.push(awaiting, { frame, ...placement });
 				else {
-					running.push({ frame, ...placement });
+					ArrayMethods.push(running, { frame, ...placement });
 					below = [];
 				}
 			}
@@ -1215,17 +1250,17 @@ export class LiveContextManager {
 			// module calls has their frames below it.
 			const outermost = running[running.length - 1];
 			// Only a function with nothing but the microtask runner below it is picking up after an `await`.
-			const resuming = below.every(isRunnerFrame);
+			const resuming = ArrayMethods.every(below, isRunnerFrame);
 			// The waiting calls of the file the job picked up in, when no name says which of them it is.
 			let fileCalls = null;
 			if (outermost.byFile && resuming) {
-				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
-				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
+				const resumed = filterList(outermost.matches, (entry) => runtime_namesEntry(outermost.frame.head, entry));
+				if (resumed.length && SetMethods.size(setFrom(mapList(resumed, callKey))) === 1) return resumed[0];
 				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
 				// callback it made: that call is what picked up again. Code it has called since (another module's function
 				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
 				// as it is in the async runtime.
-				if (outermost.matches.length && new Set(outermost.matches.map(callKey)).size === 1) return outermost.matches[0];
+				if (outermost.matches.length && SetMethods.size(setFrom(mapList(outermost.matches, callKey))) === 1) return outermost.matches[0];
 				// Several calls of that file are waiting: the job is one of them. When nothing below settles which, the
 				// access is held to every one of them (see tiedIdentity).
 				if (outermost.matches.length) fileCalls = outermost.matches;
@@ -1275,21 +1310,24 @@ export class LiveContextManager {
 	 */
 	#agree(running, awaiting, callKey, truncated, waiting) {
 		let agreed = null;
-		for (const { matches } of running) {
-			agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
+		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
+			const { matches } = ofList[ofIndex];
+			agreed = agreed ? filterList(agreed, (entry) => ArrayMethods.includes(matches, entry)) : matches;
 			if (agreed.length) continue;
-			if (!running.every((placed) => !placed.matches.length)) return AMBIGUOUS;
+			if (!ArrayMethods.every(running, (placed) => !placed.matches.length)) return AMBIGUOUS;
 			if (!waiting) return UNACCOUNTED;
-			if (awaiting.some((placed) => placed.matches.length)) return waiting.size === 1 ? [...waiting][0] : { tied: [...waiting] };
+			if (ArrayMethods.some(awaiting, (placed) => placed.matches.length))
+				return SetMethods.size(waiting) === 1 ? setToArray(waiting)[0] : { tied: setToArray(waiting) };
 			// The flows awaiting it may lie past the frames read.
 			return truncated ? undefined : UNACCOUNTED;
 		}
-		if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
+		if (SetMethods.size(setFrom(mapList(agreed, callKey))) === 1) return agreed[0];
 		// Different functions of one file: a frame in a candidate's own file names the function as well.
-		for (const { frame, byFile } of running) {
+		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
+			const { frame, byFile } = ofList[ofIndex];
 			if (!byFile) continue;
-			const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
-			if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+			const pinned = filterList(agreed, (entry) => runtime_namesEntry(frame.head, entry));
+			if (pinned.length && SetMethods.size(setFrom(mapList(pinned, callKey))) === 1) return pinned[0];
 		}
 		return this.#narrow(awaiting, agreed, callKey, truncated);
 	}
@@ -1305,18 +1343,19 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#narrow(placed, narrowed, callKey, truncated) {
-		for (const { frame, matches, byFile } of placed) {
+		for (let ofIndex = 0, ofList = placed; ofIndex < ofList.length; ofIndex++) {
+			const { frame, matches, byFile } = ofList[ofIndex];
 			// Frames further out that are no suspended call's are flows awaiting this one: they cannot narrow.
 			if (!matches.length) continue;
-			let matched = narrowed ? matches.filter((entry) => narrowed.includes(entry)) : matches;
+			let matched = narrowed ? filterList(matches, (entry) => ArrayMethods.includes(narrowed, entry)) : matches;
 			if (!matched.length) return AMBIGUOUS;
-			if (new Set(matched.map(callKey)).size === 1) return matched[0];
+			if (SetMethods.size(setFrom(mapList(matched, callKey))) === 1) return matched[0];
 			// Different functions of one file: the frame names the function as well as the file. Only the text
 			// before the location is searched, so a name inside the path cannot match by accident. Not tried for
 			// a frame placed by module or import — the function there is the helper's, not the candidate's.
 			if (byFile) {
-				const pinned = matched.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+				const pinned = filterList(matched, (entry) => runtime_namesEntry(frame.head, entry));
+				if (pinned.length && SetMethods.size(setFrom(mapList(pinned, callKey))) === 1) return pinned[0];
 			}
 			narrowed = matched;
 		}
@@ -1341,8 +1380,8 @@ export class LiveContextManager {
 	#flowBelongsToInstance(currentID, instanceID) {
 		if (!currentID) return false;
 		if (currentID === instanceID) return true;
-		if (currentID.startsWith(instanceID + "__run_")) return true;
-		return this.instances.get(currentID)?.parentInstanceID === instanceID;
+		if (StringMethods.startsWith(currentID, instanceID + "__run_")) return true;
+		return MapMethods.get(this.instances, currentID)?.parentInstanceID === instanceID;
 	}
 
 	/**
@@ -1373,17 +1412,18 @@ export class LiveContextManager {
 			const registration = store ? this.#registrationIdentity(store) : null;
 			// Registered by a file's own top level while slothlet loads it (#726): pinned to the load, so what the file
 			// starts runs as the file's module, as the async runtime's store for the load has it.
-			if (!registration?.wrapper && this.#loads.size) {
+			if (!registration?.wrapper && SetMethods.size(this.#loads)) {
 				const loading = loadOnStack(this.#loads);
-				if (loading !== null) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+				if (loading !== null)
+					return mapList(listeners, (listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
 			}
 			if (!store) return listeners;
 			const { wrapper, ceiling, inFlight, ambiguous, loading } = registration;
-			if (loading) return listeners.map((listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+			if (loading) return mapList(listeners, (listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
 			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
 			// alone. Unattributable module code: not handed the host's standing either.
 			if (ambiguous || (!wrapper && !inFlight)) return listeners;
-			return listeners.map((listener) =>
+			return mapList(listeners, (listener) =>
 				typeof listener === "function" ? pinListener(listener, store.instanceID, wrapper, ceiling ?? null) : listener
 			);
 		};
@@ -1403,7 +1443,7 @@ export class LiveContextManager {
 				// there is nobody to catch it — it surfaces as an uncaught exception and takes the
 				// process down. Run the callback unpinned instead: with no context its `self` refuses,
 				// which is the same fail-closed answer any unattributed deferred work gets.
-				if (!liveContextManagerRef.instances.has(instanceID)) return listener.apply(this, args);
+				if (!MapMethods.has(liveContextManagerRef.instances, instanceID)) return FunctionMethods.apply(listener, this, args);
 				// rawErrors: a listener's own throw must reach its emitter unchanged. Without it
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
@@ -1441,7 +1481,8 @@ export class LiveContextManager {
 				const manager = liveContextManagerRef;
 				const instanceID = loading ? loading.instanceID() : null;
 				// The instance is gone: unpinned, as any callback that outlives its instance.
-				if (loading && (instanceID === null || !manager.instances.has(instanceID))) return listener.apply(this, args);
+				if (loading && (instanceID === null || !MapMethods.has(manager.instances, instanceID)))
+					return FunctionMethods.apply(listener, this, args);
 				const record = loading ? loading.record() : null;
 				if (!record) return manager.#runAsNoOne(instanceID, listener, this, args);
 				return manager.runInContext(
@@ -1475,8 +1516,11 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#enterHost() {
-		const stores = [...this.instances.values()];
-		for (const store of stores) this.#enteredFor(store).push(HOST_ENTRY);
+		const stores = mapValuesToArray(this.instances);
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			ArrayMethods.push(this.#enteredFor(store), HOST_ENTRY);
+		}
 		return stores;
 	}
 
@@ -1489,7 +1533,10 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#leaveHost(stores) {
-		for (const store of stores) this.#enteredFor(store).pop();
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			ArrayMethods.pop(this.#enteredFor(store));
+		}
 	}
 
 	/**
@@ -1513,14 +1560,14 @@ export class LiveContextManager {
 	 */
 	runRegisteredAsHost(instanceID, fn, thisArg, args) {
 		// The instance shut down after the registration: nothing left to attribute to.
-		if (!this.instances.has(instanceID)) return fn.apply(thisArg, args);
+		if (!MapMethods.has(this.instances, instanceID)) return FunctionMethods.apply(fn, thisArg, args);
 		const previousInstanceID = this.#activeID;
 		this.#activeID = instanceID;
 		const stores = this.#enterHost();
 		this.#syncDepth++;
 		let result;
 		try {
-			result = fn.apply(thisArg, args);
+			result = FunctionMethods.apply(fn, thisArg, args);
 		} finally {
 			this.#syncDepth--;
 			this.#leaveHost(stores);
@@ -1547,19 +1594,19 @@ export class LiveContextManager {
 	 * @internal
 	 */
 	runModuleLoad(loading, fn) {
-		this.#loads.add(loading);
+		SetMethods.add(this.#loads, loading);
 		let result;
 		try {
 			result = fn();
 		} catch (error) {
-			this.#loads.delete(loading);
+			SetMethods.delete(this.#loads, loading);
 			throw error;
 		}
 		if (!util.types.isPromise(result)) {
-			this.#loads.delete(loading);
+			SetMethods.delete(this.#loads, loading);
 			return result;
 		}
-		const done = () => this.#loads.delete(loading);
+		const done = () => SetMethods.delete(this.#loads, loading);
 		nativeThen(result, done, done);
 		return result;
 	}
@@ -1575,7 +1622,7 @@ export class LiveContextManager {
 		const store = this.tryGetContext(instanceID);
 		if (!store) return true;
 		if (store.__authoritativeWrapper) return false;
-		return this.#enteredFor(store).every((entry) => entry === null);
+		return ArrayMethods.every(this.#enteredFor(store), (entry) => entry === null);
 	}
 
 	/**
@@ -1595,7 +1642,7 @@ export class LiveContextManager {
 		const family = this.#familyOf(id);
 		// Naming an instance's own store while nothing of any instance is entered or waiting, the field is only the
 		// last instance used. A `run()` / `scope()` store is active only while its callback runs.
-		if (id === family && this.#syncDepth === 0 && this.#busyStores.size === 0) return null;
+		if (id === family && this.#syncDepth === 0 && SetMethods.size(this.#busyStores) === 0) return null;
 		return family;
 	}
 
@@ -1610,14 +1657,23 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#runAsNoOne(instanceID, fn, thisArg, args) {
-		const stores = instanceID !== null && this.instances.has(instanceID) ? [this.instances.get(instanceID)] : [...this.instances.values()];
-		for (const store of stores) this.#enteredFor(store).push(UNATTRIBUTED_ENTRY);
+		const stores =
+			instanceID !== null && MapMethods.has(this.instances, instanceID)
+				? [MapMethods.get(this.instances, instanceID)]
+				: mapValuesToArray(this.instances);
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			ArrayMethods.push(this.#enteredFor(store), UNATTRIBUTED_ENTRY);
+		}
 		this.#syncDepth++;
 		try {
-			return fn.apply(thisArg, args);
+			return FunctionMethods.apply(fn, thisArg, args);
 		} finally {
 			this.#syncDepth--;
-			for (const store of stores) this.#enteredFor(store).pop();
+			for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+				const store = ofList[ofIndex];
+				ArrayMethods.pop(this.#enteredFor(store));
+			}
 		}
 	}
 
@@ -1662,7 +1718,7 @@ export class LiveContextManager {
 	runUnattributed(instanceID, fn, building = {}) {
 		const currentID = this.currentInstanceID;
 		const targetInstanceID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
-		const store = this.instances.get(targetInstanceID);
+		const store = MapMethods.get(this.instances, targetInstanceID);
 		if (!store) return fn();
 		const identity = this.#identityFor(store);
 		if (!identity.currentWrapper && !identity.unresolved) return fn();
@@ -1690,7 +1746,7 @@ export class LiveContextManager {
 			store.callerCeiling = previousCallerCeiling;
 		};
 		const entered = this.#enteredFor(store);
-		entered.push(UNATTRIBUTED_ENTRY);
+		ArrayMethods.push(entered, UNATTRIBUTED_ENTRY);
 		let result;
 		this.#syncDepth++;
 		try {
@@ -1700,7 +1756,7 @@ export class LiveContextManager {
 			throw error;
 		} finally {
 			this.#syncDepth--;
-			entered.pop();
+			ArrayMethods.pop(entered);
 			store.__authoritativeWrapper = previousAuthoritative;
 			store.__authoritativeCeiling = previousAuthoritativeCeiling;
 		}
@@ -1719,14 +1775,17 @@ export class LiveContextManager {
 			unattributed: true,
 			// What its code is told apart from the host's by.
 			slothlet: building.slothlet ?? null,
-			roots: (building.roots ?? []).filter((root) => typeof root === "string" && root).map(toComparablePath)
+			roots: mapList(
+				filterList(building.roots ?? [], (root) => typeof root === "string" && root),
+				toComparablePath
+			)
 		};
-		this.#suspendedFor(store).add(entry);
-		this.#busyStores.add(store);
+		SetMethods.add(this.#suspendedFor(store), entry);
+		SetMethods.add(this.#busyStores, store);
 		const settle = () => {
 			const suspended = this.#suspendedFor(store);
-			suspended.delete(entry);
-			if (suspended.size === 0) this.#busyStores.delete(store);
+			SetMethods.delete(suspended, entry);
+			if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 			restore();
 		};
 		return nativeThen(
@@ -1751,7 +1810,7 @@ export class LiveContextManager {
 	 * @public
 	 */
 	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
-		if (this.instances.has(instanceID)) {
+		if (MapMethods.has(this.instances, instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
 
@@ -1763,7 +1822,7 @@ export class LiveContextManager {
 			createdAt: clock.now()
 		};
 
-		this.instances.set(instanceID, store);
+		MapMethods.set(this.instances, instanceID, store);
 		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
 		const permissions = config?.permissions;
 		if (permissions && (permissions.mode ? permissions.mode === "on" : permissions.enabled !== false)) {
@@ -1835,11 +1894,11 @@ export class LiveContextManager {
 		// If already in correct context (base or child), just use current
 		const targetInstanceID = isAlreadyInContext ? currentID : instanceID;
 
-		const store = this.instances.get(targetInstanceID);
+		const store = MapMethods.get(this.instances, targetInstanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
 				instanceID: targetInstanceID,
-				availableInstances: Arrays.from(this.instances.keys())
+				availableInstances: mapKeysToArray(this.instances)
 			});
 		}
 
@@ -1925,7 +1984,7 @@ export class LiveContextManager {
 		// (#601), the same as a host-registered callback (see runRegisteredAsHost).
 		const entered = this.#enteredFor(store);
 		const hostStores = asHost ? this.#enterHost() : null;
-		if (!hostStores) entered.push(record);
+		if (!hostStores) ArrayMethods.push(entered, record);
 		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
 		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
 		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
@@ -1960,11 +2019,11 @@ export class LiveContextManager {
 			let result;
 			this.#syncDepth++;
 			try {
-				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
+				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : FunctionMethods.apply(fn, thisArg, args);
 			} finally {
 				this.#syncDepth--;
 				if (hostStores) this.#leaveHost(hostStores);
-				else entered.pop();
+				else ArrayMethods.pop(entered);
 				if (withdrawAuthoritative) {
 					store.__authoritativeWrapper = previousAuthoritative;
 					store.__authoritativeCeiling = previousAuthoritativeCeiling;
@@ -2012,13 +2071,13 @@ export class LiveContextManager {
 				// open. Tracking it keeps the count honest, so that module is resolved from its stack instead.
 				/* v8 ignore next */
 				if (currentWrapper || asHost) {
-					this.#suspendedFor(store).add(entry);
-					this.#busyStores.add(store);
+					SetMethods.add(this.#suspendedFor(store), entry);
+					SetMethods.add(this.#busyStores, store);
 				}
 				const settle = () => {
 					const suspended = this.#suspendedFor(store);
-					suspended.delete(entry);
-					if (suspended.size === 0) this.#busyStores.delete(store);
+					SetMethods.delete(suspended, entry);
+					if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 					restore();
 				};
 				// A pinned callback's promise is its own: followed to settle the call, never reacted to (#597).
@@ -2139,7 +2198,8 @@ export class LiveContextManager {
 		// identity that was unresolved at capture stays a looked-through entry, never the host's.
 		const entered = this.#enteredFor(store);
 		// A captured module is entered as a record already resolved: it was handed nothing here.
-		entered.push(
+		ArrayMethods.push(
+			entered,
 			flow.unresolved
 				? null
 				: flow.currentWrapper
@@ -2151,7 +2211,7 @@ export class LiveContextManager {
 			return fn();
 		} finally {
 			this.#syncDepth--;
-			entered.pop();
+			ArrayMethods.pop(entered);
 			this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
@@ -2174,9 +2234,9 @@ export class LiveContextManager {
 	runAsIdentity(instanceID, identity, fn) {
 		const currentID = this.currentInstanceID;
 		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
-		const store = this.instances.get(targetID);
+		const store = MapMethods.get(this.instances, targetID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Arrays.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: mapKeysToArray(this.instances) });
 		}
 		return this.runInFlow(
 			{
@@ -2204,13 +2264,13 @@ export class LiveContextManager {
 			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
 		}
 
-		const store = this.instances.get(activeID);
+		const store = MapMethods.get(this.instances, activeID);
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
 				{
 					instanceID: activeID,
-					availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none"
+					availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
 				},
 				null,
 				{ validationError: true }
@@ -2238,12 +2298,12 @@ export class LiveContextManager {
 			if (!activeID) {
 				return undefined;
 			}
-			return this.instances.get(activeID);
+			return MapMethods.get(this.instances, activeID);
 		}
 		if (this.#flowBelongsToInstance(activeID, instanceID)) {
-			return this.instances.get(activeID);
+			return MapMethods.get(this.instances, activeID);
 		}
-		return this.instances.get(instanceID);
+		return MapMethods.get(this.instances, instanceID);
 	}
 
 	/**
@@ -2289,14 +2349,14 @@ export class LiveContextManager {
 	 */
 	async runInSnapshotFlow(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
-		this.instances.set(childStore.instanceID, childStore);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		const previousInstanceID = this.#activeID;
 		try {
 			this.#activeID = childStore.instanceID;
 			return await fn();
 		} finally {
 			this.#activeID = previousInstanceID;
-			this.instances.delete(childStore.instanceID);
+			MapMethods.delete(this.instances, childStore.instanceID);
 		}
 	}
 
@@ -2314,14 +2374,14 @@ export class LiveContextManager {
 	 */
 	runInSnapshotFlowSync(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
-		this.instances.set(childStore.instanceID, childStore);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		const previousInstanceID = this.#activeID;
 		try {
 			this.#activeID = childStore.instanceID;
 			return fn();
 		} finally {
 			this.#activeID = previousInstanceID;
-			this.instances.delete(childStore.instanceID);
+			MapMethods.delete(this.instances, childStore.instanceID);
 		}
 	}
 
@@ -2331,11 +2391,11 @@ export class LiveContextManager {
 	 * @public
 	 */
 	cleanup(instanceID) {
-		const store = this.instances.get(instanceID);
+		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -2346,7 +2406,7 @@ export class LiveContextManager {
 		store.context = {};
 
 		// Remove from instances map
-		this.instances.delete(instanceID);
+		MapMethods.delete(this.instances, instanceID);
 		if (store.__recordsFlowStarters) {
 			store.__recordsFlowStarters = false;
 			this.#releaseFlowStarters();
@@ -2356,8 +2416,8 @@ export class LiveContextManager {
 		// A call still suspended when its instance shut down never settles here: its store would otherwise
 		// stay among the busy ones for the life of the process, and every later identity read would pay a
 		// stack read for it (#601 review). Its run()/scope() stores go with it.
-		for (const busy of this.#busyStores) {
-			if (busy === store || busy.parentInstanceID === instanceID) this.#busyStores.delete(busy);
+		for (const busy of setValues(this.#busyStores)) {
+			if (busy === store || busy.parentInstanceID === instanceID) SetMethods.delete(this.#busyStores, busy);
 		}
 
 		// Clear current instance if it was this one
@@ -2375,12 +2435,16 @@ export class LiveContextManager {
 		return {
 			type: "live",
 			currentInstanceID: this.currentInstanceID,
-			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
-				id,
-				createdAt: store.createdAt,
-				contextKeys: Objects.keys(store.context),
-				selfKeys: Objects.keys(store.self)
-			}))
+			instances: mapList(mapEntriesToArray(this.instances), (entry1) => {
+				const id = entry1[0],
+					store = entry1[1];
+				return {
+					id,
+					createdAt: store.createdAt,
+					contextKeys: Objects.keys(store.context),
+					selfKeys: Objects.keys(store.self)
+				};
+			})
 		};
 	}
 }

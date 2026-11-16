@@ -29,7 +29,18 @@
  * @type {function(*): boolean}
  * @private
  */
-import { Reflect, Objects, Arrays, Functions, Set, WeakSet, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	Functions,
+	Objects,
+	Processes,
+	Reflect,
+	setFrom,
+	SetMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 const IS_PROXY = Processes.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
@@ -47,7 +58,7 @@ const RECORD_BUDGET = 20000;
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Objects.prototype, Functions.prototype, Arrays.prototype]);
+const LANGUAGE_PROTOTYPES = setFrom([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
  * The values recorded.
@@ -70,20 +81,21 @@ function recordSharedExports(value) {
 	let budget = RECORD_BUDGET;
 	const pending = [value];
 	while (pending.length && budget > 0) {
-		const member = pending.pop();
+		const member = ArrayMethods.pop(pending);
 		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-		if (RECORDED.has(member) || LANGUAGE_PROTOTYPES.has(member) || IS_PROXY(member)) continue;
-		RECORDED.add(member);
+		if (WeakSetMethods.has(RECORDED, member) || SetMethods.has(LANGUAGE_PROTOTYPES, member) || IS_PROXY(member)) continue;
+		WeakSetMethods.add(RECORDED, member);
 		try {
 			const keys = Reflect.ownKeys(member);
 			budget -= keys.length;
-			for (const key of keys) {
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
-				if ("value" in descriptor) pending.push(descriptor.value);
-				else pending.push(descriptor.get, descriptor.set);
+				if ("value" in descriptor) ArrayMethods.push(pending, descriptor.value);
+				else ArrayMethods.push(pending, descriptor.get, descriptor.set);
 			}
-			pending.push(Reflect.getPrototypeOf(member));
+			ArrayMethods.push(pending, Reflect.getPrototypeOf(member));
 		} catch {
 			// What refuses to be described records nothing of what it holds.
 		}
@@ -100,7 +112,7 @@ function recordSharedExports(value) {
  */
 export function isSharedExport(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	return RECORDED.has(value);
+	return WeakSetMethods.has(RECORDED, value);
 }
 
 /**

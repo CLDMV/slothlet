@@ -24,7 +24,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import { ArrayMethods, Map, MapMethods, promiseAll, Reflect, Set, SetMethods, setValues } from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
 
 /**
@@ -44,6 +44,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		/** @type {Map<string, Set<Function>>} */
 		this.subscribers = new Map();
 		// Internal-only subscriber tier (#398). The construction/contribution stream (`impl:created` /
 		// `impl:changed` emitted pre-placement, per contribution, with the raw callable available to the
@@ -51,9 +52,11 @@ export class Lifecycle extends ComponentBase {
 		// subscribers ONLY — it never reaches public `api.slothlet.lifecycle.on(...)` / `config.lifecycle`
 		// consumers. Those see the sanitized, post-placement PUBLIC `impl:created` / `impl:changed` emitted
 		// via emit(), which carries the wrapped callable + metadata, never the raw unwrapped impl.
+		/** @type {Map<string, Set<Function>>} */
 		this.internalSubscribers = new Map();
 		// The module each public subscriber was subscribed from (#625), per event: such a subscriber is handed
 		// its module's view of the node an event is about, never the node or its implementation itself.
+		/** @type {Map<string, Map<Function, unknown>>} */
 		this.subscriberReaders = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
@@ -75,15 +78,15 @@ export class Lifecycle extends ComponentBase {
 	 * });
 	 */
 	subscribe(event, handler) {
-		if (!this.subscribers.has(event)) {
-			this.subscribers.set(event, new Set());
-			this.subscriberReaders.set(event, new Map());
+		if (!MapMethods.has(this.subscribers, event)) {
+			MapMethods.set(this.subscribers, event, new Set());
+			MapMethods.set(this.subscriberReaders, event, new Map());
 		}
-		this.subscribers.get(event).add(handler);
+		SetMethods.add(MapMethods.get(this.subscribers, event), handler);
 		// Who subscribed: a module executing now (#625), or the host. The host is handed what it always was.
 		const reader = runtime_selfModuleReader(this.slothlet);
-		if (reader) this.subscriberReaders.get(event).set(handler, reader);
-		else this.subscriberReaders.get(event).delete(handler);
+		if (reader) MapMethods.set(MapMethods.get(this.subscriberReaders, event), handler, reader);
+		else MapMethods.delete(MapMethods.get(this.subscriberReaders, event), handler);
 
 		// Return unsubscribe function
 		return () => this.off(event, handler);
@@ -117,19 +120,19 @@ export class Lifecycle extends ComponentBase {
 	 * @internal
 	 */
 	subscribeInternal(event, handler) {
-		if (!this.internalSubscribers.has(event)) {
-			this.internalSubscribers.set(event, new Set());
+		if (!MapMethods.has(this.internalSubscribers, event)) {
+			MapMethods.set(this.internalSubscribers, event, new Set());
 		}
-		this.internalSubscribers.get(event).add(handler);
+		SetMethods.add(MapMethods.get(this.internalSubscribers, event), handler);
 
 		// Return unsubscribe function
 		return () => {
-			const handlers = this.internalSubscribers.get(event);
+			const handlers = MapMethods.get(this.internalSubscribers, event);
 			// The bucket is created on subscribe and never deleted (buckets persist for the instance's
 			// life), so `handlers` is always present here; the guard is defensive and its else unreachable.
 			/* v8 ignore else */
 			if (handlers) {
-				handlers.delete(handler);
+				SetMethods.delete(handlers, handler);
 			}
 		};
 	}
@@ -146,10 +149,12 @@ export class Lifecycle extends ComponentBase {
 	 * lifecycle.off('impl:changed', handler);
 	 */
 	off(event, handler) {
-		const handlers = this.subscribers.get(event);
+		const handlers = MapMethods.get(this.subscribers, event);
 		if (handlers) {
-			handlers.delete(handler);
-			this.subscriberReaders.get(event)?.delete(handler);
+			SetMethods.delete(handlers, handler);
+			MapMethods.get(this.subscriberReaders, event) == null
+				? undefined
+				: MapMethods.delete(MapMethods.get(this.subscriberReaders, event), handler);
 		}
 	}
 
@@ -192,7 +197,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	async emit(event, data, nodes) {
 		this.#logEvent(event, data);
-		await this.#notify(this.subscribers.get(event), event, data, this.subscriberReaders.get(event), nodes);
+		await this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
 	}
 
 	/**
@@ -207,7 +212,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	async emitInternal(event, data) {
 		this.#logEvent(event, data);
-		await this.#notify(this.internalSubscribers.get(event), event, data);
+		await this.#notify(MapMethods.get(this.internalSubscribers, event), event, data);
 	}
 
 	/**
@@ -219,7 +224,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	#logEvent(event, data) {
 		if (this.____config?.debug?.lifecycle) {
-			this.eventLog.push({
+			ArrayMethods.push(this.eventLog, {
 				event,
 				data: { ...data },
 				timestamp: this.clock.now()
@@ -227,7 +232,7 @@ export class Lifecycle extends ComponentBase {
 
 			// Trim log if too large
 			if (this.eventLog.length > this.maxLogSize) {
-				this.eventLog.shift();
+				ArrayMethods.shift(this.eventLog);
 			}
 
 			this.slothlet.debug("lifecycle", {
@@ -296,7 +301,7 @@ export class Lifecycle extends ComponentBase {
 	#invokeAs(handler, reader, args) {
 		const contextManager = this.slothlet.contextManager;
 		// Code the live runtime could not attribute is no module to run as: its subscriber is called as it was.
-		if (!reader.____slothletInternal || !contextManager?.runInContext) return handler(...args);
+		if (!reader.____slothletInternal || !contextManager?.runInContext) return Reflect.apply(handler, undefined, args);
 		return contextManager.runInContext(this.slothlet.instanceID, handler, undefined, args, reader, true);
 	}
 
@@ -318,9 +323,9 @@ export class Lifecycle extends ComponentBase {
 		const handlerPromises = [];
 
 		const token = getInstanceToken(this.slothlet);
-		for (const handler of handlers) {
+		for (const handler of setValues(handlers)) {
 			try {
-				const reader = readers?.get(handler);
+				const reader = readers == null ? undefined : MapMethods.get(readers, handler);
 				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
 				// event only: the instance's token is the framework's own.
 				const apiManager = this.slothlet.handlers?.apiManager;
@@ -328,7 +333,8 @@ export class Lifecycle extends ComponentBase {
 				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
 				// If handler returns a promise, track it
 				if (result && typeof result.then === "function") {
-					handlerPromises.push(
+					ArrayMethods.push(
+						handlerPromises,
 						result.catch((error) => {
 							// Log error but don't stop other handlers
 							this.#warnHandlerError(event, data, error);
@@ -343,7 +349,7 @@ export class Lifecycle extends ComponentBase {
 
 		// Wait for all async handlers to complete
 		if (handlerPromises.length > 0) {
-			await Promises.all(handlerPromises);
+			await promiseAll(handlerPromises);
 		}
 	}
 }
