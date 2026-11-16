@@ -23,13 +23,13 @@ import { self } from "@cldmv/slothlet/runtime";
 /**
  * Run a check, answering what it returned, or the code of what it threw.
  * @param {function(): *} check - The check.
- * @returns {*} Its answer, or `{ threw }`.
+ * @returns {*} Its answer, or `{ threw, typeError }`.
  */
 function answer(check) {
 	try {
 		return check();
 	} catch (error) {
-		return { threw: error?.code ?? error?.name ?? "threw" };
+		return { threw: error?.code ?? error?.name ?? "threw", typeError: error instanceof TypeError };
 	}
 }
 
@@ -46,7 +46,7 @@ const valueOf = (kind) => (kind === "object" ? { v: 1, hidden: "H" } : kind === 
  * @param {string} key - The member.
  * @param {string} kind - The value's kind.
  * @param {string} how - `defineProperty`, `defineProperties` or `reflect`.
- * @returns {*} What the route returned, or `{ threw }`.
+ * @returns {*} What the route returned, or `{ threw, typeError }`.
  */
 const fix = (node, key, kind, how) =>
 	answer(() => {
@@ -63,7 +63,7 @@ export const data = { pub: 1 };
  * @param {string} key - The member.
  * @param {string} kind - The value's kind.
  * @param {string} how - The route.
- * @returns {*} What the route returned, or `{ threw }`.
+ * @returns {*} What the route returned, or `{ threw, typeError }`.
  */
 export function define(key, kind, how) {
 	return fix(self.owner.data, key, kind, how);

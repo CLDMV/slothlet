@@ -13983,9 +13983,51 @@ function runtime_definitionFixes(wrapper, target, prop, descriptor) {
 }
 
 /**
+ * A slothlet refusal the language itself would raise as a `TypeError` (a definition an object cannot take): an
+ * instance of `TypeError` carrying a {@link SlothletError}'s `code`, `context`, `hint` and translated message, shown and
+ * serialized as one. Made from the SlothletError with {@link SlothletTypeError.from}, so its code is declared and
+ * translated as any other. Internal to this file: it is not part of the errors module's exports.
+ * @private
+ *
+ * @example
+ * throw SlothletTypeError.from(new SlothletError("API_MEMBER_FIXED_OBJECT", { apiPath: "box.late" }, null, { validationError: true }));
+ */
+class SlothletTypeError extends TypeError {
+	/**
+	 * The same refusal as a `TypeError`.
+	 * @param {SlothletError} error - The refusal.
+	 * @returns {SlothletTypeError} The error to throw.
+	 */
+	static from(error) {
+		const hasOriginal = error.originalError !== null && error.originalError !== undefined;
+		const typed = new SlothletTypeError(error.message, hasOriginal ? { __proto__: null, cause: error.originalError } : undefined);
+		typed.name = "SlothletTypeError";
+		const keys = ["code", "context", "originalError", "hint"];
+		for (let index = 0; index < keys.length; index++) {
+			Objects.defineProperty(typed, keys[index], { __proto__: null, value: error[keys[index]], enumerable: false, writable: false });
+		}
+		Errors.captureStackTrace(typed, SlothletTypeError.from);
+		return typed;
+	}
+}
+
+{
+	const shared = ["toString", "toJSON", Symbols.for("nodejs.util.inspect.custom")];
+	for (let index = 0; index < shared.length; index++) {
+		Objects.defineProperty(SlothletTypeError.prototype, shared[index], {
+			__proto__: null,
+			value: SlothletError.prototype[shared[index]],
+			enumerable: false,
+			writable: true,
+			configurable: true
+		});
+	}
+}
+
+/**
  * Refuse, while the permission system is on, a definition that fixes a member (read-only and non-configurable) holding
  * an object or function in one step, on a node or the api root: the language requires the node to report and hand out
- * that very value, so nothing beneath it could be read, listed or written under the rules (D3). Assigning the member
+ * that very value, so nothing beneath it could be read, listed or written under the rules. Assigning the member
  * and then fixing it (`Object.defineProperty(node, key, { writable: false, configurable: false })`) keeps it a node.
  * A primitive, a built-in data object (read as one value under the rules), an api node, and every definition the
  * framework makes or makes during a build, are defined as asked; so is everything while the system is off or disabled.
@@ -13994,7 +14036,7 @@ function runtime_definitionFixes(wrapper, target, prop, descriptor) {
  * @param {string|symbol} prop - The member.
  * @param {*} value - The value defined.
  * @returns {void}
- * @throws {SlothletError} `API_MEMBER_FIXED_OBJECT` when the definition is refused.
+ * @throws {SlothletTypeError} `API_MEMBER_FIXED_OBJECT` (a `TypeError`) when the definition is refused.
  * @private
  *
  * @example
@@ -14004,12 +14046,19 @@ function runtime_definitionFixes(wrapper, target, prop, descriptor) {
  */
 function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
 	if (!slothlet.handlers?.permissionManager?.isEnabled()) return;
-	if (slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(slothlet.boundApi)) return;
+	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, slothlet.boundApi)) return;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	if (resolveWrapper(value) !== null || UnifiedWrapper._staysValue(value)) return;
-	throw new slothlet.SlothletError("API_MEMBER_FIXED_OBJECT", { apiPath: apiPath ? `${apiPath}.${String(prop)}` : String(prop) }, null, {
-		validationError: true
-	});
+	// A definition the object cannot take: thrown as the language's `TypeError`, coded and translated.
+	const refusal = new slothlet.SlothletError(
+		"API_MEMBER_FIXED_OBJECT",
+		{ apiPath: apiPath ? `${apiPath}.${String(prop)}` : String(prop) },
+		null,
+		{
+			validationError: true
+		}
+	);
+	throw SlothletTypeError.from(refusal);
 }
 
 /**
@@ -21245,7 +21294,11 @@ class UnifiedWrapper extends ComponentBase {
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 				// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.
-				if ("value" in descriptor && !FRAMEWORK_WRITES.has(wrapper) && runtime_definitionFixes(wrapper, target, prop, descriptor)) {
+				if (
+					"value" in descriptor &&
+					!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+					runtime_definitionFixes(wrapper, target, prop, descriptor)
+				) {
 					runtime_refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
 				}
 				// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is

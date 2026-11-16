@@ -43,7 +43,8 @@ const matrix = ["on", "off", "disabled"].flatMap((permissionMode) =>
 
 const KINDS = ["object", "function", "primitive"];
 const ROUTES = ["defineProperty", "defineProperties", "reflect"];
-const REFUSED = { threw: "API_MEMBER_FIXED_OBJECT" };
+// Refused as the language refuses a definition an object cannot take: a `TypeError`, coded.
+const REFUSED = { threw: "API_MEMBER_FIXED_OBJECT", typeError: true };
 
 /**
  * A fresh value of a kind, as the fixture makes it.
@@ -58,7 +59,7 @@ const valueOf = (kind) => (kind === "object" ? { v: 1, hidden: "H" } : kind === 
  * @param {string} key - The member.
  * @param {string} kind - The value's kind.
  * @param {string} how - The route.
- * @returns {*} What the route returned, or `{ threw }`.
+ * @returns {*} What the route returned, or `{ threw, typeError }`.
  */
 function fix(node, key, kind, how) {
 	try {
@@ -67,7 +68,7 @@ function fix(node, key, kind, how) {
 		if (how === "reflect") return Reflect.defineProperty(node, key, descriptor);
 		return Object.defineProperty(node, key, descriptor) === node;
 	} catch (error) {
-		return { threw: error?.code ?? error?.name ?? "threw" };
+		return { threw: error?.code ?? error?.name ?? "threw", typeError: error instanceof TypeError };
 	}
 }
 

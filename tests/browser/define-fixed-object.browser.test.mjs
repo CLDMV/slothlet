@@ -36,6 +36,19 @@ function answer(check) {
 	}
 }
 
+/**
+ * Run a definition, answering what it returned, or the code of what it threw and whether that is a `TypeError`.
+ * @param {function(): *} define - The definition.
+ * @returns {*} Its answer, or `{ threw, typeError }`.
+ */
+function defined(define) {
+	try {
+		return define();
+	} catch (error) {
+		return { threw: error?.code ?? error?.name ?? "threw", typeError: error instanceof TypeError };
+	}
+}
+
 const FIXED = { writable: false, configurable: false, enumerable: true };
 
 describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionMode) => ({ mode, permissionMode }))))(
@@ -61,7 +74,7 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 				{
 					exports: {
 						data: { pub: 1 },
-						define: (key) => answer(() => Reflect.defineProperty(self.owner.data, key, { value: { v: 1 }, ...FIXED })),
+						define: (key) => defined(() => Reflect.defineProperty(self.owner.data, key, { value: { v: 1 }, ...FIXED })),
 						lock: () => {
 							self.owner.data.locked = { v: 1, hidden: "H" };
 							return Reflect.defineProperty(self.owner.data, "locked", { writable: false, configurable: false });
@@ -80,9 +93,11 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 
 		it("refuses the one-step definition while on, by the host and a module, and allows a primitive", async () => {
 			const api = await boot();
-			const refused = { threw: "API_MEMBER_FIXED_OBJECT" };
-			expect(answer(() => Object.defineProperty(api, "rootFixed", { value: { v: 1 }, ...FIXED }) === api)).toEqual(on ? refused : true);
-			expect(answer(() => Reflect.defineProperty(api.owner.data, "hostFixed", { value: { v: 1 }, ...FIXED }))).toEqual(on ? refused : true);
+			const refused = { threw: "API_MEMBER_FIXED_OBJECT", typeError: true };
+			expect(defined(() => Object.defineProperty(api, "rootFixed", { value: { v: 1 }, ...FIXED }) === api)).toEqual(on ? refused : true);
+			expect(defined(() => Reflect.defineProperty(api.owner.data, "hostFixed", { value: { v: 1 }, ...FIXED }))).toEqual(
+				on ? refused : true
+			);
 			expect(await api.owner.define("moduleFixed")).toEqual(on ? refused : true);
 			expect(Reflect.defineProperty(api.owner.data, "prim", { value: "P", ...FIXED })).toBe(true);
 			expect(api.owner.data.prim).toBe("P");
