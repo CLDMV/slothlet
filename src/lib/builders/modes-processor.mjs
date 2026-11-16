@@ -898,8 +898,8 @@ export class ModesProcessor extends ComponentBase {
 				if (entry.moduleName !== "addapi") continue;
 				const extension = entry.file.fullName
 					? typeof entry.file.fullName === "string"
-						? StringMethods.slice(entry.file.fullName, ArrayMethods.lastIndexOf(entry.file.fullName, "."))
-						: copyList(entry.file.fullName, ArrayMethods.lastIndexOf(entry.file.fullName, "."))
+						? StringMethods.slice(entry.file.fullName, StringMethods.lastIndexOf(entry.file.fullName, "."))
+						: copyList(entry.file.fullName, StringMethods.lastIndexOf(entry.file.fullName, "."))
 					: "";
 				entry.moduleName = modes_addapiSelfName;
 				entry.file = { ...entry.file, name: modes_addapiSelfName, fullName: `${modes_addapiSelfName}${extension}` };
@@ -920,8 +920,8 @@ export class ModesProcessor extends ComponentBase {
 			const entry = loadedModules[0];
 			const extension = entry.file.fullName
 				? typeof entry.file.fullName === "string"
-					? StringMethods.slice(entry.file.fullName, ArrayMethods.lastIndexOf(entry.file.fullName, "."))
-					: copyList(entry.file.fullName, ArrayMethods.lastIndexOf(entry.file.fullName, "."))
+					? StringMethods.slice(entry.file.fullName, StringMethods.lastIndexOf(entry.file.fullName, "."))
+					: copyList(entry.file.fullName, StringMethods.lastIndexOf(entry.file.fullName, "."))
 				: "";
 			entry.moduleName = categoryName;
 			entry.file = { ...entry.file, name: categoryName, fullName: `${categoryName}${extension}` };

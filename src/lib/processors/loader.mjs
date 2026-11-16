@@ -1291,7 +1291,7 @@ export class Loader extends ComponentBase {
 			const file = files[i];
 			const filePath = file.path || file.relativePath || "";
 			const fullName = file.fullName || ArrayMethods.pop(splitText(filePath, "/"));
-			const lastDot = ArrayMethods.lastIndexOf(fullName, ".");
+			const lastDot = StringMethods.lastIndexOf(fullName, ".");
 			const ext = lastDot >= 0 ? (typeof fullName === "string" ? StringMethods.slice(fullName, lastDot) : copyList(fullName, lastDot)) : "";
 
 			// Skip non-JS files and dot/double-underscore helpers.

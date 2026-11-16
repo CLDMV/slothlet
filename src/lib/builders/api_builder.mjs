@@ -1995,10 +1995,10 @@ export class ApiBuilder extends ComponentBase {
 					const namespaces = new Set();
 					for (let ofIndex = 0, ofList = ownedPaths; ofIndex < ofList.length; ofIndex++) {
 						const owned = ofList[ofIndex];
-						let cut = ArrayMethods.lastIndexOf(owned, ".");
+						let cut = StringMethods.lastIndexOf(owned, ".");
 						while (cut > 0) {
 							SetMethods.add(namespaces, typeof owned === "string" ? StringMethods.slice(owned, 0, cut) : copyList(owned, 0, cut));
-							cut = ArrayMethods.lastIndexOf(owned, ".", cut - 1);
+							cut = StringMethods.lastIndexOf(owned, ".", cut - 1);
 						}
 					}
 					const kindOf = (path) => {
@@ -2167,7 +2167,7 @@ export class ApiBuilder extends ComponentBase {
 					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]}
 					 */
 					sort: function slothlet_modules_sort(results, comparator) {
-						return ArrayMethods.sort(slothlet.handlers.moduleManager, results, comparator);
+						return slothlet.handlers.moduleManager.sort(results, comparator);
 					},
 
 					/**
@@ -2231,7 +2231,7 @@ export class ApiBuilder extends ComponentBase {
 						// The calling module, read before the discovery's await loses it (#625).
 						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
-						const ordered = ArrayMethods.sort(slothlet.handlers.moduleManager, found, comparator);
+						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
 						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
 					},
 
