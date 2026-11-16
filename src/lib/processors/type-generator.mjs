@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
+ *	@Last modified time: 2026-11-15T19:48:24-08:00 (1794800904)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@ import { Objects, Arrays, JSON, Set, Boolean, Date } from "@cldmv/slothlet/helpe
 // on Node's module object later does not run here.
 const fs = Objects.freeze({ ...nodeFs });
 const path = Objects.freeze({ ...nodePath });
-const { resolveWrapper } = unifiedWrapperInternals("lib/processors/type-generator");
+const { resolveWrapper, runtime_rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
@@ -100,7 +100,7 @@ export async function generateTypes(api, options) {
 
 	// Describe the api, then render it.
 	const members = describeMembers(api, "", context, new Set());
-	const declaration = generateDeclaration(members, options);
+	const declaration = generateDeclaration(members, options, rootCallType(api, context));
 
 	// Ensure the output directory exists. mkdir with recursive:true is idempotent
 	// and never throws when the directory already exists, so no existsSync pre-check
@@ -113,6 +113,21 @@ export async function generateTypes(api, options) {
 		output: declaration,
 		filePath: outputPath
 	};
+}
+
+/**
+ * The type of the api root's function when the root is one (#803): its root file's default export, as a member's type
+ * is its export's. `api()` and a module's `self()` call it.
+ * @param {*} api - The composed api.
+ * @param {object} context - Shared generation state (`ownership`, `outputDir`).
+ * @returns {string|null} The type expression, or `null` for an object root (or a root with no module file).
+ * @private
+ */
+function rootCallType(api, context) {
+	if (typeof api !== "function" || !context.ownership) return null;
+	const instance = findInstance(api);
+	const filePath = instance ? runtime_rootFileOf(instance) : null;
+	return filePath ? originType({ filePath, exportPath: ["default"] }, context) : null;
 }
 
 /**
@@ -328,10 +343,11 @@ function renderMembers(members, indent, lines) {
  * Generate TypeScript declaration file content
  * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Root members.
  * @param {object} options - Generation options
+ * @param {string|null} [rootCall=null] - The api root function's type, when the root is a function (#803).
  * @returns {string} Declaration file content
  * @private
  */
-function generateDeclaration(members, options) {
+function generateDeclaration(members, options, rootCall = null) {
 	const interfaceName = options.interfaceName;
 	const augment = options.augmentRuntime !== false;
 	const lines = [];
@@ -348,6 +364,13 @@ function generateDeclaration(members, options) {
 	}
 
 	lines.push(`export interface ${interfaceName} {`);
+	// A function root makes the api, and `self`, callable as that function (#803). Its arguments and result are taken
+	// from the function's own type; the call signature is inherited by `SlothletSelf` below.
+	if (rootCall) {
+		const fn = `Extract<${rootCall}, (...args: any[]) => any>`;
+		lines.push(`\t/** The api root's own function (\`api()\`, and \`self()\` in a leaf). */`);
+		lines.push(`\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
+	}
 	renderMembers(members, 1, lines);
 	lines.push("}");
 	lines.push("");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:10-08:00 (1794797710)
+ *	@Last modified time: 2026-11-15T19:48:09-08:00 (1794800889)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,7 @@ import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/sloth
 import { Reflect, Objects, Arrays, Map, Set, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
 import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/modes-processor");
-const { setInstanceSelfKind } = instanceImportsInternals("lib/builders/modes-processor");
+const { setInstanceSelfKind, defaultExportLooksCallable } = instanceImportsInternals("lib/builders/modes-processor");
 const { resolveWrapper } = unifiedWrapperOwn;
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
@@ -784,6 +784,42 @@ export class ModesProcessor extends ComponentBase {
 		}
 		// Load all modules
 		const loadedModules = [];
+		// The base load's first build, before its api exists: the root's kind decides the form of `self` its files get
+		// (#803), and is known once a root file whose default export is a function has loaded.
+		const modes_noteRootKind = isRoot && !apiPathPrefix && !populateDirectly && !this.slothlet.boundApi;
+		let modes_rootFunctions = 0;
+		/**
+		 * Load one file's exports.
+		 * @param {object} file - The file entry.
+		 * @returns {Promise<object>} Its exports.
+		 */
+		const modes_loadExports = async (file) => {
+			// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
+			// entry, so skip the disk load + extractExports. Everything downstream (flatten,
+			// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
+			if (file.synthetic) return file.exports;
+			const loadedNamespace = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+			// Index where each exported value sits in the namespace, so every wrapper built from this
+			// file can record its module origin (#484).
+			this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
+			return this.slothlet.processors.loader.extractExports(loadedNamespace, file.path);
+		};
+		// A single root file whose source plainly makes its default export a function is loaded before its siblings, so
+		// they get the callable form from their first import. Only the order the files are evaluated in changes; they are
+		// composed in their own order below.
+		const modes_preloaded = new Map();
+		if (modes_noteRootKind) {
+			const candidates = files.filter((file) => !file.synthetic && defaultExportLooksCallable(file.path));
+			if (candidates.length === 1) {
+				try {
+					const preloaded = await modes_loadExports(candidates[0]);
+					modes_preloaded.set(candidates[0], preloaded);
+					if (typeof preloaded?.default === "function") setInstanceSelfKind(this.slothlet.instanceID, true);
+				} catch {
+					// The file is loaded again in its place below, which reports the failure.
+				}
+			}
+		}
 		for (const file of files) {
 			if (this.slothlet.config.debug?.modes && categoryName === "string") {
 				this.slothlet.debug("modes", {
@@ -799,20 +835,12 @@ export class ModesProcessor extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 				// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 				// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
-				let exports;
-				if (file.synthetic) {
-					exports = file.exports;
-				} else {
-					const loadedNamespace = await this.slothlet.processors.loader.loadModule(
-						file.path,
-						this.slothlet.instanceID,
-						moduleID,
-						cacheBust
-					);
-					// Index where each exported value sits in the namespace, so every wrapper built from this
-					// file can record its module origin (#484).
-					this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
-					exports = this.slothlet.processors.loader.extractExports(loadedNamespace, file.path);
+				const exports = modes_preloaded.has(file) ? modes_preloaded.get(file) : await modes_loadExports(file);
+				// The first root file with a function default makes the root a function; a second makes it a namespace.
+				if (modes_noteRootKind && typeof exports?.default === "function") {
+					modes_rootFunctions++;
+					if (modes_rootFunctions === 1 && !modes_preloaded.has(file)) setInstanceSelfKind(this.slothlet.instanceID, true);
+					else if (modes_rootFunctions === 2) setInstanceSelfKind(this.slothlet.instanceID, false);
 				}
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Objects.keys(exports).filter((k) => k !== "default");
@@ -1956,9 +1984,7 @@ export class ModesProcessor extends ComponentBase {
 		// The base load's root files are loaded: a single root file whose default export is a function makes the api root
 		// a function, so the files loaded from here on get the callable form of `self` from their first import (#803). The
 		// api, once built, sets the form it takes in the end.
-		if (isRoot && !apiPathPrefix && !populateDirectly && !this.slothlet.boundApi && rootContributors.length === 1) {
-			setInstanceSelfKind(this.slothlet.instanceID, true);
-		}
+		if (modes_noteRootKind) setInstanceSelfKind(this.slothlet.instanceID, rootContributors.length === 1);
 		// Handle subdirectories based on mode
 		if (this.slothlet.config.debug?.modes) {
 			this.slothlet.debug("modes", {

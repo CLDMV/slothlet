@@ -5447,6 +5447,109 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 }
 
 /**
+ * What a serialization leaves out: a member whose value JSON writes nothing for, or one the reader is refused.
+ * @type {symbol}
+ * @private
+ */
+const SNAPSHOT_OMIT = Symbol("slothlet.snapshotOmit");
+
+/**
+ * Whether an error is a refusal by the permission system.
+ * @param {*} error - What was thrown.
+ * @returns {boolean} True for `PERMISSION_DENIED`.
+ * @private
+ */
+function runtime_isRefusal(error) {
+	return error instanceof SlothletError && error.code === "PERMISSION_DENIED";
+}
+
+/**
+ * The plain data `JSON.stringify` writes for a value read through `self`, as the reader may read it (#803): each
+ * member the reader is refused (its read, its description, or the `toJSON` the serialization looks up on it) is left
+ * out, as a listing leaves it out, and never thrown for. An array element refused is written as `null`, where JSON
+ * writes a member with no value. Everything else is what JSON does: `toJSON` is called with the member's key, a
+ * function, a symbol and `undefined` are left out, a boxed primitive and a primitive are kept for JSON to write, and a
+ * cycle throws the `TypeError` JSON throws.
+ * @param {*} value - The value.
+ * @param {string} key - Its key in its holder.
+ * @param {Array<object>} stack - The objects being written, outermost first.
+ * @param {boolean} [skipToJSON=false] - Do not look up `toJSON` on the value itself (it is the root being written).
+ * @returns {*} The data, or {@link SNAPSHOT_OMIT}.
+ * @private
+ */
+function runtime_jsonSnapshot(value, key, stack, skipToJSON = false) {
+	if (!skipToJSON && value !== null && (typeof value === "object" || typeof value === "function")) {
+		let toJSON;
+		try {
+			toJSON = value.toJSON;
+		} catch (error) {
+			if (!runtime_isRefusal(error)) throw error;
+		}
+		if (typeof toJSON === "function") {
+			try {
+				value = Reflect.apply(toJSON, value, [key]);
+			} catch (error) {
+				if (!runtime_isRefusal(error)) throw error;
+				return SNAPSHOT_OMIT;
+			}
+		}
+	}
+	if (value === undefined || typeof value === "function" || typeof value === "symbol") return SNAPSHOT_OMIT;
+	if (value === null || typeof value !== "object" || isBoxedPrimitive(value)) return value;
+	if (stack.includes(value)) throw new TypeError("Converting circular structure to JSON");
+	stack.push(value);
+	try {
+		if (Arrays.isArray(value)) {
+			const out = [];
+			const length = value.length;
+			for (let i = 0; i < length; i++) {
+				let element;
+				try {
+					element = runtime_jsonSnapshot(value[i], String(i), stack);
+				} catch (error) {
+					if (!runtime_isRefusal(error)) throw error;
+					element = SNAPSHOT_OMIT;
+				}
+				out.push(element === SNAPSHOT_OMIT ? null : element);
+			}
+			return out;
+		}
+		const out = {};
+		for (const name of Reflect.ownKeys(value)) {
+			if (typeof name !== "string") continue;
+			let member;
+			try {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
+				if (!descriptor?.enumerable) continue;
+				member = runtime_jsonSnapshot(value[name], name, stack);
+			} catch (error) {
+				if (!runtime_isRefusal(error)) throw error;
+				continue;
+			}
+			if (member !== SNAPSHOT_OMIT) out[name] = member;
+		}
+		return out;
+	} finally {
+		stack.pop();
+	}
+}
+
+/**
+ * The `toJSON` `self` answers for an api whose root is an object and has no `toJSON` member of its own (#803): it
+ * gives the data `JSON.stringify(api)` gives the host, less what the reader is refused (see
+ * {@link runtime_jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
+ * member by name still does.
+ * @this {object} The `self` being written.
+ * @param {string} [key] - The key JSON passes.
+ * @returns {*} The data.
+ * @internal
+ */
+function runtime_selfToJSON(key) {
+	const data = runtime_jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
+	return data === SNAPSHOT_OMIT ? undefined : data;
+}
+
+/**
  * The definer of the code making a call while no call runs (#726): when the frames tell it is a module's code (a
  * function the module handed out, run by the host), that code's definer, the nearest leaf frame of its file or the
  * file's module. Null while a call runs, for the host's own code, with the permission system off or `provenance` off,
@@ -9774,6 +9877,17 @@ const ROOT_FILES = new WeakMap();
  * @private
  */
 const ROOT_LEAVES = new WeakMap();
+
+/**
+ * The file whose default function is the api root of an instance's base load (see {@link runtime_noteRootFile}), or
+ * null when its root is no function: what a generated declaration types the root's call by (#803).
+ * @param {object} slothlet - The instance.
+ * @returns {string|null} The root file's path.
+ * @internal
+ */
+function runtime_rootFileOf(slothlet) {
+	return ROOT_FILES.get(slothlet)?.filePath ?? null;
+}
 
 /**
  * Record the file whose default function is the api root of an instance's base load, and the module it was loaded
@@ -19723,6 +19837,7 @@ export function internals(consumer) {
 		runtime_assertRootChange,
 		runtime_registerRoot,
 		runtime_noteRootFile,
+		runtime_rootFileOf,
 		runtime_rootCall,
 		runtime_rootCallCheck,
 		runtime_rootClose,
@@ -19738,6 +19853,7 @@ export function internals(consumer) {
 		runtime_selfModuleCeilings,
 		runtime_selfModuleReader,
 		runtime_selfReadAsDefiner,
+		runtime_selfToJSON,
 		runtime_selfRootView,
 		runtime_selfView,
 		runtime_unwrapSelfView,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:18-08:00 (1794797718)
+ *	@Last modified time: 2026-11-15T19:48:25-08:00 (1794800905)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,7 @@ const {
 	runtime_resolvedAccess,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
+	runtime_selfToJSON,
 	runtime_contextRead,
 	runtime_contextWritten,
 	runtime_contextReadAsDefiner,
@@ -209,7 +210,11 @@ const selfTraps = {
 			const read = runtime_selfReadAsDefiner(objectSelf, prop, null, ctx.parentInstanceID);
 			if (read) return read.value;
 		}
-		return runtime_selfMember(prop, ctx.self[prop], resolved);
+		const value = ctx.self[prop];
+		// An object root with no `toJSON` of its own serializes as `api` does for the host, less what the reader is refused,
+		// which is left out rather than thrown for (#803).
+		if (prop === "toJSON" && value === undefined && typeof ctx.self !== "function") return runtime_selfToJSON;
+		return runtime_selfMember(prop, value, resolved);
 	},
 	// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
 	// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to

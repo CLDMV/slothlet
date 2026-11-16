@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:15-08:00 (1794797715)
+ *	@Last modified time: 2026-11-15T19:48:19-08:00 (1794800899)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1055,6 +1055,37 @@ function selfModuleSource(instanceID, url, specifier = url) {
 		`export let self = shared;\n` +
 		`shared[${JSON.stringify(SELF_BIND_KEY)}](${JSON.stringify(instanceID)}, (form) => { self = form; });\n`
 	);
+}
+
+/**
+ * Whether a file's source plainly makes its default export a function (#803): `export default function` / `async
+ * function` / `class` / an arrow, `export default name` where `name` is declared as one of those, or a CommonJS
+ * `module.exports = function` / `class` / an arrow. A read of the text only, nothing runs; anything else, and a file
+ * that cannot be read, answers false. Slothlet evaluates such a root file before its siblings, so the files the base
+ * load evaluates after it get the callable form of `self` from their first import.
+ * @param {string} filePath - Absolute file path.
+ * @returns {boolean} True when the default export is plainly a function.
+ * @internal
+ */
+function defaultExportLooksCallable(filePath) {
+	if (NODE === null || typeof filePath !== "string") return false;
+	let source;
+	try {
+		source = NODE.fs.readFileSync(filePath, "utf8");
+	} catch {
+		return false;
+	}
+	// Regular expression literals only: the realm's `RegExp` may have been replaced since slothlet loaded.
+	if (/^\s*export\s+default\s+(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
+	if (/^\s*module\.exports\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
+	const named = /^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m.exec(source)?.[1];
+	if (!named) return false;
+	const declaration =
+		/^\s*(?:(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|class\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>))/gm;
+	for (let match = declaration.exec(source); match !== null; match = declaration.exec(source)) {
+		if (match[1] === named || match[2] === named || match[3] === named) return true;
+	}
+	return false;
 }
 
 /**
@@ -3748,6 +3779,7 @@ export function internals(consumer) {
 		bindInstanceSelf,
 		SELF_BIND_KEY,
 		setInstanceSelfKind,
+		defaultExportLooksCallable,
 		requireInInstance,
 		scriptKeyInstance,
 		setCallerCheck,
