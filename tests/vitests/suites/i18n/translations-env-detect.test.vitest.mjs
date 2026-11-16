@@ -38,6 +38,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
@@ -93,13 +94,20 @@ describe("setLanguageAsync() — async locale loading", () => {
 		expect(getLanguage()).toBe("en-us");
 	});
 
-	it("warns and falls back to en-us for an unknown locale", async () => {
+	it("raises a coded warning and falls back to en-us for an unknown locale (#820)", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		SlothletWarning.suppressConsole = true;
+		SlothletWarning.clearCaptured();
 		try {
 			await setLanguageAsync("zz-zz");
 			expect(getLanguage()).toBe("en-us");
-			expect(warn).toHaveBeenCalled();
+			const warnings = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].context).toEqual({ lang: "zz-zz" });
+			expect(warn).not.toHaveBeenCalled();
 		} finally {
+			SlothletWarning.suppressConsole = false;
+			SlothletWarning.clearCaptured();
 			warn.mockRestore();
 		}
 	});

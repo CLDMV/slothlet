@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-15T21:27:31-08:00 (1794806851)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,23 +26,15 @@
  * extensions of the Slothlet class itself.
  *
  * @example
- * // ESM
- * import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+ * // Internal: `#factories/*` resolves only from slothlet's own modules. `@cldmv/slothlet/factories/*`
+ * // is not in the package `exports`, so consumers cannot import it.
+ * import { ComponentBase } from "#factories/component-base";
  * class MyHandler extends ComponentBase {
  *   doSomething() {
  *     if (this.debug?.api) {
  *       console.log("Debug mode enabled");
  *     }
  *     throw new this.SlothletError("ERROR_CODE", { details: "info" });
- *   }
- * }
- *
- * @example
- * // CJS
- * const { ComponentBase } = require("@cldmv/slothlet/factories/component-base");
- * class MyHandler extends ComponentBase {
- *   doSomething() {
- *     return this.____config.mode;
  *   }
  * }
  */

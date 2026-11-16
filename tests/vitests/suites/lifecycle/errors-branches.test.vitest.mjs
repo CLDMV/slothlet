@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-15T22:54:02-08:00 (1794812042)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,6 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
@@ -92,8 +91,7 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 			await api.shutdown().catch(() => {});
 		}
 		api = null;
-		// Drain any warnings captured by this describe block so they don't bleed into other tests
-		SlothletWarning.captured.splice(0);
+		// Capture is per instance (#819): nothing to drain on the process-level class.
 	});
 
 	it("slothlet with allowMutation:false creates a V3_CONFIG_DEPRECATED warning captured in captured[] (line 184)", async () => {
@@ -101,14 +99,13 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 		// suppressConsole is true (set globally in vitest.setup.mjs).
 		// The warning constructor takes the else branch → line 184: captured.push(this).
 		// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
-		const priorLength = SlothletWarning.captured.length;
-		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
-		expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
+		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
+		expect(api.slothlet.diag.SlothletWarning.captured.length).toBeGreaterThan(0);
 	});
 
 	it("the captured warning has code V3_CONFIG_DEPRECATED (line 184)", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
-		const codes = SlothletWarning.captured.map((w) => w.code);
+		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
+		const codes = api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
 		expect(codes).toContain("V3_CONFIG_DEPRECATED");
 	});
 });

@@ -362,7 +362,7 @@ Useful as a "module system is ready" signal for hosts that gate downstream work 
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
 	tracking: { materialization: true }
 });
@@ -413,7 +413,7 @@ Routines are not hooks (`api.slothlet.hook.*` intercepts calls), not phases (a h
 ### Configuring routines
 
 ```javascript
-const api = await slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+const api = await slothlet({ base: "./api", routines: [...slothlet.defaults.routines, "launch"] });
 ```
 
 Slothlet ships two built-in defaults, exposed as `slothlet.defaults.routines`:
@@ -426,10 +426,10 @@ Slothlet ships two built-in defaults, exposed as `slothlet.defaults.routines`:
 Passing `routines` at all **replaces** the built-ins — that is the off switch:
 
 ```javascript
-slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] }); // extend the defaults
-slothlet({ dir: "./api", routines: ["launch"] }); // REPLACE — no initialize/shutdown
-slothlet({ dir: "./api", routines: [] }); // disable every routine
-slothlet({ dir: "./api" }); // omit routines — keeps the built-in defaults
+slothlet({ base: "./api", routines: [...slothlet.defaults.routines, "launch"] }); // extend the defaults
+slothlet({ base: "./api", routines: ["launch"] }); // REPLACE — no initialize/shutdown
+slothlet({ base: "./api", routines: [] }); // disable every routine
+slothlet({ base: "./api" }); // omit routines — keeps the built-in defaults
 ```
 
 `slothlet.defaults.routines` is frozen (at every level) and derived from the exact constant the runtime reads — spread it to extend, or filter it to drop one default while keeping the other:
@@ -501,7 +501,7 @@ At any exact composed api path where a mounted module's contribution resolves, `
 
 ```javascript
 // package A mounts at ["auth"], package B mounts at ["auth"] too — both export `initialize`
-const api = await slothlet({ dir: "./api", stackRoutines: true });
+const api = await slothlet({ base: "./api", stackRoutines: true });
 await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
 await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api");
 
@@ -620,7 +620,7 @@ Use `__type` and `api.slothlet.types` symbols to check a node's state without de
 ### `__type` property
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 // Before the node loads, typeof is "function" in lazy mode (proxy target)
 console.log(typeof api.math); // "function" - even if math module exports an object
@@ -645,7 +645,7 @@ Once materialized, `__type` returns a standard `typeof` string (`"object"`, `"fu
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 const { UNMATERIALIZED, IN_FLIGHT } = api.slothlet.types;
 
@@ -681,7 +681,7 @@ In lazy mode, reading a member of a node that has not loaded yet hands back a st
 - **Assigning a callable `then`** is refused at once with `API_MEMBER_THEN_RESERVED`, as on any node.
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 api.holder.deep.inner.planted = 1; // checked now, made when `inner` loads
 const inner = await api.holder.deep.inner;
@@ -724,14 +724,14 @@ The `tracking.materialization` config option (or the `backgroundMaterialize` sho
 ```javascript
 // Recommended: use tracking.materialization
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
 	tracking: { materialization: true }
 });
 
 // Shorthand: backgroundMaterialize
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
 	backgroundMaterialize: true
 });
@@ -742,7 +742,7 @@ const api = await slothlet({
 **Without background materialization (default):**
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 // Modules are proxies - not loaded
 console.log(api.math.__type); // UNMATERIALIZED
@@ -758,7 +758,7 @@ console.log(api.math.__type); // "object"
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
 	tracking: { materialization: true }
 });

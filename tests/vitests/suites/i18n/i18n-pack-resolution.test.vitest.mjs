@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-15T23:18:13-08:00 (1794813493)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,28 +74,40 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 
 	it("setLanguage warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.suppressConsole = true;
+		SlothletWarning.clearCaptured();
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
 			i18n.setLanguage("qa-corrupt");
 			expect(i18n.getLanguage()).toBe("en-us");
-			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("qa-corrupt"));
+			expect(SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt"))).toBe(
+				true
+			);
 		} finally {
-			warnSpy.mockRestore();
+			SlothletWarning.suppressConsole = false;
+			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt.json"), { force: true });
 		}
 	});
 
 	it("setLanguageAsync warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), "{ not valid json !");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.suppressConsole = true;
+		SlothletWarning.clearCaptured();
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
 			await i18n.setLanguageAsync("qa-corrupt-async");
 			expect(i18n.getLanguage()).toBe("en-us");
-			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("qa-corrupt-async"));
+			expect(
+				SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))
+			).toBe(true);
 		} finally {
-			warnSpy.mockRestore();
+			SlothletWarning.suppressConsole = false;
+			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), { force: true });
 		}
 	});

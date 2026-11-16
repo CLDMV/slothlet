@@ -111,14 +111,14 @@ describe("scheduleMacrotask (#578)", () => {
 
 describe.each(getBrowserMatrixConfigs())("browser compose without setImmediate (#578) > $name", ({ config }) => {
 	it("raises no WARNING_LIFECYCLE_HANDLER_ERROR for function leaves", async () => {
-		SlothletWarning.clearCaptured();
 		vi.stubGlobal("setImmediate", undefined);
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, manifest });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, manifest, diagnostics: true });
 		// Touch the leaves so lazy mode materializes them and fires impl:created too.
 		expect(await api.math.add(2, 3)).toBe(5);
 		expect(await api.utils.format.upper("a")).toBe("A");
 		await settle();
-		expect(handlerWarnings()).toEqual([]);
+		// Capture is per instance (#819), so read this instance's list, not the process-level one.
+		expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
 	});
 });
 

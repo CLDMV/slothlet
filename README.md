@@ -186,7 +186,7 @@ import slothlet from "@cldmv/slothlet";
 
 // Eager mode (default) — functions behave as originally defined
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { user: "alice" }
 });
 
@@ -199,7 +199,7 @@ CommonJS works the same way: `const slothlet = require("@cldmv/slothlet")`.
 **Lazy mode** with copy-left materialization — all calls awaited, ~2.2× faster startup:
 
 ```javascript
-const api = await slothlet({ mode: "lazy", dir: "./api" });
+const api = await slothlet({ mode: "lazy", base: "./api" });
 const result = await api.math.add(2, 3); // ALL calls awaited in lazy mode
 ```
 
@@ -235,7 +235,7 @@ Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API
 
 ```javascript
 // Lazy + background materialization
-const api = await slothlet({ mode: "lazy", dir: "./api", backgroundMaterialize: true });
+const api = await slothlet({ mode: "lazy", base: "./api", backgroundMaterialize: true });
 api.slothlet.lifecycle.on("materialized:complete", ({ total }) => console.log(`${total} modules ready`));
 await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 ```
@@ -249,7 +249,7 @@ await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 Five hook types (`before`, `after`, `always`, `error`, `around`) with three-phase subset ordering (`"before"` → `"primary"` → `"after"`), pattern matching, priority, and runtime enable/disable.
 
 ```javascript
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1] * 2], { id: "double" });
 api.slothlet.hook.on("math.*:after", ({ result }) => result * 10, { id: "scale" });

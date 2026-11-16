@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:58-07:00 (1791424198)
+ *	@Last modified time: 2026-11-15T22:51:39-08:00 (1794811899)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,17 +65,15 @@ describe("slothlet compose in a real browser", () => {
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		const prevSuppress = SlothletWarning.suppressConsole;
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 		try {
-			const api = await composeBrowser();
+			const api = await composeBrowser({ diagnostics: true });
 			expect(await api.math.add(2, 3)).toBe(5);
 			// Let the deferred routine-stack patches run.
 			for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 5));
-			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
+			expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
 			if (typeof api.shutdown === "function") await api.shutdown();
 		} finally {
 			SlothletWarning.suppressConsole = prevSuppress;
-			SlothletWarning.clearCaptured();
 		}
 	});
 

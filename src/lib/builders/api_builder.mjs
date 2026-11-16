@@ -1530,12 +1530,15 @@ export class ApiBuilder extends ComponentBase {
 			 * @type {I18nNamespace}
 			 */
 			i18n: {
-				setLanguage,
-				setLanguageAsync,
+				// A locale that fails to load is warned about through this instance: its warning class and `silent`.
+				setLanguage: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
+				setLanguageAsync: (lang) =>
+					setLanguageAsync(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
 				getLanguage,
 				translate,
 				t,
-				initI18n
+				initI18n: (options = {}) =>
+					initI18n({ SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true, ...options })
 			},
 
 			/**
@@ -4403,10 +4406,9 @@ export class ApiBuilder extends ComponentBase {
 			}
 		};
 
-		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
-		// Note: Hooks are not yet implemented in v3, but the config option is ready
+		// Remove the `hook` namespace when hooks are disabled (unless diagnostics mode)
 		if (!config.hook?.enabled && config.diagnostics !== true) {
-			delete namespace.hooks;
+			delete namespace.hook;
 		}
 
 		// Add diagnostics if enabled
@@ -4550,7 +4552,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * SlothletWarning class for accessing captured warnings in tests
+				 * This instance's SlothletWarning class: `captured`, `clearCaptured()` and `suppressConsole` apply to this instance only
 				 * @type {Function}
 				 * @example
 				 * // Access captured warnings in tests

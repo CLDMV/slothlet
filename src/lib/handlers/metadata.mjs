@@ -254,7 +254,7 @@ export class Metadata extends ComponentBase {
 	 * Called internally during wrapper/function creation
 	 *
 	 * The `token` parameter must be the module-private `LIFECYCLE_TOKEN` Symbol exported
-	 * from `@cldmv/slothlet/handlers/lifecycle-token`. Because a Symbol is a unique,
+	 * from `#handlers/lifecycle-token`. Because a Symbol is a unique,
 	 * non-forgeable value within a Node.js process, and because the token module is not
 	 * listed in the package's public `exports` map, user-land code cannot construct a
 	 * value that satisfies the `token === LIFECYCLE_TOKEN` check without modifying the

@@ -1,4 +1,11 @@
 /**
+ * Register the process-level `SlothletWarning` class (called once by `errors.mjs`).
+ * @param {Function} WarningClass - The `SlothletWarning` class.
+ * @returns {void}
+ * @internal
+ */
+export function registerWarningClass(WarningClass: Function): void;
+/**
  * Get current language
  * @returns {string} Language code
  * @public
@@ -38,9 +45,13 @@ declare const guarded_initI18n: typeof initI18n;
  * Set current language (synchronous)
  * Merges requested language translations over default English translations
  * @param {string} lang - Language code
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
  * @public
  */
-declare function setLanguage(lang: string): void;
+declare function setLanguage(lang: string, options?: {
+    SlothletWarning?: Function;
+    silent?: boolean;
+}): void;
 /**
  * Set the current language asynchronously — the browser-capable path.
  *
@@ -50,10 +61,14 @@ declare function setLanguage(lang: string): void;
  * awaits the same synchronous read (the await is a no-op). A failed load warns and keeps the bundled
  * English default. Use this when you need to *await* a locale switch (e.g. in an Electron renderer).
  * @param {string} lang - Language code (e.g. "es-mx").
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
  * @returns {Promise<void>}
  * @public
  */
-declare function setLanguageAsync(lang: string): Promise<void>;
+declare function setLanguageAsync(lang: string, options?: {
+    SlothletWarning?: Function;
+    silent?: boolean;
+}): Promise<void>;
 /**
  * Initialize i18n system (synchronous)
  * @param {Object} options - Options

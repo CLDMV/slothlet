@@ -38,10 +38,31 @@ export class SlothletError extends Error {
  * @public
  */
 export class SlothletWarning {
-    static captured: any[];
+    /**
+     * Warnings captured while console output is suppressed (for testing).
+     * On this class it is the process-level list: it holds warnings raised outside any slothlet
+     * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
+     * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
+     * @type {SlothletWarning[]}
+     */
+    static captured: SlothletWarning[];
+    /**
+     * Suppress console output and capture instead. On this class it is the process-level setting; an
+     * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
+     * @type {boolean}
+     */
     static suppressConsole: boolean;
     /**
-     * Clear captured warnings (for testing)
+     * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
+     * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
+     * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
+     * Warnings are still `instanceof SlothletWarning`.
+     * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
+     * @public
+     */
+    public static forInstance(): Function;
+    /**
+     * Clear captured warnings (for testing). On an instance's class this clears that instance only.
      * @public
      */
     public static clearCaptured(): void;

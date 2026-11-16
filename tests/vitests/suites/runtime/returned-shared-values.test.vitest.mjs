@@ -96,7 +96,7 @@ beforeAll(() => {
 			"\tout[`${mode}/${runtime}`] = await api.caller.viaPlugin();",
 			"\tawait api.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -158,7 +158,7 @@ beforeAll(() => {
 			"\t}",
 			"\tout[`${mode}/${runtime}`] = results;",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -292,7 +292,7 @@ beforeAll(() => {
 			"\t}",
 			"\tout[`${mode}/${runtime}`] = results;",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -308,7 +308,7 @@ beforeAll(() => {
 			'\tout[`${mode}/${runtime}`] = await api.trusted.viaPlug("fillRequired");',
 			"\tawait api.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -329,7 +329,7 @@ beforeAll(() => {
 			"\tout[`${format}/${mode}/${runtime}`] = await live.esm.callLater(read);",
 			"\tawait live.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);

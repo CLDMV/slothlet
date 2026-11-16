@@ -14494,7 +14494,7 @@ function runtime_inspectLabel(text) {
 }
 
 /**
- * What a node shows to `util.inspect`: its members for a namespace, the node itself for a lazy node not loaded yet,
+ * What a node shows to `util.inspect`: its members for a namespace, its function form for a lazy node not loaded yet,
  * and otherwise its value — which, to a module, is never the module's runnable code (#632). A function or an object
  * holding code is shown to a module as its form instead (see {@link runtime_inspectSafe}), so a hook a module reads
  * and calls does not hand it the function behind the node, nor a class's inherited statics.
@@ -14508,13 +14508,17 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	const internal = wrapper.____slothletInternal;
 	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
 	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
-	// A lazy node not loaded yet shows itself, a function proxy, which an inspector shows as a function without asking
-	// it again. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
+	// A lazy node not loaded yet shows as the function stand-in it is, `[Function: name]` — the form a module's view of
+	// it shows (#824) — not as the Proxy around it, which `util.inspect` prints as `Proxy([Function: name])`. Its members
+	// are not read: reading them would load it. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
 	// does: one that showed itself would be asked again by an inspector that inspects what a hook returns, without end.
 	// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
 	/* v8 ignore next */
 	const unloaded = internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
-	if (unloaded && typeof internal.proxy === "function") return internal.proxy;
+	if (unloaded && typeof internal.proxy === "function") {
+		const name = ArrayMethods.pop(splitText(String(internal.apiPath ?? ""), "."));
+		return runtime_inspectLabel(name ? `[Function: ${name}]` : "[Function (anonymous)]");
+	}
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:15-07:00 (1793056575)
+ *	@Last modified time: 2026-11-16T00:34:37-08:00 (1794818077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,7 +85,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 			return api;
 		}
@@ -302,7 +302,7 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
 		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 		return api;
 	}

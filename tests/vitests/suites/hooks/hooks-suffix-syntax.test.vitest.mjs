@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-15T22:53:48-08:00 (1794812028)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,10 +45,10 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 		SlothletWarning.clearCaptured();
 	});
 
-	const deps = () => SlothletWarning.captured.filter((w) => w.code === DEP);
+	const deps = () => api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === DEP);
 
 	it("canonical suffix `pattern:type` registers and fires (no warning)", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		let seen = null;
 		api.slothlet.hook.on("math.add:before", ({ path }) => {
 			seen = path;
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 	});
 
 	it("legacy prefix `type:pattern` still fires but warns with the suffix suggestion", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		let seen = null;
 		api.slothlet.hook.on("before:math.add", ({ path }) => {
 			seen = path;
@@ -73,13 +73,13 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 	});
 
 	it("`silent: true` suppresses the prefix deprecation warning", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true, silent: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true, silent: true });
 		api.slothlet.hook.on("before:math.add", () => {});
 		expect(deps()).toHaveLength(0);
 	});
 
 	it("suffix interpretation wins for an ambiguous `type:type` input", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		const id = api.slothlet.hook.on("before:after", () => {});
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].type).toBe("after"); // trailing token wins
@@ -88,30 +88,30 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 	});
 
 	it("rejects a pattern with no colon", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		expect(() => api.slothlet.hook.on("math.add", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
 	});
 
 	it("rejects a pattern whose ends are not a hook type", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		expect(() => api.slothlet.hook.on("foo:bar", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
 	});
 
 	it("rejects an empty path pattern in suffix and prefix forms", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		expect(() => api.slothlet.hook.on(":before", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
 		expect(() => api.slothlet.hook.on("before:", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
 	});
 
 	it("rejects a non-string typePattern", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
 		expect(() => api.slothlet.hook.on(123, () => {})).toThrow(/INVALID_TYPE_PATTERN/);
 	});
 
 	it("reload re-registers hooks in suffix form without re-deprecating", async () => {
-		api = await slothlet({ ...config, base: BASE, hook: true, api: { mutations: { reload: true } } });
+		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true, api: { mutations: { reload: true } } });
 		api.slothlet.hook.on("math.add:before", () => {}); // canonical suffix
-		SlothletWarning.clearCaptured();
+		api.slothlet.diag.SlothletWarning.clearCaptured();
 		await api.slothlet.reload();
 		expect(deps()).toHaveLength(0); // exportHooks emits suffix → replay does not warn
 	});

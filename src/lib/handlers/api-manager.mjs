@@ -26,18 +26,9 @@
  * per-instance state as class properties and applies updates without requiring a full instance rebuild.
  *
  * @example
- * // ESM
- * import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
- * const manager = new ApiManager(instance);
- * await manager.addApiComponent({
- * 	apiPath: "plugins",
- * 	folderPath: "./plugins",
- * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
- * });
- *
- * @example
- * // CJS
- * const { ApiManager } = require("@cldmv/slothlet/handlers/api-manager");
+ * // Internal: `#handlers/*` resolves only from slothlet's own modules. `@cldmv/slothlet/handlers/*`
+ * // is not in the package `exports`, so consumers cannot import it.
+ * import { ApiManager } from "#handlers/api-manager";
  * const manager = new ApiManager(instance);
  * await manager.addApiComponent({
  * 	apiPath: "plugins",

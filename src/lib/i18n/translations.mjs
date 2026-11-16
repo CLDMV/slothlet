@@ -29,6 +29,7 @@ import {
 	Boolean,
 	filterList,
 	listPush,
+	listSplice,
 	NativeProcess,
 	navigator,
 	Objects,
@@ -246,12 +247,66 @@ function i18n_loadLanguageSync(lang) {
 }
 
 /**
+ * The process-level `SlothletWarning` class, registered by `errors.mjs` when it loads. The translations module
+ * cannot import it (errors.mjs imports this module), so a failed locale load reaches it through here.
+ * @type {(Function|null)}
+ * @private
+ */
+let processWarningClass = null;
+
+/**
+ * Load failures reported before the warning class registered (the import-time auto-initialisation runs first).
+ * They are raised once the class registers, so none is lost.
+ * @type {string[]}
+ * @private
+ */
+const pendingLoadFailures = [];
+
+/**
+ * Register the process-level `SlothletWarning` class (called once by `errors.mjs`).
+ * @param {Function} WarningClass - The `SlothletWarning` class.
+ * @returns {void}
+ * @internal
+ */
+export function registerWarningClass(WarningClass) {
+	// Only the first registration counts: errors.mjs makes it as it loads, and this export is reachable by anyone.
+	if (processWarningClass !== null) return;
+	processWarningClass = WarningClass;
+	const held = listSplice(pendingLoadFailures, 0);
+	for (let index = 0; index < held.length; index++) new WarningClass("WARNING_LANGUAGE_LOAD_FAILED", { lang: held[index] });
+}
+
+/**
+ * Report a locale that failed to load as a coded, translated `WARNING_LANGUAGE_LOAD_FAILED` SlothletWarning (#820).
+ * A call made through an instance passes that instance's warning class (so it is captured there) and its `silent`
+ * flag; a call made outside any instance uses the process-level class. Nothing is raised when `silent` is true.
+ * @param {string} lang - The language that failed to load.
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Instance warning class and silent flag.
+ * @returns {void}
+ * @private
+ */
+function i18n_warnLoadFailed(lang, options) {
+	if (options?.silent === true) return;
+	const WarningClass = options?.SlothletWarning ?? processWarningClass;
+	// errors.mjs registers the class when it loads, which is after this module's import-time initialisation. A
+	// failure from that initialisation is held and raised on registration. The suite always has errors.mjs loaded
+	// first, so the held case is not reproducible there.
+	/* v8 ignore next 4 */
+	if (!WarningClass) {
+		listPush(pendingLoadFailures, lang);
+		return;
+	}
+	new WarningClass("WARNING_LANGUAGE_LOAD_FAILED", { lang });
+}
+
+/**
  * Set current language (synchronous)
  * Merges requested language translations over default English translations
  * @param {string} lang - Language code
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
  * @public
  */
-function setLanguage(lang) {
+function setLanguage(lang, options) {
 	// Always start with default English translations as base
 	currentTranslations = { ...defaultTranslations.translations };
 
@@ -263,7 +318,7 @@ function setLanguage(lang) {
 	if (!isNode) {
 		// A browser can't read the locale synchronously; kick off the async load and swap it in
 		// when (if) it resolves. setLanguageAsync warns + keeps en-us on a miss.
-		void setLanguageAsync(lang);
+		void setLanguageAsync(lang, options);
 		return;
 	}
 
@@ -275,8 +330,7 @@ function setLanguage(lang) {
 		currentLanguage = lang;
 	} else {
 		// If language load failed, warn and use English
-		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
-		globalThis.console.warn(`Failed to load language '${lang}', falling back to English.`);
+		i18n_warnLoadFailed(lang, options);
 		currentLanguage = "en-us";
 	}
 }
@@ -290,10 +344,11 @@ function setLanguage(lang) {
  * awaits the same synchronous read (the await is a no-op). A failed load warns and keeps the bundled
  * English default. Use this when you need to *await* a locale switch (e.g. in an Electron renderer).
  * @param {string} lang - Language code (e.g. "es-mx").
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
  * @returns {Promise<void>}
  * @public
  */
-async function setLanguageAsync(lang) {
+async function setLanguageAsync(lang, options) {
 	// Always start from the bundled English base.
 	currentTranslations = { ...defaultTranslations.translations };
 	if (lang === "en-us") {
@@ -319,8 +374,7 @@ async function setLanguageAsync(lang) {
 		currentTranslations = { ...currentTranslations, ...langData.translations };
 		currentLanguage = lang;
 	} else {
-		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
-		globalThis.console.warn(`Failed to load language '${lang}', falling back to English.`);
+		i18n_warnLoadFailed(lang, options);
 		currentLanguage = "en-us";
 	}
 }
@@ -376,10 +430,10 @@ function initI18n(options = {}) {
 		const lang = options.language || i18n_detectLanguage();
 		if (!isNode) {
 			currentLanguage = "en-us"; // bundled default until the async locale load resolves
-			if (lang && lang !== "en-us") void setLanguageAsync(lang);
+			if (lang && lang !== "en-us") void setLanguageAsync(lang, options);
 			return;
 		}
-		setLanguage(lang);
+		setLanguage(lang, options);
 	} catch (___error) {
 		// Silently fall back to en-us if initialization fails
 		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.

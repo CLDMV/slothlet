@@ -389,11 +389,11 @@ npm run test:performance
 import slothlet from "@cldmv/slothlet";
 
 console.time("eager-startup");
-const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
+const eagerApi = await slothlet({ mode: "eager", base: "./api_tests/api_test" });
 console.timeEnd("eager-startup");
 
 console.time("lazy-startup");
-const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
+const lazyApi = await slothlet({ mode: "lazy", base: "./api_tests/api_test" });
 console.timeEnd("lazy-startup");
 
 // Test your specific usage patterns
@@ -417,11 +417,11 @@ const slothlet = require("@cldmv/slothlet");
 
 async function performanceTest() {
 	console.time("eager-startup");
-	const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
+	const eagerApi = await slothlet({ mode: "eager", base: "./api_tests/api_test" });
 	console.timeEnd("eager-startup");
 
 	console.time("lazy-startup");
-	const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
+	const lazyApi = await slothlet({ mode: "lazy", base: "./api_tests/api_test" });
 	console.timeEnd("lazy-startup");
 
 	// Test your specific usage patterns
