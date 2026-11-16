@@ -1009,6 +1009,24 @@ declare class UnifiedWrapper extends ComponentBase {
      */
     private ___settleLazyProxy;
     /**
+     * Give a settled lazy node its lazy proxy back once a reload resets it to unloaded (#811).
+     *
+     * @description
+     * {@link UnifiedWrapper#___settleLazyProxy} rebuilt the loaded node on eager's target. A node reset to unloaded
+     * holds nothing again, so it takes the form an unloaded lazy node has: its lazy proxy, on a function target, since
+     * what it loads next may be callable. That proxy runs its own traps again and is put back in the parent, so a
+     * reference taken before the first load is the node again, as before the load; the settled proxy forwards to the
+     * node's proxy from then on. A node upgraded to callable since it settled keeps its callable proxy (see
+     * {@link UnifiedWrapper#___upgradeToCallableProxy}).
+     *
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___unsettleLazyProxy(); // in ___resetLazy
+     */
+    private ___unsettleLazyProxy;
+    /**
      * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
      *
      * @description
