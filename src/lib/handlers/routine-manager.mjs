@@ -31,7 +31,37 @@ import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Math, Map, Set, WeakSet, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	appendList,
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	copyList,
+	filterList,
+	listPush,
+	listSplice,
+	Map,
+	mapKeys,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValues,
+	mapValuesToArray,
+	Math,
+	Objects,
+	PromiseMethods,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setValues,
+	splitText,
+	String,
+	StringMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
 
 /**
@@ -55,7 +85,7 @@ const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/
 // Rule 20 (T09): Stacked callable .for/.contributors surface — ~L1613
 // Rule 20 (T10): Return shape scalar vs array — ~L1077 / ~L1462
 
-const ROOT_BUILTIN_NAMES = new Set(["shutdown", "destroy"]);
+const ROOT_BUILTIN_NAMES = setFrom(["shutdown", "destroy"]);
 
 /**
  * Tracks, per Slothlet instance, every mounted module's raw contribution of a real function at any
@@ -152,8 +182,8 @@ export class RoutineManager extends ComponentBase {
 	 */
 	reset() {
 		this.raw = [];
-		this.rawWrappers.clear();
-		this.patternCache.clear();
+		MapMethods.clear(this.rawWrappers);
+		MapMethods.clear(this.patternCache);
 	}
 
 	/**
@@ -178,10 +208,10 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#moduleWrappers(moduleID) {
-		let inner = this.rawWrappers.get(moduleID);
+		let inner = MapMethods.get(this.rawWrappers, moduleID);
 		if (!inner) {
 			inner = new Map();
-			this.rawWrappers.set(moduleID, inner);
+			MapMethods.set(this.rawWrappers, moduleID, inner);
 		}
 		return inner;
 	}
@@ -193,7 +223,7 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#findRoutine(name) {
-		return this.#routines.find((routine) => routine.name === name);
+		return ArrayMethods.find(this.#routines, (routine) => routine.name === name);
 	}
 
 	/**
@@ -204,10 +234,10 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#compile(pattern) {
-		let matcher = this.patternCache.get(pattern);
+		let matcher = MapMethods.get(this.patternCache, pattern);
 		if (!matcher) {
 			matcher = compilePattern(pattern);
-			this.patternCache.set(pattern, matcher);
+			MapMethods.set(this.patternCache, pattern, matcher);
 		}
 		return matcher;
 	}
@@ -233,8 +263,8 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#matches(routine, entry) {
 		const { name, recursive } = routine;
-		if (name.startsWith("^")) {
-			return this.#compile(name.slice(1))(entry.apiPath);
+		if (StringMethods.startsWith(name, "^")) {
+			return this.#compile(StringMethods.slice(name, 1))(entry.apiPath);
 		}
 
 		const endpoint = this.slothlet.handlers.ownership?.getModuleEndpoint(entry.moduleID);
@@ -248,7 +278,7 @@ export class RoutineManager extends ComponentBase {
 		if (endpoint === "." || endpoint === "") relative = entry.apiPath;
 		else if (entry.apiPath === endpoint)
 			relative = ""; // The mount's own root itself has no relative sub-path.
-		else if (entry.apiPath.startsWith(`${endpoint}.`)) relative = entry.apiPath.slice(endpoint.length + 1);
+		else if (StringMethods.startsWith(entry.apiPath, `${endpoint}.`)) relative = StringMethods.slice(entry.apiPath, endpoint.length + 1);
 		else return false; // This contribution isn't under the module's own mount at all — shouldn't normally happen.
 
 		if (relative === "") return false; // A routine name can never be the empty string.
@@ -264,9 +294,9 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#requiresDescent(routine) {
-		if (routine.name.startsWith("^")) return true;
+		if (StringMethods.startsWith(routine.name, "^")) return true;
 		if (routine.recursive) return true;
-		return routine.name.includes(".");
+		return StringMethods.includes(routine.name, ".");
 	}
 
 	/**
@@ -305,7 +335,7 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#applyStackFilter(entries) {
 		if (this.slothlet.config?.stackRoutines) return entries;
-		return entries.filter((entry) => this.#isCurrentOwner(entry));
+		return filterList(entries, (entry) => this.#isCurrentOwner(entry));
 	}
 
 	/**
@@ -331,7 +361,7 @@ export class RoutineManager extends ComponentBase {
 		// returns undefined.
 		/* v8 ignore next */
 		if (!routine) return [];
-		return this.#applyStackFilter(this.raw.filter((entry) => this.#matches(routine, entry)));
+		return this.#applyStackFilter(filterList(this.raw, (entry) => this.#matches(routine, entry)));
 	}
 
 	/**
@@ -343,13 +373,14 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#groupByPath(entries) {
 		const groups = new Map();
-		for (const entry of entries) {
-			let group = groups.get(entry.apiPath);
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			let group = MapMethods.get(groups, entry.apiPath);
 			if (!group) {
 				group = [];
-				groups.set(entry.apiPath, group);
+				MapMethods.set(groups, entry.apiPath, group);
 			}
-			group.push(entry);
+			listPush(group, entry);
 		}
 		return groups;
 	}
@@ -384,7 +415,7 @@ export class RoutineManager extends ComponentBase {
 		if (typeof apiPath !== "string" || apiPath.length === 0) return;
 		const moduleID = data.moduleID;
 		const fn = data.wrapper?.__impl;
-		const existingIndex = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		const existingIndex = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === apiPath && e.moduleID === moduleID);
 		// A stacked callable installed by rebuildStacks() must never be captured as if it were a
 		// module's own contribution, no matter what later re-touches the property it was written
 		// to. `recording = false` only protects rebuildStacks()'s OWN write — a later, unrelated
@@ -404,12 +435,14 @@ export class RoutineManager extends ComponentBase {
 			// since changed to something else (a direct reassignment to an object/null, or a lazy
 			// placeholder resolving to a non-function export) — drop the now-stale entry so a later
 			// cascade/stack rebuild never invokes a function that no longer reflects current state.
-			if (existingIndex !== -1) this.raw.splice(existingIndex, 1);
-			this.rawWrappers.get(moduleID)?.delete(apiPath);
+			if (existingIndex !== -1) listSplice(this.raw, existingIndex, 1);
+			MapMethods.get(this.rawWrappers, moduleID) == null
+				? undefined
+				: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 			return;
 		}
 		const entry = { apiPath, moduleID, fn };
-		if (existingIndex === -1) this.raw.push(entry);
+		if (existingIndex === -1) listPush(this.raw, entry);
 		else this.raw[existingIndex] = entry;
 		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (the emit sites'), never
 		// the actual UnifiedWrapper — it has no `___invalidate()` to call. The REAL wrapper instance is
@@ -418,7 +451,7 @@ export class RoutineManager extends ComponentBase {
 		// raw exported function and no `__wrapperRef`, so `resolveWrapper(undefined)` returns null —
 		// correctly leaving whatever this key already tracked untouched rather than clobbering it.
 		const wrapper = resolveWrapper(data.__wrapperRef);
-		if (wrapper) this.#moduleWrappers(moduleID).set(apiPath, wrapper);
+		if (wrapper) MapMethods.set(this.#moduleWrappers(moduleID), apiPath, wrapper);
 
 		// Reactive self-heal (#362): rebuildStacks() only (re)installs the stacked callable at the
 		// three trigger points below — an ordinary lazy touch or a late direct reassignment
@@ -455,7 +488,7 @@ export class RoutineManager extends ComponentBase {
 				// property write are individually try/caught, so the method never rejects — this .catch()
 				// defends a would-be unexpected rejection that no code path actually produces.
 				/* v8 ignore next */
-				this.#reactivelyPatchStack(entry).catch(() => {});
+				PromiseMethods.catch(this.#reactivelyPatchStack(entry), () => {});
 			},
 			undefined,
 			this.clock
@@ -494,10 +527,10 @@ export class RoutineManager extends ComponentBase {
 		if (this.slothlet.____buildDepth > 0) return;
 		const api = this.slothlet.api;
 		if (!api) return; // Torn down mid-flight — nothing left to patch.
-		const lastDot = entry.apiPath.lastIndexOf(".");
-		const parentPath = lastDot === -1 ? "" : entry.apiPath.slice(0, lastDot);
-		const key = lastDot === -1 ? entry.apiPath : entry.apiPath.slice(lastDot + 1);
-		if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) return; // integrated via the existing dispose builtins instead
+		const lastDot = StringMethods.lastIndexOf(entry.apiPath, ".");
+		const parentPath = lastDot === -1 ? "" : StringMethods.slice(entry.apiPath, 0, lastDot);
+		const key = lastDot === -1 ? entry.apiPath : StringMethods.slice(entry.apiPath, lastDot + 1);
+		if (parentPath === "" && SetMethods.has(ROOT_BUILTIN_NAMES, key)) return; // integrated via the existing dispose builtins instead
 
 		// For each configured routine, its filtered contributor group at this exact apiPath (the
 		// same computation #contributorsFor/#groupByPath perform via #applyStackFilter, just scoped
@@ -509,10 +542,11 @@ export class RoutineManager extends ComponentBase {
 		let winner = null;
 		let winnerGroup = null;
 		const matchingRoutines = [];
-		for (const routine of this.#routines) {
+		for (let ofIndex = 0, ofList = this.#routines; ofIndex < ofList.length; ofIndex++) {
+			const routine = ofList[ofIndex];
 			let group;
 			try {
-				group = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
+				group = this.#applyStackFilter(filterList(this.raw, (e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
 			} catch {
 				// Unreachable: #matches (a #compile of the config-validated routine name plus string ops on
 				// the non-empty-string apiPath onImplCreated admits to raw) and #applyStackFilter (a config
@@ -522,7 +556,7 @@ export class RoutineManager extends ComponentBase {
 				continue;
 			}
 			if (group.length === 0) continue;
-			matchingRoutines.push(routine);
+			listPush(matchingRoutines, routine);
 			winner = routine;
 			winnerGroup = group;
 		}
@@ -566,7 +600,7 @@ export class RoutineManager extends ComponentBase {
 		// replacing whatever real function currently sits there.
 		let freshWinnerGroup;
 		try {
-			freshWinnerGroup = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(winner, e)));
+			freshWinnerGroup = this.#applyStackFilter(filterList(this.raw, (e) => e.apiPath === entry.apiPath && this.#matches(winner, e)));
 		} catch {
 			// Unreachable: same as the winner-loop filter above — #matches/#applyStackFilter cannot throw
 			// for the config-validated winner routine and the string-apiPath entries in raw.
@@ -652,8 +686,8 @@ export class RoutineManager extends ComponentBase {
 		const apiPath = data?.apiPath;
 		const moduleID = data?.moduleID;
 		if (typeof apiPath !== "string" || !moduleID) return;
-		this.raw = this.raw.filter((e) => !(e.apiPath === apiPath && e.moduleID === moduleID));
-		this.rawWrappers.get(moduleID)?.delete(apiPath);
+		this.raw = filterList(this.raw, (e) => !(e.apiPath === apiPath && e.moduleID === moduleID));
+		MapMethods.get(this.rawWrappers, moduleID) == null ? undefined : MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 	}
 
 	/**
@@ -678,14 +712,18 @@ export class RoutineManager extends ComponentBase {
 	 */
 	pruneSubtree(apiPath, moduleID) {
 		const prefix = `${apiPath}.`;
-		const matching = this.raw.filter((e) => e.moduleID === moduleID && (e.apiPath === apiPath || e.apiPath.startsWith(prefix)));
+		const matching = filterList(
+			this.raw,
+			(e) => e.moduleID === moduleID && (e.apiPath === apiPath || StringMethods.startsWith(e.apiPath, prefix))
+		);
 		if (matching.length === 0) return;
-		this.raw = this.raw.filter((e) => !matching.includes(e));
-		const moduleWrappers = this.rawWrappers.get(moduleID);
+		this.raw = filterList(this.raw, (e) => !ArrayMethods.includes(matching, e));
+		const moduleWrappers = MapMethods.get(this.rawWrappers, moduleID);
 		if (!moduleWrappers) return;
-		for (const entry of matching) {
-			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(moduleWrappers.get(entry.apiPath));
-			moduleWrappers.delete(entry.apiPath);
+		for (let ofIndex = 0, ofList = matching; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(MapMethods.get(moduleWrappers, entry.apiPath));
+			MapMethods.delete(moduleWrappers, entry.apiPath);
 		}
 	}
 
@@ -714,8 +752,8 @@ export class RoutineManager extends ComponentBase {
 	 * routineManager.pruneModule(moduleID);
 	 */
 	pruneModule(moduleID) {
-		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
-		const moduleWrappers = this.rawWrappers.get(moduleID);
+		this.raw = filterList(this.raw, (e) => e.moduleID !== moduleID);
+		const moduleWrappers = MapMethods.get(this.rawWrappers, moduleID);
 		if (!moduleWrappers) return [];
 		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
 		// own unregister()/removePath() has nothing to invalidate it via. Without this, a
@@ -728,10 +766,10 @@ export class RoutineManager extends ComponentBase {
 		// a namespace this module created and other modules merged their children into, so the caller's
 		// removal decides — after its restore/delete pass — whether it actually leaves the tree (#555).
 		const liveKept = [];
-		for (const wrapper of moduleWrappers.values()) {
+		for (const wrapper of mapValues(moduleWrappers)) {
 			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper, undefined, liveKept);
 		}
-		this.rawWrappers.delete(moduleID);
+		MapMethods.delete(this.rawWrappers, moduleID);
 		return liveKept;
 	}
 
@@ -757,9 +795,14 @@ export class RoutineManager extends ComponentBase {
 	 */
 	snapshotRawEntries(moduleID) {
 		const snapshot = new Map();
-		const moduleWrappers = this.rawWrappers.get(moduleID);
-		this.raw.forEach((entry, index) => {
-			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, { fn: entry.fn, index, wrapper: moduleWrappers?.get(entry.apiPath) });
+		const moduleWrappers = MapMethods.get(this.rawWrappers, moduleID);
+		ArrayMethods.forEach(this.raw, (entry, index) => {
+			if (entry.moduleID === moduleID)
+				MapMethods.set(snapshot, entry.apiPath, {
+					fn: entry.fn,
+					index,
+					wrapper: moduleWrappers == null ? undefined : MapMethods.get(moduleWrappers, entry.apiPath)
+				});
 		});
 		return snapshot;
 	}
@@ -792,9 +835,14 @@ export class RoutineManager extends ComponentBase {
 	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
 	snapshotRawEntry(apiPath, moduleID) {
-		const index = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		const index = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === apiPath && e.moduleID === moduleID);
 		if (index === -1) return undefined;
-		return { fn: this.raw[index].fn, index, wrapper: this.rawWrappers.get(moduleID)?.get(apiPath) };
+		return {
+			fn: this.raw[index].fn,
+			index,
+			wrapper:
+				MapMethods.get(this.rawWrappers, moduleID) == null ? undefined : MapMethods.get(MapMethods.get(this.rawWrappers, moduleID), apiPath)
+		};
 	}
 
 	/**
@@ -814,7 +862,7 @@ export class RoutineManager extends ComponentBase {
 	 * routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
 	revertRawEntry(apiPath, moduleID, priorEntry) {
-		const idx = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		const idx = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === apiPath && e.moduleID === moduleID);
 		if (priorEntry !== undefined) {
 			const entry = { apiPath, moduleID, fn: priorEntry.fn };
 			if (idx !== -1) this.raw[idx] = entry;
@@ -824,16 +872,21 @@ export class RoutineManager extends ComponentBase {
 			// `raw`, changing `stackRoutines: true`'s registration-order execution (#372/#373 review,
 			// suppressed finding). Clamp to the current length in case other entries were removed
 			// in the interim.
-			else this.raw.splice(Math.min(priorEntry.index, this.raw.length), 0, entry);
+			else listSplice(this.raw, Math.min(priorEntry.index, this.raw.length), 0, entry);
 			// onImplCreated already overwrote rawWrappers with the candidate's own (about to be
 			// invalidated by the caller) wrapper — restore tracking to whatever genuinely preceded
 			// it, or drop it if nothing did, so a later lookup never finds a stale, already-invalid
 			// reference (#372/#373 review, suppressed finding).
-			if (priorEntry.wrapper) this.#moduleWrappers(moduleID).set(apiPath, priorEntry.wrapper);
-			else this.rawWrappers.get(moduleID)?.delete(apiPath);
+			if (priorEntry.wrapper) MapMethods.set(this.#moduleWrappers(moduleID), apiPath, priorEntry.wrapper);
+			else
+				MapMethods.get(this.rawWrappers, moduleID) == null
+					? undefined
+					: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 		} else {
-			if (idx !== -1) this.raw.splice(idx, 1);
-			this.rawWrappers.get(moduleID)?.delete(apiPath);
+			if (idx !== -1) listSplice(this.raw, idx, 1);
+			MapMethods.get(this.rawWrappers, moduleID) == null
+				? undefined
+				: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), apiPath);
 		}
 	}
 
@@ -870,15 +923,15 @@ export class RoutineManager extends ComponentBase {
 	revertSpeculativeSubtree(api, moduleID, path, priorEntries, visited = new WeakSet()) {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
 
-		if (visited.has(api)) {
+		if (WeakSetMethods.has(visited, api)) {
 			return;
 		}
-		visited.add(api);
+		WeakSetMethods.add(visited, api);
 
 		const revert = (revertPath) => {
-			const prior = priorEntries.get(revertPath);
+			const prior = MapMethods.get(priorEntries, revertPath);
 			if (prior) {
-				const idx = this.raw.findIndex((e) => e.apiPath === revertPath && e.moduleID === moduleID);
+				const idx = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === revertPath && e.moduleID === moduleID);
 				// A raw entry captured earlier in the SAME candidate build can already have been
 				// deleted outright by onImplCreated() — a non-function re-touch at the same
 				// (apiPath, moduleID) drops the entry rather than overwriting it (see its own guard).
@@ -890,15 +943,20 @@ export class RoutineManager extends ComponentBase {
 				// rejected re-touch silently moves this contributor to the end of `raw`, changing
 				// `stackRoutines: true`'s registration-order execution (#372/#373 review, suppressed
 				// finding). Clamp to the current length in case other entries were removed meanwhile.
-				else this.raw.splice(Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
+				else listSplice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
 				// Callers pair this with ApiManager#invalidateSpeculativeWrappers() on the concrete
 				// tree for actual invalidation — this just keeps rawWrappers tracking in sync with the
 				// just-restored raw entry (#372/#373 review, suppressed finding).
-				if (prior.wrapper) this.#moduleWrappers(moduleID).set(revertPath, prior.wrapper);
-				else this.rawWrappers.get(moduleID)?.delete(revertPath);
+				if (prior.wrapper) MapMethods.set(this.#moduleWrappers(moduleID), revertPath, prior.wrapper);
+				else
+					MapMethods.get(this.rawWrappers, moduleID) == null
+						? undefined
+						: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), revertPath);
 			} else {
-				this.raw = this.raw.filter((e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
-				this.rawWrappers.get(moduleID)?.delete(revertPath);
+				this.raw = filterList(this.raw, (e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
+				MapMethods.get(this.rawWrappers, moduleID) == null
+					? undefined
+					: MapMethods.delete(MapMethods.get(this.rawWrappers, moduleID), revertPath);
 			}
 		};
 
@@ -906,9 +964,12 @@ export class RoutineManager extends ComponentBase {
 			revert(path);
 		}
 
-		for (const [key, value] of Objects.entries(api)) {
+		for (let ofIndex = 0, ofList = Objects.entries(api); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
-			if (skipProps.includes(key)) {
+			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
 
@@ -966,29 +1027,34 @@ export class RoutineManager extends ComponentBase {
 		// re-touch guard, not an overwrite) has no current raw entry to find, so scoping to "paths
 		// this moduleID currently has" would skip it entirely and never restore the pre-candidate
 		// function priorEntries still remembers for it (#372 review, suppressed finding).
-		const currentEntries = this.raw.filter((e) => e.moduleID === moduleID);
-		const allPaths = new Set([...currentEntries.map((e) => e.apiPath), ...priorEntries.keys()]);
-		const moduleWrappers = this.rawWrappers.get(moduleID);
-		for (const path of allPaths) {
-			const prior = priorEntries.get(path);
-			const currentEntry = currentEntries.find((e) => e.apiPath === path);
+		const currentEntries = filterList(this.raw, (e) => e.moduleID === moduleID);
+		const allPaths = setFrom(
+			concatLists(
+				mapList(currentEntries, (e) => e.apiPath),
+				mapKeysToArray(priorEntries)
+			)
+		);
+		const moduleWrappers = MapMethods.get(this.rawWrappers, moduleID);
+		for (const path of setValues(allPaths)) {
+			const prior = MapMethods.get(priorEntries, path);
+			const currentEntry = ArrayMethods.find(currentEntries, (e) => e.apiPath === path);
 			if (!currentEntry || currentEntry.fn !== prior?.fn) {
 				// This pair's raw fn actually changed during the now-aborted build — invalidate the
 				// candidate wrapper the change came from, then restore tracking to whatever
 				// genuinely preceded it (or clear it if nothing did), so a later lookup never finds a
 				// stale, already-invalid reference (#372/#373 review, suppressed finding).
-				moduleWrappers?.get(path)?.___invalidate();
-				if (prior?.wrapper) moduleWrappers?.set(path, prior.wrapper);
-				else moduleWrappers?.delete(path);
+				(moduleWrappers ? MapMethods.get(moduleWrappers, path) : undefined)?.___invalidate();
+				if (prior?.wrapper) moduleWrappers == null ? undefined : MapMethods.set(moduleWrappers, path, prior.wrapper);
+				else moduleWrappers == null ? undefined : MapMethods.delete(moduleWrappers, path);
 			}
 			if (prior) {
-				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
+				const idx = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === path && e.moduleID === moduleID);
 				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior.fn };
 				// Re-insert at the ORIGINAL registration position rather than appending — see
 				// revertRawEntry()'s identical reasoning (#372/#373 review, suppressed finding).
-				else this.raw.splice(Math.min(prior.index, this.raw.length), 0, { apiPath: path, moduleID, fn: prior.fn });
+				else listSplice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: path, moduleID, fn: prior.fn });
 			} else {
-				this.raw = this.raw.filter((e) => !(e.apiPath === path && e.moduleID === moduleID));
+				this.raw = filterList(this.raw, (e) => !(e.apiPath === path && e.moduleID === moduleID));
 			}
 		}
 	}
@@ -1010,8 +1076,8 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #runEntries(apiPath, entries, args = []) {
-		const lastDot = apiPath.lastIndexOf(".");
-		const parentPath = lastDot === -1 ? "" : apiPath.slice(0, lastDot);
+		const lastDot = StringMethods.lastIndexOf(apiPath, ".");
+		const parentPath = lastDot === -1 ? "" : StringMethods.slice(apiPath, 0, lastDot);
 		const receiver = parentPath === "" ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, parentPath);
 		if (receiver === undefined) {
 			// #resolveContainer already treats a missing or permission-gated segment like a missing
@@ -1036,14 +1102,21 @@ export class RoutineManager extends ComponentBase {
 		const contextManager = this.slothlet.contextManager;
 		const instanceID = this.slothlet.instanceID;
 		const canEnterExtent =
-			contextManager && typeof contextManager.runInContext === "function" && contextManager.instances?.has?.(instanceID);
-		for (const { moduleID, fn } of entries) {
+			contextManager &&
+			typeof contextManager.runInContext === "function" &&
+			contextManager.instances instanceof Map &&
+			MapMethods.has(contextManager.instances, instanceID);
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const { moduleID, fn } = ofList[ofIndex];
 			// An automatic mode run records what it invokes, so the dispose builtins can tell a root hook
 			// it already ran (#542).
 			if (this.activeModeRun) {
-				this.activeModeRun.add(fn);
-				const leafWrapper = this.rawWrappers.get(moduleID)?.get(apiPath);
-				if (leafWrapper) this.activeModeRun.add(leafWrapper);
+				SetMethods.add(this.activeModeRun, fn);
+				const leafWrapper =
+					MapMethods.get(this.rawWrappers, moduleID) == null
+						? undefined
+						: MapMethods.get(MapMethods.get(this.rawWrappers, moduleID), apiPath);
+				if (leafWrapper) SetMethods.add(this.activeModeRun, leafWrapper);
 			}
 			try {
 				// Sequential-by-contract: each contributor must observe the previous one's completed side effects.
@@ -1053,16 +1126,19 @@ export class RoutineManager extends ComponentBase {
 					// `cause` — stays the contributor's error. A missing wrapper (undefined) still enters
 					// the extent; `self` then resolves from the instance base store (store.self === the
 					// composed api), only the per-contributor caller identity is absent for that one entry.
-					const wrapper = this.rawWrappers.get(moduleID)?.get(apiPath);
-					results.push(await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
+					const wrapper =
+						MapMethods.get(this.rawWrappers, moduleID) == null
+							? undefined
+							: MapMethods.get(MapMethods.get(this.rawWrappers, moduleID), apiPath);
+					listPush(results, await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
 				} else {
 					// Pre-load / post-teardown: no live extent to enter, so apply directly as before.
 					/* v8 ignore next */
-					results.push(await Reflect.apply(fn, receiver, args));
+					listPush(results, await Reflect.apply(fn, receiver, args));
 				}
 			} catch (error) {
 				// Best-effort: record the failure, attributed, and keep running the remaining contributors.
-				failures.push({ apiPath, moduleID, error });
+				listPush(failures, { apiPath, moduleID, error });
 			}
 		}
 		return { results, failures };
@@ -1082,13 +1158,14 @@ export class RoutineManager extends ComponentBase {
 		// context.failures) but gains a non-enumerable toString so the translated message — which
 		// interpolates {failures} via String(value) — renders a readable list instead of the array's
 		// default "[object Object],[object Object]" join.
-		const failureEntries = failures.map(({ apiPath, moduleID }) => {
+		const failureEntries = mapList(failures, ({ apiPath, moduleID }) => {
 			const entry = { apiPath, moduleID };
-			Objects.defineProperty(entry, "toString", { value: () => `${apiPath} (${moduleID})`, enumerable: false });
+			Objects.defineProperty(entry, "toString", { __proto__: null, value: () => `${apiPath} (${moduleID})`, enumerable: false });
 			return entry;
 		});
 		Objects.defineProperty(failureEntries, "toString", {
-			value: () => failureEntries.map(String).join(", "),
+			__proto__: null,
+			value: () => ArrayMethods.join(mapList(failureEntries, String), ", "),
 			enumerable: false
 		});
 		throw new SlothletError(
@@ -1127,8 +1204,8 @@ export class RoutineManager extends ComponentBase {
 	async runPath(apiPath, args = [], routine = null) {
 		// Post-destroy() safety — see the identical guard + rationale in runCascade().
 		if (!this.slothlet.api) return undefined;
-		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath);
-		const scopedEntries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
+		const pathEntries = filterList(this.raw, (entry) => entry.apiPath === apiPath);
+		const scopedEntries = routine ? filterList(pathEntries, (entry) => this.#matches(routine, entry)) : pathEntries;
 		const entries = this.#applyStackFilter(scopedEntries);
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);
@@ -1155,8 +1232,8 @@ export class RoutineManager extends ComponentBase {
 	async runPathFor(apiPath, key, args = [], routine = null) {
 		// Post-destroy() safety — see the identical guard + rationale in runPath()/runCascade().
 		if (!this.slothlet.api) return undefined;
-		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath && entry.moduleID === key);
-		const entries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
+		const pathEntries = filterList(this.raw, (entry) => entry.apiPath === apiPath && entry.moduleID === key);
+		const entries = routine ? filterList(pathEntries, (entry) => this.#matches(routine, entry)) : pathEntries;
 		if (entries.length === 0) {
 			const available = this.contributorsAt(apiPath, routine);
 			throw new SlothletError(
@@ -1164,7 +1241,7 @@ export class RoutineManager extends ComponentBase {
 				{
 					argument: "key",
 					expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
-						available.length ? ` (contributors: ${available.join(", ")})` : " (no contributors at this path)"
+						available.length ? ` (contributors: ${ArrayMethods.join(available, ", ")})` : " (no contributors at this path)"
 					}`,
 					received: String(key),
 					validationError: true
@@ -1195,9 +1272,9 @@ export class RoutineManager extends ComponentBase {
 	 * @public
 	 */
 	contributorsAt(apiPath, routine = null) {
-		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath);
-		const entries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
-		return entries.map((entry) => entry.moduleID);
+		const pathEntries = filterList(this.raw, (entry) => entry.apiPath === apiPath);
+		const entries = routine ? filterList(pathEntries, (entry) => this.#matches(routine, entry)) : pathEntries;
+		return mapList(entries, (entry) => entry.moduleID);
 	}
 
 	/**
@@ -1234,8 +1311,8 @@ export class RoutineManager extends ComponentBase {
 		 */
 		const visit = async (obj, depth = 0) => {
 			const objType = typeof obj;
-			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
-			seen.add(obj);
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || SetMethods.has(seen, obj)) return;
+			SetMethods.add(seen, obj);
 			try {
 				if (isFrameworkInternal(obj)) return;
 				const wrapper = resolveWrapper(obj);
@@ -1247,12 +1324,14 @@ export class RoutineManager extends ComponentBase {
 							return; // Materialization failed — do not descend into a broken subtree.
 						}
 					}
-					for (const key of Objects.keys(wrapper)) {
+					for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						if (!isFrameworkReservedKey(key)) await visit(wrapper[key], depth + 1);
 					}
 					return;
 				}
-				for (const key of Objects.keys(obj)) {
+				for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					await visit(obj[key], depth + 1);
 				}
 			} catch {
@@ -1265,7 +1344,8 @@ export class RoutineManager extends ComponentBase {
 		// "slothlet"), so the skip below must not apply when `root` is a mount root passed in from
 		// `#materializeFor`'s per-mount loop.
 		const isApiRoot = root === this.slothlet.api;
-		for (const key of Objects.keys(root)) {
+		for (let ofIndex = 0, ofList = Objects.keys(root); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
 			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			// Unreachable: the root here (the composed api, or a mount-root wrapper from #materializeFor's
@@ -1324,7 +1404,8 @@ export class RoutineManager extends ComponentBase {
 		}
 		if (segments.length === 0) return;
 
-		const [segment, ...rest] = segments;
+		const segment = segments[0],
+			rest = copyList(segments, 1);
 
 		if (segment === "**") {
 			// Unbounded from exactly here — `**` can span any further depth, so the current node's
@@ -1334,7 +1415,7 @@ export class RoutineManager extends ComponentBase {
 			return;
 		}
 
-		if (!/[*?]/.test(segment)) {
+		if (!(RegExpMethods.exec(/[*?]/, segment) !== null)) {
 			// Pure literal segment — step directly into the one named child, no enumeration needed.
 			let child;
 			try {
@@ -1360,7 +1441,8 @@ export class RoutineManager extends ComponentBase {
 			return;
 		}
 		const matches = this.#compile(segment);
-		for (const key of keys) {
+		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (!matches(key)) continue;
 			let child;
 			try {
@@ -1412,7 +1494,7 @@ export class RoutineManager extends ComponentBase {
 		// own value (a callable folder's function) is only there once it loads (#754), so the named node
 		// is loaded: one node per mount, or each top-level node of a mount for a negated bare name.
 		const bare = !this.#requiresDescent(routine);
-		if (routine.name.startsWith("^")) {
+		if (StringMethods.startsWith(routine.name, "^")) {
 			await this.#materializeTree(this.slothlet.api);
 			return;
 		}
@@ -1420,21 +1502,24 @@ export class RoutineManager extends ComponentBase {
 		// Unreachable `: new Set()` arm — the ownership handler is always auto-registered (see
 		// #isCurrentOwner's note), so the ternary always takes the truthy branch.
 		/* v8 ignore next */
-		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
-		if (bare || (!routine.recursive && !routine.name.startsWith("!"))) {
+		const endpoints = ownership ? setFrom(mapValuesToArray(ownership.moduleEndpoints)) : new Set();
+		if (bare || (!routine.recursive && !StringMethods.startsWith(routine.name, "!"))) {
 			// Every bounded shape (literal, `*`/`?`, `**`, `{}`) walks one `.`-segment at a time —
 			// #materializeGlobPath descends only as far as each segment actually requires. Brace
 			// alternatives are expanded into their own concrete segment chains first, since a brace
 			// option can embed a literal `.` a naive split here couldn't distinguish from a real
 			// segment boundary.
 			const segmentChains =
-				bare && routine.name.startsWith("!") ? [["*"]] : expandBraces(routine.name).map((alternative) => alternative.split("."));
-			for (const endpoint of endpoints) {
+				bare && StringMethods.startsWith(routine.name, "!")
+					? [["*"]]
+					: mapList(expandBraces(routine.name), (alternative) => splitText(alternative, "."));
+			for (const endpoint of setValues(endpoints)) {
 				// Same "." vs "" root-endpoint equivalence as #matches() above.
 				const mountRoot =
 					endpoint === "." || endpoint === "" ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
 				if (mountRoot === null || mountRoot === undefined) continue;
-				for (const segments of segmentChains) {
+				for (let ofIndex = 0, ofList = segmentChains; ofIndex < ofList.length; ofIndex++) {
+					const segments = ofList[ofIndex];
 					await this.#materializeGlobPath(mountRoot, segments);
 				}
 			}
@@ -1443,14 +1528,14 @@ export class RoutineManager extends ComponentBase {
 		// `recursive: true` (unbounded from the mount's own root) or a `!`-negated name (an unbounded
 		// complement — precision doesn't help): walk each known mount's entire subtree.
 		// Same "." vs "" root-endpoint equivalence as #matches() above.
-		if (endpoints.has(".") || endpoints.has("")) {
+		if (SetMethods.has(endpoints, ".") || SetMethods.has(endpoints, "")) {
 			// The base endpoint's own subtree IS the whole composed api, so walking it already covers
 			// every other mount — materializing each mount separately afterward would just re-walk
 			// already-materialized ground for no new information.
 			await this.#materializeTree(this.slothlet.api);
 			return;
 		}
-		for (const endpoint of endpoints) {
+		for (const endpoint of setValues(endpoints)) {
 			const mountRoot = await this.#resolveContainer(this.slothlet.api, endpoint);
 			await this.#materializeTree(mountRoot);
 		}
@@ -1469,10 +1554,13 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#orderPaths(apiPaths, order) {
 		if (order !== "depth") return apiPaths;
-		return apiPaths
-			.map((apiPath, index) => ({ apiPath, index, depth: apiPath.split(".").length }))
-			.sort((a, b) => b.depth - a.depth || a.index - b.index)
-			.map((entry) => entry.apiPath);
+		return mapList(
+			ArrayMethods.sort(
+				mapList(apiPaths, (apiPath, index) => ({ apiPath, index, depth: splitText(apiPath, ".").length })),
+				(a, b) => b.depth - a.depth || a.index - b.index
+			),
+			(entry) => entry.apiPath
+		);
 	}
 
 	/**
@@ -1516,16 +1604,17 @@ export class RoutineManager extends ComponentBase {
 		if (!routine) return undefined;
 		if (!skipMaterialize) await this.#materializeFor(routine);
 		const groups = this.#groupByPath(this.#contributorsFor(name));
-		const orderedPaths = this.#orderPaths([...groups.keys()], routine.order);
+		const orderedPaths = this.#orderPaths(mapKeysToArray(groups), routine.order);
 		const results = [];
 		const failures = [];
-		for (const apiPath of orderedPaths) {
+		for (let ofIndex = 0, ofList = orderedPaths; ofIndex < ofList.length; ofIndex++) {
+			const apiPath = ofList[ofIndex];
 			// Sequential-by-contract: cascade order is the entire point. Each contributor establishes
 			// its own extent inside #runEntries (attributed to its own leaf wrapper), so a cascade runs
 			// every contribution exactly as a direct call would (CLDMV/slothlet#393).
-			const outcome = await this.#runEntries(apiPath, groups.get(apiPath), args);
-			results.push(outcome.results.length === 1 ? outcome.results[0] : outcome.results);
-			failures.push(...outcome.failures);
+			const outcome = await this.#runEntries(apiPath, MapMethods.get(groups, apiPath), args);
+			listPush(results, outcome.results.length === 1 ? outcome.results[0] : outcome.results);
+			appendList(failures, outcome.failures);
 		}
 		if (failures.length > 0) this.#throwAggregate(failures);
 		return results.length === 1 ? results[0] : results;
@@ -1542,17 +1631,19 @@ export class RoutineManager extends ComponentBase {
 	async #runModeRoutines(mode) {
 		// Recorded fresh on every run (#542), so a skipped run never leaves an earlier run's record behind.
 		const invoked = new Set();
-		this.modeRunInvoked.set(mode, invoked);
+		MapMethods.set(this.modeRunInvoked, mode, invoked);
 		if (!this.slothlet.config?.autoRoutines) return;
-		const routines = this.#routines.filter((routine) => routine.mode === mode);
+		const routines = filterList(this.#routines, (routine) => routine.mode === mode);
 		if (routines.length === 0) return;
-		for (const routine of routines) {
+		for (let ofIndex = 0, ofList = routines; ofIndex < ofList.length; ofIndex++) {
+			const routine = ofList[ofIndex];
 			await this.#materializeFor(routine);
 		}
 		await this.rebuildStacks(this.slothlet.api);
 		this.activeModeRun = invoked;
 		try {
-			for (const routine of routines) {
+			for (let ofIndex = 0, ofList = routines; ofIndex < ofList.length; ofIndex++) {
+				const routine = ofList[ofIndex];
 				// Sequential-by-contract: routines run in declared order, each fully drained.
 				// skipMaterialize: true — the loop above already force-materialized this exact routine;
 				// letting runCascade() do it again would re-walk the same tree for no new information.
@@ -1580,11 +1671,11 @@ export class RoutineManager extends ComponentBase {
 	 * if (!routineManager.ranInModeRun("shutdown", slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
 	 */
 	ranInModeRun(mode, value) {
-		const invoked = this.modeRunInvoked.get(mode);
-		if (!invoked || invoked.size === 0 || !value) return false;
-		if (invoked.has(value)) return true;
+		const invoked = MapMethods.get(this.modeRunInvoked, mode);
+		if (!invoked || SetMethods.size(invoked) === 0 || !value) return false;
+		if (SetMethods.has(invoked, value)) return true;
 		const wrapper = resolveWrapper(value);
-		return !!wrapper && (invoked.has(wrapper) || invoked.has(wrapper.__impl));
+		return !!wrapper && (SetMethods.has(invoked, wrapper) || SetMethods.has(invoked, wrapper.__impl));
 	}
 
 	/**
@@ -1660,7 +1751,8 @@ export class RoutineManager extends ComponentBase {
 	async #resolveContainer(api, path) {
 		if (path === "") return api;
 		let node = api;
-		for (const part of path.split(".")) {
+		for (let ofIndex = 0, ofList = splitText(path, "."); ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
 			if (node === null || node === undefined) return undefined;
 			try {
 				node = node[part];
@@ -1711,14 +1803,20 @@ export class RoutineManager extends ComponentBase {
 		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
 		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
 		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
-		Objects.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "__slothletRoutineName", {
+			__proto__: null,
+			value: routine.name,
+			enumerable: false,
+			configurable: true
+		});
 		// #400: per-contributor selector + enumerator on the stacked callable.
 		// `.for(key)` returns a callable that runs ONLY the contributor whose moduleID is `key` at this
 		// exact path (see runPathFor). `.contributors` lists the moduleIDs present here (see
 		// contributorsAt). Non-enumerable so they don't leak into spreads/enumeration of the callable,
 		// but remain directly reachable as `api.<path>.<name>.for(key)` / `.contributors`.
 		Objects.defineProperty(stacked, "for", {
+			__proto__: null,
 			value: (key) =>
 				async function slothletRoutineFor(...args) {
 					return manager.runPathFor(apiPath, key, args, routine);
@@ -1727,6 +1825,7 @@ export class RoutineManager extends ComponentBase {
 			configurable: true
 		});
 		Objects.defineProperty(stacked, "contributors", {
+			__proto__: null,
 			get: () => manager.contributorsAt(apiPath, routine),
 			enumerable: false,
 			configurable: true
@@ -1759,9 +1858,9 @@ export class RoutineManager extends ComponentBase {
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
 		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
 		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
-		Objects.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "__slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
 		return cascade;
 	}
 
@@ -1832,13 +1931,14 @@ export class RoutineManager extends ComponentBase {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
 		this.recording = false;
 		try {
-			for (const routine of this.#routines) {
+			for (let ofIndex = 0, ofList = this.#routines; ofIndex < ofList.length; ofIndex++) {
+				const routine = ofList[ofIndex];
 				const groups = this.#groupByPath(this.#contributorsFor(routine.name));
-				for (const apiPath of groups.keys()) {
-					const lastDot = apiPath.lastIndexOf(".");
-					const parentPath = lastDot === -1 ? "" : apiPath.slice(0, lastDot);
-					const key = lastDot === -1 ? apiPath : apiPath.slice(lastDot + 1);
-					if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) continue; // integrated via the existing dispose builtins instead
+				for (const apiPath of mapKeys(groups)) {
+					const lastDot = StringMethods.lastIndexOf(apiPath, ".");
+					const parentPath = lastDot === -1 ? "" : StringMethods.slice(apiPath, 0, lastDot);
+					const key = lastDot === -1 ? apiPath : StringMethods.slice(apiPath, lastDot + 1);
+					if (parentPath === "" && SetMethods.has(ROOT_BUILTIN_NAMES, key)) continue; // integrated via the existing dispose builtins instead
 					// A contributor's own apiPath coinciding with this routine's OWN name (e.g. a
 					// root-mounted module exporting `initialize`, routine named `initialize`) is a
 					// cascade-owned slot, not a per-path-stack one — the cascade write below already
@@ -1861,12 +1961,15 @@ export class RoutineManager extends ComponentBase {
 					}
 				}
 
-				if (ROOT_BUILTIN_NAMES.has(routine.name)) continue; // integrated via the existing dispose builtins instead
+				if (SetMethods.has(ROOT_BUILTIN_NAMES, routine.name)) continue; // integrated via the existing dispose builtins instead
 				if (!routine.cascade) continue; // #400: cascade:false suppresses the root run-all `api.<name>()` cascade
 				const cascade = this.#buildCascadeCallable(routine.name);
 				await this.#loadCascadeSlot(api, routine.name);
 				try {
-					api[routine.name] = cascade;
+					// The framework's own install: the root holds the cascade as it is, not as a member the host assigned.
+					runtime_frameworkWrite(api, () => {
+						api[routine.name] = cascade;
+					});
 				} catch {
 					// Best-effort — see above.
 				}

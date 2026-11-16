@@ -45,7 +45,30 @@
  * write to the value would.
  */
 import { util } from "@cldmv/slothlet/helpers/platform";
-import { Reflect, Objects, Arrays, Functions, NativeProxy, Map, Set, WeakMap, Number } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	filterList,
+	FunctionMethods,
+	Functions,
+	Map,
+	mapEntriesToArray,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	NativeProxy,
+	Number,
+	Objects,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	WeakMap,
+	WeakMapMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -58,7 +81,7 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/sloth
  * isArrayIndex("2"); // true
  */
 function isArrayIndex(key) {
-	if (typeof key !== "string" || !/^(?:0|[1-9]\d*)$/.test(key)) return false;
+	if (typeof key !== "string" || !(RegExpMethods.exec(/^(?:0|[1-9]\d*)$/, key) !== null)) return false;
 	return Number(key) < 4294967295;
 }
 
@@ -96,7 +119,7 @@ let isApiNode = () => false;
  * isCompositionLayer(copyForComposition(new Map(), { addsMembers: true })); // true
  */
 export function isCompositionLayer(value) {
-	return LAYERS.has(value);
+	return WeakMapMethods.has(LAYERS, value);
 }
 
 /**
@@ -112,10 +135,10 @@ export function isCompositionLayer(value) {
  * holdMember(moduleContent, "extra", mod.extra);
  */
 export function holdMember(target, key, value) {
-	if (LAYERS.has(target)) {
+	if (WeakMapMethods.has(LAYERS, target)) {
 		// The shell's fixed key (an array's `length`) takes only a writable data value, in its own form.
-		if (!Reflect.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })) {
-			Reflect.defineProperty(target, key, { value, writable: true });
+		if (!Reflect.defineProperty(target, key, { __proto__: null, value, writable: true, enumerable: true, configurable: true })) {
+			Reflect.defineProperty(target, key, { __proto__: null, value, writable: true });
 		}
 		return;
 	}
@@ -133,7 +156,7 @@ export function holdMember(target, key, value) {
  * layerHeldKeys(flatten.composeFunctionDefault(mod.default)); // ["extra"] once `extra` is composed onto it
  */
 export function layerHeldKeys(layer) {
-	return [...(LAYERS.get(layer)?.added.keys() ?? [])];
+	return mapKeysToArray(WeakMapMethods.get(LAYERS, layer)?.added);
 }
 
 /**
@@ -144,7 +167,7 @@ export function layerHeldKeys(layer) {
 const BOUND_ORIGINALS = new WeakMap();
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
-const weakMapHas = Functions.prototype.call.bind(WeakMap.prototype.has);
+const weakMapHas = FunctionMethods.bind(Functions.prototype.call, WeakMap.prototype.has);
 
 /**
  * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read
@@ -171,7 +194,7 @@ export function isCompositionProxy(value) {
  * layerMethodOriginal(layer.get) === Map.prototype.get; // true for a layer over a Map
  */
 export function layerMethodOriginal(value) {
-	return typeof value === "function" ? BOUND_ORIGINALS.get(value) : undefined;
+	return typeof value === "function" ? WeakMapMethods.get(BOUND_ORIGINALS, value) : undefined;
 }
 
 /**
@@ -186,8 +209,8 @@ export function layerMethodOriginal(value) {
  * layerForwards(flatten.composeFunctionDefault(mod.default), "name"); // true
  */
 export function layerForwards(layer, key) {
-	const record = LAYERS.get(layer);
-	return record !== undefined && !record.added.has(key) && !record.removed.has(key);
+	const record = WeakMapMethods.get(LAYERS, layer);
+	return record !== undefined && !MapMethods.has(record.added, key) && !SetMethods.has(record.removed, key);
 }
 
 /**
@@ -201,7 +224,7 @@ export function layerForwards(layer, key) {
  * layerUnderlying(flatten.composeFunctionDefault(mod.default)) === mod.default; // true
  */
 export function layerUnderlying(layer) {
-	return LAYERS.get(layer)?.underlying ?? layer;
+	return WeakMapMethods.get(LAYERS, layer)?.underlying ?? layer;
 }
 
 /**
@@ -251,15 +274,17 @@ function layerMember(current, descriptor) {
 	if ("get" in descriptor || "set" in descriptor) {
 		const base = currentIsAccessor ? current : {};
 		return {
+			__proto__: null,
 			get: "get" in descriptor ? descriptor.get : base.get,
 			set: "set" in descriptor ? descriptor.set : base.set,
 			enumerable,
 			configurable: true
 		};
 	}
-	if (currentIsAccessor && !("value" in descriptor) && !("writable" in descriptor)) return { ...current, enumerable };
-	const base = current && !currentIsAccessor ? current : { value: undefined, writable: true };
+	if (currentIsAccessor && !("value" in descriptor) && !("writable" in descriptor)) return { __proto__: null, ...current, enumerable };
+	const base = current && !currentIsAccessor ? current : { __proto__: null, value: undefined, writable: true };
 	return {
+		__proto__: null,
 		value: "value" in descriptor ? descriptor.value : base.value,
 		writable: "writable" in descriptor ? descriptor.writable : base.writable,
 		enumerable,
@@ -287,11 +312,12 @@ function layerMember(current, descriptor) {
  */
 function layerOver(underlying, members = [], hidden = []) {
 	const added = new Map();
-	const removed = new Set(hidden);
+	// `hidden` is an array, or the set another layer hides.
+	const removed = Arrays.isArray(hidden) ? setFrom(hidden) : setFrom(setToArray(hidden));
 	const bound = new Map();
 	const isArray = Arrays.isArray(underlying);
 	const isCallable = typeof underlying === "function";
-	const forwards = (key) => !added.has(key) && !removed.has(key);
+	const forwards = (key) => !MapMethods.has(added, key) && !SetMethods.has(removed, key);
 	// A method runs on the value itself, which is the receiver its private fields and internal slots
 	// belong to, whether the value inherits it (a class's, a built-in's) or owns it (one its constructor
 	// assigned). Only the call's receiver changes: the method answers as itself otherwise, its own
@@ -299,11 +325,11 @@ function layerOver(underlying, members = [], hidden = []) {
 	const read = (key) => {
 		const value = Reflect.get(underlying, key);
 		if (typeof value !== "function" || isApiNode(value)) return value;
-		const cached = bound.get(key);
+		const cached = MapMethods.get(bound, key);
 		if (cached?.original === value) return cached.fn;
 		const fn = new NativeProxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
-		bound.set(key, { original: value, fn });
-		BOUND_ORIGINALS.set(fn, value);
+		MapMethods.set(bound, key, { original: value, fn });
+		WeakMapMethods.set(BOUND_ORIGINALS, fn, value);
 		return fn;
 	};
 	// The layer's own target is a fresh shell, not the value: the invariants a Proxy must keep are checked
@@ -311,33 +337,40 @@ function layerOver(underlying, members = [], hidden = []) {
 	// always extensible, so the layer may report the added keys beside the value's own. A callable shell is
 	// a bound function: it can be called and constructed, and unlike a plain function it has no fixed
 	// `prototype`, which an arrow function or method value does not have either.
-	const shell = isCallable ? function () {}.bind() : isArray ? [] : {};
-	const shellFixedKeys = Reflect.ownKeys(shell).filter((key) => !Reflect.getOwnPropertyDescriptor(shell, key).configurable);
+	const shell = isCallable ? FunctionMethods.bind(function () {}) : isArray ? [] : {};
+	const shellFixedKeys = filterList(Reflect.ownKeys(shell), (key) => !Reflect.getOwnPropertyDescriptor(shell, key).configurable);
 	// A member held non-configurable must be the shell's own too: a Proxy may report a property
 	// non-configurable only when its target holds it so. The shell's copy is then what the engine checks
 	// every later change against, as it would an object's own property (#585 review).
-	const pinned = (key) => !shellFixedKeys.includes(key) && Reflect.getOwnPropertyDescriptor(shell, key)?.configurable === false;
+	const pinned = (key) =>
+		!ArrayMethods.includes(shellFixedKeys, key) && Reflect.getOwnPropertyDescriptor(shell, key)?.configurable === false;
 	const hold = (key, member, nonConfigurable) => {
-		if (nonConfigurable && !shellFixedKeys.includes(key)) {
-			const fixed = { ...member, configurable: false };
+		if (nonConfigurable && !ArrayMethods.includes(shellFixedKeys, key)) {
+			const fixed = { __proto__: null, ...member, configurable: false };
 			if (!Reflect.defineProperty(shell, key, fixed)) return false;
-			added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+			MapMethods.set(added, key, Reflect.getOwnPropertyDescriptor(shell, key));
 		} else {
-			added.set(key, member);
+			MapMethods.set(added, key, member);
 		}
-		removed.delete(key);
+		SetMethods.delete(removed, key);
 		return true;
 	};
-	for (const [key, descriptor] of members) hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
+	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			key = ofEntry[0],
+			descriptor = ofEntry[1];
+		hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
+	}
 	const layer = new NativeProxy(shell, {
+		__proto__: null,
 		get(_shell, key, receiver) {
-			if (!added.has(key)) return forwards(key) ? read(key) : undefined;
-			const member = added.get(key);
+			if (!MapMethods.has(added, key)) return forwards(key) ? read(key) : undefined;
+			const member = MapMethods.get(added, key);
 			// An accessor member runs on the layer, as a getter on an object runs on that object.
 			if (!("value" in member)) return member.get ? Reflect.apply(member.get, receiver, []) : undefined;
 			return member.value;
 		},
-		has: (_shell, key) => added.has(key) || (forwards(key) && Reflect.has(underlying, key)),
+		has: (_shell, key) => MapMethods.has(added, key) || (forwards(key) && Reflect.has(underlying, key)),
 		set(_shell, key, value, receiver) {
 			// A member the value itself holds and the layer does not is the value's: a write to it reaches
 			// the value, as a write to the value would, so its methods and getters see it. The build never
@@ -346,7 +379,7 @@ function layerOver(underlying, members = [], hidden = []) {
 			// An array's element is the array's too, a new one included: written to the array, its `length`
 			// grows as it would on the array itself (#585 review).
 			if (isArray && forwards(key) && isArrayIndex(key)) return Reflect.set(underlying, key, value, underlying);
-			const member = added.get(key);
+			const member = MapMethods.get(added, key);
 			if (member && !("value" in member)) {
 				if (!member.set) return false;
 				Reflect.apply(member.set, receiver, [value]);
@@ -354,12 +387,16 @@ function layerOver(underlying, members = [], hidden = []) {
 			}
 			if (member && !member.writable) return false;
 			if (pinned(key)) {
-				Reflect.defineProperty(shell, key, { value });
-				added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+				Reflect.defineProperty(shell, key, { __proto__: null, value });
+				MapMethods.set(added, key, Reflect.getOwnPropertyDescriptor(shell, key));
 				return true;
 			}
-			removed.delete(key);
-			added.set(key, member ? { ...member, value } : { value, writable: true, enumerable: true, configurable: true });
+			SetMethods.delete(removed, key);
+			MapMethods.set(
+				added,
+				key,
+				member ? { __proto__: null, ...member, value } : { __proto__: null, value, writable: true, enumerable: true, configurable: true }
+			);
 			return true;
 		},
 		defineProperty(_shell, key, descriptor) {
@@ -368,7 +405,7 @@ function layerOver(underlying, members = [], hidden = []) {
 			// It also stays writable: the shell holds it writable, and a non-configurable key may not be
 			// reported read-only while its target holds it writable.
 			if (
-				shellFixedKeys.includes(key) &&
+				ArrayMethods.includes(shellFixedKeys, key) &&
 				(descriptor.configurable || descriptor.enumerable || descriptor.writable === false || "get" in descriptor || "set" in descriptor)
 			) {
 				return false;
@@ -376,20 +413,21 @@ function layerOver(underlying, members = [], hidden = []) {
 			// A non-configurable member changes only as the engine allows its shell copy to.
 			if (pinned(key)) {
 				if (!Reflect.defineProperty(shell, key, descriptor)) return false;
-				added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+				MapMethods.set(added, key, Reflect.getOwnPropertyDescriptor(shell, key));
 				return true;
 			}
 			// A define that leaves out a field keeps the member's current one, as on an object (#585 review): a
 			// member still forwarded starts from the value's own. The fixed key with no new value is unchanged.
-			if (shellFixedKeys.includes(key) && !added.has(key) && !("value" in descriptor)) return true;
-			const current = added.get(key) ?? (forwards(key) ? Reflect.getOwnPropertyDescriptor(underlying, key) : undefined);
+			if (ArrayMethods.includes(shellFixedKeys, key) && !MapMethods.has(added, key) && !("value" in descriptor)) return true;
+			const current = MapMethods.get(added, key) ?? (forwards(key) ? Reflect.getOwnPropertyDescriptor(underlying, key) : undefined);
 			// A new member takes false for each attribute it leaves out, as on an object, so one defined
 			// without `configurable` is held non-configurable (#585 review).
 			const isAccessor = "get" in descriptor || "set" in descriptor;
 			const complete = current
 				? descriptor
 				: {
-						...(isAccessor ? { get: undefined, set: undefined } : { value: undefined, writable: false }),
+						__proto__: null,
+						...(isAccessor ? { get: undefined, set: undefined } : { __proto__: null, value: undefined, writable: false }),
 						enumerable: false,
 						configurable: false,
 						...descriptor
@@ -399,30 +437,37 @@ function layerOver(underlying, members = [], hidden = []) {
 		deleteProperty(_shell, key) {
 			// The shell's fixed key (an array's `length`) cannot go, as on the array itself, and neither can a
 			// member held non-configurable.
-			if (shellFixedKeys.includes(key) || pinned(key)) return false;
+			if (ArrayMethods.includes(shellFixedKeys, key) || pinned(key)) return false;
 			// Hidden from the layer only; the value keeps the member.
-			added.delete(key);
-			if (Reflect.getOwnPropertyDescriptor(underlying, key)) removed.add(key);
+			MapMethods.delete(added, key);
+			if (Reflect.getOwnPropertyDescriptor(underlying, key)) SetMethods.add(removed, key);
 			return true;
 		},
 		getOwnPropertyDescriptor(shell, key) {
 			// A member held over the shell's fixed key is reported in that key's own form.
-			if (added.has(key) && shellFixedKeys.includes(key)) {
-				return { value: added.get(key).value, writable: true, enumerable: false, configurable: false };
+			if (MapMethods.has(added, key) && ArrayMethods.includes(shellFixedKeys, key)) {
+				return { __proto__: null, value: MapMethods.get(added, key).value, writable: true, enumerable: false, configurable: false };
 			}
-			if (added.has(key)) return { ...added.get(key) };
+			if (MapMethods.has(added, key)) return { ...MapMethods.get(added, key) };
 			if (!forwards(key)) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(underlying, key);
 			if (!descriptor) return undefined;
 			// The shell's one fixed key (an array's `length`) is non-configurable and writable; the layer
 			// reports the value's member in that same form. Every other member is
 			// reported configurable, as the shell, which does not hold it, requires.
-			if (shellFixedKeys.includes(key)) return { ...descriptor, configurable: false, writable: true };
-			return { ...descriptor, configurable: true };
+			if (ArrayMethods.includes(shellFixedKeys, key)) return { __proto__: null, ...descriptor, configurable: false, writable: true };
+			return { __proto__: null, ...descriptor, configurable: true };
 		},
-		ownKeys: () => [
-			...new Set([...Reflect.ownKeys(underlying).filter((key) => !removed.has(key) && !added.has(key)), ...added.keys(), ...shellFixedKeys])
-		],
+		ownKeys: () =>
+			setToArray(
+				setFrom(
+					concatLists(
+						filterList(Reflect.ownKeys(underlying), (key) => !SetMethods.has(removed, key) && !MapMethods.has(added, key)),
+						mapKeysToArray(added),
+						shellFixedKeys
+					)
+				)
+			),
 		getPrototypeOf: () => Reflect.getPrototypeOf(underlying),
 		// The layer reports the value's prototype, and changing it would change the module's value, so a
 		// change is refused; setting the prototype it already has succeeds, as on an object (#585 review).
@@ -435,7 +480,7 @@ function layerOver(underlying, members = [], hidden = []) {
 			construct: (_shell, args, newTarget) => Reflect.construct(underlying, args, newTarget === layer ? underlying : newTarget)
 		})
 	});
-	LAYERS.set(layer, { underlying, added, removed });
+	WeakMapMethods.set(LAYERS, layer, { underlying, added, removed });
 	return layer;
 }
 
@@ -469,8 +514,8 @@ function copyArray(value) {
 function runtime_holdsMember(value, key) {
 	// A Proxy's getPrototypeOf trap can lead the walk back to a value it already passed; it stops there.
 	const seen = new Set();
-	for (let current = value; current !== null && !seen.has(current); current = Objects.getPrototypeOf(current)) {
-		seen.add(current);
+	for (let current = value; current !== null && !SetMethods.has(seen, current); current = Objects.getPrototypeOf(current)) {
+		SetMethods.add(seen, current);
 		if (Objects.getOwnPropertyDescriptor(current, key)) return true;
 	}
 	return false;
@@ -495,11 +540,15 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	// A layer is copied as a fresh layer over the same value, holding what the layer holds and hiding what
 	// it hides: layering the layer itself would bury its members a level down, where only its traps could
 	// reach them.
-	const layered = LAYERS.get(value);
+	const layered = WeakMapMethods.get(LAYERS, value);
 	if (layered)
 		return layerOver(
 			layered.underlying,
-			[...layered.added].map(([key, member]) => [key, { ...member }]),
+			mapList(mapEntriesToArray(layered.added), (entry1) => {
+				const key = entry1[0],
+					member = entry1[1];
+				return [key, { ...member }];
+			}),
 			layered.removed
 		);
 	if (util.types.isProxy(value)) return layerOver(value);
@@ -519,9 +568,13 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
 	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
 	// the value's descriptors, so a member the value would refuse to delete or redefine is refused too.
-	if (addsMembers) for (const descriptor of Objects.values(descriptors)) descriptor.configurable = true;
+	if (addsMembers)
+		for (let ofIndex = 0, ofList = Objects.values(descriptors); ofIndex < ofList.length; ofIndex++) {
+			const descriptor = ofList[ofIndex];
+			descriptor.configurable = true;
+		}
 	const copy = Objects.create(Objects.getPrototypeOf(value), descriptors);
-	COPY_SOURCES.set(copy, value);
+	WeakMapMethods.set(COPY_SOURCES, copy, value);
 	return copy;
 }
 
@@ -536,7 +589,7 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
  * copySourceOf(copyForComposition(mod.config)) === mod.config; // true
  */
 export function copySourceOf(copy) {
-	return copy !== null && typeof copy === "object" ? COPY_SOURCES.get(copy) : undefined;
+	return copy !== null && typeof copy === "object" ? WeakMapMethods.get(COPY_SOURCES, copy) : undefined;
 }
 
 /**
@@ -551,8 +604,18 @@ export function copySourceOf(copy) {
  * const impl = layerOnto(layer, standIn);
  */
 export function layerOnto(layered, underlying) {
-	const prior = LAYERS.get(layered);
-	return layerOver(underlying, prior ? [...prior.added].map(([key, member]) => [key, { ...member }]) : [], prior?.removed ?? []);
+	const prior = WeakMapMethods.get(LAYERS, layered);
+	return layerOver(
+		underlying,
+		prior
+			? mapList(mapEntriesToArray(prior.added), (entry2) => {
+					const key = entry2[0],
+						member = entry2[1];
+					return [key, { ...member }];
+				})
+			: [],
+		prior?.removed ?? []
+	);
 }
 
 /**
@@ -569,13 +632,16 @@ export function layerOnto(layered, underlying) {
  * const instance = relayer(impl, [["sib", { value: sib }], ["extra", { value: extra }]]);
  */
 export function relayer(layered, members) {
-	const prior = LAYERS.get(layered);
+	const prior = WeakMapMethods.get(LAYERS, layered);
 	const underlying = prior?.underlying ?? layered;
 	// A member the value holds keeps coming from the value, unless the layer being relaid held it over the
 	// value's own: a named export that won its collision with the value's member stays the winner (#585 review).
 	return layerOver(
 		underlying,
-		members.filter(([key]) => prior?.added.has(key) || !Reflect.getOwnPropertyDescriptor(underlying, key)),
+		filterList(members, (entry3) => {
+			const key = entry3[0];
+			return (prior == null ? undefined : MapMethods.has(prior.added, key)) || !Reflect.getOwnPropertyDescriptor(underlying, key);
+		}),
 		prior?.removed ?? []
 	);
 }

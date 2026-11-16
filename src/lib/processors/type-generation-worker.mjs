@@ -35,7 +35,7 @@ import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { JSON, NativeProcess, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import { JSON, NativeProcess, Processes, PromiseMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -101,7 +101,7 @@ export function runIfEntry(argv1, configJson, send, exit) {
 	if (!argv1 || resolve(argv1) !== fileURLToPath(import.meta.url)) {
 		return null;
 	}
-	return runTypeGeneration(configJson, send).then(exit);
+	return PromiseMethods.then(runTypeGeneration(configJson, send), exit);
 }
 
 runIfEntry(NativeProcess.argv[1], NativeProcess.env.SLOTHLET_CONFIG, Processes.send, Processes.exit);

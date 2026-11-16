@@ -38,6 +38,8 @@ const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_FORGED;
 
 /** Deny by default; the vault's secret is the victim's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "victim.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "victim.**", target: "attacker.**", effect: "allow" },
 	{ caller: "victim.**", target: "slothlet.permissions.principal.**", effect: "allow" },

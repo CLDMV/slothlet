@@ -27,8 +27,15 @@ import slothlet from "@cldmv/slothlet";
 const BASE = path.join(path.dirname(fileURLToPath(import.meta.url)), "api");
 const KINDS = ["onwrite", "readableState", "events", "on", "writeCallback", "handle", "global", "eval", "newFunction"];
 const PERMISSIONS = {
-	evilDenied: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "vault.**", effect: "deny" }] },
-	allAllowed: { defaultPolicy: "allow", rules: [] }
+	// Code from strings is a built-in capability (D4 ruling part 1); the probe is about where the planted code runs.
+	evilDenied: {
+		defaultPolicy: "allow",
+		rules: [
+			{ caller: "evil.**", target: "vault.**", effect: "deny" },
+			{ caller: "**", target: "capability:code", effect: "allow" }
+		]
+	},
+	allAllowed: { defaultPolicy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
 };
 
 const connections = new Set();

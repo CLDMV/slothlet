@@ -36,7 +36,19 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { Objects, Arrays, Map, WeakSet, Dates } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Dates,
+	listPush,
+	Map,
+	mapEntries,
+	mapKeysToArray,
+	MapMethods,
+	Objects,
+	splitText,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -143,7 +155,7 @@ export class ApiCacheManager extends ComponentBase {
 			});
 		}
 
-		this.caches.set(moduleID, entry);
+		MapMethods.set(this.caches, moduleID, entry);
 		this.version++;
 
 		this.slothlet.debug("cache", {
@@ -168,7 +180,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * }
 	 */
 	get(moduleID) {
-		return this.caches.get(moduleID);
+		return MapMethods.get(this.caches, moduleID);
 	}
 
 	/**
@@ -183,7 +195,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * }
 	 */
 	has(moduleID) {
-		return this.caches.has(moduleID);
+		return MapMethods.has(this.caches, moduleID);
 	}
 
 	/**
@@ -199,7 +211,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * cacheManager.delete("plugins_abc123");
 	 */
 	delete(moduleID) {
-		const deleted = this.caches.delete(moduleID);
+		const deleted = MapMethods.delete(this.caches, moduleID);
 		if (deleted) this.version++;
 
 		if (deleted) {
@@ -222,7 +234,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * // ["base_abc123", "plugins_xyz789", ...]
 	 */
 	getAllModuleIDs() {
-		return Arrays.from(this.caches.keys());
+		return mapKeysToArray(this.caches);
 	}
 
 	/**
@@ -247,11 +259,13 @@ export class ApiCacheManager extends ComponentBase {
 	getCacheDiagnostics() {
 		const caches = [];
 
-		for (const [moduleID, entry] of this.caches.entries()) {
+		for (const ofEntry of mapEntries(this.caches)) {
+			const moduleID = ofEntry[0],
+				entry = ofEntry[1];
 			// Count paths in API tree
 			const pathCount = this._countPaths(entry.api);
 
-			caches.push({
+			listPush(caches, {
 				moduleID,
 				endpoint: entry.endpoint,
 				folderPath: entry.folderPath,
@@ -262,7 +276,7 @@ export class ApiCacheManager extends ComponentBase {
 		}
 
 		return {
-			totalCaches: this.caches.size,
+			totalCaches: MapMethods.size(this.caches),
 			caches
 		};
 	}
@@ -275,14 +289,17 @@ export class ApiCacheManager extends ComponentBase {
 	 * @private
 	 */
 	_countPaths(api, visited = new WeakSet()) {
-		if (!api || typeof api !== "object" || visited.has(api)) {
+		if (!api || typeof api !== "object" || WeakSetMethods.has(visited, api)) {
 			return 0;
 		}
 
-		visited.add(api);
+		WeakSetMethods.add(visited, api);
 		let count = 0;
 
-		for (const [key, value] of Objects.entries(api)) {
+		for (let ofIndex = 0, ofList = Objects.entries(api); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			// Skip the framework's reserved names; a module's `_`/`__`-prefixed export is a member and counts.
 			if (isFrameworkReservedKey(key)) {
 				continue;
@@ -310,7 +327,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * cacheManager.clear();
 	 */
 	clear() {
-		this.caches.clear();
+		MapMethods.clear(this.caches);
 		this.version++;
 
 		this.slothlet.debug("cache", {
@@ -392,7 +409,7 @@ export class ApiCacheManager extends ComponentBase {
 						syntheticExports: entry.syntheticExports,
 						// Mirror the add-time syntheticName (parts.length ? last segment : "synthetic")
 						// so the flatten matches: a root synthetic (endpoint "") uses "synthetic".
-						syntheticName: entry.endpoint ? entry.endpoint.split(".").pop() : "synthetic"
+						syntheticName: entry.endpoint ? ArrayMethods.pop(splitText(entry.endpoint, ".")) : "synthetic"
 					}
 				: {})
 		});

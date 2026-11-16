@@ -524,6 +524,32 @@ const DETOURS = {
 	// Have the owner run a built-in bound to the write: no frame of this module's is on the stack when it lands.
 	boundBuiltIn: (prefix) =>
 		attempt(() => void self.owner.run(Reflect.set.bind(null, Object.getPrototypeOf(self.owner.make()), `${prefix}bound`, planted))),
+	// The same through other built-ins that write, and through `call` bound to one.
+	boundAssign: (prefix) =>
+		attempt(
+			() => void self.owner.run(Object.assign.bind(null, Object.getPrototypeOf(self.owner.make()), { [`${prefix}assign`]: planted }))
+		),
+	boundDefine: (prefix) =>
+		attempt(
+			() =>
+				void self.owner.run(
+					Object.defineProperty.bind(null, Object.getPrototypeOf(self.owner.make()), `${prefix}define`, {
+						value: planted,
+						configurable: true
+					})
+				)
+		),
+	boundCall: (prefix) =>
+		attempt(
+			() =>
+				void self.owner.run(
+					Function.prototype.call.bind(Object.defineProperty, null, Object.getPrototypeOf(self.owner.make()), `${prefix}call`, {
+						value: planted,
+						configurable: true
+					})
+				)
+		),
+	boundPrototypeSwap: () => attempt(() => void self.owner.run(Object.setPrototypeOf.bind(null, self.owner.heldOne(), { hi: planted }))),
 	closureRunByOwner: (prefix) =>
 		attempt(
 			() =>
@@ -563,6 +589,27 @@ const DETOURS = {
 			delete instance.flag;
 		})
 };
+
+/**
+ * Hand the deputy module built-ins bound to writes onto the owner's code, for it to run: a module a rule lets write the
+ * owner makes the write, through a view that is this module's.
+ * @param {string} prefix - What every key written starts with.
+ * @returns {Object<string, string>} How each write ended.
+ */
+export function throughDeputy(prefix) {
+	return {
+		assign: attempt(
+			() => void self.deputy.run(Object.assign.bind(null, Object.getPrototypeOf(self.owner.make()), { [`${prefix}deputy`]: planted }))
+		),
+		nested: attempt(
+			() =>
+				void self.deputy.run(
+					Object.assign.bind(null, Object.getPrototypeOf(self.owner.inData().inst), { [`${prefix}deputyNested`]: planted })
+				)
+		),
+		prototypeSwap: attempt(() => void self.deputy.run(Object.setPrototypeOf.bind(null, self.owner.heldOne(), { hi: planted })))
+	};
+}
 
 /**
  * The name of every detour.

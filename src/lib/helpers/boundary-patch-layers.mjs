@@ -37,7 +37,7 @@
  * The registry lives on the global object under a `Symbol.for` key, so every copy shares it.
  */
 
-import { Reflect, Objects, WeakMap, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Reflect, Symbols, WeakMap, WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Where the registry lives on the global object.
@@ -56,7 +56,7 @@ function runtime_layers() {
 	if (!(registry instanceof WeakMap)) {
 		registry = new WeakMap();
 		// Non-enumerable, so the global object's own keys look the same as before.
-		Objects.defineProperty(globalThis, LAYERS, { value: registry, configurable: true });
+		Objects.defineProperty(globalThis, LAYERS, { __proto__: null, value: registry, configurable: true });
 	}
 	return registry;
 }
@@ -80,7 +80,7 @@ function runtime_collapse(installed, identify) {
 	const registry = runtime_layers();
 	let current = installed;
 	for (;;) {
-		const layer = registry.get(identify(current));
+		const layer = WeakMapMethods.get(registry, identify(current));
 		if (!layer || layer.active) return current;
 		current = layer.below;
 	}
@@ -109,7 +109,7 @@ export function openLayer(installed, identify = runtime_byValue) {
  * @internal
  */
 export function markLayer(marker, layer) {
-	runtime_layers().set(marker, layer);
+	WeakMapMethods.set(runtime_layers(), marker, layer);
 }
 
 /**
@@ -119,7 +119,7 @@ export function markLayer(marker, layer) {
  * @internal
  */
 export function isActiveLayer(marker) {
-	return runtime_layers().get(marker)?.active === true;
+	return WeakMapMethods.get(runtime_layers(), marker)?.active === true;
 }
 
 /**

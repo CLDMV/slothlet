@@ -41,6 +41,8 @@ const BASE = TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE;
 
 /** Deny by default; the vault's secret is the callee's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "**", target: "vault.secret.whoami", effect: "allow" },
 	{ caller: "supplier.**", target: "callee.**", effect: "allow" },

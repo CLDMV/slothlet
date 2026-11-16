@@ -100,6 +100,8 @@ export const TEST_DIRS = {
 	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
 	API_TEST_CALLER_SUPPLIED_ROUND2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round2`),
 	API_TEST_CALLER_SUPPLIED_ROUND3: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round3`),
+	API_TEST_VM_RECOMPILED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_vm_recompiled`),
+	API_TEST_LEAF_FILE_IMPORT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_leaf_file_import`),
 	API_TEST_CALLER_SUPPLIED_ROUND4: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round4`),
 	API_TEST_CALLER_SUPPLIED_ROUND5: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round5`),
 	API_TEST_CALLER_SUPPLIED_ROUND7: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round7`),

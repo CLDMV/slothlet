@@ -42,6 +42,8 @@ const HOST_FILE = path.join(FIXTURE, "host", "access.mjs");
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "project.**", target: "host.**", effect: "allow" },
 	{ caller: "project.**", target: "vault.open", effect: "allow" },
 	{ caller: "host.**", target: "vault.get", effect: "allow" },
@@ -231,6 +233,11 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		});
 
 		it.each(["vm", "vmScript", "sourceURL"])("refuses code compiled to look like the leaf's (%s)", async (kind) => {
+			if (kind === "vm" || kind === "vmScript") {
+				// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
+				await expect(api.project.hand(mount, "run", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+				return;
+			}
 			expect(await api.project.hand(mount, "run", kind, file)).toEqual({ own: "secret", handed: DENIED, after: "secret" });
 		});
 
@@ -245,6 +252,11 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		it.each(["vm", "vmScript", "sourceURL"])(
 			"refuses code compiled to look like the leaf's when it runs as a reaction with none of the leaf's frames below it (%s)",
 			async (kind) => {
+				if (kind === "vm" || kind === "vmScript") {
+					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
+					await expect(api.project.hand(mount, "defer", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					return;
+				}
 				const result = await api.project.hand(mount, "defer", kind, file);
 				expect(result.own).toBe("secret");
 				// Never the leaf's: the call that made the leaf's in the async runtime; the live runtime refuses it outright.
@@ -270,6 +282,11 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		it.each(["callback", "vm", "vmScript", "sourceURL"])(
 			"runs its own body as the leaf after an await and what it was handed as the caller (%s)",
 			async (kind) => {
+				if (kind === "vm" || kind === "vmScript") {
+					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
+					await expect(api.project.hand(mount, "awaitRun", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					return;
+				}
 				expect(await api.project.hand(mount, "awaitRun", kind, file)).toEqual({ own: "secret", handed: DENIED });
 			}
 		);
@@ -277,6 +294,11 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		it.each(["vm", "vmScript", "sourceURL"])(
 			"refuses code compiled to look like the leaf's in a reaction, before the leaf read any identity (%s)",
 			async (kind) => {
+				if (kind === "vm" || kind === "vmScript") {
+					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
+					await expect(api.project.hand(mount, "deferFirst", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					return;
+				}
 				const result = await api.project.hand(mount, "deferFirst", kind, file);
 				if (runtime === "async") expect(result.handed).toBe(DENIED);
 				else expect(result.handed).toMatch(/^[A-Z_]+:/);

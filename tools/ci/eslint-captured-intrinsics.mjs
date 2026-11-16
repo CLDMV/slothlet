@@ -249,6 +249,9 @@ const KEPT_MEMBERS = {
 /** The import source of the captured copies. */
 const INTRINSICS = "@cldmv/slothlet/helpers/intrinsics";
 
+/** The helper that hands out Node's built-in modules (`fs`, `path`, …) and slothlet's own copies of them. */
+const PLATFORM = "@cldmv/slothlet/helpers/platform";
+
 /** A directive comment that turns rules off, with the rules it names (none: every rule). */
 const DIRECTIVE = /^\s*eslint-disable(?:-next-line|-line)?(?:\s+(?<rules>.*))?$/s;
 
@@ -438,7 +441,8 @@ const rule = {
 					if (!match) continue;
 					// What follows ` -- ` is the directive's description, not a rule.
 					const rules = (match.groups.rules ?? "").split(/\s--\s|\s--$/)[0].trim();
-					if (!rules || rules.split(/\s*,\s*/).includes("slothlet/captured-intrinsics")) {
+					const named = rules.split(/\s*,\s*/);
+					if (!rules || named.includes("slothlet/captured-intrinsics") || named.includes("slothlet/captured-prototype-methods")) {
 						context.report({ loc: comment.loc, messageId: "directive" });
 					}
 				}
@@ -479,4 +483,263 @@ const rule = {
 	}
 };
 
-export default { rules: { "captured-intrinsics": rule } };
+/**
+ * Methods the built-in prototypes hold, by name: a call `value.name(…)` with one of these names looks the method up on
+ * the value's prototype when it runs, where module code can have replaced it. `then`, `catch` and `finally` are left
+ * out: slothlet calls them on values module code hands it (a listener's result), and `await` reads `then` itself.
+ * @type {Set<string>}
+ */
+const PROTOTYPE_METHODS = (() => {
+	const names = new Set();
+	const prototypes = [
+		Array.prototype,
+		String.prototype,
+		Map.prototype,
+		Set.prototype,
+		WeakMap.prototype,
+		WeakSet.prototype,
+		WeakRef.prototype,
+		Function.prototype,
+		Object.prototype,
+		RegExp.prototype,
+		Date.prototype,
+		Number.prototype,
+		URLSearchParams.prototype,
+		FinalizationRegistry.prototype
+	];
+	for (const proto of prototypes) {
+		for (const name of Object.getOwnPropertyNames(proto)) {
+			if (name !== "constructor" && typeof Object.getOwnPropertyDescriptor(proto, name).value === "function") names.add(name);
+		}
+	}
+	for (const name of ["then", "catch", "finally"]) names.delete(name);
+	return names;
+})();
+
+/**
+ * The helpers of `helpers/intrinsics` that walk a `Map`, a `Set`, an array or a generator with the functions taken at
+ * load: `for…of` (and `yield*`) over a call of one of these reads nothing module code can replace. A file names helpers
+ * of its own that hand out such walks in the rule's `safeIterators` option.
+ * @type {Set<string>}
+ */
+const SAFE_ITERATORS = new Set(["mapEntries", "mapKeys", "mapValues", "setValues", "generatorSteps", "asyncGeneratorSteps", "listSteps"]);
+
+/**
+ * Captured statics that walk their argument with its iterator, and what to use instead.
+ * @type {Record<string, Record<string, string>>}
+ */
+const ITERATING_STATICS = {
+	Arrays: { from: "copyList, mapList or setToArray" },
+	Objects: { fromEntries: "objectFromEntries" },
+	Promises: { all: "promiseAll", allSettled: "promiseAllSettled", race: "an indexed loop", any: "an indexed loop" }
+};
+
+/** @type {import("eslint").Rule.RuleModule} */
+const prototypeRule = {
+	meta: {
+		type: "problem",
+		docs: { description: "Call the methods built-in values inherit through the copies helpers/intrinsics took at load" },
+		schema: [
+			{
+				type: "object",
+				properties: { safeIterators: { type: "array", items: { type: "string" } } },
+				additionalProperties: false
+			}
+		],
+		messages: {
+			method:
+				"`{{text}}` looks `{{name}}` up on the value's prototype when it runs, which module code can replace after slothlet loads. Call the copy taken at load (`ArrayMethods.{{name}}(value, …)`, `StringMethods.…`, `MapMethods.…`) from @cldmv/slothlet/helpers/intrinsics.",
+			forOf:
+				"`for…of` asks the value for its iterator and steps it with `next`, both of which module code can replace. Walk an array by index, or a Map, Set or generator through mapEntries, mapKeys, mapValues, setValues or generatorSteps.",
+			spread:
+				"Spreading walks the value with its iterator, which module code can replace. Use copyList, concatLists, setToArray, appendList, or Reflect.apply / Reflect.construct with an array.",
+			pattern: "Array destructuring walks the value with its iterator, which module code can replace. Read the elements by index.",
+			delegate:
+				"`yield*` walks the value with its iterator, which module code can replace. Loop over it by index or through a safe iterator.",
+			iterating: "`{{text}}` walks its argument with the argument's iterator, which module code can replace. Use {{use}}.",
+			arrayWrite:
+				"`ArrayMethods.{{name}}` writes elements through any setter module code put at an index of the shared prototypes, or reads the array's `constructor` and `Symbol.species`. Use {{use}} from @cldmv/slothlet/helpers/intrinsics.",
+			descriptor:
+				"A property descriptor slothlet makes inherits `Object.prototype`, where module code can add `get`, `set` or `value`: give it `__proto__: null`.",
+			construct:
+				"`new {{name}}(…)` with an argument walks it with its iterator, which module code can replace. Construct it empty and add with the copies taken at load (setFrom, mapFrom)."
+		}
+	},
+	create(context) {
+		const sourceCode = context.sourceCode;
+		const filename = context.filename ?? context.getFilename();
+		// helpers/intrinsics takes the built-ins themselves.
+		if (/[\\/]helpers[\\/]intrinsics\.mjs$/.test(filename)) return {};
+		const safeIterators = new Set([...SAFE_ITERATORS, ...(context.options[0]?.safeIterators ?? [])]);
+		/**
+		 * Whether an expression is a call of a helper that hands out a walk reading nothing module code can replace.
+		 * @param {object} node - The expression.
+		 * @returns {boolean} True for such a call.
+		 */
+		const isSafeWalk = (node) => node.type === "CallExpression" && node.callee.type === "Identifier" && safeIterators.has(node.callee.name);
+		/**
+		 * The variable an identifier refers to, from the scope it is in.
+		 * @param {object} identifier - The identifier node.
+		 * @returns {object|null} The variable, or null for a global.
+		 */
+		const variableOf = (identifier) => {
+			for (let scope = sourceCode.getScope(identifier); scope; scope = scope.upper) {
+				const variable = scope.set.get(identifier.name);
+				if (variable) return variable;
+			}
+			return null;
+		};
+		/**
+		 * Whether code runs while the file loads: outside every function. Module code cannot have run yet then.
+		 * @param {object} node - The code.
+		 * @returns {boolean} True at the file's top level.
+		 */
+		const atTopLevel = (node) => {
+			for (let at = node.parent; at; at = at.parent)
+				if (isFunction(at) || at.type === "MethodDefinition" || at.type === "PropertyDefinition") return false;
+			return true;
+		};
+		/**
+		 * Whether a receiver is one whose methods are not the built-in prototypes': slothlet's own objects (`this`,
+		 * `super`, its handlers and managers), a binding imported from helpers/intrinsics or from a Node built-in module,
+		 * or a variable holding a Node built-in module.
+		 * @param {object} node - The receiver expression.
+		 * @returns {boolean} True for such a receiver.
+		 */
+		const ownReceiver = (node, depth = 0) => {
+			if (node.type === "ThisExpression" || node.type === "Super") return true;
+			// An instance of a class constructed on the spot: its methods are that class's.
+			if (node.type === "NewExpression") return true;
+			const text = sourceCode.getText(node);
+			if (/(^|\.)(handlers\??\.\w+|\w*[mM]anager|#\w*[mM]anager|ownership|\w*[hH]andler)$/.test(text)) return true;
+			if (node.type !== "Identifier" || depth > 4) return false;
+			const variable = variableOf(node);
+			if (!variable) return false;
+			for (const def of variable.defs) {
+				if (def.type === "ImportBinding") {
+					const from = def.parent?.source?.value;
+					// helpers/platform hands out Node's built-in modules (null in a browser).
+					if (from === INTRINSICS || from === PLATFORM || isNodeSpecifier(from)) return true;
+				}
+				if (def.type !== "Variable" || !def.node.init) continue;
+				const init = def.node.init;
+				// An object literal of slothlet's own: its methods are its own members.
+				if (init.type === "ObjectExpression") return true;
+				if (init.type === "Identifier" || init.type === "MemberExpression" || init.type === "ChainExpression")
+					return ownReceiver(init.type === "ChainExpression" ? init.expression : init, depth + 1);
+				if (init.type !== "CallExpression") continue;
+				const callee = init.callee;
+				const name =
+					callee.type === "Identifier" ? callee.name : callee.type === "MemberExpression" && !callee.computed ? callee.property.name : "";
+				if (BUILTIN_GETTER.test(name)) return true;
+				// A record of functions slothlet builds at load: a frozen object literal, or what a function run on the spot makes.
+				if (name === "freeze" && init.arguments[0]?.type === "ObjectExpression") return true;
+				if (isFunction(callee) && atTopLevel(def.node)) return true;
+			}
+			return false;
+		};
+		const ARRAY_WRITES = {
+			push: "listPush",
+			unshift: "listUnshift",
+			splice: "listSplice",
+			concat: "concatLists",
+			slice: "copyList",
+			map: "mapList",
+			filter: "filterList",
+			flat: "concatLists",
+			flatMap: "mapList and concatLists"
+		};
+		const DESCRIPTOR_KEYS = new Set(["writable", "enumerable", "configurable"]);
+		const keyName = (property) =>
+			property.type === "Property" && !property.computed
+				? property.key.type === "Identifier"
+					? property.key.name
+					: property.key.type === "Literal"
+						? String(property.key.value)
+						: null
+				: null;
+		return {
+			ObjectExpression(node) {
+				if (atTopLevel(node)) return;
+				const names = node.properties.map(keyName);
+				if (names.includes("__proto__")) return;
+				const parent = node.parent;
+				const calleeName =
+					parent?.type === "CallExpression" && parent.arguments[2] === node
+						? parent.callee.type === "MemberExpression" && !parent.callee.computed
+							? parent.callee.property.name
+							: parent.callee.type === "Identifier"
+								? parent.callee.name
+								: ""
+						: "";
+				const spreadDescriptor =
+					node.properties.some((p) => p.type === "SpreadElement") && names.some((k) => k === "value" || k === "get" || k === "set");
+				if (calleeName === "defineProperty" || spreadDescriptor || names.some((k) => DESCRIPTOR_KEYS.has(k))) {
+					context.report({ node, messageId: "descriptor" });
+				}
+			},
+			CallExpression(node) {
+				const callee = node.callee.type === "ChainExpression" ? node.callee.expression : node.callee;
+				if (callee.type !== "MemberExpression") return;
+				if (
+					callee.object.type === "Identifier" &&
+					callee.object.name === "ArrayMethods" &&
+					!callee.computed &&
+					Object.hasOwn(ARRAY_WRITES, callee.property.name) &&
+					!atTopLevel(node)
+				) {
+					context.report({ node, messageId: "arrayWrite", data: { name: callee.property.name, use: ARRAY_WRITES[callee.property.name] } });
+					return;
+				}
+				const name = callee.computed ? (callee.property.type === "Literal" ? String(callee.property.value) : null) : callee.property.name;
+				if (name === null || callee.property.type === "PrivateIdentifier") return;
+				// Captured statics that iterate.
+				if (callee.object.type === "Identifier" && ITERATING_STATICS[callee.object.name]?.[name] && !atTopLevel(node)) {
+					context.report({
+						node,
+						messageId: "iterating",
+						data: { text: `${callee.object.name}.${name}`, use: ITERATING_STATICS[callee.object.name][name] }
+					});
+					return;
+				}
+				if (!PROTOTYPE_METHODS.has(name) || ownReceiver(callee.object) || atTopLevel(node)) return;
+				context.report({
+					node: callee,
+					messageId: "method",
+					data: { name, text: `${sourceCode.getText(callee.object).slice(0, 40)}.${name}(…)` }
+				});
+			},
+			NewExpression(node) {
+				if (node.callee.type !== "Identifier" || node.arguments.length === 0 || atTopLevel(node)) return;
+				if (!["Map", "Set", "WeakMap", "WeakSet"].includes(node.callee.name)) return;
+				context.report({ node, messageId: "construct", data: { name: node.callee.name } });
+			},
+			ForOfStatement(node) {
+				if (atTopLevel(node)) return;
+				if (isSafeWalk(node.right)) return;
+				context.report({ node, messageId: "forOf" });
+			},
+			SpreadElement(node) {
+				if (node.parent.type === "ObjectExpression" || atTopLevel(node)) return;
+				context.report({ node, messageId: "spread" });
+			},
+			ArrayPattern(node) {
+				if (atTopLevel(node)) return;
+				context.report({ node, messageId: "pattern" });
+			},
+			YieldExpression(node) {
+				if (!node.delegate || isSafeWalk(node.argument)) return;
+				// An object literal of slothlet's own that is its own iterator (`next`, `return`, `throw` and the iterator
+				// symbol as its own members) is walked through those members alone.
+				if (node.argument.type === "Identifier") {
+					const variable = variableOf(node.argument);
+					const def = variable?.defs.find((candidate) => candidate.type === "Variable");
+					if (def?.node.init?.type === "ObjectExpression") return;
+				}
+				context.report({ node, messageId: "delegate" });
+			}
+		};
+	}
+};
+
+export default { rules: { "captured-intrinsics": rule, "captured-prototype-methods": prototypeRule } };

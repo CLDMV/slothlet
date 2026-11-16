@@ -24,7 +24,20 @@
 import { ComponentBase } from "#factories/component-base";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { Map, Set, Promises } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	listPush,
+	Map,
+	MapMethods,
+	promiseAll,
+	PromiseMethods,
+	Reflect,
+	SafePromise,
+	Set,
+	SetMethods,
+	settledWith,
+	setValues
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
 
 /**
@@ -32,6 +45,26 @@ const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("
  * @extends ComponentBase
  * @public
  */
+
+/**
+ * Run a subscriber and settle what it returns while still inside its call: a `then` it carries (a getter, a thenable's
+ * method, a promise's own `then`) is read and called here, so it runs as the subscriber, and no other member of it is
+ * called. The promise made here settles to `undefined` whatever the result resolves to, so the emitting flow never
+ * holds, and never reads, any value of the subscriber's.
+ * @param {Function} handler - The subscriber.
+ * @param {Array} args - Its arguments.
+ * @returns {Promise<void>|undefined} A promise that settles when the subscriber's result does, or `undefined` when it
+ *   returned no thenable.
+ * @private
+ */
+function runAndSettle(handler, args) {
+	const result = Reflect.apply(handler, undefined, args);
+	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
+	const then = result.then;
+	if (typeof then !== "function") return undefined;
+	return new SafePromise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
+}
+
 export class Lifecycle extends ComponentBase {
 	/**
 	 * Where this component should be mounted on the Slothlet instance
@@ -44,6 +77,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		/** @type {Map<string, Set<Function>>} */
 		this.subscribers = new Map();
 		// Internal-only subscriber tier (#398). The construction/contribution stream (`impl:created` /
 		// `impl:changed` emitted pre-placement, per contribution, with the raw callable available to the
@@ -51,9 +85,11 @@ export class Lifecycle extends ComponentBase {
 		// subscribers ONLY — it never reaches public `api.slothlet.lifecycle.on(...)` / `config.lifecycle`
 		// consumers. Those see the sanitized, post-placement PUBLIC `impl:created` / `impl:changed` emitted
 		// via emit(), which carries the wrapped callable + metadata, never the raw unwrapped impl.
+		/** @type {Map<string, Set<Function>>} */
 		this.internalSubscribers = new Map();
 		// The module each public subscriber was subscribed from (#625), per event: such a subscriber is handed
 		// its module's view of the node an event is about, never the node or its implementation itself.
+		/** @type {Map<string, Map<Function, unknown>>} */
 		this.subscriberReaders = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
@@ -75,15 +111,15 @@ export class Lifecycle extends ComponentBase {
 	 * });
 	 */
 	subscribe(event, handler) {
-		if (!this.subscribers.has(event)) {
-			this.subscribers.set(event, new Set());
-			this.subscriberReaders.set(event, new Map());
+		if (!MapMethods.has(this.subscribers, event)) {
+			MapMethods.set(this.subscribers, event, new Set());
+			MapMethods.set(this.subscriberReaders, event, new Map());
 		}
-		this.subscribers.get(event).add(handler);
+		SetMethods.add(MapMethods.get(this.subscribers, event), handler);
 		// Who subscribed: a module executing now (#625), or the host. The host is handed what it always was.
 		const reader = runtime_selfModuleReader(this.slothlet);
-		if (reader) this.subscriberReaders.get(event).set(handler, reader);
-		else this.subscriberReaders.get(event).delete(handler);
+		if (reader) MapMethods.set(MapMethods.get(this.subscriberReaders, event), handler, reader);
+		else MapMethods.delete(MapMethods.get(this.subscriberReaders, event), handler);
 
 		// Return unsubscribe function
 		return () => this.off(event, handler);
@@ -117,19 +153,19 @@ export class Lifecycle extends ComponentBase {
 	 * @internal
 	 */
 	subscribeInternal(event, handler) {
-		if (!this.internalSubscribers.has(event)) {
-			this.internalSubscribers.set(event, new Set());
+		if (!MapMethods.has(this.internalSubscribers, event)) {
+			MapMethods.set(this.internalSubscribers, event, new Set());
 		}
-		this.internalSubscribers.get(event).add(handler);
+		SetMethods.add(MapMethods.get(this.internalSubscribers, event), handler);
 
 		// Return unsubscribe function
 		return () => {
-			const handlers = this.internalSubscribers.get(event);
+			const handlers = MapMethods.get(this.internalSubscribers, event);
 			// The bucket is created on subscribe and never deleted (buckets persist for the instance's
 			// life), so `handlers` is always present here; the guard is defensive and its else unreachable.
 			/* v8 ignore else */
 			if (handlers) {
-				handlers.delete(handler);
+				SetMethods.delete(handlers, handler);
 			}
 		};
 	}
@@ -146,10 +182,12 @@ export class Lifecycle extends ComponentBase {
 	 * lifecycle.off('impl:changed', handler);
 	 */
 	off(event, handler) {
-		const handlers = this.subscribers.get(event);
+		const handlers = MapMethods.get(this.subscribers, event);
 		if (handlers) {
-			handlers.delete(handler);
-			this.subscriberReaders.get(event)?.delete(handler);
+			SetMethods.delete(handlers, handler);
+			MapMethods.get(this.subscriberReaders, event) == null
+				? undefined
+				: MapMethods.delete(MapMethods.get(this.subscriberReaders, event), handler);
 		}
 	}
 
@@ -190,9 +228,15 @@ export class Lifecycle extends ComponentBase {
 	 *   filePath: "/path/to/math.mjs"
 	 * });
 	 */
-	async emit(event, data, nodes) {
-		this.#logEvent(event, data);
-		await this.#notify(this.subscribers.get(event), event, data, this.subscriberReaders.get(event), nodes);
+	emit(event, data, nodes) {
+		// Not an async function: the promise handed back is slothlet's own (helpers/intrinsics `SafePromise`), so awaiting
+		// it reads nothing module code can put on `Promise.prototype`.
+		try {
+			this.#logEvent(event, data);
+			return this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
+		} catch (error) {
+			return new SafePromise((resolve, reject) => reject(error));
+		}
 	}
 
 	/**
@@ -205,9 +249,13 @@ export class Lifecycle extends ComponentBase {
 	 * @returns {Promise<void>}
 	 * @internal
 	 */
-	async emitInternal(event, data) {
-		this.#logEvent(event, data);
-		await this.#notify(this.internalSubscribers.get(event), event, data);
+	emitInternal(event, data) {
+		try {
+			this.#logEvent(event, data);
+			return this.#notify(MapMethods.get(this.internalSubscribers, event), event, data);
+		} catch (error) {
+			return new SafePromise((resolve, reject) => reject(error));
+		}
 	}
 
 	/**
@@ -219,7 +267,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	#logEvent(event, data) {
 		if (this.____config?.debug?.lifecycle) {
-			this.eventLog.push({
+			listPush(this.eventLog, {
 				event,
 				data: { ...data },
 				timestamp: this.clock.now()
@@ -227,7 +275,7 @@ export class Lifecycle extends ComponentBase {
 
 			// Trim log if too large
 			if (this.eventLog.length > this.maxLogSize) {
-				this.eventLog.shift();
+				ArrayMethods.shift(this.eventLog);
 			}
 
 			this.slothlet.debug("lifecycle", {
@@ -296,7 +344,7 @@ export class Lifecycle extends ComponentBase {
 	#invokeAs(handler, reader, args) {
 		const contextManager = this.slothlet.contextManager;
 		// Code the live runtime could not attribute is no module to run as: its subscriber is called as it was.
-		if (!reader.____slothletInternal || !contextManager?.runInContext) return handler(...args);
+		if (!reader.____slothletInternal || !contextManager?.runInContext) return Reflect.apply(handler, undefined, args);
 		return contextManager.runInContext(this.slothlet.instanceID, handler, undefined, args, reader, true);
 	}
 
@@ -311,25 +359,28 @@ export class Lifecycle extends ComponentBase {
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async #notify(handlers, event, data, readers, nodes) {
-		if (!handlers) return;
+	#notify(handlers, event, data, readers, nodes) {
+		if (!handlers) return settledWith(undefined);
 
 		// Collect all handler promises (both sync and async)
 		const handlerPromises = [];
 
 		const token = getInstanceToken(this.slothlet);
-		for (const handler of handlers) {
+		for (const handler of setValues(handlers)) {
 			try {
-				const reader = readers?.get(handler);
+				const reader = readers == null ? undefined : MapMethods.get(readers, handler);
 				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
 				// event only: the instance's token is the framework's own.
 				const apiManager = this.slothlet.handlers?.apiManager;
 				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
-				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes)]) : handler(data, token);
-				// If handler returns a promise, track it
-				if (result && typeof result.then === "function") {
-					handlerPromises.push(
-						result.catch((error) => {
+				// What the subscriber returns is settled inside its own call, as an event listener's is: the promise made
+				// there is slothlet's, and settles to `undefined` whatever the subscriber's result resolves to.
+				const settle = (...args) => runAndSettle(handler, args);
+				const settled = reader ? this.#invokeAs(settle, reader, [this.#viewFor(data, reader, nodes)]) : settle(data, token);
+				if (settled) {
+					listPush(
+						handlerPromises,
+						PromiseMethods.then(settled, undefined, (error) => {
 							// Log error but don't stop other handlers
 							this.#warnHandlerError(event, data, error);
 						})
@@ -342,8 +393,7 @@ export class Lifecycle extends ComponentBase {
 		}
 
 		// Wait for all async handlers to complete
-		if (handlerPromises.length > 0) {
-			await Promises.all(handlerPromises);
-		}
+		if (handlerPromises.length === 0) return settledWith(undefined);
+		return PromiseMethods.then(promiseAll(handlerPromises), () => undefined);
 	}
 }

@@ -38,7 +38,7 @@
  * @package
  */
 
-import { Symbol, WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+import { Symbol, WeakMap, WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Module-private map of Slothlet instance → per-instance capability token.
@@ -65,12 +65,12 @@ const instanceTokens = new WeakMap();
  * registerInstance(this);
  */
 function registerInstance(slothlet) {
-	if (instanceTokens.has(slothlet)) {
+	if (WeakMapMethods.has(instanceTokens, slothlet)) {
 		// Already registered — reload path calls load() again on the same instance.
 		// The existing token remains valid; nothing to do.
 		return;
 	}
-	instanceTokens.set(slothlet, Symbol("@cldmv/slothlet/lifecycle.tagToken"));
+	WeakMapMethods.set(instanceTokens, slothlet, Symbol("@cldmv/slothlet/lifecycle.tagToken"));
 }
 
 /**
@@ -88,7 +88,7 @@ function registerInstance(slothlet) {
  * handler(data, getInstanceToken(this.slothlet));
  */
 function getInstanceToken(slothlet) {
-	return instanceTokens.get(slothlet);
+	return WeakMapMethods.get(instanceTokens, slothlet);
 }
 
 /**
@@ -108,7 +108,7 @@ function getInstanceToken(slothlet) {
  * }
  */
 function verifyToken(slothlet, token) {
-	return token === instanceTokens.get(slothlet);
+	return token === WeakMapMethods.get(instanceTokens, slothlet);
 }
 
 export { registerInstance, getInstanceToken, verifyToken };

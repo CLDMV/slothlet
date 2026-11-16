@@ -30,25 +30,31 @@ import { EventEmitter, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
-	Reflect,
-	Objects,
-	NativeObject,
+	ArrayBuffer,
 	Arrays,
-	Functions,
-	NativeProxy,
-	Map,
-	Set,
-	WeakMap,
-	WeakSet,
-	Promise,
-	Symbol,
 	Boolean,
+	DataView,
 	Date,
 	Error,
+	filterList,
+	FunctionMethods,
+	Functions,
+	Map,
+	MapMethods,
+	NativeObject,
+	NativeProxy,
+	Objects,
+	Promise,
+	Reflect,
 	RegExp,
-	ArrayBuffer,
-	DataView,
-	Uint8Array
+	Set,
+	setFrom,
+	SetMethods,
+	Symbol,
+	Uint8Array,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { outerCallerCeiling } = framePlacementInternals("lib/helpers/class-instance-wrapper");
@@ -58,7 +64,7 @@ const { outerCallerCeiling } = framePlacementInternals("lib/helpers/class-instan
  * @constant
  * @private
  */
-const EXCLUDED_CONSTRUCTORS = new Set([NativeObject, Arrays.prototype.constructor, Promise, Date, RegExp, Error]);
+const EXCLUDED_CONSTRUCTORS = setFrom([NativeObject, Arrays.prototype.constructor, Promise, Date, RegExp, Error]);
 
 /**
  * Sentinel marking a Proxy already produced by {@link runtime_wrapClassInstance}.
@@ -129,11 +135,11 @@ function setModuleInstanceCheck(check) {
  */
 function runtime_classInstanceCreator(value) {
 	if (value === null || typeof value !== "object") return null;
-	return WRAPPED_CREATORS.get(value) ?? null;
+	return WeakMapMethods.get(WRAPPED_CREATORS, value) ?? null;
 }
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakMapHas = Functions.prototype.call.bind(WeakMap.prototype.has);
+const weakMapHas = FunctionMethods.bind(Functions.prototype.call, WeakMap.prototype.has);
 
 // The language's own reflection, taken at load.
 const { getPrototypeOf, getOwnPropertyDescriptor } = Reflect;
@@ -169,7 +175,7 @@ const TypedArray = Objects.getPrototypeOf(Uint8Array);
  * @constant
  * @private
  */
-const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, TypedArray, DataView, Map, Set, WeakMap, WeakSet, EventEmitter].filter(Boolean);
+const EXCLUDED_INSTANCEOF_CLASSES = filterList([ArrayBuffer, TypedArray, DataView, Map, Set, WeakMap, WeakSet, EventEmitter], Boolean);
 
 /**
  * @function runtime_shouldWrapMethod
@@ -227,10 +233,11 @@ export function runtime_isClassInstance(val) {
 		// A value that refuses to be described is no class instance.
 		return false;
 	}
-	if (typeof constructor !== "function" || EXCLUDED_CONSTRUCTORS.has(constructor)) return false;
+	if (typeof constructor !== "function" || SetMethods.has(EXCLUDED_CONSTRUCTORS, constructor)) return false;
 
 	// The language's own check, never a `Symbol.hasInstance` a module gave one of these classes.
-	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
+	for (let ofIndex = 0, ofList = EXCLUDED_INSTANCEOF_CLASSES; ofIndex < ofList.length; ofIndex++) {
+		const cls = ofList[ofIndex];
 		if (typeof cls === "function" && inheritsFrom(val, cls)) {
 			return false;
 		}
@@ -273,15 +280,18 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
 		return instance;
 	}
 
-	if (instanceCache.has(instance)) {
-		return instanceCache.get(instance);
+	if (WeakMapMethods.has(instanceCache, instance)) {
+		return WeakMapMethods.get(instanceCache, instance);
 	}
 
 	// The same instance from the same creator is the same Proxy, whichever call returned it.
 	const creatorKey = capturedWrapper ?? contextManager;
-	const known = WRAPPERS_BY_INSTANCE.get(instance)?.get(creatorKey);
+	const known =
+		WeakMapMethods.get(WRAPPERS_BY_INSTANCE, instance) == null
+			? undefined
+			: WeakMapMethods.get(WeakMapMethods.get(WRAPPERS_BY_INSTANCE, instance), creatorKey);
 	if (known && known.instanceID === instanceID) {
-		instanceCache.set(instance, known.proxy);
+		WeakMapMethods.set(instanceCache, instance, known.proxy);
 		return known.proxy;
 	}
 
@@ -302,8 +312,8 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
 			}
 
 			// Check method cache first to avoid unnecessary property access and function creation
-			if (methodCache.has(prop)) {
-				return methodCache.get(prop);
+			if (MapMethods.has(methodCache, prop)) {
+				return MapMethods.get(methodCache, prop);
 			}
 
 			// Read on the instance itself: a getter over a private field or an internal slot works only on the object, and
@@ -336,7 +346,7 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
 				};
 
 				// Cache the wrapped method for future access - prevents recreation on subsequent calls
-				methodCache.set(prop, runtime_contextPreservingMethod);
+				MapMethods.set(methodCache, prop, runtime_contextPreservingMethod);
 				return runtime_contextPreservingMethod;
 			}
 
@@ -350,20 +360,20 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
 
 		set(target, prop, value) {
 			// Clear method cache for this property if it's being overwritten
-			if (methodCache.has(prop)) {
-				methodCache.delete(prop);
+			if (MapMethods.has(methodCache, prop)) {
+				MapMethods.delete(methodCache, prop);
 			}
 			// Written on the instance itself, as it is read: a setter over a private field works only on the object.
 			return Reflect.set(target, prop, value, target);
 		}
 	});
 
-	instanceCache.set(instance, wrappedInstance);
-	WRAPPED_INSTANCES.set(wrappedInstance, instance);
-	WRAPPED_CREATORS.set(wrappedInstance, capturedWrapper ?? null);
-	let byCreator = WRAPPERS_BY_INSTANCE.get(instance);
-	if (!byCreator) WRAPPERS_BY_INSTANCE.set(instance, (byCreator = new WeakMap()));
-	byCreator.set(creatorKey, { proxy: wrappedInstance, instanceID });
+	WeakMapMethods.set(instanceCache, instance, wrappedInstance);
+	WeakMapMethods.set(WRAPPED_INSTANCES, wrappedInstance, instance);
+	WeakMapMethods.set(WRAPPED_CREATORS, wrappedInstance, capturedWrapper ?? null);
+	let byCreator = WeakMapMethods.get(WRAPPERS_BY_INSTANCE, instance);
+	if (!byCreator) WeakMapMethods.set(WRAPPERS_BY_INSTANCE, instance, (byCreator = new WeakMap()));
+	WeakMapMethods.set(byCreator, creatorKey, { proxy: wrappedInstance, instanceID });
 	return wrappedInstance;
 }
 
@@ -382,7 +392,7 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
  */
 function runtime_unwrapClassInstance(value) {
 	if (value === null || typeof value !== "object") return value;
-	return WRAPPED_INSTANCES.get(value) ?? value;
+	return WeakMapMethods.get(WRAPPED_INSTANCES, value) ?? value;
 }
 
 /**

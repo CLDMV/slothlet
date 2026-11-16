@@ -25,7 +25,24 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // browser static graph (#123). The default (en-us) is bundled via the JSON import above; additional
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Set, Boolean, RegExp, String, navigator, NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Boolean,
+	filterList,
+	listPush,
+	listSplice,
+	NativeProcess,
+	navigator,
+	Objects,
+	RegExp,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	splitText,
+	String,
+	StringMethods,
+	stringOf
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -80,7 +97,7 @@ const KNOWN_LOCALES = new Set(["de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-
  * @cldmv/slothlet-i18n pack (or, under slothlet-dev, the internal source files that stay in place).
  * @private
  */
-const BASE_LOCALES = new Set(["en-us"]);
+const BASE_LOCALES = setFrom(["en-us"]);
 
 /**
  * Node only: resolve a non-base locale to a filesystem path inside the optional @cldmv/slothlet-i18n
@@ -119,7 +136,7 @@ function i18n_localeRefs(lang) {
 	if (!isNode) {
 		const specs = [`@cldmv/slothlet-i18n/language/${lang}.json`, `@cldmv/slothlet/i18n/language/${lang}.json`];
 		if (typeof import.meta.resolve !== "function") return specs;
-		return specs.filter((s) => {
+		return filterList(specs, (s) => {
 			try {
 				// import.meta.resolve(...) throws when `s` can't be resolved — that throw IS the test here.
 				// Read into the expression rather than starting a statement with `import.meta`: CodeQL's JS
@@ -133,9 +150,9 @@ function i18n_localeRefs(lang) {
 	/* v8 ignore stop */
 	const refs = [];
 	const packPath = i18n_resolvePackPath(lang);
-	if (packPath) refs.push(packPath);
+	if (packPath) listPush(refs, packPath);
 	const internal = path.join(translations_dirname, "languages", `${lang}.json`);
-	if (fs.existsSync(internal)) refs.push(internal);
+	if (fs.existsSync(internal)) listPush(refs, internal);
 	return refs;
 }
 
@@ -147,11 +164,11 @@ function i18n_localeRefs(lang) {
  * @private
  */
 function i18n_languageFileExists(lang) {
-	if (!isNode) return KNOWN_LOCALES.has(lang);
+	if (!isNode) return SetMethods.has(KNOWN_LOCALES, lang);
 	// Read into a local before branching: a bare `if (...)` immediately after the
 	// browser guard makes v8→istanbul mis-merge this branch's else-arm count (it
 	// goes negative across the full-suite merge, reading as uncovered).
-	const isBaseLocale = BASE_LOCALES.has(lang);
+	const isBaseLocale = SetMethods.has(BASE_LOCALES, lang);
 	if (isBaseLocale) {
 		return fs.existsSync(path.join(translations_dirname, "languages", `${lang}.json`));
 	}
@@ -167,7 +184,7 @@ function i18n_languageFileExists(lang) {
  * @private
  */
 function i18n_normalizeEnvLanguage(envLang) {
-	const normalized = String(envLang).split(".")[0].split("@")[0].replace(/_/g, "-").toLowerCase();
+	const normalized = StringMethods.toLowerCase(regExpReplace(/_/g, splitText(splitText(String(envLang), ".")[0], "@")[0], "-"));
 
 	if (normalized === "c" || normalized === "posix") return "en-us";
 
@@ -177,7 +194,7 @@ function i18n_normalizeEnvLanguage(envLang) {
 	const fullLocaleExists = i18n_languageFileExists(normalized);
 	if (fullLocaleExists) return normalized;
 
-	const base = normalized.split("-")[0];
+	const base = splitText(normalized, "-")[0];
 	if (!base) return "en-us";
 
 	// If a base language file exists directly, use it.
@@ -221,7 +238,8 @@ function i18n_loadLanguageSync(lang) {
 	/* v8 ignore next */
 	if (!isNode) return null;
 	// Try each candidate ref in priority order (pack → internal); a miss falls through to en-us.
-	for (const ref of i18n_localeRefs(lang)) {
+	for (let ofIndex = 0, ofList = i18n_localeRefs(lang); ofIndex < ofList.length; ofIndex++) {
+		const ref = ofList[ofIndex];
 		const langData = loadJson(ref);
 		if (langData?.translations) return langData.translations;
 	}
@@ -254,7 +272,8 @@ export function registerWarningClass(WarningClass) {
 	// Only the first registration counts: errors.mjs makes it as it loads, and this export is reachable by anyone.
 	if (processWarningClass !== null) return;
 	processWarningClass = WarningClass;
-	for (const lang of pendingLoadFailures.splice(0)) new WarningClass("WARNING_LANGUAGE_LOAD_FAILED", { lang });
+	const held = listSplice(pendingLoadFailures, 0);
+	for (let index = 0; index < held.length; index++) new WarningClass("WARNING_LANGUAGE_LOAD_FAILED", { lang: held[index] });
 }
 
 /**
@@ -274,7 +293,7 @@ function i18n_warnLoadFailed(lang, options) {
 	// first, so the held case is not reproducible there.
 	/* v8 ignore next 4 */
 	if (!WarningClass) {
-		pendingLoadFailures.push(lang);
+		listPush(pendingLoadFailures, lang);
 		return;
 	}
 	new WarningClass("WARNING_LANGUAGE_LOAD_FAILED", { lang });
@@ -343,7 +362,8 @@ async function setLanguageAsync(lang, options) {
 	// loadJson is synchronous (object) in Node and asynchronous (Promise) in a browser; `await`
 	// transparently handles both forms. Try each candidate ref in priority order (pack → internal).
 	let langData = null;
-	for (const ref of i18n_localeRefs(lang)) {
+	for (let ofIndex = 0, ofList = i18n_localeRefs(lang); ofIndex < ofList.length; ofIndex++) {
+		const ref = ofList[ofIndex];
 		const data = await loadJson(ref);
 		if (data?.translations) {
 			langData = data;
@@ -380,21 +400,21 @@ export function translate(errorCode, params = {}) {
 	let template = currentTranslations[errorCode];
 
 	// Fallback to generic message if specific one not found
-	if (!template && errorCode.startsWith("INVALID_CONFIG_")) {
+	if (!template && StringMethods.startsWith(errorCode, "INVALID_CONFIG_")) {
 		template = currentTranslations.INVALID_CONFIG_generic;
 	}
 
 	// Interpolate parameters
 	let message = template || `Error: ${errorCode}`;
-	for (const [key, value] of Objects.entries(params)) {
-		message = message.replace(new RegExp(`\\{${key}\\}`, "g"), value !== undefined ? String(value) : "");
+	for (let ofIndex = 0, ofList = Objects.entries(params); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			key = ofEntry[0],
+			value = ofEntry[1];
+		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? stringOf(value) : "");
 	}
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)
-	message = message
-		.replace(/\{\w+\}/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
+	message = StringMethods.trim(regExpReplace(/\s+/g, regExpReplace(/\{\w+\}/g, message, ""), " "));
 
 	return message;
 }

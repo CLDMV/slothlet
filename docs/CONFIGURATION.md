@@ -450,7 +450,20 @@ See [SANITIZATION.md](SANITIZATION.md) for pattern matching, rule precedence and
 
 The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). Two of them change what a module is handed, so they are described here too.
 
-`permissions` may also be a bare mode: `"on"`, `"off"` or `"disabled"` is the same as `{ mode }`, `true` is `"on"` and `false` is no block. Any other string or non-object value is an `INVALID_CONFIG`.
+`permissions` may also be a bare mode: `"on"`, `"strict"`, `"off"` or `"disabled"` is the same as `{ mode }`, `true` is `"on"` and `false` is no block. Any other string or non-object value is an `INVALID_CONFIG`.
+
+### `permissions.mode: "strict"`
+
+`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; under vitest, the `slothletInstanceImports()` plugin. Plain Node has no check. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
+
+```javascript
+const api = await slothlet({ dir: "./api", permissions: { mode: "strict", rules } });
+api.slothlet.permissions.control.report().baseline.met; // true
+```
+
+In Node, `--disallow-code-generation-from-strings` is recommended extra hardening: slothlet refuses `eval` and `Function` code as the rules say without it, so it is not a check, but the flag refuses code made from strings in the whole process.
+
+A met baseline means only that the checks slothlet can make passed. Code that ran before slothlet can have replaced globals or faked what the checks read, and a browser can never be fully trusted. The checks, what each rules out, and the known limits are in [PERMISSIONS.md → Strict mode, the baseline, and capabilities](./PERMISSIONS.md#strict-mode-the-baseline-and-capabilities).
 
 With no `permissions` block the system is off: no call, read or event rule is evaluated. That includes the event levels ([EVENTS.md](./EVENTS.md#delivery-levels)): every `self.slothlet.event.on()` subscription is delivered at `allow`, with its payload. Under a `permissions` block the event rules apply, and a subscriber that matches none gets `permissions.events.default` (built-in: `notify`, the trigger without the payload).
 

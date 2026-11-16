@@ -60,6 +60,56 @@ const DENY_GUEST_WRITES = [
 	{ caller: "guest.**", target: "keeper:write", effect: "deny" }
 ];
 
+/**
+ * Refuses one of three files loaded from one folder every write to another of them, the owner's.
+ * @param {string} file - The file refused.
+ * @returns {object[]} The rules.
+ */
+const denyKinWrites = (file) => [
+	{ caller: `${file}.**`, target: "owner.**:write", effect: "deny" },
+	{ caller: `${file}.**`, target: "owner:write", effect: "deny" }
+];
+
+/**
+ * Lets the narrow reader write the owner's subtree except one member, and refuses the wide reader the whole subtree.
+ */
+const SPLIT_RULES = [
+	{ caller: "readers.narrow.**", target: "owner.**:write", effect: "allow" },
+	{ caller: "readers.narrow.**", target: "owner.hiddenCls.secret:write", effect: "deny" },
+	{ caller: "readers.wide.**", target: "owner.**:write", effect: "deny" },
+	{ caller: "readers.wide.**", target: "owner:write", effect: "deny" }
+];
+
+/**
+ * Hand both readers the owner's class in `order`, then have each write a static onto it itself and through a built-in
+ * the owner runs.
+ * @param {object} api - The api.
+ * @param {string[]} order - Which reader takes the class first.
+ * @returns {Promise<object>} How each write ended and whether it landed.
+ */
+async function splitWrites(api, order) {
+	for (const file of order) await api.readers[file].take();
+	const outcome = {};
+	for (const file of ["wide", "narrow"])
+		for (const route of ["deputy", "direct"]) {
+			outcome[`${file}.${route}`] = await api.readers[file][route]();
+			outcome[`${file}.${route}.landed`] = await api.owner.landed();
+		}
+	return outcome;
+}
+
+/** What the split rules give, read leaf by leaf. */
+const SPLIT_EXPECTED = {
+	"wide.deputy": "PERMISSION_DENIED",
+	"wide.deputy.landed": false,
+	"wide.direct": "PERMISSION_DENIED",
+	"wide.direct.landed": false,
+	"narrow.deputy": "written",
+	"narrow.deputy.landed": true,
+	"narrow.direct": "written",
+	"narrow.direct.landed": true
+};
+
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => ATTRIBUTIONS.map((attribution) => ({ mode, runtime, attribution }))));
 
 describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
@@ -114,6 +164,128 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		// Plain JavaScript: both files hold the instance itself, and the write lands.
 		expect(await api.guest.reach("__open_")).toEqual({ returned: "written", callback: "written", stored: "written" });
 		expect(await api.keeper.landed("__open_")).toEqual(["returned", "callback", "stored"]);
+	});
+
+	it.each(["aside", "reader"])(
+		"keeps a class a node exports from a file of the same folder a rule refuses the write, by every route (%s)",
+		async (file) => {
+			api = await slothlet({
+				base: join(FIXTURE, "kin"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+			});
+			// The rule names the write, so each is refused as a write the rule denies, whether the file loaded before the owner's
+			// or after it, and whatever the other files of the folder may write.
+			expect(await api[file].reach()).toEqual({
+				node: "PERMISSION_DENIED",
+				constructed: "PERMISSION_DENIED",
+				returned: "PERMISSION_DENIED",
+				nested: "PERMISSION_DENIED",
+				method: "PERMISSION_DENIED"
+			});
+			expect(await api.owner.landed("__kin_")).toEqual([]);
+		}
+	);
+
+	it.each(["aside", "reader"])(
+		"refuses a write a bound built-in makes through the owner for a file of the same folder a rule refuses the write (%s)",
+		async (file) => {
+			api = await slothlet({
+				base: join(FIXTURE, "kin"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+			});
+			// The owner runs it, but the view it writes through is the file's: the write has to be the file's to make too.
+			expect(await api[file].deputy()).toEqual({
+				node: "PERMISSION_DENIED",
+				constructed: "PERMISSION_DENIED",
+				returned: "PERMISSION_DENIED",
+				nested: "PERMISSION_DENIED"
+			});
+			expect(await api.owner.landed("__kin_bound_")).toEqual([]);
+		}
+	);
+
+	it("lands a write a bound built-in makes through the owner for a file of the same folder no rule refuses", async () => {
+		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		// Plain JavaScript: every write lands.
+		expect(await api.reader.deputy()).toEqual({ node: "written", constructed: "written", returned: "written", nested: "written" });
+		expect(await api.owner.landed("__kin_bound_")).toEqual(["node", "constructed", "returned", "nested"]);
+	});
+
+	it("leaves a class a node exports to a file of the same folder where no rule stands between them", async () => {
+		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		// Plain JavaScript: every write lands.
+		expect(await api.reader.reach()).toEqual({
+			node: "written",
+			constructed: "written",
+			returned: "written",
+			nested: "written",
+			method: "written"
+		});
+		expect(await api.owner.landed("__kin_")).toEqual(["constructed", "returned", "nested", "hello", "inst"]);
+	});
+
+	it.each([
+		["narrow", "wide"],
+		["wide", "narrow"]
+	])(
+		"holds each file of one folder to its own write rules through a view of another file's class, %s taking it first",
+		async (...order) => {
+			api = await slothlet({
+				base: join(FIXTURE, "split"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: SPLIT_RULES }
+			});
+			// Each write is the writing file's, and one a built-in the owner runs makes is the file's that handed it over.
+			expect(await splitWrites(api, order)).toEqual(SPLIT_EXPECTED);
+		}
+	);
+
+	it.each([
+		["narrow", "wide"],
+		["wide", "narrow"]
+	])(
+		"holds each function of a module to its own write rules through a view of another module's class, %s taking it first",
+		async (...order) => {
+			api = await slothlet({
+				base: join(FIXTURE, "host"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: SPLIT_RULES }
+			});
+			await api.slothlet.api.add("owner", join(FIXTURE, "split", "owner"), { moduleID: "owner" });
+			await api.slothlet.api.add("readers", join(FIXTURE, "split", "readers"), { moduleID: "readers" });
+			expect(await splitWrites(api, order)).toEqual(SPLIT_EXPECTED);
+		}
+	);
+
+	it("lands every write of two files of one folder onto another file's class where no rule stands between them", async () => {
+		api = await slothlet({
+			base: join(FIXTURE, "split"),
+			silent: true,
+			mode,
+			runtime,
+			permissions: { defaultPolicy: "allow", attribution }
+		});
+		// Plain JavaScript: every write lands.
+		expect(await splitWrites(api, ["narrow", "wide"])).toEqual({
+			"wide.deputy": "written",
+			"wide.deputy.landed": true,
+			"wide.direct": "written",
+			"wide.direct.landed": true,
+			"narrow.deputy": "written",
+			"narrow.deputy.landed": true,
+			"narrow.direct": "written",
+			"narrow.direct.landed": true
+		});
 	});
 
 	it("keeps the owner's code from a view a module holds past the instance's shutdown", async () => {

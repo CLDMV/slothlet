@@ -31,7 +31,17 @@ import { ComponentBase } from "#factories/component-base";
 // fs/path/url resolved in the platform module (#123); all null in a browser — the filesystem
 // walking + stack-trace path resolution methods here are Node-only.
 import { fs, path, url } from "@cldmv/slothlet/helpers/platform";
-import { Arrays, Boolean, String, TypeError, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	filterList,
+	mapList,
+	Processes,
+	String,
+	StringMethods,
+	TypeError
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { readStack, stackSites } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
@@ -108,7 +118,7 @@ export class Resolver extends ComponentBase {
 	toFsPath(v) {
 		if (!v) return null;
 		const str = String(v);
-		return str.startsWith("file://") ? url.fileURLToPath(str) : str;
+		return StringMethods.startsWith(str, "file://") ? url.fileURLToPath(str) : str;
 	}
 
 	/**
@@ -129,7 +139,7 @@ export class Resolver extends ComponentBase {
 		const normalizedLibRoot = path.normalize(SLOTHLET_LIB_ROOT);
 
 		// Check if file is within the slothlet source directory (src3/, src/, or dist/)
-		if (normalized.startsWith(normalizedLibRoot)) {
+		if (StringMethods.startsWith(normalized, normalizedLibRoot)) {
 			return true;
 		}
 
@@ -157,17 +167,24 @@ export class Resolver extends ComponentBase {
 	 */
 	#findCallerBase() {
 		const stack = this.#getStack();
-		const files = stack.map((s) => this.toFsPath(s.getFileName())).filter(Boolean);
+		const files = filterList(
+			mapList(stack, (s) => this.toFsPath(s.getFileName())),
+			Boolean
+		);
 
 		// Find slothlet's own slothlet.mjs in the stack. The whole stack is read, so a file of the application's that
 		// happens to be named slothlet.mjs, further down, is no entry of slothlet's (#597).
-		const slothletIndex = files.findIndex((f) => path.basename(f).toLowerCase() === "slothlet.mjs" && this.#isSlothletInternal(f));
+		const slothletIndex = ArrayMethods.findIndex(
+			files,
+			(f) => StringMethods.toLowerCase(path.basename(f)) === "slothlet.mjs" && this.#isSlothletInternal(f)
+		);
 
 		if (slothletIndex === -1) {
 			// No slothlet.mjs in stack, find first non-internal file
-			for (const file of files) {
+			for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+				const file = ofList[ofIndex];
 				// A Node builtin's frame (an async context's `run`) is no caller's file.
-				if (file.startsWith("node:")) continue;
+				if (StringMethods.startsWith(file, "node:")) continue;
 				if (!this.#isSlothletInternal(file)) {
 					return file;
 				}
@@ -185,7 +202,7 @@ export class Resolver extends ComponentBase {
 			const file = files[i];
 
 			// Skip node: modules
-			if (file.startsWith?.("node:")) continue;
+			if (typeof file === "string" && StringMethods.startsWith(file, "node:")) continue;
 
 			// Skip internal files
 			if (this.#isSlothletInternal(file)) continue;
@@ -200,7 +217,8 @@ export class Resolver extends ComponentBase {
 		// always finds the test file as user code. This fallback only fires if ALL
 		// frames after slothlet.mjs are internal — impossible during test execution.
 		/* v8 ignore next */
-		for (const file of files) {
+		for (let ofIndex = 0, ofList = files; ofIndex < ofList.length; ofIndex++) {
+			const file = ofList[ofIndex];
 			if (!this.#isSlothletInternal(file)) {
 				return file;
 			}
@@ -230,7 +248,7 @@ export class Resolver extends ComponentBase {
 		}
 
 		// Short-circuit: already absolute or file:// URL
-		if (rel.startsWith?.("file://")) return url.fileURLToPath(rel);
+		if (typeof rel === "string" && StringMethods.startsWith(rel, "file://")) return url.fileURLToPath(rel);
 		if (path.isAbsolute(rel)) return rel;
 
 		// Find caller's base directory

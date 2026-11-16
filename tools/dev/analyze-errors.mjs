@@ -514,10 +514,13 @@ function parseBareNewErrors(content, filePath) {
 		// instance-imports.mjs builds the statement `slothletInstanceImports()` appends to a file, and the code of the virtual
 		// module that records who loaded it, as strings: their `new Error(` is text emitted into that code, whose stack
 		// slothlet reads, not an error slothlet throws (#714). Scoped to that file AND to the `const SCRIPT_REGISTRATION = `
-		// template and the virtual module's `return \`const record = ` template: any other `new Error(` in it is reported.
+		// template and the virtual module's `return \`const registry = ` template (its fallback for a registry slothlet has
+		// not fixed yet pushes a frozen `new Error(`): any other `new Error(` in it is reported.
 		if (
 			filePath.includes("instance-imports.mjs") &&
-			/^\s*(?:const SCRIPT_REGISTRATION = `|return `const record = Object\.freeze\(new Error\()/.test(currentLine)
+			/^\s*(?:const SCRIPT_REGISTRATION = `|return `const registry = \$\{registry\};\\nif \(typeof registry\?\.record === "function"\) registry\.record\(\$\{json\}\);\\nelse \(\$\{registry\} \?\?= \[\]\)\.push\(Object\.freeze\(new Error\()/.test(
+				currentLine
+			)
 		)
 			continue;
 

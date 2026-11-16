@@ -35,6 +35,7 @@
  * pinner; the async manager leaves it unset and its boundaries pass callbacks through untouched.
  */
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { ArrayMethods, mapList } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Binds a callback to the caller active at registration, or `null` when the runtime does not need it.
@@ -83,9 +84,9 @@ export function pinToCurrentCaller(callback) {
  * @internal
  */
 export function pinManyToCurrentCaller(callbacks) {
-	if (!pinner || !callbacks.some((callback) => typeof callback === "function")) return callbacks;
+	if (!pinner || !ArrayMethods.some(callbacks, (callback) => typeof callback === "function")) return callbacks;
 	if (typeof pinner.many === "function") return pinner.many(callbacks);
-	return callbacks.map((callback) => pinToCurrentCaller(callback));
+	return mapList(callbacks, (callback) => pinToCurrentCaller(callback));
 }
 
 /**

@@ -275,9 +275,10 @@ beforeAll(() => {
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
 			"\tconst results = {};",
 			"\tfor (const [name, permissions] of [",
-			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }],',
-			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [] }],',
-			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }]',
+			// Code from strings and data: imports are built-in capabilities (D4 ruling part 1); the rows are about where such code runs.
+			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }]',
 			"\t]) {",
 			`\t\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions });`,
 			"\t\tresults[name] = {",
@@ -505,7 +506,15 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 			base: API,
 			...config,
 			silent: true,
-			permissions: { defaultPolicy: "allow", ...permissions, rules: [{ caller: "slots.**", target: "vault.**", effect: "deny" }] }
+			// Code from strings is a built-in capability (D4 ruling part 1); these tests are about where such code runs.
+			permissions: {
+				defaultPolicy: "allow",
+				...permissions,
+				rules: [
+					{ caller: "slots.**", target: "vault.**", effect: "deny" },
+					{ caller: "**", target: "capability:code", effect: "allow" }
+				]
+			}
 		});
 		return api;
 	}
@@ -529,6 +538,101 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
+	/** The engine's own `next` of an array's iterator and of an iterator helper, taken before any module ran. */
+	const ARRAY_NEXT = Object.getPrototypeOf([][Symbol.iterator]()).next;
+	const HELPER_NEXT = Object.getPrototypeOf([0][Symbol.iterator]().map((value) => value)).next;
+	const DISGUISED = [
+		{ kind: "plainArrayIterator", next: ARRAY_NEXT },
+		{ kind: "plainIteratorHelper", next: HELPER_NEXT },
+		{ kind: "bareArrayIterator", next: ARRAY_NEXT }
+	];
+
+	/**
+	 * Step what the slots module handed the host with the engine's own `next`, and have the esm module, which may read
+	 * the vault, run what it yields.
+	 * @param {object} held - What the host was handed.
+	 * @param {Function} next - The engine's `next`.
+	 * @returns {Promise<*>} `"not stepped"` when the engine's `next` refuses it, else what running the yield gave.
+	 */
+	async function stepAndRun(held, next) {
+		let yielded;
+		try {
+			yielded = Reflect.apply(next, held, []).value;
+		} catch (error) {
+			return error instanceof TypeError ? "not stepped" : String(error);
+		}
+		return await api.esm.callLater(yielded);
+	}
+
+	// One of the language's iterators given the prototype of plain data keeps what it holds where no member shows it.
+	// With provenance off nothing reads the frames of what it yields, so it comes back as the module's: a stand-in the
+	// engine's own `next` refuses, never the iterator itself.
+	it.each(DISGUISED)("hands out $kind as the module's with provenance off", async ({ kind, next }) => {
+		await create({ provenance: false });
+		const held = await api.slots.holding(kind);
+		expect(types.isProxy(held)).toBe(true);
+		expect(await stepAndRun(held, next)).toBe("not stepped");
+	});
+
+	// With provenance on, what it yields is told by its frames: it runs as the module that wrote it, whoever runs it.
+	it.each(DISGUISED)("runs what $kind yields as the module with provenance on", async ({ kind, next }) => {
+		await create();
+		expect(await stepAndRun(await api.slots.holding(kind), next)).toBe("PERMISSION_DENIED");
+	});
+
+	it("hands out data with the prototype of plain data as itself with provenance off", async () => {
+		await create({ provenance: false });
+		const held = await api.slots.plainData();
+		expect(types.isProxy(held)).toBe(false);
+		expect(types.isProxy(held.nested)).toBe(false);
+		expect(held).toEqual({ nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: { n: 1 } } });
+	});
+
+	// An error of the language's own is told by the engine's brand check and read from its descriptors, so data holding
+	// one is checked for disguised iterators like any other data and comes back as itself.
+	it.each(["error", "typeError", "aggregate", "causeAndMembers", "stackRead"])(
+		"hands out data holding an error (%s) as itself with provenance off",
+		async (kind) => {
+			await create({ provenance: false });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(false);
+			expect(types.isProxy(held.error)).toBe(false);
+			expect(types.isNativeError(held.error)).toBe(true);
+			if (kind === "aggregate") expect(held.error.errors.map((error) => error.message)).toEqual(["a", "b"]);
+			if (kind === "causeAndMembers") expect([held.error.cause, held.error.code, held.error.detail]).toEqual([{ code: 1 }, "E1", { n: 1 }]);
+		}
+	);
+
+	it.each(["iteratorHoldingError", "iteratorPosingAsError", "errorBesideIterator", "prototypeReplaced", "stackGetter"])(
+		"hands out data holding what only looks like plain data and an error (%s) as the module's with provenance off",
+		async (kind) => {
+			await create({ provenance: false });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(true);
+			expect(await api.slots.stackGetterCount()).toBe(0);
+		}
+	);
+
+	it("hands out data holding an error without formatting its stack, with provenance off", async () => {
+		await create({ provenance: false });
+		const saved = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
+		let formatted = 0;
+		Error.prepareStackTrace = () => {
+			formatted++;
+			return "formatted";
+		};
+		try {
+			const held = await api.slots.errorData("error");
+			expect(formatted).toBe(0);
+			// Read afterwards, the stack is formatted as plain JavaScript formats it: by the formatter set now, once.
+			expect(held.error.stack).toBe("formatted");
+			expect(formatted).toBe(1);
+		} finally {
+			if (saved) Object.defineProperty(Error, "prepareStackTrace", saved);
+			else delete Error.prepareStackTrace;
+		}
+	});
+
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
 		await create({ provenance: false });
 		expect(types.isProxy(await api.slots.script())).toBe(true);
@@ -536,7 +640,12 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("runs a compiled script of the module's that may read the vault, with provenance off", async () => {
-		api = await slothlet({ base: API, ...config, silent: true, permissions: { defaultPolicy: "allow", provenance: false, rules: [] } });
+		api = await slothlet({
+			base: API,
+			...config,
+			silent: true,
+			permissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
+		});
 		expect(await api.esm.viaScript()).toBe(42);
 	});
 

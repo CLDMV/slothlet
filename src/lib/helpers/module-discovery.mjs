@@ -61,7 +61,23 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // filesystem-walking module discovery has no meaning in browser mode.
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Arrays, JSON, Map, Set, Processes } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	appendList,
+	ArrayMethods,
+	Arrays,
+	copyList,
+	JSON,
+	listPush,
+	Map,
+	mapList,
+	MapMethods,
+	Objects,
+	Processes,
+	Set,
+	SetMethods,
+	splitText,
+	StringMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
 // Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
@@ -119,12 +135,13 @@ export async function discoverModules(options = {}) {
 
 	// Gather candidate package directories from all scanRoots.
 	const candidates = [];
-	for (const root of scanRoots) {
+	for (let ofIndex = 0, ofList = scanRoots; ofIndex < ofList.length; ofIndex++) {
+		const root = ofList[ofIndex];
 		const mode = await detectScanMode(root);
 		if (mode === "npm") {
-			candidates.push(...(await enumerateNpmPackages(root, prefixes)));
+			appendList(candidates, await enumerateNpmPackages(root, prefixes));
 		} else {
-			candidates.push(...(await enumerateFolderModules(root, prefixes)));
+			appendList(candidates, await enumerateFolderModules(root, prefixes));
 		}
 	}
 
@@ -133,7 +150,8 @@ export async function discoverModules(options = {}) {
 	const seenRealPaths = new Set();
 	/** @type {Map<string, string>} */ const realPathByNameVersion = new Map();
 
-	for (const candidate of candidates) {
+	for (let ofIndex = 0, ofList = candidates; ofIndex < ofList.length; ofIndex++) {
+		const candidate = ofList[ofIndex];
 		// Resolve real path early so symlink-aliased duplicates dedupe before any I/O on manifests.
 		let realPath;
 		try {
@@ -143,8 +161,8 @@ export async function discoverModules(options = {}) {
 			// Skip silently — not a slothlet-module concern.
 			continue;
 		}
-		if (seenRealPaths.has(realPath)) continue;
-		seenRealPaths.add(realPath);
+		if (SetMethods.has(seenRealPaths, realPath)) continue;
+		SetMethods.add(seenRealPaths, realPath);
 
 		const pkgJsonPath = path.join(realPath, "package.json");
 		const pkg = await readJsonOrNull(pkgJsonPath);
@@ -181,8 +199,8 @@ export async function discoverModules(options = {}) {
 
 		// G7 case 3: same name+version, different real paths → throw.
 		const nameVersionKey = `${pkg.name}@${pkg.version}`;
-		if (realPathByNameVersion.has(nameVersionKey)) {
-			const otherRealPath = realPathByNameVersion.get(nameVersionKey);
+		if (MapMethods.has(realPathByNameVersion, nameVersionKey)) {
+			const otherRealPath = MapMethods.get(realPathByNameVersion, nameVersionKey);
 			// `seenRealPaths.has(realPath) continue` earlier in this loop guarantees
 			// each realPath is processed at most once, so any prior entry for this
 			// name@version key necessarily came from a DIFFERENT realPath — the
@@ -195,22 +213,23 @@ export async function discoverModules(options = {}) {
 					{
 						packageName: pkg.name,
 						version: pkg.version,
-						paths: [otherRealPath, realPath].join(", ")
+						paths: ArrayMethods.join([otherRealPath, realPath], ", ")
 					},
 					null,
 					{ validationError: true }
 				);
 			}
 		} else {
-			realPathByNameVersion.set(nameVersionKey, realPath);
+			MapMethods.set(realPathByNameVersion, nameVersionKey, realPath);
 		}
 
 		const apiDirAbs = path.resolve(realPath, normalized.apiDir);
-		results.push(
+		listPush(
+			results,
 			Objects.freeze({
 				packageName: pkg.name,
 				packageRoot: realPath,
-				mountPath: Objects.freeze([...normalized.mountPath]),
+				mountPath: Objects.freeze(copyList(normalized.mountPath)),
 				apiDir: apiDirAbs,
 				manifest: deepFreeze(normalized)
 			})
@@ -238,7 +257,7 @@ async function resolveScanRoots(opt) {
 		return [path.resolve(opt)];
 	}
 	if (Arrays.isArray(opt)) {
-		return opt.map((p) => path.resolve(p));
+		return mapList(opt, (p) => path.resolve(p));
 	}
 	throw new SlothletError(
 		"INVALID_ARGUMENT",
@@ -312,10 +331,11 @@ async function enumerateNpmPackages(root, prefixes) {
 	} catch {
 		return out;
 	}
-	for (const entry of entries) {
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i];
 		if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-		if (entry.name.startsWith(".")) continue; // skip .pnpm, .bin, .package-lock.json, etc.
-		if (entry.name.startsWith("@")) {
+		if (StringMethods.startsWith(entry.name, ".")) continue; // skip .pnpm, .bin, .package-lock.json, etc.
+		if (StringMethods.startsWith(entry.name, "@")) {
 			// Scoped — walk one level deeper.
 			const scopeDir = path.join(nodeModules, entry.name);
 			let scopedEntries;
@@ -325,15 +345,16 @@ async function enumerateNpmPackages(root, prefixes) {
 				// scopeDir is a broken symlink, vanished, or otherwise unreadable.
 				continue;
 			}
-			for (const scoped of scopedEntries) {
+			for (let j = 0; j < scopedEntries.length; j++) {
+				const scoped = scopedEntries[j];
 				if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue;
 				const fullName = `${entry.name}/${scoped.name}`;
 				if (!matchesPrefix(fullName, prefixes)) continue;
-				out.push({ path: path.join(scopeDir, scoped.name), packageName: fullName });
+				listPush(out, { path: path.join(scopeDir, scoped.name), packageName: fullName });
 			}
 		} else {
 			if (!matchesPrefix(entry.name, prefixes)) continue;
-			out.push({ path: path.join(nodeModules, entry.name), packageName: entry.name });
+			listPush(out, { path: path.join(nodeModules, entry.name), packageName: entry.name });
 		}
 	}
 	return out;
@@ -355,14 +376,15 @@ async function enumerateFolderModules(root, prefixes) {
 	} catch {
 		return out;
 	}
-	for (const entry of entries) {
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i];
 		if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-		if (entry.name.startsWith(".")) continue;
+		if (StringMethods.startsWith(entry.name, ".")) continue;
 		// In folder mode, the directory name acts as the candidate packageName
 		// for prefix-matching purposes. Actual package identity comes from each
 		// subdir's package.json once we read it.
 		if (!matchesPrefix(entry.name, prefixes)) continue;
-		out.push({ path: path.join(root, entry.name), packageName: entry.name });
+		listPush(out, { path: path.join(root, entry.name), packageName: entry.name });
 	}
 	return out;
 }
@@ -380,7 +402,7 @@ function normalizePrefixes(opt) {
 	if (typeof opt === "string") return [opt];
 	if (Arrays.isArray(opt)) {
 		if (opt.length === 0) return null;
-		return opt.slice();
+		return copyList(opt);
 	}
 	throw new SlothletError(
 		"INVALID_ARGUMENT",
@@ -402,8 +424,9 @@ function normalizePrefixes(opt) {
  */
 function matchesPrefix(name, prefixes) {
 	if (!prefixes) return true;
-	for (const p of prefixes) {
-		if (name.startsWith(p)) return true;
+	for (let ofIndex = 0, ofList = prefixes; ofIndex < ofList.length; ofIndex++) {
+		const p = ofList[ofIndex];
+		if (StringMethods.startsWith(name, p)) return true;
 	}
 	return false;
 }
@@ -433,12 +456,12 @@ function parseManifestSource(opt) {
 			{ validationError: true }
 		);
 	}
-	const hashIdx = opt.indexOf("#");
+	const hashIdx = StringMethods.indexOf(opt, "#");
 	if (hashIdx === -1) {
 		return { file: opt, subkey: null, isOverride: opt !== DEFAULT_MANIFEST_FILE };
 	}
-	const file = opt.slice(0, hashIdx);
-	const subkey = opt.slice(hashIdx + 1);
+	const file = StringMethods.slice(opt, 0, hashIdx);
+	const subkey = StringMethods.slice(opt, hashIdx + 1);
 	if (file.length === 0 || subkey.length === 0) {
 		throw new SlothletError(
 			"INVALID_ARGUMENT",
@@ -514,9 +537,10 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 		return parsed;
 	}
 	// Walk the dotted subkey path.
-	const parts = source.subkey.split(".");
+	const parts = splitText(source.subkey, ".");
 	let cur = parsed;
-	for (const part of parts) {
+	for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
+		const part = ofList[ofIndex];
 		if (cur === null || typeof cur !== "object" || !(part in cur)) {
 			return undefined;
 		}
@@ -542,7 +566,10 @@ function applySchemaRemap(raw, schemaMap) {
 		return raw;
 	}
 	const out = { ...raw };
-	for (const [canonical, legacy] of Objects.entries(schemaMap)) {
+	for (let ofIndex = 0, ofList = Objects.entries(schemaMap); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			canonical = ofEntry[0],
+			legacy = ofEntry[1];
 		if (legacy === canonical) continue;
 		if (out[canonical] !== undefined) continue; // canonical name already present → don't override
 		if (legacy in out) {
@@ -573,7 +600,8 @@ function deepFreeze(obj) {
 	/* v8 ignore next */
 	if (obj === null || typeof obj !== "object" || Objects.isFrozen(obj)) return obj;
 	Objects.freeze(obj);
-	for (const key of Objects.keys(obj)) {
+	for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const value = obj[key];
 		if (value !== null && typeof value === "object") {
 			deepFreeze(value);

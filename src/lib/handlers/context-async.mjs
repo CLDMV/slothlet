@@ -36,13 +36,27 @@ import {
 	resolvesSupplier,
 	internals as framePlacementInternals
 } from "#handlers/frame-placement";
-import { Reflect, Objects, Arrays, Map, WeakMap, Promise } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	concatLists,
+	FunctionMethods,
+	Map,
+	mapEntriesToArray,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	Objects,
+	Promise,
+	Reflect,
+	WeakMap
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, resolveSupplier, sampleStoreScripts } = framePlacementInternals("lib/handlers/context-async");
+const { attributeResult, enterCall, ownReceiver, resolveSupplier, sampleStoreScripts } =
+	framePlacementInternals("lib/handlers/context-async");
 
 /**
  * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
@@ -73,7 +87,8 @@ class DormantStore {
 	 * @returns {*} What it returned.
 	 */
 	run(store, fn, ...args) {
-		return this.manager.openStore().run(store, fn, ...args);
+		const storage = this.manager.openStore();
+		return Reflect.apply(storage.run, storage, concatLists([store, fn], args));
 	}
 
 	/**
@@ -171,7 +186,7 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
-		if (this.instances.has(instanceID)) {
+		if (MapMethods.has(this.instances, instanceID)) {
 			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
 
@@ -183,7 +198,7 @@ export class AsyncContextManager {
 			createdAt: clock.now()
 		};
 
-		this.instances.set(instanceID, store);
+		MapMethods.set(this.instances, instanceID, store);
 		return store;
 	}
 
@@ -239,11 +254,11 @@ export class AsyncContextManager {
 			baseStore = activeStore;
 		} else {
 			// Not in context or different instance - get base store
-			baseStore = this.instances.get(instanceID);
+			baseStore = MapMethods.get(this.instances, instanceID);
 			if (!baseStore) {
 				throw new SlothletError("CONTEXT_NOT_FOUND", {
 					instanceID,
-					availableInstances: Arrays.from(this.instances.keys())
+					availableInstances: mapKeysToArray(this.instances)
 				});
 			}
 		}
@@ -252,6 +267,8 @@ export class AsyncContextManager {
 		// on every path: spreading the base store must never leave a nested call holding its parent's.
 		const executionStore = { ...baseStore };
 		executionStore.record = this.#recordOf(baseStore);
+		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
+		let receiver = null;
 		if (asHost) {
 			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
 			executionStore.callerWrapper = null;
@@ -262,7 +279,7 @@ export class AsyncContextManager {
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
-			Objects.defineProperty(executionStore, trustedRootOwn.TRUSTED_ROOT, { value: true, configurable: true });
+			Objects.defineProperty(executionStore, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 		} else if (currentWrapper) {
 			const parent = executionStore.record;
 			// The caller is the call executing in this flow — or, when that call was handed code and the code is
@@ -272,6 +289,7 @@ export class AsyncContextManager {
 				const identity = resolved?.identity && resolved.store === baseStore ? resolved.identity : this.#identityOf(baseStore);
 				executionStore.callerWrapper = identity.currentWrapper;
 				executionStore.callerCeiling = identity.ceiling ?? null;
+				receiver = ownReceiver(parent, identity);
 			} else {
 				executionStore.callerWrapper = baseStore.currentWrapper;
 				executionStore.callerCeiling = parent ? (parent.ceiling ?? null) : (baseStore.currentCeiling ?? null);
@@ -296,7 +314,7 @@ export class AsyncContextManager {
 		const callerIsHost = !executionStore.callerWrapper;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
 				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context
@@ -304,7 +322,8 @@ export class AsyncContextManager {
 			// Already in correct context - use a child ALS context so currentWrapper/callerWrapper propagate correctly
 			return this.als.run(executionStore, () => {
 				try {
-					const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
+					const result =
+						currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : FunctionMethods.apply(fn, thisArg, args);
 					// Wrap class instances to preserve context. For an async leaf the synchronous
 					// return is a pending Promise (Promise is excluded from class-instance detection),
 					// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -336,7 +355,7 @@ export class AsyncContextManager {
 		// Not in context or switching instance - create new ALS context
 		return this.als.run(executionStore, () => {
 			try {
-				const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
+				const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : FunctionMethods.apply(fn, thisArg, args);
 				// Wrap class instances to preserve context. For an async leaf the synchronous
 				// return is a pending Promise (Promise is excluded from class-instance detection),
 				// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -451,9 +470,11 @@ export class AsyncContextManager {
 	runAsIdentity(instanceID, identity, fn) {
 		const active = this.als.getStore();
 		const base =
-			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
+			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID)
+				? active
+				: MapMethods.get(this.instances, instanceID);
 		if (!base) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Arrays.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: mapKeysToArray(this.instances) });
 		}
 		const ceiling = identity.ceiling ?? null;
 		const parent =
@@ -510,11 +531,11 @@ export class AsyncContextManager {
 	 * @internal
 	 */
 	runModuleLoad(loading, fn) {
-		const base = this.instances.get(loading.instanceID());
+		const base = MapMethods.get(this.instances, loading.instanceID());
 		if (!base || !this.als) return fn();
-		const current = () => this.instances.get(loading.instanceID()) ?? null;
+		const current = () => MapMethods.get(this.instances, loading.instanceID()) ?? null;
 		const store = { ...base, callerWrapper: null, callerCeiling: null, currentCeiling: null };
-		const live = (name, read) => Objects.defineProperty(store, name, { get: read, enumerable: true, configurable: true });
+		const live = (name, read) => Objects.defineProperty(store, name, { __proto__: null, get: read, enumerable: true, configurable: true });
 		live("instanceID", () => current()?.instanceID ?? base.instanceID);
 		live("currentWrapper", () => loading.wrapper());
 		live("record", () => loading.record());
@@ -522,7 +543,7 @@ export class AsyncContextManager {
 		live("self", () => (loading.wrapper() ? current()?.self : undefined));
 		live("context", () => current()?.context ?? base.context);
 		// Not spread onto the stores of the calls made from it: only this store is the load's.
-		Objects.defineProperty(store, "moduleLoad", { value: loading, enumerable: false });
+		Objects.defineProperty(store, "moduleLoad", { __proto__: null, value: loading, enumerable: false });
 		const outside = this.als.getStore();
 		const result = this.als.run(store, fn);
 		// A lazy load runs detached, with no store ({@link runDetached}). Where `AsyncLocalStorage` rests on async hooks
@@ -609,7 +630,7 @@ export class AsyncContextManager {
 		if (store && (store.instanceID === instanceID || store.parentInstanceID === instanceID)) {
 			return store;
 		}
-		return this.instances.get(instanceID);
+		return MapMethods.get(this.instances, instanceID);
 	}
 
 	/**
@@ -727,11 +748,11 @@ export class AsyncContextManager {
 	 */
 	async runInSnapshotFlow(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
-		this.instances.set(childStore.instanceID, childStore);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		try {
 			return await this.als.run(childStore, fn);
 		} finally {
-			this.instances.delete(childStore.instanceID);
+			MapMethods.delete(this.instances, childStore.instanceID);
 		}
 	}
 
@@ -749,11 +770,11 @@ export class AsyncContextManager {
 	 */
 	runInSnapshotFlowSync(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
-		this.instances.set(childStore.instanceID, childStore);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		try {
 			return this.als.run(childStore, fn);
 		} finally {
-			this.instances.delete(childStore.instanceID);
+			MapMethods.delete(this.instances, childStore.instanceID);
 		}
 	}
 
@@ -763,11 +784,11 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	cleanup(instanceID) {
-		const store = this.instances.get(instanceID);
+		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Arrays.from(this.instances.keys()).join(", ") || "none" },
+				{ instanceID, availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none" },
 				null,
 				{ validationError: true }
 			);
@@ -778,7 +799,7 @@ export class AsyncContextManager {
 		store.context = {};
 
 		// Remove from instances map
-		this.instances.delete(instanceID);
+		MapMethods.delete(this.instances, instanceID);
 	}
 
 	/**
@@ -790,12 +811,16 @@ export class AsyncContextManager {
 		return {
 			type: "async",
 			activeStore: this.als.getStore()?.instanceID || null,
-			instances: Arrays.from(this.instances.entries()).map(([id, store]) => ({
-				id,
-				createdAt: store.createdAt,
-				contextKeys: Objects.keys(store.context),
-				selfKeys: Objects.keys(store.self)
-			}))
+			instances: mapList(mapEntriesToArray(this.instances), (entry1) => {
+				const id = entry1[0],
+					store = entry1[1];
+				return {
+					id,
+					createdAt: store.createdAt,
+					contextKeys: Objects.keys(store.context),
+					selfKeys: Objects.keys(store.self)
+				};
+			})
 		};
 	}
 }

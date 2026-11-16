@@ -23,7 +23,29 @@
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
-import { Objects, Arrays, Math, Map, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	copyList,
+	Map,
+	mapEntries,
+	MapMethods,
+	Math,
+	NumberMethods,
+	Objects,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
 
 /**
@@ -56,13 +78,14 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		this._instanceId = `metadata_${this.clock.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		this._instanceId = `metadata_${this.clock.now()}_${StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 	}
 
 	// Secure WeakMap storage for immutable system metadata
 	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
 
 	// Centralized user metadata storage - keyed by moduleID
+	/** @type {Map<string, {metadata: object, apiPaths: Set<string>}>} */
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = Objects.create(null); // global user metadata (applies to all)
 
@@ -118,7 +141,7 @@ export class Metadata extends ComponentBase {
 		if (!utilities?.isPlainObject(value)) return;
 
 		const validate = (candidate, ancestors = new WeakSet()) => {
-			if (ancestors.has(candidate)) {
+			if (WeakSetMethods.has(ancestors, candidate)) {
 				throw new this.SlothletError("INVALID_ARGUMENT", {
 					argument: metadataKey ? `${argumentName}.${metadataKey}` : argumentName,
 					expected: "acyclic object",
@@ -127,15 +150,16 @@ export class Metadata extends ComponentBase {
 				});
 			}
 
-			ancestors.add(candidate);
+			WeakSetMethods.add(ancestors, candidate);
 			try {
-				for (const nestedValue of Objects.values(candidate)) {
+				for (let ofIndex = 0, ofList = Objects.values(candidate); ofIndex < ofList.length; ofIndex++) {
+					const nestedValue = ofList[ofIndex];
 					if (utilities.isPlainObject(nestedValue)) {
 						validate(nestedValue, ancestors);
 					}
 				}
 			} finally {
-				ancestors.delete(candidate);
+				WeakSetMethods.delete(ancestors, candidate);
 			}
 		};
 
@@ -151,10 +175,11 @@ export class Metadata extends ComponentBase {
 	 * @private
 	 */
 	#assertSafeMetadataKeySegment(key) {
-		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		const blocked = setFrom(["__proto__", "prototype", "constructor"]);
 		if (typeof key !== "string" || key.length === 0) return;
-		for (const segment of key.split(".")) {
-			if (blocked.has(segment)) {
+		for (let ofIndex = 0, ofList = splitText(key, "."); ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
+			if (SetMethods.has(blocked, segment)) {
 				throw new this.SlothletError("INVALID_METADATA_KEY", {
 					key,
 					type: "string",
@@ -174,12 +199,15 @@ export class Metadata extends ComponentBase {
 	 * @private
 	 */
 	#assertNoReservedMetadataKeys(value, metadataKey = null) {
-		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		const blocked = setFrom(["__proto__", "prototype", "constructor"]);
 		const utilities = this.slothlet.helpers?.utilities;
 
 		const walk = (candidate, path = "") => {
-			for (const [key, nestedValue] of Objects.entries(candidate)) {
-				if (blocked.has(key)) {
+			for (let ofIndex = 0, ofList = Objects.entries(candidate); ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					key = ofEntry[0],
+					nestedValue = ofEntry[1];
+				if (SetMethods.has(blocked, key)) {
 					const fullPath = path ? `${path}.${key}` : key;
 					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
@@ -212,7 +240,7 @@ export class Metadata extends ComponentBase {
 		Objects.freeze(obj);
 
 		// Recursively freeze all properties
-		Objects.getOwnPropertyNames(obj).forEach((prop) => {
+		ArrayMethods.forEach(Objects.getOwnPropertyNames(obj), (prop) => {
 			if (obj[prop] !== null && typeof obj[prop] === "object") {
 				this.#deepFreeze(obj[prop]);
 			}
@@ -260,7 +288,7 @@ export class Metadata extends ComponentBase {
 		// module id and the composite is always unambiguous to split (#303).
 		let fullModuleID = systemData.moduleID;
 		if (systemData.apiPath && systemData.moduleID) {
-			const apiPathSlashes = systemData.apiPath.replace(/\./g, "/");
+			const apiPathSlashes = regExpReplace(/\./g, systemData.apiPath, "/");
 			fullModuleID = `${systemData.moduleID}${MODULE_ID_SEPARATOR}${apiPathSlashes}`;
 		}
 
@@ -278,7 +306,7 @@ export class Metadata extends ComponentBase {
 			taggedAt: this.clock.now()
 		});
 
-		this.#secureMetadata.set(target, frozenSystem);
+		WeakMapMethods.set(this.#secureMetadata, target, frozenSystem);
 	}
 
 	/**
@@ -294,7 +322,7 @@ export class Metadata extends ComponentBase {
 		const actualTarget = resolveWrapper(target) ?? target;
 
 		// Try impl first (for wrapped functions), then target itself
-		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget);
+		const systemData = WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl || actualTarget);
 		return systemData || null;
 	}
 
@@ -313,7 +341,10 @@ export class Metadata extends ComponentBase {
 
 		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
 		// then fall back to impl (for cases where wrapper wasn't tagged)
-		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
+		const systemData =
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
+			{};
 
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
@@ -328,13 +359,13 @@ export class Metadata extends ComponentBase {
 		//   - "mixed.config"
 		//   - "mixed"
 		const collectMetadataFromParents = (path) => {
-			const parts = path.split(".");
+			const parts = splitText(path, ".");
 			const collected = {};
 
 			// Start from root and work down (parent metadata merged first, child overrides)
 			for (let i = 1; i <= parts.length; i++) {
-				const parentPath = parts.slice(0, i).join(".");
-				const parentMeta = this.#userMetadataStore.get(parentPath);
+				const parentPath = ArrayMethods.join(typeof parts === "string" ? StringMethods.slice(parts, 0, i) : copyList(parts, 0, i), ".");
+				const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
 				if (parentMeta?.metadata) {
 					Objects.assign(collected, parentMeta.metadata);
 				}
@@ -343,7 +374,7 @@ export class Metadata extends ComponentBase {
 			return collected;
 		};
 
-		const userMetadataByModule = moduleID ? this.#userMetadataStore.get(moduleID) : null;
+		const userMetadataByModule = moduleID ? MapMethods.get(this.#userMetadataStore, moduleID) : null;
 		const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
 
 		// Merge both user metadata sources (path < moduleID priority)
@@ -402,7 +433,10 @@ export class Metadata extends ComponentBase {
 		// Get system metadata to find moduleID - wrapper-first (same lookup order as getMetadata)
 		// so that set() and get() always resolve to the same moduleID, even after reload
 		// (the wrapper retains a stable moduleID while impl gets a new one after each reload).
-		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
+		const systemData =
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
+			{};
 		const moduleID = systemData.moduleID;
 
 		if (!moduleID) {
@@ -410,10 +444,10 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Get or create user metadata entry for this moduleID
-		let entry = this.#userMetadataStore.get(moduleID);
+		let entry = MapMethods.get(this.#userMetadataStore, moduleID);
 		if (!entry) {
 			entry = { metadata: {}, apiPaths: new Set() };
-			this.#userMetadataStore.set(moduleID, entry);
+			MapMethods.set(this.#userMetadataStore, moduleID, entry);
 		}
 
 		// Set the metadata key
@@ -424,13 +458,13 @@ export class Metadata extends ComponentBase {
 		// will find this entry even when the moduleID has changed (e.g. after api.slothlet.reload()).
 		const apiPath = systemData.apiPath;
 		if (apiPath) {
-			let pathEntry = this.#userMetadataStore.get(apiPath);
+			let pathEntry = MapMethods.get(this.#userMetadataStore, apiPath);
 			if (!pathEntry) {
 				pathEntry = { metadata: {}, apiPaths: new Set() };
-				this.#userMetadataStore.set(apiPath, pathEntry);
+				MapMethods.set(this.#userMetadataStore, apiPath, pathEntry);
 			}
 			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value, "metadata", key);
-			pathEntry.apiPaths.add(apiPath);
+			SetMethods.add(pathEntry.apiPaths, apiPath);
 		}
 	}
 
@@ -455,7 +489,10 @@ export class Metadata extends ComponentBase {
 		const actualTarget = resolveWrapper(target) ?? target;
 
 		// Get system metadata to find moduleID and apiPath - wrapper-first (same lookup order as getMetadata)
-		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
+		const systemData =
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
+			{};
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
@@ -463,13 +500,14 @@ export class Metadata extends ComponentBase {
 
 		// Helper to apply removal to a single store entry
 		const applyRemoval = (storeKey) => {
-			const storeEntry = this.#userMetadataStore.get(storeKey);
+			const storeEntry = MapMethods.get(this.#userMetadataStore, storeKey);
 			if (!storeEntry) return;
 
 			if (key === undefined) {
-				this.#userMetadataStore.delete(storeKey);
+				MapMethods.delete(this.#userMetadataStore, storeKey);
 			} else if (Arrays.isArray(key)) {
-				for (const k of key) {
+				for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
+					const k = ofList[ofIndex];
 					if (typeof k !== "string") {
 						throw new this.SlothletError("INVALID_METADATA_KEY", {
 							key: k,
@@ -480,7 +518,10 @@ export class Metadata extends ComponentBase {
 					delete storeEntry.metadata[k];
 				}
 			} else if (typeof key === "object" && key !== null) {
-				for (const [metadataKey, nestedKeys] of Objects.entries(key)) {
+				for (let ofIndex = 0, ofList = Objects.entries(key); ofIndex < ofList.length; ofIndex++) {
+					const ofEntry = ofList[ofIndex],
+						metadataKey = ofEntry[0],
+						nestedKeys = ofEntry[1];
 					if (!Arrays.isArray(nestedKeys)) {
 						throw new this.SlothletError("INVALID_METADATA_KEY", {
 							key: metadataKey,
@@ -490,7 +531,8 @@ export class Metadata extends ComponentBase {
 					}
 					const metadataValue = storeEntry.metadata[metadataKey];
 					if (metadataValue && typeof metadataValue === "object") {
-						for (const nestedKey of nestedKeys) {
+						for (let ofIndex = 0, ofList = nestedKeys; ofIndex < ofList.length; ofIndex++) {
+							const nestedKey = ofList[ofIndex];
 							if (typeof nestedKey !== "string") {
 								throw new this.SlothletError("INVALID_METADATA_KEY", {
 									key: nestedKey,
@@ -553,15 +595,15 @@ export class Metadata extends ComponentBase {
 			);
 		}
 
-		let entry = this.#userMetadataStore.get(identifier);
+		let entry = MapMethods.get(this.#userMetadataStore, identifier);
 		if (!entry) {
 			entry = { metadata: {}, apiPaths: new Set() };
-			this.#userMetadataStore.set(identifier, entry);
+			MapMethods.set(this.#userMetadataStore, identifier, entry);
 		}
 		// Merge incoming metadata over any existing values while preserving nested plain objects.
 		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata, "metadata");
 		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
-		entry.apiPaths.add(identifier);
+		SetMethods.add(entry.apiPaths, identifier);
 	}
 
 	/**
@@ -576,7 +618,7 @@ export class Metadata extends ComponentBase {
 	 */
 	removeUserMetadataByApiPath(apiPath) {
 		if (!apiPath) return;
-		this.#userMetadataStore.delete(apiPath);
+		MapMethods.delete(this.#userMetadataStore, apiPath);
 	}
 
 	/**
@@ -640,11 +682,11 @@ export class Metadata extends ComponentBase {
 		// All callers (getForVersion) always pass a valid resolved string; the null/non-string guard is defensive.
 		/* v8 ignore next */
 		if (!apiPath || typeof apiPath !== "string") return {};
-		const parts = apiPath.split(".");
+		const parts = splitText(apiPath, ".");
 		const collected = {};
 		for (let i = 1; i <= parts.length; i++) {
-			const parentPath = parts.slice(0, i).join(".");
-			const parentMeta = this.#userMetadataStore.get(parentPath);
+			const parentPath = ArrayMethods.join(copyList(parts, 0, i), ".");
+			const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
 			if (parentMeta?.metadata) {
 				Objects.assign(collected, parentMeta.metadata);
 			}
@@ -668,13 +710,14 @@ export class Metadata extends ComponentBase {
 	removePathMetadata(apiPath, key) {
 		if (!apiPath || typeof apiPath !== "string") return;
 
-		const entry = this.#userMetadataStore.get(apiPath);
+		const entry = MapMethods.get(this.#userMetadataStore, apiPath);
 		if (!entry) return;
 
 		if (key === undefined) {
-			this.#userMetadataStore.delete(apiPath);
+			MapMethods.delete(this.#userMetadataStore, apiPath);
 		} else if (Arrays.isArray(key)) {
-			for (const k of key) {
+			for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
+				const k = ofList[ofIndex];
 				if (typeof k !== "string") {
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
 						key: k,
@@ -708,10 +751,12 @@ export class Metadata extends ComponentBase {
 	 */
 	exportUserState() {
 		const storeCopy = new Map();
-		for (const [key, entry] of this.#userMetadataStore) {
-			storeCopy.set(key, {
+		for (const ofEntry of mapEntries(this.#userMetadataStore)) {
+			const key = ofEntry[0],
+				entry = ofEntry[1];
+			MapMethods.set(storeCopy, key, {
 				metadata: { ...entry.metadata },
-				apiPaths: new Set(entry.apiPaths)
+				apiPaths: setFrom(setToArray(entry.apiPaths))
 			});
 		}
 		return {
@@ -741,7 +786,10 @@ export class Metadata extends ComponentBase {
 
 		// Restore global metadata (merge, existing keys win)
 		if (state.globalMetadata) {
-			for (const [k, v] of Objects.entries(state.globalMetadata)) {
+			for (let ofIndex = 0, ofList = Objects.entries(state.globalMetadata); ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					k = ofEntry[0],
+					v = ofEntry[1];
 				if (!(k in this.#globalUserMetadata)) {
 					this.#globalUserMetadata[k] = v;
 				}
@@ -750,18 +798,20 @@ export class Metadata extends ComponentBase {
 
 		// Restore user metadata store entries (merge, existing keys win)
 		if (state.userMetadataStore) {
-			for (const [key, savedEntry] of state.userMetadataStore) {
-				const existing = this.#userMetadataStore.get(key);
+			for (const ofEntry of mapEntries(state.userMetadataStore)) {
+				const key = ofEntry[0],
+					savedEntry = ofEntry[1];
+				const existing = MapMethods.get(this.#userMetadataStore, key);
 				if (!existing) {
 					// No current entry - restore the saved one directly
-					this.#userMetadataStore.set(key, {
+					MapMethods.set(this.#userMetadataStore, key, {
 						metadata: { ...savedEntry.metadata },
-						apiPaths: new Set(savedEntry.apiPaths)
+						apiPaths: setFrom(setToArray(savedEntry.apiPaths))
 					});
 				} else {
 					// Merge: saved values fill in missing keys; existing keys (from load) win
 					existing.metadata = { ...savedEntry.metadata, ...existing.metadata };
-					for (const p of savedEntry.apiPaths) existing.apiPaths.add(p);
+					for (const p of setValues(savedEntry.apiPaths)) SetMethods.add(existing.apiPaths, p);
 				}
 			}
 		}
@@ -793,10 +843,11 @@ export class Metadata extends ComponentBase {
 		const apiRoot = this.slothlet.api;
 		if (!apiRoot) return null;
 
-		const parts = path.split(".");
+		const parts = splitText(path, ".");
 		let target = apiRoot;
 
-		for (const part of parts) {
+		for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
 			if (!target || (typeof target !== "object" && typeof target !== "function")) {
 				return null;
 			}

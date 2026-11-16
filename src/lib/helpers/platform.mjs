@@ -55,35 +55,39 @@
  */
 
 import {
-	Reflect,
-	Objects,
+	ArrayBuffer,
+	ArrayBuffers,
+	ArrayMethods,
+	BigInt,
+	Boolean,
+	CryptoKey,
+	DataView,
+	Date,
+	Error,
+	Errors,
+	FunctionMethods,
 	Functions,
 	JSON,
 	Map,
-	Set,
-	WeakMap,
-	WeakSet,
-	Promise,
-	Symbol,
-	Promises,
-	Symbols,
-	Boolean,
-	Date,
-	Errors,
-	Error,
-	Number,
-	RegExp,
-	String,
-	ArrayBuffer,
-	ArrayBuffers,
-	DataView,
-	SharedArrayBuffer,
-	BigInt,
-	setTimeout,
+	mapList,
+	MessageChannel,
 	NativeProcess,
-	CryptoKey,
+	Number,
+	Objects,
+	Promise,
+	promiseAll,
+	Reflect,
+	RegExp,
+	Set,
 	setImmediate,
-	MessageChannel
+	setTimeout,
+	SharedArrayBuffer,
+	String,
+	StringMethods,
+	Symbol,
+	Symbols,
+	WeakMap,
+	WeakSet
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
@@ -123,16 +127,24 @@ let AsyncResource = null;
 let createRequire = null;
 
 if (isNode) {
-	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promises.all([
-		import("node:fs"),
-		import("node:fs/promises"),
-		import("node:path"),
-		import("node:url"),
-		import("node:util"),
-		import("node:events"),
-		import("node:async_hooks"),
-		import("node:module")
-	]);
+	const unpacked1 = await promiseAll([
+			import("node:fs"),
+			import("node:fs/promises"),
+			import("node:path"),
+			import("node:url"),
+			import("node:util"),
+			import("node:events"),
+			import("node:async_hooks"),
+			import("node:module")
+		]),
+		fsMod = unpacked1[0],
+		fspMod = unpacked1[1],
+		pathMod = unpacked1[2],
+		urlMod = unpacked1[3],
+		utilMod = unpacked1[4],
+		eventsMod = unpacked1[5],
+		asyncHooksMod = unpacked1[6],
+		moduleMod = unpacked1[7];
 	// Frozen copies of the namespaces, taken now: slothlet's files read their members when they run, and code that
 	// replaces `fs.readFileSync` or `path.join` on Node's module object later (and refreshes the namespaces with
 	// `module.syncBuiltinESMExports()`) does not reach them.
@@ -147,7 +159,7 @@ if (isNode) {
 	const inspect = function inspect(...args) {
 		return Reflect.apply(nodeInspect, undefined, args);
 	};
-	Objects.defineProperty(inspect, "custom", { value: nodeInspect.custom, enumerable: true });
+	Objects.defineProperty(inspect, "custom", { __proto__: null, value: nodeInspect.custom, enumerable: true });
 	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
@@ -186,7 +198,7 @@ if (isNode) {
 	const IS_SHARED_ARRAY_BUFFER =
 		typeof SharedArrayBuffer === "function" ? brand(getterOf(SharedArrayBuffer.prototype, "byteLength")) : () => false;
 	const IS_DATA_VIEW = brand(getterOf(DataView.prototype, "byteLength"));
-	const BOXED_BRANDS = [Number, String, Boolean, Symbol, BigInt].map((kind) => brand(kind.prototype.valueOf));
+	const BOXED_BRANDS = mapList([Number, String, Boolean, Symbol, BigInt], (kind) => brand(kind.prototype.valueOf));
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
@@ -203,7 +215,7 @@ if (isNode) {
 			isPromise: (value) => {
 				if (inheritsFrom(value, Promise)) return true;
 				try {
-					return Objects.prototype.toString.call(value) === "[object Promise]";
+					return FunctionMethods.call(Objects.prototype.toString, value) === "[object Promise]";
 				} catch {
 					return false;
 				}
@@ -218,10 +230,13 @@ if (isNode) {
 			isGeneratorObject: (value) =>
 				value !== null &&
 				typeof value === "object" &&
-				GENERATOR_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, value)),
+				ArrayMethods.some(GENERATOR_PROTOTYPES, (prototype) => FunctionMethods.call(Objects.prototype.isPrototypeOf, prototype, value)),
 			// Prototype check: the browser stand-in for Node's brand check of a generator function, an async one included.
 			isGeneratorFunction: (fn) =>
-				typeof fn === "function" && GENERATOR_FUNCTION_PROTOTYPES.some((prototype) => Objects.prototype.isPrototypeOf.call(prototype, fn)),
+				typeof fn === "function" &&
+				ArrayMethods.some(GENERATOR_FUNCTION_PROTOTYPES, (prototype) =>
+					FunctionMethods.call(Objects.prototype.isPrototypeOf, prototype, fn)
+				),
 			// The rest are the engine's own brand checks, made by calling a method of the kind that reads nothing but the
 			// object's internal data and throws for any other object: none of a value's own code runs, and a Proxy never
 			// passes, as with Node's checks.
@@ -237,12 +252,14 @@ if (isNode) {
 			isArrayBufferView: (value) => ArrayBuffers.isView(value),
 			isDataView: IS_DATA_VIEW,
 			isTypedArray: (value) => ArrayBuffers.isView(value) && !IS_DATA_VIEW(value),
-			isBoxedPrimitive: (value) => value !== null && typeof value === "object" && BOXED_BRANDS.some((is) => is(value)),
+			isBoxedPrimitive: (value) => value !== null && typeof value === "object" && ArrayMethods.some(BOXED_BRANDS, (is) => is(value)),
 			// `Error.isError` where the engine has it; the prototype chain otherwise, which an object merely inheriting
 			// from `Error.prototype` passes too.
 			isNativeError: typeof Errors.isError === "function" ? (value) => Errors.isError(value) : (value) => inheritsFrom(value, Error),
-			isMapIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(MAP_ITERATOR, value),
-			isSetIterator: (value) => value !== null && typeof value === "object" && Objects.prototype.isPrototypeOf.call(SET_ITERATOR, value),
+			isMapIterator: (value) =>
+				value !== null && typeof value === "object" && FunctionMethods.call(Objects.prototype.isPrototypeOf, MAP_ITERATOR, value),
+			isSetIterator: (value) =>
+				value !== null && typeof value === "object" && FunctionMethods.call(Objects.prototype.isPrototypeOf, SET_ITERATOR, value),
 			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
 			isKeyObject: () => false,
 			isCryptoKey: (value) => typeof CryptoKey === "function" && inheritsFrom(value, CryptoKey)
@@ -429,10 +446,10 @@ function inheritsFrom(value, ctor) {
  */
 function fileParts(filePath) {
 	if (isNode) return { dir: path.dirname(filePath), name: path.basename(filePath), ext: path.extname(filePath) };
-	const cut = filePath.lastIndexOf("/");
-	const name = filePath.slice(cut + 1);
-	const dot = name.lastIndexOf(".");
-	return { dir: cut < 0 ? "." : filePath.slice(0, cut) || "/", name, ext: dot > 0 ? name.slice(dot) : "" };
+	const cut = StringMethods.lastIndexOf(filePath, "/");
+	const name = StringMethods.slice(filePath, cut + 1);
+	const dot = StringMethods.lastIndexOf(name, ".");
+	return { dir: cut < 0 ? "." : StringMethods.slice(filePath, 0, cut) || "/", name, ext: dot > 0 ? StringMethods.slice(name, dot) : "" };
 }
 
 export {

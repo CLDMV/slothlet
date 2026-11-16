@@ -65,30 +65,59 @@
 
 import { commonJSExportNames } from "./cjs-export-names.mjs";
 import {
-	Objects,
+	appendList,
+	ArrayBuffer,
+	ArrayBuffers,
+	ArrayMethods,
 	Arrays,
-	JSON,
-	Map,
-	Set,
-	WeakMap,
-	Symbol,
-	Symbols,
-	URL,
-	URLSearchParams,
-	Reflect,
 	Boolean,
+	concatLists,
+	copyList,
 	decodeURIComponent,
 	Error,
-	String,
-	TypeError,
-	ArrayBuffers,
-	ArrayBuffer,
-	TextDecoder,
-	Processes,
+	filterList,
+	FunctionMethods,
+	JSON,
+	listPush,
+	listSplice,
+	Map,
+	mapEntries,
+	mapKeys,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValues,
 	NativeProxy,
-	WeakSet
+	Objects,
+	Processes,
+	Reflect,
+	RegExpMethods,
+	regExpReplace,
+	regExpSearch,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
+	String,
+	StringMethods,
+	Symbol,
+	SymbolMethods,
+	Symbols,
+	TextDecoder,
+	TextDecoderMethods,
+	TypeError,
+	URL,
+	URLMethods,
+	URLSearchParams,
+	URLSearchParamsMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
-import { readStack, stackText } from "@cldmv/slothlet/helpers/stack-read";
+import { readStack, stackText, unreadError } from "@cldmv/slothlet/helpers/stack-read";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -209,7 +238,7 @@ const STATE = Symbols.for("@cldmv/slothlet.instanceImports");
  * @type {string}
  * @private
  */
-const STATE_REF = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]`;
+const STATE_REF = `globalThis[Symbol.for(${JSON.stringify(SymbolMethods.description(STATE))})]`;
 
 /**
  * Per instance ID: the private CommonJS module copies of that instance, by filename (#534). Kept here, with the
@@ -245,8 +274,8 @@ const SCOPE_KEYS = new Map();
 
 /**
  * The scope a synchronous {@link scopeRequire} is running in (`anchor` is the file it required; `importer` the api
- * file whose own copies are served, under `helpers: "module"`), else null.
- * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null }|null}
+ * file whose own copies are served, under `helpers: "module"`; `fresh` when the anchor is loaded as a leaf), else null.
+ * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean }|null}
  * @private
  */
 let ACTIVE = null;
@@ -315,6 +344,33 @@ const LOADED_SCRIPTS = new Map();
 const LOADED_TEXTS = new Map();
 
 /**
+ * The random value each script key's sources are sealed with (see {@link sealLoadedSource}), drawn the first time a
+ * file loads under the key and kept with its sources, so a source loaded again is the same script.
+ * @type {Map<string, string>}
+ * @private
+ */
+const SEALS = new Map();
+
+/**
+ * The CommonJS sources an instance's scope loads that are no leaf's own load (see {@link scopeLoadKind}), by script key,
+ * the newest {@link SCRIPTS_PER_KEY} each: a helper file, and a leaf's file a sibling api file requires itself, which
+ * is a helper of that sibling's, before or after slothlet loads the leaf. Frame placement holds a frame at a leaf's file
+ * running one of these to the files that import it, as a helper file's code. Kept apart from {@link LOADED_SCRIPTS},
+ * so the leaf's own loads stay listed however many of these load.
+ * @type {Map<string, Array<string>>}
+ * @private
+ */
+const HELPER_SCRIPTS = new Map();
+
+/**
+ * The random value each script key's helper loads are sealed with (see {@link HELPER_SCRIPTS}): another value than the
+ * key's own loads take, so a helper load of a leaf's file is never the leaf's script.
+ * @type {Map<string, string>}
+ * @private
+ */
+const HELPER_SEALS = new Map();
+
+/**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
  * slashes, no query, the real path Node resolves to), the URLs of the files that import it — a module's instance copy
  * with its tags, a package file, the host's own — and, when the named importer is a file nothing loaded through the
@@ -364,7 +420,7 @@ function ownStackText(limit) {
  * @private
  */
 function runningTaggedFrame() {
-	return TAGGED_FRAME.exec(ownStackText(Infinity))?.[1];
+	return RegExpMethods.exec(TAGGED_FRAME, ownStackText(Infinity))?.[1];
 }
 
 /**
@@ -375,7 +431,7 @@ function runningTaggedFrame() {
  * @private
  */
 function packageKey(url) {
-	return toSlashPath(url).replace(/^\/([a-z]:\/)/i, "$1");
+	return regExpReplace(/^\/([a-z]:\/)/i, toSlashPath(url), "$1");
 }
 
 /**
@@ -387,22 +443,25 @@ function packageKey(url) {
  * @private
  */
 function recordPackageImport(parentURL, url) {
-	if (typeof url !== "string" || !url.startsWith("file:") || url.includes(MARKER)) return;
+	if (typeof url !== "string" || !StringMethods.startsWith(url, "file:") || StringMethods.includes(url, MARKER)) return;
 	const loaders = [];
-	const parent = typeof parentURL === "string" && parentURL.startsWith("file:") ? parentURL : null;
-	if (parent) loaders.push(parent);
+	const parent = typeof parentURL === "string" && StringMethods.startsWith(parentURL, "file:") ? parentURL : null;
+	if (parent) listPush(loaders, parent);
 	// Named as imported by a file nothing loaded through the hook (`createRequire` of any path, a host file loaded
 	// before it): the module whose code is running loaded it. A module's own import, or one of a file the hook saw
 	// loaded, keeps to its importer, so a module that merely triggers another's lazy load takes none of its files.
-	if (!parent || (!parent.includes(MARKER) && !PACKAGE_IMPORTERS.has(packageKey(parent)))) {
+	if (!parent || (!StringMethods.includes(parent, MARKER) && !MapMethods.has(PACKAGE_IMPORTERS, packageKey(parent)))) {
 		const running = runningTaggedFrame();
-		if (running) loaders.push(running);
+		if (running) listPush(loaders, running);
 	}
 	if (!loaders.length) return;
 	const key = packageKey(url);
-	let importers = PACKAGE_IMPORTERS.get(key);
-	if (!importers) PACKAGE_IMPORTERS.set(key, (importers = new Set()));
-	for (const loader of loaders) importers.add(loader);
+	let importers = MapMethods.get(PACKAGE_IMPORTERS, key);
+	if (!importers) MapMethods.set(PACKAGE_IMPORTERS, key, (importers = new Set()));
+	for (let ofIndex = 0, ofList = loaders; ofIndex < ofList.length; ofIndex++) {
+		const loader = ofList[ofIndex];
+		SetMethods.add(importers, loader);
+	}
 }
 
 /**
@@ -424,21 +483,25 @@ const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
  * @private
  */
 function isInstanceRequireLoad(parentURL, commonJSParent = false) {
-	const lines = ownStackText(Infinity).split("\n");
+	const lines = splitText(ownStackText(Infinity), "\n");
 	let at = -1;
 	for (let i = 0; i < lines.length && at === -1; i++) {
-		if (lines[i].includes("(node:internal/modules/helpers:")) return false;
+		if (StringMethods.includes(lines[i], "(node:internal/modules/helpers:")) return false;
 		// Node 22 names the loader's frame `Function._load`, later versions `Module._load`.
-		if (/^\s*at (?:Module|Function)\._load \(node:/.test(lines[i])) at = i;
+		if (RegExpMethods.exec(/^\s*at (?:Module|Function)\._load \(node:/, lines[i]) !== null) at = i;
 	}
 	if (at === -1) return false;
 	// The hook is answering that `require()` itself: between it and the loader's frame run only Node's own frames and
 	// slothlet's (a resolution asked for by other code that a `require()` further out is running is not one).
 	for (let i = 1; i < at; i++) {
 		const location = frameLocation(lines[i]);
-		if (location !== null && !location.startsWith("node:") && slothletCodePath(location) === null) return false;
+		if (location !== null && !StringMethods.startsWith(location, "node:") && slothletCodePath(location) === null) return false;
 	}
-	return commonJSParent || parentURL.includes(MARKER) || lines.slice(at + 1).some((line) => INSTANCE_FRAME.test(line));
+	return (
+		commonJSParent ||
+		StringMethods.includes(parentURL, MARKER) ||
+		ArrayMethods.some(copyList(lines, at + 1), (line) => RegExpMethods.exec(INSTANCE_FRAME, line) !== null)
+	);
 }
 
 /**
@@ -450,10 +513,11 @@ function isInstanceRequireLoad(parentURL, commonJSParent = false) {
  * @private
  */
 function isInstanceCommonJSFile(ref) {
-	if (ref.includes(MARKER)) return false;
+	if (StringMethods.includes(ref, MARKER)) return false;
 	const key = packageKey(ref);
 	if (ACTIVE !== null && (key === packageKey(ACTIVE.anchor) || isInstanceScopedFile(key, ACTIVE.anchor))) return true;
-	for (const instanceID of SCOPE_KEYS.keys()) if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === key)) return true;
+	for (const instanceID of mapKeys(SCOPE_KEYS))
+		if (ArrayMethods.some(COMMONJS_READER.files(instanceID), (file) => packageKey(file) === key)) return true;
 	return false;
 }
 
@@ -481,17 +545,28 @@ function isInstanceCommonJSFile(ref) {
 function sharedRequireStub(context, resolved) {
 	const url = resolved?.url;
 	const parentURL = context?.parentURL;
-	if (typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:json|node)$/.test(url)) return null;
-	if (typeof parentURL !== "string" || !parentURL.startsWith("file:") || !hasCondition(context?.conditions, "require")) return null;
+	if (
+		typeof url !== "string" ||
+		!StringMethods.startsWith(url, "file:") ||
+		StringMethods.includes(url, "?") ||
+		RegExpMethods.exec(/\.(?:json|node)$/, url) !== null
+	)
+		return null;
+	if (typeof parentURL !== "string" || !StringMethods.startsWith(parentURL, "file:") || !hasCondition(context?.conditions, "require"))
+		return null;
 	const own = (ref) => {
 		const path = toSlashPath(ref);
-		return OWN_TREE.some((dir) => path === dir || path.startsWith(dir.endsWith("/") ? dir : `${dir}/`));
+		return ArrayMethods.some(
+			OWN_TREE,
+			(dir) => path === dir || StringMethods.startsWith(path, StringMethods.endsWith(dir, "/") ? dir : `${dir}/`)
+		);
 	};
 	if (own(parentURL) || own(url)) return null;
 	// An instance's CommonJS file requiring a file of another package; while a CommonJS api file loads, only that.
 	const commonJSParent = isInstanceCommonJSFile(parentURL) && !isInstanceScopedFile(url, parentURL);
 	if (ACTIVE !== null && !commonJSParent) return null;
-	if (!parentURL.includes(MARKER) && !commonJSParent && PACKAGE_IMPORTERS.has(packageKey(parentURL))) return null;
+	if (!StringMethods.includes(parentURL, MARKER) && !commonJSParent && MapMethods.has(PACKAGE_IMPORTERS, packageKey(parentURL)))
+		return null;
 	if (!isInstanceRequireLoad(parentURL, commonJSParent)) return null;
 	return { url: SHARED_REQUIRE_PREFIX + url, format: "commonjs", shortCircuit: true };
 }
@@ -508,7 +583,10 @@ function sharedRequireStub(context, resolved) {
 function requireShared(url, stub) {
 	const requireFn = NODE.module.createRequire(import.meta.url);
 	const cache = requireFn.cache;
-	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	for (let ofIndex = 0, ofList = [stub?.id, stub?.filename]; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	}
 	const outer = SERVING;
 	SERVING = url;
 	try {
@@ -520,7 +598,7 @@ function requireShared(url, stub) {
 
 /**
  * The reader of {@link LOADED_SCRIPTS} on the shared object: whether a key has sources recorded and whether a given
- * one is among them, a copy of them, how many keys have any, and the files importing a package file (see
+ * one is among them (and whether it is one of the key's helper loads, see {@link HELPER_SCRIPTS}), a copy of them, how many keys have any, and the files importing a package file (see
  * {@link PACKAGE_IMPORTERS}). Nothing it offers adds or drops a source or an import, so a module reaching the shared
  * object cannot have code it compiled under another file's name taken for that file (#597). Only the copy that
  * recorded them drops an instance's, when it shuts down.
@@ -529,20 +607,28 @@ function requireShared(url, stub) {
  */
 const SCRIPTS_READER = Objects.freeze({
 	lookup: (key, hash) => {
-		const hashes = LOADED_SCRIPTS.get(key);
-		return { known: Boolean(hashes?.length), has: hash !== undefined && Boolean(hashes?.includes(hash)) };
+		const hashes = MapMethods.get(LOADED_SCRIPTS, key);
+		const helpers = MapMethods.get(HELPER_SCRIPTS, key);
+		const helper = hash !== undefined && Boolean(helpers == null ? undefined : ArrayMethods.includes(helpers, hash));
+		return {
+			known: Boolean(hashes?.length || helpers?.length),
+			has: helper || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
+			helper
+		};
 	},
-	hashes: (key) => [...(LOADED_SCRIPTS.get(key) ?? [])],
+	hashes: (key) => concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []),
 	text: (key, hash) => {
-		const texts = LOADED_TEXTS.get(key);
+		const texts = MapMethods.get(LOADED_TEXTS, key);
 		if (!texts) return undefined;
-		if (hash !== undefined && hash !== null) return texts.get(hash);
-		// No hash to go by (an engine that reports none): the newest source loaded under the key.
-		const newest = LOADED_SCRIPTS.get(key)?.at(-1);
-		return newest === undefined ? undefined : texts.get(newest);
+		if (hash !== undefined && hash !== null) return MapMethods.get(texts, hash);
+		// No hash to go by (an engine that reports none): the newest source loaded under the key, its own loads first.
+		const newest =
+			(MapMethods.get(LOADED_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(LOADED_SCRIPTS, key), -1)) ??
+			(MapMethods.get(HELPER_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(HELPER_SCRIPTS, key), -1));
+		return newest === undefined ? undefined : MapMethods.get(texts, newest);
 	},
-	count: () => LOADED_SCRIPTS.size,
-	packageImporters: (path) => [...(PACKAGE_IMPORTERS.get(packageKey(path)) ?? [])]
+	count: () => SetMethods.size(setFrom(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)))),
+	packageImporters: (path) => setToArray(MapMethods.get(PACKAGE_IMPORTERS, packageKey(path)))
 });
 
 /**
@@ -600,24 +686,25 @@ const GRAPH_VIEWS = new Map();
  */
 function recordImportsHere(instanceID, parent, children) {
 	if (typeof instanceID !== "string" || typeof parent !== "string" || !Arrays.isArray(children)) return;
-	let graph = IMPORT_GRAPHS.get(instanceID);
+	let graph = MapMethods.get(IMPORT_GRAPHS, instanceID);
 	if (!graph) {
 		graph = new Map();
-		IMPORT_GRAPHS.set(instanceID, graph);
+		MapMethods.set(IMPORT_GRAPHS, instanceID, graph);
 	}
 	const parentPath = toSlashPath(parent);
-	for (const child of children) {
+	for (let ofIndex = 0, ofList = children; ofIndex < ofList.length; ofIndex++) {
+		const child = ofList[ofIndex];
 		if (typeof child !== "string") continue;
 		const childPath = toSlashPath(child);
-		let parents = graph.get(childPath);
+		let parents = MapMethods.get(graph, childPath);
 		if (!parents) {
 			parents = new Set();
-			graph.set(childPath, parents);
+			MapMethods.set(graph, childPath, parents);
 		}
-		const before = parents.size;
-		parents.add(parentPath);
+		const before = SetMethods.size(parents);
+		SetMethods.add(parents, parentPath);
 		// Counted on the graph, so a reader can tell it changed without walking it.
-		if (parents.size !== before) graph.edges = (graph.edges ?? 0) + 1;
+		if (SetMethods.size(parents) !== before) graph.edges = (graph.edges ?? 0) + 1;
 	}
 }
 
@@ -635,16 +722,20 @@ function graphView(graph) {
 			return graph.edges ?? 0;
 		},
 		get size() {
-			return graph.size;
+			return MapMethods.size(graph);
 		},
-		has: (file) => graph.has(file),
+		has: (file) => MapMethods.has(graph, file),
 		get: (file) => {
-			const importers = graph.get(file);
-			return importers ? new Set(importers) : undefined;
+			const importers = MapMethods.get(graph, file);
+			return importers ? setFrom(setToArray(importers)) : undefined;
 		},
-		keys: () => [...graph.keys()].values(),
+		keys: () => ArrayMethods.values(mapKeysToArray(graph)),
 		*[Symbol.iterator]() {
-			for (const [file, importers] of graph) yield [file, [...importers]];
+			for (const ofEntry of mapEntries(graph)) {
+				const file = ofEntry[0],
+					importers = ofEntry[1];
+				yield [file, setToArray(importers)];
+			}
 		}
 	});
 }
@@ -656,10 +747,10 @@ function graphView(graph) {
  */
 const IMPORTS_READER = Objects.freeze({
 	of: (instanceID) => {
-		const graph = IMPORT_GRAPHS.get(instanceID);
+		const graph = MapMethods.get(IMPORT_GRAPHS, instanceID);
 		if (!graph) return null;
-		let view = GRAPH_VIEWS.get(instanceID);
-		if (!view) GRAPH_VIEWS.set(instanceID, (view = graphView(graph)));
+		let view = MapMethods.get(GRAPH_VIEWS, instanceID);
+		if (!view) MapMethods.set(GRAPH_VIEWS, instanceID, (view = graphView(graph)));
 		return view;
 	}
 });
@@ -672,17 +763,19 @@ const IMPORTS_READER = Objects.freeze({
  */
 const COMMONJS_READER = Objects.freeze({
 	files: (instanceID) => {
-		const scope = SCOPES.get(instanceID);
-		const files = [...(scope ? scope.keys() : []), ...(LEAVES.get(instanceID) ?? [])];
+		const scope = MapMethods.get(SCOPES, instanceID);
+		const files = concatLists(mapKeysToArray(scope), setToArray(MapMethods.get(LEAVES, instanceID)));
 		// The copies kept per importing api file (`helpers: "module"`).
-		for (const copies of COPIES.get(instanceID)?.values() ?? []) files.push(...copies.keys());
+		for (const copies of mapValues(MapMethods.get(COPIES, instanceID))) appendList(files, mapKeysToArray(copies));
 		return files;
 	},
 	version: (instanceID) => {
-		const key = SCOPE_KEYS.get(instanceID);
+		const key = MapMethods.get(SCOPE_KEYS, instanceID);
 		if (!key) return null;
-		let count = (SCOPES.get(instanceID)?.size ?? 0) + (LEAVES.get(instanceID)?.size ?? 0);
-		for (const held of COPIES.get(instanceID)?.values() ?? []) count += held.size;
+		const scoped = MapMethods.get(SCOPES, instanceID);
+		const leaves = MapMethods.get(LEAVES, instanceID);
+		let count = (scoped ? MapMethods.size(scoped) : 0) + (leaves ? SetMethods.size(leaves) : 0);
+		for (const held of mapValues(MapMethods.get(COPIES, instanceID))) count += MapMethods.size(held);
 		return { key, count };
 	}
 });
@@ -717,14 +810,14 @@ function sharedState() {
 		scripts: SCRIPTS_READER,
 		commonJS: COMMONJS_READER,
 		scriptKeyOf: (url) => (SCRIPT_KEY_OF ? SCRIPT_KEY_OF(url) : url),
-		own: (url) => OWN_MODULES.get(url),
+		own: (url) => MapMethods.get(OWN_MODULES, url),
 		claim: claimHere,
 		hooks: () => installInstanceImportHooks(NODE_MODULE),
 		redeem: redeemTicket,
 		requireCJS: requireCJSFromRunner,
 		checkImport: checkModuleImport
 	});
-	Objects.defineProperty(globalThis, STATE, { value: OWN_STATE, enumerable: false, configurable: false, writable: false });
+	Objects.defineProperty(globalThis, STATE, { __proto__: null, value: OWN_STATE, enumerable: false, configurable: false, writable: false });
 	return (SHARED = OWN_STATE);
 }
 
@@ -794,7 +887,7 @@ const HOST = (() => {
 	const Decoder = TextDecoder;
 	const decode = Decoder.prototype.decode;
 	return Objects.freeze({
-		randomUUID: crypto.randomUUID.bind(crypto),
+		randomUUID: FunctionMethods.bind(crypto.randomUUID, crypto),
 		// What a loaded script is recorded under (see recordLoadedSource): the hash and the decoding are the ones in place
 		// when slothlet loaded, as frame placement's are, so replacing `crypto` or `TextDecoder` later changes neither.
 		sha256: (text) => {
@@ -803,12 +896,12 @@ const HOST = (() => {
 			return Reflect.apply(digest, hash, ["hex"]);
 		},
 		decode: (bytes) => Reflect.apply(decode, new Decoder(), [bytes]),
-		readFile: fs.readFileSync.bind(fs),
-		exists: fs.existsSync.bind(fs),
-		dirname: path.dirname.bind(path),
-		join: path.join.bind(path),
-		basename: path.basename.bind(path),
-		compileFunction: vm.compileFunction.bind(vm),
+		readFile: FunctionMethods.bind(fs.readFileSync, fs),
+		exists: FunctionMethods.bind(fs.existsSync, fs),
+		dirname: FunctionMethods.bind(path.dirname, path),
+		join: FunctionMethods.bind(path.join, path),
+		basename: FunctionMethods.bind(path.basename, path),
+		compileFunction: FunctionMethods.bind(vm.compileFunction, vm),
 		parseJSON: JSON.parse
 	});
 })();
@@ -835,13 +928,13 @@ const STRIP_TYPESCRIPT_TYPES = NODE_MODULE?.stripTypeScriptTypes;
  * @type {string[]}
  * @private
  */
-const OWN_PREFIXES = [
-	new URL("../", import.meta.url),
-	new URL("../../../index.mjs", import.meta.url),
-	new URL("../../../index.cjs", import.meta.url)
-]
-	.filter((u) => u.protocol === "file:")
-	.map((u) => toSlashPath(u.href));
+const OWN_PREFIXES = mapList(
+	filterList(
+		[new URL("../", import.meta.url), new URL("../../../index.mjs", import.meta.url), new URL("../../../index.cjs", import.meta.url)],
+		(u) => URLMethods.protocol(u) === "file:"
+	),
+	(u) => toSlashPath(URLMethods.href(u))
+);
 
 /**
  * Slothlet's runtime entry files, as `file:` URLs: the modules an api file imports `self`, `context` and `instanceID`
@@ -849,13 +942,17 @@ const OWN_PREFIXES = [
  * @type {string[]}
  * @private
  */
-const SINGLE_COPY_FILES = [
-	new URL("../runtime/runtime.mjs", import.meta.url),
-	new URL("../runtime/runtime-asynclocalstorage.mjs", import.meta.url),
-	new URL("../runtime/runtime-livebindings.mjs", import.meta.url)
-]
-	.filter((u) => u.protocol === "file:")
-	.map((u) => u.href);
+const SINGLE_COPY_FILES = mapList(
+	filterList(
+		[
+			new URL("../runtime/runtime.mjs", import.meta.url),
+			new URL("../runtime/runtime-asynclocalstorage.mjs", import.meta.url),
+			new URL("../runtime/runtime-livebindings.mjs", import.meta.url)
+		],
+		(u) => URLMethods.protocol(u) === "file:"
+	),
+	(u) => URLMethods.href(u)
+);
 
 /**
  * The namespace of each of {@link SINGLE_COPY_FILES} this copy of slothlet has evaluated, by its URL (#760).
@@ -946,13 +1043,13 @@ function closedSelfForm(form, target) {
 	// target's; one it holds writable is the one read through `self`, as the language lets a closed object answer.
 	const describe = (prop, described) => {
 		const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
-		if (!fixed) return described === undefined ? undefined : { ...described, configurable: true };
+		if (!fixed) return described === undefined ? undefined : { __proto__: null, ...described, configurable: true };
 		if (fixed.configurable)
 			return described === undefined
 				? { ...fixed, ...("value" in fixed ? { value: undefined } : {}) }
-				: { ...described, configurable: true };
+				: { __proto__: null, ...described, configurable: true };
 		if (!("value" in fixed) || !fixed.writable) return fixed;
-		return { ...fixed, value: described && "value" in described ? described.value : undefined };
+		return { __proto__: null, ...fixed, value: described && "value" in described ? described.value : undefined };
 	};
 	return new NativeProxy(target, {
 		get(t, prop) {
@@ -991,13 +1088,13 @@ function closedSelfForm(form, target) {
  * @private
  */
 function instanceSelfForm(instanceID, url) {
-	const forms = SELF_FORMS.get(url);
+	const forms = MapMethods.get(SELF_FORMS, url);
 	if (!forms) return undefined;
-	const form = SELF_KINDS.get(instanceID) ? forms.callable : forms.object;
-	const closed = SELF_CLOSED.get(instanceID);
+	const form = MapMethods.get(SELF_KINDS, instanceID) ? forms.callable : forms.object;
+	const closed = MapMethods.get(SELF_CLOSED, instanceID);
 	if (!closed) return form;
-	let made = closed.forms.get(url);
-	if (made === undefined) closed.forms.set(url, (made = closedSelfForm(form, closed.target)));
+	let made = MapMethods.get(closed.forms, url);
+	if (made === undefined) MapMethods.set(closed.forms, url, (made = closedSelfForm(form, closed.target)));
 	return made;
 }
 
@@ -1012,11 +1109,13 @@ function instanceSelfForm(instanceID, url) {
  */
 function closeInstanceSelf(instanceID, target) {
 	if (typeof instanceID !== "string" || target === null || (typeof target !== "object" && typeof target !== "function")) return;
-	if (SELF_CLOSED.get(instanceID)?.target === target) return;
-	SELF_CLOSED.set(instanceID, { target, forms: new Map() });
-	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+	if (MapMethods.get(SELF_CLOSED, instanceID)?.target === target) return;
+	MapMethods.set(SELF_CLOSED, instanceID, { target, forms: new Map() });
+	for (const ofEntry of mapEntries(MapMethods.get(SELF_BINDINGS, instanceID))) {
+		const url = ofEntry[0],
+			setters = ofEntry[1];
 		const form = instanceSelfForm(instanceID, url);
-		if (form) for (const set of setters) set(form);
+		if (form) for (const set of setValues(setters)) set(form);
 	}
 }
 
@@ -1034,10 +1133,10 @@ function closeInstanceSelf(instanceID, target) {
  * registerSelfForms(import.meta.url, runtimeNamespace, { object: objectSelf, callable: callableSelf }, (v) => (self = v));
  */
 function registerSelfForms(url, namespace, forms, bind) {
-	if (SELF_FORMS.has(url)) return;
+	if (MapMethods.has(SELF_FORMS, url)) return;
 	const entry = Objects.freeze({ object: forms.object, callable: forms.callable, bind });
-	SELF_FORMS.set(url, entry);
-	SELF_FORMS.set(namespace, entry);
+	MapMethods.set(SELF_FORMS, url, entry);
+	MapMethods.set(SELF_FORMS, namespace, entry);
 	bind(sharedSelfCallable() ? entry.callable : entry.object);
 }
 
@@ -1048,7 +1147,7 @@ function registerSelfForms(url, namespace, forms, bind) {
  * @internal
  */
 function callableSelfOf(namespace) {
-	return SELF_FORMS.get(namespace)?.callable ?? null;
+	return MapMethods.get(SELF_FORMS, namespace)?.callable ?? null;
 }
 
 /**
@@ -1059,8 +1158,8 @@ function callableSelfOf(namespace) {
  * @private
  */
 function sharedSelfCallable() {
-	if (SELF_KINDS.size === 0) return false;
-	for (const callable of SELF_KINDS.values()) if (!callable) return false;
+	if (MapMethods.size(SELF_KINDS) === 0) return false;
+	for (const callable of mapValues(SELF_KINDS)) if (!callable) return false;
 	return true;
 }
 
@@ -1071,7 +1170,12 @@ function sharedSelfCallable() {
  */
 function rebindSharedSelf() {
 	const callable = sharedSelfCallable();
-	for (const [key, entry] of SELF_FORMS) if (typeof key === "string") entry.bind(callable ? entry.callable : entry.object);
+	for (const ofEntry of mapEntries(SELF_FORMS)) {
+		const key = ofEntry[0],
+			entry = ofEntry[1];
+		// Each entry binds itself (its own `bind`).
+		if (typeof key === "string") FunctionMethods.call(entry.bind, entry, callable ? entry.callable : entry.object);
+	}
 }
 
 /**
@@ -1087,20 +1191,22 @@ function rebindSharedSelf() {
 function setInstanceSelfKind(instanceID, callable) {
 	if (typeof instanceID !== "string") return;
 	if (callable === null) {
-		SELF_KINDS.delete(instanceID);
-		SELF_BINDINGS.delete(instanceID);
-		SELF_CLOSED.delete(instanceID);
+		MapMethods.delete(SELF_KINDS, instanceID);
+		MapMethods.delete(SELF_BINDINGS, instanceID);
+		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
 	}
 	const kind = Boolean(callable);
-	if (SELF_KINDS.get(instanceID) === kind) return;
-	SELF_KINDS.set(instanceID, kind);
+	if (MapMethods.get(SELF_KINDS, instanceID) === kind) return;
+	MapMethods.set(SELF_KINDS, instanceID, kind);
 	// A root closed before its kind changed is closed no more once the api is built again.
-	SELF_CLOSED.delete(instanceID);
-	for (const [url, setters] of SELF_BINDINGS.get(instanceID) ?? []) {
+	MapMethods.delete(SELF_CLOSED, instanceID);
+	for (const ofEntry of mapEntries(MapMethods.get(SELF_BINDINGS, instanceID))) {
+		const url = ofEntry[0],
+			setters = ofEntry[1];
 		const form = instanceSelfForm(instanceID, url);
-		if (form) for (const set of setters) set(form);
+		if (form) for (const set of setValues(setters)) set(form);
 	}
 	rebindSharedSelf();
 }
@@ -1126,13 +1232,13 @@ const SELF_BIND_KEY = "\u0000slothlet:bindSelf";
  * @internal
  */
 function bindInstanceSelf(url, instanceID, assign) {
-	const forms = SELF_FORMS.get(url);
+	const forms = MapMethods.get(SELF_FORMS, url);
 	if (!forms || typeof instanceID !== "string" || typeof assign !== "function") return;
-	let byURL = SELF_BINDINGS.get(instanceID);
-	if (!byURL) SELF_BINDINGS.set(instanceID, (byURL = new Map()));
-	let setters = byURL.get(url);
-	if (!setters) byURL.set(url, (setters = new Set()));
-	setters.add(assign);
+	let byURL = MapMethods.get(SELF_BINDINGS, instanceID);
+	if (!byURL) MapMethods.set(SELF_BINDINGS, instanceID, (byURL = new Map()));
+	let setters = MapMethods.get(byURL, url);
+	if (!setters) MapMethods.set(byURL, url, (setters = new Set()));
+	SetMethods.add(setters, assign);
 	assign(instanceSelfForm(instanceID, url));
 }
 
@@ -1177,13 +1283,20 @@ function defaultExportLooksCallable(filePath) {
 		return false;
 	}
 	// Regular expression literals only: the realm's `RegExp` may have been replaced since slothlet loaded.
-	if (/^\s*export\s+default\s+(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
-	if (/^\s*module\.exports\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m.test(source)) return true;
-	const named = /^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m.exec(source)?.[1];
+	if (
+		RegExpMethods.exec(/^\s*export\s+default\s+(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m, source) !== null
+	)
+		return true;
+	if (
+		RegExpMethods.exec(/^\s*module\.exports\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/m, source) !==
+		null
+	)
+		return true;
+	const named = RegExpMethods.exec(/^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m, source)?.[1];
 	if (!named) return false;
 	const declaration =
 		/^\s*(?:(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|class\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|class\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>))/gm;
-	for (let match = declaration.exec(source); match !== null; match = declaration.exec(source)) {
+	for (let match = RegExpMethods.exec(declaration, source); match !== null; match = RegExpMethods.exec(declaration, source)) {
 		if (match[1] === named || match[2] === named || match[3] === named) return true;
 	}
 	return false;
@@ -1197,7 +1310,7 @@ function defaultExportLooksCallable(filePath) {
  */
 function isRuntimeEntryId(id) {
 	const path = toSlashPath(splitQuery(id)[0]);
-	return SINGLE_COPY_FILES.some((url) => NODE !== null && path === toSlashPath(NODE.url.fileURLToPath(url)));
+	return ArrayMethods.some(SINGLE_COPY_FILES, (url) => NODE !== null && path === toSlashPath(NODE.url.fileURLToPath(url)));
 }
 
 /**
@@ -1209,11 +1322,13 @@ function isRuntimeEntryId(id) {
  */
 function selfInstanceOf(parentURL) {
 	if (typeof parentURL !== "string") return null;
-	const tagged = parentURL.includes(MARKER) ? new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance") : null;
+	const tagged = StringMethods.includes(parentURL, MARKER)
+		? URLSearchParamsMethods.get(new URLSearchParams(splitQuery(parentURL)[1] ?? ""), "slothlet_instance")
+		: null;
 	if (tagged) return tagged;
-	if (!parentURL.startsWith("file:")) return null;
+	if (!StringMethods.startsWith(parentURL, "file:")) return null;
 	const found = instancesOfFile(parentURL);
-	return found.size === 1 ? [...found][0] : null;
+	return SetMethods.size(found) === 1 ? setToArray(found)[0] : null;
 }
 
 /**
@@ -1233,8 +1348,8 @@ function selfInstanceOf(parentURL) {
  * registerOwnModule(import.meta.url, runtimeNamespace);
  */
 function registerOwnModule(url, namespace) {
-	if (!SINGLE_COPY_FILES.includes(url) || OWN_MODULES.has(url)) return;
-	OWN_MODULES.set(url, namespace);
+	if (!ArrayMethods.includes(SINGLE_COPY_FILES, url) || MapMethods.has(OWN_MODULES, url)) return;
+	MapMethods.set(OWN_MODULES, url, namespace);
 }
 
 /**
@@ -1249,11 +1364,12 @@ function ownModuleBridge(url) {
 	const lines = [`const ns = ${STATE_REF}.own(${JSON.stringify(url)});`];
 	let n = 0;
 	// The runtime's entry files export by name only.
-	for (const name of Objects.keys(OWN_MODULES.get(url))) {
-		lines.push(`const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
+	for (let ofIndex = 0, ofList = Objects.keys(MapMethods.get(OWN_MODULES, url)); ofIndex < ofList.length; ofIndex++) {
+		const name = ofList[ofIndex];
+		listPush(lines, `const n${n} = ns[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
-	return lines.join("\n") + "\n";
+	return ArrayMethods.join(lines, "\n") + "\n";
 }
 
 /**
@@ -1267,24 +1383,24 @@ function instancesOfFile(url) {
 	const found = new Set();
 	const seen = new Set();
 	const queue = [url];
-	while (queue.length && seen.size < 64) {
-		const next = queue.shift();
-		if (typeof next !== "string" || seen.has(next)) continue;
-		seen.add(next);
-		const tagged = new URLSearchParams(splitQuery(next)[1] ?? "").get("slothlet_instance");
+	while (queue.length && SetMethods.size(seen) < 64) {
+		const next = ArrayMethods.shift(queue);
+		if (typeof next !== "string" || SetMethods.has(seen, next)) continue;
+		SetMethods.add(seen, next);
+		const tagged = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(next)[1] ?? ""), "slothlet_instance");
 		if (tagged) {
-			found.add(tagged);
+			SetMethods.add(found, tagged);
 			continue;
 		}
 		const path = packageKey(next);
 		let held = false;
-		for (const instanceID of SCOPE_KEYS.keys()) {
-			if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === path)) {
-				found.add(instanceID);
+		for (const instanceID of mapKeys(SCOPE_KEYS)) {
+			if (ArrayMethods.some(COMMONJS_READER.files(instanceID), (file) => packageKey(file) === path)) {
+				SetMethods.add(found, instanceID);
 				held = true;
 			}
 		}
-		if (!held) queue.push(...(PACKAGE_IMPORTERS.get(path) ?? []));
+		if (!held) appendList(queue, setToArray(MapMethods.get(PACKAGE_IMPORTERS, path)));
 	}
 	return found;
 }
@@ -1302,11 +1418,14 @@ function instancesOfFile(url) {
 function isOtherCopysFile(parentURL) {
 	if (typeof parentURL !== "string") return false;
 	const path = toSlashPath(parentURL);
-	if (OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`))) return true;
+	if (
+		ArrayMethods.some(OWN_TREE, (own) => path === own || StringMethods.startsWith(path, StringMethods.endsWith(own, "/") ? own : `${own}/`))
+	)
+		return true;
 	let other = false;
-	for (const instanceID of instancesOfFile(parentURL)) {
-		if (OWN_CLAIMS.has(instanceID)) return false;
-		if (CLAIMS.has(instanceID)) other = true;
+	for (const instanceID of setValues(instancesOfFile(parentURL))) {
+		if (SetMethods.has(OWN_CLAIMS, instanceID)) return false;
+		if (MapMethods.has(CLAIMS, instanceID)) other = true;
 	}
 	return other;
 }
@@ -1324,7 +1443,10 @@ function isOtherCopysFile(parentURL) {
 export function isFileSpecifier(specifier) {
 	return (
 		typeof specifier === "string" &&
-		(specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/") || specifier.startsWith("file:"))
+		(StringMethods.startsWith(specifier, "./") ||
+			StringMethods.startsWith(specifier, "../") ||
+			StringMethods.startsWith(specifier, "/") ||
+			StringMethods.startsWith(specifier, "file:"))
 	);
 }
 
@@ -1336,12 +1458,12 @@ export function isFileSpecifier(specifier) {
  */
 function toSlashPath(ref) {
 	let p = ref;
-	const cut = p.search(/[?#]/);
-	if (cut !== -1) p = p.slice(0, cut);
-	if (p.startsWith("file:")) {
-		p = decodeURIComponent(p.replace(/^file:\/\/[^/]*/, ""));
+	const cut = regExpSearch(/[?#]/, p);
+	if (cut !== -1) p = StringMethods.slice(p, 0, cut);
+	if (StringMethods.startsWith(p, "file:")) {
+		p = decodeURIComponent(regExpReplace(/^file:\/\/[^/]*/, p, ""));
 	}
-	return p.replace(/\\/g, "/");
+	return regExpReplace(/\\/g, p, "/");
 }
 
 /**
@@ -1354,7 +1476,7 @@ function toSlashPath(ref) {
  */
 function helperImporterPath(ref) {
 	const path = toSlashPath(ref);
-	return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path;
+	return RegExpMethods.exec(/^\/[A-Za-z]:\//, path) !== null ? StringMethods.slice(path, 1) : path;
 }
 
 /**
@@ -1377,11 +1499,11 @@ function helperCopyKey(importer, mount) {
  * @private
  */
 function nodeModulesPackage(slashPath) {
-	const idx = slashPath.lastIndexOf("/node_modules/");
+	const idx = StringMethods.lastIndexOf(slashPath, "/node_modules/");
 	if (idx === -1) return null;
-	const rest = slashPath.slice(idx + "/node_modules/".length).split("/");
-	const depth = rest[0]?.startsWith("@") ? 2 : 1;
-	return slashPath.slice(0, idx) + "/node_modules/" + rest.slice(0, depth).join("/");
+	const rest = splitText(StringMethods.slice(slashPath, idx + "/node_modules/".length), "/");
+	const depth = typeof rest[0] === "string" && StringMethods.startsWith(rest[0], "@") ? 2 : 1;
+	return StringMethods.slice(slashPath, 0, idx) + "/node_modules/" + ArrayMethods.join(copyList(rest, 0, depth), "/");
 }
 
 /**
@@ -1423,22 +1545,29 @@ function packageRoot(slashPath) {
 	if (installed !== null) return installed;
 	if (HOST === null) return null;
 	// A Windows drive is read as the drive itself (`C:/…`), not as `/C:/…`.
-	const filePath = slashPath.replace(/^\/([a-z]:\/)/i, "$1");
+	const filePath = regExpReplace(/^\/([a-z]:\/)/i, slashPath, "$1");
 	const walked = [];
 	let root = null;
-	for (let dir = filePath.slice(0, filePath.lastIndexOf("/")); ; dir = dir.slice(0, dir.lastIndexOf("/"))) {
-		if (PACKAGE_ROOTS.has(dir)) {
-			root = PACKAGE_ROOTS.get(dir);
+	for (
+		let dir = StringMethods.slice(filePath, 0, StringMethods.lastIndexOf(filePath, "/"));
+		;
+		dir = StringMethods.slice(dir, 0, StringMethods.lastIndexOf(dir, "/"))
+	) {
+		if (MapMethods.has(PACKAGE_ROOTS, dir)) {
+			root = MapMethods.get(PACKAGE_ROOTS, dir);
 			break;
 		}
-		walked.push(dir);
+		listPush(walked, dir);
 		if (isPackageRoot(HOST, dir)) {
 			root = dir;
 			break;
 		}
-		if (!dir.includes("/")) break;
+		if (!StringMethods.includes(dir, "/")) break;
 	}
-	for (const dir of walked) PACKAGE_ROOTS.set(dir, root);
+	for (let ofIndex = 0, ofList = walked; ofIndex < ofList.length; ofIndex++) {
+		const dir = ofList[ofIndex];
+		MapMethods.set(PACKAGE_ROOTS, dir, root);
+	}
 	return root;
 }
 
@@ -1461,14 +1590,21 @@ function packageRoot(slashPath) {
  */
 export function isInstanceScopedFile(child, parent) {
 	const childPath = toSlashPath(child);
-	if (OWN_PREFIXES.some((own) => childPath === own || (own.endsWith("/") && childPath.startsWith(own)))) return false;
+	if (
+		ArrayMethods.some(
+			OWN_PREFIXES,
+			(own) => childPath === own || (StringMethods.endsWith(own, "/") && StringMethods.startsWith(childPath, own))
+		)
+	)
+		return false;
 	const childPkg = nodeModulesPackage(childPath);
 	const parentPath = toSlashPath(parent);
 	// Neither under `node_modules` and in one directory: the same package, without reading the filesystem.
 	if (
 		childPkg === null &&
 		nodeModulesPackage(parentPath) === null &&
-		childPath.slice(0, childPath.lastIndexOf("/")) === parentPath.slice(0, parentPath.lastIndexOf("/"))
+		StringMethods.slice(childPath, 0, StringMethods.lastIndexOf(childPath, "/")) ===
+			StringMethods.slice(parentPath, 0, StringMethods.lastIndexOf(parentPath, "/"))
 	)
 		return true;
 	return packageRoot(childPath) === packageRoot(parentPath);
@@ -1489,7 +1625,13 @@ export function isInstanceScopedFile(child, parent) {
  */
 export function isOwnPackageImport(child, parent) {
 	const childPath = toSlashPath(child);
-	if (OWN_TREE.some((own) => childPath === own || childPath.startsWith(own.endsWith("/") ? own : `${own}/`))) return false;
+	if (
+		ArrayMethods.some(
+			OWN_TREE,
+			(own) => childPath === own || StringMethods.startsWith(childPath, StringMethods.endsWith(own, "/") ? own : `${own}/`)
+		)
+	)
+		return false;
 	return packageRoot(childPath) === packageRoot(toSlashPath(parent));
 }
 
@@ -1509,11 +1651,11 @@ const PACKAGE_NAMES = new Map();
  * @private
  */
 function mayNameOwnPackage(specifier, importer) {
-	if (specifier.startsWith("#")) return true;
+	if (StringMethods.startsWith(specifier, "#")) return true;
 	const root = packageRoot(toSlashPath(importer));
 	if (root === null) return false;
 	const name = packageName(root);
-	return name !== null && (specifier === name || specifier.startsWith(`${name}/`));
+	return name !== null && (specifier === name || StringMethods.startsWith(specifier, `${name}/`));
 }
 
 /**
@@ -1523,16 +1665,16 @@ function mayNameOwnPackage(specifier, importer) {
  * @private
  */
 function packageName(root) {
-	if (!PACKAGE_NAMES.has(root)) {
+	if (!MapMethods.has(PACKAGE_NAMES, root)) {
 		let name = null;
 		try {
 			name = HOST.parseJSON(HOST.readFile(`${root}/package.json`, "utf8")).name ?? null;
 		} catch {
 			// A package `packageRoot` found under `node_modules` with no readable manifest has no name to refer to itself by.
 		}
-		PACKAGE_NAMES.set(root, typeof name === "string" ? name : null);
+		MapMethods.set(PACKAGE_NAMES, root, typeof name === "string" ? name : null);
 	}
-	return PACKAGE_NAMES.get(root);
+	return MapMethods.get(PACKAGE_NAMES, root);
 }
 
 /**
@@ -1577,11 +1719,21 @@ const ENTRY_FILES = ["index.mjs", "index.cjs"];
 function slothletCodePath(ref) {
 	if (typeof ref !== "string" || HOST === null) return null;
 	const path = toSlashPath(ref);
-	if (!path.includes("/src/") && !path.includes("/dist/") && !ENTRY_FILES.some((entry) => path.endsWith(`/${entry}`))) return null;
+	if (
+		!StringMethods.includes(path, "/src/") &&
+		!StringMethods.includes(path, "/dist/") &&
+		!ArrayMethods.some(ENTRY_FILES, (entry) => StringMethods.endsWith(path, `/${entry}`))
+	)
+		return null;
 	const root = packageRoot(path);
 	if (root === null || packageName(root) !== "@cldmv/slothlet") return null;
-	const inside = (path.startsWith(`${root}/`) ? path : path.replace(/^\/([a-z]:\/)/i, "$1")).slice(root.length + 1);
-	return CODE_DIRS.some((dir) => inside.startsWith(dir)) || ENTRY_FILES.includes(inside) ? inside : null;
+	const inside = StringMethods.slice(
+		StringMethods.startsWith(path, `${root}/`) ? path : regExpReplace(/^\/([a-z]:\/)/i, path, "$1"),
+		root.length + 1
+	);
+	return ArrayMethods.some(CODE_DIRS, (dir) => StringMethods.startsWith(inside, dir)) || ArrayMethods.includes(ENTRY_FILES, inside)
+		? inside
+		: null;
 }
 
 /**
@@ -1596,9 +1748,9 @@ function slothletCodePath(ref) {
  */
 export function isSlothletInternal(ref) {
 	const inside = slothletCodePath(ref);
-	if (inside === null || ENTRY_FILES.includes(inside)) return false;
-	const dir = CODE_DIRS.find((code) => inside.startsWith(code));
-	return !MODULE_IMPORTABLE.includes(inside.slice(dir.length));
+	if (inside === null || ArrayMethods.includes(ENTRY_FILES, inside)) return false;
+	const dir = ArrayMethods.find(CODE_DIRS, (code) => StringMethods.startsWith(inside, code));
+	return !ArrayMethods.includes(MODULE_IMPORTABLE, StringMethods.slice(inside, dir.length));
 }
 
 /**
@@ -1616,7 +1768,7 @@ const MODULE_FILES = new Set();
  * @internal
  */
 function noteModuleFile(ref) {
-	if (typeof ref === "string" && ref !== "") MODULE_FILES.add(packageKey(ref));
+	if (typeof ref === "string" && ref !== "") SetMethods.add(MODULE_FILES, packageKey(ref));
 }
 
 /**
@@ -1640,17 +1792,17 @@ const MODULE_ROOTS = new Set();
 function noteModuleRoot(url, filePath) {
 	if (typeof url !== "string" || typeof filePath !== "string" || filePath === "") return;
 	const location = toSlashPath(url);
-	const suffix = "/" + filePath.replace(/^\.?\//, "");
-	if (!location.endsWith(suffix)) return;
-	const root = location.slice(0, location.length - suffix.length + 1);
+	const suffix = "/" + regExpReplace(/^\.?\//, filePath, "");
+	if (!StringMethods.endsWith(location, suffix)) return;
+	const root = StringMethods.slice(location, 0, location.length - suffix.length + 1);
 	let parsed;
 	try {
 		parsed = new URL(root);
 	} catch {
 		return;
 	}
-	if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.pathname === "/") return;
-	MODULE_ROOTS.add(root);
+	if ((URLMethods.protocol(parsed) !== "http:" && URLMethods.protocol(parsed) !== "https:") || URLMethods.pathname(parsed) === "/") return;
+	SetMethods.add(MODULE_ROOTS, root);
 }
 
 /**
@@ -1660,9 +1812,11 @@ function noteModuleRoot(url, filePath) {
  * @private
  */
 function isModuleRootLocation(location) {
-	if (MODULE_ROOTS.size === 0) return false;
+	if (SetMethods.size(MODULE_ROOTS) === 0) return false;
 	const path = toSlashPath(location);
-	for (const root of MODULE_ROOTS) if (path.startsWith(root) && !("/" + path.slice(root.length)).includes("/node_modules/")) return true;
+	for (const root of setValues(MODULE_ROOTS))
+		if (StringMethods.startsWith(path, root) && !StringMethods.includes("/" + StringMethods.slice(path, root.length), "/node_modules/"))
+			return true;
 	return false;
 }
 
@@ -1677,24 +1831,25 @@ function isModuleRootLocation(location) {
  * @private
  */
 function isUntaggedModuleFile(ref) {
-	if (typeof ref !== "string" || ref.includes(MARKER) || slothletCodePath(ref) !== null) return false;
+	if (typeof ref !== "string" || StringMethods.includes(ref, MARKER) || slothletCodePath(ref) !== null) return false;
 	const key = packageKey(ref);
-	if (MODULE_FILES.has(key)) return true;
+	if (SetMethods.has(MODULE_FILES, key)) return true;
 	if (ACTIVE !== null && (key === packageKey(ACTIVE.anchor) || isInstanceScopedFile(key, ACTIVE.anchor))) return true;
-	for (const instanceID of SCOPE_KEYS.keys()) if (COMMONJS_READER.files(instanceID).some((file) => packageKey(file) === key)) return true;
-	if (/\/node_modules\//.test(key)) return false;
-	const seen = new Set([key]);
+	for (const instanceID of mapKeys(SCOPE_KEYS))
+		if (ArrayMethods.some(COMMONJS_READER.files(instanceID), (file) => packageKey(file) === key)) return true;
+	if (RegExpMethods.exec(/\/node_modules\//, key) !== null) return false;
+	const seen = setFrom([key]);
 	const queue = [key];
-	while (queue.length && seen.size < 64) {
-		for (const loader of PACKAGE_IMPORTERS.get(queue.shift()) ?? []) {
-			if (loader.includes(MARKER) || MODULE_FILES.has(packageKey(loader))) {
+	while (queue.length && SetMethods.size(seen) < 64) {
+		for (const loader of setValues(MapMethods.get(PACKAGE_IMPORTERS, ArrayMethods.shift(queue)))) {
+			if (StringMethods.includes(loader, MARKER) || SetMethods.has(MODULE_FILES, packageKey(loader))) {
 				if (isInstanceScopedFile(key, splitQuery(loader)[0])) return true;
 				continue;
 			}
 			const through = packageKey(loader);
-			if (!seen.has(through) && !/\/node_modules\//.test(through)) {
-				seen.add(through);
-				queue.push(through);
+			if (!SetMethods.has(seen, through) && !(RegExpMethods.exec(/\/node_modules\//, through) !== null)) {
+				SetMethods.add(seen, through);
+				listPush(queue, through);
 			}
 		}
 	}
@@ -1709,7 +1864,8 @@ function isUntaggedModuleFile(ref) {
  * @private
  */
 function frameLocation(line) {
-	const match = /\(([^()]+):\d+:\d+\)\s*$/.exec(line) ?? /^\s*at (?:async )?([^\s()]+):\d+:\d+\s*$/.exec(line);
+	const match =
+		RegExpMethods.exec(/\(([^()]+):\d+:\d+\)\s*$/, line) ?? RegExpMethods.exec(/^\s*at (?:async )?([^\s()]+):\d+:\d+\s*$/, line);
 	return match ? match[1] : null;
 }
 
@@ -1722,14 +1878,14 @@ function frameLocation(line) {
  * @private
  */
 function isModuleRequire() {
-	const lines = ownStackText(64).split("\n").slice(1);
+	const lines = copyList(splitText(ownStackText(64), "\n"), 1);
 	let i = 0;
 	// The resolve hook's own frames, then Node's loader.
 	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;
-	while (i < lines.length && (frameLocation(lines[i]) ?? "node:").startsWith("node:")) i++;
+	while (i < lines.length && StringMethods.startsWith(frameLocation(lines[i]) ?? "node:", "node:")) i++;
 	const caller = i < lines.length ? frameLocation(lines[i]) : null;
 	if (caller === null || slothletCodePath(caller) !== null) return false;
-	return INSTANCE_FRAME.test(caller) || isUntaggedModuleFile(caller);
+	return RegExpMethods.exec(INSTANCE_FRAME, caller) !== null || isUntaggedModuleFile(caller);
 }
 
 /**
@@ -1744,10 +1900,10 @@ function isModuleRequire() {
  */
 function isModuleImport(parentURL, conditions) {
 	if (typeof parentURL === "string") {
-		if (parentURL.includes(MARKER)) return true;
+		if (StringMethods.includes(parentURL, MARKER)) return true;
 		if (
 			slothletCodePath(parentURL) === null &&
-			(parentURL.startsWith("file:") ? isUntaggedModuleFile(parentURL) : MODULE_URLS.has(parentURL))
+			(StringMethods.startsWith(parentURL, "file:") ? isUntaggedModuleFile(parentURL) : SetMethods.has(MODULE_URLS, parentURL))
 		)
 			return true;
 	}
@@ -1813,11 +1969,33 @@ function checkModuleImport(specifier, importer) {
 	const text = typeof specifier === "string" ? specifier : String(specifier);
 	// A module the instance module imports by a URL that is no file's (`data:`): what it imports is held as the
 	// module's own imports are, where Node's loader resolves them.
-	if (/^[a-z][a-z0-9+.-]+:/i.test(text) && !text.startsWith("file:") && !text.startsWith("node:")) MODULE_URLS.add(text);
-	if (isFileSpecifier(text) || /^[A-Za-z]:[\\/]/.test(text)) {
+	// A `data:` or `blob:` URL is code the module wrote: refused unless a rule opens `capability:imports` for it.
+	refuseCodeImport(text, typeof importer === "string" && StringMethods.includes(importer, MARKER) ? importer : null, []);
+	if (
+		RegExpMethods.exec(/^[a-z][a-z0-9+.-]+:/i, text) !== null &&
+		!StringMethods.startsWith(text, "file:") &&
+		!StringMethods.startsWith(text, "node:")
+	)
+		SetMethods.add(MODULE_URLS, text);
+	if (isFileSpecifier(text) || RegExpMethods.exec(/^[A-Za-z]:[\\/]/, text) !== null) {
 		let file = text;
-		if (!text.startsWith("file:") && !(text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text))) file = new URL(text, importer).href;
+		if (
+			!StringMethods.startsWith(text, "file:") &&
+			!(StringMethods.startsWith(text, "/") || RegExpMethods.exec(/^[A-Za-z]:[\\/]/, text) !== null)
+		)
+			file = URLMethods.href(new URL(text, importer));
 		if (isSlothletInternal(file)) throw importRefusal(text, file);
+		// A URL the module wrote out naming an instance, under vite, which does not name the module importing by it: it
+		// loses the tags only slothlet gives and is an edge of that instance's import graph from this module, as Node's
+		// resolve hook has it (#691).
+		const instanceID = StringMethods.includes(text, MARKER)
+			? URLSearchParamsMethods.get(new URLSearchParams(splitQuery(text)[1] ?? ""), "slothlet_instance")
+			: null;
+		if (instanceID) {
+			const untagged = withoutWrittenTags(text);
+			if (typeof importer === "string") recordImport(instanceID, importer, withoutWrittenTags(file));
+			return untagged;
+		}
 	}
 	return specifier;
 }
@@ -1844,6 +2022,34 @@ async function viteImportRefusal(specifier, file) {
 }
 
 /**
+ * The error the vite plugin throws for an `import` statement of a `data:` or `blob:` URL in an instance file:
+ * `CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
+ * @param {string} importer - The importing file.
+ * @returns {Promise<Error>} The error.
+ * @private
+ */
+async function viteCapabilityRefusal(importer) {
+	try {
+		const { SlothletError } = await import("@cldmv/slothlet/errors");
+		const { translate } = await import("@cldmv/slothlet/i18n");
+		// The vite server holds none of the instance's rules: the import is no leaf's it could decide for.
+		const refusal = new SlothletError(
+			"CAPABILITY_REFUSED",
+			{ caller: importer, capability: "imports", route: "import", reason: translate("CAPABILITY_REASON_UNATTRIBUTED") },
+			null,
+			{ validationError: true }
+		);
+		refusal.context.reasonCode = "unattributed";
+		return refusal;
+	} catch {
+		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
+		const error = new PristineError(`CAPABILITY_REFUSED: imports (import) ${importer}`);
+		error.code = "CAPABILITY_REFUSED";
+		return error;
+	}
+}
+
+/**
  * Keep slothlet's own files to slothlet: an import or require a module's code makes that resolves to any file of
  * slothlet's code but the runtime's entry files is refused, however it is spelled (a package subpath, `#imports`, a
  * file URL, an absolute or relative path, `import.meta.resolve`, `require.resolve`). The host's own imports, and
@@ -1857,13 +2063,52 @@ async function viteImportRefusal(specifier, file) {
  */
 function refuseInternalImport(specifier, context, result) {
 	const url = result?.url;
-	if (typeof url === "string" && !url.startsWith("file:") && !url.startsWith("node:") && isModuleImport(context?.parentURL, [])) {
+	if (
+		typeof url === "string" &&
+		!StringMethods.startsWith(url, "file:") &&
+		!StringMethods.startsWith(url, "node:") &&
+		isModuleImport(context?.parentURL, [])
+	) {
 		// A module an instance's file imports by a URL that is no file's: what it imports is held as the file's imports are.
-		MODULE_URLS.add(url);
+		SetMethods.add(MODULE_URLS, url);
 		return;
 	}
 	if (!isSlothletInternal(url)) return;
 	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
+}
+
+/**
+ * The capability check (see `helpers/capability-context`), registered by it as it loads; null until then.
+ * @type {?function(string, string, ?string): void}
+ * @private
+ */
+let CAPABILITY_CHECK = null;
+
+/**
+ * Register the capability check the import hooks ask (see {@link refuseCodeImport}). Taken once.
+ * @param {function(string, string, ?string): void} check - The check.
+ * @returns {void}
+ * @internal
+ */
+function setCapabilityCheck(check) {
+	if (CAPABILITY_CHECK === null && typeof check === "function") CAPABILITY_CHECK = check;
+}
+
+/**
+ * Refuse module code importing a `data:` or `blob:` URL, unless a rule opens `capability:imports` for it: the code a
+ * module would get that way is whatever text it wrote. Asked as the import is resolved, which for an `import()` is
+ * inside the call that made it, so the code making it decides; for a file's own `import` statement, which is resolved
+ * as the file links, the file is the instance's and is refused.
+ * @param {string} specifier - The specifier.
+ * @param {string|null} parentURL - The importer.
+ * @param {Array<string>|undefined} conditions - The resolution's conditions.
+ * @returns {void}
+ * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @private
+ */
+function refuseCodeImport(specifier, parentURL, conditions) {
+	if (CAPABILITY_CHECK === null || typeof specifier !== "string" || !(RegExpMethods.exec(/^(?:data|blob):/i, specifier) !== null)) return;
+	CAPABILITY_CHECK("imports", "import()", isModuleImport(parentURL, conditions ?? []) ? parentURL : null);
 }
 
 /**
@@ -1873,11 +2118,10 @@ function refuseInternalImport(specifier, context, result) {
  * @type {string[]}
  * @private
  */
-const OWN_CODE = [
-	new URL("../../", import.meta.url),
-	new URL("../../../index.mjs", import.meta.url),
-	new URL("../../../index.cjs", import.meta.url)
-].map((u) => toSlashPath(u.href));
+const OWN_CODE = mapList(
+	[new URL("../../", import.meta.url), new URL("../../../index.mjs", import.meta.url), new URL("../../../index.cjs", import.meta.url)],
+	(u) => toSlashPath(URLMethods.href(u))
+);
 
 /**
  * A stack line of a built-in function, which has no location of its own (`Array.map`, `new Promise`, `Promise.all`):
@@ -1897,13 +2141,13 @@ const BUILT_IN_FRAME = /\((?:<anonymous>|native|index \d+)\)\s*$/;
  * @private
  */
 function stackLineLocation(line) {
-	if (/\beval at /.test(line)) return /\(([^()]+?):\d+:\d+\)/.exec(line)?.[1] ?? null;
-	const compiled = /^[^@\s]*@(.+?) line \d+ > (?:eval|Function)\b/.exec(line);
+	if (RegExpMethods.exec(/\beval at /, line) !== null) return RegExpMethods.exec(/\(([^()]+?):\d+:\d+\)/, line)?.[1] ?? null;
+	const compiled = RegExpMethods.exec(/^[^@\s]*@(.+?) line \d+ > (?:eval|Function)\b/, line);
 	if (compiled !== null) return compiled[1];
 	const match =
-		/\(([^()]+):\d+:\d+\)\s*$/.exec(line) ??
-		/^\s*at (?:async )?([^()]+?):\d+:\d+\s*$/.exec(line) ??
-		/^[^@\s]*@(.+?):\d+:\d+\s*$/.exec(line);
+		RegExpMethods.exec(/\(([^()]+):\d+:\d+\)\s*$/, line) ??
+		RegExpMethods.exec(/^\s*at (?:async )?([^()]+?):\d+:\d+\s*$/, line) ??
+		RegExpMethods.exec(/^[^@\s]*@(.+?):\d+:\d+\s*$/, line);
 	return match === null ? null : match[1];
 }
 
@@ -1916,7 +2160,7 @@ function stackLineLocation(line) {
  */
 function isOwnCodeLocation(location) {
 	const path = toSlashPath(location);
-	if (path.startsWith(OWN_CODE[0]) || path === OWN_CODE[1] || path === OWN_CODE[2]) return true;
+	if (StringMethods.startsWith(path, OWN_CODE[0]) || path === OWN_CODE[1] || path === OWN_CODE[2]) return true;
 	return slothletCodePath(location) !== null;
 }
 
@@ -1928,7 +2172,12 @@ function isOwnCodeLocation(location) {
  * @private
  */
 function isModuleCodeLocation(location) {
-	return location.includes(MARKER) || MODULE_URLS.has(location) || isUntaggedModuleFile(location) || isModuleRootLocation(location);
+	return (
+		StringMethods.includes(location, MARKER) ||
+		SetMethods.has(MODULE_URLS, location) ||
+		isUntaggedModuleFile(location) ||
+		isModuleRootLocation(location)
+	);
 }
 
 /**
@@ -1962,16 +2211,17 @@ function mayUseInternal() {
 		return false;
 	}
 	let packageSeen = false;
-	for (const line of stack.split("\n")) {
-		if (!/\S/.test(line) || /^\s*Error\s*$/.test(line)) continue;
+	for (let ofIndex = 0, ofList = splitText(stack, "\n"); ofIndex < ofList.length; ofIndex++) {
+		const line = ofList[ofIndex];
+		if (!(RegExpMethods.exec(/\S/, line) !== null) || RegExpMethods.exec(/^\s*Error\s*$/, line) !== null) continue;
 		const location = stackLineLocation(line);
 		if (location === null) {
-			if (BUILT_IN_FRAME.test(line)) continue;
+			if (RegExpMethods.exec(BUILT_IN_FRAME, line) !== null) continue;
 			return false;
 		}
-		if (location.startsWith("node:") || isOwnCodeLocation(location)) continue;
+		if (StringMethods.startsWith(location, "node:") || isOwnCodeLocation(location)) continue;
 		if (isModuleCodeLocation(location)) return false;
-		if (/\/node_modules\//.test(toSlashPath(location))) {
+		if (RegExpMethods.exec(/\/node_modules\//, toSlashPath(location)) !== null) {
 			packageSeen = true;
 			continue;
 		}
@@ -2016,7 +2266,7 @@ const GUARD_PROXIES = new WeakSet();
  * @internal
  */
 export function isGuardedInternal(value) {
-	return (typeof value === "function" || (typeof value === "object" && value !== null)) && GUARD_PROXIES.has(value);
+	return (typeof value === "function" || (typeof value === "object" && value !== null)) && WeakSetMethods.has(GUARD_PROXIES, value);
 }
 
 /**
@@ -2068,16 +2318,17 @@ const GUARD_TRAPS = [
  */
 export function guardInternal(value, name, file) {
 	if (typeof value !== "function" && (typeof value !== "object" || value === null)) return value;
-	const known = GUARDED.get(value);
+	const known = WeakMapMethods.get(GUARDED, value);
 	if (known !== undefined) return known;
 	const check = () => {
 		if (!mayUseInternal()) throw useRefusal(name, file);
 	};
 	const handler = { __proto__: null };
-	for (const trap of GUARD_TRAPS) {
+	for (let ofIndex = 0, ofList = GUARD_TRAPS; ofIndex < ofList.length; ofIndex++) {
+		const trap = ofList[ofIndex];
 		handler[trap] = (...args) => {
 			check();
-			return Reflect[trap](...args);
+			return Reflect.apply(Reflect[trap], undefined, args);
 		};
 	}
 	let guarded;
@@ -2098,8 +2349,8 @@ export function guardInternal(value, name, file) {
 		};
 	}
 	guarded = new NativeProxy(value, handler);
-	GUARDED.set(value, guarded);
-	GUARD_PROXIES.add(guarded);
+	WeakMapMethods.set(GUARDED, value, guarded);
+	WeakSetMethods.add(GUARD_PROXIES, guarded);
 	return guarded;
 }
 
@@ -2114,9 +2365,9 @@ export function guardInternal(value, name, file) {
  * @private
  */
 function guardedMethod(method, target, name, file) {
-	let byTarget = GUARDED_METHODS.get(method);
-	if (byTarget === undefined) GUARDED_METHODS.set(method, (byTarget = new WeakMap()));
-	let guarded = byTarget.get(target);
+	let byTarget = WeakMapMethods.get(GUARDED_METHODS, method);
+	if (byTarget === undefined) WeakMapMethods.set(GUARDED_METHODS, method, (byTarget = new WeakMap()));
+	let guarded = WeakMapMethods.get(byTarget, target);
 	if (guarded === undefined) {
 		guarded = new NativeProxy(method, {
 			apply(fn, _thisArg, args) {
@@ -2124,8 +2375,8 @@ function guardedMethod(method, target, name, file) {
 				return Reflect.apply(fn, target, args);
 			}
 		});
-		byTarget.set(target, guarded);
-		GUARD_PROXIES.add(guarded);
+		WeakMapMethods.set(byTarget, target, guarded);
+		WeakSetMethods.add(GUARD_PROXIES, guarded);
 	}
 	return guarded;
 }
@@ -2174,7 +2425,7 @@ export function isOwnTopLevelOf(consumer) {
 	} catch {
 		return false;
 	}
-	const lines = stack.split("\n").filter((line) => /^\s*at /.test(line));
+	const lines = filterList(splitText(stack, "\n"), (line) => RegExpMethods.exec(/^\s*at /, line) !== null);
 	let i = 0;
 	while (i < lines.length) {
 		const location = stackLineLocation(lines[i]);
@@ -2184,13 +2435,16 @@ export function isOwnTopLevelOf(consumer) {
 		i++;
 	}
 	// The file's own top level: a frame with a location and no function name.
-	if (i >= lines.length || !/^\s*at (?:async )?[^()]+?:\d+:\d+\s*$/.test(lines[i])) return false;
+	if (i >= lines.length || !(RegExpMethods.exec(/^\s*at (?:async )?[^()]+?:\d+:\d+\s*$/, lines[i]) !== null)) return false;
 	let next = i + 1;
 	// Vite's runner evaluates a module after an await, so the microtask runner's frame sits between.
-	if (next < lines.length && /node:internal\/process\/task_queues/.test(lines[next])) next++;
+	if (next < lines.length && RegExpMethods.exec(/node:internal\/process\/task_queues/, lines[next]) !== null) next++;
 	return (
 		next < lines.length &&
-		/node:internal\/modules\/|\/node_modules\/(?:vite|vitest)\/dist\/[^\s()]*module-(?:runner|evaluator)/.test(lines[next])
+		RegExpMethods.exec(
+			/node:internal\/modules\/|\/node_modules\/(?:vite|vitest)\/dist\/[^\s()]*module-(?:runner|evaluator)/,
+			lines[next]
+		) !== null
 	);
 }
 
@@ -2254,38 +2508,57 @@ function belongsToInstance(specifier, child, parent) {
  * // → "file:///app/lib/state.mjs?slothlet_instance=a"
  */
 export function propagateInstanceQuery(specifier, parent, child) {
-	if (typeof parent !== "string" || !parent.includes(MARKER)) return withoutWrittenHelperTags(parent, child);
-	if (typeof child !== "string" || typeof specifier !== "string" || specifier.startsWith("node:")) return child;
-	if (!(child.startsWith("file:") || child.startsWith("/") || /^[A-Za-z]:[\\/]/.test(child))) return child;
-	const [childBase, childQuery = ""] = splitQuery(child);
+	if (typeof parent !== "string" || !StringMethods.includes(parent, MARKER)) return withoutWrittenHelperTags(parent, child);
+	if (typeof child !== "string" || typeof specifier !== "string" || StringMethods.startsWith(specifier, "node:")) return child;
+	if (!(
+		StringMethods.startsWith(child, "file:") ||
+		StringMethods.startsWith(child, "/") ||
+		RegExpMethods.exec(/^[A-Za-z]:[\\/]/, child) !== null
+	))
+		return child;
+	const unpacked1 = splitQuery(child),
+		childBase = unpacked1[0],
+		childQuery = unpacked1[1] === undefined ? "" : unpacked1[1];
 	const childParams = new URLSearchParams(childQuery);
-	const [parentBase, parentQuery = ""] = splitQuery(parent);
+	const unpacked2 = splitQuery(parent),
+		parentBase = unpacked2[0],
+		parentQuery = unpacked2[1] === undefined ? "" : unpacked2[1];
 	const parentParams = new URLSearchParams(parentQuery);
 	// A child that names its instance itself (a URL the importer wrote out) keeps the instance it names. Which api file
 	// a helper copy is loaded for is never the importer's to write: those tags are dropped and given as below.
-	const written = childParams.has("slothlet_instance");
+	const written = URLSearchParamsMethods.has(childParams, "slothlet_instance");
 	if (written) {
-		if (!HELPER_TAGS.some((key) => childParams.has(key))) return child;
-		for (const key of HELPER_TAGS) childParams.delete(key);
+		// The module-system bridges slothlet serves (require of an ES module) import the URL slothlet built.
+		if (StringMethods.startsWith(parent, ESM_PREFIX) || StringMethods.startsWith(parent, FACADE_PREFIX)) return child;
+		if (!ArrayMethods.some(WRITTEN_TAGS, (key) => URLSearchParamsMethods.has(childParams, key))) return child;
+		for (let ofIndex = 0, ofList = WRITTEN_TAGS; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			URLSearchParamsMethods.delete(childParams, key);
+		}
 	} else {
 		if (!belongsToInstance(specifier, childBase, parent)) return child;
-		for (const key of INSTANCE_QUERY_KEYS) {
-			if (parentParams.has(key)) childParams.set(key, parentParams.get(key));
+		for (let ofIndex = 0, ofList = INSTANCE_QUERY_KEYS; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (URLSearchParamsMethods.has(parentParams, key))
+				URLSearchParamsMethods.set(childParams, key, URLSearchParamsMethods.get(parentParams, key));
 		}
 	}
 	// Helpers loaded once per importing api file: the copy names the api file it is loaded for (the importer, or the
 	// file the importing helper's own copy was loaded for) and that file's mount.
-	if (parentParams.get(HELPERS_PARAM) === HELPERS_PER_MODULE) {
-		childParams.set(HELPERS_PARAM, HELPERS_PER_MODULE);
-		const loadedFor = parentParams.get(HELPERS_FOR_PARAM);
-		childParams.set(HELPERS_FOR_PARAM, loadedFor ?? helperImporterPath(parentBase));
-		const mount = loadedFor === null ? parentParams.get("module") : parentParams.get(HELPERS_MOUNT_PARAM);
-		if (mount !== null) childParams.set(HELPERS_MOUNT_PARAM, mount);
+	if (URLSearchParamsMethods.get(parentParams, HELPERS_PARAM) === HELPERS_PER_MODULE) {
+		URLSearchParamsMethods.set(childParams, HELPERS_PARAM, HELPERS_PER_MODULE);
+		const loadedFor = URLSearchParamsMethods.get(parentParams, HELPERS_FOR_PARAM);
+		URLSearchParamsMethods.set(childParams, HELPERS_FOR_PARAM, loadedFor ?? helperImporterPath(parentBase));
+		const mount =
+			loadedFor === null
+				? URLSearchParamsMethods.get(parentParams, "module")
+				: URLSearchParamsMethods.get(parentParams, HELPERS_MOUNT_PARAM);
+		if (mount !== null) URLSearchParamsMethods.set(childParams, HELPERS_MOUNT_PARAM, mount);
 	}
-	const hashIdx = childBase.indexOf("#");
-	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
-	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
-	return `${base}?${childParams.toString()}${hash}`;
+	const hashIdx = StringMethods.indexOf(childBase, "#");
+	const base = hashIdx === -1 ? childBase : StringMethods.slice(childBase, 0, hashIdx);
+	const hash = hashIdx === -1 ? "" : StringMethods.slice(childBase, hashIdx);
+	return `${base}?${URLSearchParamsMethods.toString(childParams)}${hash}`;
 }
 
 /**
@@ -2297,6 +2570,15 @@ export function propagateInstanceQuery(specifier, parent, child) {
 const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
 
 /**
+ * The tags a URL an importer writes out never keeps: the helper tags, and the mount a leaf's own module is loaded
+ * under, which only slothlet's loader gives (#691). A file imported under a mount tag its importer wrote is a module
+ * of the importer's making, not the leaf's.
+ * @type {string[]}
+ * @private
+ */
+const WRITTEN_TAGS = concatLists(HELPER_TAGS, ["module"]);
+
+/**
  * A resolved child without the helper tags its URL carries, when its importer is neither an instance file nor one of
  * slothlet's own: a package's file, the host's, evaluated code. A URL is text any code can write, and a copy's frames
  * are read by those tags, so a file imported under tags its importer wrote is loaded as the same file without them.
@@ -2306,18 +2588,35 @@ const HELPER_TAGS = [HELPERS_PARAM, HELPERS_FOR_PARAM, HELPERS_MOUNT_PARAM];
  * @private
  */
 function withoutWrittenHelperTags(parent, child) {
-	if (typeof child !== "string" || !child.includes(MARKER)) return child;
-	if (!HELPER_TAGS.some((key) => child.includes(`${key}=`))) return child;
-	if (typeof parent === "string" && OWN_PREFIXES.some((prefix) => toSlashPath(parent).startsWith(prefix))) return child;
+	if (typeof parent === "string" && ArrayMethods.some(OWN_PREFIXES, (prefix) => StringMethods.startsWith(toSlashPath(parent), prefix)))
+		return child;
 	// Slothlet's loader imports a leaf from its own files; a first import with no importer is the host's entry.
 	if (typeof parent !== "string") return child;
-	const [childBase, childQuery = ""] = splitQuery(child);
+	return withoutWrittenTags(child);
+}
+
+/**
+ * A resolved child without the tags only slothlet gives (see {@link WRITTEN_TAGS}).
+ * @param {string} child - The resolved child URL or id.
+ * @returns {string} `child`, without them.
+ * @private
+ */
+function withoutWrittenTags(child) {
+	if (typeof child !== "string" || !StringMethods.includes(child, MARKER)) return child;
+	if (!ArrayMethods.some(WRITTEN_TAGS, (key) => URLSearchParamsMethods.has(new URLSearchParams(splitQuery(child)[1] ?? ""), key)))
+		return child;
+	const unpacked3 = splitQuery(child),
+		childBase = unpacked3[0],
+		childQuery = unpacked3[1] === undefined ? "" : unpacked3[1];
 	const childParams = new URLSearchParams(childQuery);
-	for (const key of HELPER_TAGS) childParams.delete(key);
-	const hashIdx = childBase.indexOf("#");
-	const base = hashIdx === -1 ? childBase : childBase.slice(0, hashIdx);
-	const hash = hashIdx === -1 ? "" : childBase.slice(hashIdx);
-	return `${base}?${childParams.toString()}${hash}`;
+	for (let ofIndex = 0, ofList = WRITTEN_TAGS; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		URLSearchParamsMethods.delete(childParams, key);
+	}
+	const hashIdx = StringMethods.indexOf(childBase, "#");
+	const base = hashIdx === -1 ? childBase : StringMethods.slice(childBase, 0, hashIdx);
+	const hash = hashIdx === -1 ? "" : StringMethods.slice(childBase, hashIdx);
+	return `${base}?${URLSearchParamsMethods.toString(childParams)}${hash}`;
 }
 
 /**
@@ -2327,10 +2626,12 @@ function withoutWrittenHelperTags(parent, child) {
  * @private
  */
 function splitQuery(ref) {
-	const q = ref.indexOf("?");
+	const q = StringMethods.indexOf(ref, "?");
 	if (q === -1) return [ref];
-	const hash = ref.indexOf("#", q);
-	return hash === -1 ? [ref.slice(0, q), ref.slice(q + 1)] : [ref.slice(0, q) + ref.slice(hash), ref.slice(q + 1, hash)];
+	const hash = StringMethods.indexOf(ref, "#", q);
+	return hash === -1
+		? [StringMethods.slice(ref, 0, q), StringMethods.slice(ref, q + 1)]
+		: [StringMethods.slice(ref, 0, q) + StringMethods.slice(ref, hash), StringMethods.slice(ref, q + 1, hash)];
 }
 
 /**
@@ -2377,60 +2678,88 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 	)
 		return requireFn(resolved);
 
-	if (!SCOPE_KEYS.has(instanceID)) SCOPE_KEYS.set(instanceID, Objects.freeze({}));
+	if (!MapMethods.has(SCOPE_KEYS, instanceID)) MapMethods.set(SCOPE_KEYS, instanceID, Objects.freeze({}));
 	let scope;
 	if (importer === null) {
-		scope = SCOPES.get(instanceID);
+		scope = MapMethods.get(SCOPES, instanceID);
 		if (!scope) {
 			scope = new Map();
-			SCOPES.set(instanceID, scope);
+			MapMethods.set(SCOPES, instanceID, scope);
 		}
 	} else {
 		// Helpers loaded once per importing api file: that file's own copies.
-		let copies = COPIES.get(instanceID);
-		if (!copies) COPIES.set(instanceID, (copies = new Map()));
+		let copies = MapMethods.get(COPIES, instanceID);
+		if (!copies) MapMethods.set(COPIES, instanceID, (copies = new Map()));
 		const copyKey = helperCopyKey(importer, mount);
-		scope = copies.get(copyKey);
-		if (!scope) copies.set(copyKey, (scope = new Map()));
+		scope = MapMethods.get(copies, copyKey);
+		if (!scope) MapMethods.set(copies, copyKey, (scope = new Map()));
 	}
 	const owned = (file) => file === resolved || isInstanceScopedFile(file, resolved);
 	const keep = (file) => !(fresh && file === resolved);
 
 	// Set aside every global entry the require must not share, then serve this instance's copies.
 	const setAside = new Map();
-	for (const file of Objects.keys(cache)) {
+	for (let ofIndex = 0, ofList = Objects.keys(cache); ofIndex < ofList.length; ofIndex++) {
+		const file = ofList[ofIndex];
 		if (owned(file)) {
-			setAside.set(file, cache[file]);
+			MapMethods.set(setAside, file, cache[file]);
 			delete cache[file];
 		}
 	}
 	const served = [];
-	for (const [file, mod] of scope) {
+	for (const ofEntry of mapEntries(scope)) {
+		const file = ofEntry[0],
+			mod = ofEntry[1];
 		if (!keep(file)) continue;
-		if (cache[file] !== undefined) setAside.set(file, cache[file]);
+		if (cache[file] !== undefined) MapMethods.set(setAside, file, cache[file]);
 		cache[file] = mod;
-		served.push(file);
+		listPush(served, file);
 	}
 
 	if (fresh) {
 		// A leaf is not kept in the scope (it is evaluated anew each load), but its frames are the instance's code.
-		if (!LEAVES.has(instanceID)) LEAVES.set(instanceID, new Set());
-		LEAVES.get(instanceID).add(resolved);
+		if (!MapMethods.has(LEAVES, instanceID)) MapMethods.set(LEAVES, instanceID, new Set());
+		SetMethods.add(MapMethods.get(LEAVES, instanceID), resolved);
 	}
-	ACTIVE = { instanceID, anchor: resolved, importer, mount };
+	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh };
 	try {
 		return requireFn(resolved);
 	} finally {
 		ACTIVE = outer;
 		recordScopeRequires(instanceID, cache, owned);
 		// Collect this instance's (possibly new) copies, then put the global cache back.
-		for (const file of [...Objects.keys(cache).filter(owned), ...served]) {
+		for (let ofIndex = 0, ofList = concatLists(filterList(Objects.keys(cache), owned), served); ofIndex < ofList.length; ofIndex++) {
+			const file = ofList[ofIndex];
 			if (!(file in cache)) continue;
-			if (keep(file)) scope.set(file, cache[file]);
+			if (keep(file)) MapMethods.set(scope, file, cache[file]);
 			delete cache[file];
 		}
-		for (const [file, mod] of setAside) cache[file] = mod;
+		for (const ofEntry of mapEntries(setAside)) {
+			const file = ofEntry[0],
+				mod = ofEntry[1];
+			cache[file] = mod;
+		}
 	}
+}
+
+/**
+ * How an instance's scope loads a CommonJS file Node is loading (see {@link scopeRequire}): `"leaf"` for the file the
+ * scope is loading as its leaf, `"helper"` for any other file required while a scope is active (a helper file, or a
+ * leaf's file an api file requires itself, before or after slothlet loads that leaf), null outside every scope.
+ * @param {string} url - The file's URL.
+ * @returns {"leaf"|"helper"|null} How it loads.
+ * @private
+ */
+function scopeLoadKind(url) {
+	const active = ACTIVE;
+	if (active === null) return null;
+	let filePath;
+	try {
+		filePath = NODE.url.fileURLToPath(splitQuery(url)[0]);
+	} catch {
+		return null;
+	}
+	return active.fresh && filePath === active.anchor ? "leaf" : "helper";
 }
 
 /**
@@ -2454,12 +2783,14 @@ const RECORDED_REQUIRES = new WeakMap();
  * @private
  */
 function recordScopeRequires(instanceID, cache, owned) {
-	for (const file of Objects.keys(cache)) {
+	for (let ofIndex = 0, ofList = Objects.keys(cache); ofIndex < ofList.length; ofIndex++) {
+		const file = ofList[ofIndex];
 		if (!owned(file)) continue;
 		const children = cache[file]?.children;
-		if (!Arrays.isArray(children) || RECORDED_REQUIRES.get(cache[file]) === children.length) continue;
-		RECORDED_REQUIRES.set(cache[file], children.length);
-		for (const child of children) {
+		if (!Arrays.isArray(children) || WeakMapMethods.get(RECORDED_REQUIRES, cache[file]) === children.length) continue;
+		WeakMapMethods.set(RECORDED_REQUIRES, cache[file], children.length);
+		for (let ofIndex = 0, ofList = children; ofIndex < ofList.length; ofIndex++) {
+			const child = ofList[ofIndex];
 			const required = child?.filename;
 			if (typeof required === "string" && required !== file && owned(required)) recordImport(instanceID, file, required);
 		}
@@ -2532,20 +2863,32 @@ function instanceCommonJSVersion(instanceID) {
  * @private
  */
 function releaseScope(instanceID) {
-	SCOPES.delete(instanceID);
-	COPIES.delete(instanceID);
-	LEAVES.delete(instanceID);
-	SCOPE_KEYS.delete(instanceID);
-	IMPORT_GRAPHS.delete(instanceID);
-	GRAPH_VIEWS.delete(instanceID);
-	CLAIMS.delete(instanceID);
-	OWN_CLAIMS.delete(instanceID);
-	for (const [ticket, held] of TICKETS) if (held.instanceID === instanceID) TICKETS.delete(ticket);
+	MapMethods.delete(SCOPES, instanceID);
+	MapMethods.delete(COPIES, instanceID);
+	MapMethods.delete(LEAVES, instanceID);
+	MapMethods.delete(SCOPE_KEYS, instanceID);
+	MapMethods.delete(IMPORT_GRAPHS, instanceID);
+	MapMethods.delete(GRAPH_VIEWS, instanceID);
+	MapMethods.delete(CLAIMS, instanceID);
+	SetMethods.delete(OWN_CLAIMS, instanceID);
+	for (const ofEntry of mapEntries(TICKETS)) {
+		const ticket = ofEntry[0],
+			held = ofEntry[1];
+		if (held.instanceID === instanceID) MapMethods.delete(TICKETS, ticket);
+	}
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
-	for (const key of LOADED_SCRIPTS.keys()) {
+	for (
+		let ofIndex = 0, ofList = concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS));
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const key = ofList[ofIndex];
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
-		LOADED_SCRIPTS.delete(key);
-		LOADED_TEXTS.delete(key);
+		MapMethods.delete(LOADED_SCRIPTS, key);
+		MapMethods.delete(LOADED_TEXTS, key);
+		MapMethods.delete(SEALS, key);
+		MapMethods.delete(HELPER_SCRIPTS, key);
+		MapMethods.delete(HELPER_SEALS, key);
 	}
 }
 
@@ -2559,20 +2902,20 @@ function releaseScope(instanceID) {
  * @private
  */
 function claimHere(instanceID) {
-	if (typeof instanceID !== "string" || instanceID === "" || CLAIMS.has(instanceID)) return null;
+	if (typeof instanceID !== "string" || instanceID === "" || MapMethods.has(CLAIMS, instanceID)) return null;
 	// What a URL carrying the ID had recorded before the ID was claimed is not the claimer's.
-	if (SCOPE_KEYS.has(instanceID) || IMPORT_GRAPHS.has(instanceID)) releaseScope(instanceID);
+	if (MapMethods.has(SCOPE_KEYS, instanceID) || MapMethods.has(IMPORT_GRAPHS, instanceID)) releaseScope(instanceID);
 	const handle = Objects.freeze({
 		instanceID,
 		require: (filePath, options) => {
-			if (CLAIMS.get(instanceID) !== handle) throw new TypeError(`The files of instance "${instanceID}" have been released.`);
+			if (MapMethods.get(CLAIMS, instanceID) !== handle) throw new TypeError(`The files of instance "${instanceID}" have been released.`);
 			return scopeRequire(filePath, instanceID, options);
 		},
 		release: () => {
-			if (CLAIMS.get(instanceID) === handle) releaseScope(instanceID);
+			if (MapMethods.get(CLAIMS, instanceID) === handle) releaseScope(instanceID);
 		}
 	});
-	CLAIMS.set(instanceID, handle);
+	MapMethods.set(CLAIMS, instanceID, handle);
 	return handle;
 }
 
@@ -2594,7 +2937,7 @@ function claimHere(instanceID) {
 function claimInstanceScope(instanceID) {
 	const handle = sharedState().claim(instanceID) ?? null;
 	// Claimed by this copy's own slothlet: its files are given this copy's runtime (see isOtherCopysFile).
-	if (handle && isKeeper()) OWN_CLAIMS.add(instanceID);
+	if (handle && isKeeper()) SetMethods.add(OWN_CLAIMS, instanceID);
 	return handle;
 }
 
@@ -2607,11 +2950,11 @@ function claimInstanceScope(instanceID) {
  * @private
  */
 function unheldScope(instanceID) {
-	let handle = UNHELD.get(instanceID);
+	let handle = MapMethods.get(UNHELD, instanceID);
 	if (!handle) {
 		handle = claimInstanceScope(instanceID);
 		if (!handle) throw new TypeError(`The files of instance "${instanceID}" are loaded by the instance alone.`);
-		UNHELD.set(instanceID, handle);
+		MapMethods.set(UNHELD, instanceID, handle);
 	}
 	return handle;
 }
@@ -2646,13 +2989,13 @@ function requireInInstance(filePath, instanceID, options) {
  */
 function releaseInstanceScope(instanceID) {
 	if (instanceID == null) return;
-	const handle = UNHELD.get(instanceID);
+	const handle = MapMethods.get(UNHELD, instanceID);
 	if (handle) {
-		UNHELD.delete(instanceID);
+		MapMethods.delete(UNHELD, instanceID);
 		handle.release();
 		return;
 	}
-	if (isKeeper() && !CLAIMS.has(instanceID)) releaseScope(instanceID);
+	if (isKeeper() && !MapMethods.has(CLAIMS, instanceID)) releaseScope(instanceID);
 }
 
 /**
@@ -2699,13 +3042,18 @@ function requireESM(url) {
  */
 function requireFromModule(url, format, stub) {
 	const cache = NODE.module.createRequire(import.meta.url).cache;
-	for (const key of [stub?.id, stub?.filename]) if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	for (let ofIndex = 0, ofList = [stub?.id, stub?.filename]; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key === "string" && cache[key] === stub) delete cache[key];
+	}
 	if (format === "module") return requireESM(url);
-	const [base, query = ""] = splitQuery(url);
+	const unpacked4 = splitQuery(url),
+		base = unpacked4[0],
+		query = unpacked4[1] === undefined ? "" : unpacked4[1];
 	const params = new URLSearchParams(query);
-	return scopeRequire(NODE.url.fileURLToPath(base), params.get("slothlet_instance"), {
+	return scopeRequire(NODE.url.fileURLToPath(base), URLSearchParamsMethods.get(params, "slothlet_instance"), {
 		importer: helperCopyImporter(params),
-		mount: params.get(HELPERS_MOUNT_PARAM)
+		mount: URLSearchParamsMethods.get(params, HELPERS_MOUNT_PARAM)
 	});
 }
 
@@ -2722,7 +3070,7 @@ function requireFromModule(url, format, stub) {
  */
 function mintTicket(instanceID, job) {
 	const ticket = HOST.randomUUID();
-	TICKETS.set(ticket, { instanceID, job });
+	MapMethods.set(TICKETS, ticket, { instanceID, job });
 	return ticket;
 }
 
@@ -2737,9 +3085,9 @@ function mintTicket(instanceID, job) {
  * @private
  */
 function redeemTicket(ticket) {
-	const held = TICKETS.get(ticket);
+	const held = MapMethods.get(TICKETS, ticket);
 	if (!held) throw new TypeError("This code was not generated by slothlet's load hook for this load.");
-	TICKETS.delete(ticket);
+	MapMethods.delete(TICKETS, ticket);
 	const { job } = held;
 	return Objects.freeze({
 		requireCJS: () => job(),
@@ -2775,20 +3123,23 @@ function setCallerCheck(check) {
  * @private
  */
 function requireCJSFromRunner(filePath, instanceID) {
-	const previousLimit = PristineError.stackTraceLimit;
-	PristineError.stackTraceLimit = 64;
-	let entry;
-	try {
-		entry = new PristineError();
-	} finally {
-		PristineError.stackTraceLimit = previousLimit;
-	}
-	const location = CALLER_CHECK?.(entry) ?? null;
+	// Made by slothlet's own realm where there is one (see helpers/stack-read), whatever the global stack settings hold.
+	const entry = unreadError(64);
+	const location = entry === null ? null : (CALLER_CHECK?.(entry) ?? null);
 	if (typeof location === "string") {
-		const [base, query = ""] = splitQuery(location);
+		const unpacked5 = splitQuery(location),
+			base = unpacked5[0],
+			query = unpacked5[1] === undefined ? "" : unpacked5[1];
 		const params = new URLSearchParams(query);
-		if (toSlashPath(base) === toSlashPath(String(filePath)) && params.get("slothlet_instance") === instanceID && instanceID) {
-			return scopeRequire(filePath, instanceID, { importer: helperCopyImporter(params), mount: params.get(HELPERS_MOUNT_PARAM) });
+		if (
+			toSlashPath(base) === toSlashPath(String(filePath)) &&
+			URLSearchParamsMethods.get(params, "slothlet_instance") === instanceID &&
+			instanceID
+		) {
+			return scopeRequire(filePath, instanceID, {
+				importer: helperCopyImporter(params),
+				mount: URLSearchParamsMethods.get(params, HELPERS_MOUNT_PARAM)
+			});
 		}
 	}
 	throw new TypeError("requireCJS is the entry point of the wrapper slothlet's vite plugin generates for a CommonJS helper.");
@@ -2804,7 +3155,11 @@ function requireCJSFromRunner(filePath, instanceID) {
  */
 function hasCondition(conditions, name) {
 	if (conditions == null) return false;
-	return typeof conditions.has === "function" ? conditions.has(name) : Arrays.prototype.includes.call(conditions, name);
+	return Arrays.isArray(conditions)
+		? ArrayMethods.includes(conditions, name)
+		: conditions instanceof Set
+			? SetMethods.has(conditions, name)
+			: false;
 }
 
 /**
@@ -2823,7 +3178,13 @@ function hasCondition(conditions, name) {
  */
 function markScopedRequire(specifier, context, result, active) {
 	const url = result?.url;
-	if (typeof url !== "string" || !url.startsWith("file:") || url.includes("?") || /\.(?:cjs|json|node)$/.test(url)) return result;
+	if (
+		typeof url !== "string" ||
+		!StringMethods.startsWith(url, "file:") ||
+		StringMethods.includes(url, "?") ||
+		RegExpMethods.exec(/\.(?:cjs|json|node)$/, url) !== null
+	)
+		return result;
 	if (!hasCondition(context?.conditions, "require")) return result;
 	const parent = context.parentURL;
 	if (typeof parent !== "string" || !isInstanceScopedFile(parent, active.anchor) || !belongsToInstance(specifier, url, parent))
@@ -2831,11 +3192,11 @@ function markScopedRequire(specifier, context, result, active) {
 	const query = new URLSearchParams({ slothlet_instance: active.instanceID });
 	// Inside the copies of one api file (`helpers: "module"`), the ES module is that file's copy too.
 	if (active.importer) {
-		query.set(HELPERS_PARAM, HELPERS_PER_MODULE);
-		query.set(HELPERS_FOR_PARAM, active.importer);
-		if (active.mount) query.set(HELPERS_MOUNT_PARAM, active.mount);
+		URLSearchParamsMethods.set(query, HELPERS_PARAM, HELPERS_PER_MODULE);
+		URLSearchParamsMethods.set(query, HELPERS_FOR_PARAM, active.importer);
+		if (active.mount) URLSearchParamsMethods.set(query, HELPERS_MOUNT_PARAM, active.mount);
 	}
-	query.set(REQUIRE_PARAM, "1");
+	URLSearchParamsMethods.set(query, REQUIRE_PARAM, "1");
 	return { ...result, url: `${url}?${query}` };
 }
 
@@ -2874,21 +3235,33 @@ export function commonJSWrapperSource(filePath, instanceID, source, importer = n
 function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
 	const { readFileSync } = NODE.fs;
 	const { createRequire } = NODE.module;
-	const text = source == null ? readFileSync(filePath, "utf8") : typeof source === "string" ? source : new TextDecoder().decode(source);
-	const names = new Set(
+	const text =
+		source == null
+			? readFileSync(filePath, "utf8")
+			: typeof source === "string"
+				? source
+				: TextDecoderMethods.decode(new TextDecoder(), source);
+	const names = setFrom(
 		commonJSExportNames(filePath, text, {
 			readFile: (file) => readFileSync(file, "utf8"),
 			resolve: (specifier, fromFile) => createRequire(fromFile).resolve(specifier)
 		})
 	);
 	// Like Node, a module that has already run contributes the keys it actually exports.
-	const loaded = (
-		importer === null ? SCOPES.get(instanceID) : COPIES.get(instanceID)?.get(helperCopyKey(helperImporterPath(importer), mount))
-	)?.get(filePath);
+	const loadedIn =
+		importer === null
+			? MapMethods.get(SCOPES, instanceID)
+			: MapMethods.get(COPIES, instanceID) == null
+				? undefined
+				: MapMethods.get(MapMethods.get(COPIES, instanceID), helperCopyKey(helperImporterPath(importer), mount));
+	const loaded = loadedIn == null ? undefined : MapMethods.get(loadedIn, filePath);
 	if (loaded?.loaded && loaded.exports !== null && (typeof loaded.exports === "object" || typeof loaded.exports === "function")) {
-		for (const key of Objects.keys(loaded.exports)) if (key !== "default" && key.isWellFormed()) names.add(key);
+		for (let ofIndex = 0, ofList = Objects.keys(loaded.exports); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (key !== "default" && StringMethods.isWellFormed(key)) SetMethods.add(names, key);
+		}
 	}
-	names.delete("module.exports");
+	SetMethods.delete(names, "module.exports");
 	const lines = [
 		`const m = ${entry}.requireCJS(${JSON.stringify(filePath)}, ${JSON.stringify(instanceID)}${
 			importer === null ? "" : `, ${JSON.stringify(importer)}, ${JSON.stringify(mount)}`
@@ -2897,11 +3270,11 @@ function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
 		'export { m as "module.exports" };'
 	];
 	let n = 0;
-	for (const name of names) {
-		lines.push(`const n${n} = m == null ? undefined : m[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
+	for (const name of setValues(names)) {
+		listPush(lines, `const n${n} = m == null ? undefined : m[${JSON.stringify(name)}];`, `export { n${n} as ${JSON.stringify(name)} };`);
 		n++;
 	}
-	return lines.join("\n") + "\n";
+	return ArrayMethods.join(lines, "\n") + "\n";
 }
 
 /**
@@ -2912,7 +3285,9 @@ function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
  * @private
  */
 function helperCopyImporter(params) {
-	return params.get(HELPERS_PARAM) === HELPERS_PER_MODULE ? params.get(HELPERS_FOR_PARAM) : null;
+	return URLSearchParamsMethods.get(params, HELPERS_PARAM) === HELPERS_PER_MODULE
+		? URLSearchParamsMethods.get(params, HELPERS_FOR_PARAM)
+		: null;
 }
 
 /**
@@ -2924,12 +3299,12 @@ function helperCopyImporter(params) {
  * @private
  */
 function loadInstanceModule(url, context, nextLoad) {
-	if (url.startsWith(ESM_PREFIX)) {
-		const target = JSON.stringify(url.slice(ESM_PREFIX.length));
+	if (StringMethods.startsWith(url, ESM_PREFIX)) {
+		const target = JSON.stringify(StringMethods.slice(url, ESM_PREFIX.length));
 		return { format: "module", shortCircuit: true, source: `import * as ns from ${target};\nexport { ns as "module.exports" };\n` };
 	}
-	if (url.startsWith(FACADE_PREFIX)) {
-		const target = JSON.stringify(url.slice(FACADE_PREFIX.length));
+	if (StringMethods.startsWith(url, FACADE_PREFIX)) {
+		const target = JSON.stringify(StringMethods.slice(url, FACADE_PREFIX.length));
 		return {
 			format: "module",
 			shortCircuit: true,
@@ -2937,43 +3312,45 @@ function loadInstanceModule(url, context, nextLoad) {
 		};
 	}
 	const result = nextLoad(url, context);
-	if (!url.startsWith("file:")) return result;
-	const [base, query = ""] = splitQuery(url);
+	if (!StringMethods.startsWith(url, "file:")) return result;
+	const unpacked6 = splitQuery(url),
+		base = unpacked6[0],
+		query = unpacked6[1] === undefined ? "" : unpacked6[1];
 	const params = new URLSearchParams(query);
 	// A CommonJS file's source is recorded as it is loaded, as an ES module's is below (#597) — but not a package's
 	// under `node_modules` as written: frame placement hashes such a file from disk when it needs to.
 	if (shouldRecordCommonJS(base, result)) recordLoadedSource(url, result);
-	if (params.has(MODULE_REQUIRE_PARAM)) {
+	if (URLSearchParamsMethods.has(params, MODULE_REQUIRE_PARAM)) {
 		// require() made by an instance's ES module: the instance's copy, from a stub that leaves Node's cache (#755).
-		params.delete(MODULE_REQUIRE_PARAM);
+		URLSearchParamsMethods.delete(params, MODULE_REQUIRE_PARAM);
 		const target = `${base}?${params}`;
 		const format = result?.format === "module" || result?.format === "module-typescript" ? "module" : "commonjs";
-		const ticket = mintTicket(params.get("slothlet_instance"), (stub) => requireFromModule(target, format, stub));
+		const ticket = mintTicket(URLSearchParamsMethods.get(params, "slothlet_instance"), (stub) => requireFromModule(target, format, stub));
 		return {
 			format: "commonjs",
 			shortCircuit: true,
 			source: `module.exports = ${STATE_REF}.redeem(${JSON.stringify(ticket)}).requireFromModule(${JSON.stringify(target)}, ${JSON.stringify(format)}, module);\n`
 		};
 	}
-	if (params.has(REQUIRE_PARAM)) {
+	if (URLSearchParamsMethods.has(params, REQUIRE_PARAM)) {
 		// require() of a file in an instance scope: an ES module is served the instance's copy;
 		// anything else is CommonJS (or JSON/addon) and already served by the scope's private cache.
 		if (result?.format !== "module") return result;
-		params.delete(REQUIRE_PARAM);
+		URLSearchParamsMethods.delete(params, REQUIRE_PARAM);
 		const target = `${base}?${params}`;
-		const ticket = mintTicket(params.get("slothlet_instance"), () => requireESM(target));
+		const ticket = mintTicket(URLSearchParamsMethods.get(params, "slothlet_instance"), () => requireESM(target));
 		return {
 			format: "commonjs",
 			shortCircuit: true,
 			source: `module.exports = ${STATE_REF}.redeem(${JSON.stringify(ticket)}).requireESM(${JSON.stringify(target)});\n`
 		};
 	}
-	const instanceID = params.get("slothlet_instance");
-	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) recordLoadedSource(url, result);
+	const instanceID = URLSearchParamsMethods.get(params, "slothlet_instance");
+	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) return sealLoadedSource(url, result);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	const filePath = NODE.url.fileURLToPath(base);
 	const importer = helperCopyImporter(params);
-	const mount = params.get(HELPERS_MOUNT_PARAM);
+	const mount = URLSearchParamsMethods.get(params, HELPERS_MOUNT_PARAM);
 	const ticket = mintTicket(instanceID, () => scopeRequire(filePath, instanceID, { importer, mount }));
 	return {
 		format: "module",
@@ -3008,7 +3385,7 @@ function isCommonJSLoad(result) {
  */
 function shouldRecordCommonJS(url, result) {
 	if (!isCommonJSLoad(result)) return false;
-	return isTypeScriptLoad(result) || !/\/node_modules\//.test(splitQuery(url)[0]);
+	return isTypeScriptLoad(result) || !(RegExpMethods.exec(/\/node_modules\//, splitQuery(url)[0]) !== null);
 }
 
 /**
@@ -3037,10 +3414,10 @@ export const SCRIPTS_PER_KEY = 16;
  * @internal
  */
 export function rememberNewest(hashes, hash) {
-	const index = hashes.indexOf(hash);
-	if (index !== -1) hashes.splice(index, 1);
-	hashes.push(hash);
-	if (hashes.length > SCRIPTS_PER_KEY) hashes.splice(0, hashes.length - SCRIPTS_PER_KEY);
+	const index = ArrayMethods.indexOf(hashes, hash);
+	if (index !== -1) listSplice(hashes, index, 1);
+	listPush(hashes, hash);
+	if (hashes.length > SCRIPTS_PER_KEY) listSplice(hashes, 0, hashes.length - SCRIPTS_PER_KEY);
 }
 
 /**
@@ -3078,16 +3455,13 @@ function setScriptKey(keyOf) {
  * stripped.
  * @param {string} url - The module URL, query included.
  * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
+ * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}): its hash is listed there.
  * @returns {void}
  * @private
  */
-function recordLoadedSource(url, result) {
-	const source = result?.source;
-	if (source === undefined || source === null) return;
-	let text;
-	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
-	else if (ArrayBuffers.isView(source) || source instanceof ArrayBuffer) text = HOST.decode(source);
-	else return;
+function recordLoadedSource(url, result, helper = false) {
+	let text = loadedText(result);
+	if (text === null) return;
 	if (isTypeScriptLoad(result)) {
 		const strip = STRIP_TYPESCRIPT_TYPES;
 		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
@@ -3104,22 +3478,66 @@ function recordLoadedSource(url, result) {
 	}
 	const hash = HOST.sha256(text);
 	const key = scriptKeyOf(url);
-	let hashes = LOADED_SCRIPTS.get(key);
-	if (!hashes) LOADED_SCRIPTS.set(key, (hashes = []));
+	// A helper load is listed apart from the file's own loads (see HELPER_SCRIPTS).
+	const lists = helper ? HELPER_SCRIPTS : LOADED_SCRIPTS;
+	let hashes = MapMethods.get(lists, key);
+	if (!hashes) MapMethods.set(lists, key, (hashes = []));
 	rememberNewest(hashes, hash);
 	// The text itself, for where each leaf's function sits in it (see LOADED_TEXTS); only the sources still listed.
-	let texts = LOADED_TEXTS.get(key);
-	if (!texts) LOADED_TEXTS.set(key, (texts = new Map()));
-	texts.set(hash, text);
-	for (const known of texts.keys()) if (!hashes.includes(known)) texts.delete(known);
+	let texts = MapMethods.get(LOADED_TEXTS, key);
+	if (!texts) MapMethods.set(LOADED_TEXTS, key, (texts = new Map()));
+	MapMethods.set(texts, hash, text);
+	const own = MapMethods.get(LOADED_SCRIPTS, key) ?? [];
+	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
+	for (const known of mapKeys(texts))
+		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
+}
+
+/**
+ * A load result's source as the text the engine compiles: decoded as UTF-8, without a byte-order mark, which both
+ * loaders drop.
+ * @param {{source?: string|ArrayBufferView|ArrayBuffer}|undefined} result - The load hook's result.
+ * @returns {string|null} The text, or null when the result carries none.
+ * @private
+ */
+function loadedText(result) {
+	const source = result?.source;
+	if (typeof source === "string") return StringMethods.charCodeAt(source, 0) === 0xfeff ? StringMethods.slice(source, 1) : source;
+	if (source !== undefined && source !== null && (ArrayBuffers.isView(source) || source instanceof ArrayBuffer)) return HOST.decode(source);
+	return null;
+}
+
+/**
+ * Give a source slothlet loads for an instance a comment no one else can write, at its end, and record it (see
+ * {@link recordLoadedSource}). V8 reports a frame's script by the hash of the text it compiled, and anyone can read a
+ * file and compile it again under its name (`vm.compileFunction`, `Module#_compile`, `vm.SourceTextModule`): the
+ * comment, a random value drawn for the file's script key (see {@link SEALS}), makes the script slothlet loaded hash
+ * as no copy made from the file can (#691). It ends the text, so no line or column of the file's own code moves.
+ * @param {string} url - The module URL, query included.
+ * @param {object} result - The load hook's result.
+ * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}), sealed with the key's helper
+ *   value.
+ * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
+ * @private
+ */
+function sealLoadedSource(url, result, helper = false) {
+	const text = loadedText(result);
+	if (text === null) return result;
+	const key = scriptKeyOf(url);
+	const seals = helper ? HELPER_SEALS : SEALS;
+	let seal = MapMethods.get(seals, key);
+	if (seal === undefined) MapMethods.set(seals, key, (seal = HOST.randomUUID()));
+	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
+	recordLoadedSource(url, sealed, helper);
+	return sealed;
 }
 
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
  * @internal
  */
 function loadedScriptLookup(key, hash) {
@@ -3181,7 +3599,7 @@ export function recordedScriptCount() {
  * @internal
  */
 function scriptKeyInstance(key) {
-	return key.split("\u0000")[1] || null;
+	return splitText(key, "\u0000")[1] || null;
 }
 
 /**
@@ -3212,16 +3630,20 @@ function scriptKeyInstance(key) {
  */
 function applyToResult(specifier, context, result) {
 	const parentURL = context?.parentURL;
-	if (typeof parentURL === "string" && parentURL.includes(MARKER)) {
+	if (typeof parentURL === "string" && StringMethods.includes(parentURL, MARKER)) {
 		const url = propagateInstanceQuery(specifier, parentURL, result?.url);
 		// The child is the instance's own copy: an edge of its import graph.
-		if (typeof url === "string" && url.includes(MARKER)) {
-			const instanceID = new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance");
+		if (typeof url === "string" && StringMethods.includes(url, MARKER)) {
+			const instanceID = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(parentURL)[1] ?? ""), "slothlet_instance");
 			if (instanceID) recordImport(instanceID, parentURL, url);
 			// A require() the module makes itself (`createRequire`): marked, so the load hook serves the instance's copy
 			// without leaving it in Node's require cache, which is keyed on the file's path alone (#755). Node reads a JSON
 			// file and an addon by their extension, whatever a hook answers, so those load as before: once per process.
-			if (url.startsWith("file:") && hasCondition(context?.conditions, "require") && !/\.(?:json|node)$/.test(splitQuery(url)[0])) {
+			if (
+				StringMethods.startsWith(url, "file:") &&
+				hasCondition(context?.conditions, "require") &&
+				!(RegExpMethods.exec(/\.(?:json|node)$/, splitQuery(url)[0]) !== null)
+			) {
 				return { ...result, url: `${url}&${MODULE_REQUIRE_PARAM}=1` };
 			}
 		}
@@ -3236,7 +3658,12 @@ function applyToResult(specifier, context, result) {
 	// package it names by `#imports` or by the package's name (#715), are the instance's copies, so the require is an
 	// edge of the instance's graph.
 	const url = result?.url;
-	if (typeof parentURL === "string" && parentURL.startsWith("file:") && typeof url === "string" && url.startsWith("file:")) {
+	if (
+		typeof parentURL === "string" &&
+		StringMethods.startsWith(parentURL, "file:") &&
+		typeof url === "string" &&
+		StringMethods.startsWith(url, "file:")
+	) {
 		if (belongsToInstance(specifier, splitQuery(url)[0], parentURL)) recordImport(active.instanceID, parentURL, url);
 	}
 	return markScopedRequire(specifier, context, result, active);
@@ -3268,7 +3695,7 @@ function installInstanceImportHooks(nodeModule, registry = globalThis) {
 		const { registerHooks } = moduleMembers(nodeModule);
 		if (typeof registerHooks !== "function") return false;
 		Reflect.apply(registerHooks, nodeModule, [HOOKS]);
-		Objects.defineProperty(registry, INSTALLED, { value: true, enumerable: false });
+		Objects.defineProperty(registry, INSTALLED, { __proto__: null, value: true, enumerable: false });
 		return true;
 	}
 	// The hooks read what slothlet keeps about each instance's files, so they are the keeping copy's.
@@ -3338,13 +3765,14 @@ const HOOKS = Objects.freeze({
 		if (RESOLVE_PROBE.path !== null && specifier === RESOLVE_PROBE.path) RESOLVE_PROBE.seen = true;
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
 		if (
-			specifier.startsWith(ESM_PREFIX) ||
-			specifier.startsWith(FACADE_PREFIX) ||
-			specifier.startsWith(OWN_MODULE_PREFIX) ||
-			specifier.startsWith(SELF_PREFIX)
+			StringMethods.startsWith(specifier, ESM_PREFIX) ||
+			StringMethods.startsWith(specifier, FACADE_PREFIX) ||
+			StringMethods.startsWith(specifier, OWN_MODULE_PREFIX) ||
+			StringMethods.startsWith(specifier, SELF_PREFIX)
 		) {
 			return { url: specifier, format: "module", shortCircuit: true };
 		}
+		refuseCodeImport(specifier, context?.parentURL ?? null, context?.conditions);
 		const next = nextResolve(specifier, context);
 		refuseInternalImport(specifier, context, next);
 		const resolved = applyToResult(specifier, context, next);
@@ -3359,11 +3787,11 @@ const HOOKS = Objects.freeze({
 		// that module, unless it belongs to a second copy of slothlet Node loaded itself (#760).
 		const url = resolved?.url;
 		// An instance's file asking for a runtime entry file: the module that gives it the instance's own `self` (#803).
-		if (SINGLE_COPY_FILES.includes(url) && SELF_FORMS.has(url) && !isOtherCopysFile(context?.parentURL)) {
+		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && MapMethods.has(SELF_FORMS, url) && !isOtherCopysFile(context?.parentURL)) {
 			const instanceID = selfInstanceOf(context?.parentURL);
 			if (instanceID !== null) return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
 		}
-		if (OWN_MODULES.has(url) && !NODE_LOADED.has(url) && !isOtherCopysFile(context?.parentURL)) {
+		if (MapMethods.has(OWN_MODULES, url) && !SetMethods.has(NODE_LOADED, url) && !isOtherCopysFile(context?.parentURL)) {
 			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
 		}
 		return resolved;
@@ -3372,8 +3800,8 @@ const HOOKS = Objects.freeze({
 	// source hash recorded on the way (#597).
 	load: (url, context, nextLoad) => {
 		// An instance's require() of a file no instance tags: the file's one module, from a stub that leaves Node's caches.
-		if (url.startsWith(SHARED_REQUIRE_PREFIX)) {
-			const target = url.slice(SHARED_REQUIRE_PREFIX.length);
+		if (StringMethods.startsWith(url, SHARED_REQUIRE_PREFIX)) {
+			const target = StringMethods.slice(url, SHARED_REQUIRE_PREFIX.length);
 			const ticket = mintTicket(null, (stub) => requireShared(target, stub));
 			return {
 				format: "commonjs",
@@ -3382,19 +3810,24 @@ const HOOKS = Objects.freeze({
 			};
 		}
 		// A runtime entry file as an instance's file is given it (#803).
-		if (url.startsWith(SELF_PREFIX)) {
-			const [instanceID, file] = url.slice(SELF_PREFIX.length).split("|");
+		if (StringMethods.startsWith(url, SELF_PREFIX)) {
+			const selfParts = splitText(StringMethods.slice(url, SELF_PREFIX.length), "|");
+			const instanceID = selfParts[0],
+				file = selfParts[1];
 			return { format: "module", shortCircuit: true, source: selfModuleSource(instanceID, file) };
 		}
 		// One of slothlet's runtime entry files, evaluated through another loader: the module that re-exports it (#760).
-		if (url.startsWith(OWN_MODULE_PREFIX)) {
-			return { format: "module", shortCircuit: true, source: ownModuleBridge(url.slice(OWN_MODULE_PREFIX.length)) };
+		if (StringMethods.startsWith(url, OWN_MODULE_PREFIX)) {
+			return { format: "module", shortCircuit: true, source: ownModuleBridge(StringMethods.slice(url, OWN_MODULE_PREFIX.length)) };
 		}
 		// Node loading one of those files before this copy has evaluated it is loading this copy's own.
-		if (SINGLE_COPY_FILES.includes(url) && !OWN_MODULES.has(url)) NODE_LOADED.add(url);
-		if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
+		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && !MapMethods.has(OWN_MODULES, url)) SetMethods.add(NODE_LOADED, url);
+		if (StringMethods.includes(url, MARKER)) return loadInstanceModule(url, context, nextLoad);
 		const result = nextLoad(url, context);
-		if (url.startsWith("file:") && shouldRecordCommonJS(url, result)) recordLoadedSource(url, result);
+		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
+		// is another module of the file (#691). A leaf's file an api file requires itself is a helper of that file's.
+		const kind = StringMethods.startsWith(url, "file:") ? scopeLoadKind(url) : null;
+		if (kind !== null && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result, kind === "helper");
 		return result;
 	}
 });
@@ -3411,8 +3844,8 @@ const HOOKS = Objects.freeze({
  * isCommonJSFile("/app/lib/state.cjs"); // true
  */
 export function isCommonJSFile(filePath) {
-	if (filePath.endsWith(".cjs")) return true;
-	if (!filePath.endsWith(".js")) return false;
+	if (StringMethods.endsWith(filePath, ".cjs")) return true;
+	if (!StringMethods.endsWith(filePath, ".js")) return false;
 	const host = HOST;
 	for (let dir = host.dirname(filePath); ; dir = host.dirname(dir)) {
 		const manifest = host.join(dir, "package.json");
@@ -3430,7 +3863,7 @@ export function isCommonJSFile(filePath) {
 		if (host.dirname(dir) === dir || host.basename(dir) === "node_modules") break;
 	}
 	try {
-		const source = host.readFile(filePath, "utf8").replace(/^#!.*/, "");
+		const source = regExpReplace(/^#!.*/, host.readFile(filePath, "utf8"), "");
 		host.compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"]);
 		return true;
 	} catch {
@@ -3485,10 +3918,13 @@ const IMPORT_CHECK_SPECIFIER = "virtual:slothlet-import-check";
  * @type {string[]}
  * @private
  */
-const OWN_TREE = [
-	...OWN_PREFIXES,
-	...[new URL("../../", import.meta.url)].filter((u) => u.protocol === "file:").map((u) => toSlashPath(u.href))
-];
+const OWN_TREE = concatLists(
+	OWN_PREFIXES,
+	mapList(
+		filterList([new URL("../../", import.meta.url)], (u) => URLMethods.protocol(u) === "file:"),
+		(u) => toSlashPath(URLMethods.href(u))
+	)
+);
 
 /**
  * A JavaScript or TypeScript ES module file name (`.js`, `.mjs`, `.ts`, `.mts`, `.jsx`, `.tsx`).
@@ -3513,13 +3949,14 @@ const MODULE_FILE = /\.(?:m?[jt]sx?)$/;
  */
 function hostScriptRegistration(code, id) {
 	if (!isRegisteredFile(id)) return null;
-	const loadedBy = `import ${JSON.stringify(LOADED_BY_SPECIFIER + new URLSearchParams({ id }).toString())};`;
+	const loadedBy = `import ${JSON.stringify(LOADED_BY_SPECIFIER + URLSearchParamsMethods.toString(new URLSearchParams({ id })))};`;
 	return { code: `${code}\n;${SCRIPT_REGISTRATION}\n${loadedBy}\n`, map: null };
 }
 
 /**
  * The statement that registers the script vite compiled a file into (#714): it pushes an `Error` the file's own
- * top-level code creates.
+ * top-level code creates. Once slothlet fixed the registry in place, its `push` ignores what it is handed and captures the
+ * stack itself, from slothlet's own realm.
  * @type {string}
  * @private
  */
@@ -3533,10 +3970,19 @@ const SCRIPT_REGISTRATION = `(globalThis[Symbol.for(${JSON.stringify(VITE_HOST_S
  * @private
  */
 function isRegisteredFile(id) {
-	const [base] = splitQuery(id);
+	const unpacked7 = splitQuery(id),
+		base = unpacked7[0];
 	const path = toSlashPath(base);
-	if (!/^(?:\/|[a-z]:\/)/i.test(path) || !MODULE_FILE.test(path) || path.includes("/node_modules/")) return false;
-	if (OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`))) return false;
+	if (
+		!(RegExpMethods.exec(/^(?:\/|[a-z]:\/)/i, path) !== null) ||
+		!(RegExpMethods.exec(MODULE_FILE, path) !== null) ||
+		StringMethods.includes(path, "/node_modules/")
+	)
+		return false;
+	if (
+		ArrayMethods.some(OWN_TREE, (own) => path === own || StringMethods.startsWith(path, StringMethods.endsWith(own, "/") ? own : `${own}/`))
+	)
+		return false;
 	return !isCommonJSFile(path);
 }
 
@@ -3549,21 +3995,25 @@ function isRegisteredFile(id) {
  */
 function isPackageFile(id) {
 	const path = toSlashPath(splitQuery(id)[0]);
-	return /^(?:\/|[a-z]:\/)/i.test(path) && path.includes("/node_modules/");
+	return RegExpMethods.exec(/^(?:\/|[a-z]:\/)/i, path) !== null && StringMethods.includes(path, "/node_modules/");
 }
 
 /**
- * The code of the virtual module that records who loaded a file (#714): one statement that creates an `Error`, freezes
- * it with the importers as its message, and pushes it. The plugin writes the code, from the imports it resolved, so no
- * file's code can say what it says; slothlet reads the file it is about from the frame of the `Error`, the virtual
- * module's own.
+ * The code of the virtual module that records who loaded a file (#714): it hands the registry the importers' ids as
+ * JSON, and the registry captures the stack itself, from slothlet's own realm; before slothlet fixed the registry in
+ * place, it pushes an `Error` frozen with the importers as its message instead. The plugin writes the code, from the
+ * imports it resolved, so no file's code can say what it says; slothlet reads the file it is about from the frame of the
+ * virtual module's own code.
  * @param {Array<string>} importers - The ids of the modules recorded as loading the file.
  * @returns {string} The code.
  * @private
  */
 function loadedBySource(importers) {
 	const registry = `globalThis[Symbol.for(${JSON.stringify(VITE_LOADED_BY)})]`;
-	return `const record = Object.freeze(new Error(${JSON.stringify(JSON.stringify(importers))}));\n(${registry} ??= []).push(record);\n`;
+	const json = JSON.stringify(JSON.stringify(importers));
+	// Once slothlet fixed the registry, `record` takes the importers and captures the stack itself; before, an Error is
+	// pushed for slothlet to read when it loads.
+	return `const registry = ${registry};\nif (typeof registry?.record === "function") registry.record(${json});\nelse (${registry} ??= []).push(Object.freeze(new Error(${json})));\n`;
 }
 
 /**
@@ -3602,15 +4052,21 @@ export function slothletInstanceImports() {
 	 * @returns {void}
 	 */
 	const noteModuleImport = (resolved, importer) => {
-		if (!resolved || resolved.external || typeof resolved.id !== "string" || resolved.id.includes(MARKER)) return;
+		if (!resolved || resolved.external || typeof resolved.id !== "string" || StringMethods.includes(resolved.id, MARKER)) return;
 		const path = toSlashPath(splitQuery(resolved.id)[0]);
-		if (!/^(?:\/|[a-z]:\/)/i.test(path) || OWN_TREE.some((own) => path === own || path.startsWith(own.endsWith("/") ? own : `${own}/`)))
+		if (
+			!(RegExpMethods.exec(/^(?:\/|[a-z]:\/)/i, path) !== null) ||
+			ArrayMethods.some(
+				OWN_TREE,
+				(own) => path === own || StringMethods.startsWith(path, StringMethods.endsWith(own, "/") ? own : `${own}/`)
+			)
+		)
 			return;
-		let importers = moduleImporters.get(resolved.id);
-		if (!importers) moduleImporters.set(resolved.id, (importers = new Set()));
-		importers.add(importer);
+		let importers = MapMethods.get(moduleImporters, resolved.id);
+		if (!importers) MapMethods.set(moduleImporters, resolved.id, (importers = new Set()));
+		SetMethods.add(importers, importer);
 		// Through a file a module loaded, the modules that loaded it: a file under `node_modules` gets no record of its own.
-		for (const through of moduleImporters.get(importer) ?? []) importers.add(through);
+		for (const through of setValues(MapMethods.get(moduleImporters, importer))) SetMethods.add(importers, through);
 	};
 	/**
 	 * Whether a record of who loaded a file is one the plugin wrote (#715): a module's record of a file names that module
@@ -3623,10 +4079,13 @@ export function slothletInstanceImports() {
 	 */
 	const isOwnRecordQuery = (query, importer) => {
 		const params = new URLSearchParams(query);
-		const loaded = params.get("id");
-		const by = params.get("by");
+		const loaded = URLSearchParamsMethods.get(params, "id");
+		const by = URLSearchParamsMethods.get(params, "by");
 		if (loaded === null) return false;
-		if (by !== null) return moduleImporters.get(loaded)?.has(by) === true;
+		if (by !== null)
+			return (
+				(MapMethods.get(moduleImporters, loaded) == null ? undefined : SetMethods.has(MapMethods.get(moduleImporters, loaded), by)) === true
+			);
 		// vite hands `resolveId` the importer's file, without the query its id may carry.
 		return importer === undefined || toSlashPath(importer) === toSlashPath(loaded);
 	};
@@ -3637,7 +4096,7 @@ export function slothletInstanceImports() {
 	 * @returns {boolean} True when the record is the plugin's own.
 	 */
 	const isOwnRecord = (source, importer) =>
-		typeof importer === "string" && isOwnRecordQuery(source.slice(LOADED_BY_SPECIFIER.length), importer);
+		typeof importer === "string" && isOwnRecordQuery(StringMethods.slice(source, LOADED_BY_SPECIFIER.length), importer);
 	/**
 	 * Whether an importer is a module's code (see {@link refuseInternalImport}): an instance file, or a file a module
 	 * loaded that no instance tags, outside `node_modules` and outside slothlet's own files.
@@ -3645,9 +4104,11 @@ export function slothletInstanceImports() {
 	 * @returns {boolean} True for a module's code.
 	 */
 	const isModuleImporter = (importer) =>
-		importer.includes(MARKER) ||
-		moduleFiles.has(toSlashPath(importer)) ||
-		(moduleImporters.has(importer) && !/\/node_modules\//.test(toSlashPath(importer)) && slothletCodePath(importer) === null);
+		StringMethods.includes(importer, MARKER) ||
+		SetMethods.has(moduleFiles, toSlashPath(importer)) ||
+		(MapMethods.has(moduleImporters, importer) &&
+			!(RegExpMethods.exec(/\/node_modules\//, toSlashPath(importer)) !== null) &&
+			slothletCodePath(importer) === null);
 	/**
 	 * The files vite has loaded as an instance's copy, by path: vite names the importer of a dynamic `import()` by its
 	 * file alone, without the query its id carries, so an import from one of these paths is a module's.
@@ -3658,7 +4119,7 @@ export function slothletInstanceImports() {
 	 * What the name an instance module imports the import check under ends with: one no module can know beforehand.
 	 * @type {string}
 	 */
-	const checkName = HOST === null ? "0" : HOST.randomUUID().replace(/-/g, "");
+	const checkName = HOST === null ? "0" : regExpReplace(/-/g, HOST.randomUUID(), "");
 	return {
 		name: "slothlet-instance-imports",
 		enforce: "pre",
@@ -3671,24 +4132,31 @@ export function slothletInstanceImports() {
 		 * @returns {Promise<object|string|null>} The resolution, or null to defer to other resolvers.
 		 */
 		async resolveId(source, importer, options) {
-			if (typeof source === "string" && source.startsWith(LOADED_BY_SPECIFIER))
+			if (typeof source === "string" && StringMethods.startsWith(source, LOADED_BY_SPECIFIER))
 				return isOwnRecord(source, importer) ? `\0${source}` : NO_RECORD_ID;
 			if (source === IMPORT_CHECK_SPECIFIER) return `\0${IMPORT_CHECK_SPECIFIER}`;
 			if (typeof importer !== "string") return null;
-			const tagged = importer.includes(MARKER);
+			const tagged = StringMethods.includes(importer, MARKER);
 			// Slothlet's own files are slothlet's: a module's code cannot import them, by any spelling that can reach them.
-			if (isModuleImporter(importer) && (isFileSpecifier(source) || source.startsWith("@cldmv/slothlet") || source.startsWith("#"))) {
+			if (
+				isModuleImporter(importer) &&
+				(isFileSpecifier(source) || StringMethods.startsWith(source, "@cldmv/slothlet") || StringMethods.startsWith(source, "#"))
+			) {
 				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
 				if (target && !target.external && isSlothletInternal(target.id)) throw await viteImportRefusal(source, target.id);
 			}
 			// An instance file importing a runtime entry file: the module that gives it the instance's own `self` (#803).
-			if (tagged && source.startsWith("@cldmv/slothlet/runtime")) {
+			if (tagged && StringMethods.startsWith(source, "@cldmv/slothlet/runtime")) {
 				const target = await this.resolve(source, importer, { ...options, skipSelf: true });
-				const instanceID = new URLSearchParams(splitQuery(importer)[1] ?? "").get("slothlet_instance");
+				const instanceID = URLSearchParamsMethods.get(new URLSearchParams(splitQuery(importer)[1] ?? ""), "slothlet_instance");
 				if (target && !target.external && instanceID && isRuntimeEntryId(target.id)) return `\0${SELF_PREFIX}${instanceID}|${target.id}`;
 			}
+			// An `import` statement of a `data:` or `blob:` URL in an instance file: resolved here, in the vite server, where
+			// the instance's rules are not, so it is refused whatever they say (Node's resolve hook decides it by the
+			// importing file's module path; a module's `import()` of one is checked where it runs, see checkModuleImport).
+			if (tagged && RegExpMethods.exec(/^(?:data|blob):/i, source) !== null) throw await viteCapabilityRefusal(importer);
 			// A file only the host loaded imports as vite resolves it.
-			if (!tagged && !moduleImporters.has(importer)) return null;
+			if (!tagged && !MapMethods.has(moduleImporters, importer)) return null;
 			// A bare specifier an instance file imports that cannot name a file of its own package is recorded where the file
 			// is transformed, below.
 			if (tagged && !isFileSpecifier(source) && !mayNameOwnPackage(source, importer)) return null;
@@ -3721,10 +4189,12 @@ export function slothletInstanceImports() {
 			 */
 			async handler(code, id) {
 				if (typeof id !== "string") return null;
-				if (!id.includes(MARKER)) return hostScriptRegistration(code, id);
-				const [base, query = ""] = splitQuery(id);
-				moduleFiles.add(toSlashPath(base));
-				const instanceID = new URLSearchParams(query).get("slothlet_instance");
+				if (!StringMethods.includes(id, MARKER)) return hostScriptRegistration(code, id);
+				const unpacked8 = splitQuery(id),
+					base = unpacked8[0],
+					query = unpacked8[1] === undefined ? "" : unpacked8[1];
+				SetMethods.add(moduleFiles, toSlashPath(base));
+				const instanceID = URLSearchParamsMethods.get(new URLSearchParams(query), "slothlet_instance");
 				if (instanceID === null || isCommonJSFile(base)) return null;
 				// The script vite compiled an instance file into is registered too, so its code is told to be the file's own
 				// under vitest as it is under Node's own loader (#714).
@@ -3744,11 +4214,14 @@ export function slothletInstanceImports() {
 				const visit = (node) => {
 					if (!node || typeof node !== "object") return;
 					if (Arrays.isArray(node)) {
-						for (const child of node) visit(child);
+						for (let ofIndex = 0, ofList = node; ofIndex < ofList.length; ofIndex++) {
+							const child = ofList[ofIndex];
+							visit(child);
+						}
 						return;
 					}
 					if (typeof node.type !== "string") return;
-					if (node.type === "ImportExpression" && node.source) checked.push(node.source);
+					if (node.type === "ImportExpression" && node.source) listPush(checked, node.source);
 					else if (
 						node.type === "CallExpression" &&
 						node.callee?.type === "MemberExpression" &&
@@ -3756,14 +4229,28 @@ export function slothletInstanceImports() {
 						node.callee.object.meta?.name === "import" &&
 						node.callee.property?.name === "resolve"
 					)
-						checked.push(node);
-					const isImport = /^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/.test(node.type);
+						listPush(checked, node);
+					const isImport =
+						RegExpMethods.exec(/^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/, node.type) !== null;
 					const source = isImport ? node.source?.value : undefined;
-					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
-					else if (typeof source === "string") bare.add(source);
-					for (const key of Objects.keys(node)) if (key !== "type") visit(node[key]);
+					if (typeof source === "string" && isFileSpecifier(source)) SetMethods.add(specifiers, source);
+					else if (typeof source === "string") SetMethods.add(bare, source);
+					for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						if (key !== "type") visit(node[key]);
+					}
 				};
 				visit(ast.body);
+				// An `import` / `export … from` statement of a `data:` or `blob:` URL: refused here, where the instance's rules
+				// are not (vitest's runner loads such a URL itself, so no resolve names this file as its importer).
+				for (let index = 0; index < ast.body.length; index++) {
+					const node = ast.body[index];
+					const source =
+						RegExpMethods.exec(/^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration)$/, node?.type) !== null
+							? node.source?.value
+							: undefined;
+					if (typeof source === "string" && RegExpMethods.exec(/^(?:data|blob):/i, source) !== null) throw await viteCapabilityRefusal(id);
+				}
 				// A file no instance tags that the module imports by a bare specifier (a linked package, its package's own
 				// `#imports`) is recorded as the module's (#714). A specifier computed at run time is not seen here.
 				// The files no instance tags that the module imports, of those the plugin registers: each gets a record of its
@@ -3773,29 +4260,37 @@ export function slothletInstanceImports() {
 				// resolve hook sees the runner, not this module, import it, and only this record names the module as its loader.
 				const shared = new Set();
 				const noteShared = (resolved) => {
-					if (!resolved || resolved.external || typeof resolved.id !== "string" || resolved.id.includes(MARKER)) return;
+					if (!resolved || resolved.external || typeof resolved.id !== "string" || StringMethods.includes(resolved.id, MARKER)) return;
 					noteModuleImport(resolved, id);
-					if (isRegisteredFile(resolved.id) || isPackageFile(resolved.id)) shared.add(resolved.id);
+					if (isRegisteredFile(resolved.id) || isPackageFile(resolved.id)) SetMethods.add(shared, resolved.id);
 				};
 				const children = [];
-				for (const specifier of [...bare, ...specifiers]) {
+				for (let ofIndex = 0, ofList = concatLists(setToArray(bare), setToArray(specifiers)); ofIndex < ofList.length; ofIndex++) {
+					const specifier = ofList[ofIndex];
 					const resolved = await this.resolve(specifier, id);
-					if (resolved && !resolved.external && resolved.id.includes(MARKER)) children.push(resolved.id);
+					if (resolved && !resolved.external && StringMethods.includes(resolved.id, MARKER)) listPush(children, resolved.id);
 					else noteShared(resolved);
 				}
-				const loadedBy = [...shared]
-					.map((child) => `\nimport ${JSON.stringify(LOADED_BY_SPECIFIER + new URLSearchParams({ id: child, by: id }).toString())};`)
-					.join("");
+				const loadedBy = ArrayMethods.join(
+					mapList(
+						setToArray(shared),
+						(child) =>
+							`\nimport ${JSON.stringify(LOADED_BY_SPECIFIER + URLSearchParamsMethods.toString(new URLSearchParams({ id: child, by: id })))};`
+					),
+					""
+				);
 				const imports = children.length
-					? `\n;globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`
+					? `\n;globalThis[Symbol.for(${JSON.stringify(SymbolMethods.description(STATE))})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`
 					: "";
 				// The check is imported under a name the module cannot know, at the end so no line moves (imports are hoisted).
 				let body = code;
 				let check = "";
 				if (checked.length) {
 					const name = `__slothlet_import_check_${checkName}`;
-					for (const node of checked.sort((a, b) => b.start - a.start))
-						body = `${body.slice(0, node.start)}${name}(${body.slice(node.start, node.end)}, import.meta.url)${body.slice(node.end)}`;
+					for (let ofIndex = 0, ofList = ArrayMethods.sort(checked, (a, b) => b.start - a.start); ofIndex < ofList.length; ofIndex++) {
+						const node = ofList[ofIndex];
+						body = `${StringMethods.slice(body, 0, node.start)}${name}(${StringMethods.slice(body, node.start, node.end)}, import.meta.url)${StringMethods.slice(body, node.end)}`;
+					}
 					check = `\nimport { checkImport as ${name} } from ${JSON.stringify(IMPORT_CHECK_SPECIFIER)};`;
 				}
 				const tail = `${registration}${loadedBy}${imports}${check}`;
@@ -3811,34 +4306,49 @@ export function slothletInstanceImports() {
 		 */
 		load(id) {
 			if (id === NO_RECORD_ID) return { code: "export {};\n", map: null };
-			if (typeof id === "string" && id.startsWith(`\0${SELF_PREFIX}`)) {
-				const [instanceID, file] = id.slice(1 + SELF_PREFIX.length).split("|");
+			if (typeof id === "string" && StringMethods.startsWith(id, `\0${SELF_PREFIX}`)) {
+				const unpacked10 = splitText(StringMethods.slice(id, 1 + SELF_PREFIX.length), "|"),
+					instanceID = unpacked10[0],
+					file = unpacked10[1];
 				return { code: selfModuleSource(instanceID, NODE.url.pathToFileURL(splitQuery(file)[0]).href, file), map: null };
 			}
 			// Read once, as the module importing it loads, from the shared object that module's own code cannot replace.
 			if (id === `\0${IMPORT_CHECK_SPECIFIER}`) return { code: `export const checkImport = ${STATE_REF}.checkImport;\n`, map: null };
-			if (typeof id === "string" && id.startsWith(`\0${LOADED_BY_SPECIFIER}`)) {
-				const query = id.slice(1 + LOADED_BY_SPECIFIER.length);
+			if (typeof id === "string" && StringMethods.startsWith(id, `\0${LOADED_BY_SPECIFIER}`)) {
+				const query = StringMethods.slice(id, 1 + LOADED_BY_SPECIFIER.length);
 				// A record the plugin did not resolve a module's import of the file for records nothing (#715).
 				if (!isOwnRecordQuery(query)) return { code: "export {};\n", map: null };
 				const params = new URLSearchParams(query);
-				const by = params.get("by");
+				const by = URLSearchParamsMethods.get(params, "by");
 				// A module's own record of a file it imports (#715) names that module and the modules that loaded it; a file's
 				// own record, the importers resolved so far.
-				const importers = by === null ? (moduleImporters.get(params.get("id")) ?? []) : [by, ...(moduleImporters.get(by) ?? [])];
-				return { code: loadedBySource([...importers]), map: null };
+				const importers =
+					by === null
+						? setToArray(MapMethods.get(moduleImporters, URLSearchParamsMethods.get(params, "id")))
+						: concatLists([by], setToArray(MapMethods.get(moduleImporters, by)));
+				return { code: loadedBySource(importers), map: null };
 			}
-			if (typeof id !== "string" || !id.includes(MARKER)) return null;
-			const [base, query = ""] = splitQuery(id);
-			const instanceID = new URLSearchParams(query).get("slothlet_instance");
+			if (typeof id !== "string" || !StringMethods.includes(id, MARKER)) return null;
+			const unpacked9 = splitQuery(id),
+				base = unpacked9[0],
+				query = unpacked9[1] === undefined ? "" : unpacked9[1];
+			const instanceID = URLSearchParamsMethods.get(new URLSearchParams(query), "slothlet_instance");
 			if (instanceID === null) return null;
 			// A JSON file a leaf imports carries the instance query, as under Node; vite loads no JSON file under a query of
 			// its own, so it is loaded here, as Node loads a JSON module: its value as the default export (#714).
-			if (/\.json$/i.test(toSlashPath(base)))
+			if (RegExpMethods.exec(/\.json$/i, toSlashPath(base)) !== null)
 				return { code: `export default ${JSON.stringify(JSON.parse(NODE.fs.readFileSync(base, "utf8")))};\n`, map: null };
 			if (!isCommonJSFile(base)) return null;
 			const params = new URLSearchParams(query);
-			return { code: commonJSWrapperSource(base, instanceID, null, helperCopyImporter(params), params.get(HELPERS_MOUNT_PARAM)) };
+			return {
+				code: commonJSWrapperSource(
+					base,
+					instanceID,
+					null,
+					helperCopyImporter(params),
+					URLSearchParamsMethods.get(params, HELPERS_MOUNT_PARAM)
+				)
+			};
 		}
 	};
 }
@@ -3855,6 +4365,7 @@ export function internals(consumer) {
 		!mayTakeInternals(consumer, [
 			"lib/builders/modes-processor",
 			"lib/handlers/frame-placement",
+			"lib/helpers/capability-context",
 			"lib/processors/loader",
 			"lib/runtime/runtime",
 			"lib/runtime/runtime-asynclocalstorage",
@@ -3885,6 +4396,7 @@ export function internals(consumer) {
 		requireInInstance,
 		scriptKeyInstance,
 		setCallerCheck,
+		setCapabilityCheck,
 		setImportRefusal,
 		setScriptKey
 	};

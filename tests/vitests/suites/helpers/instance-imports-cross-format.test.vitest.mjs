@@ -347,7 +347,15 @@ describe("Helpers > instance-imports across module systems (#534)", () => {
 			const next = () => result;
 			expect(hooks.load("file:///x.mjs", {}, next)).toBe(result);
 			expect(hooks.load("data:text/javascript,1?slothlet_instance=a", {}, next)).toBe(result);
-			expect(hooks.load("file:///x.mjs?slothlet_instance=a", {}, next)).toBe(result);
+		});
+
+		it("seals an instance-marked ES module file's source with one trailing comment line", () => {
+			const result = { format: "module", source: "export const a = 1;" };
+			const next = () => result;
+			const loaded = hooks.load("file:///x.mjs?slothlet_instance=a", {}, next);
+			expect(loaded).not.toBe(result);
+			expect(loaded.format).toBe("module");
+			expect(loaded.source).toMatch(/^export const a = 1;\n\/\* [0-9a-f-]{36} \*\/\n$/);
 		});
 
 		it("answers the virtual modules with re-export source", () => {

@@ -31,7 +31,16 @@
 // (the wrapper classes reach `helpers/platform`, which uses it).
 import { internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { Reflect, Objects, NativeProxy, Set, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	concatLists,
+	FunctionMethods,
+	NativeProxy,
+	Objects,
+	Reflect,
+	setFrom,
+	setToArray,
+	TypeError
+} from "@cldmv/slothlet/helpers/intrinsics";
 const reservedKeysOwn = reservedKeysInternals("lib/helpers/defaults");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults");
 
@@ -95,7 +104,7 @@ function freezeSet(set) {
 					};
 				}
 				const value = Reflect.get(target, prop, target);
-				return typeof value === "function" ? value.bind(target) : value;
+				return typeof value === "function" ? FunctionMethods.bind(value, target) : value;
 			}
 		})
 	);
@@ -113,4 +122,6 @@ function freezeSet(set) {
  * every other consumer in the same process sees) despite it claiming to be frozen.
  * @type {ReadonlySet<string>}
  */
-export const RESERVED_EXPORTS = freezeSet(new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]));
+export const RESERVED_EXPORTS = freezeSet(
+	setFrom(concatLists(setToArray(reservedKeysOwn.WRAPPER_INTERNAL_KEYS), setToArray(reservedKeysOwn.IMPL_METADATA_KEYS)))
+);

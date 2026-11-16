@@ -113,6 +113,7 @@ export class SlothletSelf {}
  */
 function runtime_selfShell(shell = {}) {
 	Objects.defineProperty(shell, Symbols.for("nodejs.util.inspect.custom"), {
+		__proto__: null,
 		value: function inspectSelf() {
 			const ctx = getCurrentRuntime() === liveRuntimeModule ? liveRuntime.tryGetContext() : asyncRuntime.tryGetContext();
 			return ctx?.self ?? {};
@@ -160,7 +161,7 @@ const selfTraps = {
 		// If the property exists, return a descriptor that's always configurable
 		// to avoid proxy invariant violations (since the proxy target is an empty object)
 		if (desc) {
-			return { ...desc, configurable: true };
+			return { __proto__: null, ...desc, configurable: true };
 		}
 		return undefined;
 	},

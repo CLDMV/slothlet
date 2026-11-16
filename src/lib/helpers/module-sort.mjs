@@ -1,3 +1,4 @@
+import { ArrayMethods, copyList } from "@cldmv/slothlet/helpers/intrinsics";
 /**
  *
  *	@Project: @cldmv/slothlet
@@ -61,7 +62,7 @@
  */
 export function sortModules(results, comparator) {
 	const cmp = typeof comparator === "function" ? comparator : defaultModuleComparator;
-	return [...results].sort(cmp);
+	return ArrayMethods.sort(copyList(results), cmp);
 }
 
 /**

@@ -48,7 +48,17 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { Reflect, NativeProxy, NativeObject, Set, Symbol, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	FunctionMethods,
+	NativeObject,
+	NativeProxy,
+	Reflect,
+	setFrom,
+	SetMethods,
+	String,
+	Symbol,
+	SymbolMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime-livebindings");
 const {
@@ -142,7 +152,7 @@ function runtime_refuseUnknownCaller(prop) {
 	if (!store?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const identity = liveRuntime.getCallerIdentity?.();
 	if (!identity?.unresolved || identity.unaccounted) return;
-	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
+	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
 	throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 }
 
@@ -151,7 +161,7 @@ function runtime_refuseUnknownCaller(prop) {
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
@@ -168,7 +178,7 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  */
 function runtime_selfMember(prop, value, resolved = null) {
 	if (typeof prop !== "string") return value;
-	if (FRAMEWORK_SELF_ROOTS.has(prop)) return runtime_selfFrameworkView(value);
+	if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return runtime_selfFrameworkView(value);
 	// The reader of the view is the code whose identity this same read just resolved.
 	const access = resolved?.identity ? runtime_resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
 	return runtime_selfView(value, undefined, null, access);
@@ -238,8 +248,8 @@ const selfTraps = {
 		// to avoid proxy invariant violations (since the proxy target is an empty object)
 		if (desc) {
 			return "value" in desc
-				? { ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
-				: { ...desc, configurable: true };
+				? { __proto__: null, ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
+				: { __proto__: null, ...desc, configurable: true };
 		}
 		return undefined;
 	},
@@ -260,7 +270,7 @@ const selfTraps = {
 		const target = runtime_selfChangeTarget(ctx, prop);
 		// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
 		if (descriptor.configurable === false) return false;
-		if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+		if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 		return Reflect.defineProperty(target, prop, descriptor);
 	},
 	// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
@@ -372,7 +382,7 @@ const objectSelf = new NativeProxy({}, selfTraps);
  * @type {Function}
  * @private
  */
-const callableTarget = function () {}.bind();
+const callableTarget = FunctionMethods.bind(function () {});
 
 /**
  * `self` for an api whose root is a function (#803): a call or construction of it is one of the api root, held to the
@@ -473,7 +483,7 @@ export const context = new NativeProxy(
 			if (!ctx || !ctx.context) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 			if (!descriptor || !("value" in descriptor)) return descriptor;
-			return { ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
 		}
 	}
 );
@@ -533,7 +543,10 @@ export const instanceID = new NativeProxy(
 );
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [objectSelf, callableSelf, context, instanceID]) markSlothletProxy(proxy);
+for (let ofIndex = 0, ofList = [objectSelf, callableSelf, context, instanceID]; ofIndex < ofList.length; ofIndex++) {
+	const proxy = ofList[ofIndex];
+	markSlothletProxy(proxy);
+}
 // A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
 registerRuntimeSelf(liveRuntime, objectSelf, callableSelf);
 // Each instance's files get the form of `self` its api root takes (#803).

@@ -41,7 +41,7 @@
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Reflect, Objects, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import { concatLists, listPush, Objects, Reflect, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -82,7 +82,8 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_carryOwnExtras(wrapper, original) {
-	for (const key of Reflect.ownKeys(original)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(original); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
@@ -121,7 +122,7 @@ function runtime_patchObserverConstructor(name) {
 		// it would unpatched — hand it through untouched rather than pinning nothing.
 		// A wrapper disabled under another copy's passes the callback through as well.
 		const pinned = typeof callback === "function" && layer.active ? pinToCurrentCaller(callback) : callback;
-		return Reflect.construct(original, [pinned, ...rest], new.target);
+		return Reflect.construct(original, concatLists([pinned], rest), new.target);
 	};
 
 	// A prototype shared verbatim with `original` would leave `instance.constructor` pointing at the
@@ -129,12 +130,12 @@ function runtime_patchObserverConstructor(name) {
 	// `original.prototype` (so `instanceof` still walks the real hierarchy) but give the wrapper its own
 	// prototype object with `constructor` pointing back at itself.
 	wrapper.prototype = Objects.create(original.prototype, {
-		constructor: { value: wrapper, writable: true, configurable: true }
+		constructor: { __proto__: null, value: wrapper, writable: true, configurable: true }
 	});
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
-	patched.push({ name, layer, wrapper });
+	listPush(patched, { name, layer, wrapper });
 }
 
 /**
@@ -150,7 +151,10 @@ function runtime_patchObserverConstructor(name) {
 function enableObserverPatching() {
 	if (isPatchingEnabled) return;
 
-	for (const name of PATCHED_CONSTRUCTORS) runtime_patchObserverConstructor(name);
+	for (let ofIndex = 0, ofList = PATCHED_CONSTRUCTORS; ofIndex < ofList.length; ofIndex++) {
+		const name = ofList[ofIndex];
+		runtime_patchObserverConstructor(name);
+	}
 
 	isPatchingEnabled = true;
 }
@@ -168,7 +172,8 @@ function enableObserverPatching() {
 function disableObserverPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { name, layer, wrapper } of patched) {
+	for (let ofIndex = 0, ofList = patched; ofIndex < ofList.length; ofIndex++) {
+		const { name, layer, wrapper } = ofList[ofIndex];
 		const restore = closeLayer(layer);
 		if (holdsValue(globalThis, name, wrapper)) globalThis[name] = restore;
 	}

@@ -27,11 +27,12 @@
  * @internal
  */
 import {
-	Objects,
 	Arrays,
+	clearTimeout as loadedClearTimeout,
 	Dates,
-	setTimeout as loadedSetTimeout,
-	clearTimeout as loadedClearTimeout
+	Objects,
+	Reflect,
+	setTimeout as loadedSetTimeout
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
@@ -51,7 +52,7 @@ import {
  * @private
  */
 function detached(fn) {
-	return (...args) => fn(...args);
+	return (...args) => Reflect.apply(fn, undefined, args);
 }
 
 /**
@@ -95,7 +96,10 @@ export function createClock(option) {
 	if (option === undefined) return DEFAULT_CLOCK;
 	if (option === null || typeof option !== "object" || Arrays.isArray(option)) return null;
 	const { now, setTimeout, clearTimeout } = option;
-	for (const member of [now, setTimeout, clearTimeout]) if (member !== undefined && typeof member !== "function") return null;
+	for (let ofIndex = 0, ofList = [now, setTimeout, clearTimeout]; ofIndex < ofList.length; ofIndex++) {
+		const member = ofList[ofIndex];
+		if (member !== undefined && typeof member !== "function") return null;
+	}
 	return Objects.freeze({
 		now: now === undefined ? DEFAULT_CLOCK.now : detached(now),
 		setTimeout: setTimeout === undefined ? DEFAULT_CLOCK.setTimeout : detached(setTimeout),

@@ -52,7 +52,14 @@
  * reach the current global on purpose (to patch it, or to write where the host points `console`) writes
  * `globalThis.X`.
  *
- * Methods a value inherits (`array.map`, `map.get`) are not covered here: they are looked up on the value when called.
+ * Methods a value inherits (`array.map`, `map.get`, `promise.then`, the iterator a `for…of` asks an array for) are looked
+ * up on the value's prototype when called, and a module can replace them there too. They are taken here as well, each
+ * one called with the value first, on frozen objects with no prototype: `ArrayMethods.push(list, value)`,
+ * `StringMethods.startsWith(text, prefix)`, `MapMethods.get(map, key)`, and the same for the other built-in
+ * prototypes (an accessor such as `Map.prototype.size` is there under its name: `MapMethods.size(map)`). Walking a
+ * `Map` or a `Set` goes through `mapEntries`, `mapKeys`, `mapValues` and `setValues`, whose iterators read nothing a
+ * module can reach; arrays are walked by index. `copyList`, `concatLists`, `mapList` and `filterList` make arrays
+ * without reading `constructor` or `Symbol.species` off the array they start from.
  *
  * @module @cldmv/slothlet/helpers/intrinsics
  * @internal
@@ -74,6 +81,19 @@ const NativePromise = globalThis.Promise;
 const NativeSymbol = globalThis.Symbol;
 const { getOwnPropertyNames, getOwnPropertyDescriptor, freeze, create } = NativeObject;
 const { apply } = NativeReflect;
+const getPrototypeOfNative = NativeReflect.getPrototypeOf;
+const setPrototypeOfNative = NativeReflect.setPrototypeOf;
+const ownKeysNative = NativeReflect.ownKeys;
+const defineOwnAtLoad = NativeReflect.defineProperty;
+const globalThisMap = globalThis.Map;
+const globalThisSet = globalThis.Set;
+const ArrayFrom = globalThis.Array.from;
+const globalThisRegExp = globalThis.RegExp;
+const NativeString = globalThis.String;
+const NativeNumber = globalThis.Number;
+const globalThisTypeError = globalThis.TypeError;
+const AsyncGeneratorPrototype = getPrototypeOfNative(getPrototypeOfNative((async function* () {})()));
+const GeneratorPrototype = getPrototypeOfNative(getPrototypeOfNative((function* () {})()));
 
 /**
  * A frozen object with no prototype holding what a built-in holds as its own data members under string keys: its
@@ -92,28 +112,63 @@ function staticsOf(source) {
 }
 
 /**
+ * {@link staticsOf} for `Reflect` or `Object`, with `getOwnPropertyDescriptor` (and `Object.getOwnPropertyDescriptors`)
+ * answering descriptors with no prototype: a member a descriptor lacks (`get` on a data descriptor, `value` on an
+ * accessor) reads as absent, whatever module code put on `Object.prototype`, and a descriptor handed back to
+ * `defineProperty` or a proxy trap is read for its own members only.
+ * @param {object|Function} source - `Reflect` or `Object`.
+ * @returns {object} Its members, by name.
+ * @private
+ */
+function withPlainDescriptors(source) {
+	const copy = create(null);
+	const names = getOwnPropertyNames(source);
+	for (let i = 0; i < names.length; i++) {
+		const descriptor = getOwnPropertyDescriptor(source, names[i]);
+		if (descriptor && "value" in descriptor) copy[names[i]] = descriptor.value;
+	}
+	const describe = copy.getOwnPropertyDescriptor;
+	copy.getOwnPropertyDescriptor = (target, key) => {
+		const descriptor = describe(target, key);
+		if (descriptor !== undefined) setPrototypeOfNative(descriptor, null);
+		return descriptor;
+	};
+	if (typeof copy.getOwnPropertyDescriptors === "function") {
+		const describeAll = copy.getOwnPropertyDescriptors;
+		copy.getOwnPropertyDescriptors = (target) => {
+			const all = describeAll(target);
+			const keys = ownKeysNative(all);
+			for (let i = 0; i < keys.length; i++) setPrototypeOfNative(all[keys[i]], null);
+			setPrototypeOfNative(all, null);
+			return all;
+		};
+	}
+	return freeze(copy);
+}
+
+/**
  * The functions of `Reflect`, as they were when slothlet loaded.
- * @type {object}
+ * @type {typeof globalThis.Reflect}
  * @internal
  * @example
  * import { Reflect } from "@cldmv/slothlet/helpers/intrinsics";
  * Reflect.getOwnPropertyDescriptor(value, "constructor");
  */
-export const Reflect = staticsOf(NativeReflect);
+export const Reflect = withPlainDescriptors(NativeReflect);
 
 /**
  * The static functions of `Object`, as they were when slothlet loaded.
- * @type {object}
+ * @type {ObjectConstructor}
  * @internal
  * @example
  * import { Objects } from "@cldmv/slothlet/helpers/intrinsics";
  * Objects.keys(value);
  */
-export const Objects = staticsOf(NativeObject);
+export const Objects = withPlainDescriptors(NativeObject);
 
 /**
  * The static functions of `Array`, as they were when slothlet loaded. `Arrays.from` and `Arrays.of` make plain arrays.
- * @type {object}
+ * @type {ArrayConstructor}
  * @internal
  * @example
  * import { Arrays } from "@cldmv/slothlet/helpers/intrinsics";
@@ -131,7 +186,20 @@ export const Arrays = staticsOf(globalThis.Array);
  */
 export const Functions = staticsOf(globalThis.Function);
 
+/**
+ * The `Function` constructor, as it was when slothlet loaded: for checking whether the host lets code be made from a
+ * string (the permission baseline), whatever `globalThis.Function` holds afterwards.
+ * @type {FunctionConstructor}
+ * @internal
+ * @example
+ * import { NativeFunction } from "@cldmv/slothlet/helpers/intrinsics";
+ * new NativeFunction("return 1"); // throws EvalError where code from strings is refused
+ */
+export const NativeFunction = globalThis.Function;
+
+/** @type {JSON} */
 const NativeJSON = staticsOf(globalThis.JSON);
+/** @type {Math} */
 const NativeMath = staticsOf(globalThis.Math);
 
 /**
@@ -320,6 +388,17 @@ export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
 export const URL = globalThis.URL;
 
 /**
+ * `URL.createObjectURL` and `URL.revokeObjectURL`, as they were when slothlet loaded (absent where the host has none).
+ * Unbound: call them with `URL` as `this`.
+ * @type {{createObjectURL?: function(Blob): string, revokeObjectURL?: function(string): void}}
+ * @internal
+ * @example
+ * import { URL, URLs } from "@cldmv/slothlet/helpers/intrinsics";
+ * const href = Reflect.apply(URLs.createObjectURL, URL, [blob]);
+ */
+export const URLs = pickedStaticsOf(globalThis.URL, ["createObjectURL", "revokeObjectURL"]);
+
+/**
  * The `URLSearchParams` constructor, as it was when slothlet loaded.
  * @internal
  * @example
@@ -338,7 +417,7 @@ export const String = globalThis.String;
 
 /**
  * The static functions of `String` (`fromCharCode`, `fromCodePoint`, `raw`), as they were when slothlet loaded.
- * @type {object}
+ * @type {StringConstructor}
  * @internal
  * @example
  * import { Strings } from "@cldmv/slothlet/helpers/intrinsics";
@@ -364,7 +443,7 @@ export const Number = globalThis.Number;
 
 /**
  * The static functions and constants of `Number`, as they were when slothlet loaded.
- * @type {object}
+ * @type {NumberConstructor}
  * @internal
  * @example
  * import { Numbers } from "@cldmv/slothlet/helpers/intrinsics";
@@ -390,7 +469,7 @@ export const Date = globalThis.Date;
 
 /**
  * The static functions of `Date` (`now`, `parse`, `UTC`), as they were when slothlet loaded.
- * @type {object}
+ * @type {DateConstructor}
  * @internal
  * @example
  * import { Dates } from "@cldmv/slothlet/helpers/intrinsics";
@@ -661,7 +740,7 @@ export const Iterators = globalThis.Iterator ? staticsOf(globalThis.Iterator) : 
 /**
  * The members of `Intl` (its constructors, `Intl.Segmenter` among them), as they were when slothlet loaded, shadowing
  * the global like `JSON`.
- * @type {object}
+ * @type {typeof globalThis.Intl}
  * @internal
  * @example
  * import { Intl } from "@cldmv/slothlet/helpers/intrinsics";
@@ -886,5 +965,1429 @@ export const Buffers = boundStaticsOf(globalThis.Buffer, ["from"]);
  * navigator?.languages;
  */
 export const navigator = globalThis.navigator;
+
+/**
+ * `Function.prototype.call` bound to a function: called with the receiver first, then the arguments, it runs the
+ * function as the language's own `call` would, with no member read when it is called (Node's `uncurryThis`).
+ * @type {function(Function): Function}
+ * @private
+ */
+const uncurryThis = apply(globalThis.Function.prototype.bind, globalThis.Function.prototype.bind, [globalThis.Function.prototype.call]);
+
+/**
+ * The functions and accessors a built-in prototype holds under string keys, each taking its receiver first, on a frozen
+ * object with no prototype. An accessor is there under its name and returns what its getter returns
+ * (`MapMethods.size(map)`). `constructor` is left out.
+ * @param {object|undefined} proto - The prototype, or undefined where the host has none.
+ * @param {Object<string, symbol>} [symbols] - Symbol-keyed functions to take too, by the name to take them under.
+ * @returns {object} The functions, by name.
+ * @private
+ */
+function methodsOf(proto, symbols) {
+	const copy = create(null);
+	if (!proto) return freeze(copy);
+	const names = getOwnPropertyNames(proto);
+	for (let i = 0; i < names.length; i++) {
+		const name = names[i];
+		if (name === "constructor") continue;
+		const descriptor = getOwnPropertyDescriptor(proto, name);
+		if (typeof descriptor.value === "function") copy[name] = uncurryThis(descriptor.value);
+		else if (typeof descriptor.get === "function") copy[name] = uncurryThis(descriptor.get);
+	}
+	if (symbols) {
+		const keys = getOwnPropertyNames(symbols);
+		for (let i = 0; i < keys.length; i++) {
+			const descriptor = getOwnPropertyDescriptor(proto, symbols[keys[i]]);
+			if (descriptor && typeof descriptor.value === "function") copy[keys[i]] = uncurryThis(descriptor.value);
+		}
+	}
+	return freeze(copy);
+}
+
+/**
+ * The methods of `Array.prototype`, as they were when slothlet loaded, each taking the array first.
+ * `map`, `filter`, `slice`, `splice`, `concat`, `flat` and `flatMap` read the array's `constructor` to make their
+ * result; `mapList`, `filterList`, `copyList` and `concatLists` do not.
+ * @type {object}
+ * @internal
+ * @example
+ * import { ArrayMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * ArrayMethods.push(list, value);
+ */
+export const ArrayMethods = methodsOf(globalThis.Array.prototype);
+
+/**
+ * The methods of `String.prototype`, as they were when slothlet loaded, each taking the string first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { StringMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * StringMethods.startsWith(text, "node:");
+ */
+export const StringMethods = methodsOf(globalThis.String.prototype);
+
+/**
+ * The methods of `Map.prototype` (and its `size`), as they were when slothlet loaded, each taking the map first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { MapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * MapMethods.get(map, key);
+ */
+export const MapMethods = methodsOf(globalThis.Map.prototype);
+
+/**
+ * The methods of `Set.prototype` (and its `size`), as they were when slothlet loaded, each taking the set first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { SetMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * SetMethods.has(set, value);
+ */
+export const SetMethods = methodsOf(globalThis.Set.prototype);
+
+/**
+ * The methods of `WeakMap.prototype`, as they were when slothlet loaded, each taking the map first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * WeakMapMethods.get(views, target);
+ */
+export const WeakMapMethods = methodsOf(globalThis.WeakMap.prototype);
+
+/**
+ * The methods of `WeakSet.prototype`, as they were when slothlet loaded, each taking the set first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { WeakSetMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * WeakSetMethods.has(seen, value);
+ */
+export const WeakSetMethods = methodsOf(globalThis.WeakSet.prototype);
+
+/**
+ * The methods of `WeakRef.prototype` (`deref`), as they were when slothlet loaded, each taking the reference first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { WeakRefMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * WeakRefMethods.deref(ref);
+ */
+export const WeakRefMethods = methodsOf(globalThis.WeakRef.prototype);
+
+/**
+ * The methods and flag accessors of `RegExp.prototype`, as they were when slothlet loaded, each taking the expression
+ * first; its symbol-keyed methods are under `symbolReplace`, `symbolSplit`, `symbolMatch`, `symbolMatchAll` and
+ * `symbolSearch`. `exec` is the one that reads nothing else off the expression; `test` reads `exec` off it.
+ * @type {object}
+ * @internal
+ * @example
+ * import { RegExpMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * RegExpMethods.exec(pattern, text) !== null;
+ */
+export const RegExpMethods = methodsOf(globalThis.RegExp.prototype, {
+	symbolReplace: NativeSymbol.replace,
+	symbolSplit: NativeSymbol.split,
+	symbolMatch: NativeSymbol.match,
+	symbolMatchAll: NativeSymbol.matchAll,
+	symbolSearch: NativeSymbol.search
+});
+
+/**
+ * The methods of `Promise.prototype` (`then`, `catch`, `finally`), as they were when slothlet loaded, each taking the
+ * promise first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { PromiseMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * PromiseMethods.then(promise, onFulfilled, onRejected);
+ */
+export const PromiseMethods = methodsOf(NativePromise.prototype);
+
+/**
+ * The methods of `Function.prototype` (`call`, `apply`, `bind`, `toString`), as they were when slothlet loaded, each
+ * taking the function first: `FunctionMethods.call(fn, thisArg, a, b)` runs `fn` as `fn.call(thisArg, a, b)` would.
+ * @type {object}
+ * @internal
+ * @example
+ * import { FunctionMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * FunctionMethods.bind(fn, receiver);
+ */
+export const FunctionMethods = methodsOf(globalThis.Function.prototype);
+
+/**
+ * The methods of `Object.prototype` (`hasOwnProperty`, `isPrototypeOf`, `propertyIsEnumerable`, `toString`, …), as
+ * they were when slothlet loaded, each taking the value first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { ObjectMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * ObjectMethods.hasOwnProperty(value, "key");
+ */
+export const ObjectMethods = methodsOf(NativeObject.prototype);
+
+/**
+ * The methods of `Number.prototype`, as they were when slothlet loaded, each taking the number first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { NumberMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * NumberMethods.toString(255, 16); // "ff"
+ */
+export const NumberMethods = methodsOf(globalThis.Number.prototype);
+
+/**
+ * The methods of `Date.prototype`, as they were when slothlet loaded, each taking the date first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { DateMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * DateMethods.toISOString(date);
+ */
+export const DateMethods = methodsOf(globalThis.Date.prototype);
+
+/**
+ * The methods and accessors of `Symbol.prototype` (`description`, `toString`), as they were when slothlet loaded,
+ * each taking the symbol first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { SymbolMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * SymbolMethods.description(marker);
+ */
+export const SymbolMethods = methodsOf(NativeSymbol.prototype);
+
+/**
+ * The methods of `Error.prototype` (`toString`), as they were when slothlet loaded, each taking the error first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { ErrorMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * ErrorMethods.toString(error);
+ */
+export const ErrorMethods = methodsOf(globalThis.Error.prototype);
+
+/**
+ * The methods and accessors the typed arrays share (`length`, `byteLength`, `buffer`, `subarray`, `set`, …), as they
+ * were when slothlet loaded, each taking the typed array first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { TypedArrayMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * TypedArrayMethods.length(bytes);
+ */
+export const TypedArrayMethods = methodsOf(getPrototypeOfNative(globalThis.Uint8Array.prototype));
+
+/**
+ * The methods and accessors of `ArrayBuffer.prototype` (`byteLength`, `slice`, …), as they were when slothlet loaded,
+ * each taking the buffer first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { ArrayBufferMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * ArrayBufferMethods.byteLength(buffer);
+ */
+export const ArrayBufferMethods = methodsOf(globalThis.ArrayBuffer.prototype);
+
+/**
+ * The methods and accessors of `URL.prototype` (`href`, `pathname`, `searchParams`, `toString`, …), as they were when
+ * slothlet loaded, each taking the URL first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { URLMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * URLMethods.href(new URL("./a.mjs", base));
+ */
+export const URLMethods = methodsOf(globalThis.URL?.prototype);
+
+/**
+ * The methods of `URLSearchParams.prototype`, as they were when slothlet loaded, each taking the parameters first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { URLSearchParamsMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * URLSearchParamsMethods.get(params, "slothlet_instance");
+ */
+export const URLSearchParamsMethods = methodsOf(globalThis.URLSearchParams?.prototype);
+
+/**
+ * The methods and accessors of `TextDecoder.prototype` (`decode`, `encoding`, …), as they were when slothlet loaded,
+ * each taking the decoder first; empty where the host has none.
+ * @type {object}
+ * @internal
+ * @example
+ * import { TextDecoderMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * TextDecoderMethods.decode(new TextDecoder(), bytes);
+ */
+export const TextDecoderMethods = methodsOf(globalThis.TextDecoder?.prototype);
+
+/**
+ * The methods and accessors of `TextEncoder.prototype` (`encode`, …), as they were when slothlet loaded, each taking
+ * the encoder first; empty where the host has none.
+ * @type {object}
+ * @internal
+ * @example
+ * import { TextEncoderMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * TextEncoderMethods.encode(new TextEncoder(), text);
+ */
+export const TextEncoderMethods = methodsOf(globalThis.TextEncoder?.prototype);
+
+/**
+ * The methods of Node's `Buffer.prototype` (`toString`, …), as they were when slothlet loaded, each taking the buffer
+ * first; empty where the host has none (a browser).
+ * @type {object}
+ * @internal
+ * @example
+ * import { BufferMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * BufferMethods.toString(chunk, "utf8");
+ */
+export const BufferMethods = methodsOf(globalThis.Buffer?.prototype);
+
+/**
+ * The methods of `FinalizationRegistry.prototype` (`register`, `unregister`), as they were when slothlet loaded, each
+ * taking the registry first.
+ * @type {object}
+ * @internal
+ * @example
+ * import { FinalizationRegistryMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * FinalizationRegistryMethods.register(registry, target, held);
+ */
+export const FinalizationRegistryMethods = methodsOf(globalThis.FinalizationRegistry.prototype);
+
+/**
+ * The `next` (and a generator's `return`) of the iterators the language makes, as they were when slothlet loaded,
+ * each taking the iterator first: `arrayNext`, `mapNext`, `setNext`, `stringNext`, `regExpStringNext`,
+ * `generatorNext`, `generatorReturn`, `generatorThrow`.
+ * @type {object}
+ * @internal
+ * @example
+ * import { IteratorMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * IteratorMethods.mapNext(iterator);
+ */
+export const IteratorMethods = freeze({
+	__proto__: null,
+	arrayNext: uncurryThis(getPrototypeOfNative([][NativeSymbol.iterator]()).next),
+	mapNext: uncurryThis(getPrototypeOfNative(new globalThis.Map()[NativeSymbol.iterator]()).next),
+	setNext: uncurryThis(getPrototypeOfNative(new globalThis.Set()[NativeSymbol.iterator]()).next),
+	stringNext: uncurryThis(getPrototypeOfNative(""[NativeSymbol.iterator]()).next),
+	regExpStringNext: uncurryThis(getPrototypeOfNative(apply(globalThis.String.prototype.matchAll, "", [/(?:)/g])).next),
+	generatorNext: uncurryThis(GeneratorPrototype.next),
+	generatorReturn: uncurryThis(GeneratorPrototype.return),
+	generatorThrow: uncurryThis(GeneratorPrototype.throw)
+});
+
+/**
+ * An iterator over one the language made, stepping it with the `next` taken at load. Its prototype is frozen and has
+ * no prototype of its own, so `for…of` over it reads `Symbol.iterator`, `next` and `return` off this class only.
+ * @private
+ */
+class SafeIterator {
+	/** @type {object} */
+	#iterator;
+	/** @type {Function} */
+	#next;
+	/** @type {Function|null} */
+	#return;
+	/** @type {Function|null} */
+	#throw;
+
+	/**
+	 * @param {object} iterator - The iterator the language made.
+	 * @param {Function} next - Its `next`, taking the iterator first.
+	 * @param {Function|null} [stop] - Its `return`, taking the iterator first, where stopping early must close it.
+	 * @param {Function|null} [raise] - Its `throw`, taking the iterator first, for a generator `yield*` hands a throw to.
+	 */
+	constructor(iterator, next, stop = null, raise = null) {
+		this.#iterator = iterator;
+		this.#next = next;
+		this.#return = stop;
+		this.#throw = raise;
+	}
+
+	/**
+	 * Throw into the generator, as `yield*` does when the generator delegating to it is thrown into. An iterator with no
+	 * `throw` of its own is closed and the error is a `TypeError`, as the language does for one.
+	 * @param {unknown} error - What is thrown.
+	 * @returns {{value: unknown, done: boolean}} The step the generator takes.
+	 */
+	throw(error) {
+		if (this.#throw) return this.#throw(this.#iterator, error);
+		this.return();
+		throw new globalThisTypeError("The iterator does not provide a 'throw' method");
+	}
+
+	/**
+	 * The next step.
+	 * @returns {{value: unknown, done: boolean}} The step.
+	 */
+	next() {
+		return this.#next(this.#iterator);
+	}
+
+	/**
+	 * Stop early, closing a generator.
+	 * @param {unknown} [value] - The value to finish with.
+	 * @returns {{value: unknown, done: boolean}} The last step.
+	 */
+	return(value) {
+		if (this.#return) return this.#return(this.#iterator, value);
+		return { value, done: true };
+	}
+
+	/**
+	 * Itself, so `for…of` can walk it.
+	 * @returns {SafeIterator} This iterator.
+	 */
+	[NativeSymbol.iterator]() {
+		return this;
+	}
+}
+NativeReflect.setPrototypeOf(SafeIterator.prototype, null);
+
+/** An empty set's values, stepped where a walk is handed nothing. */
+const EMPTY_SET = new globalThisSet();
+const EMPTY_SET_ITERATOR_SOURCE = () => SetMethods.values(EMPTY_SET);
+freeze(SafeIterator.prototype);
+freeze(SafeIterator);
+
+/**
+ * The entries of a `Map`, for `for…of`, stepped with the iterator `next` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none walks nothing.
+ * @returns {Iterable<Array<unknown>>} Its `[key, value]` entries.
+ * @internal
+ * @example
+ * for (const entry of mapEntries(map)) use(entry[0], entry[1]);
+ */
+export function mapEntries(map) {
+	if (map === undefined || map === null) return new SafeIterator(EMPTY_SET_ITERATOR_SOURCE(), IteratorMethods.setNext);
+	return new SafeIterator(MapMethods.entries(map), IteratorMethods.mapNext);
+}
+
+/**
+ * The keys of a `Map`, for `for…of`, stepped with the iterator `next` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none walks nothing.
+ * @returns {Iterable<unknown>} Its keys.
+ * @internal
+ * @example
+ * for (const key of mapKeys(map)) use(key);
+ */
+export function mapKeys(map) {
+	if (map === undefined || map === null) return new SafeIterator(EMPTY_SET_ITERATOR_SOURCE(), IteratorMethods.setNext);
+	return new SafeIterator(MapMethods.keys(map), IteratorMethods.mapNext);
+}
+
+/**
+ * The values of a `Map`, for `for…of`, stepped with the iterator `next` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none walks nothing.
+ * @returns {Iterable<unknown>} Its values.
+ * @internal
+ * @example
+ * for (const value of mapValues(map)) use(value);
+ */
+export function mapValues(map) {
+	if (map === undefined || map === null) return new SafeIterator(EMPTY_SET_ITERATOR_SOURCE(), IteratorMethods.setNext);
+	return new SafeIterator(MapMethods.values(map), IteratorMethods.mapNext);
+}
+
+/**
+ * The values of a `Set`, for `for…of`, stepped with the iterator `next` taken at load.
+ * @param {Set<unknown>|null|undefined} set - The set; none walks nothing.
+ * @returns {Iterable<unknown>} Its values.
+ * @internal
+ * @example
+ * for (const value of setValues(set)) use(value);
+ */
+export function setValues(set) {
+	if (set === undefined || set === null) return new SafeIterator(EMPTY_SET_ITERATOR_SOURCE(), IteratorMethods.setNext);
+	return new SafeIterator(SetMethods.values(set), IteratorMethods.setNext);
+}
+
+/**
+ * The steps of a generator slothlet made, for `for…of`, stepped (and closed when the loop stops early) with the
+ * generator functions taken at load.
+ * @param {Generator<unknown>} generator - The generator.
+ * @returns {Iterable<unknown>} Its values.
+ * @internal
+ * @example
+ * for (const frame of generatorSteps(frames())) use(frame);
+ */
+export function generatorSteps(generator) {
+	return new SafeIterator(generator, IteratorMethods.generatorNext, IteratorMethods.generatorReturn, IteratorMethods.generatorThrow);
+}
+
+/**
+ * An async iterator over an async generator, stepped with the async generator functions taken at load, for
+ * `for await…of` and `yield*` in an async generator.
+ * @private
+ */
+class SafeAsyncIterator {
+	/** @type {object} */
+	#generator;
+
+	/**
+	 * @param {object} generator - The async generator.
+	 */
+	constructor(generator) {
+		this.#generator = generator;
+	}
+
+	/**
+	 * The next step.
+	 * @param {unknown} [value] - What the step is sent.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The step.
+	 */
+	next(value) {
+		return ASYNC_GENERATOR_NEXT(this.#generator, value);
+	}
+
+	/**
+	 * Stop early, closing the generator.
+	 * @param {unknown} [value] - The value to finish with.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The last step.
+	 */
+	return(value) {
+		return ASYNC_GENERATOR_RETURN(this.#generator, value);
+	}
+
+	/**
+	 * Throw into the generator.
+	 * @param {unknown} error - What is thrown.
+	 * @returns {Promise<{value: unknown, done: boolean}>} The step it takes.
+	 */
+	throw(error) {
+		return ASYNC_GENERATOR_THROW(this.#generator, error);
+	}
+
+	/**
+	 * Itself, so `for await…of` and `yield*` can walk it.
+	 * @returns {SafeAsyncIterator} This iterator.
+	 */
+	[NativeSymbol.asyncIterator]() {
+		return this;
+	}
+}
+const ASYNC_GENERATOR_NEXT = uncurryThis(AsyncGeneratorPrototype.next);
+const ASYNC_GENERATOR_RETURN = uncurryThis(AsyncGeneratorPrototype.return);
+const ASYNC_GENERATOR_THROW = uncurryThis(AsyncGeneratorPrototype.throw);
+NativeReflect.setPrototypeOf(SafeAsyncIterator.prototype, null);
+freeze(SafeAsyncIterator.prototype);
+freeze(SafeAsyncIterator);
+
+/**
+ * The steps of an async generator, for `for await…of` or `yield*` in an async generator, stepped (and closed or thrown
+ * into) with the async generator functions taken at load.
+ * @param {AsyncGenerator<unknown>} generator - The async generator.
+ * @returns {AsyncIterable<unknown>} Its values.
+ * @internal
+ * @example
+ * for await (const chunk of asyncGeneratorSteps(read())) use(chunk);
+ */
+export function asyncGeneratorSteps(generator) {
+	return new SafeAsyncIterator(generator);
+}
+
+/**
+ * The elements of an array, for `for…of`, stepped with the array iterator's `next` taken at load.
+ * @param {ArrayLike<unknown>} list - The array.
+ * @returns {Iterable<unknown>} Its elements.
+ * @internal
+ * @example
+ * for (const frame of listSteps(frames)) use(frame);
+ */
+export function listSteps(list) {
+	return new SafeIterator(ArrayMethods.values(list), IteratorMethods.arrayNext);
+}
+
+/**
+ * The values of something module code supplied, walked with its own iterator as plain JavaScript would (a set-like a
+ * caller hands a `Set` method), optionally mapped. Only for values whose own iteration is the behaviour asked for;
+ * slothlet's own collections are walked with the helpers above.
+ * @param {Iterable<unknown>} iterable - The value.
+ * @param {function(unknown, number): unknown} [map] - Called with each value and its index.
+ * @returns {Array<unknown>} The values.
+ * @internal
+ * @example
+ * listFromIterable(setLike, (entry) => held(entry));
+ */
+export function listFromIterable(iterable, map) {
+	return map === undefined ? ArrayFrom(iterable) : ArrayFrom(iterable, map);
+}
+
+/**
+ * A new array holding the elements of `list` from `start` up to (not including) `end`, read by index.
+ * @param {ArrayLike<unknown>} list - The array.
+ * @param {number} [start] - The first index (negative counts from the end).
+ * @param {number} [end] - The index to stop before (negative counts from the end).
+ * @returns {Array<unknown>} The copy.
+ * @internal
+ * @example
+ * copyList([1, 2, 3], 1); // [2, 3]
+ */
+export function copyList(list, start = 0, end = list.length) {
+	const length = list.length;
+	let from = start < 0 ? NativeMath.max(length + start, 0) : NativeMath.min(start, length);
+	const to = end < 0 ? NativeMath.max(length + end, 0) : NativeMath.min(end, length);
+	const out = [];
+	for (let i = 0; from < to; from++, i++) put(out, i, list[from]);
+	return out;
+}
+
+/**
+ * A new array holding the elements of each list in turn, read by index.
+ * @param {...ArrayLike<unknown>} lists - The arrays.
+ * @returns {Array<unknown>} Their elements, in order.
+ * @internal
+ * @example
+ * concatLists([1], [2, 3]); // [1, 2, 3]
+ */
+export function concatLists(...lists) {
+	const out = [];
+	let n = 0;
+	for (let i = 0; i < lists.length; i++) {
+		const list = lists[i];
+		for (let j = 0; j < list.length; j++) put(out, n++, list[j]);
+	}
+	return out;
+}
+
+/** `Array.prototype` and `Object.prototype` as slothlet loaded with them. */
+const ArrayPrototype = globalThis.Array.prototype;
+const ObjectPrototype = NativeObject.prototype;
+const defineOwn = NativeReflect.defineProperty;
+const hasOwnNative = uncurryThis(ObjectPrototype.hasOwnProperty);
+
+/**
+ * Set element `index` of an array slothlet makes, as `list[index] = value` does, without running a setter module code
+ * put at that index on `Array.prototype` or `Object.prototype` (or on a prototype put between them). When neither holds
+ * the index the plain write is taken; otherwise the element is defined.
+ * @param {Array<unknown>} list - The array.
+ * @param {number} index - The index.
+ * @param {unknown} value - The element.
+ * @returns {void}
+ * @private
+ */
+function put(list, index, value) {
+	if (
+		getPrototypeOfNative(list) === ArrayPrototype &&
+		getPrototypeOfNative(ArrayPrototype) === ObjectPrototype &&
+		!hasOwnNative(ArrayPrototype, index) &&
+		!hasOwnNative(ObjectPrototype, index)
+	) {
+		list[index] = value;
+		return;
+	}
+	defineOwn(list, index, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
+}
+
+/**
+ * Append values to an array, as `list.push(...values)` does, without running a setter module code put at an index of
+ * the shared prototypes (see {@link put}).
+ * @param {Array<unknown>} list - The array.
+ * @param {...unknown} values - What to append.
+ * @returns {number} The new length.
+ * @internal
+ * @example
+ * listPush(names, "a");
+ */
+export function listPush(list, ...values) {
+	for (let i = 0; i < values.length; i++) put(list, list.length, values[i]);
+	return list.length;
+}
+
+/**
+ * Insert values at the start of an array, as `list.unshift(...values)` does, without running a setter module code put
+ * at an index of the shared prototypes.
+ * @param {Array<unknown>} list - The array.
+ * @param {...unknown} values - What to insert.
+ * @returns {number} The new length.
+ * @internal
+ * @example
+ * listUnshift(frames, first);
+ */
+export function listUnshift(list, ...values) {
+	const count = values.length;
+	for (let i = list.length - 1; i >= 0; i--) put(list, i + count, list[i]);
+	for (let i = 0; i < count; i++) list[i] = values[i];
+	return list.length;
+}
+
+/**
+ * Remove and insert elements in place, as `list.splice(start, deleteCount, ...items)` does, without reading the array's
+ * `constructor` or `Symbol.species` and without running a setter module code put at an index of the shared prototypes.
+ * With only `start`, every element from there is removed.
+ * @param {Array<unknown>} list - The array.
+ * @param {number} start - Where to start (negative counts from the end).
+ * @param {...unknown} rest - How many to remove, then the elements to insert.
+ * @returns {Array<unknown>} The removed elements.
+ * @internal
+ * @example
+ * listSplice(stack, index, 1); // [the element removed]
+ */
+export function listSplice(list, start, ...rest) {
+	const length = list.length;
+	const from = start < 0 ? NativeMath.max(length + start, 0) : NativeMath.min(NativeMath.trunc(start) || 0, length);
+	const removeCount = rest.length === 0 ? length - from : NativeMath.min(NativeMath.max(NativeMath.trunc(rest[0]) || 0, 0), length - from);
+	const removed = [];
+	for (let i = 0; i < removeCount; i++) put(removed, i, list[from + i]);
+	const insertCount = rest.length > 1 ? rest.length - 1 : 0;
+	if (insertCount < removeCount) {
+		for (let k = from; k < length - removeCount; k++) list[k + insertCount] = list[k + removeCount];
+		list.length = length - removeCount + insertCount;
+	} else if (insertCount > removeCount) {
+		for (let k = length - removeCount; k > from; k--) put(list, k + insertCount - 1, list[k + removeCount - 1]);
+	}
+	for (let i = 0; i < insertCount; i++) put(list, from + i, rest[i + 1]);
+	return removed;
+}
+
+/**
+ * Append the elements of `list` to `target`, read by index, as `target.push(...list)` does, and answer the new length.
+ * @param {Array<unknown>} target - The array to add to.
+ * @param {ArrayLike<unknown>} list - The elements to add.
+ * @returns {number} The new length of `target`.
+ * @internal
+ * @example
+ * appendList(names, more);
+ */
+export function appendList(target, list) {
+	const length = list.length;
+	for (let i = 0; i < length; i++) put(target, target.length, list[i]);
+	return target.length;
+}
+
+/**
+ * A new array of what `fn` returns for each element of `list`, as `list.map(fn)` makes, without reading the array's
+ * `constructor`.
+ * @param {ArrayLike<unknown>} list - The array.
+ * @param {function(unknown, number, ArrayLike<unknown>): unknown} fn - Called with each element, its index and the array.
+ * @returns {Array<unknown>} The results.
+ * @internal
+ * @example
+ * mapList([1, 2], (n) => n * 2); // [2, 4]
+ */
+export function mapList(list, fn) {
+	const length = list.length;
+	const out = [];
+	for (let i = 0; i < length; i++) put(out, i, fn(list[i], i, list));
+	return out;
+}
+
+/**
+ * A new array of the elements of `list` for which `fn` returns a truthy value, as `list.filter(fn)` makes, without
+ * reading the array's `constructor`.
+ * @param {ArrayLike<unknown>} list - The array.
+ * @param {function(unknown, number, ArrayLike<unknown>): unknown} fn - Called with each element, its index and the array.
+ * @returns {Array<unknown>} The elements kept.
+ * @internal
+ * @example
+ * filterList([1, 2, 3], (n) => n > 1); // [2, 3]
+ */
+export function filterList(list, fn) {
+	const length = list.length;
+	const out = [];
+	for (let i = 0, n = 0; i < length; i++) {
+		const value = list[i];
+		if (fn(value, i, list)) put(out, n++, value);
+	}
+	return out;
+}
+
+/**
+ * The values of a `Set` in a new array, read with the `forEach` taken at load.
+ * @param {Set<unknown>|null|undefined} set - The set; none gives an empty array.
+ * @returns {Array<unknown>} Its values, in order.
+ * @internal
+ * @example
+ * setToArray(new Set([1, 2])); // [1, 2]
+ */
+export function setToArray(set) {
+	const out = [];
+	if (set === undefined || set === null) return out;
+	SetMethods.forEach(set, (value) => {
+		put(out, out.length, value);
+	});
+	return out;
+}
+
+/**
+ * The keys of a `Map` in a new array, read with the `forEach` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none gives an empty array.
+ * @returns {Array<unknown>} Its keys, in order.
+ * @internal
+ * @example
+ * mapKeysToArray(new Map([["a", 1]])); // ["a"]
+ */
+export function mapKeysToArray(map) {
+	const out = [];
+	if (map === undefined || map === null) return out;
+	MapMethods.forEach(map, (value, key) => {
+		put(out, out.length, key);
+	});
+	return out;
+}
+
+/**
+ * The values of a `Map` in a new array, read with the `forEach` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none gives an empty array.
+ * @returns {Array<unknown>} Its values, in order.
+ * @internal
+ * @example
+ * mapValuesToArray(new Map([["a", 1]])); // [1]
+ */
+export function mapValuesToArray(map) {
+	const out = [];
+	if (map === undefined || map === null) return out;
+	MapMethods.forEach(map, (value) => {
+		put(out, out.length, value);
+	});
+	return out;
+}
+
+/**
+ * The `[key, value]` entries of a `Map` in a new array, read with the `forEach` taken at load.
+ * @param {Map<unknown, unknown>|null|undefined} map - The map; none gives an empty array.
+ * @returns {Array<Array<unknown>>} Its entries, in order.
+ * @internal
+ * @example
+ * mapEntriesToArray(new Map([["a", 1]])); // [["a", 1]]
+ */
+export function mapEntriesToArray(map) {
+	const out = [];
+	if (map === undefined || map === null) return out;
+	MapMethods.forEach(map, (value, key) => {
+		put(out, out.length, [key, value]);
+	});
+	return out;
+}
+
+/**
+ * `text` split at each occurrence of `separator`, as `text.split(separator)` gives for a string separator, found with
+ * the `indexOf` taken at load. (`text.split(separator)` looks `Symbol.split` up on the separator, which for a string is
+ * `String.prototype`, where a module can put one.) An empty separator splits into code units.
+ * @param {string} text - The text.
+ * @param {string} separator - What to split at.
+ * @param {number} [limit] - The most pieces to give.
+ * @returns {string[]} The pieces.
+ * @internal
+ * @example
+ * splitText("a.b.c", "."); // ["a", "b", "c"]
+ */
+export function splitText(text, separator, limit = 4294967295) {
+	const out = [];
+	if (limit === 0) return out;
+	if (separator === "") {
+		for (let i = 0; i < text.length && out.length < limit; i++) put(out, i, text[i]);
+		return out;
+	}
+	let from = 0;
+	let at;
+	while ((at = StringMethods.indexOf(text, separator, from)) !== -1) {
+		put(out, out.length, StringMethods.slice(text, from, at));
+		if (out.length >= limit) return out;
+		from = at + separator.length;
+	}
+	put(out, out.length, StringMethods.slice(text, from));
+	return out;
+}
+
+/**
+ * What a replacement string stands for at one match, as `String.prototype.replace` reads it: `$$`, `$&`, `` $` ``,
+ * `$'`, `$1`…`$99` and `$<name>`.
+ * @param {string} replacement - The replacement string.
+ * @param {Array<string|undefined>} match - The match and its captures.
+ * @param {string} text - The text searched.
+ * @param {number} position - Where the match starts.
+ * @param {object|undefined} groups - The named captures.
+ * @returns {string} The text to put in.
+ * @private
+ */
+function substitution(replacement, match, text, position, groups) {
+	let out = "";
+	const captures = match.length - 1;
+	for (let i = 0; i < replacement.length; i++) {
+		const char = replacement[i];
+		if (char !== "$" || i + 1 >= replacement.length) {
+			out += char;
+			continue;
+		}
+		const next = replacement[i + 1];
+		if (next === "$") {
+			out += "$";
+			i++;
+		} else if (next === "&") {
+			out += match[0];
+			i++;
+		} else if (next === "`") {
+			out += StringMethods.slice(text, 0, position);
+			i++;
+		} else if (next === "'") {
+			out += StringMethods.slice(text, position + match[0].length);
+			i++;
+		} else if (next >= "0" && next <= "9") {
+			const two =
+				i + 2 < replacement.length && replacement[i + 2] >= "0" && replacement[i + 2] <= "9" ? NativeNumber(next + replacement[i + 2]) : -1;
+			const one = NativeNumber(next);
+			if (two >= 1 && two <= captures) {
+				out += match[two] ?? "";
+				i += 2;
+			} else if (one >= 1 && one <= captures) {
+				out += match[one] ?? "";
+				i++;
+			} else out += "$";
+		} else if (next === "<" && groups !== undefined) {
+			const close = StringMethods.indexOf(replacement, ">", i + 2);
+			if (close === -1) out += "$";
+			else {
+				const value = groups[StringMethods.slice(replacement, i + 2, close)];
+				out += value === undefined ? "" : NativeString(value);
+				i = close;
+			}
+		} else out += "$";
+	}
+	return out;
+}
+
+/**
+ * The matches a replace or a split walks: every match from the start for a global expression, otherwise the first from
+ * `lastIndex` for a sticky one and from the start for any other, each found with the `exec` taken at load. A global or
+ * sticky expression's `lastIndex` ends as `String.prototype.replace` leaves it.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {Array<RegExpExecArray>} The matches.
+ * @private
+ */
+function matchesOf(regexp, text) {
+	const out = [];
+	if (!RegExpMethods.global(regexp)) {
+		if (!RegExpMethods.sticky(regexp)) regexp.lastIndex = 0;
+		const match = RegExpMethods.exec(regexp, text);
+		if (match !== null) put(out, 0, match);
+		return out;
+	}
+	const unicode = RegExpMethods.unicode(regexp) || (RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	regexp.lastIndex = 0;
+	let match;
+	while ((match = RegExpMethods.exec(regexp, text)) !== null) {
+		put(out, out.length, match);
+		if (match[0] === "") {
+			const at = regexp.lastIndex;
+			const code = unicode ? StringMethods.codePointAt(text, at) : undefined;
+			regexp.lastIndex = at + (code !== undefined && code > 0xffff ? 2 : 1);
+		}
+	}
+	return out;
+}
+
+/**
+ * `text` with the matches of a regular expression replaced, as `text.replace(regexp, replacement)` (or `replaceAll`)
+ * gives, found with the `exec` taken at load. (`text.replace(regexp, …)` reads `Symbol.replace`, `flags` and `exec` off
+ * the expression's prototype, where module code can replace them.)
+ * @param {RegExp} regexp - The expression; a global one replaces every match.
+ * @param {string} text - The text.
+ * @param {string|Function} replacement - The replacement string (with `$` patterns), or a function called as
+ *   `String.prototype.replace` calls one.
+ * @returns {string} The new text.
+ * @internal
+ * @example
+ * regExpReplace(/\./g, "a.b", "/"); // "a/b"
+ */
+export function regExpReplace(regexp, text, replacement) {
+	text = NativeString(text);
+	const matches = matchesOf(regexp, text);
+	if (matches.length === 0) return text;
+	let out = "";
+	let from = 0;
+	for (let m = 0; m < matches.length; m++) {
+		const match = matches[m];
+		const position = match.index;
+		let piece;
+		if (typeof replacement === "function") {
+			const args = [];
+			for (let i = 0; i < match.length; i++) args[i] = match[i];
+			args[args.length] = position;
+			args[args.length] = text;
+			if (match.groups !== undefined) args[args.length] = match.groups;
+			piece = NativeString(apply(replacement, undefined, args));
+		} else piece = substitution(NativeString(replacement), match, text, position, match.groups);
+		out += StringMethods.slice(text, from, position) + piece;
+		from = position + match[0].length;
+	}
+	return out + StringMethods.slice(text, from);
+}
+
+/**
+ * `text` split at the matches of a regular expression, captures included, as `text.split(regexp, limit)` gives, found
+ * with the `exec` taken at load on a sticky copy of the expression.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @param {number} [limit] - The most pieces to give.
+ * @returns {string[]} The pieces.
+ * @internal
+ * @example
+ * regExpSplit(/[,;]/, "a,b;c"); // ["a", "b", "c"]
+ */
+export function regExpSplit(regexp, text, limit = 4294967295) {
+	text = NativeString(text);
+	const out = [];
+	if (limit === 0) return out;
+	// The language's own algorithm: a sticky copy tried at each position in turn.
+	const unicode = RegExpMethods.unicode(regexp) || (RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	const splitter = new globalThisRegExp(RegExpMethods.source(regexp), flagsOf(regexp, "y", "g"));
+	const size = text.length;
+	if (size === 0) {
+		splitter.lastIndex = 0;
+		if (RegExpMethods.exec(splitter, text) === null) put(out, 0, text);
+		return out;
+	}
+	const advance = (index) => {
+		if (!unicode || index + 1 >= size) return index + 1;
+		const code = StringMethods.codePointAt(text, index);
+		return index + (code !== undefined && code > 0xffff ? 2 : 1);
+	};
+	let p = 0;
+	let q = 0;
+	while (q < size) {
+		splitter.lastIndex = q;
+		const match = RegExpMethods.exec(splitter, text);
+		if (match === null) {
+			q = advance(q);
+			continue;
+		}
+		const e = NativeMath.min(splitter.lastIndex, size);
+		if (e === p) {
+			q = advance(q);
+			continue;
+		}
+		put(out, out.length, StringMethods.slice(text, p, q));
+		if (out.length >= limit) return out;
+		p = e;
+		for (let i = 1; i < match.length; i++) {
+			put(out, out.length, match[i]);
+			if (out.length >= limit) return out;
+		}
+		q = p;
+	}
+	put(out, out.length, StringMethods.slice(text, p, size));
+	return out;
+}
+
+/**
+ * What `text.match(regexp)` gives, found with the `exec` taken at load: the first match (with its captures) for an
+ * expression that is not global, every matched text for a global one, or null for none.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {RegExpExecArray|string[]|null} The match or matches.
+ * @internal
+ * @example
+ * regExpMatch(/\d+/g, "a1b22"); // ["1", "22"]
+ */
+export function regExpMatch(regexp, text) {
+	text = NativeString(text);
+	if (!RegExpMethods.global(regexp)) {
+		if (!RegExpMethods.sticky(regexp)) regexp.lastIndex = 0;
+		return RegExpMethods.exec(regexp, text);
+	}
+	const matches = matchesOf(regexp, text);
+	if (matches.length === 0) return null;
+	return mapList(matches, (match) => match[0]);
+}
+
+/**
+ * Where the first match of a regular expression in `text` starts, as `text.search(regexp)` gives (-1 for none), found
+ * with the `exec` taken at load; the expression's `lastIndex` is left as it was.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} text - The text.
+ * @returns {number} The index.
+ * @internal
+ * @example
+ * regExpSearch(/b/, "abc"); // 1
+ */
+export function regExpSearch(regexp, text) {
+	const kept = regexp.lastIndex;
+	regexp.lastIndex = 0;
+	const match = RegExpMethods.exec(regexp, NativeString(text));
+	regexp.lastIndex = kept;
+	return match === null ? -1 : match.index;
+}
+
+/**
+ * `text` with the first occurrence of `search` replaced, as `text.replace(search, replacement)` gives for a string
+ * `search`, found with the `indexOf` taken at load. (`text.replace(search, …)` looks `Symbol.replace` up on `search`,
+ * which for a string is `String.prototype`, where module code can put one.)
+ * @param {string} text - The text.
+ * @param {string} search - What to replace.
+ * @param {string|Function} replacement - The replacement string (with `$` patterns), or a function.
+ * @returns {string} The new text.
+ * @internal
+ * @example
+ * textReplace("a.b.c", ".", "/"); // "a/b.c"
+ */
+export function textReplace(text, search, replacement) {
+	text = NativeString(text);
+	search = NativeString(search);
+	const position = StringMethods.indexOf(text, search);
+	if (position === -1) return text;
+	const match = [search];
+	const piece =
+		typeof replacement === "function"
+			? NativeString(replacement(search, position, text))
+			: substitution(NativeString(replacement), match, text, position, undefined);
+	return StringMethods.slice(text, 0, position) + piece + StringMethods.slice(text, position + search.length);
+}
+
+/**
+ * The flags of a regular expression, read one by one with the accessors taken at load, with `add` added and `drop`
+ * left out.
+ * @param {RegExp} regexp - The expression.
+ * @param {string} [add] - Flags to add.
+ * @param {string} [drop] - Flags to leave out.
+ * @returns {string} The flags.
+ * @private
+ */
+function flagsOf(regexp, add = "", drop = "") {
+	let flags = "";
+	const take = (flag, on) => {
+		if ((on || StringMethods.includes(add, flag)) && !StringMethods.includes(drop, flag)) flags += flag;
+	};
+	take("d", RegExpMethods.hasIndices(regexp));
+	take("g", RegExpMethods.global(regexp));
+	take("i", RegExpMethods.ignoreCase(regexp));
+	take("m", RegExpMethods.multiline(regexp));
+	take("s", RegExpMethods.dotAll(regexp));
+	take("u", RegExpMethods.unicode(regexp));
+	take("v", RegExpMethods.unicodeSets ? RegExpMethods.unicodeSets(regexp) : false);
+	take("y", RegExpMethods.sticky(regexp));
+	return flags;
+}
+
+/**
+ * Every match of a global regular expression in `text`, as `text.matchAll(regexp)` yields them, found with the `exec`
+ * taken at load on a copy of the expression (the expression's own `lastIndex` is left alone). The copy's flags are read
+ * one by one with the accessors taken at load.
+ * @param {string} text - The text to search.
+ * @param {RegExp} regexp - The expression.
+ * @returns {Array<RegExpExecArray>} The matches, in order.
+ * @internal
+ * @example
+ * matchAllOf("a1b2", /\d/g).length; // 2
+ */
+export function matchAllOf(text, regexp) {
+	const copy = new globalThisRegExp(RegExpMethods.source(regexp), flagsOf(regexp, "g"));
+	const out = [];
+	let match;
+	while ((match = RegExpMethods.exec(copy, text)) !== null) {
+		put(out, out.length, match);
+		if (match[0] === "") copy.lastIndex++;
+	}
+	return out;
+}
+
+/**
+ * The promise slothlet makes for its own waits: a `Promise` whose `constructor`, `then`, `catch` and `finally` are its
+ * own frozen members (the language's own functions, taken at load) and whose `Symbol.species` is itself. Awaiting one, or
+ * calling the captured `then` on one, reads only those, never a member module code can put on `Promise.prototype` or
+ * `Promise`. It is still a `Promise` (`instanceof Promise`, `util.types.isPromise`).
+ * @internal
+ * @example
+ * import { SafePromise } from "@cldmv/slothlet/helpers/intrinsics";
+ * const settled = new SafePromise((resolve) => resolve());
+ */
+export class SafePromise extends NativePromise {}
+{
+	const proto = NativePromise.prototype;
+	const own = (key) => ({
+		__proto__: null,
+		value: getOwnPropertyDescriptor(proto, key).value,
+		writable: false,
+		enumerable: false,
+		configurable: false
+	});
+	defineOwnAtLoad(SafePromise.prototype, "then", own("then"));
+	defineOwnAtLoad(SafePromise.prototype, "catch", own("catch"));
+	defineOwnAtLoad(SafePromise.prototype, "finally", own("finally"));
+	defineOwnAtLoad(SafePromise, NativeSymbol.species, {
+		__proto__: null,
+		value: SafePromise,
+		writable: false,
+		enumerable: false,
+		configurable: false
+	});
+	freeze(SafePromise.prototype);
+	freeze(SafePromise);
+}
+
+/**
+ * Whether a value is a {@link SafePromise}, told by its prototype, read with the function taken at load.
+ * @param {unknown} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function isSafePromise(value) {
+	return value !== null && typeof value === "object" && getPrototypeOfNative(value) === SafePromise.prototype;
+}
+
+/**
+ * A {@link SafePromise} settled with `value`: the value itself when it is one, otherwise fulfilled with it.
+ * @param {unknown} value - The value.
+ * @returns {SafePromise} The promise.
+ * @internal
+ * @example
+ * await settledWith(undefined);
+ */
+export function settledWith(value) {
+	if (isSafePromise(value)) return value;
+	return new SafePromise((resolve) => resolve(value));
+}
+
+/**
+ * React to one item of a {@link promiseAll} list on a later job: a {@link SafePromise} through its own `then`, any other
+ * promise or thenable through the captured `then` on a {@link SafePromise} resolved with it (which reads what the item
+ * itself offers, as `Promise.all` does), and a plain value as fulfilled.
+ * @param {unknown} item - The item.
+ * @param {function(unknown): void} onFulfilled - Called with its value.
+ * @param {function(unknown): void} onRejected - Called with its reason.
+ * @returns {void}
+ * @private
+ */
+function settleItem(item, onFulfilled, onRejected) {
+	PromiseMethods.then(settledWith(item), onFulfilled, onRejected);
+}
+
+/**
+ * A promise for the values of the promises (or values) in `list`, as `Promise.all(list)` gives, without walking `list`
+ * with its iterator or reading `then` off a promise: each is settled with the `then` taken at load.
+ * @param {ArrayLike<unknown>} list - The promises or values.
+ * @returns {Promise<Array<unknown>>} Their values, in order; rejected with the first rejection.
+ * @internal
+ * @example
+ * await promiseAll([load(a), load(b)]);
+ */
+export function promiseAll(list) {
+	const length = list.length;
+	return new SafePromise((resolve, reject) => {
+		const out = [];
+		let left = length;
+		if (left === 0) {
+			resolve(out);
+			return;
+		}
+		for (let i = 0; i < length; i++) {
+			PromiseMethods.then(
+				settledWith(list[i]),
+				(value) => {
+					put(out, i, value);
+					if (--left === 0) resolve(out);
+				},
+				reject
+			);
+		}
+	});
+}
+
+/**
+ * A promise for how each of the promises (or values) in `list` settled, as `Promise.allSettled(list)` gives, without
+ * walking `list` with its iterator or reading `then` off a promise.
+ * @param {ArrayLike<unknown>} list - The promises or values.
+ * @returns {Promise<Array<{status: string, value?: unknown, reason?: unknown}>>} How each settled, in order.
+ * @internal
+ * @example
+ * await promiseAllSettled([load(a), load(b)]);
+ */
+export function promiseAllSettled(list) {
+	const length = list.length;
+	return new SafePromise((resolve) => {
+		const out = [];
+		let left = length;
+		if (left === 0) {
+			resolve(out);
+			return;
+		}
+		for (let i = 0; i < length; i++) {
+			const settle = (result) => {
+				put(out, i, result);
+				if (--left === 0) resolve(out);
+			};
+			settleItem(
+				list[i],
+				(value) => settle({ status: "fulfilled", value }),
+				(reason) => settle({ status: "rejected", reason })
+			);
+		}
+	});
+}
+
+/**
+ * A new object with a data member for each `[key, value]` entry of `list`, as `Object.fromEntries(list)` makes,
+ * without walking `list` with its iterator.
+ * @param {ArrayLike<ArrayLike<unknown>>} list - The entries.
+ * @returns {object} The object.
+ * @internal
+ * @example
+ * objectFromEntries([["a", 1]]); // { a: 1 }
+ */
+export function objectFromEntries(list) {
+	const out = {};
+	for (let i = 0; i < list.length; i++) {
+		const entry = list[i];
+		defineOwn(out, entry[0], { __proto__: null, value: entry[1], writable: true, enumerable: true, configurable: true });
+	}
+	return out;
+}
+
+/**
+ * The text `String(value)` gives for plain data, made without looking anything up on the value: strings, numbers,
+ * booleans, bigints, symbols, `null` and `undefined` as `String()` gives them; an array as its elements joined with
+ * `,` (`null` and `undefined` as empty); a function as its source text (by the `toString` taken at load); an error as
+ * `name: message` from its own data members; a date by the date `toString` taken at load; any other object as
+ * `[object Object]`. A `toString`, `valueOf`, `Symbol.toPrimitive` or `Symbol.toStringTag` an object carries, or one
+ * module code put on a shared prototype, is not read.
+ * @param {unknown} value - The value.
+ * @param {number} [depth] - How many arrays deep to render (deeper ones render as empty).
+ * @returns {string} The text.
+ * @internal
+ * @example
+ * stringOf(["a", 1]); // "a,1"
+ */
+export function stringOf(value, depth = 4) {
+	if (typeof value === "string") return value;
+	if (typeof value === "symbol") return SymbolMethods.toString(value);
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return NativeString(value);
+	if (typeof value === "function") {
+		try {
+			return functionSource(value);
+		} catch {
+			return "function () { [native code] }";
+		}
+	}
+	if (Arrays.isArray(value)) {
+		if (depth <= 0) return "";
+		let out = "";
+		for (let i = 0; i < value.length; i++) {
+			if (i > 0) out += ",";
+			const element = value[i];
+			if (element !== null && element !== undefined) out += stringOf(element, depth - 1);
+		}
+		return out;
+	}
+	const error = errorParts(value);
+	if (error !== null) return error.message ? `${error.name}: ${error.message}` : error.name;
+	try {
+		return DateMethods.toString(value);
+	} catch {
+		return "[object Object]";
+	}
+}
+
+/**
+ * The text `JSON.stringify(value)` gives for plain data, made without running code the value or module code carries: a
+ * copy of the value's own enumerable data members (getters, `toJSON` and functions left out, as are members of a
+ * prototype) is serialized with the `JSON.stringify` taken at load. A bigint renders as its digits; anything deeper than
+ * `depth` as `null`.
+ * @param {unknown} value - The value.
+ * @param {number} [depth] - How many objects deep to copy.
+ * @returns {string|undefined} The JSON text, or undefined where `JSON.stringify` gives none (a function, a symbol,
+ *   `undefined`).
+ * @internal
+ * @example
+ * jsonOf({ a: 1, get b() { return 2; } }); // '{"a":1}'
+ */
+export function jsonOf(value, depth = 8) {
+	return NativeJSON.stringify(plainCopy(value, depth));
+}
+
+/**
+ * A copy of plain data for {@link jsonOf}: primitives as they are (a bigint as its digits), arrays and objects as fresh
+ * arrays and prototype-less objects of their own enumerable data members, read with the functions taken at load.
+ * @param {unknown} value - The value.
+ * @param {number} depth - How many objects deep to copy.
+ * @returns {unknown} The copy.
+ * @private
+ */
+function plainCopy(value, depth) {
+	if (typeof value === "bigint") return NativeString(value);
+	if (value === null || typeof value !== "object") return value;
+	if (depth <= 0) return null;
+	if (Arrays.isArray(value)) {
+		const out = [];
+		for (let i = 0; i < value.length; i++) put(out, i, plainCopy(ownData(value, NativeString(i)), depth - 1));
+		return out;
+	}
+	const out = create(null);
+	const keys = ownKeysNative(value);
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i];
+		if (typeof key !== "string") continue;
+		const descriptor = getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable || !hasOwnNative(descriptor, "value")) continue;
+		const member = descriptor.value;
+		if (typeof member === "function" || typeof member === "symbol") continue;
+		defineOwn(out, key, { __proto__: null, value: plainCopy(member, depth - 1), writable: true, enumerable: true, configurable: true });
+	}
+	return out;
+}
+
+/**
+ * An own data member of an object, or undefined when it has none or holds a getter there.
+ * @param {object} value - The object.
+ * @param {string} key - The member.
+ * @returns {unknown} Its value.
+ * @private
+ */
+function ownData(value, key) {
+	const descriptor = getOwnPropertyDescriptor(value, key);
+	return descriptor && hasOwnNative(descriptor, "value") ? descriptor.value : undefined;
+}
+
+/**
+ * The name and message of an error, from its own data members (and the realm's `Error` brand where the engine offers
+ * `Error.isError`, else `instanceof` the `Error` taken at load), or null for a value that is not one.
+ * @param {object} value - The value.
+ * @returns {{name: string, message: string}|null} Its parts.
+ * @private
+ */
+function errorParts(value) {
+	const isError = typeof Errors.isError === "function" ? Errors.isError(value) : value instanceof Error;
+	if (!isError) return null;
+	const name = ownData(value, "name");
+	const message = ownData(value, "message");
+	let constructorName = "Error";
+	for (let proto = getPrototypeOfNative(value); proto !== null; proto = getPrototypeOfNative(proto)) {
+		const named = ownData(proto, "name");
+		if (typeof named === "string") {
+			constructorName = named;
+			break;
+		}
+	}
+	return { name: typeof name === "string" ? name : constructorName, message: typeof message === "string" ? message : "" };
+}
+
+/**
+ * A new `Set` of the elements of `list`, added with the `add` taken at load.
+ * @param {ArrayLike<unknown>} list - The elements.
+ * @returns {Set<unknown>} The set.
+ * @internal
+ * @example
+ * setFrom(["a", "b"]).size; // 2
+ */
+export function setFrom(list) {
+	const set = new globalThisSet();
+	for (let i = 0; i < list.length; i++) SetMethods.add(set, list[i]);
+	return set;
+}
+
+/**
+ * A new `Map` of the `[key, value]` entries in `entries`, set with the `set` taken at load.
+ * @param {ArrayLike<ArrayLike<unknown>>} entries - The entries.
+ * @returns {Map<unknown, unknown>} The map.
+ * @internal
+ * @example
+ * mapFrom([["a", 1]]).get("a"); // 1
+ */
+export function mapFrom(entries) {
+	const map = new globalThisMap();
+	for (let i = 0; i < entries.length; i++) MapMethods.set(map, entries[i][0], entries[i][1]);
+	return map;
+}
 
 export { NativeJSON as JSON, NativeMath as Math };

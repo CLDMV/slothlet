@@ -21,7 +21,17 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { Objects, Arrays, Math, Date } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Arrays,
+	Date,
+	DateMethods,
+	FunctionMethods,
+	mapList,
+	Math,
+	NumberMethods,
+	Objects,
+	StringMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { cloneTakingViews } from "@cldmv/slothlet/helpers/clone-context";
 
 /**
@@ -70,7 +80,7 @@ export class Utilities extends ComponentBase {
 		const result = { ...target };
 
 		for (const key in source) {
-			if (Objects.prototype.hasOwnProperty.call(source, key)) {
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, source, key)) {
 				if (this.isPlainObject(source[key])) {
 					// Recurse: start from target[key] if it's a plain object, otherwise {}
 					// so new nested keys in source always produce a fresh copy.
@@ -114,8 +124,8 @@ export class Utilities extends ComponentBase {
 			// transport, a service handle) is meant to be shared, not cloned (#408). Without
 			// this a bare function fell through to the key-copy loop below and became `{}`.
 			if (typeof obj === "function") return obj;
-			if (obj instanceof Date) return new Date(obj.getTime());
-			if (Arrays.isArray(obj)) return obj.map((item) => this.deepClone(item));
+			if (obj instanceof Date) return new Date(DateMethods.getTime(obj));
+			if (Arrays.isArray(obj)) return mapList(obj, (item) => this.deepClone(item));
 			// For callable Proxies and plain objects: clone all enumerable keys.
 			const cloned = {};
 			for (const key in obj) {
@@ -136,6 +146,6 @@ export class Utilities extends ComponentBase {
 	 * @public
 	 */
 	generateId() {
-		return `slothlet_${this.clock.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		return `slothlet_${this.clock.now()}_${StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 	}
 }

@@ -20,7 +20,35 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Arrays, Map, Set, WeakMap, WeakSet, Boolean } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	concatLists,
+	copyList,
+	filterList,
+	FunctionMethods,
+	listPush,
+	listSplice,
+	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
+	mapList,
+	MapMethods,
+	Objects,
+	Reflect,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/ownership");
 
 /**
@@ -92,11 +120,12 @@ function isIndexable(value) {
  */
 function ownDataKeys(value) {
 	const keys = [];
-	for (const key of Reflect.ownKeys(value)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (typeof key !== "string") continue;
 		try {
 			const descriptor = Objects.getOwnPropertyDescriptor(value, key);
-			if (descriptor && descriptor.enumerable && "value" in descriptor) keys.push(key);
+			if (descriptor && descriptor.enumerable && "value" in descriptor) listPush(keys, key);
 		} catch {
 			// A namespace binding still in its temporal dead zone throws on inspection — skip it.
 		}
@@ -113,10 +142,11 @@ function ownDataKeys(value) {
  */
 function namespaceKeys(mod) {
 	const keys = [];
-	for (const key of Reflect.ownKeys(mod)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(mod); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (typeof key !== "string") continue;
 		try {
-			if (Objects.getOwnPropertyDescriptor(mod, key)?.enumerable) keys.push(key);
+			if (Objects.getOwnPropertyDescriptor(mod, key)?.enumerable) listPush(keys, key);
 		} catch {
 			// Temporal-dead-zone binding — skip it.
 		}
@@ -217,13 +247,17 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		/** @type {Map<string, Set<string>>} */
 		this.moduleToPath = new Map(); // moduleID → Set<apiPath>
+		/** @type {Map<string, Array<object>>} */
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
 		this.moduleEndpoints = new Map(); // moduleID → mount endpoint (e.g. ".", "lib.config")
+		/** @type {Map<string, Set<string>>} */
 		this.moduleMounts = new Map(); // moduleID → every live mount endpoint (a host may mount one id at several paths, #625)
 		// moduleID → Map<endpoint, "replace"|"merge-replace"> — the winning collision mode each of the
 		// module's api.add() calls placed its content under (#524). See setPlacementMode().
+		/** @type {Map<string, Map<string, string>>} */
 		this.placementModes = new Map();
 		// filePath → { values: WeakMap<value, exportPath>, members: WeakMap<value, {key: exportPath}> } —
 		// where each value a loaded file exported sits inside that file's module namespace (#484).
@@ -255,11 +289,12 @@ export class OwnershipManager extends ComponentBase {
 		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
 		// a second mount of it) yields new value identities, while wrappers from an earlier load may
 		// still be looked up against the earlier ones.
-		const isCommonJS = filePath.endsWith(".cjs") || Objects.prototype.hasOwnProperty.call(mod, "module.exports");
-		let entry = this.exportIndex.get(filePath);
+		const isCommonJS =
+			StringMethods.endsWith(filePath, ".cjs") || FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "module.exports");
+		let entry = MapMethods.get(this.exportIndex, filePath);
 		if (!entry) {
 			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };
-			this.exportIndex.set(filePath, entry);
+			MapMethods.set(this.exportIndex, filePath, entry);
 		}
 		// Top-level keys by NAME, with the value each held, for a value that has no identity to look up (a
 		// primitive — objects and functions resolve through the WeakMaps above, so they are not held here).
@@ -267,19 +302,20 @@ export class OwnershipManager extends ComponentBase {
 		// binding is recorded before, and wins over, a default-object member of the same name.
 		const keysThisLoad = new Set();
 		const setKey = (key, value, exportPath) => {
-			if (isIndexable(value) || keysThisLoad.has(key)) return;
-			keysThisLoad.add(key);
-			entry.keys.set(key, { value, exportPath });
+			if (isIndexable(value) || SetMethods.has(keysThisLoad, key)) return;
+			SetMethods.add(keysThisLoad, key);
+			MapMethods.set(entry.keys, key, { value, exportPath });
 		};
 		const setPath = (value, exportPath) => {
-			if (isIndexable(value) && !entry.values.has(value)) entry.values.set(value, exportPath);
+			if (isIndexable(value) && !WeakMapMethods.has(entry.values, value)) WeakMapMethods.set(entry.values, value, exportPath);
 		};
 		// The namespace's own bindings are read through `[[Get]]`: a real ESM namespace exposes them as
 		// data properties, but a loader-provided namespace (a test runner's module runner, a custom
 		// `config.import`) may expose each binding as an accessor. Members BELOW the namespace are read
 		// as plain data only, so indexing never runs a module's own getter code.
-		const namedKeys = isCommonJS ? [] : namespaceKeys(mod).filter((key) => key !== "default" && key !== "module.exports");
-		for (const key of namedKeys) {
+		const namedKeys = isCommonJS ? [] : filterList(namespaceKeys(mod), (key) => key !== "default" && key !== "module.exports");
+		for (let ofIndex = 0, ofList = namedKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const value = readBinding(mod, key);
 			setPath(value, [key]);
 			setKey(key, value, [key]);
@@ -287,16 +323,21 @@ export class OwnershipManager extends ComponentBase {
 		const defaultValue = readBinding(mod, "default");
 		setPath(defaultValue, ["default"]);
 		if (isIndexable(defaultValue)) {
-			for (const key of ownDataKeys(defaultValue)) {
+			for (let ofIndex = 0, ofList = ownDataKeys(defaultValue); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const value = readOwnData(defaultValue, key);
 				setPath(value, ["default", key]);
 				setKey(key, value, ["default", key]);
 			}
 		}
-		for (const key of namedKeys) {
+		for (let ofIndex = 0, ofList = namedKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const value = readBinding(mod, key);
 			if (!isIndexable(value)) continue;
-			for (const member of ownDataKeys(value)) setPath(readOwnData(value, member), [key, member]);
+			for (let ofIndex = 0, ofList = ownDataKeys(value); ofIndex < ofList.length; ofIndex++) {
+				const member = ofList[ofIndex];
+				setPath(readOwnData(value, member), [key, member]);
+			}
 		}
 	}
 
@@ -310,7 +351,7 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.isCommonJSModule("/abs/api/text.cjs"); // true
 	 */
 	isCommonJSModule(filePath) {
-		return this.exportIndex.get(filePath)?.commonJS === true;
+		return MapMethods.get(this.exportIndex, filePath)?.commonJS === true;
 	}
 
 	/**
@@ -334,11 +375,11 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	recordComposedContent(filePath, content, members, self = null) {
 		if (typeof filePath !== "string" || !isIndexable(content)) return;
-		const entry = this.exportIndex.get(filePath);
+		const entry = MapMethods.get(this.exportIndex, filePath);
 		if (!entry) return;
-		if (self && !entry.values.has(content)) entry.values.set(content, self);
+		if (self && !WeakMapMethods.has(entry.values, content)) WeakMapMethods.set(entry.values, content, self);
 		if (members && Objects.keys(members).length > 0) {
-			entry.members.set(content, { ...(entry.members.get(content) || {}), ...members });
+			WeakMapMethods.set(entry.members, content, { ...(WeakMapMethods.get(entry.members, content) || {}), ...members });
 		}
 	}
 
@@ -353,7 +394,7 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.noteClone(copy, exported);
 	 */
 	noteClone(clone, original) {
-		if (clone !== original && isIndexable(clone) && isIndexable(original)) this.cloneSources.set(clone, original);
+		if (clone !== original && isIndexable(clone) && isIndexable(original)) WeakMapMethods.set(this.cloneSources, clone, original);
 	}
 
 	/**
@@ -368,7 +409,7 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	resolveExportPath(filePath, value) {
 		const found = this.#lookupIndexed(filePath, value, "values");
-		return found ? [...found] : null;
+		return found ? copyList(found) : null;
 	}
 
 	/**
@@ -390,8 +431,9 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	resolveExportPathByKey(filePath, key, value) {
 		if (typeof filePath !== "string") return null;
-		const found = this.exportIndex.get(filePath)?.keys.get(key);
-		return found && Objects.is(found.value, value) ? [...found.exportPath] : null;
+		const found =
+			MapMethods.get(this.exportIndex, filePath) == null ? undefined : MapMethods.get(MapMethods.get(this.exportIndex, filePath).keys, key);
+		return found && Objects.is(found.value, value) ? copyList(found.exportPath) : null;
 	}
 
 	/**
@@ -418,15 +460,16 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	#lookupIndexed(filePath, value, table) {
 		if (typeof filePath !== "string") return undefined;
-		const entry = this.exportIndex.get(filePath);
+		const entry = MapMethods.get(this.exportIndex, filePath);
 		if (!entry) return undefined;
 		let current = value;
 		const seen = new Set();
-		while (isIndexable(current) && !seen.has(current)) {
-			const found = entry[table].get(current);
+		while (isIndexable(current) && !SetMethods.has(seen, current)) {
+			// `table` is "values" or "members": both WeakMaps.
+			const found = WeakMapMethods.get(entry[table], current);
 			if (found) return found;
-			seen.add(current);
-			current = this.cloneSources.get(current);
+			SetMethods.add(seen, current);
+			current = WeakMapMethods.get(this.cloneSources, current);
 		}
 		return undefined;
 	}
@@ -453,7 +496,7 @@ export class OwnershipManager extends ComponentBase {
 		return {
 			moduleID: owner.moduleID,
 			filePath: owner.filePath ?? null,
-			exportPath: owner.exportPath ? [...owner.exportPath] : null,
+			exportPath: owner.exportPath ? copyList(owner.exportPath) : null,
 			members: owner.memberExportPaths ?? null
 		};
 	}
@@ -472,7 +515,10 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.refreshOrigin("base", "math.add", { filePath, exportPath: ["add"] });
 	 */
 	refreshOrigin(moduleID, apiPath, origin) {
-		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		const entry =
+			MapMethods.get(this.pathToModule, apiPath) == null
+				? undefined
+				: ArrayMethods.find(MapMethods.get(this.pathToModule, apiPath), (candidate) => candidate.moduleID === moduleID);
 		if (!entry || !origin?.exportPath) return;
 		if (origin.filePath) entry.filePath = origin.filePath;
 		entry.exportPath = origin.exportPath;
@@ -499,7 +545,8 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.pinLiveEntries("plugins", wrapper, previousImpl, resolveWrapper);
 	 */
 	pinLiveEntries(apiPath, wrapper, impl, resolve) {
-		for (const entry of this.pathToModule.get(apiPath) ?? []) {
+		for (let ofIndex = 0, ofList = MapMethods.get(this.pathToModule, apiPath) ?? []; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
 			if (resolve(entry.value) === wrapper) entry.value = impl;
 		}
 	}
@@ -518,13 +565,13 @@ export class OwnershipManager extends ComponentBase {
 		// the type guard is defensive against a malformed/absent ID.
 		/* v8 ignore next */
 		if (typeof moduleID === "string" && moduleID) {
-			this.moduleEndpoints.set(moduleID, endpoint);
-			let mounts = this.moduleMounts.get(moduleID);
+			MapMethods.set(this.moduleEndpoints, moduleID, endpoint);
+			let mounts = MapMethods.get(this.moduleMounts, moduleID);
 			if (!mounts) {
 				mounts = new Set();
-				this.moduleMounts.set(moduleID, mounts);
+				MapMethods.set(this.moduleMounts, moduleID, mounts);
 			}
-			mounts.add(endpoint);
+			SetMethods.add(mounts, endpoint);
 		}
 	}
 
@@ -535,7 +582,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getModuleMounts(moduleID) {
-		return [...(this.moduleMounts.get(moduleID) ?? [])];
+		return setToArray(MapMethods.get(this.moduleMounts, moduleID));
 	}
 
 	/**
@@ -547,15 +594,16 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	releaseMount(moduleID, endpoint) {
-		const mounts = this.moduleMounts.get(moduleID);
+		const mounts = MapMethods.get(this.moduleMounts, moduleID);
 		if (!mounts) return 0;
-		mounts.delete(endpoint);
-		if (mounts.size === 0) {
-			this.moduleMounts.delete(moduleID);
+		SetMethods.delete(mounts, endpoint);
+		if (SetMethods.size(mounts) === 0) {
+			MapMethods.delete(this.moduleMounts, moduleID);
 			return 0;
 		}
-		if (this.moduleEndpoints.get(moduleID) === endpoint) this.moduleEndpoints.set(moduleID, [...mounts].at(-1));
-		return mounts.size;
+		if (MapMethods.get(this.moduleEndpoints, moduleID) === endpoint)
+			MapMethods.set(this.moduleEndpoints, moduleID, ArrayMethods.at(setToArray(mounts), -1));
+		return SetMethods.size(mounts);
 	}
 
 	/**
@@ -565,7 +613,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getModuleEndpoint(moduleID) {
-		return this.moduleEndpoints.get(moduleID);
+		return MapMethods.get(this.moduleEndpoints, moduleID);
 	}
 
 	/**
@@ -592,14 +640,14 @@ export class OwnershipManager extends ComponentBase {
 	 * const previous = ownership.setPlacementMode("shadow", "launcher.session", "replace");
 	 */
 	setPlacementMode(moduleID, endpoint, collisionMode) {
-		const modes = this.placementModes.get(moduleID);
-		const previous = modes?.get(endpoint) ?? null;
+		const modes = MapMethods.get(this.placementModes, moduleID);
+		const previous = (modes == null ? undefined : MapMethods.get(modes, endpoint)) ?? null;
 		if (collisionMode === "replace" || collisionMode === "merge-replace") {
-			if (modes) modes.set(endpoint, collisionMode);
-			else this.placementModes.set(moduleID, new Map([[endpoint, collisionMode]]));
+			if (modes) MapMethods.set(modes, endpoint, collisionMode);
+			else MapMethods.set(this.placementModes, moduleID, mapFrom([[endpoint, collisionMode]]));
 		} else if (modes) {
-			modes.delete(endpoint);
-			if (modes.size === 0) this.placementModes.delete(moduleID);
+			MapMethods.delete(modes, endpoint);
+			if (MapMethods.size(modes) === 0) MapMethods.delete(this.placementModes, moduleID);
 		}
 		return previous;
 	}
@@ -616,12 +664,14 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.getPlacementMode("shadow", "launcher.session.store.create"); // "replace"
 	 */
 	getPlacementMode(moduleID, apiPath) {
-		const modes = this.placementModes.get(moduleID);
+		const modes = MapMethods.get(this.placementModes, moduleID);
 		if (!modes || typeof apiPath !== "string") return null;
 		let match = null;
 		let matchLength = -1;
-		for (const [endpoint, mode] of modes) {
-			const covers = endpoint === "" || apiPath === endpoint || apiPath.startsWith(`${endpoint}.`);
+		for (const ofEntry of mapEntries(modes)) {
+			const endpoint = ofEntry[0],
+				mode = ofEntry[1];
+			const covers = endpoint === "" || apiPath === endpoint || StringMethods.startsWith(apiPath, `${endpoint}.`);
 			if (covers && endpoint.length > matchLength) {
 				match = mode;
 				matchLength = endpoint.length;
@@ -671,7 +721,7 @@ export class OwnershipManager extends ComponentBase {
 		// Guard: reject registration for modules that have been explicitly unregistered.
 		// This prevents stale ownership entries from being re-created when async lazy
 		// materialization completes after a module has already been removed via api.remove().
-		if (this._unregisteredModules.has(moduleID)) {
+		if (SetMethods.has(this._unregisteredModules, moduleID)) {
 			return null;
 		}
 
@@ -706,19 +756,19 @@ export class OwnershipManager extends ComponentBase {
 		}
 
 		// Add to moduleToPath
-		if (!this.moduleToPath.has(moduleID)) {
-			this.moduleToPath.set(moduleID, new Set());
+		if (!MapMethods.has(this.moduleToPath, moduleID)) {
+			MapMethods.set(this.moduleToPath, moduleID, new Set());
 		}
-		this.moduleToPath.get(moduleID).add(apiPath);
+		SetMethods.add(MapMethods.get(this.moduleToPath, moduleID), apiPath);
 
 		// Add to pathToModule stack
-		if (!this.pathToModule.has(apiPath)) {
-			this.pathToModule.set(apiPath, []);
+		if (!MapMethods.has(this.pathToModule, apiPath)) {
+			MapMethods.set(this.pathToModule, apiPath, []);
 		}
 
 		// Check for duplicate registration - if this moduleID is already in the stack, don't add again
-		const stack = this.pathToModule.get(apiPath);
-		const existingEntry = stack.find((entry) => entry.moduleID === moduleID);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
+		const existingEntry = ArrayMethods.find(stack, (entry) => entry.moduleID === moduleID);
 		if (existingEntry) {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
@@ -777,10 +827,10 @@ export class OwnershipManager extends ComponentBase {
 					// non-loss) entry keeps winning the scan even though this one is what's actually
 					// live now (#372 review — A/merge-B/replace-C, then re-add B with replace: without
 					// repositioning, C stays reported as current even after B's replace overwrote it).
-					const idx = stack.indexOf(existingEntry);
+					const idx = ArrayMethods.indexOf(stack, existingEntry);
 					if (idx !== -1 && idx !== stack.length - 1) {
-						stack.splice(idx, 1);
-						stack.push(existingEntry);
+						listSplice(stack, idx, 1);
+						listPush(stack, existingEntry);
 					}
 				} else if (collisionMode === "merge") {
 					// A real collision only exists when some OTHER entry is CURRENTLY the non-loser
@@ -799,7 +849,8 @@ export class OwnershipManager extends ComponentBase {
 					// actual live winner even with an object entry sitting in the stack. Treating that
 					// object entry as "the non-loser to defer to" wrongly re-flagged the function a
 					// loser (#372 review, suppressed finding).
-					existingEntry.isMergeLoss = stack.some(
+					existingEntry.isMergeLoss = ArrayMethods.some(
+						stack,
 						(entry) => entry !== existingEntry && !entry.isMergeLoss && typeof entry.value === "function"
 					);
 				}
@@ -861,7 +912,7 @@ export class OwnershipManager extends ComponentBase {
 			isMergeLoss
 		};
 
-		stack.push(entry);
+		listPush(stack, entry);
 		return entry;
 	}
 
@@ -902,35 +953,35 @@ export class OwnershipManager extends ComponentBase {
 	 * const result = ownership.unregister("module-a");
 	 */
 	unregister(moduleID) {
-		const paths = this.moduleToPath.get(moduleID);
+		const paths = MapMethods.get(this.moduleToPath, moduleID);
 		if (!paths) {
 			return { removed: [], rolledBack: [] };
 		}
 
 		// Mark this module as unregistered so that late-arriving async registrations
 		// (e.g., from in-flight lazy materialization) are silently rejected.
-		this._unregisteredModules.add(moduleID);
+		SetMethods.add(this._unregisteredModules, moduleID);
 
 		const removed = [];
 		const rolledBack = [];
 
-		for (const apiPath of paths) {
+		for (const apiPath of setValues(paths)) {
 			const result = this.removePath(apiPath, moduleID);
 
 			if (result.action === "delete") {
-				removed.push(apiPath);
+				listPush(removed, apiPath);
 			} else if (result.action === "restore") {
-				rolledBack.push({
+				listPush(rolledBack, {
 					apiPath,
 					restoredTo: result.restoreModuleId
 				});
 			}
 		}
 
-		this.moduleToPath.delete(moduleID);
-		this.moduleEndpoints.delete(moduleID);
-		this.moduleMounts.delete(moduleID);
-		this.placementModes.delete(moduleID);
+		MapMethods.delete(this.moduleToPath, moduleID);
+		MapMethods.delete(this.moduleEndpoints, moduleID);
+		MapMethods.delete(this.moduleMounts, moduleID);
+		MapMethods.delete(this.placementModes, moduleID);
 
 		return { removed, rolledBack };
 	}
@@ -961,10 +1012,10 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.markUnregistered("plugins-core");
 	 */
 	markUnregistered(moduleID) {
-		this._unregisteredModules.add(moduleID);
-		this.moduleEndpoints.delete(moduleID);
-		this.moduleMounts.delete(moduleID);
-		this.placementModes.delete(moduleID);
+		SetMethods.add(this._unregisteredModules, moduleID);
+		MapMethods.delete(this.moduleEndpoints, moduleID);
+		MapMethods.delete(this.moduleMounts, moduleID);
+		MapMethods.delete(this.placementModes, moduleID);
 	}
 
 	/**
@@ -990,7 +1041,7 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.clearUnregistered("plugins-core");
 	 */
 	clearUnregistered(moduleID) {
-		this._unregisteredModules.delete(moduleID);
+		SetMethods.delete(this._unregisteredModules, moduleID);
 	}
 
 	/**
@@ -1008,7 +1059,7 @@ export class OwnershipManager extends ComponentBase {
 	 * const result = ownership.removePath("plugins.tools", "module-a");
 	 */
 	removePath(apiPath, moduleID = null) {
-		const stack = this.pathToModule.get(apiPath);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
 		if (!stack) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
@@ -1016,23 +1067,26 @@ export class OwnershipManager extends ComponentBase {
 		// Find and remove entry — an explicit moduleID targets it directly; the default (remove
 		// "current") must resolve the same skip-merge-loss entry getCurrentOwner() would, not just
 		// the literal last element (#372: a merge loser can sit anywhere in the stack).
-		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.indexOf(this.#currentEntry(stack));
+		const index = moduleID
+			? ArrayMethods.findIndex(stack, (entry) => entry.moduleID === moduleID)
+			: ArrayMethods.indexOf(stack, this.#currentEntry(stack));
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
-		const [removed] = stack.splice(index, 1);
+		const unpacked1 = listSplice(stack, index, 1),
+			removed = unpacked1[0];
 		const removedModuleId = removed.moduleID;
-		if (removedModuleId && this.moduleToPath.has(removedModuleId)) {
-			const pathSet = this.moduleToPath.get(removedModuleId);
-			pathSet.delete(apiPath);
-			if (pathSet.size === 0) {
-				this.moduleToPath.delete(removedModuleId);
+		if (removedModuleId && MapMethods.has(this.moduleToPath, removedModuleId)) {
+			const pathSet = MapMethods.get(this.moduleToPath, removedModuleId);
+			SetMethods.delete(pathSet, apiPath);
+			if (SetMethods.size(pathSet) === 0) {
+				MapMethods.delete(this.moduleToPath, removedModuleId);
 			}
 		}
 
 		// If stack empty, delete path entirely
 		if (stack.length === 0) {
-			this.pathToModule.delete(apiPath);
+			MapMethods.delete(this.pathToModule, apiPath);
 			return { action: "delete", removedModuleId, restoreModuleId: null };
 		}
 
@@ -1065,15 +1119,19 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	removeSubtree(apiPath) {
 		const prefix = `${apiPath}.`;
-		for (const [path, stack] of [...this.pathToModule]) {
-			if (!path.startsWith(prefix)) continue;
-			for (const entry of stack) {
-				const pathSet = this.moduleToPath.get(entry.moduleID);
+		for (let ofIndex = 0, ofList = mapEntriesToArray(this.pathToModule); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				path = ofEntry[0],
+				stack = ofEntry[1];
+			if (!StringMethods.startsWith(path, prefix)) continue;
+			for (let ofIndex = 0, ofList = stack; ofIndex < ofList.length; ofIndex++) {
+				const entry = ofList[ofIndex];
+				const pathSet = MapMethods.get(this.moduleToPath, entry.moduleID);
 				if (!pathSet) continue;
-				pathSet.delete(path);
-				if (pathSet.size === 0) this.moduleToPath.delete(entry.moduleID);
+				SetMethods.delete(pathSet, path);
+				if (SetMethods.size(pathSet) === 0) MapMethods.delete(this.moduleToPath, entry.moduleID);
 			}
-			this.pathToModule.delete(path);
+			MapMethods.delete(this.pathToModule, path);
 		}
 	}
 
@@ -1084,7 +1142,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getCurrentOwner(apiPath) {
-		const stack = this.pathToModule.get(apiPath);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
 		if (!stack || stack.length === 0) return null;
 		// The `?? null` is unreachable. #currentEntry() returns undefined in two cases: an empty/absent
 		// stack (excluded by the guard above) OR a non-empty stack whose every entry is a merge-loss
@@ -1127,7 +1185,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getModulePaths(moduleID) {
-		return Arrays.from(this.moduleToPath.get(moduleID) || []);
+		return setToArray(MapMethods.get(this.moduleToPath, moduleID));
 	}
 
 	/**
@@ -1137,7 +1195,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getPathHistory(apiPath) {
-		return this.pathToModule.get(apiPath) || [];
+		return MapMethods.get(this.pathToModule, apiPath) || [];
 	}
 
 	/**
@@ -1159,18 +1217,31 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	getDiagnostics() {
 		return {
-			totalModules: this.moduleToPath.size,
-			totalPaths: this.pathToModule.size,
-			modules: Arrays.from(this.moduleToPath.entries()).map(([id, paths]) => ({
-				moduleID: id,
-				pathCount: paths.size
-			})),
-			conflictedPaths: Arrays.from(this.pathToModule.entries())
-				.filter(([_, stack]) => stack.length > 1)
-				.map(([path, stack]) => ({
-					apiPath: path,
-					ownerStack: stack.map((e) => e.moduleID)
-				}))
+			totalModules: MapMethods.size(this.moduleToPath),
+			totalPaths: MapMethods.size(this.pathToModule),
+			modules: mapList(mapEntriesToArray(this.moduleToPath), (entry2) => {
+				const id = entry2[0],
+					paths = entry2[1];
+				return {
+					moduleID: id,
+					pathCount: SetMethods.size(paths)
+				};
+			}),
+			conflictedPaths: mapList(
+				filterList(mapEntriesToArray(this.pathToModule), (entry3) => {
+					const _ = entry3[0],
+						stack = entry3[1];
+					return stack.length > 1;
+				}),
+				(entry4) => {
+					const path = entry4[0],
+						stack = entry4[1];
+					return {
+						apiPath: path,
+						ownerStack: mapList(stack, (e) => e.moduleID)
+					};
+				}
+			)
 		};
 	}
 
@@ -1181,11 +1252,11 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	getPathOwnership(apiPath) {
-		const stack = this.pathToModule.get(apiPath);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
 		if (!stack || stack.length === 0) {
 			return null;
 		}
-		return new Set(stack.map((entry) => entry.moduleID));
+		return setFrom(mapList(stack, (entry) => entry.moduleID));
 	}
 
 	/**
@@ -1221,10 +1292,10 @@ export class OwnershipManager extends ComponentBase {
 		if (!api || typeof api !== "object") return;
 
 		// Prevent infinite recursion on circular references
-		if (visited.has(api)) {
+		if (WeakSetMethods.has(visited, api)) {
 			return;
 		}
-		visited.add(api);
+		WeakSetMethods.add(visited, api);
 
 		const claims = collisionMode === "replace" || collisionMode === "merge-replace";
 
@@ -1240,11 +1311,14 @@ export class OwnershipManager extends ComponentBase {
 		// `api.slothlet.api.add()` resolved and made what add() returned depend on timing (#462). Such a
 		// child registers its own descendants when it materializes.
 		const inner = resolveWrapper(api);
-		const entries = inner ? Objects.keys(api).map((key) => [key, readWithoutMaterializing(api, inner, key)]) : Objects.entries(api);
-		for (const [key, value] of entries) {
+		const entries = inner ? mapList(Objects.keys(api), (key) => [key, readWithoutMaterializing(api, inner, key)]) : Objects.entries(api);
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
-			if (skipProps.includes(key)) {
+			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
 
@@ -1281,11 +1355,11 @@ export class OwnershipManager extends ComponentBase {
 		});
 		if (!claim || !entry) return;
 		entry.isMergeLoss = false;
-		const stack = this.pathToModule.get(apiPath);
-		const index = stack.indexOf(entry);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
+		const index = ArrayMethods.indexOf(stack, entry);
 		if (index !== stack.length - 1) {
-			stack.splice(index, 1);
-			stack.push(entry);
+			listSplice(stack, index, 1);
+			listPush(stack, entry);
 		}
 	}
 
@@ -1307,15 +1381,18 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	snapshotModuleEntries(moduleID) {
 		const snapshot = new Map();
-		for (const path of this.moduleToPath.get(moduleID) || []) {
-			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+		for (const path of setValues(MapMethods.get(this.moduleToPath, moduleID))) {
+			const entry =
+				MapMethods.get(this.pathToModule, path) == null
+					? undefined
+					: ArrayMethods.find(MapMethods.get(this.pathToModule, path), (candidate) => candidate.moduleID === moduleID);
 			// `entry` is always found here: a path present in moduleToPath[moduleID] always has a matching
 			// pathToModule entry, because register(), removePath() and unregister() update both maps in
 			// lockstep. The `!entry` arm is a defensive floor against a map desync no public path produces
 			// (reproducing it would require hand-corrupting the internal maps — a tautology, not a test).
 			/* v8 ignore next */
 			if (!entry) continue;
-			snapshot.set(path, {
+			MapMethods.set(snapshot, path, {
 				value: entry.value,
 				filePath: entry.filePath,
 				exportPath: entry.exportPath ?? null,
@@ -1341,7 +1418,10 @@ export class OwnershipManager extends ComponentBase {
 	 * ownership.restoreEntry("same-mod", "thing", snapshot.get("thing"));
 	 */
 	restoreEntry(moduleID, apiPath, snapshot) {
-		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		const entry =
+			MapMethods.get(this.pathToModule, apiPath) == null
+				? undefined
+				: ArrayMethods.find(MapMethods.get(this.pathToModule, apiPath), (candidate) => candidate.moduleID === moduleID);
 		if (!entry) return;
 		entry.value = snapshot.value;
 		entry.filePath = snapshot.filePath;
@@ -1381,7 +1461,10 @@ export class OwnershipManager extends ComponentBase {
 	 * }
 	 */
 	snapshotPathEntry(apiPath, moduleID) {
-		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		const entry =
+			MapMethods.get(this.pathToModule, apiPath) == null
+				? undefined
+				: ArrayMethods.find(MapMethods.get(this.pathToModule, apiPath), (candidate) => candidate.moduleID === moduleID);
 		if (!entry) return undefined;
 		return {
 			value: entry.value,
@@ -1432,13 +1515,13 @@ export class OwnershipManager extends ComponentBase {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
 
 		// Prevent infinite recursion on circular references
-		if (visited.has(api)) {
+		if (WeakSetMethods.has(visited, api)) {
 			return;
 		}
-		visited.add(api);
+		WeakSetMethods.add(visited, api);
 
 		const revert = (revertPath) => {
-			const prior = priorEntries.get(revertPath);
+			const prior = MapMethods.get(priorEntries, revertPath);
 			if (prior) {
 				this.restoreEntry(moduleID, revertPath, prior);
 			} else {
@@ -1452,10 +1535,13 @@ export class OwnershipManager extends ComponentBase {
 		}
 
 		// Recursively revert children
-		for (const [key, value] of Objects.entries(api)) {
+		for (let ofIndex = 0, ofList = Objects.entries(api); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
-			if (skipProps.includes(key)) {
+			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
 
@@ -1502,8 +1588,9 @@ export class OwnershipManager extends ComponentBase {
 	 * }
 	 */
 	revertSpeculativeState(moduleID, priorEntries) {
-		for (const path of [...(this.moduleToPath.get(moduleID) || [])]) {
-			const prior = priorEntries.get(path);
+		for (let ofIndex = 0, ofList = setToArray(MapMethods.get(this.moduleToPath, moduleID)); ofIndex < ofList.length; ofIndex++) {
+			const path = ofList[ofIndex];
+			const prior = MapMethods.get(priorEntries, path);
 			if (prior) {
 				this.restoreEntry(moduleID, path, prior);
 			} else {
@@ -1528,11 +1615,14 @@ export class OwnershipManager extends ComponentBase {
 	snapshotStacks(apiPath) {
 		const prefix = apiPath === "." ? "" : apiPath;
 		const snapshot = new Map();
-		for (const [path, stack] of this.pathToModule) {
-			if (prefix === "" || path === prefix || path.startsWith(`${prefix}.`)) {
-				snapshot.set(
+		for (const ofEntry of mapEntries(this.pathToModule)) {
+			const path = ofEntry[0],
+				stack = ofEntry[1];
+			if (prefix === "" || path === prefix || StringMethods.startsWith(path, `${prefix}.`)) {
+				MapMethods.set(
+					snapshot,
 					path,
-					stack.map((entry) => ({ entry, isMergeLoss: entry.isMergeLoss }))
+					mapList(stack, (entry) => ({ entry, isMergeLoss: entry.isMergeLoss }))
 				);
 			}
 		}
@@ -1571,15 +1661,31 @@ export class OwnershipManager extends ComponentBase {
 	 * goes beneath them. Paths the reloaded modules owned are left as the rebuild registered them.
 	 */
 	restoreStacks(snapshot, moduleIDs) {
-		for (const [path, prior] of snapshot) {
-			if (moduleIDs.has(this.snapshotOwner(prior))) continue;
-			const stack = this.pathToModule.get(path);
+		for (const ofEntry of mapEntries(snapshot)) {
+			const path = ofEntry[0],
+				prior = ofEntry[1];
+			if (SetMethods.has(moduleIDs, this.snapshotOwner(prior))) continue;
+			const stack = MapMethods.get(this.pathToModule, path);
 			if (!stack) continue;
-			const kept = prior.filter(({ entry }) => stack.includes(entry));
-			const keptEntries = new Set(kept.map(({ entry }) => entry));
-			const added = stack.filter((entry) => !keptEntries.has(entry));
-			for (const { entry, isMergeLoss } of kept) entry.isMergeLoss = isMergeLoss;
-			stack.splice(0, stack.length, ...added, ...kept.map(({ entry }) => entry));
+			const kept = filterList(prior, ({ entry }) => ArrayMethods.includes(stack, entry));
+			const keptEntries = setFrom(mapList(kept, ({ entry }) => entry));
+			const added = filterList(stack, (entry) => !SetMethods.has(keptEntries, entry));
+			for (let ofIndex = 0, ofList = kept; ofIndex < ofList.length; ofIndex++) {
+				const { entry, isMergeLoss } = ofList[ofIndex];
+				entry.isMergeLoss = isMergeLoss;
+			}
+			Reflect.apply(
+				ArrayMethods.splice,
+				undefined,
+				concatLists(
+					[stack],
+					concatLists(
+						[0, stack.length],
+						added,
+						mapList(kept, ({ entry }) => entry)
+					)
+				)
+			);
 		}
 	}
 
@@ -1588,13 +1694,13 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	clear() {
-		this.moduleToPath.clear();
-		this.pathToModule.clear();
-		this._unregisteredModules.clear();
-		this.moduleEndpoints.clear();
-		this.moduleMounts.clear();
-		this.placementModes.clear();
-		this.exportIndex.clear();
+		MapMethods.clear(this.moduleToPath);
+		MapMethods.clear(this.pathToModule);
+		SetMethods.clear(this._unregisteredModules);
+		MapMethods.clear(this.moduleEndpoints);
+		MapMethods.clear(this.moduleMounts);
+		MapMethods.clear(this.placementModes);
+		MapMethods.clear(this.exportIndex);
 	}
 
 	/**
@@ -1604,8 +1710,12 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	exportState() {
 		return {
-			moduleToPath: Arrays.from(this.moduleToPath.entries()).map(([id, paths]) => [id, Arrays.from(paths)]),
-			pathToModule: Arrays.from(this.pathToModule.entries())
+			moduleToPath: mapList(mapEntriesToArray(this.moduleToPath), (entry5) => {
+				const id = entry5[0],
+					paths = entry5[1];
+				return [id, setToArray(paths)];
+			}),
+			pathToModule: mapEntriesToArray(this.pathToModule)
 		};
 	}
 
@@ -1619,13 +1729,14 @@ export class OwnershipManager extends ComponentBase {
 		this.clear();
 
 		// Restore moduleToPath
-		for (const [id, paths] of state.moduleToPath) {
-			this.moduleToPath.set(id, new Set(paths));
+		// `state` is what exportState() made: arrays of [key, value] entries.
+		for (let i = 0; i < state.moduleToPath.length; i++) {
+			MapMethods.set(this.moduleToPath, state.moduleToPath[i][0], setFrom(state.moduleToPath[i][1]));
 		}
 
 		// Restore pathToModule
-		for (const [path, stack] of state.pathToModule) {
-			this.pathToModule.set(path, stack);
+		for (let i = 0; i < state.pathToModule.length; i++) {
+			MapMethods.set(this.pathToModule, state.pathToModule[i][0], state.pathToModule[i][1]);
 		}
 	}
 }

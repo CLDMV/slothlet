@@ -52,11 +52,32 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { Reflect, Objects, Map, Set, WeakMap, Promise, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	filterList,
+	listPush,
+	Map,
+	mapEntriesToArray,
+	mapList,
+	MapMethods,
+	Numbers,
+	Objects,
+	Promise,
+	Reflect,
+	SafePromise,
+	Set,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
+	String,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
-/** Promise and the functions the dispatcher uses, taken when slothlet loaded. */
-const NativePromise = Promise;
+/** The functions the dispatcher uses, taken when slothlet loaded. */
 const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
 
@@ -75,7 +96,7 @@ function runAndSettle(listener, args) {
 	if (result === null || (typeof result !== "object" && typeof result !== "function")) return undefined;
 	const then = result.then;
 	if (typeof then !== "function") return undefined;
-	return new NativePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
+	return new SafePromise((resolve, reject) => reflectApply(then, result, [() => resolve(), reject]));
 }
 
 /**
@@ -106,7 +127,7 @@ export const DELIVERY_REASONS = Objects.freeze({ LISTENER_GONE: "listener-gone",
  */
 function ownerIdOf(wrapper) {
 	if (!wrapper) return "";
-	return String(wrapper.____slothletInternal.moduleID).split(MODULE_ID_SEPARATOR)[0];
+	return splitText(String(wrapper.____slothletInternal.moduleID), MODULE_ID_SEPARATOR)[0];
 }
 
 /**
@@ -228,12 +249,13 @@ export class EventManager extends ComponentBase {
 		const ownerCeiling = ownerWrapper ? (ownerIdentity.ceiling ?? null) : null;
 		const subscriberPath = ownerWrapper?.____slothletInternal?.apiPath ?? null;
 		// Its level is the strictest of the subscriber's and those of every call of its ceiling (#597).
-		const ceilingPaths = identityCeilings(ownerIdentity)
-			.map((call) => call.____slothletInternal?.apiPath ?? null)
-			.filter((path) => path !== null);
+		const ceilingPaths = filterList(
+			mapList(identityCeilings(ownerIdentity), (call) => call.____slothletInternal?.apiPath ?? null),
+			(path) => path !== null
+		);
 		const ownerID = ownerIdOf(ownerWrapper);
 		const id = `${ownerID}:${event}:${key === undefined ? this.#nextOrdinal(ownerID, event) : String(key)}`;
-		for (const existing of this.#subscribers.get(event) ?? []) {
+		for (const existing of setValues(MapMethods.get(this.#subscribers, event))) {
 			if (existing.id === id) {
 				throw new this.SlothletError("INVALID_ARGUMENT", {
 					argument: "options.key",
@@ -263,8 +285,8 @@ export class EventManager extends ComponentBase {
 			return { level, off: () => {}, id };
 		}
 
-		if (!this.#subscribers.has(event)) this.#subscribers.set(event, new Set());
-		this.#subscribers.get(event).add(sub);
+		if (!MapMethods.has(this.#subscribers, event)) MapMethods.set(this.#subscribers, event, new Set());
+		SetMethods.add(MapMethods.get(this.#subscribers, event), sub);
 
 		return { level, off: () => this.#removeSub(event, sub), id };
 	}
@@ -277,13 +299,13 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#nextOrdinal(ownerID, event) {
-		let perEvent = this.#ordinals.get(ownerID);
+		let perEvent = MapMethods.get(this.#ordinals, ownerID);
 		if (!perEvent) {
 			perEvent = new Map();
-			this.#ordinals.set(ownerID, perEvent);
+			MapMethods.set(this.#ordinals, ownerID, perEvent);
 		}
-		const n = perEvent.get(event) ?? 0;
-		perEvent.set(event, n + 1);
+		const n = MapMethods.get(perEvent, event) ?? 0;
+		MapMethods.set(perEvent, event, n + 1);
 		return n;
 	}
 
@@ -307,9 +329,9 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	off(event, listener) {
-		const set = this.#subscribers.get(event);
+		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return false;
-		for (const sub of set) {
+		for (const sub of setValues(set)) {
 			if (sub.listener === listener) {
 				this.#removeSub(event, sub);
 				return true;
@@ -340,18 +362,18 @@ export class EventManager extends ComponentBase {
 		if (typeof event !== "string" || !event) {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "event", expected: "a non-empty string", received: typeof event });
 		}
-		const set = this.#subscribers.get(event);
+		const set = MapMethods.get(this.#subscribers, event);
 		const strategy = this.#strategy;
 		if (strategy) {
-			await this.#emitThroughStrategy(strategy, event, payload, set ? [...set] : []);
+			await this.#emitThroughStrategy(strategy, event, payload, set ? setToArray(set) : []);
 			return;
 		}
-		if (!set || set.size === 0) return;
+		if (!set || SetMethods.size(set) === 0) return;
 
 		const meta = { event, at: this.clock.now(), instanceID: this.instanceID };
 		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
-		await this.#dispatch(event, payload, meta, [...set], emitter);
+		await this.#dispatch(event, payload, meta, setToArray(set), emitter);
 	}
 
 	/**
@@ -369,7 +391,8 @@ export class EventManager extends ComponentBase {
 		const cm = this.slothlet.contextManager;
 		const promises = [];
 
-		for (const sub of subs) {
+		for (let ofIndex = 0, ofList = subs; ofIndex < ofList.length; ofIndex++) {
+			const sub = ofList[ofIndex];
 			// A removed module's listener hears nothing more (#625), however it outlived the module's removal.
 			if (sub.ownerWrapper && this.slothlet.handlers?.apiManager?.isRemovedCaller(sub.ownerWrapper)) {
 				this.#removeSub(event, sub);
@@ -388,7 +411,7 @@ export class EventManager extends ComponentBase {
 				// Run pinned to the subscriber's identity/context so self.* resolves as that module.
 				// rawErrors:true surfaces the listener's own error so we can isolate + warn on it.
 				const settled = this.#invoke(sub, callArgs, cm);
-				if (settled) promises.push(reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
+				if (settled) listPush(promises, reflectApply(promiseThen, settled, [undefined, (error) => this.#warnListener(event, error)]));
 			} catch (error) {
 				this.#warnListener(event, error);
 			}
@@ -398,8 +421,11 @@ export class EventManager extends ComponentBase {
 			// Wait for every listener without Promise.all, which reads the global Promise: each promise here is the
 			// dispatcher's own and never rejects.
 			let pending = promises.length;
-			await new NativePromise((resolve) => {
-				for (const settled of promises) reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);
+			await new SafePromise((resolve) => {
+				for (let ofIndex = 0, ofList = promises; ofIndex < ofList.length; ofIndex++) {
+					const settled = ofList[ofIndex];
+					reflectApply(promiseThen, settled, [() => --pending === 0 && resolve()]);
+				}
 			});
 		}
 	}
@@ -430,7 +456,7 @@ export class EventManager extends ComponentBase {
 		const settle = (...args) => runAndSettle(listener, args);
 		return sub.ownerWrapper && cm?.runInContext
 			? cm.runInContext(this.instanceID, settle, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
-			: settle(...callArgs);
+			: Reflect.apply(settle, undefined, callArgs);
 	}
 
 	/**
@@ -457,14 +483,15 @@ export class EventManager extends ComponentBase {
 		// The mount each recipient's module was at emit (#625): a held event goes to that module's listener only, which
 		// a reload of the module keeps, never to another module given the same id since.
 		const recipients = new Map();
-		for (const sub of subs) {
+		for (let ofIndex = 0, ofList = subs; ofIndex < ofList.length; ofIndex++) {
+			const sub = ofList[ofIndex];
 			// Informational only: rules are enforced again when each listener is actually delivered.
 			// A listener denied at emit time is not a recipient.
 			const level = this.#levelFor(sub, event);
 			if (level === "deny") continue;
-			listeners.push(sub.id);
+			listPush(listeners, sub.id);
 			levels[sub.id] = level;
-			recipients.set(sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
+			MapMethods.set(recipients, sub.id, sub.ownerWrapper?.____slothletInternal?.incarnation ?? null);
 		}
 		Objects.freeze(listeners);
 
@@ -479,7 +506,7 @@ export class EventManager extends ComponentBase {
 			levels: Objects.freeze(levels),
 			listeners
 		});
-		ENVELOPES.set(envelope, { slothlet: this.slothlet, meta, flow, recipients });
+		WeakMapMethods.set(ENVELOPES, envelope, { slothlet: this.slothlet, meta, flow, recipients });
 
 		let delivery = null;
 		const defaultDeliver = () => {
@@ -566,7 +593,7 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	async deliver(envelope, listenerId) {
-		const record = envelope !== null && typeof envelope === "object" ? ENVELOPES.get(envelope) : undefined;
+		const record = envelope !== null && typeof envelope === "object" ? WeakMapMethods.get(ENVELOPES, envelope) : undefined;
 		if (!record || record.slothlet !== this.slothlet) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "envelope",
@@ -574,7 +601,12 @@ export class EventManager extends ComponentBase {
 				received: envelope === null ? "null" : typeof envelope
 			});
 		}
-		if (typeof listenerId !== "string" || !envelope.listeners.includes(listenerId)) {
+		if (
+			typeof listenerId !== "string" ||
+			!(typeof envelope.listeners === "string"
+				? StringMethods.includes(envelope.listeners, listenerId)
+				: ArrayMethods.includes(envelope.listeners, listenerId))
+		) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "listenerId",
 				expected: "a listener id listed on the envelope",
@@ -599,14 +631,14 @@ export class EventManager extends ComponentBase {
 	async #deliverOne(envelope, record, listenerId, cm) {
 		const { event } = envelope;
 		let sub = null;
-		for (const candidate of this.#subscribers.get(event) ?? []) {
+		for (const candidate of setValues(MapMethods.get(this.#subscribers, event))) {
 			if (candidate.id === listenerId) {
 				sub = candidate;
 				break;
 			}
 		}
 		// A listener under the id now that belongs to another module than the one the event was held for is not it.
-		if (!sub || (sub.ownerWrapper?.____slothletInternal?.incarnation ?? null) !== record.recipients.get(listenerId)) {
+		if (!sub || (sub.ownerWrapper?.____slothletInternal?.incarnation ?? null) !== MapMethods.get(record.recipients, listenerId)) {
 			return { delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE };
 		}
 
@@ -634,7 +666,7 @@ export class EventManager extends ComponentBase {
 	onModuleRemoved(moduleID) {
 		this.#dropOwner(moduleID);
 		// A strategy the module installed goes with it, as its listeners do (#625).
-		if (this.#strategyOwner !== null && this.#strategyOwner === String(moduleID).split(MODULE_ID_SEPARATOR)[0]) {
+		if (this.#strategyOwner !== null && this.#strategyOwner === splitText(String(moduleID), MODULE_ID_SEPARATOR)[0]) {
 			this.#strategy = null;
 			this.#strategyOwner = null;
 		}
@@ -660,13 +692,17 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#dropOwner(moduleID) {
-		const ownerID = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
-		for (const [event, set] of [...this.#subscribers]) {
-			for (const sub of [...set]) {
+		const ownerID = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		for (let ofIndex = 0, ofList = mapEntriesToArray(this.#subscribers); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				event = ofEntry[0],
+				set = ofEntry[1];
+			for (let ofIndex = 0, ofList = setToArray(set); ofIndex < ofList.length; ofIndex++) {
+				const sub = ofList[ofIndex];
 				if (sub.ownerID === ownerID) this.#removeSub(event, sub);
 			}
 		}
-		this.#ordinals.delete(ownerID);
+		MapMethods.delete(this.#ordinals, ownerID);
 	}
 
 	/**
@@ -740,7 +776,8 @@ export class EventManager extends ComponentBase {
 		let level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
 		// A subscription made under another module's call as its ceiling is delivered at no more than that call
 		// would be (#597).
-		for (const ceilingPath of sub.ceilingPaths ?? []) {
+		for (let i = 0, ceilingPaths = sub.ceilingPaths ?? []; i < ceilingPaths.length; i++) {
+			const ceilingPath = ceilingPaths[i];
 			const ceilingLevel = pm.resolveEventLevel(ceilingPath, event, runtimeContext);
 			if (EVENT_LEVEL_RANK[ceilingLevel] < EVENT_LEVEL_RANK[level]) level = ceilingLevel;
 		}
@@ -758,10 +795,10 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#removeSub(event, sub) {
-		const set = this.#subscribers.get(event);
+		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return;
-		set.delete(sub);
-		if (set.size === 0) this.#subscribers.delete(event);
+		SetMethods.delete(set, sub);
+		if (SetMethods.size(set) === 0) MapMethods.delete(this.#subscribers, event);
 	}
 
 	/**
@@ -782,8 +819,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	shutdown() {
-		this.#subscribers.clear();
-		this.#ordinals.clear();
+		MapMethods.clear(this.#subscribers);
+		MapMethods.clear(this.#ordinals);
 		this.#strategy = null;
 	}
 }

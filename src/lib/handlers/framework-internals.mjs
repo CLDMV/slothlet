@@ -37,7 +37,16 @@
  * consumer's private member that happened to share the name, reopening exactly what #269 closed.
  */
 
-import { Functions, Set, WeakMap, WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	FunctionMethods,
+	Functions,
+	setFrom,
+	SetMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -50,7 +59,7 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/sloth
 const FRAMEWORK_INTERNAL = new WeakSet();
 
 /** `WeakSet.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakSetHas = Functions.prototype.call.bind(WeakSet.prototype.has);
+const weakSetHas = FunctionMethods.bind(Functions.prototype.call, WeakSet.prototype.has);
 
 /**
  * Reserved marker keys slothlet stamps as OWN properties on framework-internal objects.
@@ -66,7 +75,7 @@ const weakSetHas = Functions.prototype.call.bind(WeakSet.prototype.has);
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_MARKER_KEYS = new Set(["__isVersionDispatcher", "__logicalPath"]);
+const FRAMEWORK_MARKER_KEYS = setFrom(["__isVersionDispatcher", "__logicalPath"]);
 
 /**
  * Whether `key` is one of slothlet's reserved dispatcher marker keys.
@@ -81,7 +90,7 @@ const FRAMEWORK_MARKER_KEYS = new Set(["__isVersionDispatcher", "__logicalPath"]
  * if (isFrameworkInternal(wrapper) && isFrameworkMarkerKey(leafKey)) return { allowed: true };
  */
 export function isFrameworkMarkerKey(key) {
-	return FRAMEWORK_MARKER_KEYS.has(key);
+	return SetMethods.has(FRAMEWORK_MARKER_KEYS, key);
 }
 
 /**
@@ -95,7 +104,7 @@ export function isFrameworkMarkerKey(key) {
  * const dispatcher = markFrameworkInternal(new Proxy(target, handlers));
  */
 function markFrameworkInternal(obj) {
-	if (obj !== null && (typeof obj === "object" || typeof obj === "function")) FRAMEWORK_INTERNAL.add(obj);
+	if (obj !== null && (typeof obj === "object" || typeof obj === "function")) WeakSetMethods.add(FRAMEWORK_INTERNAL, obj);
 	return obj;
 }
 
@@ -133,7 +142,7 @@ const VERSION_DISPATCHERS = new WeakMap();
  * registerVersionDispatcher(proxy, { slothlet, resolve: resolveVersionedWrapper });
  */
 function registerVersionDispatcher(dispatcher, record) {
-	VERSION_DISPATCHERS.set(dispatcher, record);
+	WeakMapMethods.set(VERSION_DISPATCHERS, dispatcher, record);
 	return dispatcher;
 }
 
@@ -148,7 +157,7 @@ function registerVersionDispatcher(dispatcher, record) {
  */
 function versionDispatcherRecord(obj) {
 	if (obj === null || (typeof obj !== "object" && typeof obj !== "function")) return null;
-	return VERSION_DISPATCHERS.get(obj) ?? null;
+	return WeakMapMethods.get(VERSION_DISPATCHERS, obj) ?? null;
 }
 
 /**
@@ -169,7 +178,7 @@ const SLOTHLET_PROXIES = new WeakSet();
  * const view = markSlothletProxy(new Proxy(value, handler));
  */
 function markSlothletProxy(proxy) {
-	if (proxy !== null && (typeof proxy === "object" || typeof proxy === "function")) SLOTHLET_PROXIES.add(proxy);
+	if (proxy !== null && (typeof proxy === "object" || typeof proxy === "function")) WeakSetMethods.add(SLOTHLET_PROXIES, proxy);
 	return proxy;
 }
 

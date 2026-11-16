@@ -20,7 +20,19 @@
  */
 import { translate, registerWarningClass } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
-import { Objects, JSON, Symbols, Error, Errors, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Error,
+	Errors,
+	filterList,
+	jsonOf,
+	listPush,
+	Objects,
+	Reflect,
+	StringMethods,
+	stringOf,
+	Symbols
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -46,20 +58,18 @@ export class SlothletError extends Error {
 	 * Renders a thrown value for message interpolation.
 	 *
 	 * @param {unknown} thrown - Whatever the guarded code threw.
-	 * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
-	 *   any other value JSON-serialized (falling back to String() for unserializable values).
+	 * @returns {string} A human-readable rendering: an Error's own message, a string as itself, and
+	 *   any other value's own data JSON-serialized (falling back to its `String()` text).
 	 */
 	static #describeThrown(thrown) {
-		if (thrown instanceof Error) return thrown.message;
-		if (typeof thrown === "string") return thrown;
-		try {
-			// Circular structures and BigInts refuse JSON serialization; String() below still
-			// yields a usable rendering for them, so the throw is guarded rather than surfaced.
-			return JSON.stringify(thrown) ?? String(thrown);
-		} catch {
-			/* v8 ignore next */
-			return String(thrown);
+		// Read without running code the thrown value carries (a `toJSON`, a getter, a `toString`): see helpers/intrinsics
+		// `jsonOf` and `stringOf`.
+		if (thrown instanceof Error) {
+			const message = Reflect.getOwnPropertyDescriptor(thrown, "message");
+			return message && typeof message.value === "string" ? message.value : stringOf(thrown);
 		}
+		if (typeof thrown === "string") return thrown;
+		return jsonOf(thrown) ?? stringOf(thrown);
 	}
 
 	constructor(code, context = {}, originalError = null, options = {}) {
@@ -98,7 +108,7 @@ export class SlothletError extends Error {
 			const staticHintKey = `HINT_${code}`;
 			const staticHint = translate(staticHintKey, enrichedContext);
 			// Only use it if it's not the fallback format (Error: HINT_...)
-			if (staticHint && !staticHint.startsWith("Error:")) {
+			if (staticHint && !StringMethods.startsWith(staticHint, "Error:")) {
 				translatedHint = staticHint;
 			}
 		}
@@ -112,29 +122,13 @@ export class SlothletError extends Error {
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
-		Objects.defineProperty(this, "code", {
-			value: code,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "code", { __proto__: null, value: code, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "context", {
-			value: context,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "context", { __proto__: null, value: context, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "originalError", {
-			value: originalError,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "originalError", { __proto__: null, value: originalError, enumerable: false, writable: false });
 
-		Objects.defineProperty(this, "hint", {
-			value: translatedHint,
-			enumerable: false,
-			writable: false
-		});
+		Objects.defineProperty(this, "hint", { __proto__: null, value: translatedHint, enumerable: false, writable: false });
 
 		Errors.captureStackTrace(this, SlothletError);
 	}
@@ -153,12 +147,13 @@ export class SlothletError extends Error {
 
 		// Add only critical details
 		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
-		const detailKeys = Objects.keys(this.context).filter((k) => criticalKeys.includes(k));
+		const detailKeys = filterList(Objects.keys(this.context), (k) => ArrayMethods.includes(criticalKeys, k));
 
 		if (detailKeys.length > 0) {
 			output += "\nDetails:\n";
-			for (const key of detailKeys) {
-				output += `  ${key}: ${this.context[key]}\n`;
+			for (let ofIndex = 0, ofList = detailKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				output += `  ${key}: ${stringOf(this.context[key])}\n`;
 			}
 		}
 
@@ -283,7 +278,7 @@ export class SlothletWarning {
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
-			Home.captured.push(this);
+			listPush(Home.captured, this);
 		}
 	}
 
@@ -363,12 +358,12 @@ export class SlothletDebug {
 		const { key: msgKey, message, ...contextParams } = context;
 
 		// Key resolution: explicit key > category key (DEBUG_{CODE}) > raw message fallback
-		const translationKey = msgKey ?? `DEBUG_${code.toUpperCase()}`;
+		const translationKey = msgKey ?? `DEBUG_${StringMethods.toUpperCase(code)}`;
 		const translatedMessage = translate(translationKey, contextParams);
-		const hasTranslation = translatedMessage && !translatedMessage.startsWith("Error:");
+		const hasTranslation = translatedMessage && !StringMethods.startsWith(translatedMessage, "Error:");
 
 		// Format label
-		const label = `[DEBUG:${code.toUpperCase()}]`;
+		const label = `[DEBUG:${StringMethods.toUpperCase(code)}]`;
 
 		// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 		if (hasTranslation) {
@@ -392,8 +387,9 @@ export class SlothletDebug {
 	 * @returns {string} Debug info
 	 */
 	toString() {
-		return `[SlothletDebug] flags: ${Objects.keys(this.debugFlags)
-			.filter((k) => this.debugFlags[k])
-			.join(", ")}`;
+		return `[SlothletDebug] flags: ${ArrayMethods.join(
+			filterList(Objects.keys(this.debugFlags), (k) => this.debugFlags[k]),
+			", "
+		)}`;
 	}
 }

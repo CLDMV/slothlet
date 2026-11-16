@@ -42,7 +42,16 @@
 import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { inheritsFrom } from "@cldmv/slothlet/helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Objects, WeakSet, Promise, Promises, Symbols, TypeError } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	FunctionMethods,
+	Objects,
+	Promise,
+	Promises,
+	Symbols,
+	TypeError,
+	WeakSet,
+	WeakSetMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -86,7 +95,7 @@ const NATIVE_THEN = runtime_unwrapThen(Promise.prototype.then);
  */
 export function nativeThen(promise, onFulfilled, onRejected) {
 	try {
-		return NATIVE_THEN.call(promise, onFulfilled, onRejected);
+		return FunctionMethods.call(NATIVE_THEN, promise, onFulfilled, onRejected);
 	} catch (error) {
 		// A Proxy around a promise (a wrapped return value) passes `instanceof Promise` but has no
 		// promise internals, so the engine's `then` refuses it as a receiver. Adopt it into a genuine
@@ -94,7 +103,7 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
 		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
-		return NATIVE_THEN.call(Promises.resolve(promise), onFulfilled, onRejected);
+		return FunctionMethods.call(NATIVE_THEN, Promises.resolve(promise), onFulfilled, onRejected);
 	}
 }
 
@@ -117,7 +126,7 @@ const THEN_WRAPPERS = new WeakSet();
  */
 export function engineThenOf(fn) {
 	if (fn === NATIVE_THEN) return NATIVE_THEN;
-	return THEN_WRAPPERS.has(fn) ? NATIVE_THEN : null;
+	return WeakSetMethods.has(THEN_WRAPPERS, fn) ? NATIVE_THEN : null;
 }
 
 /**
@@ -160,17 +169,19 @@ function enablePromisePatching() {
 	const wrapper = {
 		then(onFulfilled, onRejected) {
 			// Disabled while another copy's wrapper sat on top of this one: a plain pass-through.
-			if (!layer.active) return original.call(this, onFulfilled, onRejected);
+			if (!layer.active) return FunctionMethods.call(original, this, onFulfilled, onRejected);
 			// Both reactions were registered by the same caller: resolved once for the pair.
-			const [fulfilled, rejected] = pinManyToCurrentCaller([onFulfilled, onRejected]);
-			return original.call(this, fulfilled, rejected);
+			const unpacked1 = pinManyToCurrentCaller([onFulfilled, onRejected]),
+				fulfilled = unpacked1[0],
+				rejected = unpacked1[1];
+			return FunctionMethods.call(original, this, fulfilled, rejected);
 		}
 	}.then;
-	Objects.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
-	THEN_WRAPPERS.add(wrapper);
+	Objects.defineProperty(wrapper, ORIGINAL_THEN, { __proto__: null, value: original });
+	WeakSetMethods.add(THEN_WRAPPERS, wrapper);
 	markLayer(wrapper, layer);
 
-	Objects.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
+	Objects.defineProperty(Promise.prototype, "then", { __proto__: null, ...descriptor, value: wrapper });
 	installed = { layer, wrapper };
 }
 

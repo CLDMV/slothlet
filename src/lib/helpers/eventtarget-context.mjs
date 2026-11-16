@@ -45,7 +45,17 @@
 import { AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Map, WeakMap, Boolean, String, EventTarget } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	Boolean,
+	EventTarget,
+	FunctionMethods,
+	Map,
+	mapEntries,
+	MapMethods,
+	String,
+	WeakMap,
+	WeakMapMethods
+} from "@cldmv/slothlet/helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -123,8 +133,8 @@ function runtime_wrapListener(listener) {
 
 	const runtime_wrappedListener = function (event) {
 		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
-		if (!resource) return invoke.call(this, event);
-		return resource.runInAsyncScope(() => invoke.call(this, event), this);
+		if (!resource) return FunctionMethods.call(invoke, this, event);
+		return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
 	};
 
 	runtime_wrappedListener._slothletOriginal = listener;
@@ -158,35 +168,35 @@ function runtime_patchAdd() {
 
 	const patch = function (type, listener, options) {
 		// Disabled under another copy's patch: register as given.
-		if (!layer.active || !runtime_shouldWrap(listener)) return original.call(this, type, listener, options);
+		if (!layer.active || !runtime_shouldWrap(listener)) return FunctionMethods.call(original, this, type, listener, options);
 
 		const key = runtime_trackingKey(type, options);
-		let byKey = wrappers.get(this);
+		let byKey = WeakMapMethods.get(wrappers, this);
 		if (!byKey) {
 			byKey = new Map();
-			wrappers.set(this, byKey);
+			WeakMapMethods.set(wrappers, this, byKey);
 		}
-		let byListener = byKey.get(key);
+		let byListener = MapMethods.get(byKey, key);
 		if (!byListener) {
 			byListener = new Map();
-			byKey.set(key, byListener);
+			MapMethods.set(byKey, key, byListener);
 		}
 
 		// Reuse the existing wrapper for a repeated registration. A fresh one would be a different
 		// reference, so the DOM would treat it as a second listener and the callback would run twice
 		// where the spec says the duplicate is ignored.
-		let wrapper = byListener.get(listener);
+		let wrapper = MapMethods.get(byListener, listener);
 		if (!wrapper) {
 			wrapper = runtime_wrapListener(listener);
-			byListener.set(listener, wrapper);
+			MapMethods.set(byListener, listener, wrapper);
 		}
 
-		return original.call(this, type, wrapper, options);
+		return FunctionMethods.call(original, this, type, wrapper, options);
 	};
 
 	markLayer(patch, layer);
 	EventTarget.prototype.addEventListener = patch;
-	originalMethods.set("addEventListener", { layer, patch });
+	MapMethods.set(originalMethods, "addEventListener", { layer, patch });
 }
 
 /**
@@ -201,18 +211,18 @@ function runtime_patchRemove() {
 	// Not gated on the layer: a listener this copy wrapped while active must still resolve back to its
 	// wrapper after the copy disabled, or it could never be removed.
 	const patch = function (type, listener, options) {
-		const byKey = wrappers.get(this);
-		const byListener = byKey?.get(runtime_trackingKey(type, options));
-		const wrapper = byListener?.get(listener);
-		if (!wrapper) return original.call(this, type, listener, options);
+		const byKey = WeakMapMethods.get(wrappers, this);
+		const byListener = byKey == null ? undefined : MapMethods.get(byKey, runtime_trackingKey(type, options));
+		const wrapper = byListener == null ? undefined : MapMethods.get(byListener, listener);
+		if (!wrapper) return FunctionMethods.call(original, this, type, listener, options);
 
-		byListener.delete(listener);
-		return original.call(this, type, wrapper, options);
+		MapMethods.delete(byListener, listener);
+		return FunctionMethods.call(original, this, type, wrapper, options);
 	};
 
 	markLayer(patch, layer);
 	EventTarget.prototype.removeEventListener = patch;
-	originalMethods.set("removeEventListener", { layer, patch });
+	MapMethods.set(originalMethods, "removeEventListener", { layer, patch });
 }
 
 /**
@@ -250,12 +260,14 @@ function enableEventTargetPatching() {
 function disableEventTargetPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const [name, { layer, patch }] of originalMethods.entries()) {
+	for (const ofEntry of mapEntries(originalMethods)) {
+		const name = ofEntry[0];
+		const { layer, patch } = ofEntry[1];
 		const restore = closeLayer(layer);
 		if (holdsValue(EventTarget.prototype, name, patch)) EventTarget.prototype[name] = restore;
 	}
 
-	originalMethods.clear();
+	MapMethods.clear(originalMethods);
 	isPatchingEnabled = false;
 }
 

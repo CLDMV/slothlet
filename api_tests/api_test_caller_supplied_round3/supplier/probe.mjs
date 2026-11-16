@@ -100,8 +100,10 @@ function forge(kind, filename, target) {
  * await api.supplier.probe.forgedInFolder("compileFunction", "zz-not-real.mjs"); // { ok: false, code: "PERMISSION_DENIED" }
  */
 export async function forgedInFolder(kind, file, target = "secret") {
-	const closure = forge(kind, path.join(CALLEE_DIR, file), target);
-	return attempt(() => self.callee.ops.run(closure));
+	// Compiling under a real file of the callee's is refused itself where a capability check runs: that outcome is kept.
+	const forged = await attempt(() => forge(kind, path.join(CALLEE_DIR, file), target));
+	if (!forged.ok) return forged;
+	return attempt(() => self.callee.ops.run(forged.value));
 }
 
 /**

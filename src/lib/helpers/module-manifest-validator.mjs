@@ -42,7 +42,18 @@ import { t } from "@cldmv/slothlet/i18n";
 // path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
 // filesystem manifest validation.
 import { path } from "@cldmv/slothlet/helpers/platform";
-import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/intrinsics";
+import {
+	ArrayMethods,
+	Arrays,
+	copyList,
+	Numbers,
+	Objects,
+	setFrom,
+	SetMethods,
+	String,
+	StringMethods,
+	splitText
+} from "@cldmv/slothlet/helpers/intrinsics";
 
 /**
  * Reserved mountPath root segments. Mirror of the list in
@@ -51,7 +62,7 @@ import { Objects, Arrays, Set, Numbers, String } from "@cldmv/slothlet/helpers/i
  * the manifest layer instead of letting `api.add()` throw downstream.
  * @type {ReadonlySet<string>}
  */
-const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown", "destroy"]));
 
 /**
  * Allowed top-level fields in `slothlet.module.json`. Anything else throws
@@ -59,7 +70,7 @@ const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(new Set(["slothlet", "shutdown",
  * @type {ReadonlySet<string>}
  */
 const ALLOWED_TOP_LEVEL_FIELDS = Objects.freeze(
-	new Set([
+	setFrom([
 		"schemaVersion",
 		"name",
 		"version",
@@ -79,13 +90,13 @@ const ALLOWED_TOP_LEVEL_FIELDS = Objects.freeze(
  * Allowed effect values for permission rules.
  * @type {ReadonlySet<string>}
  */
-const PERMISSION_EFFECT_VALUES = Objects.freeze(new Set(["allow", "deny"]));
+const PERMISSION_EFFECT_VALUES = Objects.freeze(setFrom(["allow", "deny"]));
 
 /**
  * Allowed effect values for event rules (#407). Three-level, unlike the binary call rules.
  * @type {ReadonlySet<string>}
  */
-const EVENT_EFFECT_VALUES = Objects.freeze(new Set(["deny", "notify", "allow"]));
+const EVENT_EFFECT_VALUES = Objects.freeze(setFrom(["deny", "notify", "allow"]));
 
 /**
  * Validate a parsed slothlet.module.json manifest and return a normalized form.
@@ -134,8 +145,9 @@ export function validateModuleManifest(manifest, packageContext) {
 
 	// Reject unknown top-level fields BEFORE other validation so users see typos
 	// in field names rather than misleading "missing required field" errors.
-	for (const key of Objects.keys(manifest)) {
-		if (!ALLOWED_TOP_LEVEL_FIELDS.has(key)) {
+	for (let ofIndex = 0, ofList = Objects.keys(manifest); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (!SetMethods.has(ALLOWED_TOP_LEVEL_FIELDS, key)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_UNKNOWN_FIELD",
 				{
@@ -190,13 +202,13 @@ export function validateModuleManifest(manifest, packageContext) {
 	const mountPathSegments = normalizeMountPath(manifest.mountPath, packageName, manifestPath);
 
 	// Reserved-mountPath root check (G3) — runs at manifest layer, not downstream.
-	if (RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])) {
+	if (SetMethods.has(RESERVED_MOUNTPATH_ROOTS, mountPathSegments[0])) {
 		throw new SlothletError(
 			"MODULE_RESERVED_MOUNTPATH",
 			{
 				packageName,
 				mountPathRoot: mountPathSegments[0],
-				mountPath: mountPathSegments.join(".")
+				mountPath: ArrayMethods.join(mountPathSegments, ".")
 			},
 			null,
 			{ validationError: true }
@@ -341,7 +353,10 @@ export function validateModuleManifest(manifest, packageContext) {
 				{ validationError: true }
 			);
 		}
-		for (const [depName, depValue] of Objects.entries(manifest.dependencies)) {
+		for (let ofIndex = 0, ofList = Objects.entries(manifest.dependencies); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				depName = ofEntry[0],
+				depValue = ofEntry[1];
 			if (typeof depValue !== "string") {
 				throw new SlothletError(
 					"MODULE_MANIFEST_INVALID",
@@ -423,7 +438,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 				{ validationError: true }
 			);
 		}
-		return mountPath.split(".");
+		return splitText(mountPath, ".");
 	}
 	if (Arrays.isArray(mountPath)) {
 		if (mountPath.length === 0) {
@@ -438,7 +453,8 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 				{ validationError: true }
 			);
 		}
-		for (const segment of mountPath) {
+		for (let ofIndex = 0, ofList = mountPath; ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
 			if (typeof segment !== "string" || segment.length === 0) {
 				throw new SlothletError(
 					"MODULE_MANIFEST_INVALID",
@@ -452,7 +468,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 				);
 			}
 		}
-		return mountPath.slice();
+		return copyList(mountPath);
 	}
 	throw new SlothletError(
 		"MODULE_MANIFEST_INVALID",
@@ -477,8 +493,8 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
  */
 function validateApiDirContainment(apiDir, packageRoot, packageName) {
 	const resolved = path.resolve(packageRoot, apiDir);
-	const rootWithSep = packageRoot.endsWith(path.sep) ? packageRoot : packageRoot + path.sep;
-	if (resolved !== packageRoot && !resolved.startsWith(rootWithSep)) {
+	const rootWithSep = StringMethods.endsWith(packageRoot, path.sep) ? packageRoot : packageRoot + path.sep;
+	if (resolved !== packageRoot && !StringMethods.startsWith(resolved, rootWithSep)) {
 		throw new SlothletError(
 			"MODULE_PATH_TRAVERSAL",
 			{
@@ -553,7 +569,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 				{ validationError: true }
 			);
 		}
-		if (!PERMISSION_EFFECT_VALUES.has(rule.effect)) {
+		if (!SetMethods.has(PERMISSION_EFFECT_VALUES, rule.effect)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
@@ -618,7 +634,7 @@ function validateEventRules(events, packageName, manifestPath) {
 				{ validationError: true }
 			);
 		}
-		if (!EVENT_EFFECT_VALUES.has(rule.effect)) {
+		if (!SetMethods.has(EVENT_EFFECT_VALUES, rule.effect)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) },

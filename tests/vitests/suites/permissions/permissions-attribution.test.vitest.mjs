@@ -47,6 +47,8 @@ const DIR = path.resolve(HERE, "../../../../api_tests/api_test_definer_rule");
 const DENIED = "PERMISSION_DENIED";
 const NO_SELF = "RUNTIME_NO_ACTIVE_CONTEXT_SELF";
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "bag.**", target: "vault.**", effect: "allow" },
 	{ caller: "**", target: "bag.**", effect: "allow" },
 	{ caller: "**", target: "shared.**", effect: "allow" },
