@@ -43,6 +43,7 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
+	listPush,
 	Map,
 	mapEntries,
 	mapList,
@@ -1089,7 +1090,7 @@ export class PermissionManager extends ComponentBase {
 		for (const entry of mapValues(this.#eventRules)) {
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const eventMatcher = this.#getCompiledPattern(entry.event);
-			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) ArrayMethods.push(matches, entry);
+			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) listPush(matches, entry);
 		}
 
 		// Event delivery has no call/construct arguments — function conditions receive null callMeta.
@@ -1423,7 +1424,7 @@ export class PermissionManager extends ComponentBase {
 				if (!keys) MapMethods.set(seen, name, (keys = new Set()));
 				if (SetMethods.has(keys, identityKey)) continue;
 				SetMethods.add(keys, identityKey);
-				ArrayMethods.push(stale, { name, identityKey });
+				listPush(stale, { name, identityKey });
 			}
 		}
 		return stale;
@@ -2004,7 +2005,7 @@ export class PermissionManager extends ComponentBase {
 			if (!pin.live) return false;
 			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [ctx, callMeta], writer, true);
 		};
-		Objects.defineProperty(pinned, CONDITION_PIN, { value: pin });
+		Objects.defineProperty(pinned, CONDITION_PIN, { __proto__: null, value: pin });
 		return pinned;
 	}
 
@@ -2244,7 +2245,7 @@ export class PermissionManager extends ComponentBase {
 		for (const entry of mapValues(this.#callRules)) {
 			if (entry.hookType != null) continue;
 			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
-			if (this.#conditionMatches(entry, runtimeContext, null)) ArrayMethods.push(conditioned, entry);
+			if (this.#conditionMatches(entry, runtimeContext, null)) listPush(conditioned, entry);
 		}
 		this.#sortBySpecificity(
 			conditioned,
@@ -2279,7 +2280,7 @@ export class PermissionManager extends ComponentBase {
 			if (entry.condition != null || entry.requires != null) conditional = true;
 			// A write has no call arguments — function conditions receive null callMeta.
 			if (!this.#conditionMatches(entry, runtimeContext, null)) continue;
-			ArrayMethods.push(conditioned, entry);
+			listPush(conditioned, entry);
 			if (entry.layer === "builtin" && entry.effect === "deny") builtinDenied = true;
 		}
 		const winner = conditioned.length === 0 ? null : this.#pickWrite(conditioned, builtinDenied, callerPath, targetPath);
@@ -2586,7 +2587,7 @@ export class PermissionManager extends ComponentBase {
 		for (const entry of mapValues(this.#rules)) {
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 			if (targetMatcher(targetPath)) {
-				ArrayMethods.push(matching, this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2604,7 +2605,7 @@ export class PermissionManager extends ComponentBase {
 		const matching = [];
 		for (const entry of mapValues(this.#rules)) {
 			if (entry.ownerModuleID === moduleID) {
-				ArrayMethods.push(matching, this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2624,7 +2625,7 @@ export class PermissionManager extends ComponentBase {
 		for (const entry of mapValues(this.#rules)) {
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			if (callerMatcher(callerPath)) {
-				ArrayMethods.push(matching, this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2865,7 +2866,7 @@ export class PermissionManager extends ComponentBase {
 	exportRules() {
 		const rules = [];
 		for (const entry of mapValues(this.#rules)) {
-			ArrayMethods.push(rules, {
+			listPush(rules, {
 				rule: { caller: entry.caller, target: entry.target, effect: entry.effect },
 				ownerModuleID: entry.ownerModuleID
 			});
@@ -3325,7 +3326,7 @@ export class PermissionManager extends ComponentBase {
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 
 			if (callerMatcher(callerPath) && targetMatcher(targetPath)) {
-				ArrayMethods.push(matches, entry);
+				listPush(matches, entry);
 			} else if (
 				inherited.length !== 0 &&
 				entry.effect === "deny" &&
@@ -3333,7 +3334,7 @@ export class PermissionManager extends ComponentBase {
 				callerMatcher(callerPath)
 			) {
 				// A deny naming an object member exactly covers what the member holds, ranked as a rule on `member.**`.
-				ArrayMethods.push(matches, { ...entry, target: `${entry.target}.**`, coveredBy: entry });
+				listPush(matches, { ...entry, target: `${entry.target}.**`, coveredBy: entry });
 			}
 		}
 
@@ -3432,7 +3433,7 @@ export class PermissionManager extends ComponentBase {
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const pathMatcher = this.#getCompiledPattern(entry.hookPathPattern);
 			if (callerMatcher(callerPath) && pathMatcher(hookPath)) {
-				ArrayMethods.push(matches, entry);
+				listPush(matches, entry);
 			}
 		}
 
@@ -3629,7 +3630,7 @@ export class PermissionManager extends ComponentBase {
 		prefixes = [];
 		for (let end = StringMethods.lastIndexOf(targetPath, "."); end > 0; end = StringMethods.lastIndexOf(targetPath, ".", end - 1)) {
 			const prefix = StringMethods.slice(targetPath, 0, end);
-			if (SetMethods.has(targets, prefix)) ArrayMethods.push(prefixes, prefix);
+			if (SetMethods.has(targets, prefix)) listPush(prefixes, prefix);
 		}
 		if (prefixes.length === 0) prefixes = NO_PREFIXES;
 		// Paths a module's data holds are many; the record is a cache, so it starts over rather than grow without bound.
