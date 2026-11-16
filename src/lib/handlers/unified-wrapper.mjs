@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:43:32-08:00 (1794779012)
+ *	@Last modified time: 2026-11-15T20:58:58-08:00 (1794805138)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4155,6 +4155,150 @@ function runtime_moduleInheritance(wrapper, prop) {
 }
 
 /**
+ * Record the prototype a node has, as soon as what the node is, is known: its function's own for a function node, and
+ * `Object.prototype` for any other value, as an object slothlet composed has in plain JavaScript. It is kept on the
+ * node's own record and replaced with the node's value, so a reload or an add that gives the node a new value gives it
+ * that value's prototype. `Object.setPrototypeOf` on the node changes it (see {@link runtime_ownsPrototype}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_fillPrototype(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	internal.prototypeOf = impl;
+	internal.prototypeGiven = false;
+	if (typeof impl !== "function") internal.prototype = impl !== null && typeof impl === "object" ? Objects.prototype : null;
+	// A module's own Proxy answers for itself, through its traps, whenever it is asked.
+	else internal.prototype = util.types.isProxy(impl) && !isCompositionLayer(impl) ? null : Reflect.getPrototypeOf(impl);
+}
+
+/**
+ * The prototype on a node's record (see {@link runtime_fillPrototype}), recorded now when the node was handed its value
+ * without it (a value put back as it was, or moved from another node). Until the node is given one, the record follows
+ * its value: a module that changes its own function's prototype changes what its node has.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {object|Function|null} The prototype.
+ * @private
+ */
+function runtime_recordedPrototype(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (internal.prototypeOf !== internal.impl || (!internal.prototypeGiven && typeof internal.impl === "function")) {
+		runtime_fillPrototype(wrapper);
+	}
+	return internal.prototype;
+}
+
+/**
+ * Whether a node has the prototype it was given through the node (`Object.setPrototypeOf(node, …)`), rather than the
+ * one its value came with (see {@link runtime_ownsPrototype}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} Whether it was given one.
+ * @private
+ */
+function runtime_prototypeGiven(wrapper) {
+	if (!runtime_ownsPrototype(wrapper)) return false;
+	runtime_recordedPrototype(wrapper);
+	return wrapper.____slothletInternal.prototypeGiven;
+}
+
+/**
+ * Whether a node's prototype is the one its record holds (see {@link runtime_fillPrototype}): a function node, whose
+ * function is the module's and is never changed through the node, and a namespace slothlet composed, which is no value
+ * of a module's. Any other node fronts a value a module holds as it is (its own object, an array, an emitter, a class
+ * instance, built-in data), and that value's prototype is the node's.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when the record's prototype is the node's.
+ * @private
+ */
+function runtime_ownsPrototype(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	// Answered once for the value, and again when what the node knows of where its value came from has changed.
+	const known = internal.prototypeOwner;
+	if (
+		known !== undefined &&
+		known.impl === impl &&
+		known.sourceValue === internal.sourceValue &&
+		known.moduleObject === internal.moduleObject &&
+		known.deferChildAdopt === internal.deferChildAdopt
+	)
+		return known.owns;
+	let owns;
+	if (typeof impl === "function") owns = !util.types.isProxy(impl) || isCompositionLayer(impl);
+	else if (impl === null || typeof impl !== "object" || internal.deferChildAdopt) owns = false;
+	else if (hasOwn(internal, "sourceValue") && internal.sourceValue === impl) owns = false;
+	else if (Arrays.isArray(impl) || util.types.isProxy(impl) || runtime_moduleObjectOf(wrapper) !== null) owns = false;
+	else owns = !runtime_holdsDataKind(impl) && !(EventEmitter && runtime_inherits(impl, EventEmitter));
+	internal.prototypeOwner = {
+		impl,
+		sourceValue: internal.sourceValue,
+		moduleObject: internal.moduleObject,
+		deferChildAdopt: internal.deferChildAdopt,
+		owns
+	};
+	return owns;
+}
+
+/**
+ * The prototype a member a node's value does not hold itself is read from, when the node's prototype is its record's
+ * (see {@link runtime_ownsPrototype}): `undefined` for a member the value holds and for any other node, whose value
+ * answers for what it inherits.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {object|Function|null|undefined} The prototype, `null` when the node has none, or `undefined`.
+ * @private
+ */
+function runtime_inheritsFrom(wrapper, prop) {
+	if (!runtime_ownsPrototype(wrapper) || hasOwn(wrapper.____slothletInternal.impl, prop)) return undefined;
+	return runtime_recordedPrototype(wrapper);
+}
+
+/**
+ * A member of a function node's function, as the node reads it: one the function does not hold itself comes from the
+ * prototype on the node's record (see {@link runtime_ownsPrototype}), read on the function.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {Function} fn - The function.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {*} The member.
+ * @private
+ */
+function runtime_functionMember(wrapper, fn, prop) {
+	// While the node's prototype is its function's own, the function answers for what it inherits.
+	if (fn !== wrapper.____slothletInternal.impl || !runtime_prototypeGiven(wrapper)) return fn[prop];
+	const prototype = runtime_inheritsFrom(wrapper, prop);
+	if (prototype === undefined) return fn[prop];
+	return prototype === null ? undefined : Reflect.get(prototype, prop, fn);
+}
+
+/**
+ * Whether a node inherits a member by a symbol key from the prototype on its record (see {@link runtime_ownsPrototype}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {symbol} prop - The key.
+ * @returns {boolean} Whether it does.
+ * @private
+ */
+function runtime_inheritsSymbol(wrapper, prop) {
+	const prototype = runtime_inheritsFrom(wrapper, prop);
+	return prototype !== undefined && prototype !== null && Reflect.has(prototype, prop);
+}
+
+/**
+ * Whether a node's value holds or inherits a member, as `in` asks it: from the prototype on the node's record when that
+ * is the node's (see {@link runtime_ownsPrototype}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object|Function} impl - The node's value.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {boolean} Whether it does.
+ * @private
+ */
+function runtime_implHas(wrapper, impl, prop) {
+	const prototype = runtime_inheritsFrom(wrapper, prop);
+	if (prototype === undefined) return prop in impl;
+	return prototype !== null && Reflect.has(prototype, prop);
+}
+
+/**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
  * {@link runtime_runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
  * @param {object} wrapper - The node's wrapper.
@@ -4167,6 +4311,12 @@ function runtime_readImplMember(wrapper, prop) {
 	// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
 	const inherited = runtime_moduleInheritance(wrapper, prop);
 	if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
+	// A member the node inherits from a prototype given to it is read from there, on the node, as plain JS reads it.
+	// While the node's prototype is its value's own, the value answers for what it inherits, below.
+	const prototype = runtime_prototypeGiven(wrapper) ? runtime_inheritsFrom(wrapper, prop) : undefined;
+	if (prototype !== undefined) {
+		return prototype === null ? undefined : Reflect.get(prototype, prop, wrapper.____slothletInternal.proxy ?? wrapper);
+	}
 	const accessor = runtime_implAccessor(wrapper, prop);
 	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
 	if (accessor)
@@ -7121,8 +7271,10 @@ function runtime_classPrototypeSites(slothlet, prototype) {
  * @private
  */
 function runtime_functionNodePrototype(wrapper, fn) {
-	const prototype = Objects.getPrototypeOf(fn);
+	const prototype = runtime_ownsPrototype(wrapper) ? runtime_recordedPrototype(wrapper) : Objects.getPrototypeOf(fn);
 	if (prototype === null || prototype === Functions.prototype) return prototype;
+	// One given to the node is no part of the module's function: it is reported as it is.
+	if (runtime_prototypeGiven(wrapper)) return prototype;
 	if (typeof prototype !== "function") {
 		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
 	}
@@ -12963,6 +13115,7 @@ class UnifiedWrapper extends ComponentBase {
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
 		// The module's own object, when this node is built from a copy of one its file exports (#746).
 		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
+		runtime_fillPrototype(this);
 		runtime_registerLeafFunction(this, internal.impl);
 
 		internal.materializeFunc = materializeFunc;
@@ -13471,6 +13624,7 @@ class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
 		// The node's members come from the new value from here on: none of them was defined read-only through the node.
 		this.____slothletInternal.readOnlyKeys = null;
+		runtime_fillPrototype(this);
 		runtime_registerLeafFunction(this, this.____slothletInternal.impl);
 		this.____slothletInternal.invalid = false;
 
@@ -13570,6 +13724,7 @@ class UnifiedWrapper extends ComponentBase {
 		// module reverts to it.
 		this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
 		internal.impl = runtime_adoptedImpl(this, impl);
+		runtime_fillPrototype(this);
 		runtime_registerLeafFunction(this, internal.impl);
 		internal.isCallable = true;
 		internal.isCallableLocked = true;
@@ -16757,6 +16912,21 @@ class UnifiedWrapper extends ComponentBase {
 				) {
 					return reportedPrototype(target, () => kept);
 				}
+				// A namespace slothlet composed answers the prototype it reports too, unless the prototype it has holds a
+				// `__proto__` member of its own, or it has none to inherit the accessor from.
+				// So does a function node given another prototype; one keeping its function's reads it as the function does, below.
+				if (protoImpl !== null && (typeof protoImpl === "object" || typeof protoImpl === "function") && !hasOwn(wrapper, prop)) {
+					const from = runtime_inheritsFrom(wrapper, prop);
+					if (
+						from !== undefined &&
+						from !== null &&
+						!util.types.isProxy(from) &&
+						(typeof protoImpl === "object" || runtime_prototypeGiven(wrapper)) &&
+						runtime_readsEngineProto(from)
+					) {
+						return reportedPrototype(target, () => kept);
+					}
+				}
 			}
 			if (prop === "constructor" && !memberShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
@@ -16771,7 +16941,7 @@ class UnifiedWrapper extends ComponentBase {
 				// A function node answers its function's own `constructor` (`Function`, `AsyncFunction`, …), as the
 				// function does, rather than `Object` (#630); one the module defined on it is its code (#632).
 				if (typeof constructorImpl === "function") {
-					const fnConstructor = constructorImpl.constructor;
+					const fnConstructor = runtime_functionMember(wrapper, constructorImpl, prop);
 					const inherited = runtime_inheritedEngineMember(constructorImpl, prop, fnConstructor);
 					if (inherited) return inherited.value;
 					runtime_enforceCodeMember(wrapper, fnConstructor, kept);
@@ -16806,7 +16976,9 @@ class UnifiedWrapper extends ComponentBase {
 					if (FUNCTION_NODES.get(wrapper.slothlet)?.get(answered)?.deref() !== undefined) return runtime_functionNodeFor(wrapper, answered);
 					return runtime_instanceClassNode(wrapper, answered) ?? answered;
 				}
-				return Objects.prototype.constructor;
+				// A namespace given another prototype reads its `constructor` from there, through the member read below.
+				const constructorFrom = runtime_inheritsFrom(wrapper, prop);
+				if (constructorFrom === undefined || constructorFrom === Objects.prototype) return Objects.prototype.constructor;
 			}
 			if (prop === util.inspect.custom) {
 				// What the node shows to `util.inspect` (see runtime_inspectShown): the same as its target's own hook.
@@ -16853,7 +17025,9 @@ class UnifiedWrapper extends ComponentBase {
 			}
 			// A symbol the module's value holds as its own key is a member, as in plain JS (`obj[sym]`); any other
 			// symbol is not one, and the wrapper has no answer of its own for it.
-			if (typeof prop === "symbol" && !runtime_hasOwnSymbolMember(wrapper, prop)) return undefined;
+			// One the node inherits from a prototype set on it is read below, as a member by any other key is.
+			if (typeof prop === "symbol" && !runtime_hasOwnSymbolMember(wrapper, prop) && !runtime_inheritsSymbol(wrapper, prop))
+				return undefined;
 			if (prop === "length" && !memberShadowsWrapperProp) {
 				// Return actual function length from impl
 				const impl = wrapper.____slothletInternal.impl;
@@ -16903,7 +17077,9 @@ class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				const fnImpl = runtime_functionOf(impl);
 				if (fnImpl) {
-					const method = fnImpl.toString;
+					const method = runtime_functionMember(wrapper, fnImpl, prop);
+					// A function given a prototype without one has none, as the plain function then has.
+					if (typeof method !== "function") return method;
 					runtime_enforceCodeMember(wrapper, method, kept);
 					return method.bind(fnImpl);
 				}
@@ -16924,9 +17100,10 @@ class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				const fnImpl = runtime_functionOf(impl);
 				if (fnImpl) {
-					const method = fnImpl.valueOf;
+					const method = runtime_functionMember(wrapper, fnImpl, prop);
 					const inherited = runtime_inheritedEngineMember(fnImpl, prop, method);
 					if (inherited) return runtime_valueOfFor(wrapper.____slothletInternal.proxy);
+					if (typeof method !== "function") return method;
 					runtime_enforceCodeMember(wrapper, method, kept);
 					return method.bind(fnImpl);
 				}
@@ -17152,7 +17329,7 @@ class UnifiedWrapper extends ComponentBase {
 				// A Proxy answers reads through its get trap, which can serve members its `in` check does not
 				// report; the read below asks it, as eager does (#585 review).
 				!util.types.isProxy(wrapper.____slothletInternal.impl) &&
-				!(prop in wrapper.____slothletInternal.impl) &&
+				!runtime_implHas(wrapper, wrapper.____slothletInternal.impl, prop) &&
 				runtime_moduleInheritance(wrapper, prop) === null
 			) {
 				return undefined;
@@ -17219,6 +17396,9 @@ class UnifiedWrapper extends ComponentBase {
 			// An accessor the impl holds that adoption did not put on the wrapper — one on an object assigned through
 			// the api, or inherited — runs as the module the node belongs to, never as whoever reads it (#597).
 			let value = arrayElement ? arrayElement.value : wrapper.____slothletInternal.impl ? runtime_readImplMember(wrapper, prop) : undefined;
+			// A member the node inherits from its own prototype stays inherited: read as a member of the node is, and
+			// never kept as one of the node's own.
+			const isInherited = value !== undefined && !arrayElement && runtime_inheritsFrom(wrapper, prop) !== undefined;
 
 			// Fallback: value lives directly on the proxy target rather than on impl.
 			// Reached only when impl doesn't have the key but target does (e.g., a property
@@ -17284,8 +17464,12 @@ class UnifiedWrapper extends ComponentBase {
 			if (typeof currentImpl === "function" && !Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
-				runtime_enforceCodeMember(wrapper, value, kept);
-				return value;
+				// A member inherited from a prototype given to the node is no part of the module's function: it is read as
+				// a member of the node is, below.
+				if (!isInherited || !runtime_prototypeGiven(wrapper)) {
+					runtime_enforceCodeMember(wrapper, value, kept);
+					return value;
+				}
 			}
 			// The same holds for an object node: a member it inherits from the engine (`hasOwnProperty`,
 			// `__lookupGetter__`, `valueOf`, … from `Object.prototype`) is the object's own surface, not a child
@@ -17325,7 +17509,7 @@ class UnifiedWrapper extends ComponentBase {
 			// cycle-guard set through here.
 			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
 			// plain JavaScript, so a member it reads stays live (#590).
-			if (wrapped && typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
+			if (wrapped && (isInherited || typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function")) return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
 				Objects.defineProperty(wrapper, prop, {
@@ -17953,7 +18137,7 @@ class UnifiedWrapper extends ComponentBase {
 				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-				(runtime_onImpl(wrapper, (impl) => prop in impl) || runtime_moduleInheritance(wrapper, prop) !== null)
+				(runtime_onImpl(wrapper, (impl) => runtime_implHas(wrapper, impl, prop)) || runtime_moduleInheritance(wrapper, prop) !== null)
 			) {
 				return true;
 			}
@@ -18902,7 +19086,9 @@ class UnifiedWrapper extends ComponentBase {
 			const moduleObject = runtime_moduleObjectOf(wrapper);
 			if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
 			const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter));
-			return isLiveIdentity && impl && typeof impl === "object" ? Objects.getPrototypeOf(impl) : null;
+			if (isLiveIdentity && impl && typeof impl === "object") return Objects.getPrototypeOf(impl);
+			// A namespace slothlet composed has the prototype its record holds, as a function node does.
+			return runtime_ownsPrototype(wrapper) ? runtime_recordedPrototype(wrapper) : null;
 		};
 		/**
 		 * The prototype the node reports to whoever asks now (#667), by `Object.getPrototypeOf` and, for an object node,
@@ -18922,7 +19108,9 @@ class UnifiedWrapper extends ComponentBase {
 				// node (#632) and a change through it as a write at the node's path (#667). slothlet's own checks never read it
 				// (see runtime_inherits).
 				const fixed = Reflect.getPrototypeOf(target);
-				if (heldPrototypeRead !== wrapper) {
+				// A prototype given to the node is reported as it is to every reader, as on an open node.
+				const given = runtime_ownsPrototype(wrapper) && (typeof impl !== "function" || runtime_prototypeGiven(wrapper));
+				if (heldPrototypeRead !== wrapper && !given) {
 					// A class instance's prototype is checked as a call of its class's node, as on an open node (#725).
 					const behind = runtime_behindMemberView(fixed);
 					runtime_enforceCodeMember(runtime_prototypeCheckedBy(wrapper, behind), behind, takeKept());
@@ -18945,7 +19133,8 @@ class UnifiedWrapper extends ComponentBase {
 				return runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, unclassed), null);
 			}
 			let prototype = heldPrototype();
-			if (prototype === null) return null;
+			// A node's own prototype, a module's value's or none, is reported as it is to every reader.
+			if (prototype === null || runtime_ownsPrototype(wrapper)) return prototype;
 			// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 			// the node, as its `constructor` is read (#632). Any other caller is reported a stand-in inheriting from the
 			// nearest prototype above it holding none of the module's code, so `instanceof` against the language's or
@@ -18999,6 +19188,8 @@ class UnifiedWrapper extends ComponentBase {
 								: prototype
 					);
 				} else if (typeof array === "function") Reflect.setPrototypeOf(target, runtime_functionNodePrototype(wrapper, array));
+				// A lazy namespace's shell is a function, built before its value was known: it takes the namespace's prototype.
+				else if (runtime_ownsPrototype(wrapper)) Reflect.setPrototypeOf(target, runtime_recordedPrototype(wrapper));
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				const frontsModuleObject = !Arrays.isArray(target) && runtime_moduleObjectOf(wrapper) !== null;
 				for (const key of keys) {
@@ -19227,10 +19418,19 @@ class UnifiedWrapper extends ComponentBase {
 					internal.sourceValue === impl
 				)
 					return Reflect.setPrototypeOf(impl, runtime_unwrapSelfView(proto));
-				// A function node never writes to the module's function (a member written through it stays the node's), so
-				// it keeps its function's prototype, as a function root does; a namespace slothlet composed keeps reporting
-				// none, as a module namespace object does. Either answers true only for the prototype it already has.
-				return runtime_unwrapSelfView(proto) === (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : heldPrototype());
+				// A function node never writes to the module's function (a member written through it stays the node's), and
+				// a namespace slothlet composed is no value of a module's: either takes the prototype on its own record,
+				// which the node reports and inherits from (see runtime_fillPrototype). Any other node answers true only
+				// for the prototype it already has.
+				if (!runtime_ownsPrototype(wrapper)) {
+					return runtime_unwrapSelfView(proto) === (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : heldPrototype());
+				}
+				// The one its value came with is the node's again as it was before any was given.
+				const given = runtime_unwrapSelfView(proto);
+				runtime_recordedPrototype(wrapper);
+				internal.prototypeGiven = given !== (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : Objects.prototype);
+				internal.prototype = given;
+				return true;
 			},
 			getPrototypeOf: (target) => reportedPrototype(target, () => runtime_takeCapturedAccess(wrapper))
 		};
