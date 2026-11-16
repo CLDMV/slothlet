@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:56:59-08:00 (1794797819)
+ *	@Last modified time: 2026-11-15T19:51:30-08:00 (1794801090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,9 +20,11 @@
  * For a function root (`root.mjs` exporting a function, an async arrow among them) `self` is callable as `api` is:
  * `typeof`, `Object.prototype.toString`, `instanceof`, the prototype, and a call or construction of it, by every route.
  * For an object root it stays an object. Each operation is run on `self` inside a module and on `api` in the host, and
- * the two answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`). A full
- * `JSON.stringify(self)` is left out of the comparison: a module is refused the `slothlet.permissions` namespace's
- * `toJSON`, with or without a deny rule, so it differs from the host's by the permission system, not by the form.
+ * the two answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`).
+ *
+ * `JSON.stringify(self)` gives what `JSON.stringify(api)` gives the host, less the members the module is refused,
+ * which are left out as a listing leaves them out and never thrown for; a read of such a member by name is still
+ * refused (fixture `jsonroot`).
  */
 
 import path from "node:path";
@@ -62,24 +64,18 @@ const POLICIES = [
 ];
 
 /**
- * What `api` answers in the host, without the full serialization (see the file overview).
+ * What `api` answers in the host.
  * @param {object} api - The api.
  * @returns {Record<string, *>} What each operation gave.
  */
-const hostShape = (api) => {
-	const { jsonFullKind: _, ...rows } = shape(api, { inspect: util.inspect });
-	return rows;
-};
+const hostShape = (api) => shape(api, { inspect: util.inspect });
 
 /**
- * What `self` answers inside the probe module, without the full serialization.
+ * What `self` answers inside the probe module.
  * @param {object} api - The api.
  * @returns {Promise<Record<string, *>>} What each operation gave.
  */
-const moduleShape = async (api) => {
-	const { jsonFullKind: _, ...rows } = await api.probe.report(util.inspect);
-	return rows;
-};
+const moduleShape = (api) => api.probe.report(util.inspect);
 
 it("the host's copy of the report is the modules' copy", () => {
 	const code = (file) => readFileSync(path.join(FIXTURE, file), "utf8").split("\nexport function shape")[1];
@@ -181,6 +177,21 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 			await api.shutdown();
 		}
 	});
+
+	it.each(["eager", "lazy"])(
+		"%s: a file beside the root file, taking self at its top level, takes the callable form when the root plainly exports a function",
+		async (mode) => {
+			const api = await slothlet({ base: path.join(FIXTURE, "siblingroot"), mode, runtime, silent: true });
+			try {
+				const rows = await api.capture.report();
+				expect(rows.typeof).toBe("function");
+				expect(rows.directCall).toBe(4);
+				expect(Object.keys(api)[0]).toBe("capture");
+			} finally {
+				await api.shutdown();
+			}
+		}
+	);
 
 	it("a CommonJS file reading self from the runtime's namespace takes the callable form", async () => {
 		const api = await slothlet({ base: path.join(FIXTURE, "cjsroot"), runtime, silent: true });
@@ -298,6 +309,108 @@ describe.each(CONFIGS)("self() runs the root as the api root > $mode / $runtime 
 
 		it("Reflect.apply(self, …) answers as self.call() does", async () => {
 			expect(await api.reader.reflectRoot()).toBe(policy.expected);
+		});
+	});
+});
+
+/**
+ * Every path of a JSON value, with the type of each leaf.
+ * @param {*} value - The parsed value.
+ * @param {string} [at=""] - Its path.
+ * @param {Array<string>} [out=[]] - The paths so far.
+ * @returns {Array<string>} The paths.
+ */
+const jsonPaths = (value, at = "", out = []) => {
+	if (value !== null && typeof value === "object") {
+		out.push(at);
+		for (const key of Object.keys(value)) jsonPaths(value[key], `${at}.${key}`, out);
+	} else out.push(`${at}=${typeof value}`);
+	return out;
+};
+
+const SETTINGS = { public: 1, hidden: 2, list: [1, { a: 1, b: 2 }] };
+const JSON_POLICIES = [
+	{ label: "permissions off", permissions: () => undefined, config: { settings: SETTINGS }, hidden: 2, principal: DENIED, whole: false },
+	{
+		label: "permissions disabled",
+		permissions: () => ({ mode: "disabled" }),
+		config: { settings: SETTINGS },
+		hidden: 2,
+		principal: "read",
+		whole: true
+	},
+	{
+		label: "permissions on, no rule",
+		permissions: (attribution) => ({ attribution }),
+		config: { settings: SETTINGS },
+		hidden: 2,
+		principal: DENIED,
+		whole: false
+	},
+	{
+		label: "permissions on, a deny rule on one member",
+		permissions: (attribution) => ({ attribution, rules: [{ caller: "probe.**", target: "config.settings.hidden", effect: "deny" }] }),
+		config: { settings: { public: 1, list: SETTINGS.list } },
+		hidden: DENIED,
+		principal: DENIED,
+		whole: false
+	},
+	{
+		label: "default deny, no rule",
+		permissions: (attribution) => ({ attribution, defaultPolicy: "deny" }),
+		// The file's node is traversal, listed with nothing the module may read.
+		config: {},
+		hidden: DENIED,
+		principal: DENIED,
+		whole: false
+	},
+	{
+		label: "default deny, the probe allowed the config",
+		permissions: (attribution) => ({
+			attribution,
+			defaultPolicy: "deny",
+			rules: [{ caller: "probe.**", target: "config.**", effect: "allow" }]
+		}),
+		config: { settings: SETTINGS },
+		hidden: 2,
+		principal: DENIED,
+		whole: false
+	}
+];
+
+describe.each(CONFIGS)("JSON.stringify(self) > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+	describe.each(JSON_POLICIES)("$label", (policy) => {
+		let api;
+
+		beforeAll(async () => {
+			api = await slothlet({
+				base: path.join(FIXTURE, "jsonroot"),
+				mode,
+				runtime,
+				silent: true,
+				permissions: policy.permissions(attribution)
+			});
+		}, 60000);
+
+		afterAll(async () => {
+			await api?.shutdown?.();
+			api = null;
+		}, 60000);
+
+		it("gives the host's serialization less what the module is refused, and never throws for it", async () => {
+			const written = await api.probe.json();
+			expect(typeof written).toBe("string");
+			expect(written.startsWith("threw:")).toBe(false);
+			const host = JSON.stringify(api);
+			if (policy.whole) expect(written).toBe(host);
+			const hostPaths = new Set(jsonPaths(JSON.parse(host)));
+			for (const at of jsonPaths(JSON.parse(written))) expect([at, hostPaths.has(at)]).toEqual([at, true]);
+			expect(JSON.parse(written).config).toEqual(policy.config);
+		});
+
+		it("a read of a refused member by name is still refused", async () => {
+			expect(await api.probe.principalToJSON()).toBe(policy.principal);
+			expect(await api.probe.hidden()).toBe(policy.hidden);
 		});
 	});
 });

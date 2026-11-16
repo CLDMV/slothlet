@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:20-08:00 (1794797720)
+ *	@Last modified time: 2026-11-15T19:48:29-08:00 (1794800909)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,8 +16,7 @@
 /**
  * @fileoverview In a browser, a module's `self` takes the form the page's `api` takes (#803): callable for a function
  * root, an object for an object root. Each operation is run on `self` inside a module and on `api` on the page, and
- * the answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`), the full serialization left
- * out as in the Node suite (runtime/self-root-form).
+ * the answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -46,13 +45,6 @@ const boot = async (rel, manifest, permissions, mode) => {
 	});
 };
 
-/**
- * A report without the full serialization.
- * @param {Record<string, *>} rows - The report.
- * @returns {Record<string, *>} The report, without `jsonFullKind`.
- */
-const comparable = ({ jsonFullKind: _, ...rows }) => rows;
-
 describe.each(["eager", "lazy"])("browser: a module's self takes the api root's form > %s", (mode) => {
 	describe.each([
 		{ label: "a function root", rel: selfFnRel, manifest: selfFnManifest, typeof: "function" },
@@ -75,8 +67,8 @@ describe.each(["eager", "lazy"])("browser: a module's self takes the api root's 
 			});
 
 			it("self answers every operation as the page's api does", async () => {
-				const rows = comparable(await api.probe.report());
-				expect(rows).toEqual(comparable(shape(api)));
+				const rows = await api.probe.report();
+				expect(rows).toEqual(shape(api));
 				expect(rows.typeof).toBe(root.typeof);
 				expect(rows.mathAdd).toBe(5);
 			});
