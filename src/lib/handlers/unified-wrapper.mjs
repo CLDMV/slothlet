@@ -62,50 +62,85 @@ import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
 import { isBoxedPrimitive, internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
 import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
 import {
-	Reflect,
-	Objects,
-	Arrays,
-	Math,
-	functionSource,
-	functionToString,
-	NativeProxy,
-	Map,
-	Set,
-	WeakMap,
-	WeakSet,
-	WeakRef,
-	Promise,
-	Symbol,
-	Promises,
-	Symbols,
-	Functions,
-	NativeObject,
-	URL,
-	URLSearchParams,
-	Boolean,
-	Date,
-	Errors,
-	Error,
-	Number,
-	RegExp,
-	String,
-	TypeError,
-	EvalError,
-	RangeError,
-	ReferenceError,
-	SyntaxError,
-	URIError,
 	AggregateError,
-	BigInt,
-	ArrayBuffers,
 	ArrayBuffer,
+	ArrayBuffers,
+	ArrayMethods,
+	Arrays,
+	asyncGeneratorSteps,
+	BigInt,
+	BigInt64Array,
+	BigUint64Array,
+	Blob,
+	Boolean,
+	concatLists,
+	copyList,
 	DataView,
+	Date,
+	Error,
+	Errors,
+	EvalError,
+	EventTarget,
+	filterList,
+	Float16Array,
 	Float32Array,
 	Float64Array,
+	FunctionMethods,
+	Functions,
+	functionSource,
+	functionToString,
+	generatorSteps,
 	Int16Array,
 	Int32Array,
 	Int8Array,
 	Intl,
+	Iterator,
+	Iterators,
+	listFromIterable,
+	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
+	mapList,
+	MapMethods,
+	mapValuesToArray,
+	Math,
+	MessageChannel,
+	NativeObject,
+	NativeProcess,
+	NativeProxy,
+	Number,
+	NumberMethods,
+	ObjectMethods,
+	Objects,
+	Processes,
+	Promise,
+	promiseAll,
+	PromiseMethods,
+	Promises,
+	queueMicrotask,
+	RangeError,
+	ReferenceError,
+	Reflect,
+	RegExp,
+	RegExpMethods,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	SharedArrayBuffer,
+	splitText,
+	String,
+	StringMethods,
+	Symbol,
+	SymbolMethods,
+	Symbols,
+	SyntaxError,
+	TextDecoder,
+	TextEncoder,
+	TypeError,
 	Uint16Array,
 	Uint32Array,
 	Uint8Array,
@@ -163,7 +198,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
  * @returns {boolean} True if obj has own property key
  * @private
  */
-const hasOwn = (obj, key) => Objects.prototype.hasOwnProperty.call(obj, key);
+const hasOwn = (obj, key) => FunctionMethods.call(Objects.prototype.hasOwnProperty, obj, key);
 
 /**
  * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
@@ -202,15 +237,15 @@ const ROOT_PROXIES = new WeakSet();
  */
 function runtime_frameworkWrite(node, write) {
 	// The api root has no wrapper: its proxy stands for itself (see runtime_assertRootChange).
-	const wrapper = resolveWrapper(node) ?? (ROOT_PROXIES.has(node) ? node : null);
+	const wrapper = resolveWrapper(node) ?? (WeakSetMethods.has(ROOT_PROXIES, node) ? node : null);
 	if (!wrapper) return write();
-	FRAMEWORK_WRITES.set(wrapper, (FRAMEWORK_WRITES.get(wrapper) ?? 0) + 1);
+	MapMethods.set(FRAMEWORK_WRITES, wrapper, (MapMethods.get(FRAMEWORK_WRITES, wrapper) ?? 0) + 1);
 	try {
 		return write();
 	} finally {
-		const open = FRAMEWORK_WRITES.get(wrapper) - 1;
-		if (open > 0) FRAMEWORK_WRITES.set(wrapper, open);
-		else FRAMEWORK_WRITES.delete(wrapper);
+		const open = MapMethods.get(FRAMEWORK_WRITES, wrapper) - 1;
+		if (open > 0) MapMethods.set(FRAMEWORK_WRITES, wrapper, open);
+		else MapMethods.delete(FRAMEWORK_WRITES, wrapper);
 	}
 }
 
@@ -263,7 +298,8 @@ const DESCRIPTOR_FIELDS = Objects.freeze(["value", "writable", "get", "set", "en
 function runtime_isUnchangingDefinition(holder, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
 	if (!current || current.configurable) return false;
-	for (const field of DESCRIPTOR_FIELDS) {
+	for (let ofIndex = 0, ofList = DESCRIPTOR_FIELDS; ofIndex < ofList.length; ofIndex++) {
+		const field = ofList[ofIndex];
 		if (field in descriptor && !(field in current && Objects.is(descriptor[field], current[field]))) return false;
 	}
 	return true;
@@ -378,8 +414,8 @@ const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
  */
 function runtime_unwrapSelfView(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	if (GUARD_VIEWS.has(value)) return capturedViewTargets.get(value);
-	return SELF_VIEW_NODES.get(value) ?? SELF_MEMBER_VIEWS.get(value)?.value ?? value;
+	if (WeakSetMethods.has(GUARD_VIEWS, value)) return WeakMapMethods.get(capturedViewTargets, value);
+	return WeakMapMethods.get(SELF_VIEW_NODES, value) ?? WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.value ?? value;
 }
 
 /**
@@ -469,8 +505,8 @@ function runtime_selfWriteHasStanding(slothlet) {
  * @private
  */
 function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
-	const parts = owner ? String(owner.____slothletInternal.apiPath).split(".").filter(Boolean) : [];
-	if (owner && typeof prop === "string") parts.push(prop);
+	const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
+	if (owner && typeof prop === "string") ArrayMethods.push(parts, prop);
 	// With the system off only a change to the framework's own is checked (its keys on the node); disabled, none.
 	if (!slothlet.handlers.apiManager.writeChecked(parts) || runtime_selfWriteHasStanding(slothlet)) return;
 	if (reader === HOST_READER) return;
@@ -492,7 +528,7 @@ function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
  */
 function runtime_selfViewFor(value, reader) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	return SELF_VIEW_NODES.has(value) ? runtime_selfView(value, reader) : value;
+	return WeakMapMethods.has(SELF_VIEW_NODES, value) ? runtime_selfView(value, reader) : value;
 }
 
 /**
@@ -507,14 +543,14 @@ function runtime_selfViewFor(value, reader) {
  */
 function runtime_selfIsMethodNode(thisArg, method) {
 	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return false;
-	if (!SELF_VIEW_NODES.has(thisArg)) return false;
-	const node = SELF_VIEW_NODES.get(thisArg);
-	const owner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
+	if (!WeakMapMethods.has(SELF_VIEW_NODES, thisArg)) return false;
+	const node = WeakMapMethods.get(SELF_VIEW_NODES, thisArg);
+	const owner = resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null;
 	if (owner === null || owner.slothlet !== method.slothlet) return false;
 	const methodPath = String(method.____slothletInternal.apiPath);
-	const dot = methodPath.lastIndexOf(".");
+	const dot = StringMethods.lastIndexOf(methodPath, ".");
 	if (dot < 0) return false;
-	return String(owner.____slothletInternal.apiPath) === methodPath.slice(0, dot);
+	return String(owner.____slothletInternal.apiPath) === StringMethods.slice(methodPath, 0, dot);
 }
 
 /**
@@ -576,7 +612,7 @@ const SELF_MEMBER_VIEWS = new WeakMap();
  * runtime_selfLap(SELF_MEMBER_VIEWS.get(conn), raw.self); // conn's view, when raw.self === raw
  */
 function runtime_selfLap(record, value) {
-	for (let step = record; step !== undefined; step = step.parent?.deref()) {
+	for (let step = record; step !== undefined; step = step.parent == null ? undefined : WeakRefMethods.deref(step.parent)) {
 		if (step.value === value) return step.view;
 	}
 	return null;
@@ -587,12 +623,15 @@ function runtime_selfLap(record, value) {
  * @type {Set<symbol>}
  * @private
  */
-const PROTOCOL_SYMBOLS = new Set([
-	...Objects.getOwnPropertyNames(Symbol)
-		.map((name) => Symbol[name])
-		.filter((value) => typeof value === "symbol"),
-	Symbols.for("nodejs.util.inspect.custom")
-]);
+const PROTOCOL_SYMBOLS = setFrom(
+	concatLists(
+		filterList(
+			mapList(Objects.getOwnPropertyNames(Symbol), (name) => Symbol[name]),
+			(value) => typeof value === "symbol"
+		),
+		[Symbols.for("nodejs.util.inspect.custom")]
+	)
+);
 
 /**
  * The realm's intrinsics — `Object`, `Function.prototype`, `Map.prototype.get`, `Math`, … — gathered once from
@@ -618,22 +657,25 @@ function runtime_gatherIntrinsics() {
 	// Breadth first, so each intrinsic is reached at its shallowest depth and its own members are gathered too.
 	const pending = [[globalThis, 0]];
 	for (let index = 0; index < pending.length; index++) {
-		const [current, depth] = pending[index];
-		if (intrinsics.has(current)) continue;
-		intrinsics.add(current);
+		const unpacked1 = pending[index],
+			current = unpacked1[0],
+			depth = unpacked1[1];
+		if (WeakSetMethods.has(intrinsics, current)) continue;
+		WeakSetMethods.add(intrinsics, current);
 		if (depth >= 3) continue;
 		const next = (candidate) => {
 			if (
 				candidate !== null &&
 				(typeof candidate === "object" || typeof candidate === "function") &&
-				!intrinsics.has(candidate) &&
+				!WeakSetMethods.has(intrinsics, candidate) &&
 				!util.types.isProxy(candidate)
 			) {
-				pending.push([candidate, depth + 1]);
+				ArrayMethods.push(pending, [candidate, depth + 1]);
 			}
 		};
 		next(Reflect.getPrototypeOf(current));
-		for (const descriptor of Objects.values(Objects.getOwnPropertyDescriptors(current))) {
+		for (let ofIndex = 0, ofList = Objects.values(Objects.getOwnPropertyDescriptors(current)); ofIndex < ofList.length; ofIndex++) {
+			const descriptor = ofList[ofIndex];
 			next(descriptor.value);
 			next(descriptor.get);
 			next(descriptor.set);
@@ -649,7 +691,7 @@ function runtime_gatherIntrinsics() {
  * @private
  */
 function runtime_isIntrinsic(value) {
-	return REALM_INTRINSICS.has(value);
+	return WeakSetMethods.has(REALM_INTRINSICS, value);
 }
 
 /**
@@ -773,7 +815,12 @@ function runtime_dataKind(value) {
 	// Slothlet's own values (a node, a view, a stand-in) are no data object, and asking one would read through its traps:
 	// its prototype, which a closed node reports only to a caller that may call it (#632).
 	if (runtime_isSlothletValue(value)) return null;
-	for (const [kind, is] of DATA_KINDS) if (is(value)) return kind;
+	for (let ofIndex = 0, ofList = DATA_KINDS; ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			kind = ofEntry[0],
+			is = ofEntry[1];
+		if (is(value)) return kind;
+	}
 	return null;
 }
 
@@ -788,13 +835,13 @@ function runtime_isPlainMember(value) {
 	return (
 		!runtime_isIntrinsic(value) &&
 		!runtime_hasInternalSlots(value) &&
-		!SELF_VIEW_NODES.has(value) &&
-		!SELF_MEMBER_VIEWS.has(value) &&
-		!FRAMEWORK_VIEW_TARGETS.has(value) &&
-		!FRAMEWORK_MEMBERS.has(value) &&
+		!WeakMapMethods.has(SELF_VIEW_NODES, value) &&
+		!WeakMapMethods.has(SELF_MEMBER_VIEWS, value) &&
+		!WeakMapMethods.has(FRAMEWORK_VIEW_TARGETS, value) &&
+		!WeakMapMethods.has(FRAMEWORK_MEMBERS, value) &&
 		resolveWrapper(value) === null &&
 		versionDispatcherRecord(value) === null &&
-		!capturedViewChildren.has(value) &&
+		!WeakMapMethods.has(capturedViewChildren, value) &&
 		!isFrameworkInternal(value)
 	);
 }
@@ -825,13 +872,13 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 		const fronted = runtime_frontedFunctionView(slothlet, value, reader);
 		if (fronted !== undefined) return fronted;
 	}
-	if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return value;
-	if (FRAMEWORK_MEMBERS.has(value)) return runtime_selfFrameworkView(value, reader);
+	if (typeof prop === "symbol" && SetMethods.has(PROTOCOL_SYMBOLS, prop)) return value;
+	if (WeakMapMethods.has(FRAMEWORK_MEMBERS, value)) return runtime_selfFrameworkView(value, reader);
 	if (through !== undefined) {
 		const lap = runtime_selfLap(through, value);
 		if (lap !== null) return lap;
 	}
-	if (runtime_hasInternalSlots(value) && !SELF_MEMBER_VIEWS.has(value))
+	if (runtime_hasInternalSlots(value) && !WeakMapMethods.has(SELF_MEMBER_VIEWS, value))
 		return runtime_selfDataView(value, reader, slothlet, parts, through);
 	if (!runtime_isPlainMember(value)) return runtime_selfView(value, reader);
 	return runtime_selfMemberView(value, reader, slothlet, parts, through);
@@ -865,12 +912,12 @@ function runtime_assertReaderWrite(slothlet, reader, writer, parts) {
  * @type {Array<[Function, ReadonlySet<string|symbol>]>}
  * @private
  */
-const DATA_READERS = new Map([
-	["map", new Set(["get", "has", "keys", "values", "entries", "forEach", Symbol.iterator])],
-	["weakmap", new Set(["get", "has"])],
+const DATA_READERS = mapFrom([
+	["map", setFrom(["get", "has", "keys", "values", "entries", "forEach", Symbol.iterator])],
+	["weakmap", setFrom(["get", "has"])],
 	[
 		"set",
-		new Set([
+		setFrom([
 			"has",
 			"keys",
 			"values",
@@ -886,16 +933,16 @@ const DATA_READERS = new Map([
 			"isDisjointFrom"
 		])
 	],
-	["weakset", new Set(["has"])],
-	["regexp", new Set(["exec", "test", Symbol.match, Symbol.matchAll, Symbol.search, Symbol.split, Symbol.replace])],
-	["arraybuffer", new Set(["slice"])],
-	["sharedarraybuffer", new Set(["slice"])],
-	["promise", new Set(["then", "catch", "finally"])],
-	["weakref", new Set(["deref"])]
+	["weakset", setFrom(["has"])],
+	["regexp", setFrom(["exec", "test", Symbol.match, Symbol.matchAll, Symbol.search, Symbol.split, Symbol.replace])],
+	["arraybuffer", setFrom(["slice"])],
+	["sharedarraybuffer", setFrom(["slice"])],
+	["promise", setFrom(["then", "catch", "finally"])],
+	["weakref", setFrom(["deref"])]
 ]);
 
 /** The methods of a typed array that only read it. @type {ReadonlySet<string|symbol>} @private */
-const TYPED_ARRAY_READERS = new Set([
+const TYPED_ARRAY_READERS = setFrom([
 	"at",
 	"entries",
 	"every",
@@ -931,51 +978,60 @@ const TYPED_ARRAY_READERS = new Set([
  * @type {ReadonlySet<object>}
  * @private
  */
-const ENGINE_DATA_PROTOTYPES = new Set(
-	[
-		Objects.prototype,
-		Map.prototype,
-		WeakMap.prototype,
-		Set.prototype,
-		WeakSet.prototype,
-		Date.prototype,
-		RegExp.prototype,
-		ArrayBuffer.prototype,
-		typeof SharedArrayBuffer === "function" ? SharedArrayBuffer.prototype : null,
-		DataView.prototype,
-		Promise.prototype,
-		typeof WeakRef === "function" ? WeakRef.prototype : null,
-		Error.prototype,
-		EvalError.prototype,
-		RangeError.prototype,
-		ReferenceError.prototype,
-		SyntaxError.prototype,
-		TypeError.prototype,
-		URIError.prototype,
-		typeof AggregateError === "function" ? AggregateError.prototype : null,
-		String.prototype,
-		Number.prototype,
-		Boolean.prototype,
-		typeof BigInt === "function" ? BigInt.prototype : null,
-		Symbol.prototype,
-		Reflect.getPrototypeOf(Uint8Array.prototype),
-		...[
-			Int8Array,
-			Uint8Array,
-			Uint8ClampedArray,
-			Int16Array,
-			Uint16Array,
-			Int32Array,
-			Uint32Array,
-			Float32Array,
-			Float64Array,
-			typeof Float16Array === "function" ? Float16Array : null,
-			BigInt64Array,
-			BigUint64Array
-		]
-			.filter(Boolean)
-			.map((kind) => kind.prototype)
-	].filter(Boolean)
+const ENGINE_DATA_PROTOTYPES = setFrom(
+	filterList(
+		concatLists(
+			[
+				Objects.prototype,
+				Map.prototype,
+				WeakMap.prototype,
+				Set.prototype,
+				WeakSet.prototype,
+				Date.prototype,
+				RegExp.prototype,
+				ArrayBuffer.prototype,
+				typeof SharedArrayBuffer === "function" ? SharedArrayBuffer.prototype : null,
+				DataView.prototype,
+				Promise.prototype,
+				typeof WeakRef === "function" ? WeakRef.prototype : null,
+				Error.prototype,
+				EvalError.prototype,
+				RangeError.prototype,
+				ReferenceError.prototype,
+				SyntaxError.prototype,
+				TypeError.prototype,
+				URIError.prototype,
+				typeof AggregateError === "function" ? AggregateError.prototype : null,
+				String.prototype,
+				Number.prototype,
+				Boolean.prototype,
+				typeof BigInt === "function" ? BigInt.prototype : null,
+				Symbol.prototype,
+				Reflect.getPrototypeOf(Uint8Array.prototype)
+			],
+			mapList(
+				filterList(
+					[
+						Int8Array,
+						Uint8Array,
+						Uint8ClampedArray,
+						Int16Array,
+						Uint16Array,
+						Int32Array,
+						Uint32Array,
+						Float32Array,
+						Float64Array,
+						typeof Float16Array === "function" ? Float16Array : null,
+						BigInt64Array,
+						BigUint64Array
+					],
+					Boolean
+				),
+				(kind) => kind.prototype
+			)
+		),
+		Boolean
+	)
 );
 
 /**
@@ -989,7 +1045,7 @@ const ENGINE_DATA_PROTOTYPES = new Set(
 function runtime_isEngineMember(value, prop) {
 	for (let proto = value; proto !== null; proto = Reflect.getPrototypeOf(proto)) {
 		if (!hasOwn(proto, prop)) continue;
-		if (ENGINE_DATA_PROTOTYPES.has(proto)) return true;
+		if (SetMethods.has(ENGINE_DATA_PROTOTYPES, proto)) return true;
 		// Another realm's own prototype: its constructor is the engine's, never code a module wrote.
 		const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
 		return proto !== value && typeof ctor === "function" && ctor.prototype === proto && runtime_isNativeFunction(ctor);
@@ -1015,20 +1071,20 @@ function runtime_inheritedEngineMember(impl, prop, value) {
 	if (hasOwn(impl, prop)) return null;
 	const answered = layerMethodOriginal(value) ?? value;
 	// A callable node's own answer for `valueOf` (see runtime_valueOfFor), read through a layer over that node.
-	const original = NODE_VALUE_OFS.has(answered) ? Objects.prototype.valueOf : answered;
+	const original = WeakSetMethods.has(NODE_VALUE_OFS, answered) ? Objects.prototype.valueOf : answered;
 	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
 	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
 	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
 	// An accessor (`__proto__`) is the engine's when its getter, run on the value, answers what the value did, and what
 	// it answers is the engine's too: a prototype that is a class of the module's stays the module's code, behind the
 	// node's checks like any other member holding it.
-	const isEngines = INHERITED_HOLDERS.some((holder) => {
+	const isEngines = ArrayMethods.some(INHERITED_HOLDERS, (holder) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 		if (!descriptor) return false;
 		if ("value" in descriptor) return descriptor.value === original;
 		return (
 			typeof descriptor.get === "function" &&
-			(original === null || INHERITED_HOLDERS.includes(original)) &&
+			(original === null || ArrayMethods.includes(INHERITED_HOLDERS, original)) &&
 			Reflect.apply(descriptor.get, impl, []) === original
 		);
 	});
@@ -1043,13 +1099,13 @@ function runtime_inheritedEngineMember(impl, prop, value) {
  * @private
  */
 function runtime_valueOfFor(node) {
-	let method = NODE_VALUE_OF_BY_NODE.get(node);
+	let method = WeakMapMethods.get(NODE_VALUE_OF_BY_NODE, node);
 	if (method) return method;
 	method = function valueOf() {
 		return this === undefined || this === null ? node : Reflect.apply(Objects.prototype.valueOf, this, []);
 	};
-	NODE_VALUE_OFS.add(method);
-	NODE_VALUE_OF_BY_NODE.set(node, method);
+	WeakSetMethods.add(NODE_VALUE_OFS, method);
+	WeakMapMethods.set(NODE_VALUE_OF_BY_NODE, node, method);
 	return method;
 }
 
@@ -1072,14 +1128,14 @@ const INHERITED_HOLDERS = Objects.freeze([Objects.prototype, Functions.prototype
 function runtime_isNativeFunction(fn) {
 	try {
 		const source = functionSource(fn);
-		return /\{\s*\[native code\]\s*\}$/.test(source) && !String(fn.name).startsWith("bound ");
+		return RegExpMethods.exec(/\{\s*\[native code\]\s*\}$/, source) !== null && !StringMethods.startsWith(String(fn.name), "bound ");
 	} catch {
 		return false;
 	}
 }
 
 /** Methods every object has that only read it. @type {ReadonlySet<string|symbol>} @private */
-const COMMON_READERS = new Set([
+const COMMON_READERS = setFrom([
 	"hasOwnProperty",
 	"isPrototypeOf",
 	"propertyIsEnumerable",
@@ -1091,7 +1147,7 @@ const COMMON_READERS = new Set([
 ]);
 
 /** The `Set` methods that compare it with another set-like and make no change to it. @type {ReadonlySet<string>} @private */
-const SET_COMPARISONS = new Set([
+const SET_COMPARISONS = setFrom([
 	"union",
 	"intersection",
 	"difference",
@@ -1110,15 +1166,21 @@ const SET_COMPARISONS = new Set([
  * @private
  */
 function runtime_isDataReader(value, name) {
-	if (COMMON_READERS.has(name)) return true;
+	if (SetMethods.has(COMMON_READERS, name)) return true;
 	const kind = runtime_dataKind(value);
 	if (kind === "date")
-		return name === Symbol.toPrimitive || (typeof name === "string" && (name.startsWith("get") || name.startsWith("to")));
-	if (kind === "dataview") return typeof name === "string" && name.startsWith("get");
-	if (kind === "typedarray") return TYPED_ARRAY_READERS.has(name);
+		return (
+			name === Symbol.toPrimitive ||
+			(typeof name === "string" && (StringMethods.startsWith(name, "get") || StringMethods.startsWith(name, "to")))
+		);
+	if (kind === "dataview") return typeof name === "string" && StringMethods.startsWith(name, "get");
+	if (kind === "typedarray") return SetMethods.has(TYPED_ARRAY_READERS, name);
 	// A boxed primitive never changes: every method of its kind reads it.
 	if (kind === "boxed") return true;
-	return DATA_READERS.get(kind)?.has(name) ?? false;
+	{
+		const readers = MapMethods.get(DATA_READERS, kind);
+		return readers ? SetMethods.has(readers, name) : false;
+	}
 }
 
 /**
@@ -1176,18 +1238,18 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	// The host owns the whole tree: it is handed the value itself, as is a module that may change it.
 	if (reader === HOST_READER) return value;
 	if (reader !== UNATTRIBUTED_READER && runtime_readerMayWrite(slothlet, reader, parts)) return value;
-	let byReader = SELF_DATA_VIEW_CACHE.get(value);
+	let byReader = WeakMapMethods.get(SELF_DATA_VIEW_CACHE, value);
 	if (!byReader) {
 		byReader = new WeakMap();
-		SELF_DATA_VIEW_CACHE.set(value, byReader);
+		WeakMapMethods.set(SELF_DATA_VIEW_CACHE, value, byReader);
 	}
-	let byPath = byReader.get(reader);
+	let byPath = WeakMapMethods.get(byReader, reader);
 	if (!byPath) {
 		byPath = new Map();
-		byReader.set(reader, byPath);
+		WeakMapMethods.set(byReader, reader, byPath);
 	}
-	const pathKey = parts.join(".");
-	const cached = byPath.get(pathKey);
+	const pathKey = ArrayMethods.join(parts, ".");
+	const cached = MapMethods.get(byPath, pathKey);
 	if (cached) return cached;
 
 	const raw = value;
@@ -1201,14 +1263,15 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	// `then()`, `catch()`, or `finally()` passing the value on, get the view, never what the module holds.
 	let settled = null;
 	const viewedPromise = () =>
-		(settled ??= Promise.prototype.then.call(
+		(settled ??= FunctionMethods.call(
+			Promise.prototype.then,
 			raw,
 			(resolved) => held(resolved),
 			(reason) => Promises.reject(held(reason))
 		));
 	const sharedBuffer = ArrayBuffers.isView(raw) ? raw.buffer : null;
 	const assertWrite = (prop) => {
-		const target = typeof prop === "string" ? [...parts, prop] : parts;
+		const target = typeof prop === "string" ? concatLists(parts, [prop]) : parts;
 		const writer = runtime_selfRootWriter(slothlet, reader, target);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
 		runtime_assertReaderWrite(slothlet, reader, writer, target);
@@ -1216,7 +1279,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	let view = null;
 	const held = (child) => (child === raw ? view : runtime_selfMemberOf(child, reader, slothlet, parts, null, record));
 	const memberAt = (prop, child) =>
-		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop, record);
+		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? concatLists(parts, [prop]) : parts, prop, record);
 	const viewedProto = () => {
 		const proto = Reflect.getPrototypeOf(raw);
 		return proto === null ? null : runtime_selfMemberOf(proto, reader, slothlet, parts, null, record);
@@ -1243,16 +1306,23 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	// answers about a non-extensible target against that target.
 	const mirrorClosed = () => {
 		if (Reflect.isExtensible(raw)) return;
-		for (const key of Reflect.ownKeys(shadow)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
 			const descriptors = Objects.getOwnPropertyDescriptors(raw);
-			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(descriptors); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			}
 			Reflect.setPrototypeOf(shadow, viewedProto());
 			Reflect.preventExtensions(shadow);
 		} else {
-			for (const key of Reflect.ownKeys(raw)) mirror(key);
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(raw); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				mirror(key);
+			}
 		}
 	};
 	// The object itself handed to a callback is the view; what it holds, viewed.
@@ -1266,18 +1336,21 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		if (holdsValues && typeof returned.next === "function") {
 			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
 			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Objects.prototype);
-			const tag = Objects.prototype.toString.call(returned).slice(8, -1);
+			const tag = StringMethods.slice(FunctionMethods.call(Objects.prototype.toString, returned), 8, -1);
 			Objects.defineProperties(iterator, {
 				next: {
 					value: (...args) => {
-						const step = returned.next(...args);
+						const step = Reflect.apply(returned.next, returned, args);
 						return step.done ? step : { value: held(step.value), done: false };
 					}
 				},
-				return: { value: (...args) => (typeof returned.return === "function" ? returned.return(...args) : { value: args[0], done: true }) },
+				return: {
+					value: (...args) =>
+						typeof returned.return === "function" ? Reflect.apply(returned.return, returned, args) : { value: args[0], done: true }
+				},
 				throw: {
 					value: (...args) => {
-						if (typeof returned.throw === "function") return returned.throw(...args);
+						if (typeof returned.throw === "function") return Reflect.apply(returned.throw, returned, args);
 						throw args[0];
 					}
 				},
@@ -1299,31 +1372,31 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	};
 	const methods = new Map();
 	const method = (prop, fn) => {
-		const known = methods.get(prop);
+		const known = MapMethods.get(methods, prop);
 		if (known?.fn === fn) return known.call;
 		const reads = runtime_isDataReader(raw, prop);
-		const compares = kind === "set" && SET_COMPARISONS.has(prop);
+		const compares = kind === "set" && SetMethods.has(SET_COMPARISONS, prop);
 		const call = function (...args) {
 			if (!reads) assertWrite(null);
 			// A comparison runs on a copy holding what the set holds viewed: the set-like it is handed is the caller's,
 			// and is shown nothing else, and what it makes is the caller's own.
 			// The set-like is handed on as the caller gave it: a view of another object stays that view.
-			if (compares) return Reflect.apply(fn, new Set(Arrays.from(raw, (entry) => held(entry))), args);
+			if (compares) return Reflect.apply(fn, setFrom(listFromIterable(raw, (entry) => held(entry))), args);
 			// A key is looked up as the object holds it, so a view of one is unwrapped; what follows a callback (its
 			// `this`) is handed on as the caller gave it.
 			let afterCallback = false;
-			const passed = args.map((arg) => {
+			const passed = mapList(args, (arg) => {
 				if (afterCallback) return arg;
 				const unwrapped = runtime_unwrapSelfView(arg);
 				if (typeof unwrapped !== "function") return unwrapped;
 				afterCallback = true;
 				return function (...values) {
-					return Reflect.apply(unwrapped, this, values.map(callbackArg));
+					return Reflect.apply(unwrapped, this, mapList(values, callbackArg));
 				};
 			});
 			return result(Reflect.apply(fn, isPromise ? viewedPromise() : raw, passed));
 		};
-		methods.set(prop, { fn, call });
+		MapMethods.set(methods, prop, { fn, call });
 		return call;
 	};
 	view = new NativeProxy(shadow, {
@@ -1337,7 +1410,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 				// The engine's own method runs on the object; one its module defined runs as a member view's call does.
 				return runtime_isEngineMember(raw, prop) ? method(prop, member) : memberAt(prop, member);
 			}
-			if (typeof prop === "symbol" && PROTOCOL_SYMBOLS.has(prop)) return member;
+			if (typeof prop === "symbol" && SetMethods.has(PROTOCOL_SYMBOLS, prop)) return member;
 			return memberAt(prop, member);
 		},
 		getOwnPropertyDescriptor(_, prop) {
@@ -1372,8 +1445,8 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
-	byPath.set(pathKey, view);
-	SELF_MEMBER_VIEWS.set(view, record);
+	MapMethods.set(byPath, pathKey, view);
+	WeakMapMethods.set(SELF_MEMBER_VIEWS, view, record);
 	return view;
 }
 
@@ -1421,10 +1494,10 @@ function runtime_selfDataMember(inner, reader, slothlet, prop) {
  */
 function runtime_holdsDataKind(value) {
 	if (value === null || typeof value !== "object") return false;
-	let isData = SELF_DATA_VALUES.get(value);
+	let isData = WeakMapMethods.get(SELF_DATA_VALUES, value);
 	if (isData === undefined) {
 		isData = runtime_dataKind(value) !== null;
-		SELF_DATA_VALUES.set(value, isData);
+		WeakMapMethods.set(SELF_DATA_VALUES, value, isData);
 	}
 	return isData;
 }
@@ -1455,15 +1528,15 @@ function runtime_frontedDataMember(wrapper, prop) {
 	if (holder === null || holder === impl || holder === Objects.prototype || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
 	const member = Reflect.get(impl, prop, impl);
 	if (typeof member !== "function") return member;
-	let byObject = SELF_DATA_METHODS.get(impl);
+	let byObject = WeakMapMethods.get(SELF_DATA_METHODS, impl);
 	if (!byObject) {
 		byObject = new Map();
-		SELF_DATA_METHODS.set(impl, byObject);
+		WeakMapMethods.set(SELF_DATA_METHODS, impl, byObject);
 	}
-	let method = byObject.get(prop);
+	let method = MapMethods.get(byObject, prop);
 	if (method?.fn !== member) {
 		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
-		byObject.set(prop, method);
+		MapMethods.set(byObject, prop, method);
 	}
 	return method.call;
 }
@@ -1515,18 +1588,18 @@ const SELF_DATA_METHODS = new WeakMap();
 function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// The host owns the whole tree: it is handed the value itself.
 	if (reader === HOST_READER) return value;
-	let byReader = SELF_MEMBER_VIEW_CACHE.get(value);
+	let byReader = WeakMapMethods.get(SELF_MEMBER_VIEW_CACHE, value);
 	if (!byReader) {
 		byReader = new WeakMap();
-		SELF_MEMBER_VIEW_CACHE.set(value, byReader);
+		WeakMapMethods.set(SELF_MEMBER_VIEW_CACHE, value, byReader);
 	}
-	let byPath = byReader.get(reader);
+	let byPath = WeakMapMethods.get(byReader, reader);
 	if (!byPath) {
 		byPath = new Map();
-		byReader.set(reader, byPath);
+		WeakMapMethods.set(byReader, reader, byPath);
 	}
-	const pathKey = parts.join(".");
-	const cached = byPath.get(pathKey);
+	const pathKey = ArrayMethods.join(parts, ".");
+	const cached = MapMethods.get(byPath, pathKey);
 	if (cached) return cached;
 
 	const raw = value;
@@ -1538,10 +1611,10 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	else if (typeof raw !== "function") shadow = {};
 	else if (!runtime_isConstructor(raw)) shadow = () => {};
 	else if (hasOwn(raw, "prototype")) shadow = function () {};
-	else shadow = function () {}.bind(null);
+	else shadow = FunctionMethods.bind(function () {}, null);
 
 	const member = (prop, child) =>
-		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? [...parts, prop] : parts, prop, record);
+		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? concatLists(parts, [prop]) : parts, prop, record);
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
 			? { ...descriptor, value: member(prop, descriptor.value) }
@@ -1564,20 +1637,27 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// answers about a non-extensible target against that target.
 	const mirrorClosed = () => {
 		if (Reflect.isExtensible(raw)) return;
-		for (const key of Reflect.ownKeys(shadow)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (!hasOwn(raw, key)) Reflect.deleteProperty(shadow, key);
 		}
 		if (Reflect.isExtensible(shadow)) {
 			const descriptors = Objects.getOwnPropertyDescriptors(raw);
-			for (const key of Reflect.ownKeys(descriptors)) Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(descriptors); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+			}
 			Reflect.setPrototypeOf(shadow, prototypeOf(false));
 			Reflect.preventExtensions(shadow);
 		} else {
-			for (const key of Reflect.ownKeys(raw)) mirror(key);
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(raw); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				mirror(key);
+			}
 		}
 	};
 	const assertWrite = (prop) => {
-		const target = typeof prop === "string" ? [...parts, prop] : parts;
+		const target = typeof prop === "string" ? concatLists(parts, [prop]) : parts;
 		const writer = runtime_selfRootWriter(slothlet, reader, target);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
 		runtime_assertReaderWrite(slothlet, reader, writer, target);
@@ -1594,7 +1674,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		const classNode = runtime_prototypeClassNode(slothlet, proto);
 		if (classNode === undefined) return member(null, proto);
 		if (check) return runtime_selfView(classNode, reader).prototype;
-		return runtime_selfMemberOf(proto, reader, slothlet, [...runtime_apiPathParts(classNode), "prototype"], "prototype");
+		return runtime_selfMemberOf(proto, reader, slothlet, concatLists(runtime_apiPathParts(classNode), ["prototype"]), "prototype");
 	};
 	const view = new NativeProxy(shadow, {
 		get(_, prop, receiver) {
@@ -1635,7 +1715,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		apply(_, thisArg, args) {
 			// The call runs on the value it was read from: a view of that value as `this` is the value, and a view of any
 			// other value stays the view (#625), so a method cannot be pointed at another value to run on it as is.
-			const record = SELF_MEMBER_VIEWS.get(thisArg);
+			const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, thisArg);
 			const receiver = record && runtime_holdsMember(record.value, raw) ? record.value : thisArg;
 			return runtime_selfViewResult(Reflect.apply(raw, receiver, args), reader);
 		},
@@ -1653,8 +1733,8 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
-	byPath.set(pathKey, view);
-	SELF_MEMBER_VIEWS.set(view, record);
+	MapMethods.set(byPath, pathKey, view);
+	WeakMapMethods.set(SELF_MEMBER_VIEWS, view, record);
 	return view;
 }
 
@@ -1673,17 +1753,19 @@ const MEMBER_HOLDERS = new WeakMap();
  * @private
  */
 function runtime_holdsMember(value, fn) {
-	if (MEMBER_HOLDERS.get(fn)?.has(value)) return true;
+	if (WeakMapMethods.get(MEMBER_HOLDERS, fn) == null ? undefined : WeakSetMethods.has(WeakMapMethods.get(MEMBER_HOLDERS, fn), value))
+		return true;
 	for (
 		let proto = value;
 		proto !== null && (typeof proto === "object" || typeof proto === "function");
 		proto = Reflect.getPrototypeOf(proto)
 	) {
-		for (const key of Reflect.ownKeys(proto)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(proto); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
 			if (descriptor && (descriptor.value === fn || descriptor.get === fn || descriptor.set === fn)) {
-				if (!MEMBER_HOLDERS.has(fn)) MEMBER_HOLDERS.set(fn, new WeakSet());
-				MEMBER_HOLDERS.get(fn).add(value);
+				if (!WeakMapMethods.has(MEMBER_HOLDERS, fn)) WeakMapMethods.set(MEMBER_HOLDERS, fn, new WeakSet());
+				WeakSetMethods.add(WeakMapMethods.get(MEMBER_HOLDERS, fn), value);
 				return true;
 			}
 		}
@@ -1707,8 +1789,8 @@ function runtime_selfHasInstance(prototype, instance) {
 	// gets the answer `instanceof` gives on the plain instance, as it does testing against the class (see
 	// runtime_hasInstanceOf).
 	let behind = instance;
-	while (SELF_VIEW_NODES.has(behind) || capturedViewTargets.has(behind))
-		behind = SELF_VIEW_NODES.get(behind) ?? capturedViewTargets.get(behind);
+	while (WeakMapMethods.has(SELF_VIEW_NODES, behind) || WeakMapMethods.has(capturedViewTargets, behind))
+		behind = WeakMapMethods.get(SELF_VIEW_NODES, behind) ?? WeakMapMethods.get(capturedViewTargets, behind);
 	const instanceNode = resolveWrapper(behind);
 	if (instanceNode && runtime_instanceClassFront(instanceNode) !== null) instance = instanceNode.____slothletInternal.impl;
 	// The class's prototype may be handed to the reader as a view or as the object itself (#667): compared as what it stands for.
@@ -1760,14 +1842,14 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
 	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
 	// made) is decided now for the reader it reaches.
-	const memberRecord = SELF_MEMBER_VIEWS.get(node);
+	const memberRecord = WeakMapMethods.get(SELF_MEMBER_VIEWS, node);
 	const handed = memberRecord === undefined ? node : memberRecord.reader === SEALED_SHELL_READER ? memberRecord.value : undefined;
 	// One handed out before anything read it is known by its class's names (see runtime_knownPrototype).
 	const handedPrototype =
 		handed === undefined
 			? undefined
 			: memberRecord === undefined
-				? PROTOTYPE_PATHS.get(handed)
+				? WeakMapMethods.get(PROTOTYPE_PATHS, handed)
 				: runtime_knownPrototype(memberRecord.slothlet, handed);
 	if (handedPrototype !== undefined)
 		return runtime_prototypeHandedTo(handed, reader ?? runtime_selfReader(handedPrototype.slothlet, access));
@@ -1777,38 +1859,38 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		return runtime_selfMemberView(memberRecord.value, reader, memberRecord.slothlet, memberRecord.parts);
 	}
 	// A view already keeps its reader. Handed to another reader, it is that reader's view of the same node.
-	if (SELF_VIEW_NODES.has(node)) {
+	if (WeakMapMethods.has(SELF_VIEW_NODES, node)) {
 		if (reader === undefined) return node;
-		node = SELF_VIEW_NODES.get(node);
+		node = WeakMapMethods.get(SELF_VIEW_NODES, node);
 	}
 	// A view that only holds changes to its reader stands for the node behind it.
-	if (GUARD_VIEWS.has(node)) node = capturedViewTargets.get(node);
+	if (WeakSetMethods.has(GUARD_VIEWS, node)) node = WeakMapMethods.get(capturedViewTargets, node);
 	// A live-identity instance a method got as its receiver stands for the node it was called on.
 	// The async runtime hands such a value back in a context-preserving Proxy: the same value.
-	node = SELF_INSTANCE_NODES.get(runtime_unwrapClassInstance(node)) ?? node;
+	node = WeakMapMethods.get(SELF_INSTANCE_NODES, runtime_unwrapClassInstance(node)) ?? node;
 	// A version dispatcher is no node of its own: it routes every access to the versioned node it resolves to.
 	const dispatch = versionDispatcherRecord(node);
-	const inner = dispatch ? null : (resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null);
+	const inner = dispatch ? null : (resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null);
 	// Any other value another module hands on reaches the reader through the class prototype guard.
 	if (inner === null && dispatch === null) {
 		if (reader === undefined && from?.slothlet) reader = runtime_selfReader(from.slothlet, access);
 		if (from === null) {
 			// Handed on by no known module (the host's own value in a hook's arguments, say), it is handed on as it is,
 			// unless a module's call returned it to the host.
-			from = HOST_HANDED.get(node) ?? null;
-			if (from === null && !CROSSINGS.has(node)) return node;
+			from = WeakMapMethods.get(HOST_HANDED, node) ?? null;
+			if (from === null && !WeakMapMethods.has(CROSSINGS, node)) return node;
 		}
 		return runtime_crossTo(node, reader, null, from);
 	}
 	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
 	if (reader === undefined) reader = runtime_selfReader(slothlet, access);
-	let byReader = SELF_VIEWS.get(node);
+	let byReader = WeakMapMethods.get(SELF_VIEWS, node);
 	if (!byReader) {
 		byReader = new WeakMap();
-		SELF_VIEWS.set(node, byReader);
+		WeakMapMethods.set(SELF_VIEWS, node, byReader);
 	}
-	const cached = byReader.get(reader);
-	if (cached && !runtime_closedPrototypeStale(SELF_VIEW_UNDER.get(cached))) return cached;
+	const cached = WeakMapMethods.get(byReader, reader);
+	if (cached && !runtime_closedPrototypeStale(WeakMapMethods.get(SELF_VIEW_UNDER, cached))) return cached;
 
 	// A write made with no standing of its own is the reader's: it goes through only under a path the
 	// reader owns. The host owns the whole tree; code that could not be attributed owns none of it.
@@ -1842,8 +1924,8 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		// A dispatcher hands out a member only of the node it has just resolved to, so it resolves to one here too;
 		// the empty path is the defensive answer should it not, owned only by who owns the whole tree.
 		/* v8 ignore next */
-		const parts = owner ? String(owner.____slothletInternal.apiPath).split(".").filter(Boolean) : [];
-		if (typeof prop === "string") parts.push(prop);
+		const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
+		if (typeof prop === "string") ArrayMethods.push(parts, prop);
 		return parts;
 	};
 	const viewMember = (prop, value) => {
@@ -1853,8 +1935,8 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			dispatch &&
 			typeof value === "function" &&
 			resolveWrapper(value) === null &&
-			!capturedViewChildren.has(value) &&
-			!SELF_VIEW_NODES.has(value)
+			!WeakMapMethods.has(capturedViewChildren, value) &&
+			!WeakMapMethods.has(SELF_VIEW_NODES, value)
 		) {
 			return dispatcherFunction(prop, value);
 		}
@@ -1863,12 +1945,12 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		// A class's `prototype` is decided at the path it is read at now, whichever name the class was read under first;
 		// an instance's prototype, at every path its class is known at.
 		const prototype = runtime_behindMemberView(value);
-		if (prop === "prototype" && PROTOTYPE_PATHS.has(prototype)) {
+		if (prop === "prototype" && WeakMapMethods.has(PROTOTYPE_PATHS, prototype)) {
 			const parts = memberParts(prop);
 			if (runtime_mayHoldPrototype(slothlet, reader, parts, prototype)) return prototype;
 			return runtime_selfMemberOf(prototype, reader, slothlet, parts, prop);
 		}
-		if (prop === null && PROTOTYPE_PATHS.has(prototype)) return runtime_prototypeHandedTo(prototype, reader, slothlet);
+		if (prop === null && WeakMapMethods.has(PROTOTYPE_PATHS, prototype)) return runtime_prototypeHandedTo(prototype, reader, slothlet);
 		// A plain value the node holds (a class's prototype, a method of it) is held to the node's path (#625).
 		return runtime_selfMemberOf(value, reader, slothlet, memberParts(prop), prop);
 	};
@@ -1885,13 +1967,13 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	// applies at each change, so with no permissions it holds nothing, and a view built then still holds a change
 	// once the permission system is enabled.
 	const held = node;
-	if (inner && reader !== HOST_READER && !capturedViewShadows.has(node)) {
+	if (inner && reader !== HOST_READER && !WeakMapMethods.has(capturedViewShadows, node)) {
 		// A top-level node a module reads is held to that module: kept and used later, from outside any call (the host
 		// calling a function the module left behind), each read and call through it has to be the module's to make as
 		// well as whoever runs it (#597).
 		const holds =
 			reader !== UNATTRIBUTED_READER &&
-			trustedRootOwn.genuineWrappers.has(reader) &&
+			WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader) &&
 			slothlet.handlers?.permissionManager?.isCaptureEnabled?.() !== false;
 		node = runtime_capturedView(node, reader, holds && "held");
 	}
@@ -1914,7 +1996,8 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	// as the node reports it.
 	const shownPrototype = (prototype) => {
 		if (prototype === null || (typeof prototype !== "object" && typeof prototype !== "function")) return prototype;
-		if (resolveWrapper(prototype) !== null || capturedViewChildren.has(prototype)) return runtime_selfView(prototype, reader);
+		if (resolveWrapper(prototype) !== null || WeakMapMethods.has(capturedViewChildren, prototype))
+			return runtime_selfView(prototype, reader);
 		const heldEmitterPrototype = inner ? runtime_emitterOwnPrototype(inner) : undefined;
 		if (heldEmitterPrototype !== undefined) {
 			// A closed node's answer is fixed, per reader, on what this view stands over.
@@ -1958,10 +2041,10 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
-	const view = new NativeProxy(capturedViewShadows.get(node) ?? node, {
+	const view = new NativeProxy(WeakMapMethods.get(capturedViewShadows, node) ?? node, {
 		get(_, prop) {
 			// The read, and the description of the member that follows it, are one access by the same code.
-			const access = capturedViewShadows.has(node) ? runtime_beginAccess() : null;
+			const access = WeakMapMethods.has(capturedViewShadows, node) ? runtime_beginAccess() : null;
 			try {
 				return readMember(prop, access);
 			} finally {
@@ -2004,7 +2087,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		},
 		construct(_, args, newTarget) {
 			// A class the reader constructs for is its own: what it makes the instance's prototype comes back as it is.
-			if (newTarget !== view && trustedRootOwn.genuineWrappers.has(reader)) {
+			if (newTarget !== view && WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader)) {
 				runtime_recordOrigin(newTarget, reader);
 				const prototype = typeof newTarget === "function" ? Reflect.getOwnPropertyDescriptor(newTarget, "prototype")?.value : null;
 				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, reader);
@@ -2024,7 +2107,10 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		defineProperty(_, prop, descriptor) {
 			// A definition that changes nothing (freezing an already frozen node) is no write of the reader's (#667): it goes
 			// on to the node, which decides whether it changes what the node holds.
-			if (Reflect.isExtensible(node) || !runtime_isUnchangingDefinition(capturedViewShadows.get(node) ?? node, prop, descriptor))
+			if (
+				Reflect.isExtensible(node) ||
+				!runtime_isUnchangingDefinition(WeakMapMethods.get(capturedViewShadows, node) ?? node, prop, descriptor)
+			)
 				refuseWithoutStanding(prop);
 			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			const defined = vouched(() => Reflect.defineProperty(node, prop, descriptor));
@@ -2059,13 +2145,13 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			return Reflect.isExtensible(node);
 		}
 	});
-	byReader.set(reader, view);
-	if (node !== held) SELF_VIEW_UNDER.set(view, node);
-	SELF_VIEW_NODES.set(view, held);
-	SELF_VIEW_READERS.set(view, reader);
+	WeakMapMethods.set(byReader, reader, view);
+	if (node !== held) WeakMapMethods.set(SELF_VIEW_UNDER, view, node);
+	WeakMapMethods.set(SELF_VIEW_NODES, view, held);
+	WeakMapMethods.set(SELF_VIEW_READERS, view, reader);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions), and a view of a
 	// dispatcher as a dispatcher.
-	if (inner) _proxyRegistry.set(view, inner);
+	if (inner) WeakMapMethods.set(_proxyRegistry, view, inner);
 	else markFrameworkInternal(view);
 	return view;
 }
@@ -2107,8 +2193,8 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
  */
 function runtime_registerFrameworkMemberCopy(copy, member) {
-	const slothlet = FRAMEWORK_MEMBERS.get(member);
-	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, FRAMEWORK_MEMBER_NAMES.get(member));
+	const slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member);
+	if (slothlet) runtime_registerFrameworkMember(copy, slothlet, WeakMapMethods.get(FRAMEWORK_MEMBER_NAMES, member));
 	return copy;
 }
 
@@ -2127,8 +2213,8 @@ function runtime_registerFrameworkMemberCopy(copy, member) {
  */
 function runtime_registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
-		FRAMEWORK_MEMBERS.set(member, slothlet);
-		FRAMEWORK_MEMBER_NAMES.set(member, name);
+		WeakMapMethods.set(FRAMEWORK_MEMBERS, member, slothlet);
+		WeakMapMethods.set(FRAMEWORK_MEMBER_NAMES, member, name);
 	}
 	return member;
 }
@@ -2159,11 +2245,11 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  * @example
  * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
  */
-function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_MEMBERS.get(member)) {
+function runtime_selfFrameworkView(member, reader, slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member)) {
 	if (!slothlet || member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (reader === undefined) reader = runtime_selfReader(slothlet);
 	if (reader === HOST_READER) return member;
-	return runtime_frameworkViewOf(member, slothlet, reader, FRAMEWORK_MEMBER_NAMES.get(member) ?? "slothlet");
+	return runtime_frameworkViewOf(member, slothlet, reader, WeakMapMethods.get(FRAMEWORK_MEMBER_NAMES, member) ?? "slothlet");
 }
 
 /**
@@ -2184,7 +2270,7 @@ function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_MEMBERS.
  * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
  */
 function runtime_assertFrameworkRootChange(slothlet, prop) {
-	if (typeof prop !== "string" || !SELF_FRAMEWORK_ROOTS.has(prop)) return;
+	if (typeof prop !== "string" || !SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
 	if (slothlet.handlers.apiManager.frameworkProtected()) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
@@ -2192,7 +2278,12 @@ function runtime_assertFrameworkRootChange(slothlet, prop) {
 		}
 		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
 		if (identity?.currentWrapper) {
-			for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) {
+			for (
+				let ofIndex = 0, ofList = concatLists([identity.currentWrapper], identityCeilings(identity));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const writer = ofList[ofIndex];
 				slothlet.handlers.apiManager.assertOwnedWrite([prop], writer);
 			}
 		}
@@ -2236,17 +2327,22 @@ function runtime_selfChangeTarget(ctx, prop) {
 		// caller that did reach it would fail closed rather than write with the host's standing.
 		/* v8 ignore next 3 */
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 		}
 		if (identity?.currentWrapper) {
-			for (const writer of [identity.currentWrapper, ...identityCeilings(identity)]) {
+			for (
+				let ofIndex = 0, ofList = concatLists([identity.currentWrapper], identityCeilings(identity));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const writer = ofList[ofIndex];
 				slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
 			}
 		}
 	}
 	// The framework's namespace and root functions are reserved names: defined or deleted, as assigned, they are
 	// refused whether or not permissions are on, after the write rules a module meets first.
-	if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
+	if (SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	return target;
 }
 
@@ -2254,7 +2350,7 @@ function runtime_selfChangeTarget(ctx, prop) {
  * The language's own prototypes an object or function inherits from.
  * @type {Set<object>}
  */
-const BUILTIN_PROTOTYPES = new Set([
+const BUILTIN_PROTOTYPES = setFrom([
 	Reflect.getPrototypeOf({}),
 	Reflect.getPrototypeOf(function () {}),
 	Reflect.getPrototypeOf(async function () {}),
@@ -2273,7 +2369,7 @@ const BUILTIN_PROTOTYPES = new Set([
 function runtime_inheritsBuiltin(target, prop) {
 	let holder = Reflect.getPrototypeOf(target);
 	while (holder !== null && !Reflect.getOwnPropertyDescriptor(holder, prop)) holder = Reflect.getPrototypeOf(holder);
-	return holder !== null && BUILTIN_PROTOTYPES.has(holder);
+	return holder !== null && SetMethods.has(BUILTIN_PROTOTYPES, holder);
 }
 
 /**
@@ -2288,13 +2384,13 @@ function runtime_inheritsBuiltin(target, prop) {
  */
 function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
-	if (FRAMEWORK_VIEW_TARGETS.has(member)) return member;
-	let byReader = FRAMEWORK_VIEWS.get(member);
+	if (WeakMapMethods.has(FRAMEWORK_VIEW_TARGETS, member)) return member;
+	let byReader = WeakMapMethods.get(FRAMEWORK_VIEWS, member);
 	if (!byReader) {
 		byReader = new WeakMap();
-		FRAMEWORK_VIEWS.set(member, byReader);
+		WeakMapMethods.set(FRAMEWORK_VIEWS, member, byReader);
 	}
-	const cached = byReader.get(reader);
+	const cached = WeakMapMethods.get(byReader, reader);
 	if (cached) return cached;
 
 	// Made with no standing of its own, a use of the view is the reader's: it runs as that module. Run that
@@ -2307,7 +2403,9 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		return slothlet.contextManager.runInContext(slothlet.instanceID, () => runtime_asViewReader(reader, use), undefined, [], reader, true);
 	};
 	const unwrap = (value) =>
-		value !== null && (typeof value === "object" || typeof value === "function") ? (FRAMEWORK_VIEW_TARGETS.get(value) ?? value) : value;
+		value !== null && (typeof value === "object" || typeof value === "function")
+			? (WeakMapMethods.get(FRAMEWORK_VIEW_TARGETS, value) ?? value)
+			: value;
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
 	const childPath = (prop) => (typeof prop === "string" ? `${path}.${prop}` : path);
 	// Who makes a change through the view: the module executing now, or, for a change made with no standing of its
@@ -2316,7 +2414,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const changeWriter = (parts) => {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (runtime_selfWriteHasStanding(slothlet)) return null;
@@ -2329,12 +2427,18 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	// the permission system on or off alike, only disabled leaves it open. Returns the module making the change.
 	const refuseChange = (prop) => {
 		if (!slothlet.handlers.apiManager.frameworkProtected()) return null;
-		const parts = (prop === null ? path : childPath(prop)).split(".");
+		const parts = splitText(prop === null ? path : childPath(prop), ".");
 		const writer = changeWriter(parts);
 		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
 		if (writer !== null) {
-			for (const call of [writer, ...runtime_selfModuleCeilings(slothlet, writer)])
+			for (
+				let ofIndex = 0, ofList = concatLists([writer], runtime_selfModuleCeilings(slothlet, writer));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const call = ofList[ofIndex];
 				slothlet.handlers.apiManager.assertOwnedWrite(parts, call);
+			}
 		}
 		return writer;
 	};
@@ -2397,8 +2501,8 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			return asReader(() => Reflect.preventExtensions(target));
 		}
 	});
-	byReader.set(reader, view);
-	FRAMEWORK_VIEW_TARGETS.set(view, member);
+	WeakMapMethods.set(byReader, reader, view);
+	WeakMapMethods.set(FRAMEWORK_VIEW_TARGETS, view, member);
 	return view;
 }
 
@@ -2418,11 +2522,11 @@ const VIEW_READER_RUNS = [];
  * @private
  */
 function runtime_asViewReader(reader, use) {
-	VIEW_READER_RUNS.push(reader);
+	ArrayMethods.push(VIEW_READER_RUNS, reader);
 	try {
 		return use();
 	} finally {
-		VIEW_READER_RUNS.pop();
+		ArrayMethods.pop(VIEW_READER_RUNS);
 	}
 }
 
@@ -2453,7 +2557,7 @@ function runtime_frameworkViewCaller(slothlet) {
  * @type {Set<string>}
  * @private
  */
-const SELF_FRAMEWORK_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+const SELF_FRAMEWORK_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * The root views {@link runtime_selfRootView} built, per bound api and per reader.
@@ -2484,7 +2588,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		// Code the live runtime cannot attribute is refused here as through `self.X = …`: recorded as anyone's, the
 		// change would run with standing it was never given once the system is on.
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (
@@ -2497,7 +2601,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		return reader;
 	}
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 	}
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === SEALED_SHELL_READER) return null;
@@ -2524,16 +2628,18 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
  */
 function runtime_selfRootView(slothlet, reader) {
 	const root = slothlet.boundApi;
-	let byReader = SELF_ROOT_VIEWS.get(root);
+	let byReader = WeakMapMethods.get(SELF_ROOT_VIEWS, root);
 	if (!byReader) {
 		byReader = new WeakMap();
-		SELF_ROOT_VIEWS.set(root, byReader);
+		WeakMapMethods.set(SELF_ROOT_VIEWS, root, byReader);
 	}
-	const cached = byReader.get(reader);
+	const cached = WeakMapMethods.get(byReader, reader);
 	if (cached) return cached;
 	const member = (prop, value) => {
 		if (typeof prop !== "string") return value;
-		return SELF_FRAMEWORK_ROOTS.has(prop) ? runtime_selfFrameworkView(value, reader, slothlet) : runtime_selfView(value, reader);
+		return SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)
+			? runtime_selfFrameworkView(value, reader, slothlet)
+			: runtime_selfView(value, reader);
 	};
 	// A symbol key, like a change to the root itself, is held to the root's own path: only who owns the whole
 	// tree changes it (#625).
@@ -2542,7 +2648,7 @@ function runtime_selfRootView(slothlet, reader) {
 		const writer = runtime_selfRootWriter(slothlet, reader, parts);
 		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
 		// A reserved name is refused whoever changes it, as an assignment to it is.
-		if (SELF_FRAMEWORK_ROOTS.has(prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
+		if (SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 	};
 	const view = new NativeProxy(root, {
 		get(target, prop) {
@@ -2580,7 +2686,7 @@ function runtime_selfRootView(slothlet, reader) {
 			return Reflect.preventExtensions(target);
 		}
 	});
-	byReader.set(reader, view);
+	WeakMapMethods.set(byReader, reader, view);
 	return view;
 }
 
@@ -2606,7 +2712,7 @@ const CALLER_LOCKED = new WeakSet();
  * return runtime_markCallerLocked(locked);
  */
 function runtime_markCallerLocked(fn) {
-	CALLER_LOCKED.add(fn);
+	WeakSetMethods.add(CALLER_LOCKED, fn);
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
 	if (hasOwn(fn, "_slothletOriginal")) {
 		Objects.defineProperty(fn, "_slothletOriginal", {
@@ -2630,7 +2736,7 @@ function runtime_markCallerLocked(fn) {
  * if (runtime_isCallerLocked(handler)) return handler;
  */
 function runtime_isCallerLocked(fn) {
-	return typeof fn === "function" && CALLER_LOCKED.has(fn);
+	return typeof fn === "function" && WeakSetMethods.has(CALLER_LOCKED, fn);
 }
 
 /**
@@ -2661,16 +2767,16 @@ const SELF_HOOK_VIEWED = new WeakSet();
  * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
  */
 function runtime_selfHookHandler(handler, slothlet, reader) {
-	if (SELF_HOOK_VIEWED.has(handler)) return handler;
+	if (WeakSetMethods.has(SELF_HOOK_VIEWED, handler)) return handler;
 	const viewed = function slothlet_viewedHook(payload, ...rest) {
-		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, [payload, ...rest]);
+		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, concatLists([payload], rest));
 		const originals = new Map();
 		// What the call returned or threw comes from the node called, so a module's hook on its own function is handed
 		// its own values as they are.
 		const called = typeof payload.path === "string" ? runtime_nodeAtPath(slothlet, payload.path) : null;
 		const toView = (value, from = null) => {
 			const view = runtime_selfView(value, reader, from);
-			if (view !== value) originals.set(view, value);
+			if (view !== value) MapMethods.set(originals, view, value);
 			return view;
 		};
 		// A promise of a node settles to the view. Its rejection is still the call's: the viewed promise
@@ -2679,11 +2785,11 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 			if (!runtime_inherits(value, Promise)) return toView(value, called);
 			const view = value.then((settled) => toView(settled, called));
 			view.catch(() => {});
-			originals.set(view, value);
+			MapMethods.set(originals, view, value);
 			return view;
 		};
-		const fromView = (value) => (originals.has(value) ? originals.get(value) : value);
-		const fromViews = (list) => (list.some((value) => originals.has(value)) ? list.map(fromView) : list);
+		const fromView = (value) => (MapMethods.has(originals, value) ? MapMethods.get(originals, value) : value);
+		const fromViews = (list) => (ArrayMethods.some(list, (value) => MapMethods.has(originals, value)) ? mapList(list, fromView) : list);
 		const handed = { ...payload };
 		if ("api" in payload) handed.api = payload.api === slothlet.boundApi ? runtime_selfRootView(slothlet, reader) : toView(payload.api);
 		const callArgs = Arrays.isArray(payload.args) ? payload.args : null;
@@ -2693,13 +2799,13 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 		const argView = (value) => {
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 			if (!runtime_permissionsOn(reader)) return toView(value);
-			const view = toView(value, CROSSINGS.has(value) ? null : runtime_argumentSource(value, caller, called));
+			const view = toView(value, WeakMapMethods.has(CROSSINGS, value) ? null : runtime_argumentSource(value, caller, called));
 			const own = runtime_ownInstances(reader, runtime_ownArguments(reader, [view]))[0];
-			if (own !== view) originals.set(own, originals.has(view) ? originals.get(view) : value);
+			if (own !== view) MapMethods.set(originals, own, MapMethods.has(originals, view) ? MapMethods.get(originals, view) : value);
 			return own;
 		};
-		const handedArgs = callArgs ? callArgs.map(argView) : null;
-		let snapshot = handedArgs ? [...handedArgs] : null;
+		const handedArgs = callArgs ? mapList(callArgs, argView) : null;
+		let snapshot = handedArgs ? copyList(handedArgs) : null;
 		if (handedArgs) handed.args = handedArgs;
 		if ("result" in payload) handed.result = viewValue(payload.result);
 		// What the call threw, when that is a node: the handler's own view of it, as a result is.
@@ -2708,10 +2814,10 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 		// `next()` forwards them, and once the handler returns.
 		const writeBack = () => {
 			if (!handedArgs) return;
-			if (handedArgs.length === snapshot.length && handedArgs.every((value, i) => value === snapshot[i])) return;
+			if (handedArgs.length === snapshot.length && ArrayMethods.every(handedArgs, (value, i) => value === snapshot[i])) return;
 			callArgs.length = handedArgs.length;
 			for (let i = 0; i < handedArgs.length; i++) callArgs[i] = fromView(handedArgs[i]);
-			snapshot = [...handedArgs];
+			snapshot = copyList(handedArgs);
 		};
 		if (typeof payload.next === "function") {
 			const next = payload.next;
@@ -2721,9 +2827,9 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 			};
 		}
 		const settle = (out) => (Arrays.isArray(out) ? fromViews(out) : fromView(out));
-		const out = Reflect.apply(handler, this, [handed, ...rest]);
+		const out = Reflect.apply(handler, this, concatLists([handed], rest));
 		writeBack();
-		if (runtime_inherits(out, Promise) && !originals.has(out)) {
+		if (runtime_inherits(out, Promise) && !MapMethods.has(originals, out)) {
 			return out.then((value) => {
 				writeBack();
 				return settle(value);
@@ -2731,7 +2837,7 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 		}
 		return settle(out);
 	};
-	SELF_HOOK_VIEWED.add(viewed);
+	WeakSetMethods.add(SELF_HOOK_VIEWED, viewed);
 	// A pinned handler stays recognised as pinned (the around pipeline, reload replay), and keeps its original visible.
 	if (runtime_isCallerLocked(handler)) {
 		viewed._slothletOriginal = handler._slothletOriginal;
@@ -2759,9 +2865,9 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
  * @private
  */
 function runtime_assertOwnedWrite(wrapper, prop) {
-	if (FRAMEWORK_WRITES.has(wrapper)) return;
-	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
-	if (typeof prop === "string") parts.push(prop);
+	if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return;
+	const parts = filterList(splitText(String(wrapper.____slothletInternal.apiPath), "."), Boolean);
+	if (typeof prop === "string") ArrayMethods.push(parts, prop);
 	runtime_assertOwnedWriteAt(wrapper, parts);
 }
 
@@ -2785,12 +2891,15 @@ function runtime_assertOwnedWriteAt(wrapper, parts) {
 	// Code the live runtime cannot attribute to one of several suspended calls is module code with no
 	// owner to check against: refused, rather than handed the host's standing.
 	if (identity?.unresolved) {
-		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 	}
 	const caller = identity?.currentWrapper;
 	if (!caller) return;
 	// Code a caller supplied to another module's call writes only where every module it acts for owns (#597).
-	for (const writer of [caller, ...identityCeilings(identity)]) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+	for (let ofIndex = 0, ofList = concatLists([caller], identityCeilings(identity)); ofIndex < ofList.length; ofIndex++) {
+		const writer = ofList[ofIndex];
+		slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+	}
 }
 
 /**
@@ -2830,7 +2939,7 @@ const STAND_INS = new WeakSet();
  * if (isLazyStandIn(parent)) parent = walkAgain();
  */
 export function isLazyStandIn(value) {
-	return STAND_INS.has(value);
+	return WeakSetMethods.has(STAND_INS, value);
 }
 
 /**
@@ -2864,21 +2973,25 @@ const PENDING_CHANGES = new WeakMap();
  * await settleStandInChanges(slothlet);
  */
 async function settleStandInChanges(slothlet, scope = null) {
-	const pending = PENDING_CHANGES.get(slothlet);
+	const pending = WeakMapMethods.get(PENDING_CHANGES, slothlet);
 	if (!pending) return;
 	const whole = !scope || scope === ".";
-	const within = (path) => path === scope || path.startsWith(`${scope}.`);
+	const within = (path) => path === scope || StringMethods.startsWith(path, `${scope}.`);
 	// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
 	const qualifies = (holder) =>
-		whole || (holder.____slothletInternal.pendingChanges ?? []).some((change) => within(runtime_standInPath(holder, change.chain)));
+		whole ||
+		ArrayMethods.some(holder.____slothletInternal.pendingChanges ?? [], (change) => within(runtime_standInPath(holder, change.chain)));
 	const tried = new Set();
 	// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
 	// queued there and made by the next. Each holder is loaded once.
 	for (;;) {
-		const holders = [...pending].filter((holder) => !tried.has(holder) && qualifies(holder));
+		const holders = filterList(setToArray(pending), (holder) => !SetMethods.has(tried, holder) && qualifies(holder));
 		if (holders.length === 0) return;
-		for (const holder of holders) tried.add(holder);
-		await Promises.all(holders.map((holder) => holder._materialize().catch(() => {})));
+		for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+			const holder = ofList[ofIndex];
+			SetMethods.add(tried, holder);
+		}
+		await promiseAll(mapList(holders, (holder) => PromiseMethods.catch(holder._materialize(), () => {})));
 	}
 }
 
@@ -2892,9 +3005,9 @@ async function settleStandInChanges(slothlet, scope = null) {
  * releaseStandInChanges(slothlet);
  */
 function releaseStandInChanges(slothlet) {
-	for (const holder of PENDING_CHANGES.get(slothlet) ?? []) holder.____slothletInternal.pendingChanges = null;
-	PENDING_CHANGES.delete(slothlet);
-	REFUSED_CHANGES.delete(slothlet);
+	for (const holder of setValues(WeakMapMethods.get(PENDING_CHANGES, slothlet))) holder.____slothletInternal.pendingChanges = null;
+	WeakMapMethods.delete(PENDING_CHANGES, slothlet);
+	WeakMapMethods.delete(REFUSED_CHANGES, slothlet);
 }
 
 /**
@@ -2905,7 +3018,7 @@ function releaseStandInChanges(slothlet) {
  * @private
  */
 function runtime_standInPath(wrapper, chain) {
-	return [wrapper.____slothletInternal.apiPath, ...chain.map(String)].filter(Boolean).join(".");
+	return ArrayMethods.join(filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(chain, String)), Boolean), ".");
 }
 
 /**
@@ -2945,14 +3058,17 @@ function runtime_applyStandInChange(wrapper, change, replayed, holders = null) {
  */
 function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 	let node = wrapper.createProxy();
-	for (const key of change.chain) node = node[key];
+	for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		node = node[key];
+	}
 	// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
 	// reading: the node's own traps judge the change as the module making it (#625).
 	node = runtime_nodeBehind(node);
 	const { op, prop, payload } = change;
 	// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
 	// members it adopts as it loads would replace what was written (#653).
-	const standIn = STAND_INS.has(node);
+	const standIn = WeakSetMethods.has(STAND_INS, node);
 	const nodeWrapper = standIn ? null : resolveWrapper(node);
 	if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
 		replayHolders = holders;
@@ -2961,7 +3077,7 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 		} finally {
 			replayHolders = null;
 		}
-		if (!nodeWrapper.____slothletInternal.state.inFlight) nodeWrapper._materialize().catch(() => {});
+		if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper._materialize(), () => {});
 		return true;
 	}
 	// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
@@ -3054,7 +3170,7 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 	const { contextManager, instanceID } = wrapper.slothlet;
 	// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
 	// makes the refusal no longer anyone's.
-	const holders = [...(change.holders ?? []), { owner: wrapper, generation }];
+	const holders = concatLists(change.holders ?? [], [{ owner: wrapper, generation }]);
 	const make = () =>
 		contextManager.runInContext(
 			instanceID,
@@ -3074,10 +3190,10 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 		const operation = change.op === "lock" ? "preventExtensions" : change.op;
 		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
-		if (!REFUSED_CHANGES.has(wrapper.slothlet)) REFUSED_CHANGES.set(wrapper.slothlet, []);
+		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
 		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 		// hand the refusal to the node that took its place.
-		REFUSED_CHANGES.get(wrapper.slothlet).push({ path: apiPath, error: refused, holders });
+		ArrayMethods.push(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
 	}
 }
 
@@ -3089,12 +3205,12 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
  * @private
  */
 function runtime_takeRefusalAt(slothlet, path) {
-	const refused = REFUSED_CHANGES.get(slothlet);
+	const refused = WeakMapMethods.get(REFUSED_CHANGES, slothlet);
 	if (!refused?.length) return null;
 	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
 	runtime_pruneRefusedChanges(refused);
-	const index = refused.findIndex((entry) => path === entry.path || path.startsWith(`${entry.path}.`));
-	return index === -1 ? null : refused.splice(index, 1)[0].error;
+	const index = ArrayMethods.findIndex(refused, (entry) => path === entry.path || StringMethods.startsWith(path, `${entry.path}.`));
+	return index === -1 ? null : ArrayMethods.splice(refused, index, 1)[0].error;
 }
 
 /**
@@ -3106,13 +3222,14 @@ function runtime_takeRefusalAt(slothlet, path) {
  * @private
  */
 function runtime_pruneRefusedChanges(refused, dropped = null) {
-	const current = refused.filter((entry) =>
-		entry.holders.every(
+	const current = filterList(refused, (entry) =>
+		ArrayMethods.every(
+			entry.holders,
 			({ owner, generation }) =>
 				owner !== dropped && !owner.____slothletInternal.invalid && owner.____slothletInternal.changeGeneration === generation
 		)
 	);
-	refused.splice(0, refused.length, ...current);
+	Reflect.apply(ArrayMethods.splice, undefined, concatLists([refused], concatLists([0, refused.length], current)));
 }
 
 /**
@@ -3124,7 +3241,7 @@ function runtime_pruneRefusedChanges(refused, dropped = null) {
  * @private
  */
 function runtime_dropRefusedChanges(wrapper) {
-	const refused = REFUSED_CHANGES.get(wrapper.slothlet);
+	const refused = WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet);
 	if (!refused?.length) return;
 	runtime_pruneRefusedChanges(refused, wrapper);
 }
@@ -3138,7 +3255,7 @@ function runtime_dropRefusedChanges(wrapper) {
  * refusedChangeCount(slothlet); // 0
  */
 function refusedChangeCount(slothlet) {
-	return REFUSED_CHANGES.get(slothlet)?.length ?? 0;
+	return WeakMapMethods.get(REFUSED_CHANGES, slothlet)?.length ?? 0;
 }
 
 /**
@@ -3155,9 +3272,9 @@ function runtime_queueStandInChange(wrapper, change) {
 	const captured = runtime_captureChange(wrapper, change);
 	// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
 	if (replayHolders) captured.holders = replayHolders;
-	wrapper.____slothletInternal.pendingChanges.push(captured);
-	if (!PENDING_CHANGES.has(wrapper.slothlet)) PENDING_CHANGES.set(wrapper.slothlet, new Set());
-	PENDING_CHANGES.get(wrapper.slothlet).add(wrapper);
+	ArrayMethods.push(wrapper.____slothletInternal.pendingChanges, captured);
+	if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.slothlet)) WeakMapMethods.set(PENDING_CHANGES, wrapper.slothlet, new Set());
+	SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
 }
 
 /**
@@ -3173,8 +3290,10 @@ function runtime_replayStandInChanges(wrapper, generation) {
 	const pending = wrapper.____slothletInternal.pendingChanges;
 	if (!pending) return;
 	wrapper.____slothletInternal.pendingChanges = null;
-	PENDING_CHANGES.get(wrapper.slothlet)?.delete(wrapper);
-	for (const change of pending) runtime_makeQueuedChange(wrapper, change, generation);
+	WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
+		? undefined
+		: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
+	for (let i = 0; i < pending.length; i++) runtime_makeQueuedChange(wrapper, pending[i], generation);
 }
 
 /**
@@ -3186,11 +3305,12 @@ function runtime_replayStandInChanges(wrapper, generation) {
  * @private
  */
 function runtime_retireChanges(wrapper, seen = new Set()) {
-	if (seen.has(wrapper)) return;
-	seen.add(wrapper);
+	if (SetMethods.has(seen, wrapper)) return;
+	SetMethods.add(seen, wrapper);
 	wrapper.____slothletInternal.changeGeneration++;
 	runtime_dropRefusedChanges(wrapper);
-	for (const key of Objects.keys(wrapper)) {
+	for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const child = resolveWrapper(wrapper[key]);
 		if (child) runtime_retireChanges(child, seen);
 	}
@@ -3447,7 +3567,7 @@ function runtime_describeWithAccess(access, key, target, prop) {
  * @private
  */
 function runtime_takesAccess(key, target) {
-	if (key === target) return capturedViewShadows.has(target);
+	if (key === target) return WeakMapMethods.has(capturedViewShadows, target);
 	return key.____slothletInternal?.proxy === target;
 }
 
@@ -3517,18 +3637,20 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		// onto a module's execution store — so a stripped/forged context with no caller fails closed.
 		// `ctx` is the live/scope store in live mode or inside a run(); when there is no active context
 		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
-		const store = ctx ?? wrapper.slothlet.contextManager?.instances?.get(wrapper.slothlet.instanceID);
+		const instances = wrapper.slothlet.contextManager?.instances;
+		const store = ctx ?? (instances ? MapMethods.get(instances, wrapper.slothlet.instanceID) : undefined);
 		if (store && store[trustedRootOwn.TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
 		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow", identity, ctx };
 		return { verdict: "deny", identity, ctx };
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
-	if (!trustedRootOwn.genuineWrappers.has(callerWrapper)) return { verdict: "deny", identity, ctx };
+	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, callerWrapper)) return { verdict: "deny", identity, ctx };
 	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
 	// the access too, as does every call of its ceiling (#597). A ceiling that is not a genuine wrapper is forged
 	// like a caller would be.
 	const ceilings = identityCeilings(identity);
-	for (const ceiling of ceilings) if (!trustedRootOwn.genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
+	for (let i = 0; i < ceilings.length; i++)
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, ceilings[i])) return { verdict: "deny", identity, ctx };
 	return { verdict: "enforce", callerWrapper, ceilings, ctx, identity };
 }
 
@@ -3544,10 +3666,10 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
  * runtime_viewNodePath(standIn, wrapper); // "d.fn"
  */
 function runtime_viewNodePath(child, inner) {
-	const chain = WAITING_CHAINS.get(child);
+	const chain = WeakMapMethods.get(WAITING_CHAINS, child);
 	const base = inner.____slothletInternal.apiPath;
 	if (!chain || chain.length === 0) return base;
-	const tail = chain.map(String).join(".");
+	const tail = ArrayMethods.join(mapList(chain, String), ".");
 	return base ? base + "." + tail : tail;
 }
 
@@ -3672,7 +3794,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 	if (isFrameworkInternal(wrapper)) {
 		// slice(lastIndexOf + 1) yields the terminal segment, and the whole string when there is no
 		// dot (lastIndexOf → -1 → slice(0)) — no separate branch needed.
-		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
+		const leafKey = StringMethods.slice(targetPath, StringMethods.lastIndexOf(targetPath, ".") + 1);
 		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
 	// The live caller of an access that resolved it already is taken as resolved; an explicit caller is never replaced.
@@ -3702,7 +3824,8 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 	}
 	let verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx);
 	// Both the supplier of the code reading and every call of its ceiling have to be allowed (#597).
-	for (const ceiling of ceilings) {
+	for (let i = 0; i < ceilings.length; i++) {
+		const ceiling = ceilings[i];
 		if (!verdict.allowed) return verdict;
 		verdict = runtime_readGateFor(wrapper, targetPath, ceiling, ctx);
 	}
@@ -3757,10 +3880,10 @@ const DATA_READ_OPTIONS = new WeakMap();
  * @private
  */
 function runtime_dataReadOptions(slothlet) {
-	let options = DATA_READ_OPTIONS.get(slothlet);
+	let options = WeakMapMethods.get(DATA_READ_OPTIONS, slothlet);
 	if (options === undefined) {
 		options = Objects.freeze({ dataMember: (apiPath) => runtime_isDataMemberNode(runtime_nodeAtPath(slothlet, apiPath)) });
-		DATA_READ_OPTIONS.set(slothlet, options);
+		WeakMapMethods.set(DATA_READ_OPTIONS, slothlet, options);
 	}
 	return options;
 }
@@ -3844,7 +3967,7 @@ function runtime_isDataMemberNode(wrapper) {
 	if (wrapper === null) return false;
 	const internal = wrapper.____slothletInternal;
 	const impl = internal.impl;
-	const known = DATA_MEMBER_NODES.get(wrapper);
+	const known = WeakMapMethods.get(DATA_MEMBER_NODES, wrapper);
 	if (known !== undefined && known.impl === impl) return known.member;
 	const exportPath = internal.exportPath;
 	const member =
@@ -3865,7 +3988,7 @@ function runtime_isDataMemberNode(wrapper) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
+const WRAPPER_ANSWERED_PROPS = setFrom(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
  * Whether the value a node holds answers `name` or `length` itself, through its prototype chain, as an error answers
@@ -3978,17 +4101,17 @@ function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
  */
 function runtime_adoptAccessor(wrapper, { get, set }) {
 	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
-	let cache = ADOPTIONS.get(wrapper);
-	if (!cache) ADOPTIONS.set(wrapper, (cache = { get: new WeakMap(), set: new WeakMap() }));
+	let cache = WeakMapMethods.get(ADOPTIONS, wrapper);
+	if (!cache) WeakMapMethods.set(ADOPTIONS, wrapper, (cache = { get: new WeakMap(), set: new WeakMap() }));
 	// The same half of the same accessor is adopted once per node, so describing it twice gives the same function.
 	const adopt = (half, kind, make) => {
 		if (typeof half !== "function") return undefined;
-		if (ADOPTED_ACCESSORS.has(half)) return half;
-		let adopted = cache[kind].get(half);
+		if (WeakMapMethods.has(ADOPTED_ACCESSORS, half)) return half;
+		let adopted = WeakMapMethods.get(cache[kind], half);
 		if (!adopted) {
 			adopted = make(half);
-			cache[kind].set(half, adopted);
-			ADOPTED_ACCESSORS.set(adopted, half);
+			WeakMapMethods.set(cache[kind], half, adopted);
+			WeakMapMethods.set(ADOPTED_ACCESSORS, adopted, half);
 		}
 		return adopted;
 	};
@@ -4101,7 +4224,8 @@ function runtime_enforceAccessorReader(wrapper, reader, args) {
 	if (!permissionManager?.isEnabled()) return;
 	const targetPath = wrapper.____slothletInternal.apiPath;
 	const runtimeContext = reader.context ?? null;
-	for (const caller of [reader.currentWrapper, ...identityCeilings(reader)]) {
+	for (let ofIndex = 0, ofList = concatLists([reader.currentWrapper], identityCeilings(reader)); ofIndex < ofList.length; ofIndex++) {
+		const caller = ofList[ofIndex];
 		runtime_enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
 	}
 }
@@ -4184,7 +4308,7 @@ function runtime_implAccessor(wrapper, prop) {
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
-				const adopted = ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set);
+				const adopted = WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set);
 				return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function") ? { descriptor, receiver } : null;
 			}
 			holder = Reflect.getPrototypeOf(holder);
@@ -4860,7 +4984,8 @@ const RECONSTRUCTED_FROM = new WeakMap();
 function runtime_moduleObjectFor(wrapper, value, asMember) {
 	let root = value;
 	for (let depth = 0; depth < 8; depth++) {
-		const source = root !== null && typeof root === "object" ? (RECONSTRUCTED_FROM.get(root) ?? copySourceOf(root)) : undefined;
+		const source =
+			root !== null && typeof root === "object" ? (WeakMapMethods.get(RECONSTRUCTED_FROM, root) ?? copySourceOf(root)) : undefined;
 		if (source === undefined) break;
 		root = source;
 	}
@@ -4872,7 +4997,7 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
 	if (!ownership || !filePath) return null;
 	if (ownership.resolveExportPath(filePath, root) || (asMember && !ownership.resolveMemberExportPaths(filePath, root))) {
 		runtime_moduleObjectKeys(root);
-		MODULE_OBJECT_SEEN.set(wrapper, { object: root, members: runtime_moduleObjectMembers(root) });
+		WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, { object: root, members: runtime_moduleObjectMembers(root) });
 		return root;
 	}
 	return null;
@@ -4900,10 +5025,10 @@ const MODULE_OBJECT_KEYS = new WeakMap();
  * @private
  */
 function runtime_moduleObjectKeys(object) {
-	let keys = MODULE_OBJECT_KEYS.get(object);
+	let keys = WeakMapMethods.get(MODULE_OBJECT_KEYS, object);
 	if (keys === undefined) {
-		keys = new Set(Objects.keys(object));
-		MODULE_OBJECT_KEYS.set(object, keys);
+		keys = setFrom(Objects.keys(object));
+		WeakMapMethods.set(MODULE_OBJECT_KEYS, object, keys);
 	}
 	return keys;
 }
@@ -4926,7 +5051,10 @@ const MODULE_OBJECT_SEEN = new WeakMap();
  */
 function runtime_moduleObjectMembers(object) {
 	const members = new Map();
-	for (const key of Objects.getOwnPropertyNames(object)) members.set(key, Reflect.getOwnPropertyDescriptor(object, key));
+	for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(object); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		MapMethods.set(members, key, Reflect.getOwnPropertyDescriptor(object, key));
+	}
 	return members;
 }
 
@@ -4941,17 +5069,17 @@ function runtime_moduleObjectMembers(object) {
  * @private
  */
 function runtime_moduleMemberChanged(wrapper, object, key, held) {
-	let seen = MODULE_OBJECT_SEEN.get(wrapper);
+	let seen = WeakMapMethods.get(MODULE_OBJECT_SEEN, wrapper);
 	if (seen === undefined || seen.object !== object) {
 		// A node handed another node's object (a reload reusing it) was just built from that object as it is.
 		seen = { object, members: runtime_moduleObjectMembers(object) };
-		MODULE_OBJECT_SEEN.set(wrapper, seen);
+		WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, seen);
 		return false;
 	}
-	const before = seen.members.get(key);
+	const before = MapMethods.get(seen.members, key);
 	if (held === undefined) {
 		if (before === undefined) return false;
-		seen.members.delete(key);
+		MapMethods.delete(seen.members, key);
 		return true;
 	}
 	if (
@@ -4962,7 +5090,7 @@ function runtime_moduleMemberChanged(wrapper, object, key, held) {
 	) {
 		return false;
 	}
-	seen.members.set(key, held);
+	MapMethods.set(seen.members, key, held);
 	return true;
 }
 
@@ -5013,23 +5141,27 @@ function runtime_followModuleMember(wrapper, object, seen, key) {
 	if (isFrameworkReservedKey(key)) return;
 	const internal = wrapper.____slothletInternal;
 	// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
-	if (internal.collisionMergedKeys?.has(key) || runtime_moduleObjectOf(wrapper, key) === null) return;
+	if (
+		(internal.collisionMergedKeys ? SetMethods.has(internal.collisionMergedKeys, key) : false) ||
+		runtime_moduleObjectOf(wrapper, key) === null
+	)
+		return;
 	const held = Reflect.getOwnPropertyDescriptor(object, key);
 	if (!runtime_moduleMemberChanged(wrapper, object, key, held)) return;
 	const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
 	if (mine !== undefined && !mine.configurable) return;
 	if (held === undefined) {
-		if (mine === undefined || !seen.has(key)) return;
-		seen.delete(key);
+		if (mine === undefined || !SetMethods.has(seen, key)) return;
+		SetMethods.delete(seen, key);
 		const displaced = "value" in mine ? resolveWrapper(mine.value) : null;
 		if (displaced) runtime_retireChanges(displaced);
 		Reflect.deleteProperty(wrapper, key);
-		internal.readOnlyKeys?.delete(key);
+		if (internal.readOnlyKeys) SetMethods.delete(internal.readOnlyKeys, key);
 		return;
 	}
 	// The build adopts an object's enumerable members only.
 	if (!held.enumerable) return;
-	seen.add(key);
+	SetMethods.add(seen, key);
 	if (mine !== undefined && runtime_holdsModuleMember(mine, held)) return;
 	if (!("value" in held)) {
 		runtime_defineAdoptedAccessor(wrapper, key, held);
@@ -5079,10 +5211,10 @@ function runtime_gateDataNodeMember(wrapper, prop, kept, access) {
 		return;
 	}
 	if (impl === null || typeof impl !== "object") return;
-	let isData = DATA_NODE_IMPLS.get(impl);
+	let isData = WeakMapMethods.get(DATA_NODE_IMPLS, impl);
 	if (isData === undefined) {
 		isData = !util.types.isProxy(impl) && runtime_isTerminalData(impl);
-		DATA_NODE_IMPLS.set(impl, isData);
+		WeakMapMethods.set(DATA_NODE_IMPLS, impl, isData);
 	}
 	if (!isData) return;
 	runtime_gateNodeValue(wrapper, kept, access);
@@ -5172,7 +5304,13 @@ function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
 	if (prop !== undefined && typeof prop !== "string") return;
-	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (
+		internal.followingModule ||
+		internal.integritySyncing ||
+		wrapper.slothlet.____buildDepth > 0 ||
+		MapMethods.has(FRAMEWORK_WRITES, wrapper)
+	)
+		return;
 	if (!Reflect.isExtensible(target)) return;
 	const object = runtime_moduleObjectOf(wrapper);
 	if (object === null) return;
@@ -5183,8 +5321,14 @@ function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
 			runtime_followModuleMember(wrapper, object, seen, prop);
 			return;
 		}
-		for (const key of Objects.keys(object)) runtime_followModuleMember(wrapper, object, seen, key);
-		for (const key of [...seen]) if (!hasOwn(object, key)) runtime_followModuleMember(wrapper, object, seen, key);
+		for (let ofIndex = 0, ofList = Objects.keys(object); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			runtime_followModuleMember(wrapper, object, seen, key);
+		}
+		for (let ofIndex = 0, ofList = setToArray(seen); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (!hasOwn(object, key)) runtime_followModuleMember(wrapper, object, seen, key);
+		}
 	} finally {
 		internal.followingModule = false;
 	}
@@ -5202,7 +5346,13 @@ function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
 function runtime_followModuleIntegrity(wrapper, target) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
-	if (internal.followingModule || internal.integritySyncing || wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper)) return;
+	if (
+		internal.followingModule ||
+		internal.integritySyncing ||
+		wrapper.slothlet.____buildDepth > 0 ||
+		MapMethods.has(FRAMEWORK_WRITES, wrapper)
+	)
+		return;
 	if (!Reflect.isExtensible(target)) return;
 	const object = runtime_moduleObjectOf(wrapper);
 	if (object === null || Reflect.isExtensible(object)) return;
@@ -5237,7 +5387,7 @@ function runtime_writeModuleObject(wrapper, object, prop, value) {
 	if (held === undefined) {
 		const added =
 			Reflect.isExtensible(object) && Reflect.defineProperty(object, prop, { value, writable: true, enumerable: true, configurable: true });
-		if (added && typeof prop === "string") runtime_moduleObjectKeys(object).add(prop);
+		if (added && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(object), prop);
 		return added;
 	}
 	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { value });
@@ -5256,7 +5406,7 @@ function runtime_writeModuleObject(wrapper, object, prop, value) {
  * @private
  */
 function runtime_reportsWritable(wrapper, prop) {
-	if (wrapper.____slothletInternal.readOnlyKeys?.has(prop)) return false;
+	if (wrapper.____slothletInternal.readOnlyKeys && SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop)) return false;
 	const impl = wrapper.____slothletInternal.impl;
 	const live = impl !== null && (typeof impl === "object" || typeof impl === "function") && !util.types.isProxy(impl) ? impl : null;
 	const holder = runtime_moduleObjectOf(wrapper) ?? live;
@@ -5304,8 +5454,8 @@ function runtime_describeImplMember(wrapper, descriptor) {
  */
 function runtime_originalAccessor(descriptor) {
 	return {
-		get: (descriptor.get && ADOPTED_ACCESSORS.get(descriptor.get)) ?? descriptor.get,
-		set: (descriptor.set && ADOPTED_ACCESSORS.get(descriptor.set)) ?? descriptor.set
+		get: (descriptor.get && WeakMapMethods.get(ADOPTED_ACCESSORS, descriptor.get)) ?? descriptor.get,
+		set: (descriptor.set && WeakMapMethods.get(ADOPTED_ACCESSORS, descriptor.set)) ?? descriptor.set
 	};
 }
 
@@ -5418,10 +5568,11 @@ const GENERATOR_PROTOTYPES = {
 const INTRINSICS = (() => {
 	const intrinsics = new WeakSet();
 	const add = (value) => {
-		if (value !== null && (typeof value === "object" || typeof value === "function")) intrinsics.add(value);
+		if (value !== null && (typeof value === "object" || typeof value === "function")) WeakSetMethods.add(intrinsics, value);
 	};
 	// Descriptors only: a global accessor (Node's lazily created globals) is never run to find its value.
-	for (const key of Reflect.ownKeys(globalThis)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(globalThis); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const value = Reflect.getOwnPropertyDescriptor(globalThis, key)?.value;
 		if (typeof value !== "function") continue;
 		add(value);
@@ -5432,12 +5583,19 @@ const INTRINSICS = (() => {
 		for (let link = Objects.getPrototypeOf(sample); link !== null; link = Objects.getPrototypeOf(link)) add(link);
 	};
 	const samples = [function* () {}, async function* () {}, async function () {}];
-	for (const sample of samples) {
+	for (let ofIndex = 0, ofList = samples; ofIndex < ofList.length; ofIndex++) {
+		const sample = ofList[ofIndex];
 		addChain(sample);
 		addChain(sample.prototype ?? sample);
 	}
-	for (const iterator of [[][Symbol.iterator](), new Map()[Symbol.iterator](), new Set()[Symbol.iterator](), ""[Symbol.iterator]()])
+	for (
+		let ofIndex = 0, ofList = [[][Symbol.iterator](), new Map()[Symbol.iterator](), new Set()[Symbol.iterator](), ""[Symbol.iterator]()];
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const iterator = ofList[ofIndex];
 		addChain(iterator);
+	}
 	addChain(Uint8Array);
 	addChain(Uint8Array.prototype);
 	return intrinsics;
@@ -5455,14 +5613,14 @@ const INTRINSICS = (() => {
  * @private
  */
 function runtime_isBindingMethod(fn, holder) {
-	if (holder === null || typeof holder !== "object" || INTRINSICS.has(holder) || util.types.isProxy(holder)) return false;
+	if (holder === null || typeof holder !== "object" || WeakSetMethods.has(INTRINSICS, holder) || util.types.isProxy(holder)) return false;
 	if (!runtime_isBuiltinFunction(fn)) return false;
 	const constructor = Reflect.getOwnPropertyDescriptor(holder, "constructor")?.value;
 	return (
 		typeof constructor === "function" &&
 		constructor !== fn &&
 		!util.types.isProxy(constructor) &&
-		!INTRINSICS.has(constructor) &&
+		!WeakSetMethods.has(INTRINSICS, constructor) &&
 		runtime_isBuiltinFunction(constructor) &&
 		Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === holder
 	);
@@ -5495,7 +5653,11 @@ const SHARED_BUILTINS = [
 	"zlib"
 ];
 
-if (isNode) for (const id of SHARED_BUILTINS) recordSharedExports(Processes.getBuiltinModule(`node:${id}`));
+if (isNode)
+	for (let ofIndex = 0, ofList = SHARED_BUILTINS; ofIndex < ofList.length; ofIndex++) {
+		const id = ofList[ofIndex];
+		recordSharedExports(Processes.getBuiltinModule(`node:${id}`));
+	}
 
 /**
  * The prototypes of Node's data classes (`URL`, `Blob`, `TextDecoder` …) and of what Node keeps inside the objects
@@ -5520,12 +5682,12 @@ function runtime_recordNodeObjectPrototypes() {
 	const crypto = Processes.getBuiltinModule("node:crypto");
 	const samples = [crypto.createSecretKey(new Uint8Array(16))];
 	const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-	samples.push(publicKey, privateKey);
+	ArrayMethods.push(samples, publicKey, privateKey);
 	if (typeof samples[0].toCryptoKey === "function")
-		samples.push(samples[0].toCryptoKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
+		ArrayMethods.push(samples, samples[0].toCryptoKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
 	if (typeof MessageChannel === "function") {
 		const channel = new MessageChannel();
-		samples.push(channel.port1);
+		ArrayMethods.push(samples, channel.port1);
 		channel.port1.close();
 		channel.port2.close();
 	}
@@ -5533,23 +5695,32 @@ function runtime_recordNodeObjectPrototypes() {
 	const util = Processes.getBuiltinModule("node:util");
 	const net = Processes.getBuiltinModule("node:net");
 	const data = [new URL("https://localhost/"), new URLSearchParams(), new TextDecoder(), new TextEncoder()];
-	if (typeof Blob === "function") data.push(new Blob([]));
-	if (typeof util.MIMEType === "function") data.push(new util.MIMEType("text/plain"));
-	if (typeof net.SocketAddress === "function") data.push(new net.SocketAddress());
+	if (typeof Blob === "function") ArrayMethods.push(data, new Blob([]));
+	if (typeof util.MIMEType === "function") ArrayMethods.push(data, new util.MIMEType("text/plain"));
+	if (typeof net.SocketAddress === "function") ArrayMethods.push(data, new net.SocketAddress());
 	// What a sample holds is Node's too: on older Node lines (22) a key keeps its native handle (`KeyObjectHandle`) in an own
 	// symbol property, and a `CryptoKey` keeps its `KeyObject` there.
 	const held = [];
-	for (const sample of [...samples, ...data])
-		for (const key of Reflect.ownKeys(sample)) {
+	for (let ofIndex = 0, ofList = concatLists(samples, data); ofIndex < ofList.length; ofIndex++) {
+		const sample = ofList[ofIndex];
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(sample); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
-			if (member !== null && typeof member === "object") held.push(member);
+			if (member !== null && typeof member === "object") ArrayMethods.push(held, member);
 		}
-	const isData = new Set([...data, ...held]);
-	for (const sample of [...samples, ...data, ...held])
-		for (let link = Objects.getPrototypeOf(sample); link !== null && !INTRINSICS.has(link); link = Objects.getPrototypeOf(link)) {
+	}
+	const isData = setFrom(concatLists(data, held));
+	for (let ofIndex = 0, ofList = concatLists(samples, data, held); ofIndex < ofList.length; ofIndex++) {
+		const sample = ofList[ofIndex];
+		for (
+			let link = Objects.getPrototypeOf(sample);
+			link !== null && !WeakSetMethods.has(INTRINSICS, link);
+			link = Objects.getPrototypeOf(link)
+		) {
 			recordSharedExports(link);
-			if (isData.has(sample)) NODE_DATA_PROTOTYPES.add(link);
+			if (SetMethods.has(isData, sample)) WeakSetMethods.add(NODE_DATA_PROTOTYPES, link);
 		}
+	}
 }
 
 if (isNode) runtime_recordNodeObjectPrototypes();
@@ -5599,14 +5770,17 @@ function runtime_recordNodeStreamState() {
 		crypto.createSign("sha256"),
 		crypto.createVerify("sha256")
 	];
-	for (const sample of samples)
-		for (const key of Reflect.ownKeys(sample)) {
+	for (let ofIndex = 0, ofList = samples; ofIndex < ofList.length; ofIndex++) {
+		const sample = ofList[ofIndex];
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(sample); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (key === "_events") continue;
 			const member = Reflect.getOwnPropertyDescriptor(sample, key)?.value;
 			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
 			const prototype = Objects.getPrototypeOf(member);
-			if (prototype !== null && !INTRINSICS.has(prototype)) NODE_STREAM_STATE_PROTOTYPES.add(prototype);
+			if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype)) WeakSetMethods.add(NODE_STREAM_STATE_PROTOTYPES, prototype);
 		}
+	}
 	socket.destroy();
 	gzip.close();
 }
@@ -5622,7 +5796,7 @@ if (isNode) runtime_recordNodeStreamState();
  */
 function runtime_isNodeStreamState(member) {
 	if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
-	return NODE_STREAM_STATE_PROTOTYPES.has(Reflect.getPrototypeOf(member));
+	return WeakSetMethods.has(NODE_STREAM_STATE_PROTOTYPES, Reflect.getPrototypeOf(member));
 }
 
 /**
@@ -5663,22 +5837,23 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
 	const pending = [value];
 	try {
 		while (pending.length) {
-			const member = pending.pop();
-			if (member === null || (typeof member !== "object" && typeof member !== "function") || seen.has(member)) continue;
-			seen.add(member);
-			if (INTRINSICS.has(member) || runtime_isSlothletValue(member)) continue;
+			const member = ArrayMethods.pop(pending);
+			if (member === null || (typeof member !== "object" && typeof member !== "function") || SetMethods.has(seen, member)) continue;
+			SetMethods.add(seen, member);
+			if (WeakSetMethods.has(INTRINSICS, member) || runtime_isSlothletValue(member)) continue;
 			if (util.types.isProxy(member)) return false;
 			if (typeof member === "function" && !runtime_isBuiltinFunction(member) && !isSharedExport(member)) return false;
 			const keys = Reflect.ownKeys(member);
 			budget.remaining -= keys.length;
 			if (budget.remaining < 0) return false;
-			for (const key of keys) {
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
-				if ("value" in descriptor) pending.push(descriptor.value);
-				else pending.push(descriptor.get, descriptor.set);
+				if ("value" in descriptor) ArrayMethods.push(pending, descriptor.value);
+				else ArrayMethods.push(pending, descriptor.get, descriptor.set);
 			}
-			pending.push(Reflect.getPrototypeOf(member));
+			ArrayMethods.push(pending, Reflect.getPrototypeOf(member));
 		}
 		return true;
 	} catch {
@@ -5696,14 +5871,14 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
  */
 function runtime_isSlothletValue(value) {
 	return (
-		_proxyRegistry.has(value) ||
-		capturedViewSet.has(value) ||
-		STAND_IN_RECORDS.has(value) ||
-		INBOUND_VIEWS.has(value) ||
-		trustedRootOwn.genuineWrappers.has(value) ||
+		WeakMapMethods.has(_proxyRegistry, value) ||
+		WeakSetMethods.has(capturedViewSet, value) ||
+		WeakMapMethods.has(STAND_IN_RECORDS, value) ||
+		WeakMapMethods.has(INBOUND_VIEWS, value) ||
+		WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) ||
 		isSlothletProxy(value) ||
 		runtime_isWrappedClassInstance(value) ||
-		CROSSINGS.has(value)
+		WeakMapMethods.has(CROSSINGS, value)
 	);
 }
 
@@ -5741,7 +5916,7 @@ function runtime_heldPrototypeOf(node) {
  */
 function runtime_isModuleStandIn(value) {
 	const underlying = isCompositionLayer(value) ? layerUnderlying(value) : value;
-	return util.types.isProxy(underlying) && (STAND_IN_RECORDS.has(underlying) || runtime_isWrappedClassInstance(underlying));
+	return util.types.isProxy(underlying) && (WeakMapMethods.has(STAND_IN_RECORDS, underlying) || runtime_isWrappedClassInstance(underlying));
 }
 
 /**
@@ -5772,7 +5947,7 @@ function runtime_isBuiltinFunction(fn) {
 	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
 	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
 	if (isFunctionSourcePatch(fn)) return true;
-	return /^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/.test(functionSource(fn));
+	return RegExpMethods.exec(/^function\s+(?:get\s+|set\s+)?[^\s(][^(]*\(\)\s*\{\s*\[native code\]\s*\}\s*$/, functionSource(fn)) !== null;
 }
 
 /**
@@ -5784,19 +5959,23 @@ function runtime_isBuiltinFunction(fn) {
  */
 function runtime_makerOf(wrapper) {
 	const slothlet = wrapper.slothlet;
-	let makers = MAKERS.get(slothlet);
-	if (!makers) MAKERS.set(slothlet, (makers = { byID: new Map(), byWrapper: new WeakMap() }));
+	let makers = WeakMapMethods.get(MAKERS, slothlet);
+	if (!makers) WeakMapMethods.set(MAKERS, slothlet, (makers = { byID: new Map(), byWrapper: new WeakMap() }));
 	const moduleID = wrapper.____slothletInternal?.moduleID;
-	let maker = moduleID ? makers.byID.get(moduleID) : makers.byWrapper.get(wrapper);
+	let maker = moduleID ? MapMethods.get(makers.byID, moduleID) : WeakMapMethods.get(makers.byWrapper, wrapper);
 	// A module removed and added again under the same id is a new module: what the old one made is not its.
 	if (maker && maker.owner.____slothletInternal?.invalid && maker.owner !== wrapper && !wrapper.____slothletInternal?.invalid) maker = null;
 	if (!maker) {
 		maker = { owner: wrapper, made: new WeakMap(), madeBy: null, handedIn: new WeakSet(), exposed: new WeakSet() };
 		if (moduleID) {
 			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
-			for (const [id, other] of makers.byID) if (other.owner.____slothletInternal?.invalid) makers.byID.delete(id);
-			makers.byID.set(moduleID, maker);
-		} else makers.byWrapper.set(wrapper, maker);
+			for (const ofEntry of mapEntries(makers.byID)) {
+				const id = ofEntry[0],
+					other = ofEntry[1];
+				if (other.owner.____slothletInternal?.invalid) MapMethods.delete(makers.byID, id);
+			}
+			MapMethods.set(makers.byID, moduleID, maker);
+		} else WeakMapMethods.set(makers.byWrapper, wrapper, maker);
 	}
 	return maker;
 }
@@ -5814,12 +5993,12 @@ function runtime_makerOf(wrapper) {
 function releaseModuleMakers(slothlet, moduleID) {
 	if (!slothlet) return;
 	if (moduleID === undefined) {
-		MAKERS.delete(slothlet);
+		WeakMapMethods.delete(MAKERS, slothlet);
 		// The changes queued through its stand-ins, and the refusals of those made, go with the instance too (#653).
 		releaseStandInChanges(slothlet);
 		return;
 	}
-	MAKERS.get(slothlet)?.byID.delete(moduleID);
+	WeakMapMethods.get(MAKERS, slothlet) == null ? undefined : MapMethods.delete(WeakMapMethods.get(MAKERS, slothlet).byID, moduleID);
 }
 
 /**
@@ -5831,7 +6010,7 @@ function releaseModuleMakers(slothlet, moduleID) {
  * moduleMakerCount(slothlet); // 3
  */
 function moduleMakerCount(slothlet) {
-	return MAKERS.get(slothlet)?.byID.size ?? 0;
+	return WeakMapMethods.get(MAKERS, slothlet)?.byID.size ?? 0;
 }
 
 /**
@@ -5919,16 +6098,19 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
 		if (!owner || owner.instanceID === loadingInstanceID) return null;
 	}
-	const target = typeof prop === "symbol" ? String(prop.description ?? "") : String(prop);
+	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
 	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
 	// With the permission system off nothing is checked: any of them gives the code its context (#726).
 	if (definer.leaves && !definer.leaves[0].slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
 	else if (definer.leaves) {
-		const paths = definer.leaves.map((leaf) => String(leaf.____slothletInternal.apiPath ?? "").split("."));
+		const paths = mapList(definer.leaves, (leaf) => splitText(String(leaf.____slothletInternal.apiPath ?? ""), "."));
 		const common = [];
-		for (let i = 0; paths.every((parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++) common.push(paths[0][i]);
-		throw new SlothletError("PERMISSION_DENIED", { caller: common.join(".") || null, target }, null, { validationError: true });
+		for (let i = 0; ArrayMethods.every(paths, (parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++)
+			ArrayMethods.push(common, paths[0][i]);
+		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target }, null, {
+			validationError: true
+		});
 	}
 	const leaf = definer.wrapper;
 	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
@@ -5951,7 +6133,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	const read =
 		use === null ? (RUNTIME_SELVES.get(contextManager) ?? selfProxy) : (RUNTIME_CALLABLE_SELVES.get(contextManager) ?? selfProxy);
 	// The leaves whose code is further out on the stack ran this code: they have to be allowed as well.
-	const ceiling = checks && definer.callers?.length ? combineCeilings(...definer.callers) : null;
+	const ceiling = checks && definer.callers?.length ? Reflect.apply(combineCeilings, undefined, definer.callers) : null;
 	return {
 		value: runtime_readOnBehalf(undefined, () =>
 			contextManager.runInContext(
@@ -6107,7 +6289,7 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, 
 	if (!leaf || leaf.slothlet !== slothlet) return null;
 	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
 	// every other module importing the helper.
-	if (held && definer.callers?.length) held.ceiling = combineCeilings(...definer.callers);
+	if (held && definer.callers?.length) held.ceiling = Reflect.apply(combineCeilings, undefined, definer.callers);
 	return leaf;
 }
 
@@ -6223,9 +6405,9 @@ function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attrib
 function runtime_makerInstanceID(slothlet) {
 	const instances = slothlet.contextManager.instances;
 	for (let id = slothlet.instanceID; id;) {
-		if (instances.has(id)) return id;
-		const reloaded = id.lastIndexOf("_reload_");
-		id = reloaded > 0 ? id.slice(0, reloaded) : null;
+		if (MapMethods.has(instances, id)) return id;
+		const reloaded = ArrayMethods.lastIndexOf(id, "_reload_");
+		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
 	}
 	return null;
 }
@@ -6267,10 +6449,11 @@ function runtime_isSlotObject(value) {
  * @type {Set<symbol>}
  * @private
  */
-const WELL_KNOWN_SYMBOLS = new Set(
-	Reflect.ownKeys(Symbol)
-		.map((key) => Symbol[key])
-		.filter((value) => typeof value === "symbol")
+const WELL_KNOWN_SYMBOLS = setFrom(
+	filterList(
+		mapList(Reflect.ownKeys(Symbol), (key) => Symbol[key]),
+		(value) => typeof value === "symbol"
+	)
 );
 
 /**
@@ -6280,20 +6463,19 @@ const WELL_KNOWN_SYMBOLS = new Set(
  * @type {Set<Function>}
  * @private
  */
-const SLOT_CALLBACK_METHODS = new Set(
-	[
-		Map.prototype.forEach,
-		Set.prototype.forEach,
-		Promise.prototype.then,
-		Promise.prototype.catch,
-		Promise.prototype.finally,
-		// The iterator helpers, where the engine has them.
-		...(typeof Iterator === "function"
-			? ["forEach", "some", "every", "find", "reduce", "map", "filter", "flatMap"].map(
-					(name) => Reflect.getOwnPropertyDescriptor(Iterator.prototype, name)?.value
-				)
-			: [])
-	].filter((method) => typeof method === "function")
+const SLOT_CALLBACK_METHODS = setFrom(
+	filterList(
+		concatLists(
+			[Map.prototype.forEach, Set.prototype.forEach, Promise.prototype.then, Promise.prototype.catch, Promise.prototype.finally],
+			typeof Iterator === "function"
+				? mapList(
+						["forEach", "some", "every", "find", "reduce", "map", "filter", "flatMap"],
+						(name) => Reflect.getOwnPropertyDescriptor(Iterator.prototype, name)?.value
+					)
+				: []
+		),
+		(method) => typeof method === "function"
+	)
 );
 
 /**
@@ -6309,14 +6491,15 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
 	const samples = [
 		() => [][Symbol.iterator](),
 		() => /a/g[Symbol.matchAll](""),
-		() => [].values().map((value) => value),
+		() => Reflect.apply(Iterator.prototype.map, ArrayMethods.values([]), [(value) => value]),
 		() => Iterators.from({ next: () => ({ done: true, value: undefined }) }),
 		() => new Intl.Segmenter().segment("")[Symbol.iterator]()
 	];
-	for (const sample of samples) {
+	for (let ofIndex = 0, ofList = samples; ofIndex < ofList.length; ofIndex++) {
+		const sample = ofList[ofIndex];
 		try {
 			const prototype = Reflect.getPrototypeOf(sample());
-			if (prototype !== null) prototypes.add(prototype);
+			if (prototype !== null) SetMethods.add(prototypes, prototype);
 		} catch {
 			// An engine without the iterator (no iterator helpers, no `Intl`) has no such prototype.
 		}
@@ -6332,7 +6515,7 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
  * @private
  */
 function runtime_isNativeIterator(value) {
-	return NATIVE_ITERATOR_PROTOTYPES.has(Reflect.getPrototypeOf(value));
+	return SetMethods.has(NATIVE_ITERATOR_PROTOTYPES, Reflect.getPrototypeOf(value));
 }
 
 /**
@@ -6376,7 +6559,7 @@ const SLOT_READERS = {
  */
 function runtime_memberHoldsCode(member, depth, budget) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return false;
-	if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) return false;
+	if (runtime_isSlothletValue(member) || WeakSetMethods.has(INTRINSICS, member) || runtime_isSharedValue(member)) return false;
 	if (util.types.isProxy(member)) return true;
 	if (typeof member === "function") return !runtime_isBuiltinFunction(member);
 	return runtime_holdsCode(member, depth - 1, budget);
@@ -6397,19 +6580,24 @@ function runtime_memberHoldsCode(member, depth, budget) {
  * @private
  */
 function runtime_slotHoldsCode(value, depth, budget) {
-	for (let link = Reflect.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = Reflect.getPrototypeOf(link)) {
+	for (
+		let link = Reflect.getPrototypeOf(value);
+		link !== null && !WeakSetMethods.has(INTRINSICS, link);
+		link = Reflect.getPrototypeOf(link)
+	) {
 		if (util.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
 	}
 	const types = util.types;
 	if (types.isPromise(value) || types.isWeakMap(value) || types.isMapIterator(value) || types.isSetIterator(value)) return true;
 	if (runtime_isWeakRef(value)) return true;
 	if (types.isMap(value) || types.isSet(value)) {
-		const entries = Reflect.apply(types.isMap(value) ? SLOT_READERS.mapEntries : SLOT_READERS.setValues, value, []);
-		for (const entry of entries) {
+		// Read with the forEach taken at load: the map or set itself, not its iterator.
+		const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
+		for (let i = 0; i < entries.length; i++) {
 			budget.remaining -= 1;
 			if (budget.remaining < 0) return true;
-			const members = types.isMap(value) ? entry : [entry];
-			for (const member of members) if (runtime_memberHoldsCode(member, depth, budget)) return true;
+			const members = types.isMap(value) ? entries[i] : [entries[i]];
+			for (let m = 0; m < members.length; m++) if (runtime_memberHoldsCode(members[m], depth, budget)) return true;
 		}
 	}
 	const isEmitter = Boolean(EventEmitter && runtime_inherits(value, EventEmitter));
@@ -6417,13 +6605,17 @@ function runtime_slotHoldsCode(value, depth, budget) {
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return true;
-	for (const key of keys) {
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (isEmitter && key === "_events") continue;
-		if (isTarget && typeof key === "symbol" && Symbols.keyFor(key) === undefined && !WELL_KNOWN_SYMBOLS.has(key)) continue;
+		if (isTarget && typeof key === "symbol" && Symbols.keyFor(key) === undefined && !SetMethods.has(WELL_KNOWN_SYMBOLS, key)) continue;
 		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
-			for (const half of [descriptor.get, descriptor.set]) if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+			for (let ofIndex = 0, ofList = [descriptor.get, descriptor.set]; ofIndex < ofList.length; ofIndex++) {
+				const half = ofList[ofIndex];
+				if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+			}
 			continue;
 		}
 		if (isEmitter && runtime_isNodeStreamState(descriptor.value)) continue;
@@ -6461,23 +6653,30 @@ function runtime_holdsCode(value, depth, budget) {
 		const prototype = Reflect.getPrototypeOf(value);
 		// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
 		// still read below.
-		if (prototype !== null && !INTRINSICS.has(prototype) && !(NODE_DATA_PROTOTYPES.has(prototype) && runtime_isSharedValue(prototype)))
+		if (
+			prototype !== null &&
+			!WeakSetMethods.has(INTRINSICS, prototype) &&
+			!(WeakSetMethods.has(NODE_DATA_PROTOTYPES, prototype) && runtime_isSharedValue(prototype))
+		)
 			return true;
 		if (Arrays.isArray(value) && value.length > budget.remaining) return true;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return true;
-		for (const key of keys) {
+		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			if (!descriptor) continue;
 			if (!("value" in descriptor)) {
-				for (const half of [descriptor.get, descriptor.set])
+				for (let ofIndex = 0, ofList = [descriptor.get, descriptor.set]; ofIndex < ofList.length; ofIndex++) {
+					const half = ofList[ofIndex];
 					if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+				}
 				continue;
 			}
 			const member = descriptor.value;
 			if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-			if (runtime_isSlothletValue(member) || INTRINSICS.has(member) || runtime_isSharedValue(member)) continue;
+			if (runtime_isSlothletValue(member) || WeakSetMethods.has(INTRINSICS, member) || runtime_isSharedValue(member)) continue;
 			if (util.types.isProxy(member)) return true;
 			if (typeof member === "function") {
 				if (!runtime_isBuiltinFunction(member)) return true;
@@ -6631,20 +6830,26 @@ function runtime_handOutValue(maker, owner, value) {
 	if (inbound) return inbound.original;
 	// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
 	// reaches.
-	if (CROSSINGS.has(value)) return value;
+	if (WeakMapMethods.has(CROSSINGS, value)) return value;
 	// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
-	if (SELF_MEMBER_VIEWS.get(value)?.reader === SEALED_SHELL_READER) return value;
+	if (WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.reader === SEALED_SHELL_READER) return value;
 	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
 	// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
 	const prototype = typeof value === "object" ? runtime_prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
 	if (prototype !== value) return prototype;
-	if (runtime_isSlothletValue(value) || INTRINSICS.has(value) || runtime_isSharedValue(value) || maker.handedIn.has(value)) return value;
+	if (
+		runtime_isSlothletValue(value) ||
+		WeakSetMethods.has(INTRINSICS, value) ||
+		runtime_isSharedValue(value) ||
+		WeakSetMethods.has(maker.handedIn, value)
+	)
+		return value;
 	// A prototype of a class the module exports is handed out as it is (#597).
-	if (maker.exposed.has(value)) return value;
+	if (WeakSetMethods.has(maker.exposed, value)) return value;
 	// A class instance a method got as its receiver stands for its node (#625): it comes back as it is, so a view
 	// hands it to the reader as the node, whose own write rule holds.
-	if (SELF_INSTANCE_NODES.has(value)) return value;
-	const made = maker.made.get(value);
+	if (WeakMapMethods.has(SELF_INSTANCE_NODES, value)) return value;
+	const made = WeakMapMethods.get(maker.made, value);
 	// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
 	// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
 	// the leaf that handed it out, each time.
@@ -6652,7 +6857,7 @@ function runtime_handOutValue(maker, owner, value) {
 	if (made && !own) return made;
 	try {
 		if (own) {
-			const mine = own.get(value);
+			const mine = WeakMapMethods.get(own, value);
 			if (mine) return mine;
 			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return runtime_kindStandIn(maker, owner, value, own);
 			return runtime_membrane(maker, owner, value, false, own);
@@ -6662,14 +6867,16 @@ function runtime_handOutValue(maker, owner, value) {
 			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
 			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
 			// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
-			const leaf = trustedRootOwn.implWrappers.get(value);
+			const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
 			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
 			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
 			const node =
-				leaf && trustedRootOwn.genuineWrappers.has(leaf) && leaf.slothlet === owner.slothlet ? leaf.____slothletInternal.proxy : null;
+				leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
+					? leaf.____slothletInternal.proxy
+					: null;
 			if (node && typeof node === "function") return node;
 			const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
-			if (leafMaker !== maker && leafMaker.made.has(value)) return leafMaker.made.get(value);
+			if (leafMaker !== maker && WeakMapMethods.has(leafMaker.made, value)) return WeakMapMethods.get(leafMaker.made, value);
 			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))
 				return runtime_kindStandIn(leafMaker, leaf ?? owner, value);
 			return runtime_membrane(leafMaker, leaf ?? owner, value);
@@ -6708,13 +6915,13 @@ function runtime_handOutValue(maker, owner, value) {
  * @private
  */
 function runtime_ownStandIns(maker, owner, value, made) {
-	if (typeof value !== "function" || util.types.isProxy(value) || trustedRootOwn.implWrappers.has(value)) return null;
-	const record = STAND_IN_RECORDS.get(made);
+	if (typeof value !== "function" || util.types.isProxy(value) || WeakMapMethods.has(trustedRootOwn.implWrappers, value)) return null;
+	const record = WeakMapMethods.get(STAND_IN_RECORDS, made);
 	if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
 	if (isLeafFileFunction(value, [record.owner, owner])) return null;
 	maker.madeBy ??= new WeakMap();
-	let own = maker.madeBy.get(owner);
-	if (!own) maker.madeBy.set(owner, (own = new WeakMap()));
+	let own = WeakMapMethods.get(maker.madeBy, owner);
+	if (!own) WeakMapMethods.set(maker.madeBy, owner, (own = new WeakMap()));
 	return own;
 }
 
@@ -6729,7 +6936,11 @@ function runtime_ownStandIns(maker, owner, value, made) {
  */
 function runtime_isCodeObject(value) {
 	try {
-		for (let link = Reflect.getPrototypeOf(value); link !== null && !INTRINSICS.has(link); link = Reflect.getPrototypeOf(link)) {
+		for (
+			let link = Reflect.getPrototypeOf(value);
+			link !== null && !WeakSetMethods.has(INTRINSICS, link);
+			link = Reflect.getPrototypeOf(link)
+		) {
 			if (util.types.isProxy(link) || !runtime_isSharedValue(link)) return true;
 		}
 		// A class's own prototype (`C.prototype`, whose `constructor` is the class) holds the class's methods: it is the
@@ -6762,8 +6973,10 @@ function runtime_isCodeObject(value) {
  */
 function runtime_isPlainPromise(value) {
 	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
-	for (const key of Reflect.ownKeys(value))
-		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || WELL_KNOWN_SYMBOLS.has(key)) return false;
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || SetMethods.has(WELL_KNOWN_SYMBOLS, key)) return false;
+	}
 	return true;
 }
 
@@ -6778,7 +6991,7 @@ function runtime_isPlainPromise(value) {
  * @private
  */
 function runtime_promiseStandIn(maker, owner, original) {
-	const existing = maker.made.get(original);
+	const existing = WeakMapMethods.get(maker.made, original);
 	if (existing) return existing;
 	const standIn = new Promise((resolve, reject) => {
 		Reflect.apply(SLOT_READERS.then, original, [
@@ -6786,8 +6999,8 @@ function runtime_promiseStandIn(maker, owner, original) {
 			(reason) => reject(runtime_handOut(maker, owner, reason))
 		]);
 	});
-	maker.made.set(original, standIn);
-	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
+	WeakMapMethods.set(maker.made, original, standIn);
+	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
 	return standIn;
 }
 
@@ -6834,13 +7047,14 @@ function runtime_attributeResultTo(owner, value, callerIsHost, caller) {
 	const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
 	// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
 	// a module gets it as the guard decides for it.
-	if (CROSSINGS.has(value)) return toModule ? runtime_crossTo(value, caller, owner.slothlet, owner) : runtime_uncross(value);
+	if (WeakMapMethods.has(CROSSINGS, value))
+		return toModule ? runtime_crossTo(value, caller, owner.slothlet, owner) : runtime_uncross(value);
 	let handed = value;
 	if (!handsOutAsModule(owner)) {
 		if (!runtime_permissionsOn(owner)) return value;
 		// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
 		// as a call of the node, as under `"precise"` (#726).
-		if (util.types.isProxy(value)) handed = runtime_makerOf(owner).made.get(value) ?? value;
+		if (util.types.isProxy(value)) handed = WeakMapMethods.get(runtime_makerOf(owner).made, value) ?? value;
 		// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
 		// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
 		else if (toModule && typeof value === "object" && runtime_instanceReadMayRefuse(owner.slothlet, caller, value))
@@ -6850,10 +7064,11 @@ function runtime_attributeResultTo(owner, value, callerIsHost, caller) {
 	// guard.
 	if (toModule) return runtime_crossTo(handed, caller, owner.slothlet, owner);
 	// The host holds it as it is; where it came from is kept for when the host hands it on.
-	if (runtime_permissionsOn(owner) && !HOST_HANDED.has(handed) && !runtime_isShared(handed)) {
-		HOST_HANDED.set(handed, owner);
+	if (runtime_permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !runtime_isShared(handed)) {
+		WeakMapMethods.set(HOST_HANDED, handed, owner);
 		// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
-		if (handed !== value && !HOST_HANDED.has(value) && !runtime_isShared(value)) HOST_HANDED.set(value, owner);
+		if (handed !== value && !WeakMapMethods.has(HOST_HANDED, value) && !runtime_isShared(value))
+			WeakMapMethods.set(HOST_HANDED, value, owner);
 	}
 	return handed;
 }
@@ -6866,8 +7081,8 @@ function runtime_attributeResultTo(owner, value, callerIsHost, caller) {
  * @private
  */
 function runtime_isShared(value) {
-	if (INTRINSICS.has(value) || runtime_isSharedValue(value)) return true;
-	return !STAND_IN_RECORDS.has(value) && runtime_isSlothletValue(value);
+	if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSharedValue(value)) return true;
+	return !WeakMapMethods.has(STAND_IN_RECORDS, value) && runtime_isSlothletValue(value);
 }
 
 /**
@@ -6908,7 +7123,8 @@ function runtime_nodeAtPath(slothlet, apiPath) {
 	// to record the path asked for.
 	let throughRoot = false;
 	try {
-		for (const segment of String(apiPath).split(".")) {
+		for (let ofIndex = 0, ofList = splitText(String(apiPath), "."); ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
 			const holder = resolveWrapper(current) ?? current;
 			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) return null;
 			if (util.types.isProxy(holder)) {
@@ -6931,13 +7147,15 @@ function runtime_nodeAtPath(slothlet, apiPath) {
 setModuleNodeResolver(runtime_nodeAtPath);
 setHandedOutCheck(
 	(value) =>
-		value !== null && (typeof value === "object" || typeof value === "function") && (STAND_IN_RECORDS.has(value) || CROSSINGS.has(value))
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value))
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const behind = runtime_uncross(value);
-	return typeof behind === "object" && behind !== null ? (INBOUND_VIEWS.get(behind)?.original ?? behind) : behind;
+	return typeof behind === "object" && behind !== null ? (WeakMapMethods.get(INBOUND_VIEWS, behind)?.original ?? behind) : behind;
 });
 
 /**
@@ -6956,22 +7174,22 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 	runtime_noteMoved(value);
 	// A crossing view handed in stands for a value: this module's own comes back as itself, another module's stays a
 	// view, decided for this module.
-	const crossing = CROSSINGS.get(value);
+	const crossing = WeakMapMethods.get(CROSSINGS, value);
 	if (crossing) {
 		const behind = crossing.original;
-		const own = STAND_IN_RECORDS.get(behind) ?? INBOUND_VIEWS.get(behind);
+		const own = WeakMapMethods.get(STAND_IN_RECORDS, behind) ?? WeakMapMethods.get(INBOUND_VIEWS, behind);
 		if (own?.maker === maker) return own.original;
-		if (maker.made.has(behind)) return behind;
+		if (WeakMapMethods.has(maker.made, behind)) return behind;
 		return runtime_crossTo(value, owner, crossing.slothlet, crossing.from);
 	}
-	const record = STAND_IN_RECORDS.get(value) ?? INBOUND_VIEWS.get(value);
+	const record = WeakMapMethods.get(STAND_IN_RECORDS, value) ?? WeakMapMethods.get(INBOUND_VIEWS, value);
 	if (record) return record.maker === maker ? record.original : value;
-	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return value;
-	if (maker.made.has(value)) return value;
+	if (runtime_isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return value;
+	if (WeakMapMethods.has(maker.made, value)) return value;
 	// A prototype of a module's, or plain data holding one, reaches this one as reading it would (#667).
 	const carried = runtime_carryTo(value, owner, owner?.slothlet ?? null);
 	if (carried !== value) return carried;
-	maker.handedIn.add(value);
+	WeakSetMethods.add(maker.handedIn, value);
 	return runtime_inboundView(maker, value, owner);
 }
 
@@ -6990,7 +7208,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 		const value = args[index];
 		const handed = runtime_handIn(maker, value, owner);
 		if (handed === value) continue;
-		if (result === args) result = Arrays.from(args);
+		if (result === args) result = copyList(args);
 		result[index] = handed;
 	}
 	return result;
@@ -7013,10 +7231,11 @@ function runtime_holdsOwnStandIn(maker, value, depth, budget) {
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
-	for (const key of keys) {
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
 		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-		if (STAND_IN_RECORDS.get(member)?.maker === maker) return true;
+		if (WeakMapMethods.get(STAND_IN_RECORDS, member)?.maker === maker) return true;
 		if (typeof member === "object" && runtime_holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
 	}
 	return false;
@@ -7042,8 +7261,8 @@ const INBOUND_BY_MAKER = new WeakMap();
  */
 function runtime_inboundView(maker, value, owner = maker.owner) {
 	if (typeof value !== "object") return value;
-	let views = INBOUND_BY_MAKER.get(maker);
-	const existing = views?.get(value);
+	let views = WeakMapMethods.get(INBOUND_BY_MAKER, maker);
+	const existing = views == null ? undefined : WeakMapMethods.get(views, value);
 	if (existing) return existing;
 	try {
 		if (!runtime_holdsOwnStandIn(maker, value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
@@ -7070,9 +7289,9 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 					: descriptor
 			)
 	});
-	if (!views) INBOUND_BY_MAKER.set(maker, (views = new WeakMap()));
-	views.set(value, view);
-	INBOUND_VIEWS.set(view, { maker, original: value });
+	if (!views) WeakMapMethods.set(INBOUND_BY_MAKER, maker, (views = new WeakMap()));
+	WeakMapMethods.set(views, value, view);
+	WeakMapMethods.set(INBOUND_VIEWS, view, { maker, original: value });
 	return view;
 }
 
@@ -7087,7 +7306,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 function runtime_runningLeafOf(maker, fallback) {
 	const slothlet = fallback?.slothlet;
 	const current = slothlet?.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
-	return current && trustedRootOwn.genuineWrappers.has(current) && runtime_makerOf(current) === maker ? current : fallback;
+	return current && WeakSetMethods.has(trustedRootOwn.genuineWrappers, current) && runtime_makerOf(current) === maker ? current : fallback;
 }
 
 /**
@@ -7123,7 +7342,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	// caller's. A value handed out runs under whoever runs it (#726).
 	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) =>
 		runtime_runAsMaker(who, fn, thisArg, args, attribute, asNode);
-	const existing = made.get(original);
+	const existing = WeakMapMethods.get(made, original);
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
 	const isFunction = typeof original === "function";
@@ -7152,7 +7371,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			return Reflect.apply(
 				arg,
 				this,
-				values.map((item) => (item === original ? standIn : out(item)))
+				mapList(values, (item) => (item === original ? standIn : out(item)))
 			);
 		};
 	};
@@ -7171,28 +7390,34 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		}
 		// A script's methods are Node's own, written in JavaScript.
 		else if (!runtime_isBuiltinFunction(engine) && !(isScript && isSharedExport(engine))) return value;
-		let method = slotMethods.get(value);
+		let method = WeakMapMethods.get(slotMethods, value);
 		if (!method) {
 			const name = engine.name;
 			method = {
 				[name](...args) {
 					if (this !== standIn) return Reflect.apply(value, this, args);
 					if (isScript) return runAs(owner, value, original, runtime_handInAll(maker, args));
-					const callsBack = SLOT_CALLBACK_METHODS.has(engine);
+					const callsBack = SetMethods.has(SLOT_CALLBACK_METHODS, engine);
 					return out(
 						Reflect.apply(
 							value,
 							original,
-							args.map((arg) => (callsBack ? slotArgument(arg) : runtime_handIn(maker, arg)))
+							mapList(args, (arg) => (callsBack ? slotArgument(arg) : runtime_handIn(maker, arg)))
 						)
 					);
 				}
 			}[name];
-			slotMethods.set(value, method);
+			WeakMapMethods.set(slotMethods, value, method);
 		}
 		return method;
 	};
-	const shadow = isFunction ? (runtime_isConstructor(original) ? function () {}.bind(null) : () => {}) : Arrays.isArray(original) ? [] : {};
+	const shadow = isFunction
+		? runtime_isConstructor(original)
+			? FunctionMethods.bind(function () {}, null)
+			: () => {}
+		: Arrays.isArray(original)
+			? []
+			: {};
 	let standIn = null;
 	// Operations on a module's Proxy already running as the module: one reached again while entering the module (its
 	// node reading the Proxy's `default`) runs as it is, already the module's.
@@ -7232,9 +7457,11 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		if (prototype === null || typeof prototype !== "object" || util.types.isProxy(prototype)) return out(prototype);
 		const owned = classOf(prototype);
 		// While the permission system is on, it is checked for whoever writes through it (the class prototype guard).
-		if (!owned || maker.made.has(owned)) return out(prototype);
+		if (!owned || WeakMapMethods.has(maker.made, owned)) return out(prototype);
 		// One handed to the module (a subclass's, constructed for) is not the module's.
-		return maker.handedIn.has(prototype) ? prototype : runtime_crossTo(prototype, SEALED_SHELL_READER, owner.slothlet, owner);
+		return WeakSetMethods.has(maker.handedIn, prototype)
+			? prototype
+			: runtime_crossTo(prototype, SEALED_SHELL_READER, owner.slothlet, owner);
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -7259,11 +7486,16 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	/** Make the shadow match an original that cannot be extended, member for member. */
 	const settle = () => {
 		const keys = exec(() => Reflect.ownKeys(original));
-		for (const key of keys) {
+		for (let i = 0; i < keys.length; i++) {
+			const key = keys[i];
 			const descriptor = reported(exec(() => Reflect.getOwnPropertyDescriptor(original, key)));
 			if (descriptor) Reflect.defineProperty(shadow, key, descriptor);
 		}
-		for (const key of Reflect.ownKeys(shadow)) if (!keys.includes(key)) Reflect.deleteProperty(shadow, key);
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (!(typeof keys === "string" ? StringMethods.includes(keys, key) : ArrayMethods.includes(keys, key)))
+				Reflect.deleteProperty(shadow, key);
+		}
 		if (!Reflect.isExtensible(shadow)) return;
 		Reflect.setPrototypeOf(shadow, prototypeOut(exec(() => Reflect.getPrototypeOf(original))));
 		Reflect.preventExtensions(shadow);
@@ -7289,7 +7521,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
 				// A member of a value handed to the module from outside (a subclass's prototype) is not the module's.
-				const holderIsMade = holder === original || !maker.handedIn.has(holder);
+				const holderIsMade = holder === original || !WeakSetMethods.has(maker.handedIn, holder);
 				if (!("value" in descriptor)) {
 					if (typeof descriptor.get !== "function") return undefined;
 					if (!holderIsMade || runtime_isBuiltinFunction(descriptor.get)) {
@@ -7304,13 +7536,13 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				// One an api node stands for is that node, whose members are read under its own rules.
-				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !maker.made.has(value))
+				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !WeakMapMethods.has(maker.made, value))
 					return runtime_frontingNodeNow(owner.slothlet, value) ?? runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
 				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
-					let source = SOURCES.get(original);
+					let source = WeakMapMethods.get(SOURCES, original);
 					if (!source) {
 						source = { toString: () => functionSource(original) }.toString;
-						SOURCES.set(original, source);
+						WeakMapMethods.set(SOURCES, original, source);
 					}
 					return source;
 				}
@@ -7331,7 +7563,8 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			if (descriptor) {
 				if ("value" in descriptor) break;
 				if (typeof descriptor.set !== "function") return false;
-				if (maker.handedIn.has(holder) || runtime_isBuiltinFunction(descriptor.set)) Reflect.apply(descriptor.set, receiver, [value]);
+				if (WeakSetMethods.has(maker.handedIn, holder) || runtime_isBuiltinFunction(descriptor.set))
+					Reflect.apply(descriptor.set, receiver, [value]);
 				else runAs(owner, descriptor.set, receiver, [value], false);
 				return true;
 			}
@@ -7350,7 +7583,8 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			// A subclass's prototype is the subclass's, never the module's.
 			if (target !== original && typeof target === "function") {
 				const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
-				if (prototype !== null && typeof prototype === "object" && !STAND_IN_RECORDS.has(prototype)) maker.handedIn.add(prototype);
+				if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
+					WeakSetMethods.add(maker.handedIn, prototype);
 			}
 			return runAs(
 				owner,
@@ -7388,8 +7622,14 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			const keys = exec(() => Reflect.ownKeys(original));
 			if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
 			// Every member the shadow holds fixed is still the original's; the language requires it be listed.
-			for (const key of Reflect.ownKeys(shadow))
-				if (!keys.includes(key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) keys.push(key);
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (
+					!(typeof keys === "string" ? StringMethods.includes(keys, key) : ArrayMethods.includes(keys, key)) &&
+					!Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable
+				)
+					ArrayMethods.push(keys, key);
+			}
 			return keys;
 		},
 		getOwnPropertyDescriptor: (_shadow, prop) => {
@@ -7435,8 +7675,8 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
 	if (isFunction) runtime_recordStandInOrigin(standIn);
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
-	const leaf = trustedRootOwn.implWrappers.get(original);
-	if (leaf) trustedRootOwn.implWrappers.set(standIn, leaf);
+	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
+	if (leaf) WeakMapMethods.set(trustedRootOwn.implWrappers, standIn, leaf);
 	return standIn;
 }
 
@@ -7453,7 +7693,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
  * @private
  */
 function runtime_kindStandIn(maker, owner, original, made = maker.made) {
-	const existing = made.get(original);
+	const existing = WeakMapMethods.get(made, original);
 	if (existing) return existing;
 	const run = (thisArg, args) => {
 		const receiver = runtime_handIn(maker, thisArg);
@@ -7465,18 +7705,19 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	let standIn;
 	if (isGenerator && isAsync) {
 		standIn = async function* (...args) {
-			return yield* run(this, args);
+			return yield* asyncGeneratorSteps(run(this, args));
 		};
 	} else if (isGenerator) {
 		standIn = function* (...args) {
-			return yield* run(this, args);
+			return yield* generatorSteps(run(this, args));
 		};
 	} else {
 		standIn = async function (...args) {
 			return run(this, args);
 		};
 	}
-	for (const key of Reflect.ownKeys(original)) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(original); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const descriptor = Reflect.getOwnPropertyDescriptor(original, key);
 		if (!descriptor) continue;
 		if (key === "prototype") {
@@ -7517,9 +7758,9 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
  * @private
  */
 function runtime_generatorStandIn(maker, owner, original) {
-	const existing = maker.made.get(original);
+	const existing = WeakMapMethods.get(maker.made, original);
 	if (existing) return existing;
-	const isAsync = Objects.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, original);
+	const isAsync = FunctionMethods.call(Objects.prototype.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
 	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
 	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
@@ -7557,8 +7798,8 @@ function runtime_generatorStandIn(maker, owner, original) {
 	if (Objects.isFrozen(original)) Objects.freeze(standIn);
 	else if (Objects.isSealed(original)) Objects.seal(standIn);
 	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
-	maker.made.set(original, standIn);
-	STAND_IN_RECORDS.set(standIn, { maker, owner, original });
+	WeakMapMethods.set(maker.made, original, standIn);
+	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
 	return standIn;
 }
 
@@ -7609,7 +7850,8 @@ function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
 	const target = newTarget === constructor ? constructor : runtime_handIn(maker, newTarget);
 	if (target !== constructor && typeof target === "function") {
 		const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
-		if (prototype !== null && typeof prototype === "object" && !STAND_IN_RECORDS.has(prototype)) maker.handedIn.add(prototype);
+		if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
+			WeakSetMethods.add(maker.handedIn, prototype);
 	}
 	return runtime_runAsMaker(
 		wrapper,
@@ -7683,7 +7925,7 @@ function runtime_instanceHoldsReads(wrapper) {
 function runtime_exposePrototype(wrapper, prototype) {
 	if (prototype === null || typeof prototype !== "object") return prototype;
 	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext) return prototype;
-	runtime_makerOf(wrapper).exposed.add(prototype);
+	WeakSetMethods.add(runtime_makerOf(wrapper).exposed, prototype);
 	return prototype;
 }
 
@@ -7698,12 +7940,12 @@ function runtime_exposePrototype(wrapper, prototype) {
 function runtime_markWritten(wrapper, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return;
-	if (runtime_isSlothletValue(value) || INTRINSICS.has(value)) return;
+	if (runtime_isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return;
 	const maker = runtime_makerOf(wrapper);
-	if (maker.made.has(value)) return;
+	if (WeakMapMethods.has(maker.made, value)) return;
 	const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
-	if (writer && trustedRootOwn.genuineWrappers.has(writer) && runtime_makerOf(writer) === maker) return;
-	maker.handedIn.add(value);
+	if (writer && WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer) && runtime_makerOf(writer) === maker) return;
+	WeakSetMethods.add(maker.handedIn, value);
 }
 
 /**
@@ -7730,7 +7972,7 @@ function runtime_crossArguments(wrapper, args) {
  */
 function runtime_callingModule(slothlet) {
 	const current = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
-	return current?.____slothletInternal && trustedRootOwn.genuineWrappers.has(current) ? current : null;
+	return current?.____slothletInternal && WeakSetMethods.has(trustedRootOwn.genuineWrappers, current) ? current : null;
 }
 
 /**
@@ -7754,8 +7996,11 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 		if (caller === null) {
 			// The host's own values are handed in as they are. What a module's call returned to the host, passed on as it
 			// is, still comes from that module.
-			from = HOST_HANDED.get(value) ?? (typeof value === "object" ? HOST_HANDED.get(runtime_unwrapClassInstance(value)) : null) ?? null;
-			if (from === null && !CROSSINGS.has(value)) continue;
+			from =
+				WeakMapMethods.get(HOST_HANDED, value) ??
+				(typeof value === "object" ? WeakMapMethods.get(HOST_HANDED, runtime_unwrapClassInstance(value)) : null) ??
+				null;
+			if (from === null && !WeakMapMethods.has(CROSSINGS, value)) continue;
 		} else {
 			// What the caller holds as itself is its own: handed back to it later, it is the value again.
 			runtime_recordOrigin(value, caller);
@@ -7766,7 +8011,7 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 		}
 		const crossed = runtime_crossTo(value, wrapper, slothlet, from);
 		if (crossed === value) continue;
-		if (result === args) result = Arrays.from(args);
+		if (result === args) result = copyList(args);
 		result[index] = crossed;
 	}
 	return result;
@@ -7789,7 +8034,7 @@ function runtime_ownInstances(wrapper, args) {
 		if (value === null || typeof value !== "object" || !runtime_isWrappedClassInstance(value)) continue;
 		const creator = runtime_classInstanceCreator(value);
 		if (creator === null || !runtime_sameModule(creator, wrapper)) continue;
-		if (result === args) result = Arrays.from(args);
+		if (result === args) result = copyList(args);
 		result[index] = runtime_unwrapClassInstance(value);
 	}
 	return result;
@@ -7817,7 +8062,7 @@ function runtime_contextReadAsDefiner(contextProxy, prop) {
 	const contextManager = slothlet?.contextManager;
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(slothlet) : null;
 	if (instanceID === null) return undefined;
-	const read = RUNTIME_CONTEXTS.get(contextManager) ?? contextProxy;
+	const read = MapMethods.get(RUNTIME_CONTEXTS, contextManager) ?? contextProxy;
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
 	);
@@ -7841,7 +8086,7 @@ const RUNTIME_CONTEXTS = new Map();
  * registerRuntimeContext(asyncRuntime, context);
  */
 function registerRuntimeContext(contextManager, contextProxy) {
-	RUNTIME_CONTEXTS.set(contextManager, contextProxy);
+	MapMethods.set(RUNTIME_CONTEXTS, contextManager, contextProxy);
 }
 
 /**
@@ -7884,11 +8129,11 @@ const CONTEXT_HOST_VALUES = new WeakSet();
 function runtime_contextWritten(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	const writer = ctx?.currentWrapper;
-	if (!writer?.____slothletInternal || !trustedRootOwn.genuineWrappers.has(writer)) return;
+	if (!writer?.____slothletInternal || !WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer)) return;
 	// A view keeps where its value came from; slothlet's own values are handed out their own way.
-	if (CROSSINGS.has(value) || runtime_isSlothletValue(value)) return;
-	if (CONTEXT_HOST_VALUES.has(value) || CONTEXT_WRITERS.has(value)) return;
-	CONTEXT_WRITERS.set(value, writer);
+	if (WeakMapMethods.has(CROSSINGS, value) || runtime_isSlothletValue(value)) return;
+	if (WeakSetMethods.has(CONTEXT_HOST_VALUES, value) || WeakMapMethods.has(CONTEXT_WRITERS, value)) return;
+	WeakMapMethods.set(CONTEXT_WRITERS, value, writer);
 }
 
 /**
@@ -7907,12 +8152,13 @@ function runtime_contextWritten(ctx, value) {
 function runtime_contextRead(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const reader = ctx?.currentWrapper;
-	const isModule = Boolean(reader?.____slothletInternal) && trustedRootOwn.genuineWrappers.has(reader);
-	if (CROSSINGS.has(value)) return isModule ? runtime_crossTo(value, reader, reader.slothlet, null) : runtime_uncross(value);
+	const isModule = Boolean(reader?.____slothletInternal) && WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader);
+	if (WeakMapMethods.has(CROSSINGS, value))
+		return isModule ? runtime_crossTo(value, reader, reader.slothlet, null) : runtime_uncross(value);
 	if (!isModule) return value;
-	const writer = CONTEXT_WRITERS.get(value);
+	const writer = WeakMapMethods.get(CONTEXT_WRITERS, value);
 	if (writer === undefined) {
-		if (!runtime_isSlothletValue(value)) CONTEXT_HOST_VALUES.add(value);
+		if (!runtime_isSlothletValue(value)) WeakSetMethods.add(CONTEXT_HOST_VALUES, value);
 		return value;
 	}
 	return runtime_crossTo(value, reader, reader.slothlet, writer);
@@ -7942,6 +8188,21 @@ function runtime_ownArguments(wrapper, args) {
 const FUNCTION_NODES = new WeakMap();
 
 /**
+ * The node a function stands for in one instance, from a table of {@link FUNCTION_NODES} or `LAYER_FRONTS`: the
+ * instance's map of function → reference to its node, read with the functions taken at load.
+ * @param {WeakMap<object, WeakMap<Function, WeakRef<object>>>} table - The table.
+ * @param {object} slothlet - The instance.
+ * @param {Function} fn - The function.
+ * @returns {object|undefined} The node, or undefined when none is held.
+ * @private
+ */
+function nodeRefOf(table, slothlet, fn) {
+	const byFunction = WeakMapMethods.get(table, slothlet);
+	const reference = byFunction === undefined ? undefined : WeakMapMethods.get(byFunction, fn);
+	return reference === undefined ? undefined : WeakRefMethods.deref(reference);
+}
+
+/**
  * Record `wrapper`'s node as the one fronting its function, when its file exports that function, unless another node of
  * the instance already does.
  * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
@@ -7957,16 +8218,17 @@ function runtime_recordFunctionNode(wrapper) {
 	// Only a function its file exports stands for it: a node built for one the module did not export (a class reached
 	// through an instance's members) is a member of that instance, not the class's own node.
 	if (!filePath || !wrapper.slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
-	let byFunction = FUNCTION_NODES.get(wrapper.slothlet);
-	if (!byFunction) FUNCTION_NODES.set(wrapper.slothlet, (byFunction = new WeakMap()));
-	if (byFunction.get(impl)?.deref() === undefined) byFunction.set(impl, new WeakRef(proxy));
-	CLASS_INSTANCES.set(impl, new WeakRef(wrapper.slothlet));
+	let byFunction = WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet);
+	if (!byFunction) WeakMapMethods.set(FUNCTION_NODES, wrapper.slothlet, (byFunction = new WeakMap()));
+	if ((WeakMapMethods.get(byFunction, impl) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, impl))) === undefined)
+		WeakMapMethods.set(byFunction, impl, new WeakRef(proxy));
+	WeakMapMethods.set(CLASS_INSTANCES, impl, new WeakRef(wrapper.slothlet));
 	// Every node fronting it, for a class exported under more than one name (#667).
-	let everyFunction = FUNCTION_NODE_SETS.get(wrapper.slothlet);
-	if (!everyFunction) FUNCTION_NODE_SETS.set(wrapper.slothlet, (everyFunction = new WeakMap()));
-	const live = (everyFunction.get(impl) ?? []).filter((ref) => ref.deref() !== undefined);
-	if (!live.some((ref) => ref.deref() === proxy)) live.push(new WeakRef(proxy));
-	everyFunction.set(impl, live);
+	let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.slothlet);
+	if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.slothlet, (everyFunction = new WeakMap()));
+	const live = filterList(WeakMapMethods.get(everyFunction, impl) ?? [], (ref) => WeakRefMethods.deref(ref) !== undefined);
+	if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) ArrayMethods.push(live, new WeakRef(proxy));
+	WeakMapMethods.set(everyFunction, impl, live);
 }
 
 /**
@@ -7987,9 +8249,10 @@ const LAYER_FRONTS = new WeakMap();
  */
 function runtime_recordLayerFront(slothlet, fn, node) {
 	if (typeof fn !== "function") return;
-	let byFunction = LAYER_FRONTS.get(slothlet);
-	if (!byFunction) LAYER_FRONTS.set(slothlet, (byFunction = new WeakMap()));
-	if (byFunction.get(fn)?.deref() === undefined) byFunction.set(fn, new WeakRef(node));
+	let byFunction = WeakMapMethods.get(LAYER_FRONTS, slothlet);
+	if (!byFunction) WeakMapMethods.set(LAYER_FRONTS, slothlet, (byFunction = new WeakMap()));
+	if ((WeakMapMethods.get(byFunction, fn) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, fn))) === undefined)
+		WeakMapMethods.set(byFunction, fn, new WeakRef(node));
 }
 
 /**
@@ -8035,7 +8298,7 @@ function runtime_frontingNode(slothlet, fn) {
 	if (!slothlet) return undefined;
 	const root = slothlet.api;
 	if (typeof root === "function" && slothlet.boundApi && (root === fn || layerUnderlying(root) === fn)) return slothlet.boundApi;
-	return FUNCTION_NODES.get(slothlet)?.get(fn)?.deref() ?? LAYER_FRONTS.get(slothlet)?.get(fn)?.deref();
+	return nodeRefOf(FUNCTION_NODES, slothlet, fn) ?? nodeRefOf(LAYER_FRONTS, slothlet, fn);
 }
 
 /**
@@ -8059,11 +8322,20 @@ function runtime_classPrototypeSites(slothlet, prototype) {
 	if (runtime_prototypeClassNode(slothlet, prototype) === undefined) return [];
 	const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor").value;
 	const sites = [];
-	for (const ref of FUNCTION_NODE_SETS.get(slothlet)?.get(owner) ?? []) {
-		const node = ref.deref();
+	for (
+		let ofIndex = 0,
+			ofList =
+				(WeakMapMethods.get(FUNCTION_NODE_SETS, slothlet) == null
+					? undefined
+					: WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODE_SETS, slothlet), owner)) ?? [];
+		ofIndex < ofList.length;
+		ofIndex++
+	) {
+		const ref = ofList[ofIndex];
+		const node = WeakRefMethods.deref(ref);
 		if (node === undefined) continue;
 		const site = runtime_prototypeSiteOf(resolveWrapper(node), "prototype");
-		if (!sites.some((known) => known.key === site.key)) sites.push(site);
+		if (!ArrayMethods.some(sites, (known) => known.key === site.key)) ArrayMethods.push(sites, site);
 	}
 	return sites;
 }
@@ -8099,7 +8371,7 @@ function runtime_functionNodePrototype(wrapper, fn) {
  * @private
  */
 function runtime_functionNodeFor(wrapper, fn) {
-	const node = FUNCTION_NODES.get(wrapper.slothlet)?.get(fn)?.deref();
+	const node = nodeRefOf(FUNCTION_NODES, wrapper.slothlet, fn);
 	if (node === undefined) return undefined;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
@@ -8144,7 +8416,7 @@ function runtime_prototypeClassNode(slothlet, prototype) {
 	const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
 	if (typeof owner !== "function" || util.types.isProxy(owner)) return undefined;
 	if (Reflect.getOwnPropertyDescriptor(owner, "prototype")?.value !== prototype) return undefined;
-	return FUNCTION_NODES.get(slothlet)?.get(owner)?.deref();
+	return nodeRefOf(FUNCTION_NODES, slothlet, owner);
 }
 
 /**
@@ -8154,9 +8426,7 @@ function runtime_prototypeClassNode(slothlet, prototype) {
  * @private
  */
 function runtime_apiPathParts(node) {
-	return String(resolveWrapper(node)?.____slothletInternal.apiPath ?? "")
-		.split(".")
-		.filter(Boolean);
+	return filterList(splitText(String(resolveWrapper(node)?.____slothletInternal.apiPath ?? ""), "."), Boolean);
 }
 
 /**
@@ -8202,14 +8472,15 @@ const PROTOTYPE_SITES = new WeakMap();
  */
 function runtime_prototypeSiteOf(wrapper, prop) {
 	const apiPath = String(wrapper.____slothletInternal.apiPath ?? "");
-	let sites = PROTOTYPE_SITES.get(wrapper);
-	if (sites === undefined || sites.apiPath !== apiPath) PROTOTYPE_SITES.set(wrapper, (sites = { apiPath, byProp: new Map() }));
-	let site = sites.byProp.get(prop);
+	let sites = WeakMapMethods.get(PROTOTYPE_SITES, wrapper);
+	if (sites === undefined || sites.apiPath !== apiPath)
+		WeakMapMethods.set(PROTOTYPE_SITES, wrapper, (sites = { apiPath, byProp: new Map() }));
+	let site = MapMethods.get(sites.byProp, prop);
 	if (site === undefined) {
-		const parts = apiPath.split(".").filter(Boolean);
-		if (prop !== null) parts.push(prop);
-		site = { parts, key: parts.join("."), prop };
-		sites.byProp.set(prop, site);
+		const parts = filterList(splitText(apiPath, "."), Boolean);
+		if (prop !== null) ArrayMethods.push(parts, prop);
+		site = { parts, key: ArrayMethods.join(parts, "."), prop };
+		MapMethods.set(sites.byProp, prop, site);
 	}
 	return site;
 }
@@ -8234,11 +8505,11 @@ const PROTOTYPE_PATHS = new WeakMap();
  */
 function runtime_recordPrototypePath(slothlet, prototype, site) {
 	if (!slothlet || prototype === null || typeof prototype !== "object") return;
-	let record = PROTOTYPE_PATHS.get(prototype);
-	if (record?.sites.has(site.key)) return;
-	if (INTRINSICS.has(prototype) || runtime_isSharedValue(prototype)) return;
-	if (record === undefined) PROTOTYPE_PATHS.set(prototype, (record = { slothlet, sites: new Map() }));
-	record.sites.set(site.key, site);
+	let record = WeakMapMethods.get(PROTOTYPE_PATHS, prototype);
+	if (record == null ? undefined : MapMethods.has(record.sites, site.key)) return;
+	if (WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return;
+	if (record === undefined) WeakMapMethods.set(PROTOTYPE_PATHS, prototype, (record = { slothlet, sites: new Map() }));
+	MapMethods.set(record.sites, site.key, site);
 }
 
 /**
@@ -8252,13 +8523,16 @@ function runtime_recordPrototypePath(slothlet, prototype, site) {
  */
 function runtime_knownPrototype(slothlet, value) {
 	if (value === null || typeof value !== "object") return undefined;
-	const record = PROTOTYPE_PATHS.get(value);
+	const record = WeakMapMethods.get(PROTOTYPE_PATHS, value);
 	const instance = record?.slothlet ?? slothlet ?? runtime_classInstanceOf(value);
 	if (!instance) return undefined;
 	const classSites = runtime_classPrototypeSites(instance, value);
 	if (record === undefined && classSites.length === 0) return undefined;
-	const sites = record === undefined ? [] : [...record.sites.values()];
-	for (const site of classSites) if (!record?.sites.has(site.key)) sites.push(site);
+	const sites = record === undefined ? [] : mapValuesToArray(record.sites);
+	for (let ofIndex = 0, ofList = classSites; ofIndex < ofList.length; ofIndex++) {
+		const site = ofList[ofIndex];
+		if (!(record == null ? undefined : MapMethods.has(record.sites, site.key))) ArrayMethods.push(sites, site);
+	}
 	return { slothlet: instance, sites };
 }
 
@@ -8272,7 +8546,11 @@ function runtime_knownPrototype(slothlet, value) {
 function runtime_classInstanceOf(prototype) {
 	if (util.types.isProxy(prototype)) return null;
 	const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
-	return typeof owner === "function" ? (CLASS_INSTANCES.get(owner)?.deref() ?? null) : null;
+	return typeof owner === "function"
+		? ((WeakMapMethods.get(CLASS_INSTANCES, owner) == null
+				? undefined
+				: WeakRefMethods.deref(WeakMapMethods.get(CLASS_INSTANCES, owner))) ?? null)
+		: null;
 }
 
 /**
@@ -8296,8 +8574,9 @@ function runtime_prototypeHandedTo(value, reader, slothlet = null, viewFor = rea
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
 	if (!runtime_guardOn(known.slothlet)) return value;
-	const [first] = known.sites;
-	if (known.sites.every((site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
+	const unpacked2 = known.sites,
+		first = unpacked2[0];
+	if (ArrayMethods.every(known.sites, (site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
 	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
 	// decided where it would be refused.
 	const refused = known.sites.find((site) => !runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value, false)) ?? first;
@@ -8343,7 +8622,8 @@ function runtime_carriesPrototype(slothlet, value, depth, budget) {
 	const keys = Reflect.ownKeys(value);
 	budget.remaining -= keys.length;
 	if (budget.remaining < 0) return false;
-	for (const key of keys) {
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
 		if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
 		if (runtime_knownPrototype(slothlet, member) !== undefined) return true;
@@ -8438,15 +8718,15 @@ function runtime_handedAsArgument(wrapper, value, caller) {
 function runtime_argumentSource(value, caller, called) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
 	const behind = typeof value === "object" ? runtime_unwrapClassInstance(value) : value;
-	const relayed = HOST_HANDED.get(value) ?? HOST_HANDED.get(behind);
+	const relayed = WeakMapMethods.get(HOST_HANDED, value) ?? WeakMapMethods.get(HOST_HANDED, behind);
 	if (relayed) return relayed;
-	const standIn = STAND_IN_RECORDS.get(value);
+	const standIn = WeakMapMethods.get(STAND_IN_RECORDS, value);
 	if (standIn) return standIn.owner;
 	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
 	if (creator) return creator;
-	const origin = CROSSING_ORIGINS.get(value);
+	const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
 	if (origin) return origin.wrapper;
-	if (called?.____slothletInternal && called.slothlet && runtime_makerOf(called).made.has(value)) return called;
+	if (called?.____slothletInternal && called.slothlet && WeakMapMethods.has(runtime_makerOf(called).made, value)) return called;
 	return caller;
 }
 
@@ -8462,14 +8742,15 @@ function runtime_argumentSource(value, caller, called) {
  * @private
  */
 function runtime_carrierView(value, reader, slothlet) {
-	let byReader = CARRIER_VIEWS.get(value);
-	const existing = byReader?.get(reader);
+	let byReader = WeakMapMethods.get(CARRIER_VIEWS, value);
+	const existing = byReader == null ? undefined : WeakMapMethods.get(byReader, reader);
 	if (existing) return existing;
 	const carry = (member) => runtime_carryTo(member, reader, slothlet);
 	let view;
 	if (Objects.isFrozen(value)) {
 		view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
-		for (const key of Reflect.ownKeys(value)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			Reflect.defineProperty(view, key, "value" in descriptor ? { ...descriptor, value: carry(descriptor.value) } : descriptor);
 		}
@@ -8491,8 +8772,8 @@ function runtime_carrierView(value, reader, slothlet) {
 			}
 		});
 	}
-	if (!byReader) CARRIER_VIEWS.set(value, (byReader = new WeakMap()));
-	byReader.set(reader, view);
+	if (!byReader) WeakMapMethods.set(CARRIER_VIEWS, value, (byReader = new WeakMap()));
+	WeakMapMethods.set(byReader, reader, view);
 	return view;
 }
 
@@ -8542,7 +8823,7 @@ function runtime_guardOn(slothlet) {
  * @private
  */
 function runtime_isCrossing(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && CROSSINGS.has(value);
+	return value !== null && (typeof value === "object" || typeof value === "function") && WeakMapMethods.has(CROSSINGS, value);
 }
 
 /**
@@ -8552,17 +8833,17 @@ function runtime_isCrossing(value) {
  * @private
  */
 function runtime_uncross(value) {
-	return runtime_isCrossing(value) ? CROSSINGS.get(value).original : value;
+	return runtime_isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
 }
 
 // The platform's cloning functions copy the data behind a crossing view (see helpers/clone-context): the value a
 // stand-in or the async runtime's context wrapper stands for, where the view is of one.
 setCloneViewReader((value) => {
-	const crossing = CROSSINGS.get(value);
+	const crossing = WeakMapMethods.get(CROSSINGS, value);
 	if (crossing === undefined) return undefined;
 	const behind = crossing.original;
 	if (typeof behind !== "object") return behind;
-	return STAND_IN_RECORDS.get(behind)?.original ?? runtime_unwrapClassInstance(behind);
+	return WeakMapMethods.get(STAND_IN_RECORDS, behind)?.original ?? runtime_unwrapClassInstance(behind);
 });
 
 /**
@@ -8575,9 +8856,9 @@ setCloneViewReader((value) => {
 function runtime_viewedNodeWrapper(value) {
 	let current = value;
 	for (let depth = 0; depth < 4 && current !== null && (typeof current === "object" || typeof current === "function"); depth++) {
-		const wrapper = _proxyRegistry.get(current);
+		const wrapper = WeakMapMethods.get(_proxyRegistry, current);
 		if (wrapper) return wrapper;
-		current = capturedViewNodes.get(current) ?? SELF_VIEW_NODES.get(current);
+		current = WeakMapMethods.get(capturedViewNodes, current) ?? WeakMapMethods.get(SELF_VIEW_NODES, current);
 	}
 	return null;
 }
@@ -8595,8 +8876,8 @@ setFunctionSourceReader((value) => {
 		// A function default with named exports beside it is held under a layer: the module's function is the one under it.
 		return fn ? layerUnderlying(fn) : undefined;
 	}
-	const behind = CROSSINGS.get(value)?.original ?? value;
-	const original = STAND_IN_RECORDS.get(behind)?.original ?? (behind !== value ? behind : undefined);
+	const behind = WeakMapMethods.get(CROSSINGS, value)?.original ?? value;
+	const original = WeakMapMethods.get(STAND_IN_RECORDS, behind)?.original ?? (behind !== value ? behind : undefined);
 	return typeof original === "function" ? original : undefined;
 });
 
@@ -8615,7 +8896,7 @@ function runtime_holdsSlottedData(value) {
 setCloneNodeReader((value) => {
 	// A view `self` handed a module over a built-in data object or an error a module holds: while the permission system is
 	// on it is copied from reads of it (see `runtime_slotCopy` in clone-context), off it is the platform's to clone.
-	const record = SELF_MEMBER_VIEWS.get(value);
+	const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
 	if (record !== undefined) {
 		const data = record.value;
 		if (data === null || typeof data !== "object" || !runtime_holdsSlottedData(data)) return undefined;
@@ -8718,10 +8999,10 @@ function runtime_viewGroup(reader) {
  * @private
  */
 function runtime_recordOrigin(value, wrapper) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function") || CROSSINGS.has(value)) return;
-	if (CROSSING_ORIGINS.has(value) || runtime_isSlothletValue(value)) return;
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(CROSSINGS, value)) return;
+	if (WeakMapMethods.has(CROSSING_ORIGINS, value) || runtime_isSlothletValue(value)) return;
 	const module = runtime_moduleKey(wrapper);
-	if (module !== null) CROSSING_ORIGINS.set(value, { slothlet: wrapper.slothlet, module, wrapper });
+	if (module !== null) WeakMapMethods.set(CROSSING_ORIGINS, value, { slothlet: wrapper.slothlet, module, wrapper });
 }
 
 /**
@@ -8745,7 +9026,7 @@ function runtime_sameModule(a, b) {
  * @private
  */
 function runtime_isOwnOrigin(value, reader) {
-	const origin = CROSSING_ORIGINS.get(value);
+	const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
 	if (origin === undefined || origin.slothlet !== reader?.slothlet || origin.module !== runtime_moduleKey(reader)) return false;
 	// Modules of one id with a deny rule between them are not each other's.
 	return runtime_asOneModule(origin.slothlet, origin.wrapper, reader);
@@ -8758,11 +9039,7 @@ function runtime_isOwnOrigin(value, reader) {
  * @private
  */
 function runtime_crossFromParts(from) {
-	return from?.____slothletInternal
-		? String(from.____slothletInternal.apiPath ?? "")
-				.split(".")
-				.filter(Boolean)
-		: [];
+	return from?.____slothletInternal ? filterList(splitText(String(from.____slothletInternal.apiPath ?? ""), "."), Boolean) : [];
 }
 
 /**
@@ -8774,7 +9051,7 @@ function runtime_crossFromParts(from) {
  * @private
  */
 function runtime_isWrittenClassPrototype(value) {
-	if (INTRINSICS.has(value) || runtime_isSharedValue(value) || runtime_isSlothletValue(value)) return false;
+	if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSharedValue(value) || runtime_isSlothletValue(value)) return false;
 	const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
 	return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
 }
@@ -8806,16 +9083,16 @@ function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	let site = CROSSED_PROTOTYPE_PATHS.get(prototype);
 	if (site === undefined || (!site.known && from?.____slothletInternal)) {
 		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
-		CROSSED_PROTOTYPE_PATHS.set(prototype, site);
+		WeakMapMethods.set(CROSSED_PROTOTYPE_PATHS, prototype, site);
 	}
-	MODULE_PROTOTYPES.add(prototype);
+	WeakSetMethods.add(MODULE_PROTOTYPES, prototype);
 	if (site.known && runtime_mayWritePath(slothlet, reader, site.parts)) return prototype;
 	// A view the reader's module already holds of it, handed over as data before anything showed it to be a prototype,
 	// is the object the module knows: it refuses the same writes ({@link runtime_crossAssertWrite}).
-	const views = CROSSING_VIEWS.get(prototype);
+	const views = WeakMapMethods.get(CROSSING_VIEWS, prototype);
 	if (views !== undefined) {
 		const key = runtime_crossKey(reader);
-		const held = views.key === key ? views.view : views.others?.get(key);
+		const held = views.key === key ? views.view : views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (held) return held;
 	}
 	return runtime_selfMemberOf(prototype, standing, slothlet, site.parts, null);
@@ -8840,9 +9117,15 @@ const MODULE_PROTOTYPES = new WeakSet();
  */
 function runtime_notePrototypes(value) {
 	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
-		if (INTRINSICS.has(link) || MODULE_PROTOTYPES.has(link) || util.types.isProxy(link) || isSharedExport(link)) return;
+		if (
+			WeakSetMethods.has(INTRINSICS, link) ||
+			WeakSetMethods.has(MODULE_PROTOTYPES, link) ||
+			util.types.isProxy(link) ||
+			isSharedExport(link)
+		)
+			return;
 		if (runtime_isSlothletValue(link)) return;
-		MODULE_PROTOTYPES.add(link);
+		WeakSetMethods.add(MODULE_PROTOTYPES, link);
 		link = Reflect.getPrototypeOf(link);
 	}
 }
@@ -8886,7 +9169,7 @@ const TYPED_ARRAY_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototype
  */
 function runtime_isPristineData(value, slothlet) {
 	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== null && !INTRINSICS.has(prototype) && !runtime_isSharedValue(prototype)) return false;
+	if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !runtime_isSharedValue(prototype)) return false;
 	const types = util.types;
 	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
 		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
@@ -8900,9 +9183,9 @@ function runtime_isPristineData(value, slothlet) {
 	const keys = Reflect.ownKeys(value);
 	if (keys.length === 0) return true;
 	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
-	if (types.isBoxedPrimitive(value) && typeof value.valueOf() === "string") {
+	if (types.isBoxedPrimitive(value) && typeof ObjectMethods.valueOf(value) === "string") {
 		// A boxed string's own keys are its indices and its length.
-		return keys.length === value.valueOf().length + 1 && keys[keys.length - 1] === "length";
+		return keys.length === ObjectMethods.valueOf(value).length + 1 && keys[keys.length - 1] === "length";
 	}
 	return false;
 }
@@ -8922,10 +9205,16 @@ function runtime_isPristineData(value, slothlet) {
  */
 function runtime_needsCrossing(value, slothlet = null) {
 	if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
-	if (STAND_IN_RECORDS.has(value)) return true;
-	if (INTRINSICS.has(value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
-	if (SELF_MEMBER_VIEWS.has(value) || SELF_VIEW_NODES.has(value) || GUARD_VIEWS.has(value) || INBOUND_VIEWS.has(value)) return false;
-	if (resolveWrapper(value) !== null || capturedViewChildren.has(value) || isFrameworkInternal(value)) return false;
+	if (WeakMapMethods.has(STAND_IN_RECORDS, value)) return true;
+	if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
+	if (
+		WeakMapMethods.has(SELF_MEMBER_VIEWS, value) ||
+		WeakMapMethods.has(SELF_VIEW_NODES, value) ||
+		WeakSetMethods.has(GUARD_VIEWS, value) ||
+		WeakMapMethods.has(INBOUND_VIEWS, value)
+	)
+		return false;
+	if (resolveWrapper(value) !== null || WeakMapMethods.has(capturedViewChildren, value) || isFrameworkInternal(value)) return false;
 	if (typeof value === "function") return util.types.isProxy(value) || !runtime_isBuiltinFunction(value);
 	if (util.types.isProxy(value)) return true;
 	if (runtime_isOpaqueData(value)) return !runtime_isPristineData(value, slothlet);
@@ -8943,7 +9232,10 @@ function runtime_needsCrossing(value, slothlet = null) {
  */
 function runtime_mayWritePath(slothlet, reader, parts) {
 	if (!reader?.____slothletInternal || parts.length === 0) return false;
-	const verdict = slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), parts.join("."));
+	const verdict = slothlet.handlers.permissionManager.writeSubtree(
+		String(reader.____slothletInternal.apiPath ?? ""),
+		ArrayMethods.join(parts, ".")
+	);
 	if (verdict === "deny") return false;
 	if (verdict === "grant" && !slothlet.handlers.apiManager.isRemovedCaller(reader)) return true;
 	return slothlet.handlers.apiManager.ownsPath(parts, reader);
@@ -8998,7 +9290,10 @@ function runtime_writeDeniedWithin(slothlet, reader, from) {
 	if (reader === from) return false;
 	const parts = runtime_crossFromParts(from);
 	if (parts.length === 0) return false;
-	return slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), parts.join(".")) === "deny";
+	return (
+		slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), ArrayMethods.join(parts, ".")) ===
+		"deny"
+	);
 }
 
 /**
@@ -9029,8 +9324,8 @@ function runtime_asOneModule(slothlet, a, b) {
  */
 function runtime_crossPromise(promise, reader, slothlet, from) {
 	const key = runtime_crossKey(reader);
-	let byKey = CROSSED_PROMISES.get(promise);
-	const existing = byKey?.get(key);
+	let byKey = WeakMapMethods.get(CROSSED_PROMISES, promise);
+	const existing = byKey == null ? undefined : MapMethods.get(byKey, key);
 	if (existing) return existing;
 	const crossed = Reflect.apply(SLOT_READERS.then, promise, [
 		(settled) => runtime_crossTo(settled, reader, slothlet, from),
@@ -9038,8 +9333,8 @@ function runtime_crossPromise(promise, reader, slothlet, from) {
 			throw runtime_crossTo(reason, reader, slothlet, from);
 		}
 	]);
-	if (!byKey) CROSSED_PROMISES.set(promise, (byKey = new Map()));
-	byKey.set(key, crossed);
+	if (!byKey) WeakMapMethods.set(CROSSED_PROMISES, promise, (byKey = new Map()));
+	MapMethods.set(byKey, key, crossed);
 	return crossed;
 }
 
@@ -9063,7 +9358,7 @@ function runtime_crossPromise(promise, reader, slothlet, from) {
  */
 function runtime_crossTo(value, reader, slothlet, from = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	const crossing = CROSSINGS.get(value);
+	const crossing = WeakMapMethods.get(CROSSINGS, value);
 	if (crossing) {
 		value = crossing.original;
 		from = crossing.from ?? from;
@@ -9075,11 +9370,11 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	const isModule = Boolean(reader.____slothletInternal);
 	// A class instance a node holds, handed back by one of its own methods, stands for its node (#625): the reader gets
 	// its view of the node, whose own write rule holds.
-	if (isModule && typeof value === "object" && SELF_INSTANCE_NODES.has(runtime_unwrapClassInstance(value)))
+	if (isModule && typeof value === "object" && WeakMapMethods.has(SELF_INSTANCE_NODES, runtime_unwrapClassInstance(value)))
 		return runtime_selfView(value, reader);
 	// A stand-in comes from the module that made it. One of the reader's own module stays the stand-in here, as it is
 	// between two functions of one module; handed in as an argument it becomes the value again (see runtime_handIn).
-	const record = STAND_IN_RECORDS.get(value);
+	const record = WeakMapMethods.get(STAND_IN_RECORDS, value);
 	if (record) from ??= record.owner;
 	// The async runtime's context wrapper of a class instance (#328) stands for the instance: the reader's own module's
 	// comes back as the instance it made; another module's comes from that module.
@@ -9094,42 +9389,46 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	// A view already made of it for the reader's module is what the module holds, except in a function of the module
 	// that may write everything at the path the value comes from: the view was made for another of the module's
 	// functions, and this one gets the value itself, as it would have had it read the value first.
-	const views = CROSSING_VIEWS.get(value);
+	const views = WeakMapMethods.get(CROSSING_VIEWS, value);
 	if (views !== undefined) {
 		const key = runtime_crossKey(reader);
-		const held = views.key === key ? views.view : views.others?.get(key);
+		const held = views.key === key ? views.view : views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (held) {
 			if (!isModule) return held;
 			// The function the view was made for, and each one decided since, was refused the value itself already.
 			// That answer holds for the rules it was given under: a rule added or removed since (or the system switched
 			// off and on) has every function decided again.
-			const state = CROSSINGS.get(held);
+			const state = WeakMapMethods.get(CROSSINGS, held);
 			const epoch = slothlet.handlers.permissionManager.ruleEpoch;
 			if (state.epoch !== epoch) {
 				state.epoch = epoch;
 				state.readerDecided = false;
 				state.decided = null;
 			}
-			if (state.reader === reader ? state.readerDecided : state.decided?.has(reader)) return held;
+			if (state.reader === reader ? state.readerDecided : state.decided ? WeakSetMethods.has(state.decided, reader) : false) return held;
 			const itself = runtime_handedAsItself(slothlet, reader, from);
 			if (itself !== null) {
 				if (itself === "writer") runtime_recordOrigin(value, from);
 				return value;
 			}
 			if (state.reader === reader) state.readerDecided = true;
-			else (state.decided ??= new WeakSet()).add(reader);
+			else WeakSetMethods.add((state.decided ??= new WeakSet()), reader);
 			return held;
 		}
 	}
 	try {
 		// A prototype handed out for a holder not known yet is decided for this one.
-		const sealed = SELF_MEMBER_VIEWS.get(value);
+		const sealed = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
 		if (sealed?.reader === SEALED_SHELL_READER) value = sealed.value;
 		// The async runtime's context wrapper of a class instance (#328), and a stand-in, stand for a value: what it is
 		// decides.
 		const plain = record ? record.original : runtime_unwrapClassInstance(value);
 		if (plain !== null && typeof plain === "object" && !util.types.isProxy(plain)) {
-			if (MODULE_PROTOTYPES.has(plain) || runtime_knownPrototype(slothlet, plain) !== undefined || runtime_isWrittenClassPrototype(plain))
+			if (
+				WeakSetMethods.has(MODULE_PROTOTYPES, plain) ||
+				runtime_knownPrototype(slothlet, plain) !== undefined ||
+				runtime_isWrittenClassPrototype(plain)
+			)
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
 		if (!runtime_needsCrossing(value, slothlet)) return value;
@@ -9171,10 +9470,10 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 function runtime_crossView(original, reader, slothlet, from) {
 	// The views of a value: its first module's held inline, any other module's in a map made only then.
 	const key = runtime_crossKey(reader);
-	const views = CROSSING_VIEWS.get(original);
+	const views = WeakMapMethods.get(CROSSING_VIEWS, original);
 	if (views !== undefined) {
 		if (views.key === key) return views.view;
-		const other = views.others?.get(key);
+		const other = views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (other) return other;
 	}
 	const isFunction = typeof original === "function";
@@ -9182,7 +9481,7 @@ function runtime_crossView(original, reader, slothlet, from) {
 	if (!util.types.isProxy(original)) runtime_notePrototypes(original);
 	const shadow = isFunction
 		? runtime_isConstructor(original)
-			? function () {}.bind(null)
+			? FunctionMethods.bind(function () {}, null)
 			: () => {}
 		: Arrays.isArray(original)
 			? []
@@ -9206,10 +9505,10 @@ function runtime_crossView(original, reader, slothlet, from) {
 	};
 	const view = new NativeProxy(shadow, CROSSING_HANDLER);
 	state.view = view;
-	CROSSING_STATES.set(shadow, state);
-	CROSSINGS.set(view, state);
-	if (views === undefined) CROSSING_VIEWS.set(original, { key, view, reader, others: null });
-	else (views.others ??= new Map()).set(key, view);
+	WeakMapMethods.set(CROSSING_STATES, shadow, state);
+	WeakMapMethods.set(CROSSINGS, view, state);
+	if (views === undefined) WeakMapMethods.set(CROSSING_VIEWS, original, { key, view, reader, others: null });
+	else MapMethods.set((views.others ??= new Map()), key, view);
 	return view;
 }
 
@@ -9301,13 +9600,13 @@ function runtime_crossSync(shadow, state, prop, descriptor) {
 function runtime_crossPrototype(state, raw) {
 	if (raw === null || (typeof raw !== "object" && typeof raw !== "function")) return raw;
 	// A stand-in's prototype for a holder not known yet, and the context wrapper of one, stand for the prototype.
-	const sealed = SELF_MEMBER_VIEWS.get(raw);
-	const standIn = STAND_IN_RECORDS.get(raw);
+	const sealed = WeakMapMethods.get(SELF_MEMBER_VIEWS, raw);
+	const standIn = WeakMapMethods.get(STAND_IN_RECORDS, raw);
 	const prototype = sealed?.reader === SEALED_SHELL_READER ? sealed.value : standIn ? standIn.original : runtime_unwrapClassInstance(raw);
 	if (
 		typeof prototype === "object" &&
 		!util.types.isProxy(prototype) &&
-		!INTRINSICS.has(prototype) &&
+		!WeakSetMethods.has(INTRINSICS, prototype) &&
 		!runtime_isSharedValue(prototype) &&
 		!runtime_isSlothletValue(prototype)
 	)
@@ -9327,8 +9626,12 @@ function runtime_crossPrototype(state, raw) {
 function runtime_crossSettle(shadow, state) {
 	const keys = Reflect.ownKeys(state.original);
 	const open = Reflect.isExtensible(shadow);
-	for (const key of Reflect.ownKeys(shadow)) if (!keys.includes(key) && key !== INSPECT_CUSTOM) Reflect.deleteProperty(shadow, key);
-	for (const key of keys) {
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (!ArrayMethods.includes(keys, key) && key !== INSPECT_CUSTOM) Reflect.deleteProperty(shadow, key);
+	}
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (!open && !Reflect.getOwnPropertyDescriptor(shadow, key)) continue;
 		const descriptor = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, key));
 		if (descriptor) Reflect.defineProperty(shadow, key, descriptor);
@@ -9365,7 +9668,7 @@ function runtime_crossRunsOnOriginal(state) {
 		// or a module's subclass of one.
 		for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
 			if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
-			if (INTRINSICS.has(link) || runtime_isSharedValue(link)) answer = true;
+			if (WeakSetMethods.has(INTRINSICS, link) || runtime_isSharedValue(link)) answer = true;
 			link = Reflect.getPrototypeOf(link);
 		}
 	}
@@ -9402,18 +9705,18 @@ function runtime_isStepResult(result) {
  */
 function runtime_crossEngineMethod(state, fn) {
 	if (typeof fn !== "function" || util.types.isProxy(fn)) return null;
-	if (!(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn) || isSharedExport(fn))) return null;
+	if (!(WeakSetMethods.has(INTRINSICS, fn) || runtime_isBuiltinFunction(fn) || isSharedExport(fn))) return null;
 	if (!runtime_crossRunsOnOriginal(state)) return null;
 	const { original } = state;
 	state.methods ??= new WeakMap();
-	let method = state.methods.get(fn);
+	let method = WeakMapMethods.get(state.methods, fn);
 	if (!method) {
 		const name = fn.name;
-		const callsBack = SLOT_CALLBACK_METHODS.has(engineThenOf(fn) ?? fn);
+		const callsBack = SetMethods.has(SLOT_CALLBACK_METHODS, engineThenOf(fn) ?? fn);
 		// A step of one of the language's own iterators answers with an object the engine makes for that step.
 		const steps =
 			(name === "next" || name === "return" || name === "throw") &&
-			(INTRINSICS.has(fn) || runtime_isBuiltinFunction(fn)) &&
+			(WeakSetMethods.has(INTRINSICS, fn) || runtime_isBuiltinFunction(fn)) &&
 			(runtime_isNativeIterator(original) ||
 				util.types.isMapIterator(original) ||
 				util.types.isSetIterator(original) ||
@@ -9421,7 +9724,7 @@ function runtime_crossEngineMethod(state, fn) {
 		method = {
 			[name](...args) {
 				const receiver = this === state.view ? original : this;
-				const handed = args.map((arg) =>
+				const handed = mapList(args, (arg) =>
 					callsBack && typeof arg === "function"
 						? function (...values) {
 								return runtime_crossIn(
@@ -9429,7 +9732,7 @@ function runtime_crossEngineMethod(state, fn) {
 									Reflect.apply(
 										arg,
 										this === original ? state.view : this,
-										values.map((item) => runtime_crossOut(state, item))
+										mapList(values, (item) => runtime_crossOut(state, item))
 									)
 								);
 							}
@@ -9457,7 +9760,7 @@ function runtime_crossEngineMethod(state, fn) {
 				return runtime_crossOut(state, result);
 			}
 		}[name];
-		state.methods.set(fn, method);
+		WeakMapMethods.set(state.methods, fn, method);
 	}
 	return method;
 }
@@ -9475,7 +9778,7 @@ function runtime_crossIsOwnersCode(state, descriptor) {
 	const held = descriptor.value;
 	if (typeof held !== "function") return false;
 	// A function the reader's module stored there is the reader's to replace.
-	const crossing = CROSSINGS.get(held);
+	const crossing = WeakMapMethods.get(CROSSINGS, held);
 	if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && runtime_sameModule(crossing.from, state.reader));
 	return !runtime_isOwnOrigin(held, state.reader);
 }
@@ -9505,16 +9808,16 @@ function runtime_crossAssertWrite(state, prop, change) {
 	const { original, slothlet } = state;
 	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
 	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
-	const subject = STAND_IN_RECORDS.get(original)?.original ?? runtime_unwrapClassInstance(original);
+	const subject = WeakMapMethods.get(STAND_IN_RECORDS, original)?.original ?? runtime_unwrapClassInstance(original);
 	// A function, and an object some module uses as a prototype, are code whole: every member, new ones included.
-	let held = typeof original === "function" || change === "prototype" || MODULE_PROTOTYPES.has(subject);
+	let held = typeof original === "function" || change === "prototype" || WeakSetMethods.has(MODULE_PROTOTYPES, subject);
 	if (!held && !util.types.isProxy(subject)) {
 		const own = Reflect.getOwnPropertyDescriptor(subject, prop);
 		if (own) {
 			held = runtime_crossIsOwnersCode(state, own) && !(change === "set" && !("value" in own) && typeof own.set === "function");
 		} else if (change !== "delete") {
 			for (let link = Reflect.getPrototypeOf(subject), depth = 0; link !== null && depth < 64; depth++) {
-				if (util.types.isProxy(link) || INTRINSICS.has(link) || runtime_isSharedValue(link)) break;
+				if (util.types.isProxy(link) || WeakSetMethods.has(INTRINSICS, link) || runtime_isSharedValue(link)) break;
 				const inherited = Reflect.getOwnPropertyDescriptor(link, prop);
 				if (inherited) {
 					const isCode = !("value" in inherited) || typeof inherited.value === "function";
@@ -9527,18 +9830,18 @@ function runtime_crossAssertWrite(state, prop, change) {
 	}
 	if (!held) return;
 	const parts = runtime_crossFromParts(state.from);
-	if (typeof prop === "string") parts.push(prop);
+	if (typeof prop === "string") ArrayMethods.push(parts, prop);
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
 	}
 	const writers = new Set();
-	if (state.reader?.____slothletInternal) writers.add(state.reader);
+	if (state.reader?.____slothletInternal) SetMethods.add(writers, state.reader);
 	if (identity?.currentWrapper) {
-		writers.add(identity.currentWrapper);
-		for (const ceiling of identityCeilings(identity)) writers.add(ceiling);
+		SetMethods.add(writers, identity.currentWrapper);
+		for (let i = 0, ceilings = identityCeilings(identity); i < ceilings.length; i++) SetMethods.add(writers, ceilings[i]);
 	}
-	for (const writer of writers) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+	for (const writer of setValues(writers)) slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
 }
 
 /**
@@ -9550,9 +9853,9 @@ function runtime_crossAssertWrite(state, prop, change) {
  */
 const CROSSING_INSPECT = isNode
 	? function slothlet_crossInspect(depth, options) {
-			const state = CROSSINGS.get(this);
+			const state = WeakMapMethods.get(CROSSINGS, this);
 			if (!state) return this;
-			const behind = STAND_IN_RECORDS.get(state.original)?.original ?? runtime_unwrapClassInstance(state.original);
+			const behind = WeakMapMethods.get(STAND_IN_RECORDS, state.original)?.original ?? runtime_unwrapClassInstance(state.original);
 			return util.inspect(behind, { ...options, depth: typeof depth === "number" ? depth : (options?.depth ?? 2) });
 		}
 	: null;
@@ -9575,7 +9878,7 @@ const CROSSING_SHADOW_PROTOTYPE = Objects.create(
  */
 const CROSSING_HANDLER = {
 	get(shadow, prop, receiver) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (state.pinned) {
 			if (!Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -9590,12 +9893,12 @@ const CROSSING_HANDLER = {
 		// The prototype read by its accessor is the prototype, as `Object.getPrototypeOf` reports it.
 		if (prop === "__proto__" && !fixed) {
 			const prototype = Reflect.getPrototypeOf(original);
-			if (prototype === value || STAND_IN_RECORDS.has(original)) return runtime_crossPrototype(state, prototype);
+			if (prototype === value || WeakMapMethods.has(STAND_IN_RECORDS, original)) return runtime_crossPrototype(state, prototype);
 		}
 		return runtime_crossEngineMethod(state, value) ?? runtime_crossOut(state, value);
 	},
 	set(shadow, prop, value, receiver) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		const own = receiver === state.view;
 		if (own) {
 			if (prop === "__proto__" && !Reflect.getOwnPropertyDescriptor(state.original, prop))
@@ -9609,29 +9912,31 @@ const CROSSING_HANDLER = {
 		return done;
 	},
 	has(shadow, prop) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (state.pinned && !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
 		return Reflect.has(state.original, prop);
 	},
 	deleteProperty(shadow, prop) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		runtime_crossAssertWrite(state, prop, "delete");
 		const done = Reflect.deleteProperty(state.original, prop);
 		if (done && state.pinned) Reflect.deleteProperty(shadow, prop);
 		return done;
 	},
 	ownKeys(shadow) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
 		if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
 		const keys = Reflect.ownKeys(state.original);
 		if (state.pinned)
-			for (const key of Reflect.ownKeys(shadow))
-				if (!keys.includes(key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) keys.push(key);
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (!ArrayMethods.includes(keys, key) && !Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable) ArrayMethods.push(keys, key);
+			}
 		return keys;
 	},
 	getOwnPropertyDescriptor(shadow, prop) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) {
 			runtime_crossSettle(shadow, state);
 			return Reflect.getOwnPropertyDescriptor(shadow, prop);
@@ -9641,7 +9946,7 @@ const CROSSING_HANDLER = {
 		return result;
 	},
 	defineProperty(shadow, prop, descriptor) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		runtime_crossAssertWrite(state, prop, "define");
 		const into = { ...descriptor };
 		if ("value" in descriptor) into.value = runtime_crossIn(state, descriptor.value);
@@ -9653,11 +9958,11 @@ const CROSSING_HANDLER = {
 	},
 	getPrototypeOf(shadow) {
 		if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		return runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original));
 	},
 	setPrototypeOf(shadow, prototype) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		// The prototype it already reports changes nothing.
 		const reported = Reflect.isExtensible(shadow)
 			? runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original))
@@ -9668,25 +9973,25 @@ const CROSSING_HANDLER = {
 		return Reflect.setPrototypeOf(state.original, runtime_crossIn(state, prototype));
 	},
 	isExtensible(shadow) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (!Reflect.isExtensible(state.original)) runtime_crossSettle(shadow, state);
 		return Reflect.isExtensible(shadow);
 	},
 	preventExtensions(shadow) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (typeof state.original === "function") runtime_crossAssertWrite(state, null, "prototype");
 		const done = Reflect.preventExtensions(state.original);
 		if (done) runtime_crossSettle(shadow, state);
 		return done;
 	},
 	apply(shadow, thisArg, args) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		let result;
 		try {
 			result = Reflect.apply(
 				state.original,
 				runtime_crossIn(state, thisArg),
-				Arrays.from(args, (arg) => runtime_crossIn(state, arg))
+				mapList(args, (arg) => runtime_crossIn(state, arg))
 			);
 		} catch (error) {
 			throw runtime_crossOut(state, error);
@@ -9694,7 +9999,7 @@ const CROSSING_HANDLER = {
 		return runtime_crossOut(state, result);
 	},
 	construct(shadow, args, newTarget) {
-		const state = CROSSING_STATES.get(shadow);
+		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		let target = state.original;
 		if (newTarget !== state.view) {
 			// A class the reader constructs for is its own: what it makes the instance's prototype is the reader's.
@@ -9709,7 +10014,7 @@ const CROSSING_HANDLER = {
 		try {
 			result = Reflect.construct(
 				state.original,
-				Arrays.from(args, (arg) => runtime_crossIn(state, arg)),
+				mapList(args, (arg) => runtime_crossIn(state, arg)),
 				target
 			);
 		} catch (error) {
@@ -9747,7 +10052,7 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName 
 	// write rules grant it the whole subtree. The object itself takes no check of its own, so a narrower rule beneath
 	// the path, or a grant of the path alone, leaves the reader the view, which decides each write at its own path.
 	const owned = (path) => {
-		const verdict = permissionManager.writeSubtree(readerPath, path.join("."));
+		const verdict = permissionManager.writeSubtree(readerPath, ArrayMethods.join(path, "."));
 		if (verdict === "deny") return false;
 		if (verdict === "grant" && !apiManager.isRemovedCaller(reader)) return true;
 		return apiManager.ownsPath(path, reader);
@@ -9756,8 +10061,11 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName 
 	// The object is the same at every name its class is exported as, so it may be held only where every one of them
 	// would leave it the object (#667).
 	if (everyName) {
-		const readAt = parts.join(".");
-		for (const site of runtime_classPrototypeSites(slothlet, prototype)) if (site.key !== readAt && !owned(site.parts)) return false;
+		const readAt = ArrayMethods.join(parts, ".");
+		for (let ofIndex = 0, ofList = runtime_classPrototypeSites(slothlet, prototype); ofIndex < ofList.length; ofIndex++) {
+			const site = ofList[ofIndex];
+			if (site.key !== readAt && !owned(site.parts)) return false;
+		}
 	}
 	// The object's `constructor` is the function itself, whose own members a node reads under its rules: the object is
 	// held as itself only by a reader no read of them could be refused to.
@@ -9765,7 +10073,10 @@ function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName 
 	for (let link = Reflect.getPrototypeOf(prototype), depth = 0; link !== null && depth < 64; depth++) {
 		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
 		if (util.types.isProxy(link)) return false;
-		for (const site of runtime_classPrototypeSites(slothlet, link)) if (!owned(site.parts)) return false;
+		for (let ofIndex = 0, ofList = runtime_classPrototypeSites(slothlet, link); ofIndex < ofList.length; ofIndex++) {
+			const site = ofList[ofIndex];
+			if (!owned(site.parts)) return false;
+		}
 		if (runtime_constructorReadMayRefuse(slothlet, readerPath, link)) return false;
 		link = Reflect.getPrototypeOf(link);
 	}
@@ -9789,7 +10100,7 @@ function runtime_constructorReadMayRefuse(slothlet, readerPath, prototype) {
 	let path;
 	if (typeof root === "function" && (root === constructor || layerUnderlying(root) === constructor)) path = "";
 	else {
-		const node = FUNCTION_NODES.get(slothlet)?.get(constructor)?.deref() ?? LAYER_FRONTS.get(slothlet)?.get(constructor)?.deref();
+		const node = nodeRefOf(FUNCTION_NODES, slothlet, constructor) ?? nodeRefOf(LAYER_FRONTS, slothlet, constructor);
 		if (node === undefined) return false;
 		path = String(resolveWrapper(node)?.____slothletInternal.apiPath ?? "");
 	}
@@ -9803,7 +10114,7 @@ function runtime_constructorReadMayRefuse(slothlet, readerPath, prototype) {
  * @private
  */
 function runtime_behindMemberView(value) {
-	return SELF_MEMBER_VIEWS.get(value)?.value ?? value;
+	return WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.value ?? value;
 }
 
 /**
@@ -9837,7 +10148,7 @@ function runtime_emitterPrototypeForReader(wrapper, prototype, reader) {
 	const site = runtime_prototypeSiteOf(wrapper, null);
 	runtime_recordPrototypePath(slothlet, prototype, site);
 	if (reader === null || reader === HOST_READER || !slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
-	if (INTRINSICS.has(prototype) || runtime_isSharedValue(prototype)) return prototype;
+	if (WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return prototype;
 	if (runtime_mayHoldPrototype(slothlet, reader, site.parts, prototype)) return prototype;
 	return runtime_selfMemberOf(prototype, reader, slothlet, site.parts, null);
 }
@@ -9854,7 +10165,7 @@ function runtime_emitterPrototypeForReader(wrapper, prototype, reader) {
  * @private
  */
 function runtime_sealedShellPrototype(wrapper, prototype) {
-	if (!wrapper.slothlet || INTRINSICS.has(prototype) || runtime_isSharedValue(prototype)) return prototype;
+	if (!wrapper.slothlet || WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return prototype;
 	return runtime_selfMemberOf(prototype, SEALED_SHELL_READER, wrapper.slothlet, runtime_apiPathParts(wrapper), null);
 }
 
@@ -9871,7 +10182,7 @@ function runtime_sealedShellPrototype(wrapper, prototype) {
 function runtime_instancePrototypeSite(wrapper) {
 	const impl = wrapper.____slothletInternal.impl;
 	if (impl === null || typeof impl !== "object") return undefined;
-	const held = INSTANCE_PROTOTYPE_SITES.get(wrapper);
+	const held = WeakMapMethods.get(INSTANCE_PROTOTYPE_SITES, wrapper);
 	const current = util.types.isProxy(impl) ? undefined : Reflect.getPrototypeOf(impl);
 	if (held !== undefined && held.impl === impl && held.current === current && held.apiPath === wrapper.____slothletInternal.apiPath)
 		return held.found;
@@ -9886,7 +10197,7 @@ function runtime_instancePrototypeSite(wrapper) {
 			if (unclassed !== undefined) found = { prototype: unclassed, checked: wrapper, site: runtime_prototypeSiteOf(wrapper, null) };
 		}
 	}
-	INSTANCE_PROTOTYPE_SITES.set(wrapper, { impl, current, apiPath: wrapper.____slothletInternal.apiPath, found });
+	WeakMapMethods.set(INSTANCE_PROTOTYPE_SITES, wrapper, { impl, current, apiPath: wrapper.____slothletInternal.apiPath, found });
 	return found;
 }
 
@@ -9924,7 +10235,8 @@ function runtime_instanceShellPrototype(wrapper) {
 	const site = runtime_instancePrototypeSite(wrapper);
 	if (site === undefined) return undefined;
 	const { prototype, checked } = site;
-	if (prototype === null || INTRINSICS.has(prototype) || runtime_isSharedValue(prototype) || !wrapper.slothlet) return prototype;
+	if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype) || !wrapper.slothlet)
+		return prototype;
 	runtime_recordPrototypePath(wrapper.slothlet, runtime_exposePrototype(checked, prototype), site.site);
 	return runtime_selfMemberOf(prototype, SEALED_SHELL_READER, wrapper.slothlet, site.site.parts, site.site.prop);
 }
@@ -9975,7 +10287,7 @@ const SELF_VIEW_UNDER = new WeakMap();
  * @private
  */
 function runtime_closedPrototypeStale(view) {
-	const fixed = view === undefined ? undefined : CLOSED_PROTOTYPES.get(view);
+	const fixed = view === undefined ? undefined : WeakMapMethods.get(CLOSED_PROTOTYPES, view);
 	if (fixed === undefined) return false;
 	const { wrapper, prototype, reader, raw, parts } = fixed;
 	return raw !== runtime_mayHoldPrototype(wrapper.slothlet, reader, parts, prototype);
@@ -10042,7 +10354,7 @@ const WITHHELD_PROTOTYPES = new WeakMap();
  */
 function runtime_withheldPrototype(wrapper, nearest) {
 	if (nearest === null) return null;
-	const held = WITHHELD_PROTOTYPES.get(wrapper);
+	const held = WeakMapMethods.get(WITHHELD_PROTOTYPES, wrapper);
 	if (held?.nearest === nearest) return held.standIn;
 	// A change through it is checked as a call of the node, so a reader it was withheld from is refused as reading the
 	// prototype itself would refuse it; any other reader finds it closed, as a frozen object is.
@@ -10061,7 +10373,7 @@ function runtime_withheldPrototype(wrapper, nearest) {
 		}
 	});
 	markFrameworkInternal(standIn);
-	WITHHELD_PROTOTYPES.set(wrapper, { nearest, standIn });
+	WeakMapMethods.set(WITHHELD_PROTOTYPES, wrapper, { nearest, standIn });
 	return standIn;
 }
 
@@ -10076,7 +10388,7 @@ function runtime_withheldPrototype(wrapper, nearest) {
 function runtime_exportedInstanceClass(wrapper) {
 	const instanceClass = runtime_heldInstanceClass(wrapper);
 	if (instanceClass === null) return null;
-	return FUNCTION_NODES.get(wrapper.slothlet)?.get(instanceClass)?.deref() !== undefined ? instanceClass : null;
+	return nodeRefOf(FUNCTION_NODES, wrapper.slothlet, instanceClass) !== undefined ? instanceClass : null;
 }
 
 /**
@@ -10101,7 +10413,7 @@ const INSTANCE_CLASS_NODES = new WeakMap();
 function runtime_instanceClassNode(wrapper, instanceClass = runtime_heldInstanceClass(wrapper)) {
 	if (instanceClass === null) return null;
 	if (runtime_isIntrinsic(instanceClass) || runtime_isBuiltinFunction(instanceClass) || runtime_isSharedValue(instanceClass)) return null;
-	const held = INSTANCE_CLASS_NODES.get(wrapper);
+	const held = WeakMapMethods.get(INSTANCE_CLASS_NODES, wrapper);
 	if (held?.fn === instanceClass) return held.node;
 	const node = wrapper.___createChildWrapper("constructor", instanceClass);
 	if (typeof node !== "function") return null;
@@ -10109,7 +10421,7 @@ function runtime_instanceClassNode(wrapper, instanceClass = runtime_heldInstance
 	// class computes (a static getter) is its code, and the node keeps the name its path gives.
 	const name = Reflect.getOwnPropertyDescriptor(instanceClass, "name");
 	if (name && "value" in name && typeof name.value === "string") resolveWrapper(node).____slothletInternal.className = name.value;
-	INSTANCE_CLASS_NODES.set(wrapper, { fn: instanceClass, node });
+	WeakMapMethods.set(INSTANCE_CLASS_NODES, wrapper, { fn: instanceClass, node });
 	return node;
 }
 
@@ -10125,7 +10437,7 @@ function runtime_instanceClassNode(wrapper, instanceClass = runtime_heldInstance
 function runtime_instanceClassFront(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	const exported = runtime_exportedInstanceClass(wrapper);
-	if (exported !== null) return FUNCTION_NODES.get(wrapper.slothlet).get(exported).deref();
+	if (exported !== null) return WeakRefMethods.deref(WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet), exported));
 	if (internal.deferChildAdopt || (EventEmitter && runtime_inherits(internal.impl, EventEmitter))) return null;
 	return runtime_instanceClassNode(wrapper);
 }
@@ -10187,7 +10499,7 @@ const HAS_INSTANCE_BY_IMPL = new WeakMap();
  * @private
  */
 function runtime_hasInstanceOf(fn) {
-	let test = HAS_INSTANCE_BY_IMPL.get(fn);
+	let test = WeakMapMethods.get(HAS_INSTANCE_BY_IMPL, fn);
 	if (!test) {
 		// A class extending the node's view inherits from the member view a reader got of `prototype`, which counts as it
 		// (see runtime_selfHasInstance); a function with no `prototype` of its own (a bound one) answers as the language does.
@@ -10197,7 +10509,7 @@ function runtime_hasInstanceOf(fn) {
 				? runtime_selfHasInstance(prototype, value)
 				: Reflect.apply(FUNCTION_HAS_INSTANCE, fn, [value]);
 		};
-		HAS_INSTANCE_BY_IMPL.set(fn, test);
+		WeakMapMethods.set(HAS_INSTANCE_BY_IMPL, fn, test);
 	}
 	return test;
 }
@@ -10235,11 +10547,16 @@ function runtime_hasOwnMember(wrapper, prop) {
 	const internal = wrapper.____slothletInternal;
 	// The folder's entry names only stand in for members that are not composed yet: once the wrapper
 	// has loaded, its own members are the truth, so a member removed later stops counting (#571 review).
-	if (internal.mode === "lazy" && !internal.state.materialized && internal.memberNames?.has(prop)) return true;
+	if (
+		internal.mode === "lazy" &&
+		!internal.state.materialized &&
+		(internal.memberNames ? SetMethods.has(internal.memberNames, prop) : false)
+	)
+		return true;
 	const impl = internal.impl;
 	// A member a callable's composition layer holds is the module's (a named export that won the slot of
 	// the function's own `name` or `length`), not the function's built-in (#585 review).
-	if (typeof impl === "function" && isCompositionLayer(impl) && layerHeldKeys(impl).includes(prop)) return true;
+	if (typeof impl === "function" && isCompositionLayer(impl) && ArrayMethods.includes(layerHeldKeys(impl), prop)) return true;
 	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
 	return impl !== null && typeof impl === "object" && hasOwn(impl, prop);
 }
@@ -10257,8 +10574,12 @@ function runtime_hasOwnMember(wrapper, prop) {
  */
 function* runtime_prototypeChain(start) {
 	const seen = new Set();
-	for (let holder = start; holder !== null && holder !== undefined && !seen.has(holder); holder = Reflect.getPrototypeOf(holder)) {
-		seen.add(holder);
+	for (
+		let holder = start;
+		holder !== null && holder !== undefined && !SetMethods.has(seen, holder);
+		holder = Reflect.getPrototypeOf(holder)
+	) {
+		SetMethods.add(seen, holder);
 		yield holder;
 	}
 }
@@ -10277,11 +10598,11 @@ function runtime_isArrayMember(array, prop) {
 	if (runtime_isArrayIndex(prop)) return true;
 	// A composed node's layer may hold a named export that won the `length` slot, which the node then reads
 	// and describes; otherwise `length` is the array's own.
-	if (prop === "length") return isCompositionLayer(array) && layerHeldKeys(array).includes("length");
+	if (prop === "length") return isCompositionLayer(array) && ArrayMethods.includes(layerHeldKeys(array), "length");
 	// A key the module put on the array, or on a prototype it gave the array: a member like an element. Only
 	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
 	// array's class, which the array reports as plain JS does.
-	for (const holder of runtime_prototypeChain(array)) {
+	for (const holder of generatorSteps(runtime_prototypeChain(array))) {
 		if (holder === Arrays.prototype || holder === Objects.prototype) break;
 		if (hasOwn(holder, prop)) return holder === array || prop !== "constructor";
 	}
@@ -10362,7 +10683,8 @@ function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept =
  * @private
  */
 function runtime_isUnloadedLazyNode(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function") || WAITING_CHAINS.has(value)) return false;
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(WAITING_CHAINS, value))
+		return false;
 	const internal = resolveWrapper(value)?.____slothletInternal;
 	return !!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
 }
@@ -10467,7 +10789,7 @@ const ROOT_GATES = new WeakMap();
  * @private
  */
 function runtime_rootGate(slothlet) {
-	let gate = ROOT_GATES.get(slothlet);
+	let gate = WeakMapMethods.get(ROOT_GATES, slothlet);
 	if (gate === undefined) {
 		gate = {
 			slothlet,
@@ -10480,7 +10802,7 @@ function runtime_rootGate(slothlet) {
 				}
 			}
 		};
-		ROOT_GATES.set(slothlet, gate);
+		WeakMapMethods.set(ROOT_GATES, slothlet, gate);
 	}
 	return gate;
 }
@@ -10508,7 +10830,10 @@ function runtime_isHeldPrimitive(impl) {
 function runtime_holdsNullish(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (!internal.nullish || internal.invalid || (internal.impl !== null && internal.impl !== undefined)) return false;
-	for (const key of Objects.keys(wrapper)) if (!isFrameworkReservedKey(key)) return false;
+	for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (!isFrameworkReservedKey(key)) return false;
+	}
 	return true;
 }
 
@@ -10551,7 +10876,7 @@ function runtime_readsGated(slothlet) {
  * @type {ReadonlySet<string>}
  * @private
  */
-const ROOT_FUNCTION_ANSWERS = new Set(["prototype", "toString", "name", "length"]);
+const ROOT_FUNCTION_ANSWERS = setFrom(["prototype", "toString", "name", "length"]);
 
 /**
  * Whether a key of the api root is one its function answers itself (see {@link ROOT_FUNCTION_ANSWERS}): the root is a
@@ -10562,7 +10887,7 @@ const ROOT_FUNCTION_ANSWERS = new Set(["prototype", "toString", "name", "length"
  * @private
  */
 function runtime_isRootFunctionAnswer(slothlet, prop) {
-	if (typeof slothlet.api !== "function" || !ROOT_FUNCTION_ANSWERS.has(prop)) return false;
+	if (typeof slothlet.api !== "function" || !SetMethods.has(ROOT_FUNCTION_ANSWERS, prop)) return false;
 	return !Objects.getOwnPropertyDescriptor(slothlet.api, prop)?.enumerable;
 }
 
@@ -10616,8 +10941,8 @@ function runtime_rootFileOf(slothlet) {
  * @internal
  */
 function runtime_noteRootFile(slothlet, filePath, moduleID) {
-	ROOT_FILES.set(slothlet, { filePath, moduleID: moduleID ?? null });
-	ROOT_LEAVES.delete(slothlet);
+	WeakMapMethods.set(ROOT_FILES, slothlet, { filePath, moduleID: moduleID ?? null });
+	WeakMapMethods.delete(ROOT_LEAVES, slothlet);
 }
 
 /**
@@ -10634,9 +10959,9 @@ function runtime_rootLeaf(slothlet) {
 	const root = slothlet.api;
 	if (typeof root !== "function") return null;
 	const fn = layerUnderlying(root);
-	const held = ROOT_LEAVES.get(slothlet);
+	const held = WeakMapMethods.get(ROOT_LEAVES, slothlet);
 	if (held !== undefined && held.____slothletInternal.impl === fn) return held;
-	const source = ROOT_FILES.get(slothlet) ?? null;
+	const source = WeakMapMethods.get(ROOT_FILES, slothlet) ?? null;
 	const leaf = new UnifiedWrapper(slothlet, {
 		mode: "eager",
 		apiPath: "",
@@ -10649,9 +10974,9 @@ function runtime_rootLeaf(slothlet) {
 	// The file is recorded after construction, so building the leaf announces no node of the tree; its code is indexed
 	// as this leaf's, as a node's is.
 	leaf.____slothletInternal.filePath = source?.filePath ?? null;
-	trustedRootOwn.genuineWrappers.add(leaf);
+	WeakSetMethods.add(trustedRootOwn.genuineWrappers, leaf);
 	if (source?.filePath) registerLeafFile(leaf);
-	ROOT_LEAVES.set(slothlet, leaf);
+	WeakMapMethods.set(ROOT_LEAVES, slothlet, leaf);
 	return leaf;
 }
 
@@ -10735,12 +11060,12 @@ function runtime_rootInvoker(slothlet, prop, value) {
 	if (typeof slothlet.api !== "function" || typeof prop !== "string" || !(prop in FUNCTION_INVOKERS)) return value;
 	const invoker = FUNCTION_INVOKERS[prop];
 	if ((layerMethodOriginal(value) ?? value) !== invoker) return value;
-	let made = ROOT_INVOKERS.get(slothlet);
-	if (made === undefined) ROOT_INVOKERS.set(slothlet, (made = new Map()));
-	let fn = made.get(prop);
+	let made = WeakMapMethods.get(ROOT_INVOKERS, slothlet);
+	if (made === undefined) WeakMapMethods.set(ROOT_INVOKERS, slothlet, (made = new Map()));
+	let fn = MapMethods.get(made, prop);
 	if (fn === undefined) {
 		fn = { [prop]: (...args) => Reflect.apply(invoker, slothlet.boundApi, args) }[prop];
-		made.set(prop, fn);
+		MapMethods.set(made, prop, fn);
 	}
 	return fn;
 }
@@ -10817,13 +11142,14 @@ function runtime_rootListing(slothlet, target, keys) {
 	// The reader is the same for every key of one listing, so it is resolved once.
 	const host = runtime_isHostRead(gate);
 	const listed = [];
-	for (const key of keys) {
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (host && !slothlet.handlers.permissionManager.isPrivateTarget(String(key))) {
-			listed.push(key);
+			ArrayMethods.push(listed, key);
 			continue;
 		}
 		const fixed = Reflect.getOwnPropertyDescriptor(target, key);
-		if ((fixed && !fixed.configurable) || !runtime_isReadRedacted(gate, key, null, null, true)) listed.push(key);
+		if ((fixed && !fixed.configurable) || !runtime_isReadRedacted(gate, key, null, null, true)) ArrayMethods.push(listed, key);
 	}
 	return listed;
 }
@@ -10883,7 +11209,7 @@ function runtime_rootWithheld(slothlet, prop) {
  * @internal
  */
 function runtime_registerRoot(root) {
-	ROOT_PROXIES.add(root);
+	WeakSetMethods.add(ROOT_PROXIES, root);
 	return root;
 }
 
@@ -10899,9 +11225,9 @@ function runtime_registerRoot(root) {
  * @internal
  */
 function runtime_assertRootChange(slothlet, prop) {
-	if (slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(slothlet.boundApi)) return;
+	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, slothlet.boundApi)) return;
 	runtime_assertOwnedWriteAt(runtime_rootGate(slothlet), typeof prop === "string" ? [prop] : []);
-	if (!SELF_FRAMEWORK_ROOTS.has(prop)) return;
+	if (!SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) slothlet.handlers.apiManager.normalizeApiPath([prop]);
 }
@@ -11039,7 +11365,7 @@ function runtime_rootClose(slothlet, target, isCallable, prototype) {
 	const api = slothlet.api;
 	// The root holds slothlet's namespace and root functions, which closing it would pin with it: module code may not
 	// change them (the built-in write rules), so it may not close the root. Refused before anything closes.
-	for (const name of SELF_FRAMEWORK_ROOTS) if (hasOwn(api, name)) runtime_assertRootChange(slothlet, name);
+	for (const name of setValues(SELF_FRAMEWORK_ROOTS)) if (hasOwn(api, name)) runtime_assertRootChange(slothlet, name);
 	// A function root's api is a layer over its module's function, kept open so the function is not changed: the target
 	// alone closes then, and from then on holds the keys the root has (see runtime_rootTakesKey).
 	if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
@@ -11166,7 +11492,7 @@ function runtime_describeAsHeld(wrapper, node, prop, access = null) {
  * @private
  */
 function runtime_arrayKeyHolder(impl, prop) {
-	return isCompositionLayer(impl) && !layerHeldKeys(impl).includes(prop) ? layerUnderlying(impl) : impl;
+	return isCompositionLayer(impl) && !ArrayMethods.includes(layerHeldKeys(impl), prop) ? layerUnderlying(impl) : impl;
 }
 
 /**
@@ -11194,7 +11520,7 @@ function runtime_unwrapLeafValue(value) {
 		// registry, since wrappers are handed out only as proxies; the arm is a backstop for an internal
 		// construction that has not been proxied yet.
 		/* v8 ignore next */
-		const inner = _proxyRegistry.get(current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
+		const inner = WeakMapMethods.get(_proxyRegistry, current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
 		if (!inner) return current;
 		current = inner.____slothletInternal?.impl;
 	}
@@ -11236,12 +11562,13 @@ const SERIALIZERS = new WeakMap();
  * @private
  */
 function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
-	if (!data || typeof data !== "object" || Arrays.isArray(data) || seen.has(data)) return data;
-	seen.add(data);
+	if (!data || typeof data !== "object" || Arrays.isArray(data) || WeakSetMethods.has(seen, data)) return data;
+	WeakSetMethods.add(seen, data);
 	let copy = null;
 	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
 	const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
-	for (const key of Objects.keys(data)) {
+	for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
@@ -11262,7 +11589,7 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
 			if (redacted !== value) own()[key] = redacted;
 		}
 	}
-	seen.delete(data);
+	WeakSetMethods.delete(seen, data);
 	return copy ?? data;
 }
 
@@ -11475,9 +11802,11 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 	// it had called it through `self` (#597): the call it is handed to would otherwise run it with its own rights.
 	const handed = handedLeafFunctions(thisArg, callArgs);
 	if (handed) {
-		for (const leaf of handed) {
+		for (let h = 0; h < handed.length; h++) {
+			const leaf = handed[h];
 			const leafPath = leaf.____slothletInternal.apiPath;
-			for (const caller of [callerWrapper, ...ceilings]) {
+			for (let ofIndex = 0, ofList = concatLists([callerWrapper], ceilings); ofIndex < ofList.length; ofIndex++) {
+				const caller = ofList[ofIndex];
 				runtime_enforceCallAs(leaf, permissionManager, caller, leafPath, runtimeContext, { args: [], target: leafPath }, false);
 			}
 		}
@@ -11485,9 +11814,12 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 	let gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
 	// Code a caller supplied to another call runs as the supplier, and every call of its ceiling has to allow
 	// the access as well (#597) — checked after the supplier, never instead of it.
-	for (const ceiling of ceilings) {
+	for (let i = 0; i < ceilings.length; i++) {
+		const ceiling = ceilings[i];
 		gate = gate
-			? gate.then(() => runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true))
+			? PromiseMethods.then(gate, () =>
+					runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true)
+				)
 			: runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
 	}
 	return gate;
@@ -11604,7 +11936,7 @@ const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
  * @private
  */
 function runtime_runAfterPrincipalGate(wrapper, gate, run) {
-	const promoted = gate.then(run);
+	const promoted = PromiseMethods.then(gate, run);
 	const impl = wrapper.____slothletInternal.impl;
 	const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
 	return leafIsAsync ? promoted : runtime_guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
@@ -11661,12 +11993,12 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
  */
 function runtime_registerLeafFunction(wrapper, impl) {
 	if (typeof impl === "function") {
-		trustedRootOwn.implWrappers.set(impl, wrapper);
+		WeakMapMethods.set(trustedRootOwn.implWrappers, impl, wrapper);
 		return;
 	}
 	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
 	const fallback = Objects.getOwnPropertyDescriptor(impl, "default")?.value;
-	if (typeof fallback === "function") trustedRootOwn.implWrappers.set(fallback, wrapper);
+	if (typeof fallback === "function") WeakMapMethods.set(trustedRootOwn.implWrappers, fallback, wrapper);
 }
 
 /**
@@ -11761,9 +12093,10 @@ const capturedViewNodes = new WeakMap();
  */
 function runtime_enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
 	let gate = runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
-	for (const call of identityCeilings({ currentWrapper: capturedCaller, ceiling })) {
+	for (let i = 0, calls = identityCeilings({ currentWrapper: capturedCaller, ceiling }); i < calls.length; i++) {
+		const call = calls[i];
 		gate = gate
-			? gate.then(() => runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
+			? PromiseMethods.then(gate, () => runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
 			: runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, promote);
 	}
 	return gate;
@@ -11838,7 +12171,7 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
  * @type {Set<string>}
  * @private
  */
-const FUNCTION_OWN_KEYS = new Set(["name", "length", "prototype", "arguments", "caller"]);
+const FUNCTION_OWN_KEYS = setFrom(["name", "length", "prototype", "arguments", "caller"]);
 
 /**
  * An empty function named as `fn` is: what `util.inspect` shows of a function, to hold the members a reader may read.
@@ -11853,7 +12186,7 @@ function runtime_namedFunction(fn) {
 	const name = typeof fn.name === "string" ? fn.name : "";
 	// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
 	// a method) shows none.
-	if (/^class\b/.test(functionSource(fn))) return { [name]: class {} }[name];
+	if (RegExpMethods.exec(/^class\b/, functionSource(fn)) !== null) return { [name]: class {} }[name];
 	if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
 	if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
 	if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
@@ -11912,20 +12245,20 @@ function runtime_isConstructor(fn) {
  */
 function runtime_capturedView(child, capturedCaller, gated = true, ceiling = null) {
 	// One ceiling per set of calls, without the reader's own: the cache key below.
-	ceiling = combineCeilings(...identityCeilings({ currentWrapper: capturedCaller, ceiling }));
+	ceiling = Reflect.apply(combineCeilings, undefined, identityCeilings({ currentWrapper: capturedCaller, ceiling }));
 	const views = gated === "held" ? heldViews : gated ? capturedViews : guardViews;
-	let byCeiling = views.get(capturedCaller);
+	let byCeiling = WeakMapMethods.get(views, capturedCaller);
 	if (!byCeiling) {
 		byCeiling = new WeakMap();
-		views.set(capturedCaller, byCeiling);
+		WeakMapMethods.set(views, capturedCaller, byCeiling);
 	}
 	const ceilingKey = ceiling ?? capturedCaller;
-	let byChild = byCeiling.get(ceilingKey);
+	let byChild = WeakMapMethods.get(byCeiling, ceilingKey);
 	if (!byChild) {
 		byChild = new WeakMap();
-		byCeiling.set(ceilingKey, byChild);
+		WeakMapMethods.set(byCeiling, ceilingKey, byChild);
 	}
-	const existing = byChild.get(child);
+	const existing = WeakMapMethods.get(byChild, child);
 	if (existing && !runtime_closedPrototypeStale(existing)) return existing;
 
 	// Enforcement reads `slothlet`, `apiPath`, and `filePath` off the internal wrapper. Those are
@@ -11937,7 +12270,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// loaded yet, which runs its node's code before any gate.
 	// A held view never answers for whoever accesses through it: the access is theirs, and the reader's as well.
 	const asKept = (access) =>
-		!gated || gated === "held" || STAND_INS.has(child) ? access() : runtime_accessAsKept(inner, capturedCaller, access);
+		!gated || gated === "held" || WeakSetMethods.has(STAND_INS, child) ? access() : runtime_accessAsKept(inner, capturedCaller, access);
 	// A read through a stand-in says who it reads for to the stand-in alone (see standInKeptRead).
 	const readKept = (access) => {
 		if (gated === "held") {
@@ -11949,7 +12282,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 				heldStandInRead = previous;
 			}
 		}
-		if (!gated || !STAND_INS.has(child)) return asKept(access);
+		if (!gated || !WeakSetMethods.has(STAND_INS, child)) return asKept(access);
 		const previous = standInKeptRead;
 		standInKeptRead = { standIn: inner, reader: capturedCaller };
 		try {
@@ -11972,7 +12305,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	let shadow;
 	if (Arrays.isArray(child)) shadow = [];
 	else if (typeof child !== "function") shadow = {};
-	else if (runtime_isConstructor(child)) shadow = function () {}.bind(null);
+	else if (runtime_isConstructor(child)) shadow = FunctionMethods.bind(function () {}, null);
 	else shadow = () => {};
 	let view = null;
 	// `util.inspect` describes a proxy by its target, without its traps: the shadow describes what the reader can
@@ -11994,7 +12327,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			try {
 				const proto = view.prototype;
 				if (proto !== null && typeof proto === "object") {
-					for (const key of Reflect.ownKeys(proto)) {
+					for (let ofIndex = 0, ofList = Reflect.ownKeys(proto); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						const descriptor = key === "constructor" ? undefined : Reflect.getOwnPropertyDescriptor(proto, key);
 						if (descriptor) Reflect.defineProperty(out.prototype, key, { ...descriptor, configurable: true });
 					}
@@ -12003,11 +12337,12 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 				if (error?.code !== "PERMISSION_DENIED") throw error;
 			}
 		}
-		for (const key of asKept(() => Reflect.ownKeys(child))) {
+		for (let k = 0, childKeys = asKept(() => Reflect.ownKeys(child)); k < childKeys.length; k++) {
+			const key = childKeys[k];
 			// Symbol members are left out, as the node's own inspect leaves them, and so are a function's own
 			// `name`, `length` and `prototype`, which the stand-in has of its own.
 			if (typeof key === "symbol") continue;
-			if (typeof child === "function" && FUNCTION_OWN_KEYS.has(key)) continue;
+			if (typeof child === "function" && SetMethods.has(FUNCTION_OWN_KEYS, key)) continue;
 			if (key === util.inspect.custom || (Arrays.isArray(child) && key === "length")) continue;
 			try {
 				const descriptor = Reflect.getOwnPropertyDescriptor(view, key);
@@ -12067,7 +12402,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			if (value === resolved) return resolved;
 		}
 		// The node's `toJSON` serializes as the module that kept the node, through this view, wherever it is called.
-		const serialize = typeof resolved === "function" ? SERIALIZERS.get(resolved) : undefined;
+		const serialize = typeof resolved === "function" ? WeakMapMethods.get(SERIALIZERS, resolved) : undefined;
 		// It also serializes for whoever serializes it, as each read through the view is gated for both.
 		if (serialize) {
 			return (...args) =>
@@ -12135,7 +12470,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		// Closed, the shadow holds the child's members and keeps its inspect hook, which the view lists as well: the
 		// shadow holds what the module holds, so `util.inspect` must never describe it directly.
 		const keys = asKept(() => Reflect.ownKeys(child));
-		for (const key of keys) {
+		for (let k = 0; k < keys.length; k++) {
+			const key = keys[k];
 			// What the module holds, for every member: one the reader may not read is still refused when it is read.
 			if (key === util.inspect.custom) continue;
 			const descriptor = rawDescriptor(key);
@@ -12154,7 +12490,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			const { shown: shownProto, parts } = runtime_closedPrototypeForReader(inner, behindProto, capturedCaller);
 			Reflect.setPrototypeOf(shadow, shownProto);
 			// Fixed for as long as the view lives: a view whose answer the reader's standing no longer gives is replaced.
-			CLOSED_PROTOTYPES.set(view, {
+			WeakMapMethods.set(CLOSED_PROTOTYPES, view, {
 				wrapper: inner,
 				prototype: behindProto,
 				reader: capturedCaller,
@@ -12168,7 +12504,8 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 	// shorter length — goes from the shadow too.
 	const pruneClosed = () => {
 		if (Reflect.isExtensible(shadow)) return;
-		for (const key of Reflect.ownKeys(shadow)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (key !== util.inspect.custom && !rawDescriptor(key)) Reflect.deleteProperty(shadow, key);
 		}
 	};
@@ -12197,7 +12534,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			if (!gated) return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stand-in a held view read was made for its reader, and checks the reader against the node it resolves
 			// to when called; a check here could only be made against the stand-in's base.
-			if (gated === "held" && STAND_INS.has(child))
+			if (gated === "held" && WeakSetMethods.has(STAND_INS, child))
 				return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
@@ -12218,7 +12555,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return call();
 		},
 		construct(_, args, newTarget) {
-			if (gated && !(gated === "held" && STAND_INS.has(child)))
+			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
 				runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
@@ -12273,8 +12610,9 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			const keys = asKept(() => Reflect.ownKeys(child));
 			// An open view lists what its reader may read, as it is listed in a call; a closed one lists every member,
 			// as the engine requires, and refuses those the reader may not read when they are read, and its inspect hook.
-			if (!Reflect.isExtensible(shadow)) return keys.includes(util.inspect.custom) ? keys : [...keys, util.inspect.custom];
-			return keys.filter((key) => readable(key) || Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable === false);
+			if (!Reflect.isExtensible(shadow))
+				return ArrayMethods.includes(keys, util.inspect.custom) ? keys : concatLists(keys, [util.inspect.custom]);
+			return filterList(keys, (key) => readable(key) || Reflect.getOwnPropertyDescriptor(shadow, key)?.configurable === false);
 		},
 		getPrototypeOf() {
 			mirrorClosed();
@@ -12336,14 +12674,14 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		}
 	});
 
-	byChild.set(child, view);
-	capturedViewChildren.set(view, inner);
-	capturedViewTargets.set(view, child);
-	capturedViewShadows.set(view, shadow);
+	WeakMapMethods.set(byChild, child, view);
+	WeakMapMethods.set(capturedViewChildren, view, inner);
+	WeakMapMethods.set(capturedViewTargets, view, child);
+	WeakMapMethods.set(capturedViewShadows, view, shadow);
 	// A held view stands for its node as a view that gates nothing does: stored, it stores the node.
-	if (gated !== true) GUARD_VIEWS.add(view);
-	capturedViewSet.add(view);
-	capturedViewNodes.set(view, child);
+	if (gated !== true) WeakSetMethods.add(GUARD_VIEWS, view);
+	WeakSetMethods.add(capturedViewSet, view);
+	WeakMapMethods.set(capturedViewNodes, view, child);
 	return view;
 }
 
@@ -12402,7 +12740,7 @@ const INSPECT_HOOKS = new WeakSet();
  * @private
  */
 function runtime_registerInspectHook(hook) {
-	INSPECT_HOOKS.add(hook);
+	WeakSetMethods.add(INSPECT_HOOKS, hook);
 	return hook;
 }
 
@@ -12452,7 +12790,12 @@ function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
 	/* v8 ignore next -- apiPath is always set on a resolved wrapper; guarded so a partially-built one
 	   cannot throw on the hot read path. */
 	// A symbol member's path ends in the symbol's description, as the child's path is built from `String(symbol)`.
-	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
+	if (
+		!innerPath ||
+		(typeof prop === "symbol"
+			? !StringMethods.endsWith(innerPath, `.${String(prop)}`)
+			: ArrayMethods.pop(splitText(innerPath, ".")) !== prop)
+	)
 		return value;
 
 	const capturedIdentity = runtime_accessIdentity(access, wrapper.slothlet.contextManager);
@@ -12495,7 +12838,7 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 			// Promise methods must run against the real promise (native brand checks reject
 			// proxies) — and ONLY those are rebound. Binding every function-valued property is
 			// observable: `constructor` would read back as a bound function instead of Promise.
-			if (prop === "then" || prop === "catch" || prop === "finally") return value.bind(target);
+			if (prop === "then" || prop === "catch" || prop === "finally") return FunctionMethods.bind(value, target);
 			return value;
 		}
 	});
@@ -12547,7 +12890,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 
 	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
 	// only then is the call's own flow captured for its next() to restore.
-	const flow = arounds.some((hook) => runtime_isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
+	const flow = ArrayMethods.some(arounds, (hook) => runtime_isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
 	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
 
 	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
@@ -12555,7 +12898,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!sources.some((entryRecord) => Objects.is(entryRecord.error, error))) sources.push({ error, source });
+		if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) ArrayMethods.push(sources, { error, source });
 	};
 	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
 	let unobserved = null;
@@ -12598,7 +12941,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const settleError = (error) => {
 		// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
 		// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
-		const recordedSource = sources.find((record) => Objects.is(record.error, error))?.source;
+		const recordedSource = ArrayMethods.find(sources, (record) => Objects.is(record.error, error))?.source;
 		const unrecorded = recordedSource === undefined && unobserved ? runtime_readTargetFailure(wrapper, error) : null;
 		const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
 		// A failure an inner hooked call already reported is not reported again (same rule as the
@@ -12768,12 +13111,10 @@ export const TYPE_STATES = {
  * @returns {string} Safe function name.
  */
 function getSafeFunctionName(apiPath, fallback) {
-	const parts = String(apiPath || "")
-		.split(".")
-		.filter((part) => part && part !== "null");
+	const parts = filterList(splitText(String(apiPath || ""), "."), (part) => part && part !== "null");
 	const baseName = parts.length > 0 ? parts[parts.length - 1] : "";
-	let safeName = String(baseName || "").replace(/[^A-Za-z0-9_$]/g, "_");
-	if (!safeName || !/^[A-Za-z_$]/.test(safeName[0])) {
+	let safeName = regExpReplace(/[^A-Za-z0-9_$]/g, String(baseName || ""), "_");
+	if (!safeName || !(RegExpMethods.exec(/^[A-Za-z_$]/, safeName[0]) !== null)) {
 		safeName = safeName ? `_${safeName}` : "";
 	}
 	return safeName || fallback;
@@ -12793,7 +13134,11 @@ function getSafeFunctionName(apiPath, fallback) {
  */
 function createNamedProxyTarget(nameHint, fallback) {
 	const safeName = getSafeFunctionName(nameHint, fallback);
-	return Objects.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
+	return Objects.defineProperty(
+		FunctionMethods.bind(function () {}),
+		"name",
+		{ value: safeName, configurable: true }
+	);
 }
 
 /**
@@ -12804,9 +13149,12 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 // A composition layer hands an api node back as it is instead of binding it as a method.
-setApiNodeCheck((value) => _proxyRegistry.has(value));
+setApiNodeCheck((value) => WeakMapMethods.has(_proxyRegistry, value));
 // An api node or a per-reader view handed to a leaf carries no code of its caller's (#597).
-setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(value), runtime_nodeHarborsCode);
+setApiValueCheck(
+	(value) => WeakMapMethods.has(_proxyRegistry, value) || WeakSetMethods.has(capturedViewSet, value),
+	runtime_nodeHarborsCode
+);
 
 /**
  * Whether an api node holds code that the paths running a module's code as that module do not reach (#597): an
@@ -12820,10 +13168,11 @@ setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(val
  * @private
  */
 function runtime_nodeHarborsCode(value) {
-	const wrapper = _proxyRegistry.get(capturedViewNodes.get(value) ?? value);
+	const wrapper = WeakMapMethods.get(_proxyRegistry, WeakMapMethods.get(capturedViewNodes, value) ?? value);
 	if (!wrapper) return false;
 	const holdsSymbolFunction = (holder) => {
-		for (const key of Objects.getOwnPropertySymbols(holder)) {
+		for (let ofIndex = 0, ofList = Objects.getOwnPropertySymbols(holder); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
 			if (descriptor && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
 		}
@@ -12835,12 +13184,13 @@ function runtime_nodeHarborsCode(value) {
 		if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
 		// A module's own Proxy runs its traps on every operation on the node (#597).
 		if (util.types.isProxy(impl)) return runtime_isModuleProxy(impl);
-		for (const key of Reflect.ownKeys(impl)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(impl); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(impl, key);
 			if (!descriptor) continue;
 			if (
-				(typeof descriptor.get === "function" && !ADOPTED_ACCESSORS.has(descriptor.get)) ||
-				(typeof descriptor.set === "function" && !ADOPTED_ACCESSORS.has(descriptor.set))
+				(typeof descriptor.get === "function" && !WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get)) ||
+				(typeof descriptor.set === "function" && !WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set))
 			)
 				return true;
 			if (typeof key === "symbol" && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
@@ -12866,8 +13216,12 @@ function runtime_nodeHarborsCode(value) {
  */
 export function findThen(value) {
 	const seen = new Set();
-	for (let current = value; current !== null && current !== undefined && !seen.has(current); current = Reflect.getPrototypeOf(current)) {
-		seen.add(current);
+	for (
+		let current = value;
+		current !== null && current !== undefined && !SetMethods.has(seen, current);
+		current = Reflect.getPrototypeOf(current)
+	) {
+		SetMethods.add(seen, current);
 		const descriptor = Reflect.getOwnPropertyDescriptor(current, "then");
 		if (descriptor) return descriptor;
 	}
@@ -12971,12 +13325,15 @@ function runtime_isRestartStale(wrapper) {
  */
 function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	const apiPath = wrapper.____slothletInternal.apiPath;
-	const segments = [...(apiPath ? String(apiPath).split(".") : []), ...propChain.map(String)];
+	const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
 	const fail = () => {
-		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { apiPath: segments.join(".") }, null, { validationError: true });
+		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { apiPath: ArrayMethods.join(segments, ".") }, null, {
+			validationError: true
+		});
 	};
 	let node = wrapper.____slothlet.api;
-	for (const segment of segments) {
+	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
+		const segment = ofList[ofIndex];
 		if (node === null || node === undefined) fail();
 		node = node[segment];
 	}
@@ -12999,15 +13356,15 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 function runtime_liveThis(value) {
 	// A view `self` handed out stays a view, of the live node, for the same reader (#625): the method
 	// never gets the node itself.
-	if (SELF_VIEW_NODES.has(value)) {
-		const node = SELF_VIEW_NODES.get(value);
+	if (WeakMapMethods.has(SELF_VIEW_NODES, value)) {
+		const node = WeakMapMethods.get(SELF_VIEW_NODES, value);
 		const live = runtime_liveThis(node);
-		return live === node ? value : runtime_selfView(live, SELF_VIEW_READERS.get(value));
+		return live === node ? value : runtime_selfView(live, WeakMapMethods.get(SELF_VIEW_READERS, value));
 	}
-	const wrapper = _proxyRegistry.get(value);
+	const wrapper = WeakMapMethods.get(_proxyRegistry, value);
 	// A stand-in for a chain below the wrapper resolves to the chain's live end (`new.target` of a construction
 	// through one, #685).
-	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper, WAITING_CHAINS.get(value));
+	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper, WeakMapMethods.get(WAITING_CHAINS, value));
 	return value;
 }
 
@@ -13049,7 +13406,7 @@ function runtime_isFixedOnTarget(target, prop) {
  * runtime_isArrayIndex("3"); // true
  */
 function runtime_isArrayIndex(prop) {
-	return typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+	return typeof prop === "string" && RegExpMethods.exec(/^(?:0|[1-9]\d*)$/, prop) !== null;
 }
 
 /**
@@ -13182,7 +13539,8 @@ function runtime_canDefine(object, prop, descriptor) {
 	if (current === undefined) return Reflect.isExtensible(object);
 	if (Arrays.isArray(object) && prop === "length" && "value" in descriptor) {
 		// Only the indices the array holds are checked: a sparse array can have any length up to 2^32 - 1.
-		for (const key of Reflect.ownKeys(object)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(object); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (
 				runtime_isArrayIndex(key) &&
 				// Keys from 2^32 - 1 up are ordinary properties, which a shorter length does not remove.
@@ -13276,7 +13634,7 @@ function runtime_elementAt(array, index) {
  * runtime_elementDescriptor(["a"], "0"); // { value: "a", ... }
  */
 function runtime_elementDescriptor(array, index) {
-	for (const holder of runtime_prototypeChain(array)) {
+	for (const holder of generatorSteps(runtime_prototypeChain(array))) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(holder, index);
 		if (descriptor) return descriptor;
 	}
@@ -13298,12 +13656,14 @@ function runtime_indexOfElement(array, value) {
 	// The positions the array holds and those its prototypes supply, lowest first; each is read as the array
 	// reads it, so a position an earlier object shadows answers with the shadowing value.
 	const keys = new Set();
-	for (const holder of runtime_prototypeChain(array)) {
-		for (const key of Reflect.ownKeys(holder)) {
-			if (runtime_isPosition(key)) keys.add(key);
+	for (const holder of generatorSteps(runtime_prototypeChain(array))) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(holder); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (runtime_isPosition(key)) SetMethods.add(keys, key);
 		}
 	}
-	for (const key of [...keys].sort((a, b) => Number(a) - Number(b))) {
+	for (let ofIndex = 0, ofList = ArrayMethods.sort(setToArray(keys), (a, b) => Number(a) - Number(b)); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (runtime_elementAt(array, key) === value) return key;
 	}
 	return null;
@@ -13460,7 +13820,7 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 	// A node fronting a module's own object defines on that object too, as freezing the object would (#757).
 	const holder = Arrays.isArray(impl)
 		? runtime_arrayKeyHolder(impl, prop)
-		: FRAMEWORK_WRITES.has(wrapper)
+		: MapMethods.has(FRAMEWORK_WRITES, wrapper)
 			? null
 			: runtime_moduleObjectOf(wrapper, prop);
 	const mirrors = holder !== null && hasOwn(holder, prop);
@@ -13559,11 +13919,12 @@ const RESTART_FORWARD_TRAPS = {
 	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
-		const keys = new Set(Reflect.ownKeys(NativeObject(live)));
-		for (const key of Reflect.ownKeys(target)) {
-			if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+		const keys = setFrom(Reflect.ownKeys(NativeObject(live)));
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (runtime_isFixedOnTarget(target, key)) SetMethods.add(keys, key);
 		}
-		return [...keys];
+		return setToArray(keys);
 	},
 	getOwnPropertyDescriptor: (live, target, prop) => {
 		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
@@ -13594,7 +13955,7 @@ const STAND_IN_UNLOADED = Symbol("slothlet.standInUnloaded");
  * @type {Set<string|symbol>}
  * @private
  */
-const STAND_IN_OWN_READS = new Set(["then", "__type", "__metadata", "__slothletPath", util.inspect.custom]);
+const STAND_IN_OWN_READS = setFrom(["then", "__type", "__metadata", "__slothletPath", util.inspect.custom]);
 
 /**
  * What a stand-in for a chain below a lazy node stands for, once the node has loaded: the chain read off the node now,
@@ -13609,7 +13970,8 @@ function runtime_standInNode(wrapper, propChain) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.invalid || !internal.state.materialized) return STAND_IN_UNLOADED;
 	let node = wrapper.createProxy();
-	for (const key of propChain) {
+	for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		if (node === null || node === undefined) return undefined;
 		node = node[key];
 	}
@@ -13648,7 +14010,10 @@ function runtime_standInMember(node, prop) {
  */
 function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 	const wrapped = {};
-	for (const [trap, original] of Objects.entries(handler)) {
+	for (let ofIndex = 0, ofList = Objects.entries(handler); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			trap = ofEntry[0],
+			original = ofEntry[1];
 		const forward = RESTART_FORWARD_TRAPS[trap];
 		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
 		// common, non-stale path must not allocate. No trap takes more than four arguments.
@@ -13660,7 +14025,7 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 				handedEntry = null;
 				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
 			}
-			return original.call(handler, a, b, c, d);
+			return FunctionMethods.call(original, handler, a, b, c, d);
 		};
 	}
 	return wrapped;
@@ -13689,7 +14054,10 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
  * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
  */
 function runtime_forwardHandlerTo(trapHandler, resolveLive) {
-	for (const [trap, forward] of Objects.entries(RESTART_FORWARD_TRAPS)) {
+	for (let ofIndex = 0, ofList = Objects.entries(RESTART_FORWARD_TRAPS); ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			trap = ofEntry[0],
+			forward = ofEntry[1];
 		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
 			// An access or a caller identity handed to the replaced proxy is not handed on to the node it forwards to.
 			handedAccessKey = null;
@@ -13715,7 +14083,8 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (const key of Objects.keys(node)) {
+	for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
@@ -13763,7 +14132,7 @@ function runtime_inspectLabel(text) {
  */
 function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
 	const internal = wrapper.____slothletInternal;
-	const childKeys = Objects.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
+	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
 	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
 	// A lazy node not loaded yet shows itself, a function proxy, which an inspector shows as a function without asking
 	// it again. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
@@ -13782,7 +14151,8 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	const label = runtime_codeLabel(layered ? layerUnderlying(internal.impl) : internal.impl);
 	const members = runtime_inspectMembers(wrapper);
 	if (Objects.keys(members).length === 0) return label;
-	const [, options, inspect] = args;
+	const options = args[1],
+		inspect = args[2];
 	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(members, options)}`;
 }
 
@@ -13823,7 +14193,7 @@ function runtime_codeLabel(fn) {
 	const isProxy = util.types.isProxy(fn);
 	const name = isProxy ? "" : runtime_dataName(fn);
 	const named = name === "" ? " (anonymous)" : null;
-	if (!isProxy && /^class[\s{]/.test(functionSource(fn))) {
+	if (!isProxy && RegExpMethods.exec(/^class[\s{]/, functionSource(fn)) !== null) {
 		// As util.inspect gives it: the class it extends, by that class's own name.
 		const parent = Reflect.getPrototypeOf(fn);
 		const parentName = typeof parent === "function" && !util.types.isProxy(parent) ? runtime_dataName(parent) : "";
@@ -13877,7 +14247,10 @@ function runtime_defineProxyInspect(wrapper, target) {
 			value: runtime_registerInspectHook(() => {
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = [];
-				for (const key of Objects.keys(node)) shown[key] = node[key];
+				for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					shown[key] = node[key];
+				}
 				shown.length = node.length;
 				return shown;
 			}),
@@ -13933,7 +14306,8 @@ function runtime_rootInspectShown(slothlet, args) {
 	const reader = runtime_selfModuleReader(slothlet);
 	const root = reader ? runtime_selfRootView(slothlet, reader) : slothlet.boundApi;
 	const shown = {};
-	for (const key of Objects.keys(root)) {
+	for (let ofIndex = 0, ofList = Objects.keys(root); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
 		try {
 			shown[key] = reader ? runtime_rootMemberShown(root[key], args) : root[key];
 		} catch (error) {
@@ -13944,7 +14318,8 @@ function runtime_rootInspectShown(slothlet, args) {
 	if (typeof api !== "function") return shown;
 	const label = runtime_codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
 	if (Objects.keys(shown).length === 0) return label;
-	const [, options, inspect] = args;
+	const options = args[1],
+		inspect = args[2];
 	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(shown, options)}`;
 }
 
@@ -13959,7 +14334,9 @@ function runtime_rootInspectShown(slothlet, args) {
  */
 function runtime_rootMemberShown(value, args) {
 	const behind =
-		value !== null && (typeof value === "object" || typeof value === "function") ? FRAMEWORK_VIEW_TARGETS.get(value) : undefined;
+		value !== null && (typeof value === "object" || typeof value === "function")
+			? WeakMapMethods.get(FRAMEWORK_VIEW_TARGETS, value)
+			: undefined;
 	if (behind !== undefined && typeof value === "object") return value;
 	const safe = runtime_inspectSafe(value, args, true);
 	if (typeof safe !== "string" || safe === value) return safe;
@@ -14108,7 +14485,7 @@ class UnifiedWrapper extends ComponentBase {
 		const isCallableLocked = isCallableValue || isCallableExplicit;
 
 		const internal = Objects.create(null);
-		internal.id = Math.random().toString(36).substr(2, 9); // Unique ID for debugging
+		internal.id = StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9); // Unique ID for debugging
 		internal.mode = mode;
 		internal.apiPath = apiPath;
 		if (__position) {
@@ -14135,7 +14512,7 @@ class UnifiedWrapper extends ComponentBase {
 		const originIndex = slothlet.handlers?.ownership;
 		const isPrimitiveImpl =
 			initialImpl !== null && initialImpl !== undefined && typeof initialImpl !== "object" && typeof initialImpl !== "function";
-		const ownKey = typeof apiPath === "string" ? apiPath.slice(apiPath.lastIndexOf(".") + 1) : null;
+		const ownKey = typeof apiPath === "string" ? StringMethods.slice(apiPath, StringMethods.lastIndexOf(apiPath, ".") + 1) : null;
 		internal.exportPath =
 			exportPath !== undefined
 				? exportPath
@@ -14145,7 +14522,7 @@ class UnifiedWrapper extends ComponentBase {
 		internal.memberExportPaths = originIndex?.resolveMemberExportPaths(filePath, initialImpl) ?? null;
 		internal.sourceFolder = sourceFolder;
 		// The folder's entry names (#571), so a member wins over the wrapper's own answers; null when unknown.
-		internal.memberNames = memberNames ? new Set(memberNames) : null;
+		internal.memberNames = memberNames ? setFrom(memberNames) : null;
 		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
 		internal.adoptVisited = __adoptVisited;
 		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
@@ -14159,7 +14536,7 @@ class UnifiedWrapper extends ComponentBase {
 			inFlight: false,
 			collisionMode: "merge"
 		};
-		internal.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
+		internal.displayName = apiPath ? `${regExpReplace(/\./g, String(apiPath), "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		// These are set dynamically by api-assignment.mjs during collision handling:
 		// internal.collisionMergedKeys - Set of keys merged from another wrapper
 		// internal.childFilePathsPreMaterialize - Map of child key → file path
@@ -14285,22 +14662,30 @@ class UnifiedWrapper extends ComponentBase {
 
 		if (initialImpl !== null && !deferChildAdopt) {
 			const implKeys = Objects.keys(initialImpl || {});
-			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+			if (
+				(wrapperDebugEnabled || this.____config?.debug?.wrapper) &&
+				apiPath &&
+				(apiPath === "config" || StringMethods.startsWith(apiPath, "config."))
+			) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS",
 					apiPath,
 					keyCount: implKeys.length,
-					keySample: implKeys.slice(0, 5)
+					keySample: copyList(implKeys, 0, 5)
 				});
 			}
 			this.___adoptImplChildren();
-			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				const childKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
+			if (
+				(wrapperDebugEnabled || this.____config?.debug?.wrapper) &&
+				apiPath &&
+				(apiPath === "config" || StringMethods.startsWith(apiPath, "config."))
+			) {
+				const childKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
 					childCount: childKeys.length,
-					childKeySample: childKeys.slice(0, 5)
+					childKeySample: copyList(childKeys, 0, 5)
 				});
 			}
 		}
@@ -14315,7 +14700,7 @@ class UnifiedWrapper extends ComponentBase {
 				// Fire-and-forget: don't await, let it materialize in background
 				scheduleMacrotask(
 					() => {
-						this._materialize().catch((err) => {
+						PromiseMethods.catch(this._materialize(), (err) => {
 							// Silently catch errors - background materialization is best-effort
 							// The FALSE branch (debug off, error silently dropped) requires inducing a background
 							// materialization failure without debug.materialize enabled — not testable deterministically.
@@ -14352,12 +14737,13 @@ class UnifiedWrapper extends ComponentBase {
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
-		const w = _proxyRegistry.get(this) ?? this;
+		const w = WeakMapMethods.get(_proxyRegistry, this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
-		const childKeys = Objects.keys(w).filter((k) => !isFrameworkReservedKey(k));
+		const childKeys = filterList(Objects.keys(w), (k) => !isFrameworkReservedKey(k));
 		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
 			const inspectObj = {};
-			for (const key of childKeys) {
+			for (let ofIndex = 0, ofList = childKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				// Return the proxy/wrapper directly - Node will recursively inspect it
 				inspectObj[key] = w[key];
 			}
@@ -14410,7 +14796,8 @@ class UnifiedWrapper extends ComponentBase {
 		/* v8 ignore start */
 		if (value && typeof value === "object" && resolveWrapper(value)) {
 			const clone = {};
-			for (const key of Reflect.ownKeys(value)) {
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				try {
 					clone[key] = value[key];
 				} catch {
@@ -14452,7 +14839,7 @@ class UnifiedWrapper extends ComponentBase {
 	 */
 	static _copyMember(source, target, key) {
 		const descriptor = Objects.getOwnPropertyDescriptor(source, key);
-		if (descriptor && (ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set))) {
+		if (descriptor && (WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set))) {
 			runtime_defineAdoptedAccessor(target, key, runtime_originalAccessor(descriptor));
 			return;
 		}
@@ -14498,7 +14885,8 @@ class UnifiedWrapper extends ComponentBase {
 	 * @package
 	 */
 	static _recordSourceFile(wrapper, filePath) {
-		if (wrapper && typeof filePath === "string" && trustedRootOwn.genuineWrappers.has(wrapper)) registerLeafFile(wrapper, filePath);
+		if (wrapper && typeof filePath === "string" && WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper))
+			registerLeafFile(wrapper, filePath);
 	}
 
 	/**
@@ -14600,14 +14988,18 @@ class UnifiedWrapper extends ComponentBase {
 		// Members adoption moved from the layer onto the wrapper are held on the copy again.
 		// An array with nothing beside it is returned itself, the module's own array the wrapper fronts: a
 		// reload that hands it to a reused wrapper keeps writes through a held reference reaching it (#602).
-		const extractFullImpl_hasMembers = Objects.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key));
+		const extractFullImpl_hasMembers = ArrayMethods.some(
+			Objects.keys(wrapper),
+			(key) => !SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, key)
+		);
 		if (Arrays.isArray(impl) && !isCompositionLayer(impl) && !extractFullImpl_hasMembers) return impl;
 		if (isCompositionLayer(impl) || Arrays.isArray(impl)) {
 			const extractFullImpl_layer = copyForComposition(impl, {
 				addsMembers: Arrays.isArray(impl) && extractFullImpl_hasMembers
 			});
-			for (const key of Objects.keys(wrapper)) {
-				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
+			for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
 				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
 				holdMember(
 					extractFullImpl_layer,
@@ -14640,10 +15032,12 @@ class UnifiedWrapper extends ComponentBase {
 				const answered = resolveWrapper(read.value);
 				serialized[key] = answered ? UnifiedWrapper._extractFullImpl(answered, readMember) : read.value;
 			};
-			for (const key of Objects.keys(wrapper)) {
-				if (!UnifiedWrapper.INTERNAL_KEYS.has(key)) take(key, wrapper);
+			for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (!SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, key)) take(key, wrapper);
 			}
-			for (const key of Objects.keys(impl)) {
+			for (let ofIndex = 0, ofList = Objects.keys(impl); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				if (!isFrameworkReservedKey(key) && !hasOwn(serialized, key) && !hasOwn(wrapper, key)) take(key, impl);
 			}
 			return serialized;
@@ -14653,10 +15047,11 @@ class UnifiedWrapper extends ComponentBase {
 		const extractFullImpl_result = {};
 		// A node rebuilt from the reconstruction fronts the module's object this one does (#746).
 		if (wrapper.____slothletInternal.moduleObject)
-			RECONSTRUCTED_FROM.set(extractFullImpl_result, wrapper.____slothletInternal.moduleObject);
+			WeakMapMethods.set(RECONSTRUCTED_FROM, extractFullImpl_result, wrapper.____slothletInternal.moduleObject);
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
-		for (const key of Objects.keys(impl)) {
+		for (let ofIndex = 0, ofList = Objects.keys(impl); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
 			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
 			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
@@ -14691,10 +15086,11 @@ class UnifiedWrapper extends ComponentBase {
 
 		// Add adopted children from wrapper's own enumerable keys.
 		// Skip all framework-reserved keys — user module properties with any prefix are fine.
-		for (const key of Objects.keys(wrapper)) {
+		for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// Wrapper own keys are user-facing API names; INTERNAL_KEYS never appear as own enumerable keys.
 			/* v8 ignore next */
-			if (UnifiedWrapper.INTERNAL_KEYS.has(key)) continue;
+			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, key)) continue;
 			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
 
 			const extractFullImpl_child = wrapper[key];
@@ -14933,7 +15329,7 @@ class UnifiedWrapper extends ComponentBase {
 		const newProxy = new NativeProxy(target, traps);
 		internal.proxy = newProxy;
 		if (Arrays.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
-		_proxyRegistry.set(newProxy, wrapper);
+		WeakMapMethods.set(_proxyRegistry, newProxy, wrapper);
 		// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
 		if (!Arrays.isArray(target)) {
 			internal.proxyHandler = handler;
@@ -14997,11 +15393,12 @@ class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___replaceInParent(oldProxy, newProxy);
 	 */
 	___replaceInParent(oldProxy, newProxy) {
-		const segments = String(this.____slothletInternal.apiPath).split(".");
+		const segments = splitText(String(this.____slothletInternal.apiPath), ".");
 		const key = segments[segments.length - 1];
 		let holder = null;
 		let node = this.slothlet.api;
-		for (const segment of segments) {
+		for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
 			// Raw wrappers hold their children as own data properties, so this read runs no trap.
 			holder = resolveWrapper(node) ?? node;
 			node = holder?.[segment];
@@ -15108,11 +15505,12 @@ class UnifiedWrapper extends ComponentBase {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
 			hadImpl: this.____slothletInternal.impl !== null,
-			hadChildren: Objects.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
+			hadChildren: filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k)).length
 		});
 
 		// Invalidate and clear all child wrappers
-		for (const key of Reflect.ownKeys(this)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(this); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// All own properties are user-facing API names; internal state lives in #internal (private field), never in own keys.
 			/* v8 ignore next */
 			if (isFrameworkReservedKey(key)) {
@@ -15147,13 +15545,13 @@ class UnifiedWrapper extends ComponentBase {
 
 		// Swap in the fresh materialization function
 		this.____slothletInternal.materializeFunc = newMaterializeFunc;
-		this.____slothletInternal.memberNames = memberNames ? new Set(memberNames) : null;
+		this.____slothletInternal.memberNames = memberNames ? setFrom(memberNames) : null;
 
 		// Clear waiting proxy caches - stale references from previous materialization.
 		// waitingProxyCache is always initialized to a Map in the constructor; null check is unreachable.
 		/* v8 ignore next */
 		if (this.____slothletInternal.waitingProxyCache) {
-			this.____slothletInternal.waitingProxyCache.clear();
+			MapMethods.clear(this.____slothletInternal.waitingProxyCache);
 		}
 		// WeakMap has no clear(); replace with a fresh instance so any inner Maps held
 		// by GC-reachable context objects are dropped along with their cached proxies.
@@ -15295,7 +15693,9 @@ class UnifiedWrapper extends ComponentBase {
 				// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
 				if (!this.____slothletInternal.state.materialized) {
 					this.____slothletInternal.pendingChanges = null;
-					PENDING_CHANGES.get(this.slothlet)?.delete(this);
+					WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
+						? undefined
+						: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
 				}
 				// CRITICAL: Always clear inFlight flag and promise reference
 				this.____slothletInternal.state.inFlight = false;
@@ -15373,7 +15773,8 @@ class UnifiedWrapper extends ComponentBase {
 			UnifiedWrapper._invalidateTree(direct, seen);
 			return;
 		}
-		for (const key of Objects.keys(impl)) {
+		for (let ofIndex = 0, ofList = Objects.keys(impl); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Objects.getOwnPropertyDescriptor(impl, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
@@ -15392,9 +15793,10 @@ class UnifiedWrapper extends ComponentBase {
 	 * UnifiedWrapper._invalidateTree(wrapper, new Set());
 	 */
 	static _invalidateTree(wrapper, seen) {
-		if (seen.has(wrapper)) return;
-		seen.add(wrapper);
-		for (const key of Objects.keys(wrapper)) {
+		if (SetMethods.has(seen, wrapper)) return;
+		SetMethods.add(seen, wrapper);
+		for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
 			if (child) UnifiedWrapper._invalidateTree(child, seen);
@@ -15493,12 +15895,13 @@ class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * if (internal.lazyCount === "parked") wrapper.___parkChildren();
 	 */
-	___parkChildren(seen = new Set([this])) {
-		for (const key of Objects.keys(this)) {
+	___parkChildren(seen = setFrom([this])) {
+		for (let ofIndex = 0, ofList = Objects.keys(this); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
-			if (!child || seen.has(child)) continue;
-			seen.add(child);
+			if (!child || SetMethods.has(seen, child)) continue;
+			SetMethods.add(seen, child);
 			child.___trackLazyLoad("park");
 			child.___parkChildren(seen);
 		}
@@ -15519,14 +15922,17 @@ class UnifiedWrapper extends ComponentBase {
 		this.___trackLazyLoad("discard");
 		// Nor takes the changes queued for it, and the refusals of those made on it go with it (#653).
 		this.____slothletInternal.pendingChanges = null;
-		PENDING_CHANGES.get(this.slothlet)?.delete(this);
+		WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
+			? undefined
+			: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
 		this.____slothletInternal.changeGeneration++;
 		runtime_dropRefusedChanges(this);
 		this.____slothletInternal.invalid = true;
 		this.____slothletInternal.impl = null;
 		this.____slothletInternal.nullish = null;
 		// Clear all child properties from wrapper (filter internals)
-		for (const key of Reflect.ownKeys(this)) {
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(this); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// All own properties on a wrapper are user-facing API names; internal state lives in #internal (private field), never in own keys.
 			/* v8 ignore next */
 			if (isFrameworkReservedKey(key)) {
@@ -15550,7 +15956,8 @@ class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	___isUserAssignedKey(key) {
-		if (this.____slothletInternal.userAssignedKeys?.has(key)) return true;
+		if (this.____slothletInternal.userAssignedKeys == null ? undefined : SetMethods.has(this.____slothletInternal.userAssignedKeys, key))
+			return true;
 		return resolveWrapper(this[key])?.____slothletInternal?.userAssigned === true;
 	}
 
@@ -15566,14 +15973,14 @@ class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___adoptImplChildren();
 	 */
 	___adoptImplChildren(forceReuseChildren = false) {
-		const preExistingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const preExistingKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_ADOPT_START",
 			apiPath: this.____slothletInternal.apiPath,
 			// Every wrapper is assigned a unique id at construction; "no-id" fallback is unreachable.
 			/* v8 ignore next */
 			wrapperId: this.____slothletInternal.id || "no-id",
-			preExistingKeys: preExistingKeys.join(","),
+			preExistingKeys: ArrayMethods.join(preExistingKeys, ","),
 			collisionMode: this.____slothletInternal.state.collisionMode
 		});
 
@@ -15649,7 +16056,7 @@ class UnifiedWrapper extends ComponentBase {
 
 		const ownKeys = uw_isLayer ? layerHeldKeys(this.____slothletInternal.impl) : Reflect.ownKeys(this.____slothletInternal.impl);
 
-		const internalKeys = new Set([
+		const internalKeys = setFrom([
 			"__impl",
 			"___setImpl",
 			"___resetLazy",
@@ -15671,14 +16078,14 @@ class UnifiedWrapper extends ComponentBase {
 			typeof this.____slothletInternal.impl === "object" &&
 			typeof this.____slothletInternal.impl.default === "function"
 		) {
-			internalKeys.add("default");
+			SetMethods.add(internalKeys, "default");
 		}
 		const observedKeys = new Set();
 
 		// CRITICAL: Check stored collision mode to determine how to handle existing properties
 		// - For "replace" mode: Clear existing properties before adopting new ones
 		// - For "merge" or "merge-replace": Keep existing properties and merge
-		const existingKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
+		const existingKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
 		const storedCollisionMode = this.____slothletInternal.state.collisionMode; // Set during collision in api-assignment.mjs
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
@@ -15687,7 +16094,7 @@ class UnifiedWrapper extends ComponentBase {
 			apiPath: this.____slothletInternal.apiPath,
 			mode: this.____slothletInternal.mode,
 			storedCollisionMode,
-			existingKeys: existingKeys.join(","),
+			existingKeys: ArrayMethods.join(existingKeys, ","),
 			isMergeScenario
 		});
 
@@ -15701,19 +16108,20 @@ class UnifiedWrapper extends ComponentBase {
 				count: existingKeys.length
 			});
 
-			for (const key of existingKeys) {
+			for (let ofIndex = 0, ofList = existingKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				// A value the user assigned onto this wrapper is not a stale child of the replaced content —
 				// it belongs to neither module (a lazy wrapper can be assigned to while its materialization is
 				// still in flight, and only then does this adoption run). Keep it, and mark it observed so the
 				// sweep below leaves it alone too (#543). A key the new impl also provides is still resolved
 				// by the per-key loop, which keeps a userAssigned wrapper over the module's value.
 				if (this.___isUserAssignedKey(key)) {
-					observedKeys.add(key);
+					SetMethods.add(observedKeys, key);
 					continue;
 				}
 				const child = this[key];
 				if (resolveWrapper(child) !== null) {
-					savedChildren.set(key, child);
+					MapMethods.set(savedChildren, key, child);
 				}
 				const descriptor = Objects.getOwnPropertyDescriptor(this, key);
 				if (descriptor?.configurable) {
@@ -15723,24 +16131,26 @@ class UnifiedWrapper extends ComponentBase {
 			// Don't add to observedKeys - let them be replaced
 		} else {
 			// For merge modes, add existing wrapper keys to observedKeys so they don't get deleted
-			for (const key of existingKeys) {
-				observedKeys.add(key);
+			for (let ofIndex = 0, ofList = existingKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				SetMethods.add(observedKeys, key);
 			}
 		}
 
 		// Define metadata/helper keys that should never be adopted as children
-		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
-		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
+		const metadataKeys = setFrom(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+		const skipKeys = typeof this.____slothletInternal.impl === "function" ? setFrom(["length", "name", "prototype"]) : null;
 
-		for (const key of ownKeys) {
-			if (internalKeys.has(key)) {
+		for (let ofIndex = 0, ofList = ownKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (SetMethods.has(internalKeys, key)) {
 				continue;
 			}
 			// Skip metadata/helper keys
-			if (typeof key === "string" && metadataKeys.has(key)) {
+			if (typeof key === "string" && SetMethods.has(metadataKeys, key)) {
 				continue;
 			}
-			if (skipKeys && typeof key === "string" && skipKeys.has(key)) {
+			if (skipKeys && typeof key === "string" && SetMethods.has(skipKeys, key)) {
 				continue;
 			}
 			// DEFENSIVE: _impl might have changed during iteration (shouldn't happen, but safety first)
@@ -15782,10 +16192,14 @@ class UnifiedWrapper extends ComponentBase {
 			// does: adoption moves the object's other members onto the wrapper and deletes them from the impl,
 			// so a getter reading `this.items` would find them gone on the impl.
 			if (typeof descriptor.get === "function" || typeof descriptor.set === "function") {
-				observedKeys.add(key);
+				SetMethods.add(observedKeys, key);
 				// A member the other side of a collision won (`collisionMergedKeys`) keeps its place, as a data
 				// member does below; the getter is left unadopted (#585 review).
-				if (hasOwn(this, key) && this.____slothletInternal.collisionMergedKeys?.has(key) && !forceReuseChildren) {
+				if (
+					hasOwn(this, key) &&
+					(this.____slothletInternal.collisionMergedKeys ? SetMethods.has(this.____slothletInternal.collisionMergedKeys, key) : false) &&
+					!forceReuseChildren
+				) {
 					delete this.____slothletInternal.impl[key];
 					continue;
 				}
@@ -15811,7 +16225,7 @@ class UnifiedWrapper extends ComponentBase {
 					valueName: value?.name
 				});
 			}
-			observedKeys.add(key);
+			SetMethods.add(observedKeys, key);
 
 			// CRITICAL: Check if wrapper already has this key (from collision merge)
 			// Use hasOwn to avoid matching ComponentBase prototype getters (config, debug)
@@ -15826,10 +16240,13 @@ class UnifiedWrapper extends ComponentBase {
 						apiPath: this.____slothletInternal.apiPath,
 						propKey: key,
 						has__collisionMergedKeys: !!this.____slothletInternal.collisionMergedKeys,
-						inSet: this.____slothletInternal.collisionMergedKeys?.has(key)
+						inSet: this.____slothletInternal.collisionMergedKeys
+							? SetMethods.has(this.____slothletInternal.collisionMergedKeys, key)
+							: false
 					});
 				}
-				const isCollisionMerged = this.____slothletInternal.collisionMergedKeys && this.____slothletInternal.collisionMergedKeys.has(key);
+				const isCollisionMerged =
+					this.____slothletInternal.collisionMergedKeys && SetMethods.has(this.____slothletInternal.collisionMergedKeys, key);
 
 				if (isCollisionMerged && !forceReuseChildren) {
 					// Collision-merged means this key came from file exports that won during merge.
@@ -15873,7 +16290,7 @@ class UnifiedWrapper extends ComponentBase {
 			// own properties, prototype getters (e.g. ComponentBase's '____config', 'debug')
 			// shadow the lookup - this[key] returns the prototype getter result (truthy
 			// but not a wrapper), preventing the || fallback from reaching savedChildren.
-			const existingChild = savedChildren.get(key) || this[key];
+			const existingChild = MapMethods.get(savedChildren, key) || this[key];
 			let wrapped;
 
 			// LAZY REFERENCE CONTRACT: In lazy+replace mode (reload), do NOT reuse
@@ -15911,9 +16328,9 @@ class UnifiedWrapper extends ComponentBase {
 						typeof rawImpl === "object" &&
 						!Arrays.isArray(rawImpl) &&
 						typeof rawImpl !== "function" &&
-						Objects.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
+						filterList(Objects.keys(rawImpl), (k) => !isFrameworkReservedKey(k)).length === 0
 					) {
-						const wrapperOwnKeys = Objects.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
+						const wrapperOwnKeys = filterList(Objects.keys(newWrapper), (k) => !isFrameworkReservedKey(k));
 						// A depleted impl always means the wrapper has its own keys (those being the "depletees"); `length===0` is unreachable.
 						/* v8 ignore next */
 						if (wrapperOwnKeys.length > 0) {
@@ -16135,9 +16552,10 @@ class UnifiedWrapper extends ComponentBase {
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
-			const currentKeys = Objects.keys(this).filter((k) => !isFrameworkReservedKey(k));
-			for (const key of currentKeys) {
-				if (!observedKeys.has(key)) {
+			const currentKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
+			for (let ofIndex = 0, ofList = currentKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (!SetMethods.has(observedKeys, key)) {
 					const existing = this[key];
 					const existingRaw = resolveWrapper(existing);
 					// In the cleanup path, `existing` is always a wrapper proxy (it was defined from a prior ___setImpl); `existingRaw` is never null here.
@@ -16165,8 +16583,9 @@ class UnifiedWrapper extends ComponentBase {
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
-			const existingKeys = Objects.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
-			for (const key of existingKeys) {
+			const existingKeys = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
+			for (let ofIndex = 0, ofList = existingKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				if (!(key in this)) {
 					const child = existingWrapper[key];
 					Objects.defineProperty(this, key, {
@@ -16270,7 +16689,7 @@ class UnifiedWrapper extends ComponentBase {
 		const trackCycle = typeof value === "object" || typeof value === "function";
 		if (trackCycle) {
 			visited ??= new WeakSet();
-			if (visited.has(value)) {
+			if (WeakSetMethods.has(visited, value)) {
 				return null;
 			}
 		}
@@ -16326,7 +16745,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
-					keys: Objects.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
+					keys: ArrayMethods.join(Objects.keys(this.____slothletInternal.impl.__childFilePaths), ","),
 					propKey: keyStr,
 					found: !!this.____slothletInternal.impl.__childFilePaths[key]
 				});
@@ -16402,9 +16821,9 @@ class UnifiedWrapper extends ComponentBase {
 			const memberExportPaths = sameFileAsParent ? parentInternal.memberExportPaths : null;
 			const recordedMember = memberExportPaths && hasOwn(memberExportPaths, keyName) ? memberExportPaths[keyName] : undefined;
 			if (recordedMember) {
-				childExportPath = [...recordedMember];
+				childExportPath = copyList(recordedMember);
 			} else if (sameFileAsParent && parentInternal.exportPath) {
-				childExportPath = originIndex?.resolveExportPath(childFilePath, value) ?? [...parentInternal.exportPath, keyName];
+				childExportPath = originIndex?.resolveExportPath(childFilePath, value) ?? concatLists(parentInternal.exportPath, [keyName]);
 			} else {
 				childExportPath =
 					originIndex?.resolveExportPath(childFilePath, value) ??
@@ -16417,7 +16836,7 @@ class UnifiedWrapper extends ComponentBase {
 		// same reference reached again THROUGH this subtree (a cycle) bails, but a sibling reuse does
 		// not. `finally` guarantees the unmark even if construction throws (#330).
 		if (trackCycle) {
-			visited.add(value);
+			WeakSetMethods.add(visited, value);
 		}
 		// An array element's path is where the element sits now, and so is the path of everything below it
 		// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
@@ -16449,7 +16868,7 @@ class UnifiedWrapper extends ComponentBase {
 			});
 		} finally {
 			if (trackCycle) {
-				visited.delete(value);
+				WeakSetMethods.delete(visited, value);
 			}
 		}
 		// The value the child was built from (before any clone), so a parent array can tell whether the
@@ -16537,11 +16956,12 @@ class UnifiedWrapper extends ComponentBase {
 		// first. External readers (no caller) share a single "::" prefix since the read
 		// gate exempts them anyway.
 		// A ceiling (#597) is part of who is reading, so a proxy read under one is never shared with one read without.
-		const __ceilingKey = identityCeilings(__readGateCaller)
-			.map((call) => call.____slothletInternal?.apiPath)
-			.join("^");
+		const __ceilingKey = ArrayMethods.join(
+			mapList(identityCeilings(__readGateCaller), (call) => call.____slothletInternal?.apiPath),
+			"^"
+		);
 		const __callerKey = (__readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "") + (__ceilingKey ? `^${__ceilingKey}` : "");
-		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
+		const cacheKey = `${__callerKey}::${ArrayMethods.join(propChain, ".")}`;
 
 		// Request-context bucketing on top of the cache key: conditional rules
 		// (e.g. `condition: { scope: "restricted" }`) evaluate against the snapshotted
@@ -16556,18 +16976,18 @@ class UnifiedWrapper extends ComponentBase {
 		const useContextBucket = __readGateContextRef && typeof __readGateContextRef === "object";
 		let cache;
 		if (useContextBucket) {
-			cache = wrapper.____slothletInternal.waitingProxyCacheByContext.get(__readGateContextRef);
+			cache = WeakMapMethods.get(wrapper.____slothletInternal.waitingProxyCacheByContext, __readGateContextRef);
 			if (!cache) {
 				cache = new Map();
-				wrapper.____slothletInternal.waitingProxyCacheByContext.set(__readGateContextRef, cache);
+				WeakMapMethods.set(wrapper.____slothletInternal.waitingProxyCacheByContext, __readGateContextRef, cache);
 			}
 		} else {
 			cache = wrapper.____slothletInternal.waitingProxyCache;
 		}
 
 		// Return cached waiting proxy if it exists in the selected bucket
-		if (cache.has(cacheKey)) {
-			return cache.get(cacheKey);
+		if (MapMethods.has(cache, cacheKey)) {
+			return MapMethods.get(cache, cacheKey);
 		}
 
 		// Waiting proxies always use function target since they represent unknown/in-flight values
@@ -16584,8 +17004,8 @@ class UnifiedWrapper extends ComponentBase {
 		// as whoever made it, when it has not (see runtime_replayStandInChanges).
 		const nodePath = () => runtime_standInPath(wrapper, propChain);
 		const assertChange = (prop) => {
-			const parts = nodePath().split(".").filter(Boolean);
-			if (typeof prop === "string") parts.push(prop);
+			const parts = filterList(splitText(nodePath(), "."), Boolean);
+			if (typeof prop === "string") ArrayMethods.push(parts, prop);
 			runtime_assertOwnedWriteAt(wrapper, parts);
 		};
 		// What the code reading now (its module, or the host) last did to `prop` through a stand-in for this node while it
@@ -16596,9 +17016,10 @@ class UnifiedWrapper extends ComponentBase {
 			if (!pending) return null;
 			const reader = runtime_changeAuthor(wrapper.slothlet.contextManager.getCallerIdentity(wrapper.slothlet.instanceID));
 			let member = null;
-			for (const change of pending) {
+			for (let i = 0; i < pending.length; i++) {
+				const change = pending[i];
 				if (change.prop !== prop || change.by !== reader) continue;
-				if (change.chain.length !== propChain.length || change.chain.some((key, index) => key !== propChain[index])) continue;
+				if (change.chain.length !== propChain.length || ArrayMethods.some(change.chain, (key, index) => key !== propChain[index])) continue;
 				if (change.op === "set") member = { value: change.payload, writable: true, enumerable: true, configurable: true };
 				else if (change.op === "defineProperty") {
 					const { get, set, value, writable, enumerable } = change.payload;
@@ -16674,7 +17095,7 @@ class UnifiedWrapper extends ComponentBase {
 				// stand-in is closed as the engine closes it, and the node is closed the same way after the changes made
 				// before it: what the stand-in's target reads as once the operation is done (see runtime_lockAsStandIn).
 				if (Reflect.isExtensible(target)) {
-					const change = { chain: [...propChain], op: "lock", prop: null, payload: target };
+					const change = { chain: copyList(propChain), op: "lock", prop: null, payload: target };
 					if (wrapper.____slothletInternal.state.materialized) {
 						const queued = runtime_captureChange(wrapper, change);
 						const generation = wrapper.____slothletInternal.changeGeneration;
@@ -16796,7 +17217,12 @@ class UnifiedWrapper extends ComponentBase {
 									if (__chainIndex < propChain.length - 1) {
 										const descendedChild = __descendRest(child, __chainIndex + 1);
 										if (descendedChild !== undefined) {
-											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedChild, __readGateCaller);
+											runtime_enforceReadGate(
+												current,
+												ArrayMethods.join(copyList(propChain, __chainIndex), "."),
+												descendedChild,
+												__readGateCaller
+											);
 										}
 										return descendedChild;
 									}
@@ -16821,7 +17247,12 @@ class UnifiedWrapper extends ComponentBase {
 									if (__chainIndex < propChain.length - 1) {
 										const descendedImpl = __descendRest(implValue, __chainIndex + 1);
 										if (descendedImpl !== undefined) {
-											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedImpl, __readGateCaller);
+											runtime_enforceReadGate(
+												current,
+												ArrayMethods.join(copyList(propChain, __chainIndex), "."),
+												descendedImpl,
+												__readGateCaller
+											);
 										}
 										return descendedImpl;
 									}
@@ -16874,7 +17305,10 @@ class UnifiedWrapper extends ComponentBase {
 							// unchanged for everything except the shape that was losing data.
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
-								Objects.keys(current).some((key) => !isFrameworkReservedKey(key) && !Objects.prototype.hasOwnProperty.call(finalImpl, key));
+								ArrayMethods.some(
+									Objects.keys(current),
+									(key) => !isFrameworkReservedKey(key) && !FunctionMethods.call(Objects.prototype.hasOwnProperty, finalImpl, key)
+								);
 							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 							// function behind it: that function carries no gate, so calling it would skip the node's call check
 							// (#632). The host, which no rule gates, still gets the function itself.
@@ -16906,17 +17340,19 @@ class UnifiedWrapper extends ComponentBase {
 						// A change queued through a stand-in that the node it reached refused fails this await (#653).
 						// The chain is handed back, so a `then` called with one callback leaves the rejection to the promise it
 						// returns, as a promise's own `then` does, instead of losing it.
-						return waitingProxy_thenResolve()
-							.then((value) => {
+						return PromiseMethods.then(
+							PromiseMethods.then(waitingProxy_thenResolve(), (value) => {
 								const refused = runtime_takeRefusedChange(wrapper, propChain);
 								if (refused) throw refused;
 								return value;
-							})
-							.then(onFulfilled, onRejected);
+							}),
+							onFulfilled,
+							onRejected
+						);
 					};
 				}
 				if (prop === "____slothletInternal") return undefined; // blocked: do not expose internal state through waiting proxy
-				if (prop === "_materialize") return wrapper._materialize.bind(wrapper);
+				if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
 				if (prop === "__mode") return wrapper.____slothletInternal.mode;
 				if (prop === "__materialized") return wrapper.____slothletInternal.state.materialized;
 				if (prop === "__inFlight") return wrapper.____slothletInternal.state.inFlight;
@@ -16924,7 +17360,7 @@ class UnifiedWrapper extends ComponentBase {
 
 				// Once the node has loaded, a stand-in kept from before answers as what it stands for answers a read of its
 				// path now: a default-export Map's methods, an object's members, a string's characters.
-				if (!STAND_IN_OWN_READS.has(prop)) {
+				if (!SetMethods.has(STAND_IN_OWN_READS, prop)) {
 					const node = runtime_standInNode(wrapper, propChain);
 					if (node !== STAND_IN_UNLOADED && node !== null && node !== undefined) {
 						const end = kept ? resolveWrapper(node) : null;
@@ -16947,7 +17383,7 @@ class UnifiedWrapper extends ComponentBase {
 					// unhandled rejection (e.g. collision mode "error" during background trigger).
 					// Rejection handler is intentionally empty — errors are surfaced via the explicit-await path.
 					/* v8 ignore next */
-					wrapper._materialize().catch(() => {});
+					PromiseMethods.catch(wrapper._materialize(), () => {});
 				}
 
 				if (prop === util.inspect.custom) {
@@ -16970,7 +17406,8 @@ class UnifiedWrapper extends ComponentBase {
 						// The chain is read through the node, as each of its reads is gated, and what it resolves to is shown as
 						// the node's hook shows a value: never as the module's runnable code to a module (#632).
 						let current = wrapper.____slothletInternal.proxy;
-						for (const chainProp of propChain) {
+						for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
+							const chainProp = ofList[ofIndex];
 							if (current === null || current === undefined) return undefined;
 							current = current[chainProp];
 						}
@@ -16984,7 +17421,7 @@ class UnifiedWrapper extends ComponentBase {
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_TYPE",
 						apiPath: wrapper.apiPath,
-						propChain: propChain.join(","),
+						propChain: ArrayMethods.join(propChain, ","),
 						materialized: wrapper.____slothletInternal.state.materialized,
 						hasImpl: wrapper.____slothletInternal.impl !== null
 					});
@@ -17004,12 +17441,13 @@ class UnifiedWrapper extends ComponentBase {
 							// A node (or a reader's view of one) reports its own kind: a lazy folder's proxy is a function to
 							// `typeof` whatever it loads as.
 							const behind = runtime_nodeBehind(node);
-							if (resolveWrapper(behind) !== null && !STAND_INS.has(behind)) return node.__type;
+							if (resolveWrapper(behind) !== null && !WeakSetMethods.has(STAND_INS, behind)) return node.__type;
 							return typeof node === "function" ? "function" : typeof node === "object" && node !== null ? "object" : typeof node;
 						}
 						// Wrapper has materialized - walk propChain to determine actual type
 						let current = wrapper.createProxy();
-						for (const chainProp of propChain) {
+						for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
+							const chainProp = ofList[ofIndex];
 							if (!current) break;
 							const currentWrapper = resolveWrapper(current);
 							if (currentWrapper) {
@@ -17055,7 +17493,7 @@ class UnifiedWrapper extends ComponentBase {
 						wrapper.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_TYPE_RESOLVED",
 							apiPath: wrapper.apiPath,
-							propChain: propChain.join(","),
+							propChain: ArrayMethods.join(propChain, ","),
 							resolvedType
 						});
 						return resolvedType;
@@ -17064,7 +17502,7 @@ class UnifiedWrapper extends ComponentBase {
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_TYPE_INFLIGHT",
 						apiPath: wrapper.apiPath,
-						propChain: propChain.join(",")
+						propChain: ArrayMethods.join(propChain, ",")
 					});
 					return TYPE_STATES.IN_FLIGHT;
 				}
@@ -17090,11 +17528,11 @@ class UnifiedWrapper extends ComponentBase {
 				if (prop === "name") return waitingTarget.name || "waitingProxyTarget";
 				if (prop === "toString") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return functionToString.bind(waitingTarget);
+					return FunctionMethods.bind(functionToString, waitingTarget);
 				}
 				if (prop === "valueOf") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return Functions.prototype.valueOf.bind(waitingTarget);
+					return FunctionMethods.bind(Functions.prototype.valueOf, waitingTarget);
 				}
 				// prop === "toJSON" is never accessed on a lazy unmaterialized property-chain proxy in tests.
 				/* v8 ignore start */
@@ -17120,7 +17558,8 @@ class UnifiedWrapper extends ComponentBase {
 					// Direct delegation to custom proxy
 					// Traverse propChain through the custom proxy first
 					let result = wrapper.____slothletInternal.impl;
-					for (const chainProp of propChain) {
+					for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
+						const chainProp = ofList[ofIndex];
 						result = result[chainProp];
 					}
 					// Then access the requested prop on the result
@@ -17135,7 +17574,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 					// Start from the parent wrapper and traverse using wrapper properties
 					let current = wrapper;
-					let remainingChain = [...propChain];
+					let remainingChain = copyList(propChain);
 
 					// Traverse propChain through wrapper properties until we hit a custom proxy
 					for (let i = 0; i < propChain.length; i++) {
@@ -17150,7 +17589,8 @@ class UnifiedWrapper extends ComponentBase {
 							// Traverse remaining propChain through the custom proxy, as the module it belongs to (#597)
 							return runtime_onImpl(current, (impl) => {
 								let proxyResult = impl;
-								for (const remainingProp of remainingChain) {
+								for (let ofIndex = 0, ofList = remainingChain; ofIndex < ofList.length; ofIndex++) {
+									const remainingProp = ofList[ofIndex];
 									proxyResult = proxyResult[remainingProp];
 								}
 
@@ -17173,7 +17613,7 @@ class UnifiedWrapper extends ComponentBase {
 							/* v8 ignore start */
 							if (_cachedW2) {
 								current = _cachedW2;
-								remainingChain.shift(); // Remove this prop from remaining chain
+								ArrayMethods.shift(remainingChain); // Remove this prop from remaining chain
 							} else {
 								// Cached value is not a wrapper (primitive or unwrapped object)
 								return undefined;
@@ -17251,7 +17691,7 @@ class UnifiedWrapper extends ComponentBase {
 						prop
 					});
 					// Trigger materialization NOW (async but we'll check after)
-					wrapper._materialize().catch((err) => {
+					PromiseMethods.catch(wrapper._materialize(), (err) => {
 						wrapper.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_ERROR",
 							apiPath: wrapper.apiPath,
@@ -17276,11 +17716,11 @@ class UnifiedWrapper extends ComponentBase {
 				if (wrapper.____slothletInternal.state.inFlight) {
 					// Materialization started but not complete yet
 					// Return waiting proxy to allow chaining, but __type will return IN_FLIGHT symbol
-					return wrapper.___createWaitingProxy([...propChain, prop]);
+					return wrapper.___createWaitingProxy(concatLists(propChain, [prop]));
 				}
 
 				// Not yet materialized and not in flight - create waiting proxy that will trigger materialization
-				return wrapper.___createWaitingProxy([...propChain, prop]);
+				return wrapper.___createWaitingProxy(concatLists(propChain, [prop]));
 			},
 
 			// `invoke` runs the chain's end once it has loaded: a call, or `new` from the construct trap below (#685).
@@ -17344,19 +17784,25 @@ class UnifiedWrapper extends ComponentBase {
 					(!___liveIdentity.unaccounted || !___capturedCallerWrapper) &&
 					wrapper.slothlet.handlers?.permissionManager?.isEnabled?.()
 				) {
-					const ___deniedPath = [wrapper.____slothletInternal.apiPath, ...propChain.map(String)].filter(Boolean).join(".");
+					const ___deniedPath = ArrayMethods.join(
+						filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
+						"."
+					);
 					throw new wrapper.slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: ___deniedPath });
 				}
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 					apiPath: wrapper.____slothletInternal.apiPath,
-					propChain: propChain.join(","),
+					propChain: ArrayMethods.join(propChain, ","),
 					// The count only: joining would convert each argument, running the caller's own
 					// toString / Symbol.toPrimitive before the leaf sees it, and throws for a Symbol.
 					argCount: args.length
 				});
-				const chainLabel = propChain.map((prop) => String(prop)).join(".");
+				const chainLabel = ArrayMethods.join(
+					mapList(propChain, (prop) => String(prop)),
+					"."
+				);
 
 				if (
 					wrapper.____slothletInternal.mode === "lazy" &&
@@ -17395,13 +17841,14 @@ class UnifiedWrapper extends ComponentBase {
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_START_WALK",
 					apiPath: wrapper.____slothletInternal.apiPath,
-					propChain: propChain.join(",")
+					propChain: ArrayMethods.join(propChain, ",")
 				});
 				let current = wrapper.createProxy();
 				let lastWrapper = wrapper;
 				let lastObject = null; // Track the parent object for `this` binding
 
-				for (const prop of propChain) {
+				for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
+					const prop = ofList[ofIndex];
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_APPLY_WALK",
 						prop: String(prop),
@@ -17414,7 +17861,7 @@ class UnifiedWrapper extends ComponentBase {
 						// This prevents errors during Node.js inspection operations, regardless of wrapper state
 						// ___createWaitingProxy joins propChain with "," so Symbol props can never be passed in; this if is unreachable via the API.
 						/* v8 ignore start */
-						if (propChain.some((p) => typeof p === "symbol")) {
+						if (ArrayMethods.some(propChain, (p) => typeof p === "symbol")) {
 							return undefined;
 						}
 						/* v8 ignore stop */
@@ -17527,7 +17974,7 @@ class UnifiedWrapper extends ComponentBase {
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY",
 					apiPath: wrapper.____slothletInternal.apiPath,
-					propChain: propChain.join(","),
+					propChain: ArrayMethods.join(propChain, ","),
 					typeOf: typeof current,
 					currentName: current?.name,
 					isFunction: typeof current === "function"
@@ -17561,7 +18008,7 @@ class UnifiedWrapper extends ComponentBase {
 						/* v8 ignore next 3 */
 						const ___targetPath =
 							___resolvedInner?.____slothletInternal?.apiPath ??
-							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
+							ArrayMethods.join(filterList(concatLists([wrapper.____slothletInternal.apiPath], propChain), Boolean), ".");
 						// Lazy captured chain: thread the resolved leaf's call args for resource-scoped conditions (#455).
 						// This apply is already async, so a stale principal (#459) is simply awaited here.
 						const ___principalGate = runtime_enforceCapturedPair(
@@ -17585,7 +18032,10 @@ class UnifiedWrapper extends ComponentBase {
 					// to re-establish context properly. This is multi-instance safe because
 					// runInContext looks up the store by instanceID, not currentInstanceID.
 					if (___capturedCallerWrapper && wrapper.slothlet.contextManager) {
-						const ___instanceStore = wrapper.slothlet.contextManager.instances?.get?.(wrapper.instanceID);
+						const ___instanceStore =
+							wrapper.slothlet.contextManager.instances instanceof Map
+								? MapMethods.get(wrapper.slothlet.contextManager.instances, wrapper.instanceID)
+								: undefined;
 						// False path (store missing or currentWrapper already set) only occurs in
 						// re-entrant scenarios that are not exercised by the test suite.
 						/* v8 ignore next */
@@ -17625,7 +18075,11 @@ class UnifiedWrapper extends ComponentBase {
 							[]
 						);
 					}
-					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
+					const ___identityStore = ___capturedCallerWrapper
+						? wrapper.slothlet.contextManager?.instances instanceof Map
+							? MapMethods.get(wrapper.slothlet.contextManager.instances, wrapper.instanceID)
+							: undefined
+						: null;
 					if (!___identityStore) return ___invokeChainEnd(current, lastObject);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
 					const ___previousAuthoritativeCeiling = ___identityStore.__authoritativeCeiling;
@@ -17680,7 +18134,10 @@ class UnifiedWrapper extends ComponentBase {
 			construct(target, args, newTarget) {
 				// A subclass's `super()` has to finish now, which nothing not yet loaded can.
 				if (newTarget !== waitingProxy) {
-					const apiPath = [wrapper.____slothletInternal.apiPath, ...propChain.map(String)].filter(Boolean).join(".");
+					const apiPath = ArrayMethods.join(
+						filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
+						"."
+					);
 					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath }, null, { validationError: true });
 				}
 				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
@@ -17697,12 +18154,12 @@ class UnifiedWrapper extends ComponentBase {
 		// Register waiting proxy in the global registry so resolveWrapper() can find the
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
 		// worked on waiting proxies before step 2 blocked the property on regular proxies.
-		_proxyRegistry.set(waitingProxy, wrapper);
-		WAITING_CHAINS.set(waitingProxy, propChain);
-		STAND_INS.add(waitingProxy);
+		WeakMapMethods.set(_proxyRegistry, waitingProxy, wrapper);
+		WeakMapMethods.set(WAITING_CHAINS, waitingProxy, propChain);
+		WeakSetMethods.add(STAND_INS, waitingProxy);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
-		cache.set(cacheKey, waitingProxy);
+		MapMethods.set(cache, cacheKey, waitingProxy);
 
 		return waitingProxy;
 	}
@@ -17730,7 +18187,7 @@ class UnifiedWrapper extends ComponentBase {
 		) {
 			// Fire-and-forget background materialization — rejection suppressed to avoid unhandled-rejection event.
 			/* v8 ignore next */
-			wrapper._materialize().catch(() => {});
+			PromiseMethods.catch(wrapper._materialize(), () => {});
 		}
 
 		// Proxy target depends on whether this is callable
@@ -17854,7 +18311,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
 			// otherwise the filter short-circuits before the handler runs.
-			const allowedInternals = new Set([
+			const allowedInternals = setFrom([
 				"_materialize",
 				"__mode",
 				"__apiPath",
@@ -17871,7 +18328,7 @@ class UnifiedWrapper extends ComponentBase {
 				"__sourceFolder",
 				"__moduleID"
 			]);
-			if (isInternalProp && !allowedInternals.has(prop)) {
+			if (isInternalProp && !SetMethods.has(allowedInternals, prop)) {
 				return undefined; // Hide internal properties from external access
 			}
 
@@ -17907,7 +18364,7 @@ class UnifiedWrapper extends ComponentBase {
 				) {
 					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 					/* v8 ignore next */
-					wrapper._materialize().catch(() => {});
+					PromiseMethods.catch(wrapper._materialize(), () => {});
 				}
 
 				// Return state symbols for lazy mode if not ready
@@ -17947,7 +18404,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				return "undefined";
 			}
-			if (prop === "_materialize") return wrapper._materialize.bind(wrapper);
+			if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
 			if (prop === "__slothletPath") return wrapper.____slothletInternal.apiPath;
 			// Note: "____slothletInternal" is NOT in allowedInternals so the filter above returns undefined first.
 			if (prop === "__metadata") {
@@ -18031,7 +18488,7 @@ class UnifiedWrapper extends ComponentBase {
 			// …) shadowed the member and skipped enforcement entirely. Only those names and `then` consult it,
 			// so any other read skips the lookup.
 			const memberShadowsWrapperProp =
-				(prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) &&
+				(prop === "then" || SetMethods.has(WRAPPER_ANSWERED_PROPS, prop)) &&
 				(runtime_hasOwnMember(wrapper, prop) || runtime_valueHoldsName(wrapper, prop));
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
@@ -18044,15 +18501,15 @@ class UnifiedWrapper extends ComponentBase {
 					// read of the node for whoever awaits it (#797).
 					const pinned = runtime_pinReader(wrapper, access);
 					return (onFulfilled, onRejected) =>
-						wrapper
-							._materialize()
-							.then(() => {
+						PromiseMethods.catch(
+							PromiseMethods.then(wrapper._materialize(), () => {
 								const held = runtime_nodePrimitive(wrapper);
 								if (held === NO_NODE_PRIMITIVE) return onFulfilled(wrapper.____slothletInternal.proxy);
 								if (pinned) runtime_gateNodeValue(wrapper, kept, null, pinned);
 								return onFulfilled(held);
-							})
-							.catch(onRejected);
+							}),
+							onRejected
+						);
 				}
 				// A `then` holding data (a JSON Schema `if`/`then`/`else`) reads back as itself: it does not make
 				// the node awaitable. A member by that name takes the ordinary member read below, gating and
@@ -18149,7 +18606,7 @@ class UnifiedWrapper extends ComponentBase {
 					const answered = runtime_readImplMember(wrapper, prop);
 					if (answered === null || (typeof answered !== "object" && typeof answered !== "function")) return answered;
 					if (typeof answered !== "function") return wrapper.___createChildWrapper(prop, answered) ?? answered;
-					if (FUNCTION_NODES.get(wrapper.slothlet)?.get(answered)?.deref() !== undefined) return runtime_functionNodeFor(wrapper, answered);
+					if (nodeRefOf(FUNCTION_NODES, wrapper.slothlet, answered) !== undefined) return runtime_functionNodeFor(wrapper, answered);
 					return runtime_instanceClassNode(wrapper, answered) ?? answered;
 				}
 				// A namespace given another prototype reads its `constructor` from there, through the member read below.
@@ -18235,7 +18692,7 @@ class UnifiedWrapper extends ComponentBase {
 				// apiPath is always set for valid wrappers; defensive false branch never taken.
 				/* v8 ignore next */
 				if (wrapper.____slothletInternal.apiPath) {
-					const pathParts = wrapper.____slothletInternal.apiPath.split(".");
+					const pathParts = splitText(wrapper.____slothletInternal.apiPath, ".");
 					const lastPart = pathParts[pathParts.length - 1];
 					// lastPart is always non-empty for valid paths; the false branch never falls through.
 					/* v8 ignore next */
@@ -18257,13 +18714,13 @@ class UnifiedWrapper extends ComponentBase {
 					// A function given a prototype without one has none, as the plain function then has.
 					if (typeof method !== "function") return method;
 					runtime_enforceCodeMember(wrapper, method, kept);
-					return method.bind(fnImpl);
+					return FunctionMethods.bind(method, fnImpl);
 				}
 				// A loaded object node answers its `toString` as the object does, through the member read below (#630).
 				if (impl === null || typeof impl !== "object") {
 					// For non-callable wrappers, return a descriptive string
 					if (typeof target === "function") {
-						return functionToString.bind(target);
+						return FunctionMethods.bind(functionToString, target);
 					}
 					return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 				}
@@ -18281,10 +18738,10 @@ class UnifiedWrapper extends ComponentBase {
 					if (inherited) return runtime_valueOfFor(wrapper.____slothletInternal.proxy);
 					if (typeof method !== "function") return method;
 					runtime_enforceCodeMember(wrapper, method, kept);
-					return method.bind(fnImpl);
+					return FunctionMethods.bind(method, fnImpl);
 				}
 				// A loaded object node reads its `valueOf` through the member read below.
-				if (impl === null || typeof impl !== "object") return Functions.prototype.valueOf.bind(target);
+				if (impl === null || typeof impl !== "object") return FunctionMethods.bind(Functions.prototype.valueOf, target);
 			}
 			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
@@ -18332,7 +18789,8 @@ class UnifiedWrapper extends ComponentBase {
 					const pm = wrapper.slothlet.handlers?.permissionManager;
 					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
 						let redacted = data;
-						for (const reader of readers) {
+						for (let r = 0; r < readers.length; r++) {
+							const reader = readers[r];
 							redacted = runtime_redactSerialized(
 								wrapper,
 								redacted,
@@ -18348,7 +18806,7 @@ class UnifiedWrapper extends ComponentBase {
 					return data;
 				};
 				const toJSON = () => serialize([undefined], wrapper.____slothletInternal.proxy);
-				SERIALIZERS.set(toJSON, serialize);
+				WeakMapMethods.set(SERIALIZERS, toJSON, serialize);
 				return toJSON;
 			}
 
@@ -18361,7 +18819,7 @@ class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize().catch(() => {});
+				PromiseMethods.catch(wrapper._materialize(), () => {});
 			}
 
 			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
@@ -18398,9 +18856,10 @@ class UnifiedWrapper extends ComponentBase {
 						apiPath: wrapper.apiPath,
 						prop: String(prop),
 						collisionMode: wrapper.____slothletInternal.state.collisionMode,
-						wrapperKeys: Objects.keys(wrapper)
-							.filter((k) => !isFrameworkReservedKey(k))
-							.join(", ")
+						wrapperKeys: ArrayMethods.join(
+							filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k)),
+							", "
+						)
 					});
 				}
 				this.slothlet.debug("wrapper", {
@@ -18430,7 +18889,7 @@ class UnifiedWrapper extends ComponentBase {
 					) {
 						// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 						/* v8 ignore next */
-						cachedWrapper._materialize().catch(() => {});
+						PromiseMethods.catch(cachedWrapper._materialize(), () => {});
 					}
 				}
 				// For objects and functions, return the proxy as-is.
@@ -18476,9 +18935,10 @@ class UnifiedWrapper extends ComponentBase {
 						});
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_FOUND",
-							wrapperKeys: Objects.keys(wrapper)
-								.filter((k) => !isFrameworkReservedKey(k))
-								.join(", ")
+							wrapperKeys: ArrayMethods.join(
+								filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k)),
+								", "
+							)
 						});
 					}
 					const cached = wrapper[prop];
@@ -18491,7 +18951,7 @@ class UnifiedWrapper extends ComponentBase {
 							!cachedWrapper.____slothletInternal.state.materialized &&
 							!cachedWrapper.____slothletInternal.state.inFlight
 						) {
-							cachedWrapper._materialize().catch(() => {});
+							PromiseMethods.catch(cachedWrapper._materialize(), () => {});
 						}
 					}
 					enforceReadGate(cached);
@@ -18503,7 +18963,7 @@ class UnifiedWrapper extends ComponentBase {
 			// If lazy mode is materialized and property doesn't exist in wrapper or _impl, return undefined
 			// This prevents creating waiting proxies for properties that were deleted.
 			// Only framework-reserved keys bypass this check (they're handled elsewhere in getTrap).
-			const isInternalProp2 = typeof prop === "string" && UnifiedWrapper.INTERNAL_KEYS.has(prop);
+			const isInternalProp2 = typeof prop === "string" && SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				wrapper.____slothletInternal.state.materialized &&
@@ -18532,7 +18992,7 @@ class UnifiedWrapper extends ComponentBase {
 				// never simultaneously true here, so _materialize() is never called from this path.
 				/* v8 ignore next */
 				if (!wrapper.____slothletInternal.state.materialized && !wrapper.____slothletInternal.state.inFlight) {
-					wrapper._materialize().catch(() => {});
+					PromiseMethods.catch(wrapper._materialize(), () => {});
 				}
 
 				this.slothlet.debug("wrapper", {
@@ -18591,7 +19051,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Reached only when impl doesn't have the key but target does (e.g., a property
 			// set directly on the wrapper object before the proxy was created).
 			/* v8 ignore next */
-			if (value === undefined && Objects.prototype.hasOwnProperty.call(target, prop)) {
+			if (value === undefined && FunctionMethods.call(Objects.prototype.hasOwnProperty, target, prop)) {
 				value = target[prop];
 			}
 
@@ -18648,7 +19108,7 @@ class UnifiedWrapper extends ComponentBase {
 			// as it is, so reading it is checked as a call of the node (#632).
 			// A member inherited from the engine runs on the node, as on the plain value (#630).
 			const currentImpl = wrapper.____slothletInternal.impl;
-			if (typeof currentImpl === "function" && !Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+			if (typeof currentImpl === "function" && !FunctionMethods.call(Objects.prototype.propertyIsEnumerable, currentImpl, prop)) {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
 				// A member inherited from a prototype given to the node is no part of the module's function: it is read as
@@ -18672,7 +19132,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (
 					runtime_holdsDataKind(currentImpl) &&
 					hasOwn(currentImpl, prop) &&
-					!Objects.prototype.propertyIsEnumerable.call(currentImpl, prop)
+					!FunctionMethods.call(Objects.prototype.propertyIsEnumerable, currentImpl, prop)
 				) {
 					runtime_enforceCodeMember(wrapper, value, kept);
 					return value;
@@ -18785,10 +19245,11 @@ class UnifiedWrapper extends ComponentBase {
 			// the node the method was read from. A view of any other node a caller steers the method onto
 			// (`.call()` / `.apply()`) stays the caller's view, whose writes are held to the caller (#625): the
 			// value itself would let any module write another module's instance through a method of its own.
-			const thisArgIsOwnIdentity = thisArgIsLiveIdentity && (!SELF_VIEW_NODES.has(thisArg) || runtime_selfIsMethodNode(thisArg, wrapper));
+			const thisArgIsOwnIdentity =
+				thisArgIsLiveIdentity && (!WeakMapMethods.has(SELF_VIEW_NODES, thisArg) || runtime_selfIsMethodNode(thisArg, wrapper));
 			const effectiveThisArg = thisArgIsOwnIdentity ? thisArgImpl : thisArg;
 			// The value stands for its node when it comes back through `self` (#625).
-			if (thisArgIsOwnIdentity) SELF_INSTANCE_NODES.set(thisArgImpl, runtime_unwrapSelfView(thisArg));
+			if (thisArgIsOwnIdentity) WeakMapMethods.set(SELF_INSTANCE_NODES, thisArgImpl, runtime_unwrapSelfView(thisArg));
 
 			// Permission enforcement: check before hooks or function execution.
 			// Only applies to inter-module calls (caller context exists); external calls
@@ -18813,7 +19274,8 @@ class UnifiedWrapper extends ComponentBase {
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
 			// Early exit if hooks disabled globally or this is a hook API function
-			const hasHooks = hookManager && hookManager.enabled && !wrapper.____slothletInternal.apiPath.startsWith("slothlet.hook");
+			const hasHooks =
+				hookManager && hookManager.enabled && !StringMethods.startsWith(wrapper.____slothletInternal.apiPath, "slothlet.hook");
 
 			// Get api (bound API) and ctx (user context) for hooks
 			const api = wrapper.slothlet.boundApi;
@@ -18904,7 +19366,7 @@ class UnifiedWrapper extends ComponentBase {
 											___entryIdentity,
 											true
 										)
-									: impl.apply(effectiveThisArg, args);
+									: FunctionMethods.apply(impl, effectiveThisArg, args);
 							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 								raw = wrapper.slothlet.contextManager
 									? wrapper.slothlet.contextManager.runInContext(
@@ -18919,7 +19381,7 @@ class UnifiedWrapper extends ComponentBase {
 											___entryIdentity,
 											true
 										)
-									: impl.default.apply(impl, args);
+									: FunctionMethods.apply(impl.default, impl, args);
 							} else {
 								throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: ___path, actualType: typeof impl }, null, {
 									validationError: true
@@ -19012,7 +19474,7 @@ class UnifiedWrapper extends ComponentBase {
 				) {
 					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 					/* v8 ignore next */
-					wrapper._materialize().catch(() => {});
+					PromiseMethods.catch(wrapper._materialize(), () => {});
 				}
 
 				// Wait for materialization if in flight (returns Promise)
@@ -19040,7 +19502,7 @@ class UnifiedWrapper extends ComponentBase {
 												)
 											);
 										} else {
-											resolve(impl.apply(effectiveThisArg, args));
+											resolve(FunctionMethods.apply(impl, effectiveThisArg, args));
 										}
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 										if (wrapper.contextManager) {
@@ -19060,7 +19522,7 @@ class UnifiedWrapper extends ComponentBase {
 												)
 											);
 										} else {
-											resolve(impl.default.apply(impl, args));
+											resolve(FunctionMethods.apply(impl.default, impl, args));
 										}
 									} else {
 										reject(
@@ -19125,7 +19587,7 @@ class UnifiedWrapper extends ComponentBase {
 							true
 						);
 					} else {
-						result = impl.apply(effectiveThisArg, args);
+						result = FunctionMethods.apply(impl, effectiveThisArg, args);
 					}
 				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					if (wrapper.slothlet.contextManager) {
@@ -19143,7 +19605,7 @@ class UnifiedWrapper extends ComponentBase {
 							true
 						);
 					} else {
-						result = impl.default.apply(impl, args);
+						result = FunctionMethods.apply(impl.default, impl, args);
 					}
 				} else {
 					throw new wrapper.SlothletError(
@@ -19163,7 +19625,11 @@ class UnifiedWrapper extends ComponentBase {
 					isAsync = true;
 					// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
 					// would, so a reaction that throws never surfaces at its own `then`'s call site.
-					return (runtime_inherits(result, Promise) ? result.then.bind(result) : settleThenable.bind(null, result))(
+					return (
+						runtime_inherits(result, Promise)
+							? FunctionMethods.bind(result.then, result)
+							: FunctionMethods.bind(settleThenable, null, result)
+					)(
 						(resolvedResult) => {
 							try {
 								// Execute after hooks synchronously with resolved value
@@ -19297,7 +19763,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				wrapper._materialize().catch(() => {});
+				PromiseMethods.catch(wrapper._materialize(), () => {});
 			}
 
 			// An array-backed wrapper holds the elements it cached, but the array decides which indices
@@ -19329,7 +19795,7 @@ class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			return Objects.prototype.hasOwnProperty.call(target, prop);
+			return FunctionMethods.call(Objects.prototype.hasOwnProperty, target, prop);
 		};
 
 		/**
@@ -19363,7 +19829,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				wrapper._materialize().catch(() => {});
+				PromiseMethods.catch(wrapper._materialize(), () => {});
 			}
 
 			if (prop === "____slothletInternal") return undefined;
@@ -19372,7 +19838,7 @@ class UnifiedWrapper extends ComponentBase {
 			// shows under that module's identity, so a copy it keeps and calls later, with no caller of its own, still reads as it.
 			if (prop === util.inspect.custom) {
 				const hookDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-				if (hookDescriptor && INSPECT_HOOKS.has(hookDescriptor.value)) {
+				if (hookDescriptor && WeakSetMethods.has(INSPECT_HOOKS, hookDescriptor.value)) {
 					const reader = runtime_capturedReader(wrapper);
 					// A sealed node's hook is fixed on its shell, which the invariants require the node to report as is.
 					if (!reader || !hookDescriptor.configurable) return hookDescriptor;
@@ -19384,7 +19850,10 @@ class UnifiedWrapper extends ComponentBase {
 							const shown = Arrays.isArray(target) ? Reflect.apply(hook, this, args) : runtime_inspectShown(wrapper, args, true);
 							if (shown === null || typeof shown !== "object") return shown;
 							const completed = Arrays.isArray(shown) ? [] : {};
-							for (const key of Objects.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
+							for (let ofIndex = 0, ofList = Objects.keys(shown); ofIndex < ofList.length; ofIndex++) {
+								const key = ofList[ofIndex];
+								completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
+							}
 							if (Arrays.isArray(shown)) completed.length = shown.length;
 							return completed;
 						}
@@ -19559,7 +20028,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				wrapper._materialize().catch(() => {});
+				PromiseMethods.catch(wrapper._materialize(), () => {});
 			}
 
 			// A sealed node holds its members on its shell (see preventExtensions), and a non-extensible target
@@ -19576,46 +20045,53 @@ class UnifiedWrapper extends ComponentBase {
 			if (Arrays.isArray(arrayImpl)) {
 				// A non-extensible target must be listed exactly (proxy invariant).
 				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
-				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
-				for (const key of Reflect.ownKeys(target)) {
-					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(arrayImpl); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					SetMethods.add(keys, key);
 				}
-				for (const key of Reflect.ownKeys(wrapper)) {
-					if (!runtime_isArrayIndex(key) && Objects.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (runtime_isFixedOnTarget(target, key)) SetMethods.add(keys, key);
 				}
-				for (const key of keys) {
-					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key, kept)) keys.delete(key);
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(wrapper); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (!runtime_isArrayIndex(key) && Objects.getOwnPropertyDescriptor(wrapper, key)?.enumerable) SetMethods.add(keys, key);
 				}
-				return Arrays.from(keys);
+				for (const key of setValues(keys)) {
+					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key, kept)) SetMethods.delete(keys, key);
+				}
+				return setToArray(keys);
 			}
 
 			// A function target's own `length` / `name` come first, as on any function. A lazy folder that loaded as a
 			// namespace lists none, as the eager node does: its function target only stood in while it loaded.
 			const uw_listsAsFunction = (typeof target === "function" || (target && target.__isCallable)) && !runtime_loadedAsNamespace(wrapper);
 			if (uw_listsAsFunction) {
-				keys.add("length");
-				keys.add("name");
+				SetMethods.add(keys, "length");
+				SetMethods.add(keys, "name");
 			}
 
 			// Add all target keys (wrapper or function), checking configurability
-			for (const key of Reflect.ownKeys(target)) {
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Objects.getOwnPropertyDescriptor(target, key);
 				// Include non-configurable properties (required by proxy invariants)
 				// OR enumerable properties (child wrappers)
 				if (!descriptor.configurable || descriptor.enumerable) {
-					keys.add(key);
+					SetMethods.add(keys, key);
 				}
 			}
 
 			// CRITICAL: When proxy target is a callable function (not the wrapper itself),
 			// children are defined on wrapper, not target. Include wrapper's enumerable keys.
 			if (target !== wrapper) {
-				for (const key of Reflect.ownKeys(wrapper)) {
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(wrapper); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 					// Wrapper-owned sibling props are always enumerable in tests; non-enumerable path never taken.
 					/* v8 ignore next */
 					if (descriptor && descriptor.enumerable) {
-						keys.add(key);
+						SetMethods.add(keys, key);
 					}
 				}
 			}
@@ -19630,11 +20106,12 @@ class UnifiedWrapper extends ComponentBase {
 			// but are not api members — leaking them made lazy enumeration differ from eager for the
 			// same module. Filtered by exact name, never by prefix, so a user module exporting an
 			// underscore-prefixed member keeps it enumerable in both modes.
-			for (const key of implKeys) {
+			for (let ofIndex = 0, ofList = implKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				// A function impl's own `prototype` is listed as on the function itself; the bound-function
 				// proxy target has none whose invariants it could break (see createNamedProxyTarget).
-				if (!reservedKeysOwn.IMPL_METADATA_KEYS.has(key)) {
-					keys.add(key);
+				if (!SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, key)) {
+					SetMethods.add(keys, key);
 				}
 			}
 
@@ -19643,23 +20120,27 @@ class UnifiedWrapper extends ComponentBase {
 			// keys of the target must still be reported (proxy invariant), so they are never
 			// filtered — they are framework internals, never gated user data.
 			if (redact) {
-				for (const key of keys) {
+				for (const key of setValues(keys)) {
 					const targetDesc = Objects.getOwnPropertyDescriptor(target, key);
 					if (targetDesc && !targetDesc.configurable) continue;
-					if (runtime_isReadRedacted(wrapper, key, kept, null, true)) keys.delete(key);
+					if (runtime_isReadRedacted(wrapper, key, kept, null, true)) SetMethods.delete(keys, key);
 				}
 			}
 
 			// A function lists its `prototype` right after `length` and `name`, before the members added to
 			// it, as `Reflect.ownKeys(function f() {})` does; the members are gathered from the target, the
 			// wrapper and the impl, so it is put back in its place once every key is known.
-			if (uw_listsAsFunction && keys.has("prototype")) {
+			if (uw_listsAsFunction && SetMethods.has(keys, "prototype")) {
 				const uw_ordered = [];
-				for (const key of ["length", "name", "prototype"]) if (keys.has(key)) uw_ordered.push(key);
-				for (const key of keys) if (key !== "length" && key !== "name" && key !== "prototype") uw_ordered.push(key);
+				for (let ofIndex = 0, ofList = ["length", "name", "prototype"]; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (SetMethods.has(keys, key)) ArrayMethods.push(uw_ordered, key);
+				}
+				for (const key of setValues(keys))
+					if (key !== "length" && key !== "name" && key !== "prototype") ArrayMethods.push(uw_ordered, key);
 				return uw_ordered;
 			}
-			return Arrays.from(keys);
+			return setToArray(keys);
 		};
 
 		/**
@@ -19691,7 +20172,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Silently absorb the write so no TypeError leaks key existence.
 			// _materialize is exempted: the framework writes it directly on the target.
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
-			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") {
+			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "_materialize") {
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true;
 			}
@@ -19741,7 +20222,7 @@ class UnifiedWrapper extends ComponentBase {
 				const movedPath = moved?.____slothletInternal.apiPath;
 				const isOwnElement =
 					moved !== null &&
-					(movedPath === arrayPath || movedPath?.startsWith(`${arrayPath}.`)) &&
+					(movedPath === arrayPath || (movedPath == null ? undefined : StringMethods.startsWith(movedPath, `${arrayPath}.`))) &&
 					"sourceValue" in moved.____slothletInternal;
 				const written = Reflect.set(arrayImpl, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value);
 				// A sealed member reports its elements from its shell (see the preventExtensions trap): a new
@@ -19764,26 +20245,29 @@ class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			const internalKeys = new Set(["_materialize"]);
+			const internalKeys = setFrom(["_materialize"]);
 			// An array node reads and lists its members through its array target. A member beside the elements
 			// (a sibling file of a self-named array) is held by the array's composition layer, where those reads
 			// find it; the module's own array is never written to (#585 review).
 			const uw_arrayImpl = wrapper.____slothletInternal.impl;
 			// An element or `length` is the array's own: written to it (through its layer, which passes it on),
 			// as a write to the array would be, so its length and elements follow (#585 review).
-			if (Arrays.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
+			if (
+				Arrays.isArray(uw_arrayImpl) &&
+				(prop === "length" || (typeof prop === "string" && RegExpMethods.exec(/^(?:0|[1-9]\d*)$/, prop) !== null))
+			) {
 				return Reflect.set(uw_arrayImpl, prop, value);
 			}
 			if (
-				!internalKeys.has(prop) &&
+				!SetMethods.has(internalKeys, prop) &&
 				Arrays.isArray(uw_arrayImpl) &&
 				isCompositionLayer(uw_arrayImpl) &&
-				!(typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop))
+				!(typeof prop === "string" && RegExpMethods.exec(/^(?:0|[1-9]\d*)$/, prop) !== null)
 			) {
 				holdMember(uw_arrayImpl, prop, value);
 				return true;
 			}
-			if (!internalKeys.has(prop)) {
+			if (!SetMethods.has(internalKeys, prop)) {
 				// An accessor the node holds answers a write as it would on an object: its setter runs, and an
 				// accessor with no setter refuses the write (#585 review). The node's accessors are the module's
 				// (adopted, or merged in from an addapi file or a collision) or a live forward to the impl, and
@@ -19791,7 +20275,7 @@ class UnifiedWrapper extends ComponentBase {
 				const ownAccessor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				if (ownAccessor && !("value" in ownAccessor)) {
 					if (!ownAccessor.set) return false;
-					ownAccessor.set.call(wrapper.____slothletInternal.proxy ?? wrapper, value);
+					FunctionMethods.call(ownAccessor.set, wrapper.____slothletInternal.proxy ?? wrapper, value);
 					return true;
 				}
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
@@ -19881,11 +20365,16 @@ class UnifiedWrapper extends ComponentBase {
 				// (#746). The object refusing the write (a member it holds read-only) refuses it here, before the node
 				// changes. The framework's own writes (the build, a sibling file merged onto the node) change only the node:
 				// composing never changes a module's value.
-				const ownWrite = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper);
+				const ownWrite = wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper);
 				const moduleObject = ownWrite ? null : runtime_moduleObjectOf(wrapper, prop);
 				if (moduleObject !== null && !runtime_writeModuleObject(wrapper, moduleObject, prop, value)) return false;
 				// A member defined read-only through the node takes no assignment, as on an object (#749).
-				if (!ownWrite && wrapper.____slothletInternal.readOnlyKeys?.has(prop) && hasOwn(wrapper, prop)) return false;
+				if (
+					!ownWrite &&
+					(wrapper.____slothletInternal.readOnlyKeys ? SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop) : false) &&
+					hasOwn(wrapper, prop)
+				)
+					return false;
 
 				// A member the node already holds is replaced where it stands (the definition below), so it keeps its
 				// place among the node's keys, as an assignment to an object's member does (#746).
@@ -19937,7 +20426,7 @@ class UnifiedWrapper extends ComponentBase {
 				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
 				if (!inBuild) {
 					if (!wrapper.____slothletInternal.userAssignedKeys) wrapper.____slothletInternal.userAssignedKeys = new Set();
-					wrapper.____slothletInternal.userAssignedKeys.add(prop);
+					SetMethods.add(wrapper.____slothletInternal.userAssignedKeys, prop);
 				}
 			} else {
 				// For internal properties, just assign directly: on the wrapper for a namespace node, whose target
@@ -19982,7 +20471,8 @@ class UnifiedWrapper extends ComponentBase {
 			// a named export) live on its composition layer, which holds them.
 			const underlying = layerUnderlying(arrayImpl);
 			// A `length` the layer holds (a named export that won the slot) is the layer's, as the get trap reads it.
-			const layerHoldsLength = prop === "length" && isCompositionLayer(arrayImpl) && layerHeldKeys(arrayImpl).includes("length");
+			const layerHoldsLength =
+				prop === "length" && isCompositionLayer(arrayImpl) && ArrayMethods.includes(layerHeldKeys(arrayImpl), "length");
 			const holder =
 				!layerHoldsLength && (runtime_isArrayIndex(prop) || prop === "length" || hasOwn(underlying, prop)) ? underlying : arrayImpl;
 			const bindsTarget = runtime_bindsTarget(target, holder, prop, descriptor);
@@ -20006,7 +20496,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Don't allow deletion of internal or read-only properties.
 			// Return true (silently absorb) rather than false to avoid leaking that these
 			// keys exist via the TypeError thrown by returning falsish in strict mode.
-			const internalKeys = new Set([
+			const internalKeys = setFrom([
 				// Framework mutation APIs
 				"____slothletInternal",
 				"__impl",
@@ -20033,7 +20523,7 @@ class UnifiedWrapper extends ComponentBase {
 				"__materialized",
 				"__inFlight"
 			]);
-			if (internalKeys.has(prop)) {
+			if (SetMethods.has(internalKeys, prop)) {
 				// Module code meets the write rules first, so a deletion is refused as a definition is (#625).
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true; // silently ignore - do not expose the key's existence via TypeError
@@ -20086,7 +20576,7 @@ class UnifiedWrapper extends ComponentBase {
 			// A node built from a copy of a module's own object deletes the member from that object too, as deleting it
 			// from the object does (#746); a member the object holds non-configurably stays, and so does the node's.
 			// The framework's own removals (a mount taken off the node) change only the node.
-			const moduleObject = isInternal || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+			const moduleObject = isInternal || MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
 			if (moduleObject !== null && hasOwn(moduleObject, prop) && !Reflect.deleteProperty(moduleObject, prop)) return false;
 			// Remove from _impl if it's an object, before anything is retired: the backing value may refuse (its own
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
@@ -20103,8 +20593,10 @@ class UnifiedWrapper extends ComponentBase {
 				return false;
 			}
 			// A deleted key is no longer a user assignment to preserve across adoption (#543), nor one defined read-only.
-			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
-			wrapper.____slothletInternal.readOnlyKeys?.delete(prop);
+			wrapper.____slothletInternal.userAssignedKeys == null
+				? undefined
+				: SetMethods.delete(wrapper.____slothletInternal.userAssignedKeys, prop);
+			if (wrapper.____slothletInternal.readOnlyKeys) SetMethods.delete(wrapper.____slothletInternal.readOnlyKeys, prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
 			if (isOwnMember) {
 				const childWrapper = wrapper[prop];
@@ -20181,7 +20673,7 @@ class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.inFlight
 			) {
 				/* v8 ignore next */
-				wrapper._materialize().catch(() => {});
+				PromiseMethods.catch(wrapper._materialize(), () => {});
 			}
 
 			// Lazy mode, in-flight: chain off the existing materializationPromise instead of polling.
@@ -20199,7 +20691,7 @@ class UnifiedWrapper extends ComponentBase {
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
 				/* v8 ignore next */
-				return Promises.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
+				return PromiseMethods.then(Promises.resolve(wrapper.____slothletInternal.materializationPromise), () => {
 					if (!wrapper.____slothletInternal.state.materialized) {
 						// Materialization resolved without marking the wrapper as materialized —
 						// a defensive guard against corrupted internal state; unreachable in practice.
@@ -20397,13 +20889,13 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 				const frontsModuleObject = !Arrays.isArray(target) && runtime_moduleObjectOf(wrapper) !== null;
-				for (const key of keys) {
+				for (const key of setValues(keys)) {
 					if (runtime_isFixedOnTarget(target, key)) continue;
 					// The shell's inspect hook stays the shell's own (see runtime_defineProxyInspect): the node holds no member
 					// there to fix in its place, so an object node frozen with it read the hook as `undefined` (#667).
 					if (
 						key === util.inspect.custom &&
-						(Arrays.isArray(target) || INSPECT_HOOKS.has(Reflect.getOwnPropertyDescriptor(target, key)?.value))
+						(Arrays.isArray(target) || WeakSetMethods.has(INSPECT_HOOKS, Reflect.getOwnPropertyDescriptor(target, key)?.value))
 					)
 						continue;
 					const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
@@ -20539,7 +21031,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				// A node built from a copy of a module's own object defines the member on that object too, as the same
 				// definition of the object does (#746).
-				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+				const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
 				// All are checked before any changes, so a refusal by one leaves the others as they were.
 				if (
 					(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
@@ -20599,7 +21091,8 @@ class UnifiedWrapper extends ComponentBase {
 				runtime_assertOwnedWrite(wrapper, null);
 				// A node fronting a module's own object closes that object too, as closing the object does (#757): the
 				// object refusing it refuses it here, before the node changes. Composing never changes a module's value.
-				const moduleObject = wrapper.slothlet.____buildDepth > 0 || FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				const moduleObject =
+					wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper);
 				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
@@ -20625,7 +21118,7 @@ class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				// A node fronting a module's own object sets that object's prototype, which the node reports (#757); a
 				// closed node keeps the one its shell holds, as the closed object does.
-				const moduleObject = FRAMEWORK_WRITES.has(wrapper) ? null : runtime_moduleObjectOf(wrapper);
+				const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper);
 				if (moduleObject !== null && !Arrays.isArray(impl)) {
 					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 					return Reflect.setPrototypeOf(moduleObject, runtime_unwrapSelfView(proto));
@@ -20678,11 +21171,11 @@ class UnifiedWrapper extends ComponentBase {
 			wrapper.____slothletInternal.lazyProxyTraps = proxyTraps;
 		}
 
-		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
+		WeakMapMethods.set(_proxyRegistry, wrapper.____slothletInternal.proxy, wrapper);
 		runtime_recordFunctionNode(wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real
 		// caller identity (`ctx.currentWrapper`) from a forged object and fail closed on the latter.
-		trustedRootOwn.genuineWrappers.add(wrapper);
+		WeakSetMethods.add(trustedRootOwn.genuineWrappers, wrapper);
 		// Indexed by its file, so code running from that file elsewhere is known to be this leaf's (#597).
 		registerLeafFile(wrapper);
 		return wrapper.____slothletInternal.proxy;
@@ -20738,7 +21231,7 @@ function resolveWrapper(value) {
 	// Check registry first - handles all proxies created by createProxy().
 	// A Proxy wrapping a UnifiedWrapper target passes instanceof UnifiedWrapper (via prototype
 	// chain delegation), but the getTrap blocks ____slothletInternal, so registry must come first.
-	const registered = _proxyRegistry.get(value);
+	const registered = WeakMapMethods.get(_proxyRegistry, value);
 	if (registered) return registered;
 	// Raw UnifiedWrapper instances (not proxies): the class's own brand, so a Proxy's traps never run to tell (#632),
 	// and the prototype getter works, so ____slothletInternal is non-null. Proxies of wrappers return undefined for it
@@ -20758,7 +21251,7 @@ function resolveWrapper(value) {
  * isWrapperAnsweredName("name"); // true
  */
 export function isWrapperAnsweredName(key) {
-	return WRAPPER_ANSWERED_PROPS.has(key);
+	return SetMethods.has(WRAPPER_ANSWERED_PROPS, key);
 }
 
 /**
@@ -20773,7 +21266,7 @@ export function isWrapperAnsweredName(key) {
  */
 function runtime_nodeBehind(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	return capturedViewTargets.get(value) ?? value;
+	return WeakMapMethods.get(capturedViewTargets, value) ?? value;
 }
 
 /**
@@ -20800,20 +21293,23 @@ function runtime_nodeBehind(value) {
  */
 export function readApiMember(container, key) {
 	const wrapper = resolveWrapper(container);
-	if (wrapper && WRAPPER_ANSWERED_PROPS.has(key) && !runtime_hasOwnMember(wrapper, key)) {
+	if (wrapper && SetMethods.has(WRAPPER_ANSWERED_PROPS, key) && !runtime_hasOwnMember(wrapper, key)) {
 		const { mode, state } = wrapper.____slothletInternal;
 		if (mode !== "lazy" || state.materialized) return undefined;
 	}
 	// A plain object (the api root while it is built) holds its members as own properties; what it
 	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
 	// node would write the mount into the global builtin.
-	if (!wrapper) return Objects.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
+	if (!wrapper) return FunctionMethods.call(Objects.prototype.hasOwnProperty, container, key) ? container[key] : undefined;
 	// The framework reads its own tree, often while a module's call is executing (that module's own
 	// `api.add`), and works on the node itself: a read under a module's identity hands back that module's
 	// captured view, which is not the node, so the mount would merge the node into itself and write to it
 	// as that module (#625).
 	const member = container[key];
-	return (member !== null && (typeof member === "object" || typeof member === "function") && capturedViewTargets.get(member)) || member;
+	return (
+		(member !== null && (typeof member === "object" || typeof member === "function") && WeakMapMethods.get(capturedViewTargets, member)) ||
+		member
+	);
 }
 
 /**
@@ -20832,7 +21328,7 @@ export function readApiMember(container, key) {
  * const { value } = await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
  */
 export async function loadApiMember(container, key) {
-	if (WRAPPER_ANSWERED_PROPS.has(key) && resolveWrapper(container)) {
+	if (SetMethods.has(WRAPPER_ANSWERED_PROPS, key) && resolveWrapper(container)) {
 		// A waiting proxy stands for a member of a node that has not loaded, and maps back to that
 		// ancestor's wrapper; awaiting it loads the chain and yields the member itself, the node `key`
 		// must be read on. A loaded node is not thenable and is unchanged.
