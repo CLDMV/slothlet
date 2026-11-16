@@ -60,3 +60,19 @@ export async function reach() {
 		})
 	};
 }
+
+/**
+ * Hand the owner a built-in bound to a write onto its class, reached by each route, for the owner to run: no frame of
+ * this file's is on the stack when the write is made. Each write is under a key starting `__kin_bound_`.
+ * @returns {Promise<Object<string, string>>} How each route's write ended.
+ */
+export async function deputy() {
+	const prefix = "__kin_bound_";
+	const plant = (prototype, key) => self.owner.run(Object.assign.bind(null, prototype, { [`${prefix}${key}`]: 1 }));
+	return {
+		node: await attempt(() => plant(self.owner.Base.prototype, "node")),
+		constructed: await attempt(() => plant(Object.getPrototypeOf(new self.owner.Base()), "constructed")),
+		returned: await attempt(async () => plant(Object.getPrototypeOf(await self.owner.make()), "returned")),
+		nested: await attempt(async () => plant(Object.getPrototypeOf((await self.owner.wrap()).inner.inst), "nested"))
+	};
+}

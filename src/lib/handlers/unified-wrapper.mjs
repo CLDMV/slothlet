@@ -840,7 +840,8 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 /**
  * A view is its reader's: a write another module's code, or the host's, makes through it has to be the reader's to make
  * as well, so a function the reader hands someone to run (a bound built-in, which has no frame of the reader's) writes
- * nothing the reader could not. A write the reader's own module makes is decided for the leaf executing it alone.
+ * nothing the reader could not. A write the reader's own module makes is decided for the leaf executing it alone,
+ * unless a write rule keeps the two apart (files loaded from one folder share a module): then it is held to both.
  * @param {object} slothlet - The instance.
  * @param {object} reader - Who the view belongs to.
  * @param {object|null} writer - Who the write is made as: the module executing, or null for the host.
@@ -851,7 +852,7 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
  */
 function runtime_assertReaderWrite(slothlet, reader, writer, parts) {
 	if (!reader?.____slothletInternal || reader === writer) return;
-	if (writer !== null && runtime_sameModule(writer, reader)) return;
+	if (writer !== null && runtime_asOneModule(slothlet, writer, reader)) return;
 	if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 	slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 }
@@ -8772,8 +8773,11 @@ function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
 	// One view per module: the first of its wrappers stands for all of them, and each write is still decided for the
 	// module executing it. Whether the reader holds the object itself is the reader's own answer: files loaded from one
-	// folder share a module, and the one standing for it may hold what a rule refuses this one.
-	const standing = reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader).owner : reader;
+	// folder share a module, and the one standing for it may hold what a rule refuses this one. A file a write rule
+	// keeps apart from the one standing for its module gets a view of its own, so a write through it that another
+	// module's code makes (a bound built-in it hands on) is still held to what the file may write.
+	let standing = reader?.____slothletInternal && reader.slothlet ? runtime_makerOf(reader).owner : reader;
+	if (standing !== reader && !runtime_asOneModule(slothlet, standing, reader)) standing = reader;
 	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet, standing);
 	let site = CROSSED_PROTOTYPE_PATHS.get(prototype);
 	if (site === undefined || (!site.known && from?.____slothletInternal)) {

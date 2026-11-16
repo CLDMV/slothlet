@@ -49,6 +49,16 @@ export function wrap() {
 }
 
 /**
+ * Run a function handed in.
+ * @param {Function} fn - The function.
+ * @returns {string} `"ran"`.
+ */
+export function run(fn) {
+	fn();
+	return "ran";
+}
+
+/**
  * Which members whose name starts with `prefix` `Base.prototype` holds, removing each, and whether its method is still
  * the one written (putting it back).
  * @param {string} prefix - The prefix.

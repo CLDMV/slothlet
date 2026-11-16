@@ -149,6 +149,34 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		}
 	);
 
+	it.each(["aside", "reader"])(
+		"refuses a write a bound built-in makes through the owner for a file of the same folder a rule refuses the write (%s)",
+		async (file) => {
+			api = await slothlet({
+				base: join(FIXTURE, "kin"),
+				silent: true,
+				mode,
+				runtime,
+				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+			});
+			// The owner runs it, but the view it writes through is the file's: the write has to be the file's to make too.
+			expect(await api[file].deputy()).toEqual({
+				node: "PERMISSION_DENIED",
+				constructed: "PERMISSION_DENIED",
+				returned: "PERMISSION_DENIED",
+				nested: "PERMISSION_DENIED"
+			});
+			expect(await api.owner.landed("__kin_bound_")).toEqual([]);
+		}
+	);
+
+	it("lands a write a bound built-in makes through the owner for a file of the same folder no rule refuses", async () => {
+		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		// Plain JavaScript: every write lands.
+		expect(await api.reader.deputy()).toEqual({ node: "written", constructed: "written", returned: "written", nested: "written" });
+		expect(await api.owner.landed("__kin_bound_")).toEqual(["node", "constructed", "returned", "nested"]);
+	});
+
 	it("leaves a class a node exports to a file of the same folder where no rule stands between them", async () => {
 		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
 		// Plain JavaScript: every write lands.

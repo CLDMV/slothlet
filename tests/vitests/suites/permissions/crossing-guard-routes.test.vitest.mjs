@@ -139,6 +139,10 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 		expect(outcome).toEqual({
 			stackExhausted: ["refused"],
 			boundBuiltIn: refused(),
+			boundAssign: refused(),
+			boundDefine: refused(),
+			boundCall: refused(),
+			boundPrototypeSwap: refused(),
 			closureRunByOwner: refused(),
 			echoedData: refused(),
 			echoedInstance: refused(),
@@ -151,6 +155,29 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 			// A data member of an instance the reader was handed is the reader's to write.
 			instanceDataWritten: ["written"]
 		});
+	});
+
+	it("refuses the reader a write a module allowed to write the owner makes for it through a bound built-in", async () => {
+		api = await mount({
+			mode,
+			runtime,
+			permissions: {
+				defaultPolicy: "allow",
+				attribution,
+				rules: [
+					{ caller: "deputy.**", target: "owner.**:write", effect: "allow" },
+					{ caller: "deputy.**", target: "owner:write", effect: "allow" }
+				]
+			}
+		});
+		await api.slothlet.api.add("deputy", join(FIXTURE, "deputy"), { moduleID: "deputy" });
+		// The deputy may write the owner's code, but the view the write goes through is the reader's, and the reader may not.
+		expect(await api.reader.throughDeputy("__deputy_")).toEqual({
+			assign: "LOOSE_SET_NOT_OWNED",
+			nested: "LOOSE_SET_NOT_OWNED",
+			prototypeSwap: "LOOSE_SET_NOT_OWNED"
+		});
+		expect([...(await api.owner.landed("__deputy_")), ...(await api.owner.changed())]).toEqual([]);
 	});
 
 	it("hands a module's own hook on its own function the module's own values", async () => {
