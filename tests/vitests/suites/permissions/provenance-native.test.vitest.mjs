@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-15T20:45:25-08:00 (1794804325)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,7 @@ beforeAll(() => {
 			"\t\tawait sched.slothlet.shutdown();",
 			"\t}",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);

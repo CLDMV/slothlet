@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T01:39:20-07:00 (1793522360)
+ *	@Last modified time: 2026-11-15T20:45:24-08:00 (1794804324)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,7 +109,7 @@ beforeAll(() => {
 			"\tawait new Promise((resolve) => setTimeout(resolve, 100));",
 			"\tawait api.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
