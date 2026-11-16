@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:58-08:00 (1794635278)
+ *	@Last modified time: 2026-11-15T19:13:19-08:00 (1794798799)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * @internal
  */
 
-import { path, util } from "@cldmv/slothlet/helpers/platform";
+import { fileParts, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
@@ -203,10 +203,11 @@ const FRAMEWORK_WRITE_KEYS = new Set([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, 
  * that survives every composition shape — the api path is lossy in both directions, but
  * enforcement receives both REAL file paths, and `dirname` equality needs no new assigned
  * identity, no cache-key change, and no mode-dependent normalization. A subdirectory is its own
- * module: nesting expresses a boundary, exactly as it does for the api surface.
+ * module: nesting expresses a boundary, exactly as it does for the api surface. The folders come from
+ * `fileParts`, so a browser, where both files are URLs, compares them the same way.
  */
 function runtime_sameModuleDir(callerFilePath, targetFilePath) {
-	return path.dirname(callerFilePath) === path.dirname(targetFilePath);
+	return fileParts(callerFilePath).dir === fileParts(targetFilePath).dir;
 }
 
 /**
