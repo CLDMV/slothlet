@@ -579,6 +579,51 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		expect(held).toEqual({ nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: { n: 1 } } });
 	});
 
+	// An error of the language's own is told by the engine's brand check and read from its descriptors, so data holding
+	// one is checked for disguised iterators like any other data and comes back as itself.
+	it.each(["error", "typeError", "aggregate", "causeAndMembers", "stackRead"])(
+		"hands out data holding an error (%s) as itself with provenance off",
+		async (kind) => {
+			await create({ provenance: false });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(false);
+			expect(types.isProxy(held.error)).toBe(false);
+			expect(types.isNativeError(held.error)).toBe(true);
+			if (kind === "aggregate") expect(held.error.errors.map((error) => error.message)).toEqual(["a", "b"]);
+			if (kind === "causeAndMembers") expect([held.error.cause, held.error.code, held.error.detail]).toEqual([{ code: 1 }, "E1", { n: 1 }]);
+		}
+	);
+
+	it.each(["iteratorHoldingError", "iteratorPosingAsError", "errorBesideIterator", "prototypeReplaced", "stackGetter"])(
+		"hands out data holding what only looks like plain data and an error (%s) as the module's with provenance off",
+		async (kind) => {
+			await create({ provenance: false });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(true);
+			expect(await api.slots.stackGetterCount()).toBe(0);
+		}
+	);
+
+	it("hands out data holding an error without formatting its stack, with provenance off", async () => {
+		await create({ provenance: false });
+		const saved = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
+		let formatted = 0;
+		Error.prepareStackTrace = () => {
+			formatted++;
+			return "formatted";
+		};
+		try {
+			const held = await api.slots.errorData("error");
+			expect(formatted).toBe(0);
+			// Read afterwards, the stack is formatted as plain JavaScript formats it: by the formatter set now, once.
+			expect(held.error.stack).toBe("formatted");
+			expect(formatted).toBe(1);
+		} finally {
+			if (saved) Object.defineProperty(Error, "prepareStackTrace", saved);
+			else delete Error.prepareStackTrace;
+		}
+	});
+
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
 		await create({ provenance: false });
 		expect(types.isProxy(await api.slots.script())).toBe(true);

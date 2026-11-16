@@ -159,6 +159,7 @@ import {
 	WeakSetMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { isEngineStackAccessor, runUnformatted } from "@cldmv/slothlet/helpers/stack-read";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
 const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
@@ -6657,9 +6658,11 @@ function runtime_slotHoldsCode(value, depth, budget) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 		if (!descriptor) continue;
 		if (!("value" in descriptor)) {
+			// An error's `stack` accessor is the engine's, which names no function.
 			for (let ofIndex = 0, ofList = [descriptor.get, descriptor.set]; ofIndex < ofList.length; ofIndex++) {
 				const half = ofList[ofIndex];
-				if (typeof half === "function" && !runtime_isBuiltinFunction(half)) return true;
+				if (typeof half === "function" && !runtime_isBuiltinFunction(half) && !(key === "stack" && isEngineStackAccessor(half)))
+					return true;
 			}
 			continue;
 		}
@@ -6776,6 +6779,72 @@ function runtime_isBoxedSymbol(value) {
 }
 
 /**
+ * The prototypes of the language's own errors, taken when slothlet loaded.
+ * @type {Set<object>}
+ * @private
+ */
+const ERROR_PROTOTYPES = setFrom(
+	mapList(
+		filterList(
+			[Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError, AggregateError],
+			(constructor) => typeof constructor === "function"
+		),
+		(constructor) => constructor.prototype
+	)
+);
+
+/**
+ * Whether a value is an error of the language's own, told by the engine's brand check ({@link runtime_isBrandedError};
+ * where the engine has none, nothing is), with one of the language's own error
+ * prototypes. A look-alike (an object of another kind given an error's prototype, or posing as one by its members)
+ * is not, and neither is an error whose prototype was replaced.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such an error.
+ * @private
+ */
+function runtime_isEngineError(value) {
+	if (!isNode && typeof Errors.isError !== "function") return false;
+	return runtime_isBrandedError(value) && SetMethods.has(ERROR_PROTOTYPES, Reflect.getPrototypeOf(value));
+}
+
+/**
+ * Whether the engine's brand check tells a value to be an error, whatever its prototype: Node's `util.types`, or
+ * `Error.isError` where the engine has it. Where it has neither, an object is taken to be one.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True when it is, or cannot be told.
+ * @private
+ */
+function runtime_isBrandedError(value) {
+	if (isNode) return util.types.isNativeError(value);
+	return typeof Errors.isError === "function" ? Errors.isError(value) : true;
+}
+
+/**
+ * Whether copying an error of the language's own with `structuredClone` runs none of a module's code: the copy reads
+ * its own `message` (a string), its `name` (a data property on it or up its chain), its `stack` (the engine's getter,
+ * whose formatting {@link runtime_keepsHiddenState} holds, or a data property) and its own `cause` (a value whose copy
+ * runs no code either). Other members of its own, `errors` of an `AggregateError` among them, are not copied.
+ * @param {Error} error - The error ({@link runtime_isEngineError}).
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_errorCopyRunsNoCode(error, depth) {
+	const message = Reflect.getOwnPropertyDescriptor(error, "message");
+	if (message !== undefined && (!("value" in message) || typeof message.value !== "string")) return false;
+	const cause = Reflect.getOwnPropertyDescriptor(error, "cause");
+	if (cause !== undefined && (!("value" in cause) || !runtime_copyRunsNoCode(cause.value, depth - 1))) return false;
+	let name = null;
+	let stack = null;
+	for (let link = error; link !== null && (name === null || stack === null); link = Reflect.getPrototypeOf(link)) {
+		name ??= Reflect.getOwnPropertyDescriptor(link, "name") ?? null;
+		stack ??= Reflect.getOwnPropertyDescriptor(link, "stack") ?? null;
+	}
+	if (name !== null && !("value" in name)) return false;
+	return stack === null || "value" in stack || isEngineStackAccessor(stack.get);
+}
+
+/**
  * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
  * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
  * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
@@ -6793,6 +6862,10 @@ function runtime_copyRunsNoCode(value, depth) {
 	const types = util.types;
 	if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
 	if (types.isBoxedPrimitive(value)) return !runtime_isBoxedSymbol(value);
+	// An error is copied from its `message`, `name`, `stack` and `cause`, whatever its prototype: one whose prototype is
+	// not the language's own may hand the copy a getter of a module's to run.
+	if (runtime_isEngineError(value)) return runtime_errorCopyRunsNoCode(value, depth);
+	if (runtime_isBrandedError(value)) return false;
 	if (types.isMap(value) || types.isSet(value)) {
 		// Read with the forEach taken at load: the map or set itself, not its iterator.
 		const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
@@ -6843,11 +6916,10 @@ function runtime_keepsHiddenState(value, depth) {
 		if (!descriptor || !descriptor.enumerable) continue;
 		if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return true;
 	}
-	try {
-		structuredClone(value);
-	} catch {
-		return true;
-	}
+	// An error's stack not read yet is not formatted for the copy: the copy stops there, past the check of the
+	// object's own kind, and the stack is left to be formatted when it is first read.
+	const copy = runUnformatted(() => structuredClone(value));
+	if (!copy.held || (Objects.hasOwn(copy, "error") && !copy.unformatted)) return true;
 	WeakSetMethods.add(ORDINARY_OBJECTS, value);
 	return false;
 }

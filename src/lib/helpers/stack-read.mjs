@@ -83,6 +83,13 @@ const STACK_GETTER =
 const OWN_STACK_GETTER = Objects.getOwnPropertyDescriptor(new RealmError(), "stack")?.get;
 
 /**
+ * The `stack` setter V8 puts on each error of the global realm, as it was when slothlet loaded; undefined elsewhere.
+ * @type {Function|undefined}
+ * @private
+ */
+const OWN_STACK_SETTER = Objects.getOwnPropertyDescriptor(new RealmError(), "stack")?.set;
+
+/**
  * A property {@link hold} did not change: it held the value already.
  * @type {symbol}
  * @private
@@ -433,6 +440,66 @@ export function hasEngineStack(error) {
 	if (error === null || (typeof error !== "object" && typeof error !== "function")) return false;
 	const get = Objects.getOwnPropertyDescriptor(error, "stack")?.get;
 	return get !== undefined && (get === OWN_STACK_GETTER || get === PRIVATE?.stackGetter);
+}
+
+/**
+ * Whether a function is the `stack` getter or setter the engine gives the errors of this realm, as it was when
+ * slothlet loaded: the getter runs no code of a module's but the realm's `Error.prepareStackTrace`, which
+ * {@link runUnformatted} holds, and the setter stores a value.
+ * @param {unknown} half - A getter or setter.
+ * @returns {boolean} True when it is.
+ * @internal
+ */
+export function isEngineStackAccessor(half) {
+	return typeof half === "function" && (half === OWN_STACK_GETTER || half === STACK_GETTER || half === OWN_STACK_SETTER);
+}
+
+/**
+ * Thrown by the formatter {@link runUnformatted} holds when the engine asks it to format a stack.
+ * @type {symbol}
+ * @private
+ */
+const UNFORMATTED = Symbol("unformatted stack");
+
+/**
+ * The formatter {@link runUnformatted} holds: it formats nothing. The engine keeps a stack it could not format
+ * unformatted, so the next read formats it as it would have been.
+ * @returns {never}
+ * @throws {symbol} Always, {@link UNFORMATTED}.
+ * @private
+ */
+function refuseFormat() {
+	throw UNFORMATTED;
+}
+
+/**
+ * Run `run` with the global `Error` and its `prepareStackTrace` held so that reading the stack of an error of this realm
+ * not read yet formats nothing and runs none of a module's code: the read throws instead, and the stack is left as it
+ * was.
+ * @param {Function} run - What to run.
+ * @returns {{held: false}|{held: true, value: unknown}|{held: true, error: unknown, unformatted: boolean}} Whether the
+ *   formatter could be held, and what `run` returned or threw; `unformatted` when it threw because a stack was read.
+ * @internal
+ */
+export function runUnformatted(run) {
+	let prepareSaved = UNCHANGED;
+	let globalSaved = UNCHANGED;
+	try {
+		try {
+			prepareSaved = hold(RealmError, "prepareStackTrace", refuseFormat);
+			globalSaved = hold(GLOBAL, "Error", RealmError);
+		} catch {
+			return { held: false };
+		}
+		try {
+			return { held: true, value: run() };
+		} catch (error) {
+			return { held: true, error, unformatted: error === UNFORMATTED };
+		}
+	} finally {
+		release(GLOBAL, "Error", globalSaved);
+		release(RealmError, "prepareStackTrace", prepareSaved);
+	}
 }
 
 /**
