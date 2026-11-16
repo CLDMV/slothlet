@@ -53,6 +53,7 @@ export class ModuleManager extends ComponentBase {
      *
      * @param {DiscoverOptions} [options]
      * @returns {Promise<DiscoverResult[]>} Validated discovery results in walk order (apply `sortModules()` for deterministic ordering).
+     * @throws {SlothletError} `MODULE_DISCOVERY_REQUIRES_NODE` in a browser, which has no filesystem to walk.
      */
     discover(options?: DiscoverOptions): Promise<DiscoverResult[]>;
     /**

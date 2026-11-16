@@ -994,11 +994,12 @@ declare class UnifiedWrapper extends ComponentBase {
      *
      * @description
      * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
-     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
-     * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
-     * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
-     * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
-     * to callable does (#533).
+     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on an array shell (so
+     * `Array.isArray` sees it) and any other non-callable value, a namespace object included (#811), on an
+     * object shell. Once a lazy node loads such a value, a proxy is built from the same handler on that
+     * target and put in the parent in place of the lazy one, which forwards every operation to it from then
+     * on, as a namespace upgraded to callable does (#533). A reference taken before the load keeps the lazy
+     * proxy's form (`typeof` reads `"function"`) and reads through to the node.
      *
      * @returns {void}
      * @private
