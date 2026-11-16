@@ -185,7 +185,17 @@ const SOLO_RUN_PATTERNS = [
 	// emit) plus a `tsc` compile of the output in the acceptance check. Under a full parallel run
 	// those tsc passes are starved by the other workers and blow past the test timeout (each takes
 	// ~3s in isolation), so it runs solo like typescript-strict-mode above.
-	"tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs"
+	"tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs",
+	// The four metadata suites below each build a slothlet instance per test across every LAZY* config
+	// (45-120s per file in isolation, 1-3 GB heap). Under the full sharded run on a CI runner the
+	// beforeEach instance build is starved by the other workers and exceeds the 10s hook timeout
+	// (a different test in each file on the Node 24 leg of PR #830). They pass in isolation and time the
+	// same on next and on the PR branch, so this is starvation, not a regression: they run solo like
+	// metadata-edge-cases above.
+	"tests/vitests/suites/metadata/system-metadata.test.vitest.mjs",
+	"tests/vitests/suites/metadata/user-metadata.test.vitest.mjs",
+	"tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs",
+	"tests/vitests/suites/metadata/metadata-external-api.test.vitest.mjs"
 ];
 const PER_FILE_HEAP_OVERRIDES = [
 	{ pattern: "listener-cleanup/", heapMb: 6144 },
