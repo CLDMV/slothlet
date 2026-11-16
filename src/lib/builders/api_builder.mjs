@@ -1208,9 +1208,19 @@ export class ApiBuilder extends ComponentBase {
 					const keys = Reflect.ownKeys(target);
 					if (!Reflect.isExtensible(target)) return keys;
 					return keys.filter((prop) => {
-						if (isMetaProperty(prop)) return true;
 						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 						if (!descriptor?.configurable) return true;
+						// A member named like a function's own (`slothlet.caller`, `lockCaller.caller`) is described only to a reader
+						// that may read it (see getOwnPropertyDescriptor), so it is listed only to that reader.
+						if (isMetaProperty(prop)) {
+							try {
+								enforceInternalPermission(`${routePath}.${prop}`);
+								return true;
+							} catch (error) {
+								if (error?.code !== "PERMISSION_DENIED") throw error;
+								return false;
+							}
+						}
 						// The inspect hook is slothlet's, not a member of the namespace.
 						if (prop === INSPECT_KEY) return !NAMESPACE_INSPECT_HOOKS.has(descriptor.value);
 						if (typeof prop !== "string") return true;

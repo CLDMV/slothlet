@@ -53,29 +53,42 @@ const DENIED_TARGETS = ["math.**", "deep.**", "named.**", "mnt.**"];
 
 /**
  * The permission setups. `denies` names whether the module's own `named.name` and `named.length` members are refused,
- * and `unheld` the functions the module may not read at all (so it holds no function to read the members of).
- * @type {Array<{label: string, permissions: object, denies: boolean, unheld: string[]}>}
+ * `unheld` the functions the module may not read at all (so it holds no function to read the members of), and `listed`
+ * the members of `self.slothlet` the module lists.
+ * @type {Array<{label: string, permissions: object, denies: boolean, unheld: string[], listed: string[]}>}
  */
 const POLICIES = [
 	{
 		label: "a deny rule on each target",
 		permissions: { defaultPolicy: "allow", rules: DENIED_TARGETS.map((target) => ({ caller: "probe.**", target, effect: "deny" })) },
 		denies: true,
-		unheld: []
+		unheld: [],
+		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
 	},
 	{
 		label: "default deny with no rule for the target",
 		permissions: { defaultPolicy: "deny", rules: [] },
 		denies: true,
-		unheld: ["slothlet.api.add"]
+		unheld: ["slothlet.api.add"],
+		// `slothlet.api` is not the module's to read at all, and `lockCaller` holds a `prototype` it may not read but
+		// which a function always lists (it is fixed), so neither is listed here.
+		listed: ["slothlet", "slothlet.hook"]
 	},
 	{
 		label: "default allow with no rule",
 		permissions: { defaultPolicy: "allow", rules: [] },
 		denies: false,
-		unheld: []
+		unheld: [],
+		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
 	}
 ];
+
+/**
+ * Whether a probe's answer is a refusal.
+ * @param {*} answer - The answer.
+ * @returns {boolean} True for `"THROW …"`.
+ */
+const threw = (answer) => typeof answer === "string" && answer.startsWith("THROW");
 
 /** What every route answers when reading the function itself is refused. */
 const UNHELD = {
@@ -131,7 +144,7 @@ const CONFIGS = getMatrixConfigs().flatMap(({ name, config }) =>
 );
 
 describe.each(CONFIGS)("Permissions > a function's built-in name and length > $name", ({ config, attribution }) => {
-	describe.each(POLICIES)("$label", ({ permissions, denies, unheld }) => {
+	describe.each(POLICIES)("$label", ({ permissions, denies, unheld, listed }) => {
 		let api;
 
 		beforeAll(async () => {
@@ -201,6 +214,18 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 			}
 			for (const where of ["math.add", "deep.inner.walk", "mnt.gear.spin"]) {
 				expect(walked, where).toContain(`${where} ${host.get(where)}`);
+			}
+		});
+
+		it("lets a module list members of self.slothlet as the members it may read, members named like a function's own ones included", async () => {
+			for (const where of listed) {
+				const keys = await probe("listed", where);
+				expect(Array.isArray(keys), `${where}: ${keys}`).toBe(true);
+				for (const key of keys) expect(threw((await probe("read", where, key)).dot), `${where}.${key}`).toBe(false);
+				// What the module may read is listed: the host lists every member, and each one the module reads is among the module's.
+				for (const key of Object.keys(at(api, where))) {
+					if (!threw((await probe("read", where, key)).dot)) expect(keys, `${where}.${key}`).toContain(key);
+				}
 			}
 		});
 
