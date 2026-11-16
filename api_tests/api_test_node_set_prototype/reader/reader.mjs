@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:55:17-08:00 (1794804917)
+ *	@Last modified time: 2026-11-16T00:41:12-08:00 (1794818472)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -195,5 +195,36 @@ export function viewKeys(path) {
 		return Object.keys(Object.getPrototypeOf(at(path)));
 	} catch (error) {
 		return { threw: error?.code ?? error?.name ?? "threw" };
+	}
+}
+
+/**
+ * What this module lists of the object members a node holds and inherits: `nothing` and `partly` from the prototype the
+ * node reports, `ownNothing` and `ownPartly` from the node itself.
+ * @param {string} path - The node's path.
+ * @returns {object} What it lists, or `{ threw }`.
+ */
+export function objectListing(path) {
+	try {
+		const node = at(path);
+		const view = Object.getPrototypeOf(node);
+		const own = Object.keys(node);
+		const forIn = [];
+		for (const name in node) if (!own.includes(name)) forIn.push(name);
+		const viewForIn = [];
+		for (const name in view) viewForIn.push(name);
+		return {
+			own: own.filter((name) => name.startsWith("own")),
+			keys: Object.keys(view),
+			ownKeys: Reflect.ownKeys(view).filter((key) => typeof key === "string"),
+			forIn,
+			viewForIn,
+			spread: Object.keys({ ...view }),
+			json: JSON.stringify(view),
+			has: ["nothing" in view, "partly" in view, "nothing" in node],
+			partly: [view.partly.a, Object.keys(view.partly)]
+		};
+	} catch (error) {
+		return { threw: error?.code ?? error?.name ?? "threw", message: String(error?.message) };
 	}
 }

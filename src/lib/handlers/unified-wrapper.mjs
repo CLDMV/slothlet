@@ -4197,12 +4197,12 @@ function runtime_givenAsIs(value) {
  * view was handed to, so a view a module kept reads no more than the module may.
  * @param {{gate: object, reader: object}} record - The view's record.
  * @param {string|symbol} prop - The member's key.
+ * @param {string} [target] - The path decided, when it is not the member's own (a probe beneath it).
  * @returns {{allowed: boolean, caller: string|null, target: string}} The verdict, with the path decided.
  * @private
  */
-function runtime_givenReadDecision(record, prop) {
+function runtime_givenReadDecision(record, prop, target = runtime_memberPathOf(record.gate, prop)) {
 	const { gate, reader } = record;
-	const target = runtime_memberPathOf(gate, prop);
 	const pm = gate.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return { allowed: true, caller: null, target };
 	const live = runtime_readGateDecision(gate, target, undefined);
@@ -4216,18 +4216,50 @@ function runtime_givenReadDecision(record, prop) {
 /**
  * Whether a member a given prototype holds is left out of what its view lists and describes: data the reader may not
  * read, and a getter whose path it may not read, as a node leaves them out of its own listing (see
- * {@link runtime_isReadRedacted}). Read by descriptor: nothing of the prototype runs.
+ * {@link runtime_isReadRedacted}), and, from a listing, an object member the reader may read nothing beneath, as a node
+ * leaves out the same member of its own (see {@link runtime_givenReadsNothingBeneath}). Read by descriptor: nothing of
+ * the prototype runs.
  * @param {{value: object, gate: object, reader: object}} record - The view's record.
  * @param {string|symbol} prop - The member's key.
+ * @param {boolean} [listing=false] - Whether the key is being listed (`ownKeys`): an object member is described still.
  * @returns {boolean} True when it is left out.
  * @private
  */
-function runtime_givenWithheld(record, prop) {
+function runtime_givenWithheld(record, prop, listing = false) {
 	const descriptor = Reflect.getOwnPropertyDescriptor(record.value, prop);
 	if (!descriptor) return false;
 	const isData = "value" in descriptor;
+	// An object member is listed only while the reader may read something beneath it, as the same member of the node's
+	// own is. What slothlet hands out as it is (a node, a view) is listed whatever the rules on its path say.
+	if (listing && isData && typeof prop === "string") {
+		const member = descriptor.value;
+		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member) && !runtime_givenAsIs(member))
+			return runtime_givenReadsNothingBeneath(record, prop);
+	}
 	if (isData ? !runtime_isTerminalData(descriptor.value) : typeof descriptor.get !== "function") return false;
 	return !runtime_givenReadDecision(record, prop).allowed;
+}
+
+/**
+ * Whether the rules leave the reader nothing to read at an object member of a given prototype: a read of the member's
+ * path is refused, and so is a read of any member beneath it, with no more specific allow beneath it, as
+ * {@link runtime_readsNothingBeneath} decides for the same member of a node's own.
+ * @param {{gate: object, reader: object}} record - The view's record.
+ * @param {string} prop - The member's key.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ *
+ * @example
+ * // rule: allow reader.** → owner.config.partly.a; the prototype holds { nothing: {...}, partly: {...} }
+ * Object.keys(Object.getPrototypeOf(self.owner.config)); // ["partly"]
+ */
+function runtime_givenReadsNothingBeneath(record, prop) {
+	const targetPath = runtime_memberPathOf(record.gate, prop);
+	if (runtime_givenReadDecision(record, prop, targetPath).allowed) return false;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = runtime_givenReadDecision(record, prop, probePath);
+	if (beneath.allowed) return false;
+	return !record.gate.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -4289,7 +4321,7 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
 	const view = new NativeProxy(shadow, {
 		get: (_, prop, receiver) => runtime_givenMember(record, prop, Reflect.get(value, prop, receiver === view ? view : receiver)),
 		has: (_, prop) => Reflect.has(value, prop),
-		ownKeys: () => Reflect.ownKeys(value).filter((key) => !runtime_givenWithheld(record, key)),
+		ownKeys: () => Reflect.ownKeys(value).filter((key) => !runtime_givenWithheld(record, key, true)),
 		getOwnPropertyDescriptor: (_, prop) => {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
 			if (!descriptor || runtime_givenWithheld(record, prop)) return undefined;

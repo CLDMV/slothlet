@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T00:46:26-08:00 (1794818786)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -422,6 +422,25 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 						expect(api.w.ops.protoWrite(via, api)).not.toBe("done");
 					}
 					expect(Object.hasOwn(prototype, "written")).toBe(false);
+				});
+
+				it("an inherited object member the module may read nothing beneath is left out of its listings", async () => {
+					const objectRules = [...rules, { caller: "w.ops.protoObjects", target: "partly.a", effect: "allow" }];
+					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules: objectRules } });
+					Object.setPrototypeOf(api, { nothing: { a: 1 }, partly: { a: 1, b: 2 } });
+					for (const via of ["given", "api"]) {
+						// Plain JS lists both; the module may read nothing beneath `nothing`, which is left out as a node leaves out
+						// the same member of its own, and `partly` is listed holding the one leaf the module may read.
+						expect(api.w.ops.protoObjects(via, api), via).toEqual({
+							keys: ["partly"],
+							ownKeys: ["partly"],
+							forIn: ["partly"],
+							spread: ["partly"],
+							json: '{"partly":{"a":1}}',
+							has: [true, true, true],
+							partly: [1, ["a"]]
+						});
+					}
 				});
 
 				it("a closed root holds the checked prototype for every holder", async () => {

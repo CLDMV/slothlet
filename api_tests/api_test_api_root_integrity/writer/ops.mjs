@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T00:38:07-08:00 (1794818287)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -210,5 +210,31 @@ export function protoKeys(via, given) {
 		return Object.keys(rootOrPrototype(via, given, 1));
 	} catch (error) {
 		return { code: error?.code ?? error?.name };
+	}
+}
+
+/**
+ * What this module lists of the object members `nothing` and `partly` the root inherits from the prototype it reports.
+ * @param {"self"|"api"|"given"} via - How the root is reached.
+ * @param {object} given - The api the host handed in.
+ * @returns {object} What it lists, or `{ code, message }`.
+ */
+export function protoObjects(via, given) {
+	try {
+		const root = rootOrPrototype(via, given, 0);
+		const view = Object.getPrototypeOf(root);
+		const forIn = [];
+		for (const name in root) if (name === "nothing" || name === "partly") forIn.push(name);
+		return {
+			keys: Object.keys(view),
+			ownKeys: Reflect.ownKeys(view).filter((key) => typeof key === "string"),
+			forIn,
+			spread: Object.keys({ ...view }),
+			json: JSON.stringify(view),
+			has: ["nothing" in view, "partly" in view, "nothing" in root],
+			partly: [view.partly.a, Object.keys(view.partly)]
+		};
+	} catch (error) {
+		return { code: error?.code ?? error?.name, message: String(error?.message) };
 	}
 }

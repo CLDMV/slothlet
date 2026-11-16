@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:03:10-08:00 (1794805390)
+ *	@Last modified time: 2026-11-16T00:46:27-08:00 (1794818787)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -479,7 +479,10 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 			// A closed function node lists its function's own members only to a module that may call it.
 			{ caller: "reader.listed", target: path, effect: "allow" },
 			{ caller: "reader.read", target: `${path}.deepRuled`, effect: "allow" },
-			{ caller: "reader.listed", target: `${path}.deepRuled`, effect: "allow" }
+			{ caller: "reader.listed", target: `${path}.deepRuled`, effect: "allow" },
+			// One leaf of an object member, inherited and own, and nothing beneath the other.
+			{ caller: "reader.objectListing", target: `${path}.partly.a`, effect: "allow" },
+			{ caller: "reader.objectListing", target: `${path}.ownPartly.a`, effect: "allow" }
 		]);
 		/**
 		 * The node at a dotted path.
@@ -577,6 +580,30 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 			// A write through it is a write at the node's path: refused to a module that does not own the node.
 			expect(await api.reader.write(path, "written", 1)).toBe("LOOSE_SET_NOT_OWNED");
 			expect(Object.hasOwn(prototype, "written")).toBe(false);
+		});
+
+		it.each(PATHS)("%s: an inherited object member the module may read nothing beneath is left out of its listings", async (path) => {
+			await build({ defaultPolicy: "deny", rules });
+			const node = at(path);
+			expect(Reflect.setPrototypeOf(node, { nothing: { a: 1 }, partly: { a: 1, b: 2 } })).toBe(true);
+			// The same members, held by the node itself.
+			node.ownNothing = { a: 1 };
+			node.ownPartly = { a: 1, b: 2 };
+			// Plain JS lists both members; the module may read nothing beneath `nothing` and one leaf of `partly`, so
+			// `nothing` is left out, and `partly` is listed holding the leaf it may read. A function node leaves out
+			// `ownNothing` the same way; a composed namespace still lists an object the host assigned to it.
+			const { own, ...listing } = await api.reader.objectListing(path);
+			if (path !== "ev") expect(own).toEqual(["ownPartly"]);
+			expect(listing).toEqual({
+				keys: ["partly"],
+				ownKeys: ["partly"],
+				forIn: ["partly"],
+				viewForIn: ["partly"],
+				spread: ["partly"],
+				json: '{"partly":{"a":1}}',
+				has: [true, true, true],
+				partly: [1, ["a"]]
+			});
 		});
 
 		it("the module owning the node writes through the prototype it is handed, onto the object", async () => {
