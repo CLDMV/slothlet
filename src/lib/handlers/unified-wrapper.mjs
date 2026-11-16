@@ -13329,6 +13329,49 @@ function runtime_shellValue(wrapper, prop) {
 }
 
 /**
+ * The node a data definition on a node holds in place of the object or function it defines, as a value assigned to
+ * the node is held (wrap-on-set): `null` for a value held as it is (a primitive, a built-in data object, a proxy, a
+ * node), for any definition during a build, and for a member the definition leaves fixed (read-only and
+ * non-configurable), which JavaScript requires the node to report and hand out as the value defined. A definition of
+ * a member with the value it holds already keeps that member's node.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} target - The node's proxy target.
+ * @param {string|symbol} prop - The member.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {object|null} The node to hold, or `null`.
+ * @private
+ *
+ * @example
+ * Object.defineProperty(self.secret.holder, "late", { value: { hidden: "H" }, writable: true });
+ * self.secret.holder.late.hidden; // read through the node at secret.holder.late.hidden, gated as any member
+ */
+function runtime_definedValueNode(wrapper, target, prop, descriptor) {
+	if (!("value" in descriptor) || wrapper.slothlet.____buildDepth > 0) return null;
+	const value = descriptor.value;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
+	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
+	const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
+	const known = shell ?? current;
+	const configurable = "configurable" in descriptor ? descriptor.configurable : known ? known.configurable : false;
+	const writable =
+		"writable" in descriptor
+			? descriptor.writable
+			: known && "value" in known
+				? !wrapper.____slothletInternal.readOnlyKeys?.has(prop) && (shell ? shell.writable : true)
+				: false;
+	if (!configurable && !writable) return null;
+	const currentNode = current && "value" in current ? resolveWrapper(current.value) : null;
+	if (currentNode && hasOwn(currentNode.____slothletInternal, "sourceValue") && currentNode.____slothletInternal.sourceValue === value)
+		return current.value;
+	const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
+	const wrappedInternal = wrapped === null || wrapped === undefined ? null : resolveWrapper(wrapped);
+	if (!wrappedInternal) return null;
+	wrappedInternal.____slothletInternal.userAssigned = true;
+	return wrapped;
+}
+
+/**
  * Apply a definition to a sealed node's shell target (see the preventExtensions trap), and to the module's
  * array for an array member, so both answer as the array itself would (#603, #609).
  *
@@ -20387,7 +20430,18 @@ class UnifiedWrapper extends ComponentBase {
 				// An object defined after the api was built is data, as one assigned is (#826).
 				if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
-				if (target === wrapper || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+				if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+				// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is
+				// read through it is gated at its own path and a write through it is held to its owner. The module's own
+				// object keeps the value itself.
+				const raw = descriptor;
+				const heldNode = runtime_definedValueNode(wrapper, target, prop, descriptor);
+				if (heldNode !== null) descriptor = { ...descriptor, value: heldNode };
+				if (target === wrapper) {
+					if (!Reflect.defineProperty(target, prop, descriptor)) return false;
+					if (heldNode !== null) (wrapper.____slothletInternal.userAssignedKeys ??= new Set()).add(prop);
+					return true;
+				}
 				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
 				// changes them as it would on the object, a value going through the node's own write.
 				if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
@@ -20421,10 +20475,10 @@ class UnifiedWrapper extends ComponentBase {
 				if (
 					(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
 					!runtime_canDefine(wrapper, prop, descriptor) ||
-					(moduleObject !== null && !runtime_canDefine(moduleObject, prop, descriptor))
+					(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw))
 				)
 					return false;
-				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, descriptor)) return false;
+				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, raw)) return false;
 				if (moduleObject !== null && typeof prop === "string") runtime_moduleObjectKeys(moduleObject).add(prop);
 				// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
 				// node's own store keeps every member read-only, so what was asked for is remembered beside it.
@@ -20436,6 +20490,7 @@ class UnifiedWrapper extends ComponentBase {
 				const staysWritable = !isAccessor && ("writable" in descriptor ? descriptor.writable === true : wasWritable);
 				if (isAccessor || staysWritable) internal.readOnlyKeys?.delete(prop);
 				else (internal.readOnlyKeys ??= new Set()).add(prop);
+				if (heldNode !== null) (internal.userAssignedKeys ??= new Set()).add(prop);
 				return true;
 			},
 			deleteProperty: deletePropertyTrap,
