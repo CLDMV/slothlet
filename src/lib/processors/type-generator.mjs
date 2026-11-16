@@ -402,13 +402,13 @@ function generateDeclaration(members, options, rootCall = null) {
 		listPush(lines, "");
 	}
 
-	lines.push(`export interface ${interfaceName} {`);
+	listPush(lines, `export interface ${interfaceName} {`);
 	// A function root makes the api, and `self`, callable as that function (#803). Its arguments and result are taken
 	// from the function's own type; the call signature is inherited by `SlothletSelf` below.
 	if (rootCall) {
 		const fn = `Extract<${rootCall}, (...args: any[]) => any>`;
-		lines.push(`\t/** The api root's own function (\`api()\`, and \`self()\` in a leaf). */`);
-		lines.push(`\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
+		listPush(lines, `\t/** The api root's own function (\`api()\`, and \`self()\` in a leaf). */`);
+		listPush(lines, `\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
 	}
 	renderMembers(members, 1, lines);
 	listPush(lines, "}");

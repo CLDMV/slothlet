@@ -52,12 +52,14 @@ import {
 	filterList,
 	JSON,
 	listPush,
+	listSplice,
 	Map,
 	mapEntries,
 	MapMethods,
 	mapValuesToArray,
 	NativeProcess,
 	NumberMethods,
+	ObjectMethods,
 	Objects,
 	Promise,
 	promiseAll,
@@ -396,11 +398,7 @@ function runtime_encodeQueryValue(value) {
  * @private
  */
 function runtime_sortedQuery(query) {
-	return query
-		.split("&")
-		.filter((part) => part !== "")
-		.sort()
-		.join("&");
+	return ArrayMethods.join(ArrayMethods.sort(filterList(splitText(query, "&"), (part) => part !== "")), "&");
 }
 
 /**
@@ -612,7 +610,7 @@ export class Loader extends ComponentBase {
 							let errorOutput = "";
 
 							child.stderr?.on("data", (data) => {
-								errorOutput += BufferMethods.toString(data);
+								errorOutput += ObjectMethods.toString(BufferMethods, data);
 							});
 
 							child.on("message", (msg) => {
@@ -1451,11 +1449,11 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#rememberImportedURL(filePath, url) {
-		let urls = this.#importedURLs.get(filePath);
-		if (!urls) this.#importedURLs.set(filePath, (urls = []));
-		if (urls.includes(url)) return;
-		urls.push(url);
-		if (urls.length > Loader.IMPORTED_URLS_PER_FILE) urls.splice(0, urls.length - Loader.IMPORTED_URLS_PER_FILE);
+		let urls = MapMethods.get(this.#importedURLs, filePath);
+		if (!urls) MapMethods.set(this.#importedURLs, filePath, (urls = []));
+		if (ArrayMethods.includes(urls, url)) return;
+		listPush(urls, url);
+		if (urls.length > Loader.IMPORTED_URLS_PER_FILE) listSplice(urls, 0, urls.length - Loader.IMPORTED_URLS_PER_FILE);
 	}
 
 	/**
@@ -1470,12 +1468,13 @@ export class Loader extends ComponentBase {
 	 * loader.importedUnderQuery("/app/api/tally.mjs", "slothlet_instance=abc&module=mod1"); // true
 	 */
 	importedUnderQuery(filePath, query) {
-		const urls = this.#importedURLs.get(filePath);
+		const urls = MapMethods.get(this.#importedURLs, filePath);
 		if (!urls) return false;
 		const wanted = runtime_sortedQuery(query);
-		for (const url of urls) {
-			const at = url.indexOf("?");
-			if (at !== -1 && runtime_sortedQuery(url.slice(at + 1).replace(/#.*$/, "")) === wanted) return true;
+		for (let ofIndex = 0, ofList = urls; ofIndex < ofList.length; ofIndex++) {
+			const url = ofList[ofIndex];
+			const at = StringMethods.indexOf(url, "?");
+			if (at !== -1 && runtime_sortedQuery(regExpReplace(/#.*$/, StringMethods.slice(url, at + 1), "")) === wanted) return true;
 		}
 		return false;
 	}
