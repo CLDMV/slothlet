@@ -3869,8 +3869,12 @@ function runtime_isBuiltinFunctionMember(wrapper, prop) {
 	const internal = wrapper.____slothletInternal;
 	if (runtime_hasOwnMember(wrapper, prop) || runtime_valueHoldsName(wrapper, prop)) return false;
 	const fn = runtime_functionOf(internal.impl);
-	// A module's own Proxy answers for itself, so what it holds there is not taken to be the language's.
-	if (fn !== null) return !util.types.isProxy(fn) && runtime_isLanguageNameDescriptor(prop, Reflect.getOwnPropertyDescriptor(fn, prop));
+	// A module's own Proxy answers for itself, so what it holds there is not taken to be the language's. A composition
+	// layer (a callable mount's function with the folder's members) is slothlet's, and answers as its function does.
+	if (fn !== null) {
+		if (util.types.isProxy(fn) && !isCompositionLayer(fn)) return false;
+		return runtime_isLanguageNameDescriptor(prop, Reflect.getOwnPropertyDescriptor(fn, prop));
+	}
 	// A node holding no function that is still a function to the language (a lazy node's stand-in) answers the
 	// stand-in's `name` and `length`: its path's last segment, and 0.
 	return typeof internal.proxy === "function";

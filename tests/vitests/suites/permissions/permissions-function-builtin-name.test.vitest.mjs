@@ -35,6 +35,7 @@ import { getMatrixConfigs, withSuppressedSlothletErrorOutput } from "../../setup
 const FIXTURE = new URL("../../../../api_tests/api_test_function_builtin_names/", import.meta.url);
 const DIR = fileURLToPath(new URL("base", FIXTURE));
 const MOUNT = fileURLToPath(new URL("mount", FIXTURE));
+const CALLABLE = fileURLToPath(new URL("callable", FIXTURE));
 
 /** Every function target the module reads, by its path under `self` (`""` is the api root). */
 const FUNCTIONS = [
@@ -44,12 +45,14 @@ const FUNCTIONS = [
 	"deep.inner.walk",
 	"named",
 	"mnt.gear.spin",
+	"cm",
+	"cm.helper",
 	"slothlet.hook.on",
 	"slothlet.api.add"
 ];
 
 /** The api targets `probe` is refused by the deny-rule policy. */
-const DENIED_TARGETS = ["math.**", "deep.**", "named.**", "mnt.**"];
+const DENIED_TARGETS = ["math.**", "deep.**", "named.**", "mnt.**", "cm", "cm.**"];
 
 /**
  * The permission setups. `denies` names whether the module's own `named.name` and `named.length` members are refused,
@@ -150,11 +153,14 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 		beforeAll(async () => {
 			api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, attribution } });
 			await api.slothlet.api.add(["mnt"], MOUNT);
+			// A folder whose root file's default export is a function: a callable mount holding the folder's other members.
+			await api.slothlet.api.add(["cm"], CALLABLE);
 			// Load every node, so a lazy instance answers as a loaded one (the host's answers are the expected values).
 			await api.math;
 			await api.deep.inner;
 			await api.named;
 			await api.mnt.gear;
+			await api.cm;
 			await api.probe;
 		});
 
@@ -212,7 +218,7 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 				const where = entry.slice(0, entry.indexOf(" "));
 				expect(entry.slice(where.length + 1), where).toBe(host.get(where));
 			}
-			for (const where of ["math.add", "deep.inner.walk", "mnt.gear.spin"]) {
+			for (const where of ["math.add", "deep.inner.walk", "mnt.gear.spin", "cm", "cm.helper"]) {
 				expect(walked, where).toContain(`${where} ${host.get(where)}`);
 			}
 		});
