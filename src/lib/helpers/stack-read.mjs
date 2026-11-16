@@ -115,7 +115,13 @@ function hold(target, key, value) {
 			return saved;
 		}
 	}
-	Objects.defineProperty(target, key, { value, writable: true, enumerable: saved?.enumerable ?? false, configurable: true });
+	Objects.defineProperty(target, key, {
+		__proto__: null,
+		value,
+		writable: true,
+		enumerable: saved?.enumerable ?? false,
+		configurable: true
+	});
 	return saved ?? ABSENT;
 }
 
@@ -145,6 +151,7 @@ const HAS_FORMATTER_HOOK = (() => {
 	let called = false;
 	const saved = Objects.getOwnPropertyDescriptor(RealmError, "prepareStackTrace");
 	Objects.defineProperty(RealmError, "prepareStackTrace", {
+		__proto__: null,
 		value: () => {
 			called = true;
 			return "";
