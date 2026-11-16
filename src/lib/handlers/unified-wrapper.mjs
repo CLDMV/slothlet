@@ -11198,6 +11198,8 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
 			delete own()[key];
 		} else if (Arrays.isArray(value)) {
 			own()[key] = node[key];
+		} else if (runtime_serializesItself(value)) {
+			own()[key] = runtime_serializedHolder(wrapper, value, targetPath, callerOverride, kept);
 		} else {
 			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
 			if (redacted !== value) own()[key] = redacted;
@@ -11205,6 +11207,126 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOve
 	}
 	seen.delete(data);
 	return copy ?? data;
+}
+
+/**
+ * Whether a value of a module's data serializes through a `toJSON` of its own (own or inherited), which
+ * `JSON.stringify` calls in place of reading its members. Slothlet's own nodes and the language's own data (a `Date`)
+ * are not: a node serializes through its own `toJSON`, and data is read as a value.
+ * @param {*} value - A member's value.
+ * @returns {boolean} True when the value's own code gives its serialized form.
+ * @private
+ */
+function runtime_serializesItself(value) {
+	if (value === null || typeof value !== "object" || runtime_isTerminalData(value) || resolveWrapper(value) !== null) return false;
+	return typeof value.toJSON === "function";
+}
+
+/**
+ * Stand-in for a value that serializes through its own `toJSON`, in a snapshot handed to `JSON.stringify`: its
+ * `toJSON` runs the value's own, as `JSON.stringify` would, and leaves out of what that gives each member the reader
+ * may not read at the value's path and the member's name (see {@link runtime_redactSerializedResult}).
+ * @param {object} wrapper - Wrapper the snapshot was extracted from.
+ * @param {object} value - The value.
+ * @param {string} path - Api path the value is at.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @returns {object} The stand-in.
+ * @private
+ */
+function runtime_serializedHolder(wrapper, value, path, callerOverride, kept) {
+	const holder = Objects.create(null);
+	holder.toJSON = (key) =>
+		runtime_redactSerializedResult(wrapper, Reflect.apply(value.toJSON, value, [key]), path, new WeakSet(), callerOverride, kept);
+	return holder;
+}
+
+/**
+ * What a module's own `toJSON` gave, with the members the reader may not read left out at `basePath` and each
+ * member's name, as a node's own members are left out of its serialization (see {@link runtime_redactSerialized}):
+ * an object member the rules leave the reader nothing of goes, arrays are read element by element at `<path>.<i>`,
+ * and a value inside that serializes through a `toJSON` of its own is held to the same at its path. What the result
+ * holds is never changed: an object or array that loses a member is copied.
+ * @param {object} wrapper - The node whose `toJSON` gave the result.
+ * @param {*} data - What the `toJSON` gave.
+ * @param {string} basePath - Api path the result stands for.
+ * @param {WeakSet<object>} seen - The objects on the current path.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+ * @returns {*} `data`, or a copy of it with what the reader may not read left out.
+ * @private
+ *
+ * @example
+ * // rule: deny reader.** → owner.cfg.hidden; owner.cfg.toJSON() gives { pub: 1, hidden: "H" }
+ * JSON.stringify(self.owner.cfg); // '{"pub":1}'
+ */
+function runtime_redactSerializedResult(wrapper, data, basePath, seen, callerOverride, kept = null) {
+	if (!data || typeof data !== "object" || seen.has(data) || runtime_isTerminalData(data) || resolveWrapper(data) !== null) return data;
+	seen.add(data);
+	const isList = Arrays.isArray(data);
+	let copy = null;
+	const own = () => (copy ??= isList ? Objects.assign([], data) : Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
+	for (const key of Objects.keys(data)) {
+		const value = data[key];
+		const targetPath = `${basePath}.${key}`;
+		if (runtime_isTerminalData(value)) {
+			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
+		} else if (value === null || typeof value !== "object" || resolveWrapper(value) !== null) {
+			// A function is left out by JSON.stringify, and a node serializes for its reader through its own toJSON.
+			continue;
+		} else if (runtime_deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
+			delete own()[key];
+		} else if (runtime_serializesItself(value)) {
+			own()[key] = runtime_serializedHolder(wrapper, value, targetPath, callerOverride, kept);
+		} else {
+			const redacted = runtime_redactSerializedResult(wrapper, value, targetPath, seen, callerOverride, kept);
+			if (redacted !== value) own()[key] = redacted;
+		}
+	}
+	seen.delete(data);
+	return copy ?? data;
+}
+
+/**
+ * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
+ * gave): the path is denied and nothing beneath it is allowed, as {@link runtime_readsNothingBeneath} answers for a
+ * member of a node's data.
+ * @param {object} wrapper - The node being serialized.
+ * @param {string} targetPath - The member's api path.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ */
+function runtime_deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
+	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept);
+	if (beneath.allowed) return false;
+	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+}
+
+/**
+ * What a `toJSON` of a node's own gave, held for each reader in turn (see {@link runtime_redactSerializedResult}),
+ * when the permission system gates reads.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} result - What the `toJSON` gave.
+ * @param {string} path - The node's api path.
+ * @param {Array<{currentWrapper: object, context: object}|undefined>} readers - The readers (`undefined` for whoever is
+ *   reading now).
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @returns {*} The result with what the readers may not read left out.
+ * @private
+ */
+function runtime_redactToJSONResult(wrapper, result, path, readers, kept) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return result;
+	let redacted = result;
+	for (const reader of readers) redacted = runtime_redactSerializedResult(wrapper, redacted, path, new WeakSet(), reader, kept);
+	return redacted;
 }
 
 /**
@@ -11891,14 +12013,15 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const serialize = typeof resolved === "function" ? SERIALIZERS.get(resolved) : undefined;
 		// It also serializes for whoever serializes it, as each read through the view is gated for both.
 		if (serialize) {
-			return () =>
+			return (...args) =>
 				serialize(
 					[
 						{ currentWrapper: capturedCaller, ceiling, context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null },
 						undefined
 					],
 					view,
-					{ wrapper: inner, reader: capturedCaller }
+					{ wrapper: inner, reader: capturedCaller },
+					args
 				);
 		}
 		if (resolveWrapper(resolved) === null) return resolved;
@@ -18060,9 +18183,17 @@ class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				// A function node's own `toJSON` (a static method of a class) is the module's code, checked as a call of
 				// the node (#632).
+				// What it gives is held to the rules at the node's path and each member's name, for whoever serializes it
+				// and, through a view a module kept, for that module too (see runtime_capturedView).
 				if (impl && typeof impl.toJSON === "function") {
-					runtime_enforceCodeMember(wrapper, impl.toJSON, kept);
-					return impl.toJSON.bind(impl);
+					const method = impl.toJSON;
+					runtime_enforceCodeMember(wrapper, method, kept);
+					const path = wrapper.____slothletInternal.apiPath;
+					const serializeOwn = (readers, ___node, keptAccess = kept, args = []) =>
+						runtime_redactToJSONResult(wrapper, Reflect.apply(method, impl, args), path, readers, keptAccess);
+					const ownToJSON = (...args) => serializeOwn([undefined], null, kept, args);
+					SERIALIZERS.set(ownToJSON, serializeOwn);
+					return ownToJSON;
 				}
 				// The snapshot for the given readers (`undefined` for whoever is reading now), read through `node`: a
 				// module's kept node serializes for that module and for the module serializing it.
@@ -20210,7 +20341,15 @@ class UnifiedWrapper extends ComponentBase {
 				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
 				return runtime_bindCapturedIdentity(wrapper, prop, value, access);
 			},
-			apply: applyTrap,
+			apply: (target, thisArg, args) => {
+				// A member named `toJSON` is what `JSON.stringify` calls to serialize the node holding it: what it gives is
+				// held to the rules at that node's path and each member's name, as the node's own members are.
+				const path = wrapper.____slothletInternal.apiPath;
+				const dot = typeof path === "string" ? path.lastIndexOf(".") : -1;
+				if (dot < 0 || path.slice(dot + 1) !== "toJSON") return applyTrap(target, thisArg, args);
+				const keptAccess = capturedAccess?.wrapper === wrapper ? capturedAccess : null;
+				return runtime_redactToJSONResult(wrapper, applyTrap(target, thisArg, args), path.slice(0, dot), [undefined], keptAccess);
+			},
 			construct: constructTrap,
 			has: hasTrap,
 			// A member is described holding what reading it hands out, the reading module's identity bound to a node as the
