@@ -1539,6 +1539,87 @@ export function matchAllOf(text, regexp) {
 }
 
 /**
+ * A promise for the values of the promises (or values) in `list`, as `Promise.all(list)` gives, without walking `list`
+ * with its iterator or reading `then` off a promise: each is settled with the `then` taken at load.
+ * @param {ArrayLike<unknown>} list - The promises or values.
+ * @returns {Promise<Array<unknown>>} Their values, in order; rejected with the first rejection.
+ * @internal
+ * @example
+ * await promiseAll([load(a), load(b)]);
+ */
+export function promiseAll(list) {
+	const length = list.length;
+	return new NativePromise((resolve, reject) => {
+		const out = [];
+		let left = length;
+		if (left === 0) {
+			resolve(out);
+			return;
+		}
+		for (let i = 0; i < length; i++) {
+			PromiseMethods.then(
+				Promises.resolve(list[i]),
+				(value) => {
+					out[i] = value;
+					if (--left === 0) resolve(out);
+				},
+				reject
+			);
+		}
+	});
+}
+
+/**
+ * A promise for how each of the promises (or values) in `list` settled, as `Promise.allSettled(list)` gives, without
+ * walking `list` with its iterator or reading `then` off a promise.
+ * @param {ArrayLike<unknown>} list - The promises or values.
+ * @returns {Promise<Array<{status: string, value?: unknown, reason?: unknown}>>} How each settled, in order.
+ * @internal
+ * @example
+ * await promiseAllSettled([load(a), load(b)]);
+ */
+export function promiseAllSettled(list) {
+	const length = list.length;
+	return new NativePromise((resolve) => {
+		const out = [];
+		let left = length;
+		if (left === 0) {
+			resolve(out);
+			return;
+		}
+		for (let i = 0; i < length; i++) {
+			const settle = (result) => {
+				out[i] = result;
+				if (--left === 0) resolve(out);
+			};
+			PromiseMethods.then(
+				Promises.resolve(list[i]),
+				(value) => settle({ status: "fulfilled", value }),
+				(reason) => settle({ status: "rejected", reason })
+			);
+		}
+	});
+}
+
+/**
+ * A new object with a data member for each `[key, value]` entry of `list`, as `Object.fromEntries(list)` makes,
+ * without walking `list` with its iterator.
+ * @param {ArrayLike<ArrayLike<unknown>>} list - The entries.
+ * @returns {object} The object.
+ * @internal
+ * @example
+ * objectFromEntries([["a", 1]]); // { a: 1 }
+ */
+export function objectFromEntries(list) {
+	const out = {};
+	for (let i = 0; i < list.length; i++) {
+		const entry = list[i];
+		NativeReflect.defineProperty(out, entry[0], { value: entry[1], writable: true, enumerable: true, configurable: true });
+	}
+	return out;
+}
+
+/**
  * A new `Set` of the elements of `list`, added with the `add` taken at load.
  * @param {ArrayLike<unknown>} list - The elements.
  * @returns {Set<unknown>} The set.

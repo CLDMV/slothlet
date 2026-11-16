@@ -75,7 +75,7 @@ import {
 	Number,
 	Objects,
 	Promise,
-	Promises,
+	promiseAll,
 	Reflect,
 	RegExp,
 	Set,
@@ -127,7 +127,7 @@ let AsyncResource = null;
 let createRequire = null;
 
 if (isNode) {
-	const unpacked1 = await Promises.all([
+	const unpacked1 = await promiseAll([
 			import("node:fs"),
 			import("node:fs/promises"),
 			import("node:path"),

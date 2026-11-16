@@ -3027,7 +3027,11 @@ function requireCJSFromRunner(filePath, instanceID) {
  */
 function hasCondition(conditions, name) {
 	if (conditions == null) return false;
-	return typeof conditions.has === "function" ? conditions.has(name) : FunctionMethods.call(Arrays.prototype.includes, conditions, name);
+	return Arrays.isArray(conditions)
+		? ArrayMethods.includes(conditions, name)
+		: conditions instanceof Set
+			? SetMethods.has(conditions, name)
+			: false;
 }
 
 /**

@@ -202,7 +202,7 @@ export class Resolver extends ComponentBase {
 			const file = files[i];
 
 			// Skip node: modules
-			if (file.startsWith?.("node:")) continue;
+			if (typeof file === "string" && StringMethods.startsWith(file, "node:")) continue;
 
 			// Skip internal files
 			if (this.#isSlothletInternal(file)) continue;

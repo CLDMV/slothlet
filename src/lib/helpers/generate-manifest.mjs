@@ -90,7 +90,7 @@ import {
 	mapEntries,
 	MapMethods,
 	Objects,
-	Promises,
+	promiseAll,
 	Reflect,
 	RegExpMethods,
 	Set,
@@ -98,9 +98,9 @@ import {
 	SetMethods,
 	setToArray,
 	setValues,
+	splitText,
 	String,
-	StringMethods,
-	splitText
+	StringMethods
 } from "@cldmv/slothlet/helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
@@ -905,7 +905,7 @@ async function generateBrowserAssets(apiDir, options = {}) {
 	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from slothletBase.
 	const base = StringMethods.endsWith(String(slothletBase), "/") ? String(slothletBase) : `${slothletBase}/`;
 	const packagesBase = derivePackagesBase(base);
-	const unpacked1 = await Promises.all([
+	const unpacked1 = await promiseAll([
 			generateManifest(apiDir),
 			generateImportMap(slothletBase),
 			collectGraphImports(apiDir, packagesBase)
