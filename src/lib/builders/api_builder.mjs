@@ -330,7 +330,7 @@ function makeCopyOnWriteSelf(parentSelf) {
 			}
 		: {};
 	return markSlothletProxy(
-		new NativeProxy(callable ? function () {}.bind() : {}, {
+		new NativeProxy(copyOnWriteShell(callable ? function () {}.bind() : {}, parentSelf), {
 			...callTraps,
 			get(_t, prop) {
 				return read(prop);
@@ -380,6 +380,28 @@ function makeCopyOnWriteSelf(parentSelf) {
 			}
 		})
 	);
+}
+
+/**
+ * The target of a scope's copy-on-write view of `self` (#803), holding the hook Node's `util.inspect` reads: Node shows a
+ * Proxy's target rather than what its traps report, so the hook hands it the `self` the view reads through, which shows
+ * what the reading code may read, as `self` shows outside the scope. What the scope wrote to its own overlay is not
+ * shown.
+ * @param {object|Function} shell - The empty target.
+ * @param {object} parentSelf - The `self` the view reads through.
+ * @returns {object|Function} The target.
+ * @private
+ */
+function copyOnWriteShell(shell, parentSelf) {
+	Objects.defineProperty(shell, INSPECT_KEY, {
+		value: function inspectScopeSelf() {
+			return parentSelf;
+		},
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+	return shell;
 }
 
 /**
