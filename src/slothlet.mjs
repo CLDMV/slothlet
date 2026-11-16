@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:11:46-08:00 (1794802306)
+ *	@Last modified time: 2026-11-15T23:15:17-08:00 (1794813317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -642,6 +642,16 @@ class Slothlet {
 			// The api node a public impl:created / impl:changed is about. A subscriber a module subscribed is
 			// handed its module's view of it instead of the implementation (#625).
 			const nodeOf = (data) => ({ impl: data.__wrapperRef?.____slothletInternal?.proxy ?? null });
+			// What ownership records for a contribution that is an object: the node itself, as the load's subtree
+			// confirmation records it in eager mode. The node adopts the object's members as its own, which leaves
+			// the object empty, so a record of the object would hold nothing to restore once another module's add
+			// over the path is removed (#815). A function or a primitive is recorded as itself, as before (a leaf's
+			// kind is read from it). The node's proxy is made after its construction event, so the wrapper stands
+			// in until then; ownership resolves either to the node.
+			const recordedValue = (data, implValue) =>
+				implValue !== null && typeof implValue === "object"
+					? (data.__wrapperRef?.____slothletInternal?.proxy ?? data.__wrapperRef ?? implValue)
+					: implValue;
 			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
 			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
 			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
@@ -689,7 +699,7 @@ class Slothlet {
 				this.handlers.ownership.register({
 					moduleID: data.moduleID,
 					apiPath: data.apiPath,
-					value: implValue,
+					value: recordedValue(data, implValue),
 					source: data.source,
 					filePath: data.filePath,
 					// Where the value sits in its file's module namespace (#484), resolved by the wrapper.
@@ -757,7 +767,7 @@ class Slothlet {
 					this.handlers.ownership.register({
 						moduleID: data.moduleID,
 						apiPath: data.apiPath,
-						value: implValue,
+						value: recordedValue(data, implValue),
 						source: data.source,
 						filePath: data.filePath,
 						exportPath: data.exportPath ?? null,

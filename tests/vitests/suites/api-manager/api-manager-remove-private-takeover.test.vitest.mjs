@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:10:19-08:00 (1794805819)
+ *	@Last modified time: 2026-11-15T23:16:04-08:00 (1794813364)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,11 +91,37 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 		expect(api.billing.lreader).toBeUndefined();
 		expect(await api.billing.reader.read("billing.internals.__rate")).toEqual(own);
 		expect(await settled(() => api.billing.internals.__rate)).toEqual(hostAnswer);
-		// The overwritten file's other members come back too. Lazy mode does not restore them yet (its ownership
-		// record of a file's node is the node's emptied implementation); that is tracked on its own.
-		if (config.mode === "eager") {
-			expect(await api.billing.reader.read("billing.internals._fee")).toEqual({ value: internals._fee, error: null });
-			expect(await settled(() => api.billing.internals.currency)).toEqual({ value: internals.currency, error: null });
-		}
+		// The overwritten file's other members come back too.
+		expect(await api.billing.reader.read("billing.internals._fee")).toEqual({ value: internals._fee, error: null });
+		expect(await settled(() => api.billing.internals.currency)).toEqual({ value: internals.currency, error: null });
+		expect(Object.keys(await api.billing.internals).sort()).toEqual(
+			Object.keys(internals)
+				.sort()
+				.filter((key) => config.host === "allow" || !key.startsWith("_") || typeof internals[key] === "function")
+		);
+	});
+
+	it("restores the same after the add is reloaded first, and keeps the members across a reload of the base", async () => {
+		const internals = await import(pathToFileURL(`${BASE}/billing/internals.mjs`).href);
+		api = await slothlet({
+			base: BASE,
+			mode: config.mode,
+			runtime: config.runtime,
+			silent: true,
+			permissions: {
+				defaultPolicy: "allow",
+				attribution: config.attribution,
+				rules: [],
+				private: { scope: config.scope, host: config.host }
+			}
+		});
+		await api.billing.reader.read("billing.internals.__rate");
+		await api.slothlet.api.add("billing", LAYER, { moduleID: "layer", forceOverwrite: true });
+		await api.slothlet.api.reload("layer");
+		expect(await settled(() => api.slothlet.api.remove("layer"))).toEqual({ value: true, error: null });
+		await api.slothlet.reload();
+		expect(await api.billing.reader.read("billing.internals.__rate")).toEqual({ value: internals.__rate, error: null });
+		expect(await api.billing.reader.read("billing.internals._fee")).toEqual({ value: internals._fee, error: null });
+		expect(await settled(() => api.billing.internals.currency)).toEqual({ value: internals.currency, error: null });
 	});
 });
