@@ -41,12 +41,14 @@ import {
 	concatLists,
 	FunctionMethods,
 	Map,
+	mapEntriesToArray,
 	mapKeysToArray,
 	MapMethods,
 	Objects,
 	Promise,
 	Reflect,
-	WeakMap
+	WeakMap,
+	WeakMapMethods
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
@@ -55,6 +57,136 @@ const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
 const { attributeResult, enterCall, ownReceiver, resolveSupplier, sampleStoreScripts } =
 	framePlacementInternals("lib/handlers/context-async");
+
+/**
+ * `AsyncLocalStorage` and the methods its instances inherit, taken as slothlet loads, before any module's code runs:
+ * a module may replace them on the prototype later, and slothlet's storage never calls what it put there. Null where
+ * the platform has no `node:async_hooks`.
+ * @type {{Storage: Function, methods: Array<[string, Function]>}|null}
+ * @private
+ */
+const STORAGE_METHODS = AsyncLocalStorage ? storageMethodsOf(AsyncLocalStorage) : null;
+
+/**
+ * Every method an instance of `Storage` inherits, nearest prototype first, by name.
+ * @param {Function} Storage - The `AsyncLocalStorage` class.
+ * @returns {{Storage: Function, methods: Array<[string, Function]>}} The class and its methods.
+ * @private
+ */
+function storageMethodsOf(Storage) {
+	const methods = new Map();
+	for (let proto = Storage.prototype; proto && proto !== Objects.prototype; proto = Objects.getPrototypeOf(proto)) {
+		for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(proto); ofIndex < ofList.length; ofIndex++) {
+			const name = ofList[ofIndex];
+			const descriptor = Objects.getOwnPropertyDescriptor(proto, name);
+			if (name === "constructor" || typeof descriptor.value !== "function" || MapMethods.has(methods, name)) continue;
+			MapMethods.set(methods, name, descriptor.value);
+		}
+	}
+	return { Storage, methods: mapEntriesToArray(methods) };
+}
+
+/**
+ * The token slothlet's storage holds for each store, and the store each token stands for. Node keeps what a storage
+ * holds where module code can read it: on async resources while `AsyncContextFrame` is off (Node 22, or a later Node
+ * run with `--no-async-context-frame`), under a symbol `async_hooks.executionAsyncResource()`, a promise, or an
+ * `AsyncResource` lists. A store carries the instance, its handlers and the running node's wrapper, so the storage
+ * holds an empty frozen token instead, and the store stays here.
+ * @private
+ */
+const tokenOfStore = new WeakMap();
+const storeOfToken = new WeakMap();
+
+/**
+ * The token that stands for `store` in Node's storage, made on first use.
+ * @param {*} store - The store.
+ * @returns {*} Its token; `store` itself when it is not an object (no store).
+ * @private
+ */
+function sealStore(store) {
+	if (store === null || typeof store !== "object") return store;
+	let token = WeakMapMethods.get(tokenOfStore, store);
+	if (token === undefined) {
+		token = Objects.freeze(Objects.create(null));
+		WeakMapMethods.set(tokenOfStore, store, token);
+		WeakMapMethods.set(storeOfToken, token, store);
+	}
+	return token;
+}
+
+/**
+ * The store a token Node's storage holds stands for. Anything else found there (code that wrote the resource's slot
+ * itself) stands for no store.
+ * @param {*} token - What the storage holds.
+ * @returns {object|undefined} The store, or undefined.
+ * @private
+ */
+function unsealStore(token) {
+	if (token === null || typeof token !== "object") return undefined;
+	return WeakMapMethods.get(storeOfToken, token);
+}
+
+/**
+ * Slothlet's `AsyncLocalStorage`, as {@link AsyncContextManager#als} hands it out: it takes and gives the stores
+ * themselves, and holds a token for each in Node's storage (see {@link sealStore}). The Node storage carries the methods
+ * taken as slothlet loaded as its own, so Node's code calling `this.getStore()` or `this.enterWith()` inside them runs
+ * those, never what a module put on the prototype since.
+ * @private
+ */
+class SealedStorage {
+	#storage;
+
+	constructor() {
+		const { Storage, methods } = STORAGE_METHODS;
+		const storage = new Storage();
+		for (let ofIndex = 0, ofList = methods; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			Objects.defineProperty(storage, entry[0], { __proto__: null, value: entry[1], writable: true, configurable: true });
+		}
+		this.#storage = storage;
+	}
+
+	/**
+	 * @returns {object|undefined} The active store.
+	 */
+	getStore() {
+		return unsealStore(this.#storage.getStore());
+	}
+
+	/**
+	 * @param {*} store - The store.
+	 * @param {Function} fn - The callback.
+	 * @param {...*} args - Its arguments.
+	 * @returns {*} What it returned.
+	 */
+	run(store, fn, ...args) {
+		return Reflect.apply(this.#storage.run, this.#storage, concatLists([sealStore(store), fn], args));
+	}
+
+	/**
+	 * @param {*} store - The store.
+	 * @returns {void}
+	 */
+	enterWith(store) {
+		return this.#storage.enterWith(sealStore(store));
+	}
+
+	/**
+	 * @param {Function} fn - The callback.
+	 * @param {...*} args - Its arguments.
+	 * @returns {*} What it returned.
+	 */
+	exit(fn, ...args) {
+		return Reflect.apply(this.#storage.exit, this.#storage, concatLists([fn], args));
+	}
+
+	/**
+	 * @returns {void}
+	 */
+	disable() {
+		return this.#storage.disable();
+	}
+}
 
 /**
  * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
@@ -129,9 +261,9 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * The manager's `AsyncLocalStorage`: the store once it has been made, a stand-in before that which answers that no
+	 * The manager's `AsyncLocalStorage` (sealed, see {@link SealedStorage}): the store once it has been made, a stand-in before that which answers that no
 	 * store is active and makes the store when one is run (see {@link AsyncContextManager#openStore}). Null in a browser.
-	 * @type {AsyncLocalStorage|DormantStore|null}
+	 * @type {SealedStorage|DormantStore|null}
 	 * @public
 	 */
 	get als() {
@@ -142,13 +274,13 @@ export class AsyncContextManager {
 	 * Make the manager's `AsyncLocalStorage`, once: called when an instance selects the async runtime, before any of its
 	 * files load. The scripts of Node's own that run a store's callback are sampled first (see `sampleStoreScripts` in
 	 * `handlers/frame-placement`), so they are known before slothlet's store runs anything.
-	 * @returns {AsyncLocalStorage|null} The store; null in a browser.
+	 * @returns {SealedStorage|null} The store; null in a browser.
 	 * @internal
 	 */
 	openStore() {
 		if (this.store === null && AsyncLocalStorage) {
 			sampleStoreScripts();
-			this.store = new AsyncLocalStorage();
+			this.store = new SealedStorage();
 		}
 		return this.store;
 	}
