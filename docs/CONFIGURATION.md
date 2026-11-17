@@ -57,7 +57,7 @@ const api = await slothlet({
 	permissions: { policy: "allow", caller: { attribution: "precise" } }, // attribution: "precise" | "fast"
 
 	// Routines
-	routines: { auto: false, entries: slothlet.defaults.routines, stack: false },
+	routines: { auto: true, entries: slothlet.defaults.routines, stack: true },
 
 	// Versioned api paths
 	versioning: { dispatcher: null }, // version metadata key, or (versions, caller) => tag
@@ -689,7 +689,7 @@ A non-plain-object value (array, class instance, primitive) throws at constructi
 ### `routines`
 
 **Type**: `{ auto?: boolean, entries?: Array<…>, stack?: boolean }`
-**Default**: `{ auto: false, entries: slothlet.defaults.routines, stack: false }`
+**Default**: `{ auto: true, entries: slothlet.defaults.routines, stack: true }`
 
 The routine system's group. It takes the object form only.
 
@@ -715,7 +715,6 @@ const api2 = await slothlet({ base: "./api", routines: { entries: [] } });
 const api3 = await slothlet({
 	base: "./api",
 	routines: {
-		auto: true,
 		entries: [
 			{ name: "initialize", mode: "startup" },
 			{ name: "^**.shutdown", mode: "shutdown", order: "depth" },
@@ -730,30 +729,30 @@ See [LIFECYCLE.md](LIFECYCLE.md#routines) for the full contract — name matchin
 #### `routines.auto`
 
 **Type**: `boolean`
-**Default**: `false`
+**Default**: `true`
 
-Every configured routine is always stacked and directly callable regardless of this flag — only the _automatic_ firing (`startup` at compose end, `shutdown`/`destroy` at dispose) is gated.
+`startup`-mode routines run at compose end and `shutdown`/`destroy`-mode routines run at dispose. Every configured routine is always stacked and directly callable regardless of this flag — only the _automatic_ firing is gated. Set `false` to run them yourself.
 
 ```javascript
-const api = await slothlet({ base: "./api", routines: { auto: true } });
-// "startup"-mode routines now auto-run at compose end; "shutdown"/"destroy"-mode routines auto-run at dispose.
+const api = await slothlet({ base: "./api", routines: { auto: false } });
+// nothing runs at compose end or dispose; call api.initialize() / api.shutdown() yourself.
 ```
 
 #### `routines.stack`
 
 **Type**: `boolean`
-**Default**: `false`
+**Default**: `true`
 
-Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per [`api.collision`](#apicollision)) runs. `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework — a colliding key always resolves to one winner unless explicitly opted into stacking.
+Whether two or more modules' contributions colliding at the exact same composed api path all run (the default, in mount order), or only the single contribution that actually owns that path (per [`api.collision`](#apicollision)) runs. Set `false` to match ordinary (non-routine) collision behavior, where a colliding key resolves to one winner.
 
-Deliberately independent of the collision mode: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `routines.stack: true` is set. The root cascade runs every matching contribution across **distinct** api paths regardless of this flag; where two or more contributions land on the **identical** api path, the cascade applies the same filtering a direct call at that path would.
+Deliberately independent of the collision mode: stacking is not a side effect of `merge`, `replace`, or any other mode. With `routines.stack: false`, a module that loses a collision, under any collision mode, does not run via the routine system. The root cascade runs every matching contribution across **distinct** api paths regardless of this flag; where two or more contributions land on the **identical** api path, the cascade applies the same filtering a direct call at that path would.
 
 ```javascript
-const api = await slothlet({ base: "./api", routines: { stack: true } });
+const api = await slothlet({ base: "./api" });
 await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
 await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api"); // also exports "initialize"
 
-await api.auth.initialize(); // runs both, in mount order — without routines.stack only one would
+await api.auth.initialize(); // runs both, in mount order — with routines.stack: false only one would
 ```
 
 See [LIFECYCLE.md](LIFECYCLE.md#routines) for the full contract.

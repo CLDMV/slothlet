@@ -781,15 +781,16 @@ export class Config extends ComponentBase {
 	/**
 	 * Normalize the `routines` group (object form only).
 	 * @param {object} [routines] - The group as given.
-	 * @param {boolean} [routines.auto=false] - Startup/shutdown/destroy routines fire by themselves.
+	 * @param {boolean} [routines.auto=true] - Startup/shutdown/destroy routines fire by themselves; `false` leaves them to explicit calls.
 	 * @param {Array} [routines.entries] - The routines; see {@link Config#normalizeRoutines}. Omitted keeps the defaults.
-	 * @param {boolean} [routines.stack=false] - Every module contributing the same routine name at one api path runs, in
+	 * @param {boolean} [routines.stack=true] - Every module contributing the same routine name at one api path runs, in
 	 *   mount order; `false` runs only the collision winner.
 	 * @returns {{auto: boolean, entries: Array<object>, stack: boolean}} The normalized group.
 	 * @throws {SlothletError} INVALID_CONFIG when it is not an object, or a member is invalid.
 	 * @public
 	 * @example
-	 * config.normalizeRoutinesGroup({ auto: true }).auto; // true
+	 * config.normalizeRoutinesGroup({}).auto; // true
+	 * config.normalizeRoutinesGroup({ auto: false }).auto; // false
 	 */
 	normalizeRoutinesGroup(routines) {
 		if (Arrays.isArray(routines)) {
@@ -808,11 +809,11 @@ export class Config extends ComponentBase {
 		}
 		const group = configGroup(routines, "routines");
 		return {
-			auto: configChoice(group.auto, [true, false], false, "routines.auto", "boolean"),
+			auto: configChoice(group.auto, [true, false], true, "routines.auto", "boolean"),
 			entries: this.normalizeRoutines(group.entries),
-			// Independent of the collision mode entirely (#365): a module that lost a collision, under ANY collision mode,
-			// does not still run through the routine system unless this is turned on.
-			stack: configChoice(group.stack, [true, false], false, "routines.stack", "boolean")
+			// Independent of the collision mode entirely (#365): on (the default), every contributor at a shared path runs;
+			// off, a module that lost a collision, under ANY collision mode, does not run through the routine system.
+			stack: configChoice(group.stack, [true, false], true, "routines.stack", "boolean")
 		};
 	}
 
