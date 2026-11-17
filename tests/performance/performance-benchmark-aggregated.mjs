@@ -603,7 +603,12 @@ async function executeApiCall(api, call) {
  */
 async function benchmarkRealisticApiUsage(lazy) {
 	const config = await loadApiConfig();
-	const api = await slothlet({ base: API_DIR, mode: lazy ? "lazy" : "eager" });
+	// The fixtures collide on purpose and the config's expected values are the `replace` outcome, as the test suites set it.
+	const api = await slothlet({
+		base: API_DIR,
+		mode: lazy ? "lazy" : "eager",
+		api: { collision: { mode: { initial: "replace", api: "replace" } } }
+	});
 
 	// Collect all calls from all sections
 	const allCalls = [];

@@ -130,7 +130,9 @@ function versions() {
 			apiDir: join(v3Dir, "api_tests/api_test"),
 			configPath: join(v3Dir, "tests/vitests/setup/api-test-config.jsonc"),
 			conditions: [],
-			extraOptions: {}
+			// The shared fixtures collide on purpose (`math.mjs` vs `math/`, `exportDefault`'s default vs named export) and
+			// `api-test-config.jsonc` expects the `replace` outcome, as the test suites configure it (v3 shape here).
+			extraOptions: { api: { collision: { initial: "replace", api: "replace" } } }
 		},
 		{
 			key: "v4",
@@ -140,7 +142,10 @@ function versions() {
 			apiDir: join(REPO, "api_tests/api_test"),
 			configPath: join(REPO, "tests/vitests/setup/api-test-config.jsonc"),
 			conditions: v4Source === "src" ? ["--conditions=slothlet-dev"] : [],
-			extraOptions: matchV3Defaults ? { routines: { auto: false, stack: false } } : {}
+			extraOptions: {
+				api: { collision: { mode: { initial: "replace", api: "replace" } } },
+				...(matchV3Defaults ? { routines: { auto: false, stack: false } } : {})
+			}
 		}
 	];
 }
