@@ -204,6 +204,7 @@
 	"types": "./types/stub/index.d.mts",
 	"scripts": {
 		"precommit": "node tools/dev/precommit-validation.mjs",
+		"precommit:local": "node tools/dev/precommit-headers.mjs",
 		"prepare": "node -e \"import('./.githooks/install.mjs').catch(()=>{})\"",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/ci/check-i18n-languages.mjs",
