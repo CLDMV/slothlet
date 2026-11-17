@@ -210,6 +210,194 @@ describe("api.add at a shared path — primitive members", () => {
 					await api.shutdown();
 				}
 			});
+
+			it("replace: a full reload keeps the members B took off the api ownerless", async () => {
+				const { api, owner } = await setup(config, "replace");
+				try {
+					await api.slothlet.api.reload();
+					void Object.keys(api.p.shared);
+					expect(api.p.shared.version).toBe("b");
+					expect(api.p.shared.count).toBeUndefined();
+					expect(api.p.shared.who).toBeUndefined();
+					expect(owner("p.shared.version")).toBe("b");
+					expect(owner("p.shared.whoB")).toBe("b");
+					expect(owner("p.shared.count")).toBeNull();
+					expect(owner("p.shared.who")).toBeNull();
+					expect(owner("p.shared.writeVersion")).toBeNull();
+
+					// Removing B after the reload still brings A's members back.
+					await api.slothlet.api.remove("b");
+					expect(api.p.shared.version).toBe("a");
+					expect(api.p.shared.count).toBe(1);
+					expect(api.p.shared.who()).toBe("a");
+					expect(owner("p.shared.version")).toBe("a");
+					expect(owner("p.shared.count")).toBe("a");
+					expect(owner("p.shared.who")).toBe("a");
+				} finally {
+					await api.shutdown();
+				}
+			});
+
+			it("replace: remove(a) then remove(b) brings nothing of A's back", async () => {
+				const { api, owner } = await setup(config, "replace");
+				try {
+					await api.slothlet.api.remove("a");
+					expect(api.p.shared.version).toBe("b");
+					expect(api.p.shared.whoB()).toBe("b");
+					expect(api.p.shared.count).toBeUndefined();
+					expect(api.p.shared.who).toBeUndefined();
+					expect(owner("p.shared.version")).toBe("b");
+					expect(owner("p.shared.count")).toBeNull();
+					expect(owner("p.shared.who")).toBeNull();
+
+					await api.slothlet.api.remove("b");
+					expect(api.p).toBeUndefined();
+					expect(owner("p.shared.version")).toBeNull();
+					expect(owner("p.shared.count")).toBeNull();
+					expect(owner("p.shared.who")).toBeNull();
+					expect(owner("p.shared")).toBeNull();
+					expect(api.ping()).toBe(1);
+				} finally {
+					await api.shutdown();
+				}
+			});
+		});
+	}
+});
+
+describe("api.add at a shared path — what a replace hid stays consistent", () => {
+	let tempBase;
+	let baseDir;
+	let aDir;
+	let bDir;
+
+	beforeAll(() => {
+		tempBase = makeTestTmpDirSync("ownership-replace-hidden");
+		baseDir = join(tempBase, "base");
+		aDir = join(tempBase, "A");
+		bDir = join(tempBase, "B");
+		mkdirSync(baseDir, { recursive: true });
+		mkdirSync(aDir, { recursive: true });
+		mkdirSync(bDir, { recursive: true });
+		writeFileSync(join(baseDir, "ping.mjs"), "export function ping() { return 1; }");
+		writeFileSync(join(aDir, "shared.mjs"), 'export const version = "a";\nexport const count = 1;\nexport function who() { return "a"; }');
+		writeFileSync(join(aDir, "extra.mjs"), 'export function hi() { return "hi-a"; }\nexport function bye() { return "bye-a"; }');
+		writeFileSync(join(bDir, "shared.mjs"), 'export const version = "b";\nexport function whoB() { return "b"; }');
+	});
+
+	afterAll(() => {
+		rmSync(tempBase, { recursive: true, force: true });
+	});
+
+	/**
+	 * Build an instance with A then B added at "p" under "replace".
+	 * @param {object} config - Matrix config.
+	 * @returns {Promise<{api: object, owner: function(string): (string|null)}>} The api and an owner lookup.
+	 */
+	async function setup(config) {
+		const api = await slothlet({
+			...config,
+			base: baseDir,
+			permissions: { mode: "on" },
+			api: { collision: { mode: { api: "replace" } } }
+		});
+		await api.slothlet.api.add("p", aDir, { id: "a" });
+		await api.slothlet.api.add("p", bDir, { id: "b" });
+		void Object.keys(api.p.shared);
+		const ownership = resolveWrapper(api.ping).slothlet.handlers.ownership;
+		const owner = (path) => ownership.getCurrentOwner(path)?.moduleID ?? null;
+		return { api, owner };
+	}
+
+	for (const { name, config } of CONFIGS) {
+		describe(name, () => {
+			it("reload of the shared path keeps what B's replace took off the api off it", async () => {
+				const { api, owner } = await setup(config);
+				try {
+					await api.slothlet.api.reload("p");
+					expect(Object.keys(api.p)).toEqual(["shared"]);
+					expect(Object.keys(api.p.shared).sort()).toEqual(["version", "whoB"]);
+					expect(api.p.shared.version).toBe("b");
+					expect(owner("p.shared.count")).toBeNull();
+					expect(owner("p.extra")).toBeNull();
+
+					await api.slothlet.api.remove("b");
+					expect(Object.keys(api.p).sort()).toEqual(["extra", "shared"]);
+					expect(Object.keys(api.p.shared).sort()).toEqual(["count", "version", "who"]);
+					expect(api.p.shared.version).toBe("a");
+					expect(api.p.extra.hi()).toBe("hi-a");
+					expect(owner("p.shared.count")).toBe("a");
+					expect(owner("p.extra.hi")).toBe("a");
+				} finally {
+					await api.shutdown();
+				}
+			});
+
+			it("members of A removed while B's replace hides them do not come back when B is removed", async () => {
+				const { api, owner } = await setup(config);
+				try {
+					expect(await api.slothlet.api.remove("p.shared.count", "a")).toBe(true);
+					expect(await api.slothlet.api.remove("p.extra.bye", "a")).toBe(true);
+					expect(Object.keys(api.p.shared).sort()).toEqual(["version", "whoB"]);
+
+					await api.slothlet.api.remove("b");
+					expect(Object.keys(api.p).sort()).toEqual(["extra", "shared"]);
+					expect(Object.keys(api.p.shared).sort()).toEqual(["version", "who"]);
+					expect(api.p.shared.count).toBeUndefined();
+					expect(Object.keys(api.p.extra)).toEqual(["hi"]);
+					expect(api.p.extra.bye).toBeUndefined();
+					expect(api.p.shared.version).toBe("a");
+					expect(owner("p.shared.count")).toBeNull();
+					expect(owner("p.extra.bye")).toBeNull();
+				} finally {
+					await api.shutdown();
+				}
+			});
+
+			it("a whole hidden member of A removed while B's replace hides it does not come back", async () => {
+				const { api, owner } = await setup(config);
+				try {
+					expect(await api.slothlet.api.remove("p.extra", "a")).toBe(true);
+					await api.slothlet.api.remove("b");
+					expect(Object.keys(api.p)).toEqual(["shared"]);
+					expect(api.p.extra).toBeUndefined();
+					expect(owner("p.extra")).toBeNull();
+					expect(api.p.shared.who()).toBe("a");
+				} finally {
+					await api.shutdown();
+				}
+			});
+
+			it("removing B after a scoped remove of A's shared part keeps A's other members", async () => {
+				const { api, owner } = await setup(config);
+				try {
+					expect(await api.slothlet.api.remove("p.shared", "a")).toBe(true);
+					expect(Object.keys(api.p.shared).sort()).toEqual(["version", "whoB"]);
+
+					await api.slothlet.api.remove("b");
+					expect(Object.keys(api.p)).toEqual(["extra"]);
+					expect(api.p.extra.hi()).toBe("hi-a");
+					expect(owner("p.extra.hi")).toBe("a");
+					expect(owner("p.shared")).toBeNull();
+				} finally {
+					await api.shutdown();
+				}
+			});
+
+			it("removing all of B scoped, then the rest of B, brings A's other members back", async () => {
+				const { api, owner } = await setup(config);
+				try {
+					await api.slothlet.api.remove("p.shared", "a");
+					await api.slothlet.api.remove("p.shared", "b");
+					await api.slothlet.api.remove("p", "b");
+					expect(Object.keys(api.p)).toEqual(["extra"]);
+					expect(api.p.extra.hi()).toBe("hi-a");
+					expect(owner("p")).toBe("a");
+					expect(owner("p.extra.hi")).toBe("a");
+				} finally {
+					await api.shutdown();
+				}
+			});
 		});
 	}
 });

@@ -76,6 +76,7 @@ import {
 	mapKeysToArray,
 	mapList,
 	MapMethods,
+	mapValues,
 	mapValuesToArray,
 	Math,
 	NumberMethods,
@@ -2373,9 +2374,20 @@ export class ApiManager extends ComponentBase {
 			this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 		}
 
+		// A namespace a cross-module replace hid members of still holds them, off the api until they are put back: it is
+		// not empty, so it stays (and so does every namespace above it).
+		const holdsHidden = (value) => {
+			const raw = resolveWrapper(value);
+			if (!raw) return false;
+			for (const shadows of mapValues(this.state.replaceShadows)) {
+				if (ArrayMethods.some(shadows, (shadow) => shadow.container === raw)) return true;
+			}
+			return false;
+		};
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
 			const value = parent[key];
+			if (holdsHidden(value)) break;
 			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
@@ -4223,6 +4235,106 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Put back on the api what `overwriterID`'s cross-module `replace` took off it (#3), at or under `underPath`.
+	 * @param {string} overwriterID - The module whose replace hid the members.
+	 * @param {?string} [underPath=null] - Only the members at or under this path; every one when null.
+	 * @returns {void}
+	 * @private
+	 */
+	#reattachShadows(overwriterID, underPath = null) {
+		const shadows = MapMethods.get(this.state.replaceShadows, overwriterID);
+		if (!shadows) return;
+		const kept = [];
+		for (let ofIndex = 0, ofList = shadows; ofIndex < ofList.length; ofIndex++) {
+			const shadow = ofList[ofIndex];
+			const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+			if (underPath !== null && shadowPath !== underPath && !StringMethods.startsWith(shadowPath, `${underPath}.`)) {
+				listPush(kept, shadow);
+				continue;
+			}
+			// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
+			// clobber a live member with a stale shadow.
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, shadow.container, shadow.key)) continue;
+			runtime_frameworkWrite(shadow.container, () =>
+				Objects.defineProperty(shadow.container, shadow.key, {
+					__proto__: null,
+					value: shadow.child,
+					writable: false,
+					enumerable: true,
+					configurable: true
+				})
+			);
+			// Back on the surface, so what of it is unloaded counts again.
+			this._setShadowParked(shadow.child, false);
+		}
+		if (kept.length > 0) MapMethods.set(this.state.replaceShadows, overwriterID, kept);
+		else MapMethods.delete(this.state.replaceShadows, overwriterID);
+	}
+
+	/**
+	 * Forget the members of `ownerID` that another module's `replace` holds off the api, at or under `atPath`: the
+	 * owner removed them while they were hidden, so removing the replacing module must not bring them back.
+	 * @param {string} ownerID - The module the hidden members belong to.
+	 * @param {?string} [atPath=null] - Only the members at or under this path; every one when null.
+	 * @returns {void}
+	 * @private
+	 */
+	#dropShadowsOf(ownerID, atPath = null) {
+		for (const ofEntry of mapEntries(this.state.replaceShadows)) {
+			const overwriter = ofEntry[0];
+			const kept = filterList(ofEntry[1], (shadow) => {
+				if (shadow.ownerModuleID !== ownerID) return true;
+				const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+				return atPath !== null && shadowPath !== atPath && !StringMethods.startsWith(shadowPath, `${atPath}.`);
+			});
+			if (kept.length > 0) MapMethods.set(this.state.replaceShadows, overwriter, kept);
+			else MapMethods.delete(this.state.replaceShadows, overwriter);
+		}
+	}
+
+	/**
+	 * Take a member a scoped removal deleted out of what another module's `replace` holds off the api: the detached
+	 * contributions at its parent path (which a removal of the replacing module restores from) and the hidden members
+	 * recorded for re-attach.
+	 * @param {string} target - The removed member's api path.
+	 * @param {string} moduleID - The module it was removed from.
+	 * @returns {void}
+	 * @private
+	 */
+	#forgetHiddenMember(target, moduleID) {
+		this.#dropShadowsOf(moduleID, target);
+		const lastDot = StringMethods.lastIndexOf(target, ".");
+		if (lastDot === -1) return;
+		const parentPath = StringMethods.slice(target, 0, lastDot);
+		const key = StringMethods.slice(target, lastDot + 1);
+		const holders = [];
+		for (let ofIndex = 0, ofList = this.slothlet.handlers.ownership.getPathHistory(parentPath); ofIndex < ofList.length; ofIndex++) {
+			const holder = resolveWrapper(ofList[ofIndex].value);
+			if (holder && !ArrayMethods.includes(holders, holder)) listPush(holders, holder);
+		}
+		// A hidden member's own subtree is held by its shadow record, not by an ownership value.
+		for (const ofEntry of mapEntries(this.state.replaceShadows)) {
+			for (let ofIndex = 0, ofList = ofEntry[1]; ofIndex < ofList.length; ofIndex++) {
+				const shadow = ofList[ofIndex];
+				const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+				if (parentPath !== shadowPath && !StringMethods.startsWith(parentPath, `${shadowPath}.`)) continue;
+				let node = resolveWrapper(shadow.child);
+				const rest = parentPath === shadowPath ? [] : splitText(StringMethods.slice(parentPath, shadowPath.length + 1), ".");
+				for (let i = 0; node && i < rest.length; i++) node = resolveWrapper(Objects.getOwnPropertyDescriptor(node, rest[i])?.value);
+				if (node && !ArrayMethods.includes(holders, node)) listPush(holders, node);
+			}
+		}
+		for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+			const holder = ofList[ofIndex];
+			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, holder, key)) {
+				runtime_frameworkWrite(holder, () => Reflect.deleteProperty(holder, key));
+			}
+			const impl = holder.____slothletInternal.impl;
+			if (impl && typeof impl === "object" && resolveWrapper(impl) === null) Reflect.deleteProperty(impl, key);
+		}
+	}
+
+	/**
 	 * Put a primitive member's surviving value back after a removal, when the member at the path is a plain value
 	 * rather than a node.
 	 * @param {object} root - The api tree (`api` or `boundApi`).
@@ -4598,8 +4710,14 @@ export class ApiManager extends ComponentBase {
 						await this.deletePath(this.slothlet.api, targetParts);
 						await this.deletePath(this.slothlet.boundApi, targetParts);
 					}
+					// A member another module's replace held off the api is removed there too, or removing that module
+					// would bring it back.
+					this.#forgetHiddenMember(target, scopedModuleIDKey);
 				}
 			}
+			// What this module's replace took off the api under the path comes back now that its share there is gone
+			// (all of it when the module is gone).
+			this.#reattachShadows(scopedModuleIDKey, isFullRemoval ? null : normalizedScoped);
 			// A mount of this module at or below the path goes with its share; the last one takes the module (#625).
 			if (!isFullRemoval) this.#releaseMountsUnder(normalizedScoped, recordHistory, scopedModuleIDKey);
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
@@ -4941,27 +5059,10 @@ export class ApiManager extends ComponentBase {
 			// rollback above only reverts the CO-owned paths. Re-attach each shadowed child now — AFTER the
 			// container's own rollback ___setImpl, whose replace-mode adoption would otherwise clear it —
 			// so removing the overriding module restores the first module's FULL mount (leaf + exclusives).
-			const shadows = MapMethods.get(this.state.replaceShadows, moduleIDKey);
-			if (shadows) {
-				for (let ofIndex = 0, ofList = shadows; ofIndex < ofList.length; ofIndex++) {
-					const shadow = ofList[ofIndex];
-					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
-					// clobber a live member with a stale shadow.
-					if (FunctionMethods.call(Objects.prototype.hasOwnProperty, shadow.container, shadow.key)) continue;
-					runtime_frameworkWrite(shadow.container, () =>
-						Objects.defineProperty(shadow.container, shadow.key, {
-							__proto__: null,
-							value: shadow.child,
-							writable: false,
-							enumerable: true,
-							configurable: true
-						})
-					);
-					// Back on the surface, so what of it is unloaded counts again.
-					this._setShadowParked(shadow.child, false);
-				}
-				MapMethods.delete(this.state.replaceShadows, moduleIDKey);
-			}
+			this.#reattachShadows(moduleIDKey);
+			// What the removed module had under another module's replace is gone with it: removing that module later
+			// brings none of it back.
+			this.#dropShadowsOf(moduleIDKey);
 
 			for (let ofIndex = 0, ofList = rolledBackNodes; ofIndex < ofList.length; ofIndex++) {
 				const ofEntry = ofList[ofIndex],
@@ -5374,9 +5475,14 @@ export class ApiManager extends ComponentBase {
 
 		for (const ofEntry of mapEntries(endpointOrder)) {
 			const moduleIDs = ofEntry[1];
+			// A module added here under "replace" after another swapped the endpoint's surface for its own, and what the
+			// earlier modules had there went off the api. Rebuilding them as one clean slate would put it back, so each
+			// module is reloaded on its own instead, exactly as reloading it by its moduleID does: the earlier ones stay
+			// under the replace, and the replacing one keeps what it holds.
+			const layered = ArrayMethods.some(moduleIDs, (id, i) => i > 0 && cacheManager.get(id)?.collisionMode === "replace");
 			const reloadGroup = setFrom(moduleIDs);
 			for (let i = 0; i < moduleIDs.length; i++) {
-				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0, reloadGroup });
+				await this._reloadByModuleID(moduleIDs[i], layered ? undefined : { forceReplace: i === 0, reloadGroup });
 			}
 		}
 
