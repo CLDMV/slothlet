@@ -206,7 +206,7 @@ api.slothlet.lifecycle.on("impl:error", (data) => {
 
 ### `materialized:complete`
 
-Emitted when all lazy-mode modules have been materialized. Requires `tracking: { materialization: true }` in config.
+Emitted when all lazy-mode modules have been materialized. Requires `tracking: { materialization: true }` in config. To be told without subscribing, give `loader.materialize` a function (see [A callback when everything is loaded](#a-callback-when-everything-is-loaded)).
 
 **Event data:**
 
@@ -785,6 +785,22 @@ await api.slothlet.materialize.wait();
 console.log(api.math.__type); // "object"
 const result = await api.math.add(2, 3); // Fast - no loading delay
 ```
+
+### A callback when everything is loaded
+
+Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, timestamp }` (the `materialized:complete` event data), when every lazy module has loaded. It does not need `tracking.materialization`.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	mode: "lazy",
+	loader: {
+		materialize: ({ total }) => console.log(`${total} modules loaded`)
+	}
+});
+```
+
+When everything has already loaded by the time the instance finishes building (always so in eager mode, where `total` is `0`), the function is called at once, before `await slothlet(...)` resolves. It runs once per instance: a module added later reopens `api.slothlet.materialize.wait()` but does not call it again; a restart builds a new instance and calls it again. What it throws, or a promise it returns rejects with, is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning, as for a failing event handler.
 
 ### `api.slothlet.materialize.wait()`
 
