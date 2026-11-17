@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:48-08:00 (1794882468)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -184,7 +184,7 @@ function _metadataNode(slothlet, target) {
  * @param {object} slothlet - Slothlet instance.
  * @param {*} target - A function or node, a dotted api path, a segment array, or a module id.
  * @returns {string|null} The dotted api path (a module id resolved to where it was added), or null for a function or node.
- * @throws {SlothletError} INVALID_METADATA_TARGET when the target is none of these.
+ * @throws {SlothletError} METADATA_TARGET_INVALID when the target is none of these.
  * @private
  * @example
  * _metadataTargetPath(slothlet, ["v1", "auth"]); // "v1.auth"
@@ -201,7 +201,7 @@ function _metadataTargetPath(slothlet, target) {
 		return ArrayMethods.join(target, ".");
 	}
 	if (typeof target === "string" && target !== "") return _resolvePathOrModuleId(slothlet, target);
-	throw new slothlet.SlothletError("INVALID_METADATA_TARGET", {
+	throw new slothlet.SlothletError("METADATA_TARGET_INVALID", {
 		target: Arrays.isArray(target) ? "array" : typeof target,
 		expected: "function, node, api path or module id"
 	});
@@ -345,12 +345,7 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
 function runtime_readAddOptions(slothlet, source, options) {
 	const objectArgument = (value, argument) => {
 		if (value === null || typeof value !== "object" || Arrays.isArray(value)) {
-			throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-				argument,
-				expected: "object",
-				received: value === null ? "null" : Arrays.isArray(value) ? "array" : typeof value,
-				validationError: true
-			});
+			throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument, expected: "object", received: value === null ? "null" : Arrays.isArray(value) ? "array" : typeof value });
 		}
 	};
 	const given = options == null ? {} : options;
@@ -795,9 +790,7 @@ export class ApiBuilder extends ComponentBase {
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
 			if (!permissionManager?.enforceAccess) {
-				throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-					validationError: true
-				});
+				throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 			}
 			/* v8 ignore stop */
 
@@ -1189,7 +1182,7 @@ export class ApiBuilder extends ComponentBase {
 			const parts = splitText(changedPath, ".");
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			if (identity?.unresolved) {
-				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: changedPath });
 			}
 			if (identity?.currentWrapper) {
 				// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
@@ -1206,7 +1199,7 @@ export class ApiBuilder extends ComponentBase {
 			// No call is running: whose code makes the change decides, so a function a module left where the host calls it
 			// later is still that module's.
 			const writers = runtime_codeWritersOnStack(slothlet);
-			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: changedPath, validationError: true });
+			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: changedPath });
 			for (let i = 0; i < writers.length; i++) apiManager.assertOwnedWrite(parts, writers[i]);
 		};
 
@@ -1744,19 +1737,11 @@ export class ApiBuilder extends ComponentBase {
 				add: async function slothlet_api_add(apiPath, folderPath, options = {}, ...extra) {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: ["slothlet", "api", "add"],
-							validationError: true
-						});
+						throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "add"] });
 					}
 					// api.add takes (path, source, options); a further argument would otherwise be dropped unread.
 					if (extra.length > 0 && extra[0] !== undefined) {
-						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-							argument: "arguments",
-							expected: "(path, source, options)",
-							received: `${3 + extra.length} arguments`,
-							validationError: true
-						});
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "arguments", expected: "(path, source, options)", received: `${3 + extra.length} arguments` });
 					}
 					const read = runtime_readAddOptions(slothlet, folderPath, options);
 					folderPath = read.source;
@@ -1772,7 +1757,7 @@ export class ApiBuilder extends ComponentBase {
 						const passed = filterList(LOCKED_ADD_OPTIONS, (entry) => entry[0] in effectiveOptions);
 						if (passed.length > 0) {
 							// The warning prints unless the instance is silent (decided inside the warning, #838).
-							new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", {
+							new slothlet.SlothletWarning("WARNING_COLLISION_OPTION_LOCKED", {
 								option: ArrayMethods.join(
 									mapList(passed, (entry) => entry[1]),
 									", "
@@ -1842,17 +1827,13 @@ export class ApiBuilder extends ComponentBase {
 				remove: async function slothlet_api_remove(target, id) {
 					// Check if remove mutation is allowed
 					if (!config.api?.mutations?.remove) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: ["slothlet", "api", "remove"],
-							validationError: true
-						});
+						throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "remove"] });
 					}
 					if (typeof target !== "string") {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "target",
 							expected: "string",
-							received: typeof target,
-							validationError: true
+							received: typeof target
 						});
 					}
 					// The optional scoping module id, when supplied, must be a string.
@@ -1860,8 +1841,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "id",
 							expected: "string",
-							received: typeof id,
-							validationError: true
+							received: typeof id
 						});
 					}
 					// Scoped: module `id`'s node at the path `target`. Unscoped: `target` is a path or a module id.
@@ -1898,7 +1878,7 @@ export class ApiBuilder extends ComponentBase {
 				 *   object, or `options.details`/`options.private` is not a boolean.
 				 * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY when `options` has a key other than `details`/`private`.
 				 * @throws {SlothletError} PERMISSION_DENIED when a MODULE caller passes `private`.
-				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
+				 * @throws {SlothletError} MODULE_UNKNOWN when the key resolves to no module.
 				 * @public
 				 *
 				 * @description
@@ -1929,8 +1909,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "key",
 							expected: "string",
-							received: typeof key,
-							validationError: true
+							received: typeof key
 						});
 					}
 					// Same option-bag normalization the other public entry points use (see
@@ -1942,8 +1921,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "options",
 							expected: "object with optional boolean details/private",
-							received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
-							validationError: true
+							received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions
 						});
 					}
 					assertOptionKeys(normalizedOptions, "slothlet.api.leaves");
@@ -1964,8 +1942,7 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: `options.${name}`,
 								expected: "boolean",
-								received: typeof value,
-								validationError: true
+								received: typeof value
 							});
 						}
 					}
@@ -2018,7 +1995,7 @@ export class ApiBuilder extends ComponentBase {
 						}
 					}
 					if (!moduleID || !MapMethods.has(ownership.moduleToPath, moduleID)) {
-						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+						throw new slothlet.SlothletError("MODULE_UNKNOWN", { key });
 					}
 
 					// Under lazy an untouched subtree has only namespace records — its leaf names genuinely
@@ -2123,7 +2100,7 @@ export class ApiBuilder extends ComponentBase {
 					// remove()/reload() can unregister this module while we wait. Re-check rather than
 					// spreading `undefined` into a raw TypeError from inside the framework.
 					if (!MapMethods.has(ownership.moduleToPath, moduleID)) {
-						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+						throw new slothlet.SlothletError("MODULE_UNKNOWN", { key });
 					}
 
 					// Classify from the records: the registered value names the kind, and a path with an
@@ -2242,10 +2219,7 @@ export class ApiBuilder extends ComponentBase {
 				reload: async function slothlet_api_reload(pathOrModuleId, options) {
 					// Check if reload mutation is allowed
 					if (!config.api?.mutations?.reload) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: ["slothlet", "api", "reload"],
-							validationError: true
-						});
+						throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "reload"] });
 					}
 					assertOptionKeys(options, "slothlet.api.reload");
 
@@ -2260,8 +2234,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "pathOrModuleId",
 							expected: "string, null, undefined, or '.'",
-							received: typeof pathOrModuleId,
-							validationError: true
+							received: typeof pathOrModuleId
 						});
 					}
 
@@ -2283,18 +2256,16 @@ export class ApiBuilder extends ComponentBase {
 					for (let i = 0; i < pathParts.length; i++) {
 						const part = pathParts[i];
 						if (!current || (typeof current !== "object" && typeof current !== "function")) {
-							throw new slothlet.SlothletError("INVALID_API_PATH", {
-								apiPath: pathOrModuleId,
-								validationError: true
+							throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
+								path: pathOrModuleId
 							});
 						}
 						current = current[part];
 					}
 
 					if (current === undefined) {
-						throw new slothlet.SlothletError("INVALID_API_PATH", {
-							apiPath: pathOrModuleId,
-							validationError: true
+						throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
+							path: pathOrModuleId
 						});
 					}
 
@@ -2349,10 +2320,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					add: async function slothlet_modules_add(target, options) {
 						if (!config.api?.mutations?.add) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "api", "modules", "add"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "modules", "add"] });
 						}
 						// The calling module, read before any await (#625): see ModuleManager#addModule.
 						const writer = runtime_selfModuleReader(slothlet);
@@ -2360,12 +2328,7 @@ export class ApiBuilder extends ComponentBase {
 						// One argument that is a plain object this instance's discovery did not return is the options of a discover run.
 						if (target !== null && typeof target === "object" && !Arrays.isArray(target) && !manager.issued(target)) {
 							if (options !== undefined) {
-								throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-									argument: "target",
-									expected: "module name, discover result or array of them",
-									received: "object",
-									validationError: true
-								});
+								throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "target", expected: "module name, discover result or array of them", received: "object" });
 							}
 							options = target;
 							target = undefined;
@@ -2390,10 +2353,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					remove: async function slothlet_modules_remove(name, opts) {
 						if (!config.api?.mutations?.remove) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "api", "modules", "remove"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "modules", "remove"] });
 						}
 						// The calling module, read before any await (#625): see ModuleManager#removeModule.
 						return slothlet.handlers.moduleManager.removeModule(name, opts, runtime_selfModuleReader(slothlet));
@@ -2448,8 +2408,7 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 						argument: "str",
 						expected: "string",
-						received: typeof str,
-						validationError: true
+						received: typeof str
 					});
 				}
 				return slothlet.helpers.sanitize.sanitizePropertyName(str, slothlet.config.sanitize || {});
@@ -2505,8 +2464,7 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 						argument: "fn",
 						expected: "function",
-						received: typeof fn,
-						validationError: true
+						received: typeof fn
 					});
 				}
 				// Capture the registering module's identity now (null when called outside a module).
@@ -2562,8 +2520,7 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 						argument: "fn",
 						expected: "function",
-						received: typeof fn,
-						validationError: true
+						received: typeof fn
 					});
 				}
 				// Browser host: no AsyncResource (live context), so bind is identity (`: fn`). This nested
@@ -2793,7 +2750,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				on: function slothlet_hook_on(typePattern, handler, options = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					assertOptionKeys(options, "slothlet.hook.on");
 					return slothlet.handlers.hookManager.on(typePattern, handler, options);
@@ -2814,7 +2771,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				remove: function slothlet_hook_remove(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.remove");
 					return slothlet.handlers.hookManager.remove(filter);
@@ -2842,7 +2799,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				off: function slothlet_hook_off(idOrFilter) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					// If string, treat as ID
 					const filter = typeof idOrFilter === "string" ? { id: idOrFilter } : idOrFilter;
@@ -2865,7 +2822,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				enable: function slothlet_hook_enable(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.enable");
 					return slothlet.handlers.hookManager.enable(filter);
@@ -2886,7 +2843,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				disable: function slothlet_hook_disable(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.disable");
 					return slothlet.handlers.hookManager.disable(filter);
@@ -2910,7 +2867,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					enable: function slothlet_hook_pattern_enable(pattern) {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.enablePattern(pattern);
 					},
@@ -2927,7 +2884,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					disable: function slothlet_hook_pattern_disable(pattern) {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.disablePattern(pattern);
 					},
@@ -2942,7 +2899,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					reset: function slothlet_hook_pattern_reset() {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.resetPatternFilter();
 					}
@@ -2964,7 +2921,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				list: function slothlet_hook_list(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 					}
 					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.list");
 					return slothlet.handlers.hookManager.list(filter);
@@ -2991,7 +2948,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					get enabled() {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.pinEnforced;
 					},
@@ -3005,7 +2962,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					enable: function slothlet_hook_pin_enable() {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.setPinEnforced(true);
 					},
@@ -3019,7 +2976,7 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					disable: function slothlet_hook_pin_disable() {
 						if (!slothlet.handlers?.hookManager) {
-							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+							throw new slothlet.SlothletError("HOOK_MANAGER_NOT_AVAILABLE", {});
 						}
 						return slothlet.handlers.hookManager.setPinEnforced(false);
 					}
@@ -3058,10 +3015,7 @@ export class ApiBuilder extends ComponentBase {
 					// or on an instance that explicitly omits the metadata handler.
 					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
-						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ") : "undefined",
-							validationError: true
-						});
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {});
 					}
 					/* v8 ignore stop */
 
@@ -3070,14 +3024,14 @@ export class ApiBuilder extends ComponentBase {
 					 *
 					 * @param {string} keyPath - Dot-notation metadata key.
 					 * @returns {void}
-					 * @throws {SlothletError} INVALID_METADATA_KEY when the key path is unsafe.
+					 * @throws {SlothletError} METADATA_KEY_INVALID when the key path is unsafe.
 					 * @example
 					 * validateGlobalMetadataKeyPath("build.region");
 					 */
 					const validateGlobalMetadataKeyPath = (keyPath) => {
 						const blocked = setFrom(["__proto__", "prototype", "constructor"]);
 						if (typeof keyPath !== "string" || keyPath.length === 0) {
-							throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+							throw new slothlet.SlothletError("METADATA_KEY_INVALID", {
 								key: keyPath,
 								type: typeof keyPath,
 								expected: "non-empty string"
@@ -3088,7 +3042,7 @@ export class ApiBuilder extends ComponentBase {
 						for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
 							const segment = ofList[ofIndex];
 							if (!segment || SetMethods.has(blocked, segment)) {
-								throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+								throw new slothlet.SlothletError("METADATA_KEY_INVALID", {
 									key: keyPath,
 									type: typeof keyPath,
 									expected: "safe dot-notation key without reserved segments"
@@ -3112,8 +3066,7 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: "keyOrObj",
 								expected: "acyclic object",
-								received: "circular reference",
-								validationError: true
+								received: "circular reference"
 							});
 						}
 
@@ -3156,8 +3109,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "keyOrObj",
 							expected: "string or object",
-							received: typeof keyOrObj,
-							validationError: true
+							received: typeof keyOrObj
 						});
 					}
 
@@ -3191,14 +3143,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				set: function slothlet_metadata_set(target, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
-						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers
-								? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ")
-								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
-									/* v8 ignore next */
-									"undefined",
-							validationError: true
-						});
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {});
 					}
 					const path = _metadataTargetPath(slothlet, target);
 					if (path === null) {
@@ -3334,10 +3279,7 @@ export class ApiBuilder extends ComponentBase {
 			reload: async (options = {}) => {
 				// Check if reload mutation is allowed
 				if (!config.api?.mutations?.reload) {
-					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-						operation: ["slothlet", "reload"],
-						validationError: true
-					});
+					throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "reload"] });
 				}
 				return slothlet.reload(options);
 			},
@@ -3350,10 +3292,7 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			restart: async () => {
 				if (!config.api?.mutations?.reload) {
-					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-						operation: ["slothlet", "restart"],
-						validationError: true
-					});
+					throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "restart"] });
 				}
 				return slothlet.restart();
 			},
@@ -3629,15 +3568,12 @@ export class ApiBuilder extends ComponentBase {
 						 */
 						add: function slothlet_event_rules_add(rule) {
 							if (!config.api?.mutations?.events) {
-								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-									operation: ["slothlet", "event", "rules", "add"],
-									validationError: true
-								});
+								throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "event", "rules", "add"] });
 							}
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.addEventRule) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 							// The rule is read once; module code's is placed as its call rules are, at the module layer, and
@@ -3668,15 +3604,12 @@ export class ApiBuilder extends ComponentBase {
 						 */
 						remove: function slothlet_event_rules_remove(ruleId) {
 							if (!config.api?.mutations?.events) {
-								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-									operation: ["slothlet", "event", "rules", "remove"],
-									validationError: true
-								});
+								throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "event", "rules", "remove"] });
 							}
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.removeEventRule) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 							// Code supplied to another module's call removes for both modules (#597).
@@ -3874,19 +3807,14 @@ export class ApiBuilder extends ComponentBase {
 					add: function slothlet_permissions_rules_add(rule) {
 						// Check if permissions mutation is allowed
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "permissions", "rules", "add"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "rules", "add"] });
 						}
 
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.addRule) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -3927,19 +3855,14 @@ export class ApiBuilder extends ComponentBase {
 					remove: function slothlet_permissions_rules_remove(ruleId) {
 						// Check if permissions mutation is allowed
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "permissions", "rules", "remove"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "rules", "remove"] });
 						}
 
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.removeRule) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -3995,17 +3918,12 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					register: function slothlet_permissions_principal_register(name, definition) {
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "permissions", "principal", "register"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "principal", "register"] });
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.registerPrincipal) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4050,17 +3968,12 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					unregister: function slothlet_permissions_principal_unregister(name) {
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: ["slothlet", "permissions", "principal", "unregister"],
-								validationError: true
-							});
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "principal", "unregister"] });
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.unregisterPrincipal) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4095,9 +4008,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.invalidatePrincipal) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4127,9 +4038,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.checkAccess) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4166,9 +4075,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.getRulesForCaller) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4218,9 +4125,7 @@ export class ApiBuilder extends ComponentBase {
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.checkAccess) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-									validationError: true
-								});
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 
@@ -4255,9 +4160,7 @@ export class ApiBuilder extends ComponentBase {
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.checkCall) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-									validationError: true
-								});
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 
@@ -4285,9 +4188,7 @@ export class ApiBuilder extends ComponentBase {
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.getRulesForPath) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-									validationError: true
-								});
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 
@@ -4308,9 +4209,7 @@ export class ApiBuilder extends ComponentBase {
 							const permissionManager = slothlet.handlers?.permissionManager;
 							/* v8 ignore start */
 							if (!permissionManager?.getRulesByModule) {
-								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-									validationError: true
-								});
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
 							/* v8 ignore stop */
 
@@ -4338,9 +4237,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.isEnabled) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4376,9 +4273,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.enable) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4398,9 +4293,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.disable) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4420,9 +4313,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.isReadGatingEnabled) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4444,9 +4335,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.setReadGating) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4467,9 +4356,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.seal) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4506,9 +4393,7 @@ export class ApiBuilder extends ComponentBase {
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
 						if (!permissionManager?.isSealed) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
 						/* v8 ignore stop */
 
@@ -4742,8 +4627,7 @@ export class ApiBuilder extends ComponentBase {
 				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 					argument: "fn",
 					expected: "function",
-					received: typeof fn,
-					validationError: true
+					received: typeof fn
 				});
 			}
 			// The identity metadata.caller() reports right now — null when the current leaf was
@@ -4860,15 +4744,15 @@ export class ApiBuilder extends ComponentBase {
 			run: async (contextData, callback, ...args) => {
 				// Check if per-request context is disabled
 				if (slothlet.config.scope === false) {
-					throw new slothlet.SlothletError("SCOPE_DISABLED", {}, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_DISABLED", {});
 				}
 
 				// Validate parameters
 				if (!contextData || typeof contextData !== "object") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_CONTEXT", { received: typeof contextData }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_CONTEXT_INVALID", { received: typeof contextData });
 				}
 				if (typeof callback !== "function") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_CALLBACK", { received: typeof callback }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_CALLBACK_INVALID", { received: typeof callback });
 				}
 
 				// Delegate to scope with structured options
@@ -4896,28 +4780,26 @@ export class ApiBuilder extends ComponentBase {
 			scope: async (options) => {
 				// Check if per-request context is disabled
 				if (slothlet.config.scope === false) {
-					throw new slothlet.SlothletError("SCOPE_DISABLED", {}, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_DISABLED", {});
 				}
 
 				// Validate parameters
 				if (!options || typeof options !== "object") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_OPTIONS", { received: typeof options }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_OPTIONS_INVALID", { received: typeof options });
 				}
 				assertOptionKeys(options, "slothlet.context.scope");
 				if (!options.fn || typeof options.fn !== "function") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_FN", { received: typeof options?.fn }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_FUNCTION_INVALID", { received: typeof options?.fn });
 				}
 				if (!options.context || typeof options.context !== "object") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_CONTEXT_OBJECT", { received: typeof options?.context }, null, {
-						validationError: true
-					});
+					throw new slothlet.SlothletError("SCOPE_CONTEXT_OBJECT_INVALID", { received: typeof options?.context });
 				}
 
 				const { context: contextData, fn, args = [], merge = "shallow", isolation, protect, owners } = options;
 
 				// Validate merge strategy
 				if (merge !== "shallow" && merge !== "deep") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_MERGE_STRATEGY", { merge }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_MERGE_STRATEGY_INVALID", { merge });
 				}
 
 				// Get isolation mode (from options or config)
@@ -4925,7 +4807,7 @@ export class ApiBuilder extends ComponentBase {
 
 				// Validate isolation mode
 				if (isolationMode !== "partial" && isolationMode !== "full") {
-					throw new slothlet.SlothletError("SCOPE_INVALID_ISOLATION_MODE", { isolationMode }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_ISOLATION_MODE_INVALID", { isolation: isolationMode });
 				}
 
 				// Owner-locked context keys (opt-in). `protect` is a write-once/unowned lock (owner =
@@ -4933,15 +4815,11 @@ export class ApiBuilder extends ComponentBase {
 				// is declared ONLY via scope()/run() options — never via run()'s positional args, whose 3rd+
 				// arguments are forwarded to the callback.
 				if (protect !== undefined && (!Arrays.isArray(protect) || ArrayMethods.some(protect, (k) => typeof k !== "string"))) {
-					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: describeScopeReceived(protect) }, null, {
-						validationError: true
-					});
+					throw new slothlet.SlothletError("SCOPE_PROTECTED_KEYS_INVALID", { received: describeScopeReceived(protect) });
 				}
 				if (owners !== undefined) {
 					if (typeof owners !== "object" || owners === null || Arrays.isArray(owners)) {
-						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: describeScopeReceived(owners) }, null, {
-							validationError: true
-						});
+						throw new slothlet.SlothletError("SCOPE_KEY_OWNERS_INVALID", { received: describeScopeReceived(owners) });
 					}
 					// Owner VALUES are used as owner-name strings later (`enforceContextKeyWrite`'s
 					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
@@ -4955,8 +4833,7 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 								argument: `owners.${key}`,
 								expected: "non-empty string",
-								received: typeof owner === "string" ? "empty string" : typeof owner,
-								validationError: true
+								received: typeof owner === "string" ? "empty string" : typeof owner
 							});
 						}
 					}
@@ -4981,7 +4858,7 @@ export class ApiBuilder extends ComponentBase {
 					const claim = (key, owner) => {
 						const existing = child && FunctionMethods.call(Objects.prototype.hasOwnProperty, child, key) ? child[key] : undefined;
 						if (existing !== undefined && existing !== owner) {
-							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
+							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) });
 						}
 						if (child === base) child = base ? Objects.assign(Objects.create(null), base) : Objects.create(null);
 						child[key] = owner;
@@ -5004,7 +4881,7 @@ export class ApiBuilder extends ComponentBase {
 				// Get current context manager
 				const contextManager = slothlet.contextManager;
 				if (!contextManager) {
-					throw new slothlet.SlothletError("NO_CONTEXT_MANAGER", { validationError: true });
+					throw new slothlet.SlothletError("CONTEXT_RUNTIME_NOT_AVAILABLE", {});
 				}
 
 				const { utilities } = slothlet.helpers;
@@ -5035,9 +4912,8 @@ export class ApiBuilder extends ComponentBase {
 
 					if (!currentStore) {
 						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
-							instanceID: slothlet.instanceID,
-							availableInstances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none",
-							validationError: true
+							instance: slothlet.instanceID,
+							instances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none"
 						});
 					}
 
@@ -5135,9 +5011,8 @@ export class ApiBuilder extends ComponentBase {
 						const baseStore = MapMethods.get(contextManager.instances, slothlet.instanceID);
 						if (!baseStore) {
 							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
-								instanceID: slothlet.instanceID,
-								availableInstances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none",
-								validationError: true
+								instance: slothlet.instanceID,
+								instances: ArrayMethods.join(mapKeysToArray(contextManager.instances), ", ") || "none"
 							});
 						}
 						currentStore = baseStore;
@@ -5211,9 +5086,8 @@ export class ApiBuilder extends ComponentBase {
 					}
 				}
 
-				throw new slothlet.SlothletError("UNSUPPORTED_CONTEXT_MANAGER", {
-					manager: contextManager.constructor.name,
-					validationError: true
+				throw new slothlet.SlothletError("CONTEXT_RUNTIME_UNSUPPORTED", {
+					manager: contextManager.constructor.name
 				});
 			}
 		}.scope;

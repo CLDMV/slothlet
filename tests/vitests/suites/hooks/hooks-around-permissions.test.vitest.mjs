@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
+ *	@Last modified time: 2026-11-16T18:29:58-08:00 (1794882598)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -130,7 +130,7 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 		api = await boot(null);
 		const id = await api.auditor.armOpts("db.read:around", { pin: false });
 		expect(api.slothlet.hook.list({ id }).registeredHooks[0].lockCaller).toBe(true);
-		expect(api.slothlet.warnings.get().some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("a pinned around hook's next() runs the target as the intercepted call, not as the hook owner", async () => {

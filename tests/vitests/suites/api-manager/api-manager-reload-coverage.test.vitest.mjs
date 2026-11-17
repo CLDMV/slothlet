@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ describe("reloadApiComponent — error paths", () => {
 		await expect(api.slothlet.api.reload(42)).rejects.toThrow();
 	});
 
-	it("throws INVALID_API_PATH when api path does not exist in the live API", async () => {
+	it("throws API_PATH_NOT_FOUND when api path does not exist in the live API", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		await expect(api.slothlet.api.reload("doesNotExist.atAll")).rejects.toThrow();
 	});

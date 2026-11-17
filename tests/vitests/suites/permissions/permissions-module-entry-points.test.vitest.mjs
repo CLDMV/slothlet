@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
+ *	@Last modified time: 2026-11-16T18:30:38-08:00 (1794882638)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -90,13 +90,13 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 			["a discover run", "run"]
 		])("refuses module code mounting one whose rules reach beyond its subtree through %s, and mounts nothing", async (_label, how) => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(how, EVIL))).toBe("INVALID_PERMISSION_RULE");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(how, EVIL))).toBe("PERMISSION_RULE_INVALID");
 			expect(api.guest.sub).toBeUndefined();
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
 			expect(
 				withSuppressedSlothletErrorOutputSync(() => api.guest.x.addRuleFor({ caller: "guest.**", target: "victim.**", effect: "allow" }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("lets module code mount one whose rules stay in its subtree", async () => {

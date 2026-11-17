@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:13:33-08:00 (1794431613)
+ *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import("@cldmv/slothlet/runtime").then((runtime) => {
 	self = runtime.self;
 });
 
-const refused = (error) => `${error?.code}:${error?.context?.caller ?? null}`;
+const refused = (error) => `${error?.code}:${error?.details?.caller ?? null}`;
 
 const read = () => {
 	try {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -309,11 +309,11 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		// A write onto the class is refused as one made in no call of the instance, a method shadowed on the instance as
 		// one the module does not own. Data it was handed stays its to change.
 		expect(globalThis.__crossingRulesReader.writeThroughKept("__after_")).toEqual({
-			getPrototypeOf: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-			proto: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-			constructor: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-			method: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-			keptPrototype: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+			getPrototypeOf: "CONTEXT_NOT_ACTIVE_SELF",
+			proto: "CONTEXT_NOT_ACTIVE_SELF",
+			constructor: "CONTEXT_NOT_ACTIVE_SELF",
+			method: "CONTEXT_NOT_ACTIVE_SELF",
+			keptPrototype: "CONTEXT_NOT_ACTIVE_SELF",
 			shadowed: "LOOSE_SET_NOT_OWNED",
 			data: "written"
 		});

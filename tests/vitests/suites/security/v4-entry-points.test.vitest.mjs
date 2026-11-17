@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:31:03-08:00 (1794882663)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,17 +110,17 @@ describe("v4 entry points > @cldmv/slothlet/files", () => {
 		vi.doMock("#helpers/platform", async (importOriginal) => ({ ...(await importOriginal()), isNode: false }));
 		const { files } = await import("@cldmv/slothlet/files");
 		for (const [name, call] of [
-			["files.generate()", () => files.generate(API_DIR)],
-			["files.importmap()", () => files.importmap("/")],
-			["files.assets()", () => files.assets(API_DIR)],
-			["files.specifiers.slothlet()", () => files.specifiers.slothlet(process.cwd())],
-			["files.specifiers.packages()", () => files.specifiers.packages(process.cwd())]
+			[["files", "generate"], () => files.generate(API_DIR)],
+			[["files", "importmap"], () => files.importmap("/")],
+			[["files", "assets"], () => files.assets(API_DIR)],
+			[["files", "specifiers", "slothlet"], () => files.specifiers.slothlet(process.cwd())],
+			[["files", "specifiers", "packages"], () => files.specifiers.packages(process.cwd())]
 		]) {
 			const error = await call().then(
 				() => null,
 				(e) => e
 			);
-			expect([name, error?.code, error?.context?.operation]).toEqual([name, "FILES_REQUIRES_NODE", name]);
+			expect([name, error?.code, error?.details?.operation]).toEqual([name, "FILES_REQUIRES_NODE", name]);
 		}
 		expect(files.resolver("https://example.com/api/")({ path: "math.mjs" })).toBe("https://example.com/api/math.mjs");
 	});

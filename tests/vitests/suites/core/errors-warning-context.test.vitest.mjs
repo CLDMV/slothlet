@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  *   if (!Home.silent) {
  *       console.warn(`...`);
  *       if (Object.keys(contextData).length > 0) {  // ← line 184
- *           console.warn("Context:", contextData);   // ← line 184 TRUE branch (already covered)
+ *           console.warn("Details:", contextData);   // ← line 184 TRUE branch (already covered)
  *       }
  *       // ← line 184 FALSE branch: contextData is empty {}
  *   }
@@ -65,8 +65,8 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 		const headerCall = warnCalls.find((call) => String(call[0]).includes("⚠️"));
 		expect(headerCall).toBeDefined();
 
-		// The "Context:" call must NOT have been made (false branch — no context to log)
-		const contextCall = warnCalls.find((call) => call[0] === "Context:");
+		// The "Details:" call must NOT have been made (false branch — no context to log)
+		const contextCall = warnCalls.find((call) => call[0] === "Details:");
 		expect(contextCall).toBeUndefined();
 	});
 
@@ -77,7 +77,7 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 		new SlothletWarning("WARNING_METADATA_MISMATCH", { source: "test" });
 
 		const warnCalls = warnSpy.mock.calls;
-		const contextCall = warnCalls.find((call) => call[0] === "Context:");
+		const contextCall = warnCalls.find((call) => call[0] === "Details:");
 		// The Context log SHOULD be present (length > 0 → true branch taken)
 		expect(contextCall).toBeDefined();
 	});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@
  * Target lines:
  *   2592: `result = impl.apply(thisArg, args)` — impl is a function, no contextManager
  *   2598: `result = impl.default.apply(impl, args)` — impl is {default: fn}, no contextManager
- *   2601: throw INVALID_CONFIG_NOT_A_FUNCTION — impl is neither fn nor {default:fn}, no contextManager
+ *   2601: throw API_PATH_NOT_CALLABLE — impl is neither fn nor {default:fn}, no contextManager
  *
  * Lines covered via normal contextManager path (already passing):
  *   hasTrap ~2763: `prop in impl` fallback
@@ -173,7 +173,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 });
 
 // ─── line 2601: impl is invalid, no contextManager ──────────────────────────
-// Neither a function nor {default:fn} — throws INVALID_CONFIG_NOT_A_FUNCTION.
+// Neither a function nor {default:fn} — throws API_PATH_NOT_CALLABLE.
 
 describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 2601)", () => {
 	let api;
@@ -201,7 +201,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_A_FUNCTION when impl is a plain object and contextManager is null", () => {
+	it("throws API_PATH_NOT_CALLABLE when impl is a plain object and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
 		const sl = wrapper.slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
@@ -217,14 +217,14 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			sl.contextManager = origCtx;
 			wrapper.____slothletInternal.impl = origImpl;
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_A_FUNCTION when impl is null and contextManager is null", () => {
+	it("throws API_PATH_NOT_CALLABLE when impl is null and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
 		const sl = wrapper.slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
@@ -240,7 +240,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			sl.contextManager = origCtx;
 			wrapper.____slothletInternal.impl = origImpl;

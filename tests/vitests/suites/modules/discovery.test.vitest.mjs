@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:25:47-08:00 (1794878747)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -224,8 +224,8 @@ describe("discoverModules — malformed manifests", () => {
 		}
 		expect(caught).toBeDefined();
 		expect(caught.code).toBe("MODULE_MANIFEST_INVALID");
-		expect(caught.context.package).toBe("@bad-scope/bad-json-scoped");
-		expect(caught.context.reason).toMatch(/JSON parse error/);
+		expect(caught.details.package).toBe("@bad-scope/bad-json-scoped");
+		expect(caught.details.reason).toMatch(/JSON parse error/);
 	});
 
 	it("throws MODULE_RESERVED_MOUNT when mount uses a reserved root", async () => {

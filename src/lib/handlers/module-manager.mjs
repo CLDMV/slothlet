@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:23:43-08:00 (1794878623)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -192,9 +192,7 @@ export class ModuleManager extends ComponentBase {
 		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
 		// rather than fail on a missing Node builtin (#817). modules.add() with no target and modules.add(name) run it too.
 		if (this.slothlet.envTarget === "browser") {
-			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] }, null, {
-				validationError: true
-			});
+			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] });
 		}
 		await this.#emit("modules:discover-start", { scanRoot: options.root, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
@@ -202,7 +200,8 @@ export class ModuleManager extends ComponentBase {
 		// where node:fs is not available; the import only fires when discover() is called.
 		const { discoverModules } = await import("#helpers/module-discovery");
 		const found = await discoverModules(options, {
-			warn: (details) => new this.slothlet.SlothletWarning("WARNING_MODULE_MANIFEST_FORMAT_1", details)
+			warn: ({ package: name, manifest }) =>
+				new this.slothlet.SlothletWarning("WARNING_MODULE_MANIFEST_FORMAT_1", { package: name, manifest })
 		});
 		MapMethods.clear(this.#cache);
 		for (let ofIndex = 0, ofList = found; ofIndex < ofList.length; ofIndex++) {
@@ -318,16 +317,11 @@ export class ModuleManager extends ComponentBase {
 	 */
 	async addModules(items, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
 		if (!Arrays.isArray(items)) {
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "items",
-					expected: "array of string|DiscoverResult",
-					received: typeof items
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "items",
+				expected: "array of string|DiscoverResult",
+				received: typeof items
+			});
 		}
 		assertOptionKeys(options, "slothlet.api.modules.add.batch", "slothlet.api.modules.add");
 		const onFailure = options.failure ?? "throw";
@@ -335,16 +329,11 @@ export class ModuleManager extends ComponentBase {
 		const collisionMode = collisionModeOf(options);
 
 		if (!ArrayMethods.includes(["throw", "rollback", "best-effort"], onFailure)) {
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "options.failure",
-					expected: "throw|rollback|best-effort",
-					received: String(onFailure)
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "options.failure",
+				expected: "throw|rollback|best-effort",
+				received: String(onFailure)
+			});
 		}
 
 		// Resolve all items to DiscoverResults up front so name lookups happen
@@ -445,16 +434,11 @@ export class ModuleManager extends ComponentBase {
 		// frozen. Any other object, whatever its shape, is not a discover result.
 		if (WeakSetMethods.has(this.#issued, arg)) return arg;
 		if (typeof arg !== "string") {
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "module name or DiscoverResult",
-					expected: "a package name, or a result this instance's discover() returned",
-					received: arg === null ? "null" : typeof arg
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "module name or DiscoverResult",
+				expected: "a package name, or a result this instance's discover() returned",
+				received: arg === null ? "null" : typeof arg
+			});
 		}
 
 		// Cache miss + lazy discover (G8 lazy-discover-on-empty fallback).
@@ -469,29 +453,18 @@ export class ModuleManager extends ComponentBase {
 			listPush(candidates, result);
 		}
 		if (candidates.length === 0) {
-			throw new SlothletError(
-				"MODULE_PACKAGE_NOT_FOUND",
-				{
-					package: arg,
-					hint: "modules.add(name) needs the package installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("MODULE_PACKAGE_NOT_FOUND", {
+				package: arg
+			});
 		}
 		if (candidates.length > 1) {
 			// Multi-version cache hit + no version disambiguator. addModules
 			// handles this by mounting each version; addModule wants exactly one.
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "version",
-					expected: "version disambiguator (multi-version cache hit)",
-					received: "undefined"
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "version",
+				expected: "version disambiguator (multi-version cache hit)",
+				received: "undefined"
+			});
 		}
 		return candidates[0];
 	}
@@ -525,17 +498,12 @@ export class ModuleManager extends ComponentBase {
 		if (collisionMode === "error") {
 			const existing = this.#findExactMountAt(effectiveMountPath);
 			if (existing) {
-				throw new SlothletError(
-					"MODULE_MOUNT_COLLISION",
-					{
-						package: discoverResult.package,
-						mount: splitText(effectiveMountPath, "."),
-						existingModuleID: existing.moduleID,
-						collisionMode
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new SlothletError("MODULE_MOUNT_COLLISION", {
+					package: discoverResult.package,
+					mount: splitText(effectiveMountPath, "."),
+					owner: existing.moduleID,
+					collision: collisionMode
+				});
 			}
 		}
 

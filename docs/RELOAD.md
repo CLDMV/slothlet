@@ -38,7 +38,7 @@ const api = await slothlet({
 });
 ```
 
-Disabling a mutation throws `INVALID_CONFIG_MUTATIONS_DISABLED` when that method is called. Set all three to `false` to create a locked, immutable API after build.
+Disabling a mutation throws `API_MUTATION_DISABLED` when that method is called. Set all three to `false` to create a locked, immutable API after build.
 
 ---
 
@@ -62,7 +62,7 @@ await api.slothlet.api.add(apiPath, folderPath, options);
 | `options.version`           | `{ tag, default?, metadata? }?`                             | Mount as one version of the path; see [VERSIONING.md](VERSIONING.md).                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `options.hidden`         | `string \| string[]?`                                       | Glob(s) hiding files/folders from this mount, matched against each entry's path relative to the **added** folder (files match extension-stripped). Same syntax and semantics as the init-time [`hidden`](./CONFIGURATION.md#hidden) option, `!` globs over the built-in `.`/`__` rule included. Persisted, so `reload()` re-applies it.                                                                                                                                                   |
 
-**Validation.** A mount `apiPath` may not contain a `__proto__` / `constructor` / `prototype` segment (a prototype-pollution guard) or the reserved internal separator `__slothlet_sep__`; a supplied `moduleID` may not contain the reserved separator either (see [Module Ownership](#module-ownership-moduleid)). Any of these is refused up front with a validation error (`INVALID_CONFIG_API_PATH_INVALID` / `MODULE_ID_RESERVED_SEPARATOR`) rather than mounted.
+**Validation.** A mount `apiPath` may not contain a `__proto__` / `constructor` / `prototype` segment (a prototype-pollution guard) or the reserved internal separator `__slothlet_sep__`; a supplied `moduleID` may not contain the reserved separator either (see [Module Ownership](#module-ownership-moduleid)). Any of these is refused up front with a validation error (`API_PATH_INVALID` / `MODULE_ID_RESERVED_SEPARATOR`) rather than mounted.
 
 **Examples:**
 
@@ -163,7 +163,7 @@ await api.slothlet.api.leaves("modules.acme.shop", { details: true });
 // ]
 ```
 
-An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
+An unknown key throws `MODULE_UNKNOWN`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
 
 Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ private: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
 
@@ -392,7 +392,7 @@ Targeted reloads (by path or moduleID) rebuild only the affected cache entries a
 
 Every module mounted via `add()` is tracked by a `moduleID`. If you don't provide one, slothlet generates a stable ID from the apiPath and resolved folder path.
 
-A `moduleID` may contain **any character** — `:`, `/`, `.`, `-`, and so on all round-trip through `add` / `leaves` / `remove` / `reload`, so a namespaced convention like `vine:abc` or `plugin:opensearch:v1` is safe. Internally slothlet joins the id and its apiPath into a composite metadata key using a **reserved multi-character token** (`__slothlet_sep__`), not `:`, and stores the raw base id verbatim — so no ordinary character collides with the delimiter. The one token a `moduleID` (or an `apiPath`) may **not** contain is that reserved separator: `add()` refuses it up front with a named error (`MODULE_ID_RESERVED_SEPARATOR` for a supplied or auto-generated id, `INVALID_CONFIG_API_PATH_INVALID` for an apiPath).
+A `moduleID` may contain **any character** — `:`, `/`, `.`, `-`, and so on all round-trip through `add` / `leaves` / `remove` / `reload`, so a namespaced convention like `vine:abc` or `plugin:opensearch:v1` is safe. Internally slothlet joins the id and its apiPath into a composite metadata key using a **reserved multi-character token** (`__slothlet_sep__`), not `:`, and stores the raw base id verbatim — so no ordinary character collides with the delimiter. The one token a `moduleID` (or an `apiPath`) may **not** contain is that reserved separator: `add()` refuses it up front with a named error (`MODULE_ID_RESERVED_SEPARATOR` for a supplied or auto-generated id, `API_PATH_INVALID` for an apiPath).
 
 Ownership is **stack-based**: each API path maintains a history of which modules have written to it. Removing a module automatically rolls back to the previous owner for all paths it touched.
 
@@ -493,7 +493,7 @@ A held reference keeps the `typeof` it had when it was taken (a proxy's callabil
 
 - A throwing `mode: "shutdown"` routine or root `shutdown` hook does not stop the restart; the old instance is still torn down, the new one is built, and the error is re-thrown once `restarted` has been emitted.
 - If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained.
-- `restart()` throws `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`.
+- `restart()` throws `API_MUTATION_DISABLED` when `api.mutations.reload` is `false`.
 - `restart()`, like `api.slothlet.reload()`, throws `API_ROOT_CLOSED` when the host has sealed, frozen or closed the api root to new members (`Object.seal(api)` and the like): a closed root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes. `api.slothlet.api.add()` of a new member at the root is refused the same way; members below the root still reload and take adds.
 
 ### Permissions and the seal

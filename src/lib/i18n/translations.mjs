@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,12 +30,12 @@ import {
 	Arrays,
 	Boolean,
 	filterList,
+	mapList,
 	listPush,
 	listSplice,
 	NativeProcess,
 	navigator,
 	Objects,
-	RegExp,
 	regExpReplace,
 	Set,
 	setFrom,
@@ -433,18 +433,24 @@ export function translate(errorCode, params = {}) {
 		template = currentTranslations.INVALID_CONFIG_generic;
 	}
 
-	// Interpolate parameters
+	// Interpolate parameters. `{name}` renders a value; an array renders joined with "." (the paths slothlet reports
+	// are segments arrays, shown in their dotted form). `{name.N}` renders one element of an array, and `{name|list}`
+	// renders an array as a list ("a, b"). A placeholder with no value renders empty.
 	let message = template || `Error: ${errorCode}`;
-	for (let ofIndex = 0, ofList = Objects.entries(params); ofIndex < ofList.length; ofIndex++) {
-		const ofEntry = ofList[ofIndex],
-			key = ofEntry[0],
-			value = ofEntry[1];
-		message = regExpReplace(
-			new RegExp(`\\{${key}\\}`, "g"),
-			message,
-			value !== undefined ? (SEGMENT_KEYS[key] === true && Arrays.isArray(value) ? ArrayMethods.join(value, ".") : stringOf(value)) : ""
-		);
-	}
+	const values = { __proto__: null };
+	for (let ofIndex = 0, ofList = Objects.entries(params ?? {}); ofIndex < ofList.length; ofIndex++)
+		values[ofList[ofIndex][0]] = ofList[ofIndex][1];
+	message = regExpReplace(/\{(\w+)(?:\.(\d+))?(\|list)?\}/g, message, (whole, name, index, list) => {
+		let value = values[name];
+		if (index !== undefined) value = Arrays.isArray(value) ? value[index] : undefined;
+		if (value === undefined) return "";
+		if (Arrays.isArray(value))
+			return ArrayMethods.join(
+				mapList(value, (item) => stringOf(item)),
+				list ? ", " : "."
+			);
+		return stringOf(value);
+	});
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)
 	message = StringMethods.trim(regExpReplace(/\s+/g, regExpReplace(/\{\w+\}/g, message, ""), " "));

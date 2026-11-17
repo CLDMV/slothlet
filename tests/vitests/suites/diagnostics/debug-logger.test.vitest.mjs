@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:00-08:00 (1794882540)
+ *	@Last modified time: 2026-11-16T18:29:47-08:00 (1794882587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,24 +122,21 @@ describe("SlothletDebug", () => {
 	});
 });
 
-describe("SlothletError - originalError enrichment (line 39)", () => {
-	it("sets hint via detectHint when originalError matches a pattern, short-circuiting the static-hint &&", () => {
-		// When originalError matches a HINT_RULES pattern (e.g. 'Cannot find module'),
-		// detectHint() returns a key and translatedHint is set to a truthy string.
-		// At line 58: !translatedHint evaluates to false, so the && short-circuits
-		// (validationError is never evaluated) — covering the && false-path branch.
+describe("SlothletError - cause enrichment", () => {
+	it("sets hint via detectHint when the cause matches a pattern", () => {
+		// When the cause matches a HINT_RULES pattern (e.g. 'Cannot find module'),
+		// detectHint() returns a key and the hint is that key's translated sentence.
 		const original = new Error("Cannot find module './missing-module.mjs'");
-		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing-module.mjs" }, original);
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing-module.mjs" }, { cause: original });
 		// translatedHint IS set because detectHint matched; hint property reflects this
 		expect(err).toBeInstanceOf(SlothletError);
 		expect(err.hint).toBeDefined();
 	});
 
-	it("enriches context with originalError.message when originalError is provided", () => {
+	it("enriches details with the cause's message when a cause is provided", () => {
 		const original = new Error("underlying io failure");
-		// Line 39: enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData
-		// A non-null originalError triggers the true branch.
-		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./math.mjs", hint: "Check path" }, original);
+		// A non-null cause renders its message into details.error.
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./math.mjs" }, { cause: original });
 		// The translated message should include the original error info in context enrichment
 		expect(err).toBeInstanceOf(SlothletError);
 		expect(err.code).toBe("MODULE_NOT_FOUND");
@@ -159,24 +156,24 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 
 	it("outputs to console.warn through the process-level class (lines 181-185)", () => {
 		// Create a warning — should call console.warn (lines 181-185)
-		const w = new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
+		const w = new SlothletWarning("WARNING_COLLISION_OPTION_LOCKED", { option: "collisionMode" });
 		expect(warnSpy).toHaveBeenCalled();
 		// The warning object itself should be valid
-		expect(w.code).toBe("WARNING_API_ADD_OPTION_LOCKED");
+		expect(w.code).toBe("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("outputs Context: line when the context has data", () => {
-		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
+		new SlothletWarning("WARNING_COLLISION_OPTION_LOCKED", { option: "collisionMode" });
 		const calls = warnSpy.mock.calls;
 		// First call: the main warning message. Possibly second call: "Context:" line.
 		expect(calls.length).toBeGreaterThanOrEqual(1);
 	});
 
 	it("toString() returns formatted string representation of the warning (line 198)", () => {
-		const w = new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
+		const w = new SlothletWarning("WARNING_COLLISION_OPTION_LOCKED", { option: "collisionMode" });
 		// Line 198: `return \`[${this.code}] ${this.name}: ${this.message}\``
 		const str = w.toString();
-		expect(str).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(str).toContain("WARNING_COLLISION_OPTION_LOCKED");
 		expect(str).toContain("SlothletWarning");
 	});
 });
@@ -193,7 +190,7 @@ describe("SlothletError - inspect.custom and toJSON (lines 130-144)", () => {
 	});
 
 	it("toJSON() returns a plain object with name, code, message, hint (lines 138-144)", () => {
-		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing.mjs", hint: "Check path" });
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing.mjs" });
 		const json = err.toJSON();
 		expect(json).toBeTypeOf("object");
 		expect(json.name).toBe("SlothletError");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:06-08:00 (1794882546)
+ *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  *  - the same, two levels of nesting deep
  *  - read-level permission gating still enforced on the live-delegated path
  *  - an EventEmitter-derived instance assigned via wrap-on-set gets real `self`-context
- *    access on its own methods instead of throwing RUNTIME_NO_ACTIVE_CONTEXT_SELF
+ *    access on its own methods instead of throwing CONTEXT_NOT_ACTIVE_SELF
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";

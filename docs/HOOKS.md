@@ -363,7 +363,7 @@ api.slothlet.hook.on("**:around", ({ path, args, next }) => {
 
 ## Pattern Matching
 
-The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). A type-first string (e.g. `"before:math.add"`) names no hook type at its end and is refused with `INVALID_TYPE_PATTERN`.
+The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). A type-first string (e.g. `"before:math.add"`) names no hook type at its end and is refused with `HOOK_PATTERN_INVALID`.
 
 ```javascript
 // pattern = "math.add", type = "before"
@@ -805,7 +805,7 @@ self.slothlet.hook.on("math.*:before", ({ args }) => {
 });
 ```
 
-Pass `{ pin: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `pin: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
+Pass `{ pin: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `pin: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `WARNING_HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
 
 ```javascript
 self.slothlet.hook.on("math.*:before", logArgs, { pin: false });
@@ -894,7 +894,7 @@ Register a hook.
 
 **Parameters:**
 
-- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). A type-first string (e.g. `"before:math.*"`) is refused with `INVALID_TYPE_PATTERN`.
+- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). A type-first string (e.g. `"before:math.*"`) is refused with `HOOK_PATTERN_INVALID`.
 - `handler` (Function) - Hook handler (sync or async — see [Sync and Async Function Behavior](#sync-and-async-function-behavior))
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)

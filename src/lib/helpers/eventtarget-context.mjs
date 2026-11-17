@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * runtimes something different:
  *
  * - **async** — the AsyncLocalStorage store is gone, so `self` inside a listener throws
- *   `RUNTIME_NO_ACTIVE_CONTEXT_SELF`. Capturing an `AsyncResource` at registration restores it, the
+ *   `CONTEXT_NOT_ACTIVE_SELF`. Capturing an `AsyncResource` at registration restores it, the
  *   same fix `EventEmitter` already gets.
  * - **live** — the caller field has unwound, and enforcement reads an absent caller as host-initiated
  *   and exempt. So a module reached denied targets from inside a listener the host dispatched.

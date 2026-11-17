@@ -59,7 +59,7 @@ if (userApi.slothlet) {
 **Source(s)**: `src/lib/builders/api_builder.mjs:785-806` (lock) · `:807-813` (always-allowed)
 
 **Trigger**: `!config.api?.mutations?.api.collision.override` and a locked option is present
-**Result**: `WARNING_API_ADD_OPTION_LOCKED`; the option is dropped and the mount uses the instance policy. (Shipped: [#419](https://github.com/CLDMV/slothlet/pull/419).)
+**Result**: `WARNING_COLLISION_OPTION_LOCKED`; the option is dropped and the mount uses the instance policy. (Shipped: [#419](https://github.com/CLDMV/slothlet/pull/419).)
 
 ---
 

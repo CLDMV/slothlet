@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  * `addEventListener` patch nor the `on*` property patch applies, because there is no method call or
  * property assignment to intercept, only a constructor invocation. Left unpinned, the callback runs
  * with no active identity the first time the observer actually fires, the same
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` failure the other boundary patches exist to prevent.
+ * `CONTEXT_NOT_ACTIVE_SELF` failure the other boundary patches exist to prevent.
  *
  * The fix wraps each constructor so the callback argument is pinned before it reaches the native
  * constructor. The constructed instance itself is untouched — `observe()`, `disconnect()`, and every

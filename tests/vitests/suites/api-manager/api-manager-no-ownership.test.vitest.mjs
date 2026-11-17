@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -136,38 +136,38 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 		api = null;
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is null (line 259)", async () => {
+	it("throws FOLDER_INVALID when folderPath is null (line 259)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(sl.handlers.apiManager.resolveFolderPath(null)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(null)).rejects.toMatchObject({ code: "FOLDER_INVALID" });
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is undefined (line 259)", async () => {
+	it("throws FOLDER_INVALID when folderPath is undefined (line 259)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(sl.handlers.apiManager.resolveFolderPath(undefined)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(undefined)).rejects.toMatchObject({ code: "FOLDER_INVALID" });
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is a number (line 259)", async () => {
+	it("throws FOLDER_INVALID when folderPath is a number (line 259)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(sl.handlers.apiManager.resolveFolderPath(42)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(42)).rejects.toMatchObject({ code: "FOLDER_INVALID" });
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID for a non-existent path (catch branch line 278)", async () => {
+	it("throws FOLDER_INVALID for a non-existent path (catch branch line 278)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/__does_not_exist_xyz__/")).rejects.toMatchObject({
-			code: "INVALID_CONFIG_DIR_INVALID"
+			code: "FOLDER_INVALID"
 		});
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when path points to a file, not a directory (line 266-269)", async () => {
+	it("throws FOLDER_INVALID when path points to a file, not a directory (line 266-269)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		// package.json is a real file (not a directory)
 		await expect(sl.handlers.apiManager.resolveFolderPath(path.resolve(____dirname, "../../../../package.json"))).rejects.toMatchObject({
-			code: "INVALID_CONFIG_DIR_INVALID"
+			code: "FOLDER_INVALID"
 		});
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:25:48-08:00 (1794878748)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,9 +150,9 @@ describe("validateModuleManifest — top-level shape", () => {
 			validateModuleManifest({ ...makeMinimalManifest(), bogus: true }, makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_UNKNOWN_FIELD");
-			expect(err.context.field).toBe("bogus");
+			expect(err.details.field).toBe("bogus");
 			// the manifest path must stay in context so the error names which manifest file had the bad key.
-			expect(err.context.manifest).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
+			expect(err.details.manifest).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
 		}
 	});
 });
@@ -189,8 +189,8 @@ describe("validateModuleManifest — schema", () => {
 			expect.unreachable();
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_FORMAT_UNSUPPORTED");
-			expect(err.context.package).toBe("@org/sample-driver");
-			expect(err.context.schema).toBe("3");
+			expect(err.details.package).toBe("@org/sample-driver");
+			expect(err.details.schema).toBe("3");
 		}
 	});
 });
@@ -218,7 +218,7 @@ describe("validateModuleManifest — format 1 (deprecated)", () => {
 			expect.unreachable();
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_INVALID");
-			expect(err.context.reason).toContain("mountPath");
+			expect(err.details.reason).toContain("mountPath");
 		}
 	});
 
@@ -236,7 +236,7 @@ describe("validateModuleManifest — format 1 (deprecated)", () => {
 			expect.unreachable();
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_INVALID");
-			expect(err.context.reason).toMatch(/format 2.*format 1/);
+			expect(err.details.reason).toMatch(/format 2.*format 1/);
 		}
 	});
 });
@@ -280,7 +280,7 @@ describe("validateModuleManifest — mount", () => {
 			validateModuleManifest(makeMinimalManifest({ mount: "slothlet.x" }), makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_RESERVED_MOUNT");
-			expect(err.context.mount).toEqual(["slothlet", "x"]);
+			expect(err.details.mount).toEqual(["slothlet", "x"]);
 			expect(err.message).toContain("(slothlet.x)"); // segments read dotted in the message
 		}
 	});
@@ -349,9 +349,9 @@ describe("validateModuleManifest — name / version mismatch", () => {
 			validateModuleManifest(makeMinimalManifest({ name: "@org/forked" }), makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_NAME_MISMATCH");
-			expect(err.context.package).toBe("@org/sample-driver");
-			expect(err.context.received).toBe("@org/forked");
-			expect(err.context.expected).toBe("@org/sample-driver");
+			expect(err.details.package).toBe("@org/sample-driver");
+			expect(err.details.received).toBe("@org/forked");
+			expect(err.details.expected).toBe("@org/sample-driver");
 		}
 	});
 });

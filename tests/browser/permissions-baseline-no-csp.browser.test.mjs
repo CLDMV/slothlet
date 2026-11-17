@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:07-08:00 (1794882487)
+ *	@Last modified time: 2026-11-16T18:29:01-08:00 (1794882541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ describe("permission baseline in a browser with no Content Security Policy", () 
 	it("under on, starts and warns once for each check not met", async () => {
 		api = await boot("on");
 		const warned = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET");
-		expect(warned.map((warning) => warning.context.check)).toEqual(MET ? [] : IDS);
+		expect(warned.map((warning) => warning.details.check)).toEqual(MET ? [] : IDS);
 		const report = api.slothlet.permissions.control.report();
 		expect(report.mode).toBe("on");
 		expect(report.baseline.met).toBe(MET);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
+ *	@Last modified time: 2026-11-16T18:30:23-08:00 (1794882623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,14 +93,16 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 				await build();
 				// Under a real file of the callee's, the compile itself is refused, whatever the rules (D8 ruling).
 				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file))).toEqual(
-					file === "zz-not-real.mjs" ? DENIED : { ok: false, code: "CAPABILITY_REFUSED" }
+					file === "zz-not-real.mjs" ? DENIED : { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
 				);
 			});
 
 			it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: the vault sees the supplier", async (kind) => {
 				await build();
 				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file, "whoami"))).toEqual(
-					file === "zz-not-real.mjs" ? { ok: true, value: "supplier.probe.forgedInFolder" } : { ok: false, code: "CAPABILITY_REFUSED" }
+					file === "zz-not-real.mjs"
+						? { ok: true, value: "supplier.probe.forgedInFolder" }
+						: { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
 				);
 			});
 		});

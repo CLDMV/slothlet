@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * Tests verify:
  * - caller() returns null when no tracked slothlet caller is in context
  * - caller() returns the caller's system metadata in a slothlet→slothlet call chain
- * - self() throws RUNTIME_NO_ACTIVE_CONTEXT when called outside any slothlet context
+ * - self() throws CONTEXT_NOT_ACTIVE when called outside any slothlet context
  *
  * @module tests/vitests/suites/metadata/metadata-runtime-introspection.test.vitest
  */
@@ -93,13 +93,13 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 
 	// ─── get() edge cases ────────────────────────────────────────────────────
 
-	describe("get() - a target that is no function, node, path or module id throws INVALID_METADATA_TARGET", () => {
+	describe("get() - a target that is no function, node, path or module id throws METADATA_TARGET_INVALID", () => {
 		it("throws when passed a number", () => {
-			expect(() => api.slothlet.metadata.get(123)).toThrow(/INVALID_METADATA_TARGET/);
+			expect(() => api.slothlet.metadata.get(123)).toThrow(/METADATA_TARGET_INVALID/);
 		});
 
 		it("throws when passed null", () => {
-			expect(() => api.slothlet.metadata.get(null)).toThrow(/INVALID_METADATA_TARGET/);
+			expect(() => api.slothlet.metadata.get(null)).toThrow(/METADATA_TARGET_INVALID/);
 		});
 	});
 
@@ -112,7 +112,7 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 	// ─── self() ────────────────────────────────────────────────────────────────
 
 	describe("self() - called outside any slothlet context", () => {
-		it("throws RUNTIME_NO_ACTIVE_CONTEXT when called from test scope", () => {
+		it("throws CONTEXT_NOT_ACTIVE when called from test scope", () => {
 			// api.slothlet.metadata.self() is a plain closure — not a slothlet wrapper
 			// Calling it from outside any execution context must throw
 			withSuppressedSlothletErrorOutputSync(() => {

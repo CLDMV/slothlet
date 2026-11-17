@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T18:29:44-08:00 (1794882584)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -804,7 +804,7 @@ describe("Per-Request Context Error Handling", () => {
 			await api.slothlet.context.run({ userId: 123 });
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("SCOPE_INVALID_CALLBACK");
+			expect(error.message).toContain("SCOPE_CALLBACK_INVALID");
 		}
 	});
 
@@ -821,7 +821,7 @@ describe("Per-Request Context Error Handling", () => {
 			});
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("SCOPE_INVALID_FN");
+			expect(error.message).toContain("SCOPE_FUNCTION_INVALID");
 		}
 	});
 
@@ -838,7 +838,7 @@ describe("Per-Request Context Error Handling", () => {
 			});
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("SCOPE_INVALID_CONTEXT_OBJECT");
+			expect(error.message).toContain("SCOPE_CONTEXT_OBJECT_INVALID");
 		}
 	});
 });

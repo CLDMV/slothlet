@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -212,12 +212,12 @@ const isObjectLike = (value) => value !== null && (typeof value === "object" || 
 /**
  * Extract the original error from a SlothletError wrapper if present.
  * @param {*} error - What was thrown.
- * @returns {*} The SlothletError's original error, otherwise the value itself.
+ * @returns {*} The SlothletError's cause, otherwise the value itself.
  * @public
  */
 export function unwrapThrown(error) {
-	if (error && error.name === "SlothletError" && error.originalError) {
-		return error.originalError;
+	if (error && error.name === "SlothletError" && error.cause) {
+		return error.cause;
 	}
 	return error;
 }
@@ -589,9 +589,8 @@ export class HookManager extends ComponentBase {
 
 		// Validate handler
 		if (typeof handler !== "function") {
-			throw new this.slothlet.SlothletError("INVALID_HOOK_HANDLER", {
-				receivedType: typeof handler,
-				validationError: true
+			throw new this.slothlet.SlothletError("HOOK_HANDLER_INVALID", {
+				received: typeof handler
 			});
 		}
 
@@ -603,15 +602,15 @@ export class HookManager extends ComponentBase {
 		// are stored as `id::tag`), so without the second arm a later plain hook could claim the same
 		// id, shadow the group on remove()'s fast path, and strand its members unremovable.
 		if (MapMethods.has(this.#byId, id) || this.#isGroupId(id)) {
-			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
+			throw new this.slothlet.SlothletError("HOOK_ID_IN_USE", { id });
 		}
 
 		// Get subset (default: primary)
 		const subset = options.subset ?? DEFAULT_HOOK_SUBSET;
 		if (!SetMethods.has(this.#validSubsets, subset)) {
-			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
+			throw new this.slothlet.SlothletError("HOOK_SUBSET_INVALID", {
 				subset,
-				validSubsets: setToArray(this.#validSubsets)
+				expected: setToArray(this.#validSubsets)
 			});
 		}
 
@@ -660,7 +659,7 @@ export class HookManager extends ComponentBase {
 			const logicalPath = versionManager?.findLogicalPathFor?.(pattern) ?? null;
 			const registered = logicalPath ? versionManager.list(logicalPath) : undefined;
 			if (!registered) {
-				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 			}
 			const allVersions = versionManager.buildAllVersionsArg(logicalPath);
 			const callerArg = versionManager.buildCallerArg(ownerWrapper);
@@ -677,7 +676,7 @@ export class HookManager extends ComponentBase {
 			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
 			// fallback below pushes the default tag, which would otherwise mutate the caller's own
 			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
-			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
+			// naming the same tag twice means one registration for that tag, not a HOOK_ID_IN_USE
 			// failure on a member id the caller never chose.
 			const tags = selected == null ? [] : Arrays.isArray(selected) ? setToArray(setFrom(selected)) : [selected];
 			if (tags.length === 0) {
@@ -688,7 +687,7 @@ export class HookManager extends ComponentBase {
 				const defaultTag = versionManager.getDefaultVersion(logicalPath);
 				/* v8 ignore next 3 */
 				if (defaultTag == null) {
-					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 				}
 				listPush(tags, defaultTag);
 			}
@@ -698,7 +697,7 @@ export class HookManager extends ComponentBase {
 				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
 				// register a hook against a physical path that was never mounted.
 				if (typeof tag !== "string" || !Objects.hasOwn(registered.versions, tag)) {
-					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) });
 				}
 			}
 			const groupId = id;
@@ -769,7 +768,7 @@ export class HookManager extends ComponentBase {
 		// Host hooks (no owner) are unaffected — #pinHandler is already a no-op without a caller.
 		if (!lockCaller && ownerWrapper && this.pinEnforced) {
 			lockCaller = true;
-			new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
+			new this.SlothletWarning("WARNING_HOOK_UNPINNED_IGNORED", { pattern });
 		}
 		// Async-ness is a property of the AUTHOR'S function, so it is read off the original before
 		// pinning wraps it in a plain function (a pre-locked handler exposes its original the same
@@ -1344,7 +1343,7 @@ export class HookManager extends ComponentBase {
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
-					throw new this.SlothletError("HOOK_BEFORE_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_BEFORE_RETURNED_PROMISE", { id: hook.id, path });
 				}
 
 				// Check for short-circuit (hook returns value directly)
@@ -1426,7 +1425,7 @@ export class HookManager extends ComponentBase {
 				// attribution across the permission suites. Every `.then` test on a value path in this
 				// codebase is object-only for the same reason; don't "fix" them.
 				if (transformed && typeof transformed === "object" && typeof transformed.then === "function") {
-					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path });
 				}
 
 				// Hook can transform result by returning a value
@@ -1751,12 +1750,10 @@ export class HookManager extends ComponentBase {
 		// handed back so the synchronous pipeline can tell whether `next()` returned a thenable.
 		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
 			if (state.called) {
-				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path });
 			}
 			if (nextArgs !== undefined && !Arrays.isArray(nextArgs)) {
-				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs }, null, {
-					validationError: true
-				});
+				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs });
 			}
 			state.called = true;
 			const forwarded = nextArgs === undefined ? currentArgs : nextArgs;
@@ -1798,7 +1795,7 @@ export class HookManager extends ComponentBase {
 				// A thenable is accepted only when next() was called and itself returned one: the caller already
 				// gets a thenable then, so whatever thenable the handler returns adds no asynchrony the target did not.
 				if (!(state.called && returned && typeof returned === "object" && typeof returned.then === "function")) {
-					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path });
 				}
 				if (result === returned) return result;
 				return observeReturnedThenable(hook, result);
@@ -1924,16 +1921,16 @@ export class HookManager extends ComponentBase {
 	 */
 	#parseTypePattern(typePattern) {
 		if (typeof typePattern !== "string") {
-			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-				typePattern,
+			throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+				received: typePattern,
 				expected: "expected a string in the form 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
 
 		const firstColon = StringMethods.indexOf(typePattern, ":");
 		if (firstColon === -1) {
-			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-				typePattern,
+			throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+				received: typePattern,
 				expected: "missing ':' — use 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
@@ -1945,8 +1942,8 @@ export class HookManager extends ComponentBase {
 		if (SetMethods.has(this.#validTypes, trailing)) {
 			const pattern = StringMethods.substring(typePattern, 0, lastColon);
 			if (!pattern) {
-				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-					typePattern,
+				throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+					received: typePattern,
 					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
 				});
 			}
@@ -1954,8 +1951,8 @@ export class HookManager extends ComponentBase {
 		}
 
 		// The string does not end with a hook type.
-		throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-			typePattern,
+		throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+			received: typePattern,
 			expected: `no hook type found — end with one of: ${ArrayMethods.join(setToArray(this.#validTypes), ", ")} (e.g. 'math.*:before')`
 		});
 	}
@@ -1971,7 +1968,7 @@ export class HookManager extends ComponentBase {
 	#compilePattern(pattern) {
 		return compilePattern(pattern, {
 			onMaxDepth: (maxDepth) => {
-				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { depth: maxDepth });
 			}
 		});
 	}
@@ -2048,7 +2045,7 @@ export class HookManager extends ComponentBase {
 		/* v8 ignore next */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
-				hookId: hook.id,
+				id: hook.id,
 				type: hook.type,
 				subset: hook.subset,
 				pattern: hook.pattern,
@@ -2066,7 +2063,7 @@ export class HookManager extends ComponentBase {
 		/* v8 ignore next */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
-				hookId: hook.id,
+				id: hook.id,
 				type: hook.type,
 				subset: hook.subset,
 				pattern: hook.pattern,

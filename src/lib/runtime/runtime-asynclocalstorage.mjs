@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,7 @@ const { asyncRuntime } = contextInternals("lib/runtime/runtime-asynclocalstorage
 
 /**
  * Safely retrieve the current ALS context without throwing.
- * `asyncRuntime.getContext()` throws `NO_ACTIVE_CONTEXT_ASYNC` when no store is active,
+ * `asyncRuntime.getContext()` throws `CONTEXT_NOT_ACTIVE_ASYNC` when no store is active,
  * so every proxy trap that needs a graceful fallback should use this helper instead.
  * @returns {object|null} Current context store, or null if no context is active.
  * @private
@@ -137,7 +137,7 @@ const selfTraps = {
 			// out) is not the load's: it is read as its definer, as with no store.
 			const read = runtime_selfReadAsDefiner(objectSelf, prop, ctx?.moduleLoad ? ctx.instanceID : null);
 			if (read) return read.value;
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
 		// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
@@ -179,14 +179,14 @@ const selfTraps = {
 	deleteProperty(_, prop) {
 		const ctx = safeGetContext();
 		if (!ctx || !ctx.self) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
 	},
 	defineProperty(_, prop, descriptor) {
 		const ctx = safeGetContext();
 		if (!ctx || !ctx.self) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		const target = runtime_selfChangeTarget(ctx, prop);
 		// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
@@ -220,7 +220,7 @@ const selfTraps = {
 		// has ctx.self set; the test surface is the same as the get path.
 		/* v8 ignore next 3 */
 		if (!ctx || !ctx.self) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
 		// are dotted strings and ownership is path-based. Routing a symbol
@@ -269,7 +269,7 @@ const selfTraps = {
  * code a module handed out run while no call runs, as its definer.
  * @param {function(object): *} use - What is done with it.
  * @returns {*} What `use` returned.
- * @throws {SlothletError} RUNTIME_NO_ACTIVE_CONTEXT_SELF outside any context, with no definer to run as.
+ * @throws {SlothletError} CONTEXT_NOT_ACTIVE_SELF outside any context, with no definer to run as.
  * @private
  */
 function runtime_selfUse(use) {
@@ -277,7 +277,7 @@ function runtime_selfUse(use) {
 	if (!ctx || !ctx.self) {
 		const read = runtime_selfReadAsDefiner(objectSelf, "", ctx?.moduleLoad ? ctx.instanceID : null, null, use);
 		if (read) return read.value;
-		throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+		throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 	}
 	if (!ctx.currentWrapper && !ctx.record && ctx.parentInstanceID) {
 		const read = runtime_selfReadAsDefiner(objectSelf, "", null, ctx.parentInstanceID, use);
@@ -382,7 +382,7 @@ export const context = new NativeProxy(
 			// resolves to a phantom -1 — so it is ignored, matching the self guard.
 			/* v8 ignore next 3 */
 			if (!ctx || !ctx.context) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
+				throw new SlothletError("CONTEXT_NOT_ACTIVE_WRITE", {});
 			}
 			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 			// current caller doesn't own before mutating the context.

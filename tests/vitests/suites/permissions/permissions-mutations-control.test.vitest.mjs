@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
+ *	@Last modified time: 2026-11-16T18:30:40-08:00 (1794882640)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,14 +41,14 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 			}
 		});
 
-		// Should throw INVALID_CONFIG_MUTATIONS_DISABLED when trying to add a rule
+		// Should throw API_MUTATION_DISABLED when trying to add a rule
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "**", effect: "deny" });
-				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
+				expect.unreachable("Should have thrown API_MUTATION_DISABLED");
 			} catch (error) {
-				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-				expect(error.context?.operation).toEqual(["slothlet", "permissions", "rules", "add"]);
+				expect(error.message).toContain("API_MUTATION_DISABLED");
+				expect(error.details?.operation).toEqual(["slothlet", "permissions", "rules", "add"]);
 			}
 		});
 	});
@@ -86,7 +86,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		expect(ruleId).toBeTypeOf("string");
 	});
 
-	it("should throw INVALID_CONFIG_MUTATIONS_DISABLED when rules.remove is called and mutations.permissions is false", async () => {
+	it("should throw API_MUTATION_DISABLED when rules.remove is called and mutations.permissions is false", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -103,10 +103,10 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				api.slothlet.permissions.rules.remove("any-rule-id");
-				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
+				expect.unreachable("Should have thrown API_MUTATION_DISABLED");
 			} catch (error) {
-				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-				expect(error.context?.operation).toEqual(["slothlet", "permissions", "rules", "remove"]);
+				expect(error.message).toContain("API_MUTATION_DISABLED");
+				expect(error.details?.operation).toEqual(["slothlet", "permissions", "rules", "remove"]);
 			}
 		});
 	});

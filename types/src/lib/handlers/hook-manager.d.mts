@@ -20,7 +20,7 @@ export function settleThenable(thenable: object, onFulfilled: (arg0: any) => any
 /**
  * Extract the original error from a SlothletError wrapper if present.
  * @param {*} error - What was thrown.
- * @returns {*} The SlothletError's original error, otherwise the value itself.
+ * @returns {*} The SlothletError's cause, otherwise the value itself.
  * @public
  */
 export function unwrapThrown(error: any): any;

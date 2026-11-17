@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:19:31-08:00 (1793848771)
+ *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../
 const OWN_CODE = ["onwrite", "readableState", "events", "on", "writeCallback", "handle", "global"];
 // Code the module compiles at run time, which belongs to no module.
 const COMPILED = ["eval", "newFunction"];
-const REFUSED = ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"];
+const REFUSED = ["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"];
 const CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
 
 /**

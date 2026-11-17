@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:24-08:00 (1794882564)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,10 +74,10 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// An anonymous / `default`-keyed default has no name to key onto at root: it is dropped (#136).
 		await api.slothlet.api.add("", { exports: { default: () => "x" } });
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_UNNAMED");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_UNNAMED");
 		expect(payload).toBeDefined();
 		expect(payload.apiPath).toBe("");
-		expect(payload.code).toBe("WARN_SYNTHETIC_ROOT_UNNAMED");
+		expect(payload.code).toBe("WARNING_INLINE_ROOT_UNNAMED");
 		expect(typeof payload.message).toBe("string");
 		expect(payload.message.length).toBeGreaterThan(0);
 		expect(payload.source).toBe("addApi");
@@ -96,7 +96,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// Named export wins; the diagnostic is still emitted.
 		expect(await api.greet()).toBe("named");
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_COLLISION");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_COLLISION");
 		expect(payload).toBeDefined();
 		expect(payload.apiPath).toBe("");
 		expect(payload.source).toBe("addApi");
@@ -107,7 +107,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 	it("fires impl:warning for a no-op root add that contributes no keys", async () => {
 		await api.slothlet.api.add("", { exports: {} });
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_EMPTY");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_EMPTY");
 		expect(payload).toBeDefined();
 		expect(payload.apiPath).toBe("");
 		expect(payload.source).toBe("addApi");
@@ -129,7 +129,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		await api.slothlet.api.add("", { exports: {} });
 
-		const empty = silentEvents.find((p) => p.code === "WARN_SYNTHETIC_ROOT_EMPTY");
+		const empty = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_EMPTY");
 		expect(empty).toBeDefined();
 		expect(empty.source).toBe("addApi");
 	});
@@ -160,7 +160,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// Named export still wins even with the console warning suppressed.
 		expect(await api.greet()).toBe("named");
 
-		const collision = silentEvents.find((p) => p.code === "WARN_SYNTHETIC_ROOT_COLLISION");
+		const collision = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_COLLISION");
 		expect(collision).toBeDefined();
 		expect(collision.apiPath).toBe("");
 		expect(collision.source).toBe("addApi");
@@ -181,11 +181,11 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		const errors = events.filter((e) => e.event === "impl:error").map((e) => e.payload);
 		expect(errors.length).toBeGreaterThanOrEqual(1);
 		const [payload] = errors;
-		expect(payload.code).toBe("WARNING_HOT_RELOAD_MERGE_PRIMITIVES");
+		expect(payload.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
 		expect(payload.apiPath).toBe("primitiveKey");
 		expect(payload.source).toBe("addApi");
 		expect(payload.error).toBeInstanceOf(Error);
-		expect(payload.error.code).toBe("WARNING_HOT_RELOAD_MERGE_PRIMITIVES");
+		expect(payload.error.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
 		expect(typeof payload.message).toBe("string");
 		// The existing primitive is preserved (mutation rejected).
 		expect(api.primitiveKey).toBe(42);
@@ -256,7 +256,7 @@ describe("lifecycle config option — construction-time subscription", () => {
 		});
 		try {
 			await api.slothlet.api.add("", { exports: {} });
-			const empties = seen.filter(([, code]) => code === "WARN_SYNTHETIC_ROOT_EMPTY");
+			const empties = seen.filter(([, code]) => code === "WARNING_INLINE_ROOT_EMPTY");
 			// Both array handlers fire for the runtime event.
 			expect(empties.map(([tag]) => tag).sort()).toEqual(["a", "b"]);
 		} finally {
@@ -319,13 +319,13 @@ describe("lifecycle config option — construction-time subscription", () => {
 
 	it("init-time invalid config (empty base) still THROWS — not an event", async () => {
 		// An absent base is a valid no-base instance since #471; a present-but-empty one is invalid.
-		await expect(slothlet({ base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
+		await expect(slothlet({ base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_BASE_MISSING" });
 	});
 });
 
 // ─── silent gates init-time console warnings (but never events) ──────────────
 // #196 review follow-up: the init-time warning sites (WARNING_RESERVED_PROPERTY_CONFLICT,
-// WARNING_MULTIPLE_ROOT_CONTRIBUTORS, WARN_DIRECTORY_EMPTY) now honor `silent` like every other
+// WARNING_MULTIPLE_ROOT_CONTRIBUTORS, WARNING_FOLDER_EMPTY) now honor `silent` like every other
 // SlothletWarning site, so `silent: true` suppresses their console output — while the additive
 // impl:warning EVENT still fires regardless of `silent`.
 describe("silent gates init-time console warnings, not events", () => {

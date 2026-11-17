@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,7 +119,7 @@ export class LazyMode extends ComponentBase {
 			const filesType = Arrays.isArray(preloadedStructure.files) ? "array" : typeof preloadedStructure.files;
 			const directoriesType = Arrays.isArray(preloadedStructure.directories) ? "array" : typeof preloadedStructure.directories;
 			const received = `{ files: ${filesType}, directories: ${directoriesType} }`;
-			throw new this.SlothletError("INVALID_CONFIG_PRELOADED_STRUCTURE", { received }, null, { validationError: true });
+			throw new this.SlothletError("FILES_STRUCTURE_INVALID", { received });
 		}
 		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter, hidden }));
 

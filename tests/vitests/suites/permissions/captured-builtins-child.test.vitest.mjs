@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:33-08:00 (1794882573)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -270,8 +270,8 @@ describe.each(CONFIGS)("built-ins replaced after slothlet loaded ($mode, $runtim
 			added: 6,
 			reloaded: 9,
 			shutdown: "done",
-			refusedAdd: "INVALID_CONFIG_API_PATH_INVALID",
-			refusedConfig: "INVALID_DIRECTORY"
+			refusedAdd: "API_PATH_INVALID",
+			refusedConfig: "FOLDER_UNREADABLE"
 		});
 		expect(probe([mode, runtime, attribution, "yes"])).toEqual(plain);
 	});

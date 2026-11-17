@@ -150,7 +150,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	it("a framework-reserved name a `!` glob brings back is still refused", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await writeModule(join(root, "__metadata.mjs"), "export function m() { return 1; }");
-		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILENAME" });
+		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILE" });
 	});
 
 	it("prunes a folder that becomes empty after hiding its only child (#156 + hidden)", async () => {

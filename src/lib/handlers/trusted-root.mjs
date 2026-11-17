@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -275,9 +275,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	const writers = mapList(writersOf(writerCtx), (wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
 	const writer = writers[0] ?? null;
 	if (owner === PROTECT_SENTINEL) {
-		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
-			validationError: true
-		});
+		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" });
 	}
 	// A writer identity is an executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
 	// An owner name matches that leaf exactly OR as a module prefix (`callers.dataReader` owns every
@@ -286,12 +284,11 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 		? ArrayMethods.find(writers, (path) => !(path !== null && (path === owner || StringMethods.startsWith(path, owner + "."))))
 		: null;
 	if (!writers.length || refused !== undefined) {
-		throw new SlothletError(
-			"CONTEXT_KEY_PROTECTED",
-			{ key: pathKey, owner: String(owner), writer: (writers.length ? refused : null) ?? "host" },
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("CONTEXT_KEY_PROTECTED", {
+			key: pathKey,
+			owner: String(owner),
+			writer: (writers.length ? refused : null) ?? "host"
+		});
 	}
 }
 
@@ -312,7 +309,7 @@ function writersOf(store) {
 		ceiling: store?.currentCeiling ?? null
 	};
 	// A writer that cannot be told apart is no one's, and not the host either.
-	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
 	if (!identity.currentWrapper) return [];
 	return concatLists([identity.currentWrapper], identityCeilings(identity));
 }
@@ -463,8 +460,8 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 	const baseStore = MapMethods.get(instances, instanceID);
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
-			instanceID,
-			availableInstances: ArrayMethods.join(mapKeysToArray(instances), ", ") || "none"
+			instance: instanceID,
+			instances: ArrayMethods.join(mapKeysToArray(instances), ", ") || "none"
 		});
 	}
 	const childStore = {

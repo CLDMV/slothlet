@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,10 +20,10 @@
  * Tests the uncovered branches in `normalizeApiPath` (api-manager.mjs lines 118-186):
  * - Array path input: converted to dot-separated string
  * - Empty array: treated as root path
- * - Non-string element in array: throws INVALID_CONFIG_API_PATH_INVALID
- * - Empty-string element in array: throws INVALID_CONFIG_API_PATH_INVALID
- * - Reserved name as first array element ("slothlet"): throws INVALID_CONFIG_API_PATH_INVALID
- * - Non-string, non-array type (e.g., number): throws INVALID_CONFIG_API_PATH_INVALID
+ * - Non-string element in array: throws API_PATH_INVALID
+ * - Empty-string element in array: throws API_PATH_INVALID
+ * - Reserved name as first array element ("slothlet"): throws API_PATH_INVALID
+ * - Non-string, non-array type (e.g., number): throws API_PATH_INVALID
  *
  * All tests go through `api.slothlet.api.add` which internally calls normalizeApiPath.
  *
@@ -79,14 +79,14 @@ describe.each(getMatrixConfigs())("API Manager Path Validation (normalizeApiPath
 	it("should reject an array containing a non-string element (number)", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add([42, "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add([42, "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject an array containing a non-string element (object)", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add([{}, "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add([{}, "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
@@ -95,14 +95,14 @@ describe.each(getMatrixConfigs())("API Manager Path Validation (normalizeApiPath
 	it("should reject an array containing an empty string element", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(["", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(["", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject an array containing a whitespace-only string element", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(["   ", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(["   ", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
@@ -111,21 +111,21 @@ describe.each(getMatrixConfigs())("API Manager Path Validation (normalizeApiPath
 	it("should reject an array whose first element is the reserved name 'slothlet'", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(["slothlet", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(["slothlet", "sub"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject a single-element array with the reserved name 'shutdown'", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(["shutdown"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(["shutdown"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject a single-element array with the reserved name 'destroy'", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(["destroy"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(["destroy"], TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
@@ -134,21 +134,21 @@ describe.each(getMatrixConfigs())("API Manager Path Validation (normalizeApiPath
 	it("should reject a numeric path argument", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(42, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(42, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject a boolean path argument", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add(true, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add(true, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
 	it("should reject an object path argument", async () => {
 		api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add({ path: "test" }, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add({ path: "test" }, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T22:14:34-08:00 (1794032074)
+ *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,7 +101,7 @@ describe("Permissions > a host like rummage's under vitest, with only server.dep
 		// cannot be checked"); attributing a module's code under vitest is #682. The async runtime refuses the access;
 		// the live runtime, which tells the running call from the stack, refuses `self` itself ("`self` requires an
 		// executing module").
-		const code = config.endsWith("/live") ? "RUNTIME_NO_ACTIVE_CONTEXT_SELF" : "PERMISSION_DENIED";
+		const code = config.endsWith("/live") ? "CONTEXT_NOT_ACTIVE_SELF" : "PERMISSION_DENIED";
 		expect(out[`${config}/helper`]).toEqual({ ok: false, code, caller: null });
 	});
 

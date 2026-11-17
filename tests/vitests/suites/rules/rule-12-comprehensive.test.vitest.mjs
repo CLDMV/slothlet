@@ -177,7 +177,7 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 		const noAdd = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { add: false } } });
 		try {
 			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(addForced(noAdd)).rejects.toMatchObject({ code: "INVALID_CONFIG_MUTATIONS_DISABLED" });
+				await expect(addForced(noAdd)).rejects.toMatchObject({ code: "API_MUTATION_DISABLED" });
 			});
 		} finally {
 			await noAdd.shutdown();

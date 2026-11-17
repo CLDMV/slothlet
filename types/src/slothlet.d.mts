@@ -108,7 +108,7 @@ export type SlothletOptions = {
     /**
      * - Defaults for `api.slothlet.scope()` / `api.slothlet.context.scope()` runs.
      * `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
-     * `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
+     * `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
      */
     scope?: {
         merge?: "shallow" | "deep";

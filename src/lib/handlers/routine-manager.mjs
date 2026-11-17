@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:52-08:00 (1794882472)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1101,7 +1101,7 @@ export class RoutineManager extends ComponentBase {
 		// The wrapper is the LEAF wrapper captured in onImplCreated (pre-stacking, keyed
 		// moduleID -> apiPath), NOT the stacked callable, so `runInContext` runs the raw impl and never
 		// re-enters `runPath` (no recursion). Before this, the cascade invoked contributors with no
-		// active extent, so a body reaching ambient `self.*` threw RUNTIME_NO_ACTIVE_CONTEXT_SELF
+		// active extent, so a body reaching ambient `self.*` threw CONTEXT_NOT_ACTIVE_SELF
 		// (CLDMV/slothlet#393).
 		const contextManager = this.slothlet.contextManager;
 		const instanceID = this.slothlet.instanceID;
@@ -1150,7 +1150,7 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Throw an aggregate `ROUTINE_FAILED` error for a batch of collected failures, chaining the
-	 * first one as `cause` and carrying the full list in `context.failures` — never called when
+	 * first one as `cause` and carrying the full list in `details.failures` — never called when
 	 * `failures` is empty.
 	 * @param {Array<{apiPath: string, moduleID: string, error: unknown}>} failures - Collected failures, in the order they occurred.
 	 * @returns {never}
@@ -1158,29 +1158,17 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#throwAggregate(failures) {
-		// Each entry keeps its plain {apiPath, moduleID} shape (structurally matched elsewhere via
-		// context.failures) but gains a non-enumerable toString so the translated message — which
-		// interpolates {failures} via String(value) — renders a readable list instead of the array's
-		// default "[object Object],[object Object]" join.
-		const failureEntries = mapList(failures, ({ apiPath, moduleID }) => {
-			const entry = { apiPath, moduleID };
-			Objects.defineProperty(entry, "toString", { __proto__: null, value: () => `${apiPath} (${moduleID})`, enumerable: false });
-			return entry;
-		});
-		Objects.defineProperty(failureEntries, "toString", {
-			__proto__: null,
-			value: () => ArrayMethods.join(mapList(failureEntries, String), ", "),
-			enumerable: false
-		});
+		// Each entry is plain data: the failure's api path, its module and what it threw.
+		const failureEntries = mapList(failures, ({ apiPath, moduleID, error }) => ({ path: apiPath, module: moduleID, error }));
 		throw new SlothletError(
 			"ROUTINE_FAILED",
 			{
-				apiPath: failures[0].apiPath,
-				moduleID: failures[0].moduleID,
+				path: failures[0].apiPath,
+				module: failures[0].moduleID,
 				count: failures.length,
 				failures: failureEntries
 			},
-			failures[0].error
+			{ cause: failures[0].error }
 		);
 	}
 
@@ -1240,19 +1228,13 @@ export class RoutineManager extends ComponentBase {
 		const entries = routine ? filterList(pathEntries, (entry) => this.#matches(routine, entry)) : pathEntries;
 		if (entries.length === 0) {
 			const available = this.contributorsAt(apiPath, routine);
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "key",
-					expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
-						available.length ? ` (contributors: ${ArrayMethods.join(available, ", ")})` : " (no contributors at this path)"
-					}`,
-					received: String(key),
-					validationError: true
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "key",
+				expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
+					available.length ? ` (contributors: ${ArrayMethods.join(available, ", ")})` : " (no contributors at this path)"
+				}`,
+				received: String(key)
+			});
 		}
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);

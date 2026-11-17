@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
+ *	@Last modified time: 2026-11-16T18:30:50-08:00 (1794882650)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,7 +100,7 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 				withSuppressedSlothletErrorOutputSync(() =>
 					api.guest.x.addRuleFor({ caller: "guest.**", target: "victim.**:write", effect: "allow" })
 				)
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 			expect(typeof api.guest.x.addRuleFor({ caller: "other.**", target: "guest.**:write", effect: "allow" })).toBe("string");
 			const off = api.other.x.writeAt("victim.v");
 			expect(off).toEqual(every(off, "done"));

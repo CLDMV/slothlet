@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-16T18:30:13-08:00 (1794882613)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -279,29 +279,29 @@ describe("OwnershipManager.ownsPath — true/false check (lines 290-291)", () =>
 // ─── register() input validation (lines 53, 57) ──────────────────────────────
 
 describe("OwnershipManager.register — input validation error paths (lines 53, 57)", () => {
-	it("throws OWNERSHIP_INVALID_MODULE_ID when moduleID is null (line 53)", () => {
+	it("throws OWNERSHIP_MODULE_ID_INVALID when moduleID is null (line 53)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		expect(() => ownership.register({ moduleID: null, apiPath: "math.add", value: () => {} })).toThrow(SlothletError);
 	});
 
-	it("thrown error message contains OWNERSHIP_INVALID_MODULE_ID (line 53)", () => {
+	it("thrown error message contains OWNERSHIP_MODULE_ID_INVALID (line 53)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
-		expect(() => ownership.register({ moduleID: undefined, apiPath: "math.add", value: () => {} })).toThrow(/OWNERSHIP_INVALID_MODULE_ID/);
+		expect(() => ownership.register({ moduleID: undefined, apiPath: "math.add", value: () => {} })).toThrow(/OWNERSHIP_MODULE_ID_INVALID/);
 	});
 
-	it("throws OWNERSHIP_INVALID_API_PATH when apiPath is a number (line 57)", () => {
+	it("throws OWNERSHIP_API_PATH_INVALID when apiPath is a number (line 57)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		// apiPath !== "" and not a string → line 57 throws
 		expect(() => ownership.register({ moduleID: "mod-1", apiPath: 42, value: () => {} })).toThrow(SlothletError);
 	});
 
-	it("thrown error message contains OWNERSHIP_INVALID_API_PATH (line 57)", () => {
+	it("thrown error message contains OWNERSHIP_API_PATH_INVALID (line 57)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
-		expect(() => ownership.register({ moduleID: "mod-1", apiPath: {}, value: () => {} })).toThrow(/OWNERSHIP_INVALID_API_PATH/);
+		expect(() => ownership.register({ moduleID: "mod-1", apiPath: {}, value: () => {} })).toThrow(/OWNERSHIP_API_PATH_INVALID/);
 	});
 
 	it("does NOT throw for empty string apiPath (root-level special case)", () => {

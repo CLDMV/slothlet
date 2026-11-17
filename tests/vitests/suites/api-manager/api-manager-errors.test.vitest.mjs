@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.reload()).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 		await api.shutdown();
 	});
@@ -62,10 +62,10 @@ describe("Hot Reload Error Handling", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(api.slothlet.api.reload(123)).rejects.toThrow("INVALID_ARGUMENT");
 		});
-		// V3: Empty string is valid (reloads root), whitespace throws INVALID_API_PATH
+		// V3: Empty string is valid (reloads root), whitespace throws API_PATH_NOT_FOUND
 		await expect(api.slothlet.api.reload("")).resolves.toBeUndefined();
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.reload("   ")).rejects.toThrow("INVALID_API_PATH");
+			await expect(api.slothlet.api.reload("   ")).rejects.toThrow("API_PATH_NOT_FOUND");
 		});
 
 		await api.shutdown();
@@ -75,16 +75,16 @@ describe("Hot Reload Error Handling", () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
 		// V3: Should throw mutations disabled error, not invalid path error
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.reload("test")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.api.reload("test")).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 		await api.shutdown();
 	});
 
 	it("allows reloadApi on non-existent paths without throwing", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
-		// V3: Throws INVALID_API_PATH for non-existent paths instead of silently succeeding
+		// V3: Throws API_PATH_NOT_FOUND for non-existent paths instead of silently succeeding
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("INVALID_API_PATH");
+			await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("API_PATH_NOT_FOUND");
 		});
 		await api.shutdown();
 	});

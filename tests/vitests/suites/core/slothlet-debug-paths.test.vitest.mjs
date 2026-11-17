@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
  *             `Object.assign(this.boundApi, this.reference)` - fires when `reference`
  *             config option is provided.
  *
- * - Line 677: `getAPI()` throws INVALID_CONFIG_NOT_LOADED when `!this.isLoaded`.
+ * - Line 677: `getAPI()` throws INSTANCE_NOT_LOADED when `!this.isLoaded`.
  *             Accessible via the internal slothlet instance diagnostics after shutdown.
  */
 

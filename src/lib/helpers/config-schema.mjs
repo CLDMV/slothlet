@@ -220,9 +220,7 @@ export function assertKnownKeys(value, schema, where, path = []) {
 		const key = keys[i];
 		const keyPath = concatLists(path, [key]);
 		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, schema, key)) {
-			throw new SlothletError("INVALID_CONFIG_UNKNOWN_KEY", { where, key: ArrayMethods.join(keyPath, "."), path: keyPath }, null, {
-				validationError: true
-			});
+			throw new SlothletError("INVALID_CONFIG_UNKNOWN_KEY", { where, key: ArrayMethods.join(keyPath, "."), path: keyPath });
 		}
 		const child = schema[key];
 		if (child !== null && typeof child === "object") assertKnownKeys(value[key], child, where, keyPath);

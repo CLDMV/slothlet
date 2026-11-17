@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:16-08:00 (1794882616)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,18 +103,18 @@ describe("Loader processor (real slothlet integration)", () => {
 		}
 	});
 
-	it("returns INVALID_DIRECTORY when initializing from a non-existent root", async () => {
+	it("returns FOLDER_UNREADABLE when initializing from a non-existent root", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
 					base: join(fixtureRoot, "missing-root"),
 					mode: "eager"
 				})
-			).rejects.toThrow("INVALID_DIRECTORY");
+			).rejects.toThrow("FOLDER_UNREADABLE");
 		});
 	});
 
-	it("initializes from an empty directory (exercises WARN_DIRECTORY_EMPTY path)", async () => {
+	it("initializes from an empty directory (exercises WARNING_FOLDER_EMPTY path)", async () => {
 		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
@@ -282,7 +282,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_OUTPUT");
+			).rejects.toThrow("TYPESCRIPT_TYPES_OUTPUT_MISSING");
 
 			await expect(
 				slothlet({
@@ -295,7 +295,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_INTERFACE_NAME");
+			).rejects.toThrow("TYPESCRIPT_TYPES_NAME_MISSING");
 		});
 	});
 
@@ -351,7 +351,7 @@ describe("Loader processor (real slothlet integration)", () => {
 			expect(caught).not.toBeNull();
 			expect(caught.code).not.toBe("INVALID_CONFIG_UNKNOWN_KEY");
 			expect(caught.code).toBe("MODULE_IMPORT_FAILED");
-			expect(caught.originalError?.code).toBe("TS_TYPE_GENERATION_FAILED");
+			expect(caught.originalError?.code).toBe("TYPESCRIPT_TYPE_GENERATION_FAILED");
 			expect(caught.originalError.message).toMatch(/ENOTDIR/);
 		} finally {
 			await rm(blocker, { force: true });

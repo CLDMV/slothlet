@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:48-08:00 (1794882468)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -118,11 +118,11 @@ export class Builder extends ComponentBase {
 		let effectiveDir = dir;
 		// Gate on presence (`!= null`), not truthiness: a present-but-falsy syntheticExports (e.g. ""
 		// or 0) signals synthetic intent and must hit the structured synthetic validation below, not
-		// fall through to `dir` validation and surface a misleading INVALID_CONFIG_DIR_INVALID.
+		// fall through to `dir` validation and surface a misleading FOLDER_INVALID.
 		if (noBase && dir === null) {
 			// #471: an instance with no base directory — its tree is built entirely through
 			// api.slothlet.api.add(). Compose an empty root through the normal pipeline (no scan, so no
-			// WARN_DIRECTORY_EMPTY); the sentinel stands in for the directory nothing is read from.
+			// WARNING_FOLDER_EMPTY); the sentinel stands in for the directory nothing is read from.
 			effectiveDir = "slothlet:no-base";
 			preloadedStructure = { files: [], directories: [] };
 		} else if (syntheticExports != null) {
@@ -137,21 +137,19 @@ export class Builder extends ComponentBase {
 				return proto === Objects.prototype || proto === null;
 			};
 			if (!isPlainObject(syntheticExports)) {
-				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
+				throw new this.SlothletError("INLINE_EXPORTS_INVALID", {
 					received: Arrays.isArray(syntheticExports)
 						? "array"
 						: typeof syntheticExports === "object"
 							? `${syntheticExports.constructor?.name ?? "non-plain object"} instance`
-							: typeof syntheticExports,
-					validationError: true
+							: typeof syntheticExports
 				});
 			}
 			if (typeof syntheticName !== "string" || !syntheticName) {
 				// An empty string passes `typeof === "string"`, so reporting the type alone
 				// ("received string") hides the real fault; surface it as "<empty>" instead.
-				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_NAME", {
-					received: typeof syntheticName === "string" ? "<empty>" : typeof syntheticName,
-					validationError: true
+				throw new this.SlothletError("INLINE_NAME_INVALID", {
+					received: typeof syntheticName === "string" ? "<empty>" : typeof syntheticName
 				});
 			}
 			const sentinel = `synthetic:${syntheticName}`;
@@ -171,25 +169,15 @@ export class Builder extends ComponentBase {
 			};
 		} else if (!dir || typeof dir !== "string") {
 			// Validate inputs — dir is required for a filesystem build.
-			throw new this.SlothletError(
-				"INVALID_CONFIG_DIR_INVALID",
-				{
-					dir: dir
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: dir
+			});
 		}
 
 		if (mode !== "eager" && mode !== "lazy") {
-			throw new this.SlothletError(
-				"INVALID_CONFIG_MODE_INVALID",
-				{
-					value: mode
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_CONFIG_MODE_INVALID", {
+				value: mode
+			});
 		}
 
 		// Build based on mode - each mode handles its own scanning and flattening.

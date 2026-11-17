@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:00:00-08:00 (1794772800)
+ *	@Last modified time: 2026-11-16T18:29:47-08:00 (1794882587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ const CASES = [
 ];
 
 /**
- * Raise a WARNING_API_ADD_OPTION_LOCKED on an instance (a locked per-call add option).
+ * Raise a WARNING_COLLISION_OPTION_LOCKED on an instance (a locked per-call add option).
  * @param {object} api - Bound api.
  * @returns {Promise<void>}
  */
@@ -64,8 +64,8 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		a = await make();
 		b = await make();
 		await raise(a);
-		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
-		expect(codes(b)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(a)).toContain("WARNING_COLLISION_OPTION_LOCKED");
+		expect(codes(b)).not.toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("warnings.clear() on one instance leaves the other's warnings", async () => {
@@ -75,7 +75,7 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		await raise(b);
 		a.slothlet.warnings.clear();
 		expect(codes(a)).toEqual([]);
-		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(b)).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("silent on one instance does not change the other, and both record their warnings (#838)", async () => {
@@ -87,14 +87,14 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		warn.mockClear();
 		await raise(b);
 		expect(warn).not.toHaveBeenCalled();
-		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
-		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(a)).toContain("WARNING_COLLISION_OPTION_LOCKED");
+		expect(codes(b)).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("a warning raised outside any instance is kept by no instance", async () => {
 		a = await make();
-		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "x" });
-		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		new SlothletWarning("WARNING_COLLISION_OPTION_LOCKED", { option: "x" });
+		expect(codes(a)).not.toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("instance warnings are still SlothletWarning instances", async () => {

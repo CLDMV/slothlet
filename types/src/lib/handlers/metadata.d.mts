@@ -251,7 +251,7 @@ export class Metadata extends ComponentBase {
      *
      * Reads `currentWrapper` from the active context-manager store — the same
      * fast synchronous path used by the unified wrapper's `apply` trap.
-     * Throws `RUNTIME_NO_ACTIVE_CONTEXT` when called outside of a slothlet
+     * Throws `CONTEXT_NOT_ACTIVE` when called outside of a slothlet
      * execution context.
      *
      * Called by the `api.slothlet.metadata.self()` closure injected in

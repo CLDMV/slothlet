@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:48-08:00 (1794882588)
+ *	@Last modified time: 2026-11-16T18:30:26-08:00 (1794882626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview While the permission system is on, a member defined read-only and non-configurable holding an object
- * or function in one step is refused (`API_MEMBER_FIXED_OBJECT`), on the api root and on any node, by the host and by
+ * or function in one step is refused (`PERMISSION_MEMBER_FIXED_OBJECT`), on the api root and on any node, by the host and by
  * module code alike: the language would require the node to hand that very value out, so nothing beneath it could be
  * checked. Assigning the member and then locking it keeps it a node, checked beneath. A primitive value, and every
  * definition while the system is off or disabled, is defined as in plain JavaScript.
@@ -44,7 +44,7 @@ const matrix = ["on", "off", "disabled"].flatMap((permissionMode) =>
 const KINDS = ["object", "function", "primitive"];
 const ROUTES = ["defineProperty", "defineProperties", "reflect"];
 // Refused as the language refuses a definition an object cannot take: a `TypeError`, coded.
-const REFUSED = { threw: "API_MEMBER_FIXED_OBJECT", typeError: true };
+const REFUSED = { threw: "PERMISSION_MEMBER_FIXED_OBJECT", typeError: true };
 
 /**
  * A fresh value of a kind, as the fixture makes it.

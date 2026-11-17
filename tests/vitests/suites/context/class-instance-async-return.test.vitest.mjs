@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * checking the *synchronous* return of `fn.apply(...)`. For an `async function` leaf that return is
  * always a pending `Promise` — and `Promise` is excluded from class-instance detection — so the wrap
  * never fired: `await api.mod.asyncFactory()` resolved to an UNWRAPPED instance, and a later method
- * on it that touches `self` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF`. The identical body worked when the
+ * on it that touches `self` threw `CONTEXT_NOT_ACTIVE_SELF`. The identical body worked when the
  * factory was synchronous. This suite pins that an async factory returning a class instance gets the
  * same context-preserving method wrapping as the sync factory does.
  */
@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > async leaf clas
 		await api.slothlet.api.add("widget", WIDGETS);
 
 		const w = await api.widget.create();
-		// Pre-#328-fix this rejected with RUNTIME_NO_ACTIVE_CONTEXT_SELF (unwrapped instance).
+		// Pre-#328-fix this rejected with CONTEXT_NOT_ACTIVE_SELF (unwrapped instance).
 		expect(await w.ping()).toBe("pong");
 	});
 

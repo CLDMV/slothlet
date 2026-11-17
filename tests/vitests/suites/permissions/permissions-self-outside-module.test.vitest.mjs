@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
+ *	@Last modified time: 2026-11-16T18:30:46-08:00 (1794882646)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 	it("refuses to read through while no module is executing", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
-		expect(() => self.db).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		expect(() => self.db).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 
 	it("refuses to reach the internal namespace, so the permission system cannot be turned off", async () => {
@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 		});
 
 		// The worst version of the read above: `control.disable()` would drop enforcement wholesale.
-		expect(() => self.slothlet).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		expect(() => self.slothlet).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 
 	it("discloses no shape through enumeration, membership, or descriptors", async () => {
@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 		// writing module. With no module writing there is nobody to attribute it to.
 		expect(() => {
 			self.injected = () => "owned";
-		}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		expect(api.injected).toBeUndefined();
 	});
 

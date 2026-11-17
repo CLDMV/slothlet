@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:23:49-08:00 (1794878629)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,9 +159,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageContext?.packageName ?? "<unknown>",
 				manifest: packageContext?.manifestPath ?? "<unknown>",
 				reason: t("MODULE_MANIFEST_REASON_NOT_OBJECT")
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -178,9 +176,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					manifest: manifestPath,
 					field: key
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 	}
@@ -196,9 +192,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_MIXED_FORMATS")
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	const names = hasFormat1 ? FORMAT_1_NAMES : FORMAT_2_NAMES;
@@ -212,9 +206,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.schema })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	if (manifest[names.schema] !== expectedSchema) {
@@ -223,9 +215,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				package: packageName,
 				schema: String(manifest[names.schema])
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -237,9 +227,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.mount })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	const mountSegments = normalizeMount(manifest[names.mount], names.mount, packageName, manifestPath);
@@ -251,9 +239,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				package: packageName,
 				mount: copyList(mountSegments)
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -266,9 +252,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.base })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	if (typeof base !== "string" || base.length === 0) {
@@ -278,9 +262,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: names.base, expected: t("MODULE_MANIFEST_EXPECTED_NON_EMPTY_STRING") })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	validateBaseContainment(base, packageRoot, packageName);
@@ -294,9 +276,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		if (manifest.name !== packageName) {
@@ -306,9 +286,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					expected: packageName,
 					received: manifest.name
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 	}
@@ -322,9 +300,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		if (manifest.version !== packageVersion) {
@@ -334,9 +310,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					expected: packageVersion,
 					received: manifest.version
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 	}
@@ -349,9 +323,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -363,9 +335,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -377,9 +347,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("MODULE_MANIFEST_EXPECTED_FINITE_NUMBER") })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 
@@ -392,9 +360,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		for (let ofIndex = 0, ofList = Objects.entries(manifest.dependencies); ofIndex < ofList.length; ofIndex++) {
@@ -408,9 +374,7 @@ export function validateModuleManifest(manifest, packageContext) {
 						package: packageName,
 						manifest: manifestPath,
 						reason: t("MODULE_MANIFEST_REASON_DEPENDENCY_TYPE", { dependency: depName })
-					},
-					null,
-					{ validationError: true }
+					}
 				);
 			}
 		}
@@ -435,9 +399,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 	}
@@ -478,9 +440,7 @@ function normalizeMount(mount, field, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		return splitText(mount, ".");
@@ -493,9 +453,7 @@ function normalizeMount(mount, field, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		for (let ofIndex = 0, ofList = mount; ofIndex < ofList.length; ofIndex++) {
@@ -507,9 +465,7 @@ function normalizeMount(mount, field, packageName, manifestPath) {
 						package: packageName,
 						manifest: manifestPath,
 						reason: t("MODULE_MANIFEST_REASON_MOUNT_ENTRIES", { field })
-					},
-					null,
-					{ validationError: true }
+					}
 				);
 			}
 		}
@@ -521,9 +477,7 @@ function normalizeMount(mount, field, packageName, manifestPath) {
 			package: packageName,
 			manifest: manifestPath,
 			reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-		},
-		null,
-		{ validationError: true }
+		}
 	);
 }
 
@@ -547,9 +501,7 @@ function validateBaseContainment(base, packageRoot, packageName) {
 				base,
 				resolved,
 				folder: packageRoot
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 }
@@ -574,9 +526,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					field: "permissions",
 					expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS")
 				})
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	for (let i = 0; i < permissions.length; i++) {
@@ -588,9 +538,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
@@ -600,9 +548,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		if (typeof rule.target !== "string" || rule.target.length === 0) {
@@ -612,9 +558,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_TARGET", { index: i })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 		if (!SetMethods.has(PERMISSION_EFFECT_VALUES, rule.effect)) {
@@ -624,9 +568,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					package: packageName,
 					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
-				},
-				null,
-				{ validationError: true }
+				}
 			);
 		}
 	}
@@ -651,9 +593,7 @@ function validateEventRules(events, packageName, manifestPath) {
 				package: packageName,
 				manifest: manifestPath,
 				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS") })
-			},
-			null,
-			{ validationError: true }
+			}
 		);
 	}
 	for (let i = 0; i < events.length; i++) {
@@ -661,33 +601,25 @@ function validateEventRules(events, packageName, manifestPath) {
 		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) },
-				null,
-				{ validationError: true }
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) }
 			);
 		}
 		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) },
-				null,
-				{ validationError: true }
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) }
 			);
 		}
 		if (typeof rule.event !== "string" || rule.event.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) },
-				null,
-				{ validationError: true }
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) }
 			);
 		}
 		if (!SetMethods.has(EVENT_EFFECT_VALUES, rule.effect)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) },
-				null,
-				{ validationError: true }
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) }
 			);
 		}
 	}

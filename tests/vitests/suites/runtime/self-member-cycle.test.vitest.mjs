@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T18:28:04-08:00 (1793586484)
+ *	@Last modified time: 2026-11-16T18:31:02-08:00 (1794882662)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,7 +110,7 @@ describe.each(CONFIGS)("a cyclic member read through self (#688) — $mode / $ru
 	it("refuses a write round the cycle made later with no module behind it, held to the reader", async () => {
 		await load({ permissions: {} });
 		api.reader.r.stashLap(STASH);
-		expect(writeStashed()).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+		expect(writeStashed()).toBe("CONTEXT_NOT_ACTIVE_SELF");
 		expect(api.things.x.conn.later).toBeUndefined();
 	});
 

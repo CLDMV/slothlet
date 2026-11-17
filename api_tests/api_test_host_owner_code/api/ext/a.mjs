@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T16:51:28-08:00 (1793926288)
+ *	@Last modified time: 2026-11-16T18:25:57-08:00 (1794882357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ export async function activate(ctx) {
 		try {
 			results[name] = { ok: true, value: await fn(() => "handler") };
 		} catch (error) {
-			results[name] = { ok: false, code: error?.code, caller: error?.context?.caller ?? null };
+			results[name] = { ok: false, code: error?.code, caller: error?.details?.caller ?? null };
 		}
 	}
 	return results;

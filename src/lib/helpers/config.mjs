@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:55-08:00 (1794882475)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -136,24 +136,18 @@ export function normalizeHookConfig(hook) {
 export function normalizeClockConfig(clock) {
 	const built = createClock(clock);
 	if (built === null) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "clock",
-				value:
-					clock === null
-						? "null"
-						: Arrays.isArray(clock)
-							? "an array"
-							: typeof clock === "object"
-								? "an object with a member that is not a function"
-								: typeof clock,
-				expected: "an object whose now, set and clear members are functions",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "clock",
+			value:
+				clock === null
+					? "null"
+					: Arrays.isArray(clock)
+						? "an array"
+						: typeof clock === "object"
+							? "an object with a member that is not a function"
+							: typeof clock,
+			expected: "an object whose now, set and clear members are functions"
+		});
 	}
 	return built;
 }
@@ -207,9 +201,7 @@ export function expandPermissionsShorthand(permissions) {
 function configGroup(value, option) {
 	if (value === undefined) return {};
 	if (typeof value !== "object" || value === null || Arrays.isArray(value)) {
-		throw new SlothletError("INVALID_CONFIG", { option, value, expected: "object", hint: "HINT_INVALID_CONFIG" }, null, {
-			validationError: true
-		});
+		throw new SlothletError("INVALID_CONFIG", { option, value, expected: "object" });
 	}
 	return value;
 }
@@ -228,7 +220,7 @@ function configGroup(value, option) {
 function configChoice(value, allowed, fallback, option, expected) {
 	if (value === undefined) return fallback;
 	if (ArrayMethods.includes(allowed, value)) return value;
-	throw new SlothletError("INVALID_CONFIG", { option, value, expected, hint: "HINT_INVALID_CONFIG" }, null, { validationError: true });
+	throw new SlothletError("INVALID_CONFIG", { option, value, expected });
 }
 
 /**
@@ -280,17 +272,11 @@ function configChoice(value, allowed, fallback, option, expected) {
 export function normalizePermissionsConfig(permissions) {
 	const expanded = expandPermissionsShorthand(permissions);
 	if (!expanded.valid) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions",
-				value: typeof permissions === "string" ? `"${permissions}"` : String(permissions),
-				expected: 'an object, "on", "strict", "off", "disabled", or a boolean',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "permissions",
+			value: typeof permissions === "string" ? `"${permissions}"` : String(permissions),
+			expected: 'an object, "on", "strict", "off", "disabled", or a boolean'
+		});
 	}
 	permissions = expanded.value;
 	if (!permissions || typeof permissions !== "object") {
@@ -339,14 +325,7 @@ export function normalizePermissionsConfig(permissions) {
 	if (typeof buffers !== "boolean" && !(Numbers.isSafeInteger(buffers) && buffers >= 0)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: "permissions.gating.buffers",
-				value: buffers,
-				expected: "boolean | whole number of kilobytes",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
+			{ option: "permissions.gating.buffers", value: buffers, expected: "boolean | whole number of kilobytes" }
 		);
 	}
 	const gating = {
@@ -357,9 +336,7 @@ export function normalizePermissionsConfig(permissions) {
 	if (permissions.rules !== undefined && !Arrays.isArray(permissions.rules)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{ option: "permissions.rules", value: permissions.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
-			null,
-			{ validationError: true }
+			{ option: "permissions.rules", value: permissions.rules, expected: "array" }
 		);
 	}
 	const rules = Arrays.isArray(permissions.rules) ? permissions.rules : [];
@@ -386,9 +363,7 @@ export function normalizePermissionsConfig(permissions) {
 	if (eventsGroup.rules !== undefined && !Arrays.isArray(eventsGroup.rules)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{ option: "permissions.events.rules", value: eventsGroup.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
-			null,
-			{ validationError: true }
+			{ option: "permissions.events.rules", value: eventsGroup.rules, expected: "array" }
 		);
 	}
 	const eventRules = Arrays.isArray(eventsGroup.rules) ? eventsGroup.rules : [];
@@ -537,12 +512,7 @@ export class Config extends ComponentBase {
 	normalizeHelpers(helpers) {
 		if (helpers === undefined || helpers === null) return "instance";
 		if (helpers !== "instance" && helpers !== "module") {
-			throw new SlothletError(
-				"INVALID_CONFIG",
-				{ option: "helpers", value: String(helpers), expected: '"instance" | "module"', hint: "HINT_INVALID_CONFIG" },
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_CONFIG", { option: "helpers", value: String(helpers), expected: '"instance" | "module"' });
 		}
 		return helpers;
 	}
@@ -746,7 +716,7 @@ export class Config extends ComponentBase {
 	 * @param {Function} [loader.resolve] - Browser: a file list entry to an importable URL.
 	 * @returns {{import: (Function|null), files: (object|null), materialize: (boolean|Function), platform: ("node"|"browser"), resolve: (Function|null)}}
 	 *   The normalized group.
-	 * @throws {SlothletError} INVALID_CONFIG_IMPORT when `import` is given and is not a function.
+	 * @throws {SlothletError} INVALID_CONFIG_IMPORTER_INVALID when `import` is given and is not a function.
 	 * @throws {SlothletError} INVALID_CONFIG when `materialize` is not a boolean or a function.
 	 * @public
 	 * @example
@@ -757,10 +727,7 @@ export class Config extends ComponentBase {
 		const group = configGroup(loader, "loader");
 		// Validate the injectable leaf importer (#235): a function or nothing.
 		if (group.import !== undefined && group.import !== null && typeof group.import !== "function") {
-			throw new this.SlothletError("INVALID_CONFIG_IMPORT", {
-				received: typeof group.import,
-				validationError: true
-			});
+			throw new this.SlothletError("INVALID_CONFIG_IMPORTER_INVALID", { received: typeof group.import });
 		}
 		const files = group.files ?? null;
 		return {
@@ -796,15 +763,7 @@ export class Config extends ComponentBase {
 		if (Arrays.isArray(routines)) {
 			throw new this.SlothletError(
 				"INVALID_CONFIG",
-				{
-					option: "routines",
-					value: "array",
-					expected: 'an object, e.g. { entries: ["initialize:startup", "shutdown:shutdown"] }',
-					hint: "HINT_INVALID_CONFIG",
-					validationError: true
-				},
-				null,
-				{ validationError: true }
+				{ option: "routines", value: "array", expected: 'an object, e.g. { entries: ["initialize:startup", "shutdown:shutdown"] }' }
 			);
 		}
 		const group = configGroup(routines, "routines");
@@ -846,32 +805,25 @@ export class Config extends ComponentBase {
 			typeof files === "object" &&
 			((Arrays.isArray(files.files) && files.files.length > 0) || (Arrays.isArray(files.directories) && files.directories.length > 0));
 		if ((!noBase && !rawBase) || (noBase && filesListEntries)) {
-			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
+			throw new this.SlothletError("INVALID_CONFIG_BASE_MISSING", {});
 		}
 
 		// Browser-mode specific validation. With no base there is no base tree to describe, so the
 		// file list is only required when a base is given.
 		if (envTarget === "browser") {
 			if (!noBase && (!files || typeof files !== "object" || Arrays.isArray(files))) {
-				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+				throw new this.SlothletError("INVALID_CONFIG_FILES_REQUIRED", {});
 			}
 			if (!noBase && (!Arrays.isArray(files.files) || !Arrays.isArray(files.directories))) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG_BROWSER_MANIFEST_INVALID",
-					{
-						received: typeof files
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG_FILES_INVALID", {
+					received: typeof files
+				});
 			}
 			// loader.resolve is optional — if omitted (undefined) or normalized to null it defaults to new URL(path, base).
 			// Only a provided NON-function value is rejected. Treating null like undefined keeps transformConfig
 			// idempotent, so reload() — which re-feeds the already-normalized config — does not throw (#91).
 			if (loader.resolve !== null && typeof loader.resolve !== "function") {
-				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof loader.resolve }, null, {
-					validationError: true
-				});
+				throw new this.SlothletError("INVALID_CONFIG_RESOLVER_INVALID", { received: typeof loader.resolve });
 			}
 		}
 
@@ -889,18 +841,11 @@ export class Config extends ComponentBase {
 		if (scopeConfig && typeof scopeConfig === "object" && scopeConfig.merge) {
 			const validMergeStrategies = ["shallow", "deep"];
 			if (!ArrayMethods.includes(validMergeStrategies, scopeConfig.merge)) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: "scope.merge",
-						value: scopeConfig.merge,
-						expected: ArrayMethods.join(validMergeStrategies, " or "),
-						hint: `Invalid merge strategy: "${scopeConfig.merge}". Must be "shallow" or "deep".`,
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: "scope.merge",
+					value: scopeConfig.merge,
+					expected: ArrayMethods.join(validMergeStrategies, " or ")
+				});
 			}
 		}
 
@@ -926,10 +871,7 @@ export class Config extends ComponentBase {
 		const versioningGroup = configGroup(config.versioning, "versioning");
 		const dispatcher = versioningGroup.dispatcher ?? null;
 		if (dispatcher !== null && typeof dispatcher !== "string" && typeof dispatcher !== "function") {
-			throw new this.SlothletError("INVALID_CONFIG_VERSION_DISPATCHER", {
-				received: typeof dispatcher,
-				validationError: true
-			});
+			throw new this.SlothletError("VERSION_DISPATCHER_INVALID", { received: typeof dispatcher });
 		}
 
 		// Normalize permissions configuration
@@ -1050,18 +992,11 @@ export class Config extends ComponentBase {
 			valid = typeof value === kind;
 		}
 		if (valid) return;
-		throw new this.SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: `typescript.${name}`,
-				value: Arrays.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
-				expected,
-				hint: "HINT_INVALID_CONFIG",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new this.SlothletError("INVALID_CONFIG", {
+			option: `typescript.${name}`,
+			value: Arrays.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
+			expected
+		});
 	}
 
 	/**
@@ -1136,18 +1071,11 @@ export class Config extends ComponentBase {
 			return null;
 		}
 		if (typeof lifecycle !== "object" || Arrays.isArray(lifecycle)) {
-			throw new this.SlothletError(
-				"INVALID_CONFIG",
-				{
-					option: "lifecycle",
-					value: Arrays.isArray(lifecycle) ? "array" : typeof lifecycle,
-					expected: "a plain object mapping event names to functions or arrays of functions",
-					hint: "HINT_INVALID_CONFIG",
-					validationError: true
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_CONFIG", {
+				option: "lifecycle",
+				value: Arrays.isArray(lifecycle) ? "array" : typeof lifecycle,
+				expected: "a plain object mapping event names to functions or arrays of functions"
+			});
 		}
 		// Reject class instances (Date, Map, RegExp, custom classes, …): only a plain object
 		// literal or Object.create(null) map is a valid lifecycle shape. A class instance often
@@ -1155,18 +1083,11 @@ export class Config extends ComponentBase {
 		// through unvalidated instead of rejecting the malformed config.
 		const lifecycleProto = Objects.getPrototypeOf(lifecycle);
 		if (lifecycleProto !== null && lifecycleProto !== Objects.prototype) {
-			throw new this.SlothletError(
-				"INVALID_CONFIG",
-				{
-					option: "lifecycle",
-					value: lifecycle?.constructor?.name ? `${lifecycle.constructor.name} instance` : "non-plain object",
-					expected: "a plain object mapping event names to functions or arrays of functions",
-					hint: "HINT_INVALID_CONFIG",
-					validationError: true
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_CONFIG", {
+				option: "lifecycle",
+				value: lifecycle?.constructor?.name ? `${lifecycle.constructor.name} instance` : "non-plain object",
+				expected: "a plain object mapping event names to functions or arrays of functions"
+			});
 		}
 		for (let ofIndex = 0, ofList = Objects.entries(lifecycle); ofIndex < ofList.length; ofIndex++) {
 			const ofEntry = ofList[ofIndex],
@@ -1176,18 +1097,11 @@ export class Config extends ComponentBase {
 			for (let ofIndex = 0, ofList = handlers; ofIndex < ofList.length; ofIndex++) {
 				const fn = ofList[ofIndex];
 				if (typeof fn !== "function") {
-					throw new this.SlothletError(
-						"INVALID_CONFIG",
-						{
-							option: `lifecycle["${event}"]`,
-							value: typeof fn,
-							expected: "a function or an array of functions",
-							hint: "HINT_INVALID_CONFIG",
-							validationError: true
-						},
-						null,
-						{ validationError: true }
-					);
+					throw new this.SlothletError("INVALID_CONFIG", {
+						option: `lifecycle["${event}"]`,
+						value: typeof fn,
+						expected: "a function or an array of functions"
+					});
 				}
 			}
 		}
@@ -1257,18 +1171,11 @@ export class Config extends ComponentBase {
 			return [];
 		}
 		if (!Arrays.isArray(routines)) {
-			throw new this.SlothletError(
-				"INVALID_CONFIG",
-				{
-					option: "routines",
-					value: typeof routines,
-					expected: 'an array of routine names/objects, e.g. ["initialize", "shutdown:shutdown", { name: "warmup" }]',
-					hint: "HINT_INVALID_CONFIG",
-					validationError: true
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_CONFIG", {
+				option: "routines",
+				value: typeof routines,
+				expected: 'an array of routine names/objects, e.g. ["initialize", "shutdown:shutdown", { name: "warmup" }]'
+			});
 		}
 
 		return mapList(routines, (entry, index) => {
@@ -1288,79 +1195,44 @@ export class Config extends ComponentBase {
 				name = entry.name;
 				mode = entry.mode ?? "manual";
 			} else {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}]`,
-						value: Arrays.isArray(entry) ? "array" : typeof entry,
-						expected: 'a string ("name" or "name:mode") or an object ({ name, mode? })',
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}]`,
+					value: Arrays.isArray(entry) ? "array" : typeof entry,
+					expected: 'a string ("name" or "name:mode") or an object ({ name, mode? })'
+				});
 			}
 
 			if (typeof name !== "string" || name.length === 0) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].name`,
-						value: typeof name,
-						expected: "a non-empty string",
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].name`,
+					value: typeof name,
+					expected: "a non-empty string"
+				});
 			}
 			if (SetMethods.has(ROUTINE_NAME_RESERVED, name)) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].name`,
-						value: name,
-						expected: `a name other than the reserved: ${ArrayMethods.join(setToArray(ROUTINE_NAME_RESERVED), ", ")}`,
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].name`,
+					value: name,
+					expected: `a name other than the reserved: ${ArrayMethods.join(setToArray(ROUTINE_NAME_RESERVED), ", ")}`
+				});
 			}
 			if (!SetMethods.has(VALID_ROUTINE_MODES, mode)) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].mode`,
-						value: String(mode),
-						expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_MODES), ", ")}`,
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].mode`,
+					value: String(mode),
+					expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_MODES), ", ")}`
+				});
 			}
 
 			// `recursive` is only settable via the object form — the string shorthands ("name",
 			// "name:mode") always mean recursive: false (the default).
 			const recursive = typeof entry === "object" ? (entry.recursive ?? false) : false;
 			if (typeof recursive !== "boolean") {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].recursive`,
-						value: typeof recursive,
-						expected: "a boolean",
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].recursive`,
+					value: typeof recursive,
+					expected: "a boolean"
+				});
 			}
 
 			// Validate the pattern compiles now — never at first cascade/rebuild — so a malformed
@@ -1372,56 +1244,33 @@ export class Config extends ComponentBase {
 				// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but then
 				// matches no real api path ever, silently — the exact "malformed glob" this validation
 				// exists to catch, just one compilePattern's own try/catch can't see since it never throws.
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].name`,
-						value: name,
-						expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)',
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].name`,
+					value: name,
+					expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)'
+				});
 			}
 			try {
 				compilePattern(pattern);
 			} catch (error) {
 				// INVALID_CONFIG is a shared, generic code with no {error}/{reason} placeholder of its
-				// own, so the compile failure's message is folded into the existing {expected} field
-				// instead of passed as a cause — a validationError:true throw must pass null for
-				// originalError, since the validation templates never render it (analyze MUST-FIX).
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].name`,
-						value: name,
-						expected: `a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs): ${error.message}`,
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				// own, so the compile failure's message is folded into the existing {expected} field.
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].name`,
+					value: name,
+					expected: `a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs): ${error.message}`
+				});
 			}
 
 			// `order` is only settable via the object form. Default depends on mode: "depth"
 			// (deepest-first) for shutdown/destroy, "mount" (registration order) for startup/manual.
 			const order = typeof entry === "object" && entry.order !== undefined ? entry.order : DEFAULT_ROUTINE_ORDER_BY_MODE[mode];
 			if (!SetMethods.has(VALID_ROUTINE_ORDERS, order)) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].order`,
-						value: String(order),
-						expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_ORDERS), ", ")}`,
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].order`,
+					value: String(order),
+					expected: `one of: ${ArrayMethods.join(setToArray(VALID_ROUTINE_ORDERS), ", ")}`
+				});
 			}
 
 			// `cascade` is only settable via the object form (like `recursive`/`order`); it defaults to
@@ -1430,18 +1279,11 @@ export class Config extends ComponentBase {
 			// be invoked by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all.
 			const cascade = typeof entry === "object" && entry.cascade !== undefined ? entry.cascade : true;
 			if (typeof cascade !== "boolean") {
-				throw new this.SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: `routines[${index}].cascade`,
-						value: typeof cascade,
-						expected: "a boolean",
-						hint: "HINT_INVALID_CONFIG",
-						validationError: true
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: `routines[${index}].cascade`,
+					value: typeof cascade,
+					expected: "a boolean"
+				});
 			}
 
 			return { name, mode, recursive, order, cascade };

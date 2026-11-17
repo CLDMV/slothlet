@@ -95,7 +95,7 @@ const api = await slothlet({ base: "./api" });
 const api = await slothlet({ base: "/absolute/path/to/api" });
 ```
 
-**No base directory.** Omit `base` (or pass `base: null`) to start from an empty root and build the whole tree at runtime with [`api.slothlet.api.add()`](./RELOAD.md#apislothletapiadd) — directories, in-memory `{ exports }` objects, at a path or at the root (`""`). Nothing is scanned, so there is no `WARN_DIRECTORY_EMPTY`; permissions, lifecycle, `remove()`, and both reload forms work as usual, and a full `reload()` replays what was added.
+**No base directory.** Omit `base` (or pass `base: null`) to start from an empty root and build the whole tree at runtime with [`api.slothlet.api.add()`](./RELOAD.md#apislothletapiadd) — directories, in-memory `{ exports }` objects, at a path or at the root (`""`). Nothing is scanned, so there is no `WARNING_FOLDER_EMPTY`; permissions, lifecycle, `remove()`, and both reload forms work as usual, and a full `reload()` replays what was added.
 
 ```javascript
 const api = await slothlet({ mode: "eager" }); // no base
@@ -103,7 +103,7 @@ await api.slothlet.api.add("services", { exports: { now: () => Date.now() } });
 await api.slothlet.api.add("plugins", "./plugins");
 ```
 
-A base that is given but unusable still fails loudly: an empty string throws `INVALID_CONFIG_DIR_MISSING`, a path that does not exist throws, and an existing but empty directory still warns `WARN_DIRECTORY_EMPTY`. In browser mode the same applies, and a `loader.files` list is only needed with a base — a list that names files without a base throws `INVALID_CONFIG_DIR_MISSING`, since those files cannot be resolved.
+A base that is given but unusable still fails loudly: an empty string throws `INVALID_CONFIG_BASE_MISSING`, a path that does not exist throws, and an existing but empty directory still warns `WARNING_FOLDER_EMPTY`. In browser mode the same applies, and a `loader.files` list is only needed with a base — a list that names files without a base throws `INVALID_CONFIG_BASE_MISSING`, since those files cannot be resolved.
 
 ---
 
@@ -259,7 +259,7 @@ await slothlet({ base: "./api", hidden: ["!**/.*/", "!**/__*/"] });
 await slothlet({ base: "./api", hidden: ["!__internal/", "__internal/drafts"] });
 ```
 
-A name the framework reserves (`__metadata`, `_impl`, …) is still refused when a `!` glob brings it back (`MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_DIRNAME`). As in gitignore, a folder that stays hidden is never scanned, so a `!` glob cannot reach an entry inside it; bring the folder back first. In a browser, the manifest `generateManifest()` writes leaves `.`/`__`-prefixed entries out, so a `!` glob can only bring back entries a hand-written manifest lists.
+A name the framework reserves (`__metadata`, `_impl`, …) is still refused when a `!` glob brings it back (`MODULE_RESERVED_FILE` / `MODULE_RESERVED_FOLDER`). As in gitignore, a folder that stays hidden is never scanned, so a `!` glob cannot reach an entry inside it; bring the folder back first. In a browser, the manifest `generateManifest()` writes leaves `.`/`__`-prefixed entries out, so a `!` glob can only bring back entries a hand-written manifest lists.
 
 The v3 `scanHiddenFolders` option is gone; `hidden: ["!**/.*/", "!**/__*/"]` does what `scanHiddenFolders: true` did.
 
@@ -401,7 +401,7 @@ Sets the defaults for `api.slothlet.context.scope()` runs. Both can be overridde
 - **`isolation`**
   - **`"partial"`** (default) - The scope shares `self` with the rest of the api, so a write through `self` inside the scope is visible outside it.
   - **`"full"`** - The scope gets a copy-on-write `self`: writes made inside the scope stay inside it.
-  - Any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
+  - Any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
 
 ```javascript
 const api = await slothlet({
@@ -789,7 +789,7 @@ How leaf files are found and loaded.
 
 | Option        | Default         | Effect                                                                                                                                                                                                                                                                                                                 |
 | ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORT`.                                                                                 |
+| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORTER_INVALID`.                                                                                 |
 | `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                                                                                                           |
 | `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization. The api is usable through its proxies before this completes. A function turns it on and is called once when everything has materialized (see [LIFECYCLE.md](LIFECYCLE.md#a-callback-when-everything-is-loaded)). |
 | `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                                                                                                       |
@@ -855,7 +855,7 @@ Process-wide work that belongs to no instance keeps the functions slothlet loade
 **Type**: `{ dispatcher?: string | ((versions, caller) => string | null) | null }`
 **Default**: `{ dispatcher: null }`
 
-`dispatcher` picks the version a call to a versioned api path runs: a string names the key read from the caller's version metadata (`null` means `"version"`), a function is called as `(versions, caller)` and returns a registered version tag, or `null`/`undefined` to take the default. Anything else throws `INVALID_CONFIG_VERSION_DISPATCHER`. See [VERSIONING.md](VERSIONING.md).
+`dispatcher` picks the version a call to a versioned api path runs: a string names the key read from the caller's version metadata (`null` means `"version"`), a function is called as `(versions, caller)` and returns a registered version tag, or `null`/`undefined` to take the default. Anything else throws `VERSION_DISPATCHER_INVALID`. See [VERSIONING.md](VERSIONING.md).
 
 ```javascript
 const api = await slothlet({ base: "./api", versioning: { dispatcher: "apiVersion" } });
@@ -981,7 +981,7 @@ Warnings are not part of `diag`: every instance keeps the warnings it raised, pr
 api.slothlet.warnings.clear();
 // ... trigger code that may emit warnings ...
 const codes = api.slothlet.warnings.get().map((w) => w.code);
-expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
+expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 ```
 
 - `get()` - a copy of this instance's warnings, oldest first.

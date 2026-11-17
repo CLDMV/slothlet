@@ -91,8 +91,8 @@ describe("modules.add tells its own discover results from options", () => {
 	it("names the method as path segments when mutations are off, and joined in the message", async () => {
 		await boot({ add: false });
 		const error = await withSuppressedSlothletErrorOutput(() => errorOf(() => api.slothlet.api.modules.add("x")));
-		expect(error.code).toBe("INVALID_CONFIG_MUTATIONS_DISABLED");
-		expect(error.context.operation).toEqual(["slothlet", "api", "modules", "add"]);
+		expect(error.code).toBe("API_MUTATION_DISABLED");
+		expect(error.details.operation).toEqual(["slothlet", "api", "modules", "add"]);
 		expect(error.message).toContain("slothlet.api.modules.add");
 	});
 });

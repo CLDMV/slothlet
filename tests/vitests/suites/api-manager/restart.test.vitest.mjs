@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:40-08:00 (1794882520)
+ *	@Last modified time: 2026-11-16T18:29:32-08:00 (1794882572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -355,7 +355,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		} catch (error) {
 			caught = error;
 		}
-		expect(caught?.code).toBe("INVALID_CONFIG_MUTATIONS_DISABLED");
+		expect(caught?.code).toBe("API_MUTATION_DISABLED");
 	});
 
 	it("restarts a sealed instance into an unsealed one with only the original config's rules", async () => {
@@ -588,7 +588,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		} catch (error) {
 			caught = error;
 		}
-		expect(caught?.code).toBe("INVALID_CONFIG_NOT_LOADED");
+		expect(caught?.code).toBe("INSTANCE_NOT_LOADED");
 	});
 
 	it("retains an immutable snapshot of the original config", async () => {

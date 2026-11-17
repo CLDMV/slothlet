@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:52-08:00 (1794882472)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,10 +117,10 @@ const CAPABILITIES = Objects.freeze(["code", "imports", "loader"]);
  * @type {Readonly<Record<string, string>>}
  */
 const CAPABILITY_REASONS = Objects.freeze({
-	"not-opened": "CAPABILITY_REASON_NOT_OPENED",
-	unattributed: "CAPABILITY_REASON_UNATTRIBUTED",
-	"foreign-filename": "CAPABILITY_REASON_FOREIGN_FILENAME",
-	binding: "CAPABILITY_REASON_BINDING"
+	"not-opened": "PERMISSION_CAPABILITY_REASON_NOT_OPENED",
+	unattributed: "PERMISSION_CAPABILITY_REASON_UNATTRIBUTED",
+	"foreign-filename": "PERMISSION_CAPABILITY_REASON_FOREIGN_FILENAME",
+	binding: "PERMISSION_CAPABILITY_REASON_BINDING"
 });
 
 /**
@@ -942,7 +942,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
 	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
 	 * @returns {string} The rule ID (generated or reused).
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if rule is malformed.
 	 * @example
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
@@ -1027,8 +1027,8 @@ export class PermissionManager extends ComponentBase {
 			entry.layer !== "manager"
 		) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", {
-				ruleId,
-				moduleID: entry.ownerModuleID
+				id: ruleId,
+				module: entry.ownerModuleID
 			});
 		}
 		/* v8 ignore stop */
@@ -1063,7 +1063,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
 	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
 	 * @returns {string} The rule id.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if the rule is malformed.
 	 * @example
 	 * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
 	 */
@@ -1126,7 +1126,7 @@ export class PermissionManager extends ComponentBase {
 			entry.layer !== "module" &&
 			entry.layer !== "manager"
 		) {
-			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: entry.ownerModuleID });
+			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { id: ruleId, module: entry.ownerModuleID });
 		}
 		/* v8 ignore stop */
 		MapMethods.delete(this.#eventRules, ruleId);
@@ -1203,33 +1203,36 @@ export class PermissionManager extends ComponentBase {
 	 * `{ caller, event, effect(deny/notify/allow), condition? }` construct.
 	 * @param {object} rule - The event rule to validate.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE on a malformed rule.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID on a malformed rule.
 	 * @private
 	 */
 	#validateEventRule(rule) {
 		if (!rule || typeof rule !== "object") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_NOT_OBJECT"), received: typeof rule });
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
+				received: typeof rule
+			});
 		}
 		if (typeof rule.caller !== "string" || !rule.caller) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CALLER_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CALLER_REQUIRED"),
 				received: typeof rule.caller
 			});
 		}
 		if (typeof rule.event !== "string" || !rule.event) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_EVENT_RULE_EVENT_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_EVENT_RULE_REASON_EVENT_REQUIRED"),
 				received: typeof rule.event
 			});
 		}
 		if (rule.effect !== "deny" && rule.effect !== "notify" && rule.effect !== "allow") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_EVENT_RULE_EFFECT_INVALID"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_EVENT_RULE_REASON_EFFECT_INVALID"),
 				received: rule.effect
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+			this.#assertValidConditionPayload(rule.condition, "PERMISSION_RULE_INVALID");
 		}
 	}
 
@@ -1258,7 +1261,7 @@ export class PermissionManager extends ComponentBase {
 	 * @returns {void}
 	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
 	 * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
-	 * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NAME_OWNED when another module owns the name.
 	 * @example
 	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), ttl: 30_000 }, "roles_mod");
 	 */
@@ -1274,9 +1277,7 @@ export class PermissionManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = existing ? claimants : []; ofIndex < ofList.length; ofIndex++) {
 			const claimant = ofList[ofIndex];
 			if (!this.#sameOwner(existing.ownerModuleID, claimant)) {
-				throw new this.SlothletError("PRINCIPAL_NAME_OWNED", { name, owner: existing.ownerModuleID ?? "host", claimant }, null, {
-					validationError: true
-				});
+				throw new this.SlothletError("PERMISSION_PRINCIPAL_NAME_OWNED", { name, owner: existing.ownerModuleID ?? "host", claimant });
 			}
 		}
 
@@ -1312,7 +1313,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when a principal was removed.
 	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
 	 * @example
 	 * pm.unregisterPrincipal("roles");
 	 */
@@ -1338,7 +1339,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
 	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when the principal exists.
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
 	 * @example
 	 * pm.invalidatePrincipal("roles", "user-42");
 	 */
@@ -1726,7 +1727,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Build (or reuse) a read-only view of a resolved principal value. Reads pass through (nested
 	 * plain objects/arrays are viewed on the way out); every write — set, define, delete, prototype
-	 * change — throws `PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, on re-resolve.
+	 * change — throws `PERMISSION_PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, on re-resolve.
 	 *
 	 * @param {object} record - Principal record (owns the view cache).
 	 * @param {*} value - Raw resolved value, or a nested value inside it.
@@ -1738,7 +1739,7 @@ export class PermissionManager extends ComponentBase {
 		const cached = WeakMapMethods.get(record.views, value);
 		if (cached) return cached;
 		const refuse = () => {
-			throw new this.SlothletError("PRINCIPAL_READ_ONLY", { name: record.name }, null, { validationError: true });
+			throw new this.SlothletError("PERMISSION_PRINCIPAL_READ_ONLY", { name: record.name });
 		};
 		const view = markSlothletProxy(
 			new NativeProxy(value, {
@@ -1765,9 +1766,9 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {string|string[]|null} callerModuleID - Calling module's id, or a list of them (#597); `null` for the host.
-	 * @param {string[]} operation - The method, as path segments, for the error.
+	 * @param {string[]} operation - The method called, as its path from `api` (segments), for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a non-owner module calls.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a non-owner module calls.
 	 * @private
 	 */
 	#assertPrincipalOwner(record, callerModuleID, operation) {
@@ -1775,12 +1776,12 @@ export class PermissionManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = runtime_moduleIDList(callerModuleID); ofIndex < ofList.length; ofIndex++) {
 			const caller = ofList[ofIndex];
 			if (this.#sameOwner(record.ownerModuleID, caller)) continue;
-			throw new this.SlothletError(
-				"PRINCIPAL_NOT_OWNER",
-				{ name: record.name, operation, owner: record.ownerModuleID ?? "host", caller },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("PERMISSION_PRINCIPAL_NOT_OWNER", {
+				name: record.name,
+				operation,
+				owner: record.ownerModuleID ?? "host",
+				caller
+			});
 		}
 	}
 
@@ -1809,7 +1810,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#validatePrincipal(name, definition) {
 		const fail = (argument, expected, received) => {
-			throw new this.SlothletError("INVALID_ARGUMENT", { argument, expected, received, validationError: true });
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument, expected, received });
 		};
 		if (typeof name !== "string" || name.length === 0) fail("name", "non-empty string", typeof name);
 		if (!definition || typeof definition !== "object") fail("definition", "object", definition === null ? "null" : typeof definition);
@@ -1844,8 +1845,7 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options",
 				expected: "object with optional boolean useCache",
-				received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
-				validationError: true
+				received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions
 			});
 		}
 
@@ -1854,8 +1854,7 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options.useCache",
 				expected: "boolean",
-				received: typeof useCache,
-				validationError: true
+				received: typeof useCache
 			});
 		}
 
@@ -1996,7 +1995,7 @@ export class PermissionManager extends ComponentBase {
 	 *   lost it; read now when omitted. Null is host code.
 	 * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
 	 *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not manage a rule on that target.
 	 * @example
 	 * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
 	 * pm.addRule(rule, ownerModuleID, null, layer);
@@ -2006,10 +2005,9 @@ export class PermissionManager extends ComponentBase {
 		if (module === null) return { ownerModuleID: null, layer: null, writer: null };
 		const internal = module.____slothletInternal;
 		const refuse = () => {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_NOT_OWNED"),
-				received: typeof rule?.target === "string" ? rule.target : typeof rule?.target,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_NOT_OWNED"),
+				received: typeof rule?.target === "string" ? rule.target : typeof rule?.target
 			});
 		};
 		// Code the live runtime cannot attribute has no module to register for. Unreachable through the routes that
@@ -2110,7 +2108,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} ruleId - The rule about to be removed.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the rule.
 	 * @example
 	 * pm.assertModuleRuleRemoval("perm-12");
 	 */
@@ -2124,7 +2122,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} ruleId - The event rule about to be removed.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the event rule.
 	 * @example
 	 * pm.assertModuleEventRuleRemoval("evt-12");
 	 */
@@ -2139,7 +2137,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|undefined} entry - The rule entry; nothing to check when absent.
 	 * @param {string} ruleId - The rule's id, for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the rule.
 	 * @private
 	 */
 	#assertModuleRemoval(entry, ruleId) {
@@ -2150,10 +2148,9 @@ export class PermissionManager extends ComponentBase {
 		if (internal && entry.ownerModuleID !== null && this.#sameOwner(entry.ownerModuleID, internal.moduleID)) return;
 		const moduleOwned = entry.ownerModuleID !== null && entry.layer !== "builtin" && entry.layerRank < RULE_LAYER_RANK.instance;
 		if (internal && moduleOwned && this.#mayReachBeyondOwn(String(internal.apiPath))) return;
-		throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-			reason: translate("PERM_RULE_REMOVAL_NOT_OWNED"),
-			received: String(ruleId),
-			validationError: true
+		throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+			reason: translate("PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED"),
+			received: String(ruleId)
 		});
 	}
 
@@ -2166,7 +2163,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {*} rule - The rule handed in.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @example
 	 * const rule = pm.snapshotRule(input);
 	 */
@@ -2180,7 +2177,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {*} rule - The event rule handed in.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @example
 	 * const rule = pm.snapshotEventRule(input);
 	 */
@@ -2194,7 +2191,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} rule - The rule, as {@link snapshotRule} copied it.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` or `PERMISSION_RULE_UNKNOWN_TARGET` when the rule is refused.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` or `PERMISSION_RULE_UNKNOWN_TARGET` when the rule is refused.
 	 * @example
 	 * pm.assertRuleValid(pm.snapshotRule(input));
 	 */
@@ -2207,7 +2204,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} rule - The event rule, as {@link snapshotEventRule} copied it.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when the rule is refused.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when the rule is refused.
 	 * @example
 	 * pm.assertEventRuleValid(pm.snapshotEventRule(input));
 	 */
@@ -2221,7 +2218,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {*} rule - The rule handed in.
 	 * @param {ReadonlyArray<string>} fields - The data fields to copy.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @private
 	 */
 	#snapshotFields(rule, fields) {
@@ -2232,10 +2229,9 @@ export class PermissionManager extends ComponentBase {
 			const descriptor = Reflect.getOwnPropertyDescriptor(rule, key);
 			if (descriptor === undefined) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: key,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: key
 				});
 			}
 			if (key === "condition") copy[key] = this.#snapshotCondition(descriptor.value, new Map());
@@ -2255,16 +2251,15 @@ export class PermissionManager extends ComponentBase {
 	 * @param {Map<object, object>} seen - Copies made so far, so a shared or cyclic part is copied once.
 	 * @param {string} [at="condition"] - Where `value` sits in the rule, for the error.
 	 * @returns {*} The frozen copy.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a member is an accessor or a Proxy.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a member is an accessor or a Proxy.
 	 * @private
 	 */
 	#snapshotCondition(value, seen, at = "condition") {
 		if (value === null || typeof value !== "object") return value;
 		if (util.types.isProxy(value)) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CONDITION_PROXY"),
-				received: at,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CONDITION_PROXY"),
+				received: at
 			});
 		}
 		if (MapMethods.has(seen, value)) return MapMethods.get(seen, value);
@@ -2278,10 +2273,9 @@ export class PermissionManager extends ComponentBase {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			if (!descriptor.enumerable) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: `${at}.${String(key)}`,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: `${at}.${String(key)}`
 				});
 			}
 			copy[key] = this.#snapshotCondition(descriptor.value, seen, `${at}.${String(key)}`);
@@ -2342,7 +2336,7 @@ export class PermissionManager extends ComponentBase {
 	 *   compiled under the name of a real file outside the caller's own folder, or through Node's binding, whose names
 	 *   cannot be read.
 	 * @returns {void}
-	 * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
+	 * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
 	 * @example
 	 * pm.assertCapability(leaf, "code", "new Function");
 	 */
@@ -2360,9 +2354,9 @@ export class PermissionManager extends ComponentBase {
 			conditionMatched: winner?.condition != null
 		});
 		const reason = translate(CAPABILITY_REASONS[reasonCode]);
-		const error = new this.SlothletError("CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason });
+		const error = new this.SlothletError("PERMISSION_CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason });
 		// Carried for code that branches on why; the message reads the translated `reason`.
-		error.context.reasonCode = reasonCode;
+		error.details.reasonCode = reasonCode;
 		throw error;
 	}
 
@@ -2376,7 +2370,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} route - What the code used.
 	 * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason.
 	 * @returns {void}
-	 * @throws {SlothletError} `CAPABILITY_REFUSED`.
+	 * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
 	 * @example
 	 * pm.assertCapabilityForPaths(["ext.render"], "code", "new Function");
 	 */
@@ -2691,16 +2685,14 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "callerPath",
 				expected: "a non-empty string",
-				received: typeof callerPath,
-				validationError: true
+				received: typeof callerPath
 			});
 		}
 		if (typeof targetPath !== "string" || targetPath.length === 0) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "targetPath",
 				expected: "a non-empty string",
-				received: typeof targetPath,
-				validationError: true
+				received: typeof targetPath
 			});
 		}
 		// `null`/`undefined` both mean "no arguments", as on every other optional bag in the api.
@@ -2709,8 +2701,7 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "args",
 				expected: "an array",
-				received: typeof callArgs,
-				validationError: true
+				received: typeof callArgs
 			});
 		}
 
@@ -2863,7 +2854,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#assertNotStrict(method) {
-		if (this.#strict) throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method }, null, { validationError: true });
+		if (this.#strict) throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method });
 	}
 
 	/**
@@ -2874,7 +2865,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#assertNotSealed() {
 		if (this.#sealed) {
-			throw new this.SlothletError("PERMISSION_SEALED", {}, null, { validationError: true });
+			throw new this.SlothletError("PERMISSION_SEALED", {});
 		}
 	}
 
@@ -2988,19 +2979,12 @@ export class PermissionManager extends ComponentBase {
 		if (baseline.met) return;
 		const unmet = filterList(baseline.checks, (entry) => !entry.met);
 		if (this.#strict) {
-			throw new this.SlothletError(
-				"PERMISSION_BASELINE_UNMET",
-				{
-					checks: ArrayMethods.join(
-						mapList(unmet, (entry) => entry.id),
-						", "
-					)
-				},
-				null,
-				{
-					validationError: true
-				}
-			);
+			throw new this.SlothletError("PERMISSION_BASELINE_UNMET", {
+				checks: ArrayMethods.join(
+					mapList(unmet, (entry) => entry.id),
+					", "
+				)
+			});
 		}
 		for (let ofIndex = 0, ofList = unmet; ofIndex < ofList.length; ofIndex++) {
 			const entry = ofList[ofIndex];
@@ -3121,8 +3105,7 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "value",
 				expected: "boolean",
-				received: typeof value,
-				validationError: true
+				received: typeof value
 			});
 		}
 		this.#readGating = value;
@@ -3200,31 +3183,31 @@ export class PermissionManager extends ComponentBase {
 	 * Validate a rule object.
 	 *
 	 * @param {object} rule - Rule to validate.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if malformed.
 	 * @private
 	 */
 	#validateRule(rule) {
 		if (!rule || typeof rule !== "object") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_NOT_OBJECT"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
 				received: typeof rule
 			});
 		}
 		if (typeof rule.caller !== "string" || !rule.caller) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CALLER_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CALLER_REQUIRED"),
 				received: typeof rule.caller
 			});
 		}
 		if (typeof rule.target !== "string" || !rule.target) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_REQUIRED"),
 				received: typeof rule.target
 			});
 		}
 		if (rule.effect !== "allow" && rule.effect !== "deny") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_EFFECT_INVALID"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_EFFECT_INVALID"),
 				received: rule.effect
 			});
 		}
@@ -3235,14 +3218,10 @@ export class PermissionManager extends ComponentBase {
 				? !ArrayMethods.includes(CAPABILITIES, StringMethods.slice(rule.target, CAPABILITY_PREFIX.length))
 				: StringMethods.startsWith(rule.target, "slothlet.") && !namesSlothletMember(rule.target)
 		) {
-			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", {
-				target: rule.target,
-				capabilities: ArrayMethods.join(CAPABILITIES, ", "),
-				validationError: true
-			});
+			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", { target: rule.target, capabilities: ArrayMethods.join(CAPABILITIES, ", ") });
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+			this.#assertValidConditionPayload(rule.condition, "PERMISSION_RULE_INVALID");
 		}
 		if (rule.requires !== undefined && rule.requires !== null) {
 			const valid =
@@ -3250,8 +3229,8 @@ export class PermissionManager extends ComponentBase {
 				rule.requires.length > 0 &&
 				ArrayMethods.every(rule.requires, (name) => typeof name === "string" && name.length > 0);
 			if (!valid) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_REQUIRES_INVALID"),
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_PRINCIPALS_INVALID"),
 					received: Arrays.isArray(rule.requires) ? "array" : typeof rule.requires
 				});
 			}
@@ -3263,7 +3242,7 @@ export class PermissionManager extends ComponentBase {
 	 * Conditions must be a plain object, a function, or a non-empty array of those entries.
 	 *
 	 * @param {unknown} condition - Condition payload to validate.
-	 * @param {"INVALID_ARGUMENT"|"INVALID_PERMISSION_RULE"} errorCode - Error code to throw on invalid input.
+	 * @param {"INVALID_ARGUMENT"|"PERMISSION_RULE_INVALID"} errorCode - Error code to throw on invalid input.
 	 * @returns {void}
 	 * @throws {SlothletError} When the condition shape is invalid.
 	 * @private
@@ -3287,18 +3266,17 @@ export class PermissionManager extends ComponentBase {
 		if (entries.length > 0 && invalidEntry === undefined) return;
 
 		const received = getValueType(invalidEntry);
-		if (errorCode === "INVALID_PERMISSION_RULE") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CONDITION_INVALID"),
+		if (errorCode === "PERMISSION_RULE_INVALID") {
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CONDITION_INVALID"),
 				received
 			});
 		}
 
 		throw new this.SlothletError("INVALID_ARGUMENT", {
 			argument: "condition",
-			expected: translate("PERM_RULE_CONDITION_INVALID"),
-			received,
-			validationError: true
+			expected: translate("PERMISSION_RULE_REASON_CONDITION_INVALID"),
+			received
 		});
 	}
 

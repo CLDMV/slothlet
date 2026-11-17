@@ -97,7 +97,7 @@ describe.each(["eager", "lazy"])("method options > unknown keys (%s)", (mode) =>
 		const instance = await boot();
 		const error = await caught(() => call(instance));
 		expect(error?.code).toBe("INVALID_CONFIG_UNKNOWN_KEY");
-		expect(error.context).toMatchObject({ where, key });
+		expect(error.details).toMatchObject({ where, key });
 	});
 
 	it("api.add refuses a fourth argument", async () => {
@@ -126,7 +126,7 @@ describe("generate() options", () => {
 	it("refuses a key generate() does not take", async () => {
 		const error = await caught(() => generate({ dir: "./api", output: "./x.d.ts", name: "X" }));
 		expect(error?.code).toBe("INVALID_CONFIG_UNKNOWN_KEY");
-		expect(error.context).toMatchObject({ where: "typegen.generate", key: "dir" });
+		expect(error.details).toMatchObject({ where: "typegen.generate", key: "dir" });
 	});
 });
 

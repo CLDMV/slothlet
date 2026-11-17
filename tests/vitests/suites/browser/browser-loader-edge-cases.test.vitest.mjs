@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:43-08:00 (1794882523)
+ *	@Last modified time: 2026-11-16T18:29:34-08:00 (1794882574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * matching base, all files present). This file targets the validation branches
  * in `#scanDirectoryBrowser`, `#findManifestNode`, and `#manifestNodeToStructure`:
  *
- *  - `api.slothlet.api.add` to a path NOT present in the manifest → INVALID_DIRECTORY
+ *  - `api.slothlet.api.add` to a path NOT present in the manifest → FOLDER_UNREADABLE
  *  - Manifest files using fallback fields (`relativePath` instead of `path`,
  *    `dir.name` only without `dir.path`)
  *  - File entries without an extension (no `.`)
@@ -48,7 +48,7 @@ function browserCfg(matrixConfig) {
 	return makeBrowserConfig(matrixConfig, FIXTURE_DIR, BROWSER_MANIFEST);
 }
 
-// ─── INVALID_DIRECTORY when manifest node not found ──────────────────────────
+// ─── FOLDER_UNREADABLE when manifest node not found ──────────────────────────
 
 describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $name", ({ config }) => {
 	let api;
@@ -58,13 +58,13 @@ describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $
 		api = null;
 	});
 
-	it("api.add to a non-existent manifest path throws INVALID_DIRECTORY", async () => {
+	it("api.add to a non-existent manifest path throws FOLDER_UNREADABLE", async () => {
 		api = await slothlet(browserCfg(config));
 
 		// The manifest only has utils/, math.mjs, auth.mjs — `does/not/exist`
-		// is guaranteed missing. The browser scanner should throw INVALID_DIRECTORY
+		// is guaranteed missing. The browser scanner should throw FOLDER_UNREADABLE
 		// when #findManifestNode returns null.
-		await expect(api.slothlet.api.add("ghost", `${FIXTURE_DIR}/does/not/exist`)).rejects.toThrow(/INVALID_DIRECTORY/);
+		await expect(api.slothlet.api.add("ghost", `${FIXTURE_DIR}/does/not/exist`)).rejects.toThrow(/FOLDER_UNREADABLE/);
 	});
 });
 
@@ -297,14 +297,14 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 		expect(api.empty).toBeUndefined();
 	});
 
-	it("throws MODULE_RESERVED_FILENAME for a manifest file named a framework-reserved key", async () => {
+	it("throws MODULE_RESERVED_FILE for a manifest file named a framework-reserved key", async () => {
 		// "____impl" is a single-underscore INTERNAL_KEY, so it passes the "__"-prefix skip and reaches the
 		// reserved-name guard — same hazard as the disk scan (#260), platform-independent.
 		const manifest = {
 			files: [{ path: "____impl.mjs", name: "____impl", full: "____impl.mjs" }],
 			directories: []
 		};
-		await expect(slothlet(syntheticBrowserConfig(manifest))).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+		await expect(slothlet(syntheticBrowserConfig(manifest))).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 });
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
+ *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,7 +87,7 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 
 		it("refuses module code lifting a built-in write rule with rules.add", async () => {
 			await load();
-			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("PERMISSION_RULE_INVALID");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 			expect(api.slothlet.lifted).toBeUndefined();
 		});
@@ -95,7 +95,7 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 		it("refuses module code lifting a built-in write rule through the options of an api.add", async () => {
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
-				"INVALID_PERMISSION_RULE"
+				"PERMISSION_RULE_INVALID"
 			);
 			expect(api.granted).toBeUndefined();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
@@ -106,7 +106,7 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.addOtherRules())).toEqual({
 				deny: "done",
 				call: "done",
-				malformed: "INVALID_PERMISSION_RULE"
+				malformed: "PERMISSION_RULE_INVALID"
 			});
 		});
 
@@ -165,9 +165,9 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 
 	it("keeps module code from adding a rule that lifts a built-in write rule", async () => {
 		await load();
-		expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
+		expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("PERMISSION_RULE_INVALID");
 		expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
-			"INVALID_PERMISSION_RULE"
+			"PERMISSION_RULE_INVALID"
 		);
 		expect(api.granted).toBeUndefined();
 	});

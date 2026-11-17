@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:35-08:00 (1794882635)
+ *	@Last modified time: 2026-11-16T18:31:10-08:00 (1794882670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * `.ts` source through the copy's inline source map. When `typescript.sourcemap` is not set,
  * slothlet turns it on for a coverage run — a vitest coverage run (the worker global the #235
  * hint already reads) or a native/c8 run (`NODE_V8_COVERAGE`). An explicit `sourcemap: false`
- * wins, and then a one-shot `WARNING_COVERAGE_TS_SOURCEMAP_OFF` says the TS coverage can't reach
+ * wins, and then a one-shot `WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF` says the TS coverage can't reach
  * the source (silenced by `silent`).
  *
  * @module tests/vitests/suites/typescript/typescript-coverage-sourcemap.test.vitest
@@ -38,7 +38,7 @@ import { captureWarnings } from "../../setup/warning-capture.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 
-const WARNING_CODE = "WARNING_COVERAGE_TS_SOURCEMAP_OFF";
+const WARNING_CODE = "WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF";
 const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
 const PLAIN_WORKER = { config: { coverage: { enabled: false } } };
 

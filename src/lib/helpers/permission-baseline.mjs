@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-16T18:28:51-08:00 (1794882531)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -163,7 +163,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-eval",
 				() => probes.codeFromStringsRefused(),
-				() => translate("BASELINE_CSP_EVAL_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_EVAL_ALLOWED")
 			)
 		);
 		listPush(
@@ -171,7 +171,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-blob-script",
 				() => probes.importRefused("blob"),
-				() => translate("BASELINE_CSP_BLOB_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED")
 			)
 		);
 		listPush(
@@ -179,7 +179,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-data-script",
 				() => probes.importRefused("data"),
-				() => translate("BASELINE_CSP_DATA_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED")
 			)
 		);
 	} else {
@@ -189,7 +189,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 				await check(
 					"vitest-plugin",
 					() => (probes.viteRecords() ?? 0) > 0,
-					() => translate("BASELINE_VITEST_PLUGIN_ABSENT")
+					() => translate("PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT")
 				)
 			);
 		}

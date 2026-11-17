@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:25-08:00 (1794882625)
+ *	@Last modified time: 2026-11-16T18:31:01-08:00 (1794882661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,7 +252,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.guest.x.keptElement.hostNote = 1;
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 			});
 			api.victim.v.shelf[0].hostNote = 1;
 			expect(api.victim.v.shelf[0].hostNote).toBe(1);
@@ -435,8 +435,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				setPrototypeOf: outcome(() => Object.setPrototypeOf(self, null)),
 				preventExtensions: outcome(() => Object.preventExtensions(self))
 			}).toEqual({
-				remove: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-				define: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+				remove: "CONTEXT_NOT_ACTIVE_SELF",
+				define: "CONTEXT_NOT_ACTIVE_SELF",
 				setPrototypeOf: "TypeError",
 				preventExtensions: "TypeError"
 			});

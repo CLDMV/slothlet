@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
+ *	@Last modified time: 2026-11-16T18:29:34-08:00 (1794882574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -200,11 +200,11 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.api.reload
 		expect(api.math.add(4, 5)).toBe(9);
 	});
 
-	it("throws INVALID_API_PATH when reloading a path that does not exist", async () => {
+	it("throws API_PATH_NOT_FOUND when reloading a path that does not exist", async () => {
 		api = await slothlet(browserCfg(config));
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("INVALID_API_PATH");
+			await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("API_PATH_NOT_FOUND");
 		});
 	});
 
@@ -221,7 +221,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.api.reload
 // Full-instance reload re-feeds the normalized internal config into load() → transformConfig.
 // That config stores `resolveModuleSpecifier: null` (the "no override — use the default resolver"
 // value), so transformConfig's browser guard must treat null the same as undefined. Previously it
-// only skipped `undefined`, so reload threw INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID (#91).
+// only skipped `undefined`, so reload threw INVALID_CONFIG_RESOLVER_INVALID (#91).
 // Path-scoped `api.slothlet.api.reload(path)` (above) was unaffected — it rebuilds from cache
 // without re-running transformConfig.
 

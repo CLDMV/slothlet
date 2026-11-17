@@ -165,7 +165,7 @@ Emitted for a **non-throwing** diagnostic warning — a condition slothlet handl
 ```javascript
 {
 	apiPath: "",                             // Where the mutation was attempted ("" / "(root)" for the root)
-	code: "WARN_SYNTHETIC_ROOT_COLLISION",   // The i18n diagnostic code
+	code: "WARNING_INLINE_ROOT_COLLISION",   // The i18n diagnostic code
 	message: "Synthetic add at the API root…", // Already-translated human-readable message
 	source: "addApi",                        // Command family: "addApi" | "reload" | "buildAPI" | "module-mount"
 	context: { name: "greet" },              // Structured context passed to the diagnostic
@@ -189,7 +189,7 @@ Emitted for a **non-throwing** runtime error — a failure slothlet caught and c
 ```javascript
 {
 	apiPath: "plugins.count",
-	code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
+	code: "WARNING_COLLISION_MERGE_PRIMITIVES",
 	message: "Cannot merge into primitive value…",
 	source: "addApi",
 	context: { apiPath: "plugins.count" },
@@ -553,7 +553,7 @@ await api.storage.deactivate.for("B")(ctx); // runs ONLY B.deactivate(ctx)
 
 ### Execution extent
 
-Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.context.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
+Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.context.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `CONTEXT_NOT_ACTIVE_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
 
 ### Errors: best-effort, aggregated
 
@@ -564,9 +564,9 @@ try {
 	await api.auth.initialize();
 } catch (error) {
 	// error.code === "ROUTINE_FAILED"
-	// error.context.count === 2                                // total failures
-	// error.context.failures === [{ apiPath, moduleID }, ...]  // every failure, in order
-	// error.context.apiPath / .moduleID                        // the FIRST failure, for quick access
+	// error.details.count === 2                                // total failures
+	// error.details.failures === [{ apiPath, moduleID }, ...]  // every failure, in order
+	// error.details.apiPath / .moduleID                        // the FIRST failure, for quick access
 	// error.cause is the first failure's own thrown error
 }
 ```

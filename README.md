@@ -359,15 +359,17 @@ The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts` (Ty
 
 ## 🛡 Error Handling
 
-Slothlet v3 uses a rich `SlothletError` class with translated messages and contextual hints:
+Slothlet throws a `SlothletError` with a translated message, a translated hint and structured details:
 
 ```javascript
 try {
 	await api.slothlet.api.add("plugins", "./dir");
 } catch (error) {
 	console.error(error.message); // Translated error message
-	console.error(error.hint); // Contextual hint for resolution
+	console.error(error.hint); // Translated hint for resolution, when the code has one
 	console.error(error.code); // Machine-readable error code
+	console.error(error.details); // Structured details (api paths are segments arrays)
+	console.error(error.cause); // What was originally thrown, when slothlet wrapped a failure
 }
 ```
 

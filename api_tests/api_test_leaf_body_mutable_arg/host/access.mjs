@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:30:12-08:00 (1794169812)
+ *	@Last modified time: 2026-11-16T18:26:17-08:00 (1794882377)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@ export function attempt(access) {
 	try {
 		return access();
 	} catch (error) {
-		return `${error?.code}:${error?.context?.caller ?? null}`;
+		return `${error?.code}:${error?.details?.caller ?? null}`;
 	}
 }
 
@@ -110,7 +110,7 @@ export function makeAccess(getApi) {
 				.then(callback)
 				.then(
 					(handed) => ({ handed }),
-					(error) => ({ handed: `${error?.code}:${error?.context?.caller ?? null}` })
+					(error) => ({ handed: `${error?.code}:${error?.details?.caller ?? null}` })
 				);
 		},
 		defer(callback) {
@@ -120,7 +120,7 @@ export function makeAccess(getApi) {
 				.then(callback)
 				.then(
 					(handed) => ({ own, handed }),
-					(error) => ({ own, handed: `${error?.code}:${error?.context?.caller ?? null}` })
+					(error) => ({ own, handed: `${error?.code}:${error?.details?.caller ?? null}` })
 				);
 		}
 	};

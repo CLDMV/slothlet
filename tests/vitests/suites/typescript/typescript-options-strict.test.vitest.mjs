@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:35-08:00 (1794882635)
+ *	@Last modified time: 2026-11-16T18:31:11-08:00 (1794882671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -129,7 +129,7 @@ afterAll(async () => {
 
 describe("typescript.strict", () => {
 	it("rejects an implicit-any parameter by default", async () => {
-		await expectBootRejects(implicitAnyDir, {}, "TS_TYPE_CHECK_ERRORS", "implicitly has an 'any' type");
+		await expectBootRejects(implicitAnyDir, {}, "TYPESCRIPT_TYPE_CHECK_ERRORS", "implicitly has an 'any' type");
 	});
 
 	it("accepts an implicit-any parameter with strict: false", async () => {
@@ -145,11 +145,16 @@ describe("typescript.compiler", () => {
 	});
 
 	it("rejects an unused local with compiler.noUnusedLocals", async () => {
-		await expectBootRejects(unusedLocalDir, { compiler: { noUnusedLocals: true } }, "TS_TYPE_CHECK_ERRORS", "'unused' is declared");
+		await expectBootRejects(
+			unusedLocalDir,
+			{ compiler: { noUnusedLocals: true } },
+			"TYPESCRIPT_TYPE_CHECK_ERRORS",
+			"'unused' is declared"
+		);
 	});
 
 	it('applies tsconfig-style string values (compiler.module: "commonjs" rejects import.meta)', async () => {
-		await expectBootRejects(importMetaDir, { compiler: { module: "commonjs" } }, "TS_TYPE_CHECK_ERRORS", "import.meta");
+		await expectBootRejects(importMetaDir, { compiler: { module: "commonjs" } }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "import.meta");
 	});
 
 	it("rejects an unknown compiler option with INVALID_CONFIG", async () => {
@@ -164,6 +169,6 @@ describe("typescript.module", () => {
 	});
 
 	it('rejects import.meta with module: "commonjs"', async () => {
-		await expectBootRejects(importMetaDir, { module: "commonjs" }, "TS_TYPE_CHECK_ERRORS", "import.meta");
+		await expectBootRejects(importMetaDir, { module: "commonjs" }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "import.meta");
 	});
 });

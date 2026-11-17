@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
+ *	@Last modified time: 2026-11-16T18:28:55-08:00 (1794882535)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,7 +71,7 @@ function hostStringTimer(schedule) {
 	});
 }
 const OPEN = { caller: "**", target: "**", effect: "allow" };
-const REFUSED = { ok: false, code: "CAPABILITY_REFUSED" };
+const REFUSED = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" };
 
 /**
  * Run a route as the host.

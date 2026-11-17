@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -99,7 +99,7 @@ describe("setLanguageAsync() — async locale loading", () => {
 		expect(getLanguage()).toBe("en-us");
 		const warnings = printed.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
 		expect(warnings).toHaveLength(1);
-		expect(warnings[0].context).toEqual({ lang: "zz-zz" });
+		expect(warnings[0].details).toEqual({ lang: "zz-zz" });
 	});
 
 	it("reports en-us (not the stale prior locale) while a non-default load is pending", async () => {

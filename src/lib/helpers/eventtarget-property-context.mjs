@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * lands on an IDL attribute the target interface declares on its own prototype — there is no single
  * shared setter the way `EventTarget.prototype.addEventListener` is shared, so `addEventListener`
  * patching never sees it. The callback then runs with no pinned identity, the same
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` / unattributed-caller failure the `addEventListener` patch exists
+ * `CONTEXT_NOT_ACTIVE_SELF` / unattributed-caller failure the `addEventListener` patch exists
  * to prevent.
  *
  * Each interface below declares its `on*` attributes independently, so each one is patched by name on

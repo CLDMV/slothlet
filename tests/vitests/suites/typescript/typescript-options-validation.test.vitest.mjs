@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:36-08:00 (1794882636)
+ *	@Last modified time: 2026-11-16T18:31:11-08:00 (1794882671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -97,7 +97,7 @@ describe("normalizeTypeScript — INVALID_CONFIG", () => {
 		expect(() => cfg.normalizeTypeScript({ mode: "strict", strict: value })).toThrow(
 			expect.objectContaining({
 				code: "INVALID_CONFIG",
-				context: expect.objectContaining({ option: "typescript.strict", value: reported })
+				details: expect.objectContaining({ option: "typescript.strict", value: reported })
 			})
 		);
 	});

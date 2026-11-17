@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:54-08:00 (1794882534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,15 +81,7 @@ export async function generate(options = {}) {
 	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: "typegen.options",
-				expected: "plain object",
-				value: options,
-				hint: "Call generate({ base, output, name }) with an options object.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
+			{ option: "typegen.options", expected: "plain object", value: options }
 		);
 	}
 
@@ -100,15 +92,7 @@ export async function generate(options = {}) {
 	if (options.augment !== undefined && typeof options.augment !== "boolean") {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: "typegen.augment",
-				expected: "boolean",
-				value: options.augment,
-				hint: "Pass augment: false to leave `self` untyped by this declaration, or omit it.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
+			{ option: "typegen.augment", expected: "boolean", value: options.augment }
 		);
 	}
 
@@ -143,15 +127,7 @@ function assertOption(value, name) {
 	if (typeof value !== "string" || value.length === 0) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: `typegen.${name}`,
-				expected: "non-empty string",
-				value,
-				hint: `Provide options.${name} as a non-empty string when calling generate(). For the CLI, use --${name} or the matching positional argument.`,
-				validationError: true
-			},
-			null,
-			{ validationError: true }
+			{ option: `typegen.${name}`, expected: "non-empty string", value }
 		);
 	}
 }

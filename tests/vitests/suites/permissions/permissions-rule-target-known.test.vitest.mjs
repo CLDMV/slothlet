@@ -127,7 +127,7 @@ describe.each(getMatrixConfigs())("Permissions > rule targets in slothlet's own 
 			error = thrown;
 		}
 		expect(error.code).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
-		expect(error.context.target).toBe("slothlet.permissions.addRule");
+		expect(error.details.target).toBe("slothlet.permissions.addRule");
 		expect(error.message).toContain("slothlet.permissions.addRule");
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:58-08:00 (1794882658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  *
  * Uncovered lines targeted:
  *   136 — context.get trap: return undefined (no ctx)
- *   143 — context.set trap: throw RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT (no ctx)
+ *   143 — context.set trap: throw CONTEXT_NOT_ACTIVE_WRITE (no ctx)
  *   154–156 — context.getOwnPropertyDescriptor trap: return undefined (no ctx)
  */
 
@@ -46,7 +46,7 @@ describe("runtime-asynclocalstorage: context proxy (no active ALS context)", () 
 
 	// ── set trap (line 143) ────────────────────────────────────────────────
 
-	it("set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT when no ALS context is active", () => {
+	it("set trap throws CONTEXT_NOT_ACTIVE_WRITE when no ALS context is active", () => {
 		// Assigning to `context.key` without an active ALS store must throw. (line 143)
 		expect(() => {
 			context.__noContextWrite = "should-throw";

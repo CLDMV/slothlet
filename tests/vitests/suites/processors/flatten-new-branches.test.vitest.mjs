@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ function makeMock() {
  * @returns {Promise<string>} The key unchanged.
  *
  * @example
- * await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE"); // "FLATTEN_REASON_ADDAPI_SPECIAL_FILE"
+ * await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE"); // "FLATTEN_REASON_MOUNT_SPECIAL_FILE"
  */
 const t = async (key) => key;
 

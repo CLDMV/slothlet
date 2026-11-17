@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:26:41-08:00 (1794882401)
+ *	@Last modified time: 2026-11-16T18:27:43-08:00 (1794882463)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const outcome = async (call) => {
 	try {
 		return { ok: true, value: await call() };
 	} catch (error) {
-		return { ok: false, code: error?.code, caller: error?.context?.caller ?? null };
+		return { ok: false, code: error?.code, caller: error?.details?.caller ?? null };
 	}
 };
 

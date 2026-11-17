@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:31:15-08:00 (1794882675)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@
  * - Lines 2548-2601: The polling promise creation and resolution (function impl)
  * - Lines 2593-2601: The object.default function path
  * - Lines 2609-2619: Reject when inFlight clears without materializing (failure path)
- * - Lines 2618-2629: INVALID_CONFIG_NOT_A_FUNCTION via polling after namespace impl
+ * - Lines 2618-2629: API_PATH_NOT_CALLABLE via polling after namespace impl
  *
  * @example
  * // Internal usage only
@@ -71,7 +71,7 @@ function getSlothletInstance(api, childKey = "task") {
 }
 
 // ---------------------------------------------------------------------------
-// Group 1: In-flight namespace wrapper called directly → INVALID_CONFIG_NOT_A_FUNCTION
+// Group 1: In-flight namespace wrapper called directly → API_PATH_NOT_CALLABLE
 // Covers lines 2533, 2548-2549, 2554, 2593-2601, 2618-2629
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lines 2533-2629)", () => {
@@ -112,7 +112,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 
 		// After materialization completes (task is namespace, not function), should reject
 		await expect(callPromise).rejects.toMatchObject({
-			code: "INVALID_CONFIG_NOT_A_FUNCTION"
+			code: "API_PATH_NOT_CALLABLE"
 		});
 	});
 
@@ -139,7 +139,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 		// Since task is a namespace (object impl), it rejects with NOT_A_FUNCTION
 		// after materialization completes across multiple setImmediate cycles
 		await expect(callPromise).rejects.toMatchObject({
-			code: "INVALID_CONFIG_NOT_A_FUNCTION"
+			code: "API_PATH_NOT_CALLABLE"
 		});
 	});
 
@@ -281,7 +281,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 
 // ---------------------------------------------------------------------------
 // Group 3: Materialization fails → polling detects inFlight=false (lines 2609-2619)
-// Covers the INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED error path
+// Covers the LAZY_MATERIALIZATION_FAILED error path
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609-2619)", () => {
 	it("rejects with materialization-failed when materializeFunc throws", async () => {
@@ -315,10 +315,10 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 		const proxy = failingWrapper.createProxy();
 
 		// Call while in-flight — polling promise detects inFlight=false after failure
-		// → rejects with INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED
+		// → rejects with LAZY_MATERIALIZATION_FAILED
 		const callPromise = proxy();
 		await expect(callPromise).rejects.toMatchObject({
-			code: "INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED"
+			code: "LAZY_MATERIALIZATION_FAILED"
 		});
 	});
 

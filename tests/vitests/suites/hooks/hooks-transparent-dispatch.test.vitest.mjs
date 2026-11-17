@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:17-08:00 (1794882557)
+ *	@Last modified time: 2026-11-16T18:30:00-08:00 (1794882600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -462,7 +462,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 					} catch (e) {
 						// Re-raise the marked ORIGINAL, not the context wrapper around it — that is what
 						// carries the processed marker across the boundary.
-						throw e.originalError ?? e;
+						throw e.cause ?? e;
 					}
 				}
 			}
@@ -704,7 +704,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 		}
 	});
 
-	it("rejects INVALID_CONFIG_NOT_A_FUNCTION for a non-callable impl", async () => {
+	it("rejects API_PATH_NOT_CALLABLE for a non-callable impl", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		const wrapper = resolveWrapper(api.svc.mulSync);
 		const origImpl = wrapper.____slothletInternal.impl;
@@ -718,7 +718,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -768,7 +768,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 						// handed to error hooks. (The context boundary may hand back a wrapper around
 						// it — unwrap so the marker travels; the fallback keeps this correct once leaf
 						// throws propagate unwrapped.)
-						throw e.originalError ?? e;
+						throw e.cause ?? e;
 					}
 				}
 			}

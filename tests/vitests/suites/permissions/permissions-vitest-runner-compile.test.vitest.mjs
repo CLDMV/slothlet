@@ -72,15 +72,15 @@ describe.each(CONFIGS)("vitest runner compile — $mode / $runtime", ({ mode, ru
 		const report = await withSuppressedSlothletErrorOutput(() => api.probe.result());
 		expect(report).toEqual({
 			self: "object",
-			selfOwnCode: "CAPABILITY_REFUSED",
-			selfReplay: "CAPABILITY_REFUSED",
-			selfOther: "CAPABILITY_REFUSED",
+			selfOwnCode: "PERMISSION_CAPABILITY_REFUSED",
+			selfReplay: "PERMISSION_CAPABILITY_REFUSED",
+			selfOther: "PERMISSION_CAPABILITY_REFUSED",
 			selfOtherSeen: true,
 			runner: true,
-			ownCodeAtPath: "CAPABILITY_REFUSED",
-			ownCodeAtId: "CAPABILITY_REFUSED",
-			replay: "CAPABILITY_REFUSED",
-			forged: "CAPABILITY_REFUSED",
+			ownCodeAtPath: "PERMISSION_CAPABILITY_REFUSED",
+			ownCodeAtId: "PERMISSION_CAPABILITY_REFUSED",
+			replay: "PERMISSION_CAPABILITY_REFUSED",
+			forged: "PERMISSION_CAPABILITY_REFUSED",
 			forgedRan: false,
 			replayRan: false
 		});

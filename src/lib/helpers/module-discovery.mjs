@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:23:49-08:00 (1794878629)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -217,16 +217,11 @@ export async function discoverModules(options = {}, hooks = {}) {
 			// against an upstream refactor that loosens the realPath dedupe.
 			/* v8 ignore next */
 			if (otherRealPath !== realPath) {
-				throw new SlothletError(
-					"MODULE_DUPLICATE_NAME_VERSION_MISMATCH",
-					{
-						package: pkg.name,
-						version: pkg.version,
-						paths: ArrayMethods.join([otherRealPath, realPath], ", ")
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new SlothletError("MODULE_DUPLICATE_NAME_VERSION_MISMATCH", {
+					package: pkg.name,
+					version: pkg.version,
+					paths: ArrayMethods.join([otherRealPath, realPath], ", ")
+				});
 			}
 		} else {
 			MapMethods.set(realPathByNameVersion, nameVersionKey, realPath);
@@ -268,16 +263,11 @@ async function resolveScanRoots(opt) {
 	if (Arrays.isArray(opt)) {
 		return mapList(opt, (p) => path.resolve(p));
 	}
-	throw new SlothletError(
-		"INVALID_ARGUMENT",
-		{
-			argument: "options.root",
-			expected: "string or string[]",
-			received: typeof opt
-		},
-		null,
-		{ validationError: true }
-	);
+	throw new SlothletError("INVALID_ARGUMENT", {
+		argument: "options.root",
+		expected: "string or string[]",
+		received: typeof opt
+	});
 }
 
 /**
@@ -413,16 +403,11 @@ function normalizePrefixes(opt) {
 		if (opt.length === 0) return null;
 		return copyList(opt);
 	}
-	throw new SlothletError(
-		"INVALID_ARGUMENT",
-		{
-			argument: "prefix",
-			expected: "string or string[]",
-			received: typeof opt
-		},
-		null,
-		{ validationError: true }
-	);
+	throw new SlothletError("INVALID_ARGUMENT", {
+		argument: "prefix",
+		expected: "string or string[]",
+		received: typeof opt
+	});
 }
 
 /**
@@ -454,16 +439,11 @@ function parseManifestSource(opt) {
 		return { file: DEFAULT_MANIFEST_FILE, subkey: null, isOverride: false };
 	}
 	if (typeof opt !== "string" || opt.length === 0) {
-		throw new SlothletError(
-			"INVALID_ARGUMENT",
-			{
-				argument: "manifest",
-				expected: "string",
-				received: typeof opt
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_ARGUMENT", {
+			argument: "manifest",
+			expected: "string",
+			received: typeof opt
+		});
 	}
 	const hashIdx = StringMethods.indexOf(opt, "#");
 	if (hashIdx === -1) {
@@ -472,16 +452,11 @@ function parseManifestSource(opt) {
 	const file = StringMethods.slice(opt, 0, hashIdx);
 	const subkey = StringMethods.slice(opt, hashIdx + 1);
 	if (file.length === 0 || subkey.length === 0) {
-		throw new SlothletError(
-			"INVALID_ARGUMENT",
-			{
-				argument: "manifest",
-				expected: "<file>#<dotted.key> with both parts non-empty",
-				received: opt
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_ARGUMENT", {
+			argument: "manifest",
+			expected: "<file>#<dotted.key> with both parts non-empty",
+			received: opt
+		});
 	}
 	return { file, subkey, isOverride: true };
 }
@@ -528,19 +503,13 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 	try {
 		parsed = JSON.parse(content);
 	} catch (err) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				// err.message is already surfaced through the JSON_PARSE reason; passing err as the
-				// originalError 3rd-arg too would be a dropped cause on a validationError (the
-				// MODULE_MANIFEST_INVALID template has no {error} slot), so it is intentionally omitted.
-				reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			// err.message is already surfaced through the JSON_PARSE reason (the MODULE_MANIFEST_INVALID
+			// template has no {error} slot).
+			reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
+		});
 	}
 	if (source.subkey === null) {
 		return parsed;

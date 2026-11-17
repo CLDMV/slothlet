@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:42-08:00 (1794882642)
+ *	@Last modified time: 2026-11-16T18:31:16-08:00 (1794882676)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -222,7 +222,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 			}
 		});
 
-		// Naming a tag twice means one registration for it — not a DUPLICATE_HOOK_ID failure on an
+		// Naming a tag twice means one registration for it — not a HOOK_ID_IN_USE failure on an
 		// `id::tag` member the caller never chose.
 		await api.v1.auth.login();
 		expect(fires, "fires once for v1, not twice").toEqual(["v1"]);
@@ -270,7 +270,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 
 		// The group id names a registration but is not itself a hook, so it is absent from the id
 		// index. Reusing it would shadow the group on remove()'s fast path and strand its members.
-		expect(() => api.slothlet.hook.on("v1.auth.login:before", () => {}, { id: "claimed" })).toThrow(/DUPLICATE_HOOK_ID/);
+		expect(() => api.slothlet.hook.on("v1.auth.login:before", () => {}, { id: "claimed" })).toThrow(/HOOK_ID_IN_USE/);
 		expect(api.slothlet.hook.remove({ id: "claimed" }), "the group is still whole and still removable").toBe(2);
 	});
 
@@ -287,7 +287,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 					dispatcher: (allVersions) => Object.keys(allVersions)
 				}
 			})
-		).toThrow(/DUPLICATE_HOOK_ID/);
+		).toThrow(/HOOK_ID_IN_USE/);
 
 		// All-or-nothing: the caller never received the group id on the throw path, so a surviving
 		// v1 member would be live and unremovable.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:26-08:00 (1794882566)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,7 +69,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: moduleID });
 
-		// Resolution is by verbatim id — leaves must not throw API_LEAVES_UNKNOWN_MODULE and must
+		// Resolution is by verbatim id — leaves must not throw MODULE_UNKNOWN and must
 		// return this mount's owned callable paths (host tooling call).
 		const paths = await api.slothlet.api.leaves(moduleID, { private: true });
 		expect(Array.isArray(paths)).toBe(true);
@@ -160,7 +160,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// With a clean explicit moduleID the offending token is the apiPath, not the id, so it surfaces as a
 		// path-validation error rather than MODULE_ID_RESERVED_SEPARATOR (which covers the auto-generated case).
 		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { id: "cleanId" })).rejects.toMatchObject({
-			code: "INVALID_CONFIG_API_PATH_INVALID"
+			code: "API_PATH_INVALID"
 		});
 		expect(api[badPath]).toBeUndefined();
 	});
@@ -173,7 +173,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
 		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { id: 123 })).rejects.toMatchObject({
-			code: "INVALID_CONFIG_API_PATH_INVALID"
+			code: "API_PATH_INVALID"
 		});
 		expect(api[badPath]).toBeUndefined();
 	});

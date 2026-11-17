@@ -43,7 +43,7 @@ describe.each(["eager", "lazy"])("config > unknown keys (%s)", (mode) => {
 	])("refuses %s", async (_label, extra, path) => {
 		const error = await slothlet({ base: BASE, mode, silent: true, ...extra }).catch((caught) => caught);
 		expect(error?.code).toBe("INVALID_CONFIG_UNKNOWN_KEY");
-		expect(error.context).toMatchObject({ where: "config", key: path.join("."), path });
+		expect(error.details).toMatchObject({ where: "config", key: path.join("."), path });
 		expect(error.hint).toContain("@cldmv/slothlet-migrate");
 	});
 
@@ -86,7 +86,7 @@ describe("assertKnownKeys", () => {
 				return caught;
 			}
 		})();
-		expect(error.context.where).toBe("a test");
+		expect(error.details.where).toBe("a test");
 	});
 
 	it("leaves a value that is not a plain object alone", () => {

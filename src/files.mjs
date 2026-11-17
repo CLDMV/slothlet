@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:44-08:00 (1794882464)
+ *	@Last modified time: 2026-11-16T18:28:43-08:00 (1794882523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,13 +52,13 @@ import { Objects } from "#helpers/intrinsics";
 
 /**
  * The Node-only half of this namespace, loaded the first time one of its functions is called.
- * @param {string} operation - The function called, as written (for the refusal).
+ * @param {string[]} operation - The function called, as its path in the `files` namespace (for the refusal).
  * @returns {Promise<object>} The module that implements it.
  * @throws {SlothletError} `FILES_REQUIRES_NODE` outside Node.js.
  * @private
  */
 async function nodeOnly(operation) {
-	if (!isNode) throw new SlothletError("FILES_REQUIRES_NODE", { operation }, null, { validationError: true });
+	if (!isNode) throw new SlothletError("FILES_REQUIRES_NODE", { operation });
 	return import("#helpers/generate-manifest");
 }
 
@@ -69,7 +69,7 @@ async function nodeOnly(operation) {
  * @public
  */
 async function generate(dir) {
-	return (await nodeOnly("files.generate()")).generateManifest(dir);
+	return (await nodeOnly(["files", "generate"])).generateManifest(dir);
 }
 
 /**
@@ -79,7 +79,7 @@ async function generate(dir) {
  * @public
  */
 async function importmap(base) {
-	return (await nodeOnly("files.importmap()")).generateImportMap(base);
+	return (await nodeOnly(["files", "importmap"])).generateImportMap(base);
 }
 
 /**
@@ -92,7 +92,7 @@ async function importmap(base) {
  * @public
  */
 async function assets(dir, options) {
-	return (await nodeOnly("files.assets()")).generateBrowserAssets(dir, options);
+	return (await nodeOnly(["files", "assets"])).generateBrowserAssets(dir, options);
 }
 
 /**
@@ -102,7 +102,7 @@ async function assets(dir, options) {
  * @public
  */
 async function slothletSpecifiers(root) {
-	return (await nodeOnly("files.specifiers.slothlet()")).collectSlothletSpecifiers(root);
+	return (await nodeOnly(["files", "specifiers", "slothlet"])).collectSlothletSpecifiers(root);
 }
 
 /**
@@ -112,7 +112,7 @@ async function slothletSpecifiers(root) {
  * @public
  */
 async function packageSpecifiers(root) {
-	return (await nodeOnly("files.specifiers.packages()")).collectPackageSpecifiers(root);
+	return (await nodeOnly(["files", "specifiers", "packages"])).collectPackageSpecifiers(root);
 }
 
 /**

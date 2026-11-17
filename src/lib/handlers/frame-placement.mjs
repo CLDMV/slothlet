@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -583,7 +583,7 @@ function runtime_captureFrames(limit) {
 	const read = readStack(runtime_structuredFrames, { limit });
 	// The global `Error` or its stack settings were changed so that slothlet's own formatter could not be the one that
 	// ran: the frames are not the engine's, and what they would have decided is refused.
-	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
 	if (read.value?.structured) return read.value;
 	// An engine without V8's call-site hook formats the trace as text, which is parsed instead.
 	return textFrames(String(read.text ?? ""), limit);
@@ -3953,7 +3953,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 				break;
 			}
 			if (!running) return null;
-			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
 		}
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a

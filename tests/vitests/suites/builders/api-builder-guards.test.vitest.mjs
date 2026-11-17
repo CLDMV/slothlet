@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Covers:
- *   lines 589,609,636,658,678,699  – hook.on/remove/off/enable/disable/list throw HOOKS_NOT_INITIALIZED
+ *   lines 589,609,636,658,678,699  – hook.on/remove/off/enable/disable/list throw HOOK_MANAGER_NOT_AVAILABLE
  *   lines 727,761,828              – metadata.global/set/setFor throw METADATA_NOT_AVAILABLE
  *   line  865                      – metadata.remove early-returns when handler absent
  *   line  920                      – owner.get returns null when ownership handler absent
@@ -30,9 +30,9 @@
  *   line  1165                     – userHooks.shutdown callback called on api.shutdown()
  *   lines 1427,1447-1450           – userHooks.destroy callback + destroy clear loop via api.destroy()
  *   line  487                      – context.get falls back to slothlet.context for unknown manager type
- *   line  1257                     – scope() throws NO_CONTEXT_MANAGER when contextManager is null
+ *   line  1257                     – scope() throws CONTEXT_RUNTIME_NOT_AVAILABLE when contextManager is null
  *   lines 1287,1358                – scope() throws CONTEXT_NOT_FOUND for Live/Async missing store
- *   line  1406                     – scope() throws UNSUPPORTED_CONTEXT_MANAGER for unknown type
+ *   line  1406                     – scope() throws CONTEXT_RUNTIME_UNSUPPORTED for unknown type
  *
  * @module tests/vitests/suites/builders/api-builder-guards
  */
@@ -87,9 +87,9 @@ function getSlothlet(api) {
 }
 
 // ---------------------------------------------------------------------------
-// Group A: HOOKS_NOT_INITIALIZED throws (lines 589, 609, 636, 658, 678, 699)
+// Group A: HOOK_MANAGER_NOT_AVAILABLE throws (lines 589, 609, 636, 658, 678, 699)
 // ---------------------------------------------------------------------------
-describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookManager is null", () => {
+describe("api_builder – hook methods throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", () => {
 	let api;
 
 	afterEach(async () => {
@@ -99,101 +99,101 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 		}
 	});
 
-	it("hook.on throws HOOKS_NOT_INITIALIZED (line 589)", async () => {
+	it("hook.on throws HOOK_MANAGER_NOT_AVAILABLE (line 589)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.on("*:before", () => {})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.on("*:before", () => {})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.remove throws HOOKS_NOT_INITIALIZED (line 609)", async () => {
+	it("hook.remove throws HOOK_MANAGER_NOT_AVAILABLE (line 609)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.remove({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.remove({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.off throws HOOKS_NOT_INITIALIZED (line 636)", async () => {
+	it("hook.off throws HOOK_MANAGER_NOT_AVAILABLE (line 636)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.off("some-id")).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.off("some-id")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.enable throws HOOKS_NOT_INITIALIZED (line 658)", async () => {
+	it("hook.enable throws HOOK_MANAGER_NOT_AVAILABLE (line 658)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.enable({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.enable({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.disable throws HOOKS_NOT_INITIALIZED (line 678)", async () => {
+	it("hook.disable throws HOOK_MANAGER_NOT_AVAILABLE (line 678)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.disable({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.disable({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.list throws HOOKS_NOT_INITIALIZED (line 699)", async () => {
+	it("hook.list throws HOOK_MANAGER_NOT_AVAILABLE (line 699)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.list({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.list({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.pin.{enabled,enable,disable} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+	it("hook.pin.{enabled,enable,disable} throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.pin.enabled).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pin.enable()).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pin.disable()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pin.enabled).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pin.enable()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pin.disable()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.{pattern.enable,pattern.disable,pattern.reset} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+	it("hook.{pattern.enable,pattern.disable,pattern.reset} throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.pattern.enable("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pattern.disable("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pattern.reset()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pattern.enable("math.*")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pattern.disable("math.*")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pattern.reset()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
@@ -512,13 +512,13 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		}
 	});
 
-	it("scope() throws NO_CONTEXT_MANAGER when contextManager is null (line 1257)", async () => {
+	it("scope() throws CONTEXT_RUNTIME_NOT_AVAILABLE when contextManager is null (line 1257)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.contextManager;
 		sl.contextManager = null;
 		try {
-			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/NO_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_RUNTIME_NOT_AVAILABLE/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -558,7 +558,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		}
 	});
 
-	it("scope() throws UNSUPPORTED_CONTEXT_MANAGER for unrecognized manager type (line 1406)", async () => {
+	it("scope() throws CONTEXT_RUNTIME_UNSUPPORTED for unrecognized manager type (line 1406)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.contextManager;
@@ -568,7 +568,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/UNSUPPORTED_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_RUNTIME_UNSUPPORTED/);
 		} finally {
 			sl.contextManager = orig;
 		}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
+ *	@Last modified time: 2026-11-16T18:30:25-08:00 (1794882625)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -323,7 +323,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 
 	// ── Invalid condition type ───────────────────────────────────────────────────
 
-	it("invalid condition type (string) throws INVALID_PERMISSION_RULE", async () => {
+	it("invalid condition type (string) throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -340,9 +340,9 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 				effect: "allow",
 				condition: "tenant-a"
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
@@ -469,7 +469,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(condRule.condition).toEqual({ role: "guest" });
 	});
 
-	it("api.add shorthand rejects null entries with INVALID_PERMISSION_RULE", async () => {
+	it("api.add shorthand rejects null entries with PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -484,13 +484,13 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [null]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects array entries with INVALID_PERMISSION_RULE (received: array)", async () => {
+	it("api.add shorthand rejects array entries with PERMISSION_RULE_INVALID (received: array)", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -506,13 +506,13 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [["admin.**"]]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects primitive entries with INVALID_PERMISSION_RULE (received: typeof)", async () => {
+	it("api.add shorthand rejects primitive entries with PERMISSION_RULE_INVALID (received: typeof)", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -528,13 +528,13 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [42]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects object entries missing target with INVALID_PERMISSION_RULE", async () => {
+	it("api.add shorthand rejects object entries missing target with PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -549,9 +549,9 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					deny: [{ condition: { tenant: "trial" } }]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
@@ -808,7 +808,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 
 	// ── Invalid condition: array with invalid entry ───────────────────────────────
 
-	it("array condition with a non-object/non-function entry throws INVALID_PERMISSION_RULE", async () => {
+	it("array condition with a non-object/non-function entry throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -822,15 +822,15 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 				effect: "allow",
 				condition: [{ role: "admin" }, 42]
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
 	// ── Invalid condition: empty array ────────────────────────────────────────────
 
-	it("empty array condition throws INVALID_PERMISSION_RULE", async () => {
+	it("empty array condition throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -844,9 +844,9 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 				effect: "allow",
 				condition: []
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 

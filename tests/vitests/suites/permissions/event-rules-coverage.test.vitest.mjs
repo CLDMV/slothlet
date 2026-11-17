@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
+ *	@Last modified time: 2026-11-16T18:30:18-08:00 (1794882618)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,10 +65,10 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const add = (rule) => () => api.slothlet.event.rules.add(rule);
-		expect(add(null)).toThrow(/INVALID_PERMISSION_RULE/); // not an object
-		expect(add({ event: "x", effect: "allow" })).toThrow(/INVALID_PERMISSION_RULE/); // caller missing
-		expect(add({ caller: "**", effect: "allow" })).toThrow(/INVALID_PERMISSION_RULE/); // event missing
-		expect(add({ caller: "**", event: "x", effect: "bogus" })).toThrow(/INVALID_PERMISSION_RULE/); // bad effect
+		expect(add(null)).toThrow(/PERMISSION_RULE_INVALID/); // not an object
+		expect(add({ event: "x", effect: "allow" })).toThrow(/PERMISSION_RULE_INVALID/); // caller missing
+		expect(add({ caller: "**", effect: "allow" })).toThrow(/PERMISSION_RULE_INVALID/); // event missing
+		expect(add({ caller: "**", event: "x", effect: "bogus" })).toThrow(/PERMISSION_RULE_INVALID/); // bad effect
 	});
 
 	it("a conditional event rule marks the pool conditional and still resolves a subscriber", async () => {

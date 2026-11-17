@@ -174,7 +174,7 @@ const outcomes = {
  * @returns {Record<string, boolean|string>} Each try's outcome.
  * @public
  * @example
- * api.probe.result(); // { runner: true, ownCodeAtPath: "CAPABILITY_REFUSED", ... }
+ * api.probe.result(); // { runner: true, ownCodeAtPath: "PERMISSION_CAPABILITY_REFUSED", ... }
  */
 export function result() {
 	return {

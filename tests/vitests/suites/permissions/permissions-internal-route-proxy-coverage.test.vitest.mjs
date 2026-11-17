@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
+ *	@Last modified time: 2026-11-16T18:30:34-08:00 (1794882634)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -211,7 +211,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.context.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toBe("slothlet.permissions.rules");
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
@@ -239,7 +239,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.context.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toBe("slothlet.permissions.rules");
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
@@ -267,7 +267,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.context.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toBe("slothlet.permissions.rules");
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
@@ -336,7 +336,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
-	it("throws INVALID_METADATA_KEY for empty key from module-internal metadata.global", async () => {
+	it("throws METADATA_KEY_INVALID for empty key from module-internal metadata.global", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -349,9 +349,9 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				await api.internalProxyHelper.callSetGlobalWithEmptyKey();
-				expect.unreachable("Should have thrown INVALID_METADATA_KEY");
+				expect.unreachable("Should have thrown METADATA_KEY_INVALID");
 			} catch (err) {
-				expect(err.message).toContain("INVALID_METADATA_KEY");
+				expect(err.message).toContain("METADATA_KEY_INVALID");
 			}
 		});
 	});

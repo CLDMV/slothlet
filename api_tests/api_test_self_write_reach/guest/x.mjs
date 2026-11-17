@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T20:03:29-07:00 (1792983809)
+ *	@Last modified time: 2026-11-16T18:27:40-08:00 (1794882460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -105,7 +105,7 @@ export function changeHandedPrototype() {
  * Keep the victim's class prototype and hand back a function that writes it later, from outside any call.
  * @returns {function(): string} Writes the kept prototype and reports the outcome.
  * @example
- * keepVictimPrototype()(); // "RUNTIME_NO_ACTIVE_CONTEXT_SELF"
+ * keepVictimPrototype()(); // "CONTEXT_NOT_ACTIVE_SELF"
  */
 export function keepVictimPrototype() {
 	const proto = self.victim.v.Account.prototype;
@@ -132,7 +132,7 @@ export function changeVictimFrozenMembers() {
  * Keep members the victim holds frozen and hand back a function that changes them later, from outside any call.
  * @returns {function(): Record<string, string>} Changes the kept members and reports each outcome.
  * @example
- * keepVictimFrozenMembers()(); // { elementAssign: "RUNTIME_NO_ACTIVE_CONTEXT_SELF", … }
+ * keepVictimFrozenMembers()(); // { elementAssign: "CONTEXT_NOT_ACTIVE_SELF", … }
  */
 export function keepVictimFrozenMembers() {
 	const v = self.victim.v;

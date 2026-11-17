@@ -162,7 +162,7 @@ await api.slothlet.api.add("plugins", "./plugins-c", { id: "c" }); // supplies a
 await api.slothlet.api.remove("c"); // api.plugins() runs b's function again
 ```
 
-The change to a callable proxy is one-way: when no function is left (`remove()` of the only module that supplied one, or a `reload()` after which no module exports one), the namespace's children revert as usual but it keeps the callable proxy — `typeof` stays "function" and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, exactly as for a namespace that was callable from the start.
+The change to a callable proxy is one-way: when no function is left (`remove()` of the only module that supplied one, or a `reload()` after which no module exports one), the namespace's children revert as usual but it keeps the callable proxy — `typeof` stays "function" and a call throws `API_PATH_NOT_CALLABLE`, exactly as for a namespace that was callable from the start.
 
 ---
 

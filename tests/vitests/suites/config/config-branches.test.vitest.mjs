@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -158,7 +158,7 @@ describe("Config.transformConfig — missing dir throws (line 241)", () => {
 		expect(normalized.base).toBeNull();
 	});
 
-	it("throws INVALID_CONFIG_DIR_MISSING when dir is an empty string (line 241)", () => {
+	it("throws INVALID_CONFIG_BASE_MISSING when dir is an empty string (line 241)", () => {
 		const cfg = new Config(makeMock());
 
 		expect(() => cfg.transformConfig({ base: "" })).toThrow();

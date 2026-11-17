@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:04-08:00 (1794882484)
+ *	@Last modified time: 2026-11-16T18:28:57-08:00 (1794882537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,7 +95,7 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 
 		it("refuses the one-step definition while on, by the host and a module, and allows a primitive", async () => {
 			const api = await boot();
-			const refused = { threw: "API_MEMBER_FIXED_OBJECT", typeError: true };
+			const refused = { threw: "PERMISSION_MEMBER_FIXED_OBJECT", typeError: true };
 			expect(defined(() => Object.defineProperty(api, "rootFixed", { value: { v: 1 }, ...FIXED }) === api)).toEqual(on ? refused : true);
 			expect(defined(() => Reflect.defineProperty(api.owner.data, "hostFixed", { value: { v: 1 }, ...FIXED }))).toEqual(
 				on ? refused : true

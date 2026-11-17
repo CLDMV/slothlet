@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:42-08:00 (1794882522)
+ *	@Last modified time: 2026-11-16T18:29:33-08:00 (1794882573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -140,49 +140,49 @@ describe("Config.transformConfig — browser mode validation (platform: 'browser
 		expect(result.base).toBeNull();
 	});
 
-	it("no base with a manifest that lists files throws INVALID_CONFIG_DIR_MISSING (the files need a base)", () => {
+	it("no base with a manifest that lists files throws INVALID_CONFIG_BASE_MISSING (the files need a base)", () => {
 		const cfg = new Config(makeMock());
 		expect(() =>
 			cfg.transformConfig({ loader: { platform: "browser", files: { files: [{ path: "a.mjs", name: "a" }], directories: [] } } })
-		).toThrow(expect.objectContaining({ code: "INVALID_CONFIG_DIR_MISSING" }));
+		).toThrow(expect.objectContaining({ code: "INVALID_CONFIG_BASE_MISSING" }));
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST when manifest is absent", () => {
+	it("throws INVALID_CONFIG_FILES_REQUIRED when manifest is absent", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ loader: { platform: "browser" }, base: "/url" })).toThrow(SlothletError);
 		try {
 			cfg.transformConfig({ loader: { platform: "browser" }, base: "/url" });
 		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST");
+			expect(err.code).toBe("INVALID_CONFIG_FILES_REQUIRED");
 		}
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST when manifest is null", () => {
+	it("throws INVALID_CONFIG_FILES_REQUIRED when manifest is null", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: null } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest lacks files array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest lacks files array", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { directories: [] } } })).toThrow(SlothletError);
 		try {
 			cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { directories: [] } } });
 		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_BROWSER_MANIFEST_INVALID");
+			expect(err.code).toBe("INVALID_CONFIG_FILES_INVALID");
 		}
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest lacks directories array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest lacks directories array", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { files: [] } } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest is a plain string", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest is a plain string", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: "not-an-object" } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest is an array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest is an array", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: [] } })).toThrow(SlothletError);
 	});
@@ -192,14 +192,14 @@ describe("Config.transformConfig — browser mode validation (platform: 'browser
 		expect(() => cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST } })).not.toThrow();
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID when resolveModuleSpecifier is a string", () => {
+	it("throws INVALID_CONFIG_RESOLVER_INVALID when resolveModuleSpecifier is a string", () => {
 		const cfg = new Config(makeMock());
 		expect(() =>
 			cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST, resolve: "not-a-function" } })
 		).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID when resolveModuleSpecifier is a number", () => {
+	it("throws INVALID_CONFIG_RESOLVER_INVALID when resolveModuleSpecifier is a number", () => {
 		const cfg = new Config(makeMock());
 		expect(() => cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST, resolve: 42 } })).toThrow(
 			SlothletError

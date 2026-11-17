@@ -102,12 +102,12 @@ describe("metadata removePathMetadata guards (lines 494, 497)", () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
-	it("remove('') names no target and is refused (INVALID_METADATA_TARGET)", () => {
-		expect(() => api.slothlet.metadata.remove("")).toThrow(/INVALID_METADATA_TARGET/);
+	it("remove('') names no target and is refused (METADATA_TARGET_INVALID)", () => {
+		expect(() => api.slothlet.metadata.remove("")).toThrow(/METADATA_TARGET_INVALID/);
 	});
 
-	it("remove with a non-string, non-node target is refused (INVALID_METADATA_TARGET)", () => {
-		expect(() => api.slothlet.metadata.remove(42)).toThrow(/INVALID_METADATA_TARGET/);
+	it("remove with a non-string, non-node target is refused (METADATA_TARGET_INVALID)", () => {
+		expect(() => api.slothlet.metadata.remove(42)).toThrow(/METADATA_TARGET_INVALID/);
 	});
 
 	it("removeFor for a path with no prior setFor returns early without error (line 497)", () => {
@@ -122,7 +122,7 @@ describe("metadata removePathMetadata guards (lines 494, 497)", () => {
 
 	it("remove('') is refused even after set was called on a different path", () => {
 		api.slothlet.metadata.set("math", "cat", "arithmetic");
-		expect(() => api.slothlet.metadata.remove("")).toThrow(/INVALID_METADATA_TARGET/);
+		expect(() => api.slothlet.metadata.remove("")).toThrow(/METADATA_TARGET_INVALID/);
 		expect(api.slothlet.metadata.get("math").cat).toBe("arithmetic");
 	});
 });
