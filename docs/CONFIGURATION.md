@@ -926,7 +926,7 @@ const state = diag.inspect();
 //   loaded: true,                     // whether it is loaded
 //   at: 1708012345,                   // when its context record was made (the instance clock)
 //   config: { base: "/app/api", … }, // the resolved config, defaults filled in, derived fields left out
-//   runtime: { type: "async", running: false }, // the runtime, and whether a call of this instance is running now
+//   runtime: { type: "async", running: false }, // the runtime, and whether code of this instance (a call, a run()/scope() callback, a load) is running now
 //   context: { tenant: "acme" },      // its context data now
 //   self: ["math", "util"],           // the top-level names `self` shows
 //   ownership: {                      // the ownership summary

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T09:14:20-08:00 (1794935660)
+ *	@Last modified time: 2026-11-17T12:36:59-08:00 (1794947819)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1693,14 +1693,16 @@ export class AsyncContextManager {
 	 * the process-wide manager also serves.
 	 * @param {string} instanceID - The instance.
 	 * @returns {{ type: "async", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
-	 *   The runtime word, whether a call of the instance is running now, when its record was made, its context data,
-	 *   the top-level names its `self` shows, and the running call's context (and whether it is a nested run/scope).
+	 *   The runtime word, whether code of the instance (a call, a `run()` / `scope()` callback, a load) is running now,
+	 *   when its record was made, its context data, the top-level names its `self` shows, and the running flow's context
+	 *   (and whether it is a nested run/scope).
 	 * @public
 	 */
 	getInstanceDiagnostics(instanceID) {
 		const store = MapMethods.get(this.instances, instanceID) ?? null;
 		const active = this.als.getStore();
-		const running = active?.instanceID === instanceID;
+		// A `run()` / `scope()` store is a child of the instance's: its code, and a call made inside it, is the instance's.
+		const running = active !== undefined && (active.instanceID === instanceID || active.parentInstanceID === instanceID);
 		return {
 			type: "async",
 			running,
