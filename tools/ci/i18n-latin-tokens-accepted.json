@@ -275,6 +275,8 @@
 		]
 	},
 	"tokens": [
+		"npx",
+		"migrate",
 		"rules",
 		"path",
 		"modules",
