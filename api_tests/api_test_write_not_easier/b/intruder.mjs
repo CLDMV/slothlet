@@ -191,6 +191,58 @@ export function containerWrite(name) {
 }
 
 /**
+ * One write that replaces, redefines, deletes or freezes a node holding the first module's data values, by its name.
+ * @type {Record<string, function(): *>}
+ */
+const HOLDER_WRITES = {
+	assign: () => {
+		self.p.shared = { count: 2 };
+	},
+	define: () => {
+		Object.defineProperty(self.p, "shared", { value: { count: 2 }, configurable: true, writable: true, enumerable: true });
+	},
+	remove: () => {
+		if (!delete self.p.shared) throw new Error("NOT_DELETED");
+	},
+	data: () => {
+		self.p.shared.data = { v: 2 };
+	},
+	freeze: () => {
+		Object.freeze(self.p.shared);
+	},
+	mount: () => {
+		if (!delete self.p) throw new Error("NOT_DELETED");
+	}
+};
+
+/**
+ * Make one write to a node holding the first module's data values.
+ * @param {string} name - The write, a key of HOLDER_WRITES.
+ * @returns {string} Its outcome.
+ * @example
+ * holderWrite("assign");
+ */
+export function holderWrite(name) {
+	return attempt(HOLDER_WRITES[name]);
+}
+
+/**
+ * Read one of the first module's data values.
+ * @param {string} name - `count`, `v` (`data.v`), `when` or `table`.
+ * @returns {string} `"done"`, or the error code the read was refused with.
+ * @example
+ * read("count");
+ */
+export function read(name) {
+	return attempt(() => {
+		if (name === "v") void self.p.shared.data.v;
+		else if (name === "when") void self.p.shared.when.getTime();
+		else if (name === "table") void self.p.shared.table.get("k");
+		else void self.p.shared[name];
+	});
+}
+
+/**
  * Replace the second module's own node.
  * @returns {string} Its outcome.
  * @example

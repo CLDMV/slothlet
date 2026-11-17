@@ -41,6 +41,18 @@ export const count = 1;
 export const data = { list: [1], v: 1 };
 
 /**
+ * A date of the first module's.
+ * @type {Date}
+ */
+export const when = new Date(0);
+
+/**
+ * A map of the first module's.
+ * @type {Map<string, number>}
+ */
+export const table = new Map([["k", 1]]);
+
+/**
  * A class of the first module's, whose prototype method the second module tries to replace.
  */
 export class Box {

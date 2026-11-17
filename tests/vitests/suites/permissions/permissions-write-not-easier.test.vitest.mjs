@@ -244,6 +244,58 @@ describe.each(CONFIGS)("writing is never easier than accessing — $mode / $runt
 		});
 	});
 
+	/** Every write `B` makes to a node holding `A`'s data values (see `b/intruder.mjs`). */
+	const HOLDER_WRITES = ["assign", "define", "remove", "data", "freeze", "mount"];
+
+	/**
+	 * Make one write from `B` on a fresh instance through `intruder.holderWrite` and report it with `A`'s values after it.
+	 * @param {object|undefined} permissions - The permissions config.
+	 * @param {string} name - The write.
+	 * @returns {Promise<{outcome: string, count: *, v: *, when: *, table: *}>} Its outcome and `A`'s data values.
+	 */
+	async function holderOnce(permissions, name) {
+		await load(permissions);
+		const outcome = await withSuppressedSlothletErrorOutput(() => api.p.intruder.holderWrite(name));
+		const shared = api.p?.shared;
+		const state = {
+			outcome,
+			count: shared?.count,
+			v: shared?.data?.v,
+			when: shared?.when?.getTime?.(),
+			table: shared?.table?.get?.("k")
+		};
+		await api.slothlet.shutdown();
+		api = null;
+		return state;
+	}
+
+	/** `A`'s data values when nothing replaced them. */
+	const VALUES = { count: 1, v: 1, when: 0, table: 1 };
+
+	describe("a write over a node is held to the read of every data value beneath it", () => {
+		it.each([
+			["a primitive member", "p.shared.count", "count", HOLDER_WRITES.filter((name) => name !== "data")],
+			["a primitive inside a data object", "p.shared.data.v", "v", HOLDER_WRITES],
+			["a Date member", "p.shared.when", "when", HOLDER_WRITES.filter((name) => name !== "data")],
+			["a Map member", "p.shared.table", "table", HOLDER_WRITES.filter((name) => name !== "data")]
+		])("refuses every write that takes over %s a rule refuses the second module", async (_label, target, member, refused) => {
+			const permissions = { rules: [{ caller: "p.intruder.**", target, effect: "deny" }] };
+			await load(permissions);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.p.intruder.read(member))).toBe("PERMISSION_DENIED");
+			await api.slothlet.shutdown();
+			api = null;
+			for (const name of refused) {
+				expect({ name, ...(await holderOnce(permissions, name)) }).toEqual({ name, outcome: "PERMISSION_DENIED", ...VALUES });
+			}
+		});
+
+		it("lets a write over a node through when it takes over no value a rule refuses", async () => {
+			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.count", effect: "deny" }] };
+			expect((await holderOnce(permissions, "data")).outcome).toBe("done");
+			for (const name of HOLDER_WRITES) expect([name, (await holderOnce({}, name)).outcome]).toEqual([name, "done"]);
+		});
+	});
+
 	describe("shadowing a member the first module's values inherit is a write to an existing member", () => {
 		it("refuses every shadowing write under policy deny with the owner grant, and the host reads the first module's values", async () => {
 			for (const name of SHADOW_WRITES) {

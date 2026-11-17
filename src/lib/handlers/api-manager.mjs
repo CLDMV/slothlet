@@ -953,6 +953,9 @@ export class ApiManager extends ComponentBase {
 					walk(childPath, child, childFile);
 				} else if (child === null || typeof child !== "object") {
 					check(childPath, childFile);
+				} else if (childWrapper !== null && this.#holdsDataValue(childWrapper)) {
+					// A node holding a data value (a primitive, a Date, a Map, an instance) is read, not traversed.
+					check(childPath, childFile);
 				} else if (childWrapper !== null || Arrays.isArray(child) || this.#isPlainObject(child)) {
 					walk(childPath, child, childFile);
 				} else {
@@ -970,9 +973,31 @@ export class ApiManager extends ComponentBase {
 			if (entry === null) continue;
 			const recorded = entry.value;
 			const wrapper = resolveWrapper(recorded);
-			if (wrapper !== null ? wrapper.____slothletInternal.isCallable : recorded === null || typeof recorded !== "object")
+			if (
+				wrapper !== null
+					? wrapper.____slothletInternal.isCallable || this.#holdsDataValue(wrapper)
+					: recorded === null || typeof recorded !== "object"
+			)
 				check(path, wrapper?.____slothletInternal.filePath ?? entry.filePath ?? null);
 		}
+	}
+
+	/**
+	 * Whether a loaded node holds a data value of its own rather than members: its impl is a primitive or an object that
+	 * is not walked as a namespace (a Date, a Map, a Set, a class instance, …). Such a node is read, so a write over it
+	 * is held to the read gate at its own path. A lazy node not loaded yet, a callable, and a node whose impl is a
+	 * namespace, a plain object or an array are not.
+	 * @param {object} wrapper - The node's raw wrapper.
+	 * @returns {boolean} True for a node holding a data value.
+	 * @private
+	 */
+	#holdsDataValue(wrapper) {
+		const internal = wrapper.____slothletInternal;
+		if (internal.isCallable || (internal.mode === "lazy" && !internal.state.materialized)) return false;
+		const impl = internal.impl;
+		if (impl === null || impl === undefined || typeof impl === "function") return false;
+		if (typeof impl !== "object") return true;
+		return resolveWrapper(impl) === null && !Arrays.isArray(impl) && !this.#isPlainObject(impl);
 	}
 
 	/**
