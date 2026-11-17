@@ -80,8 +80,9 @@ const CHECKS = new Map();
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
  * @param {*} [filename=null] - The file name the code is compiled under, when one is given.
  * @param {boolean|null} [runnerCompile=false] - Whether the compile is vitest's own compile of the code its server
- *   sent for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}); null for a compile shaped as
- *   vitest's runner makes one when no worker setup records the server's replies, so it cannot be told either way.
+ *   sent for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}); null, under vitest only, for
+ *   a compile shaped as vitest's runner makes one when no worker setup records the server's replies, so it cannot be
+ *   told either way.
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
@@ -247,19 +248,27 @@ const RUNNER_VERIFY = (() => {
 const RUNNER_COMPILES = ["runInThisContext", "runInContext", "Script", "createScript"];
 
 /**
+ * Whether this process is a vitest worker, read from vitest's worker global as slothlet loads (before any module code
+ * runs). Outside vitest no module runner compiles module files, so there is no runner compile to leave to its caller.
+ * @type {boolean}
+ * @private
+ */
+const UNDER_VITEST_RUNNER = globalThis.__vitest_worker__ != null;
+
+/**
  * Whether a `vm` call is vitest's compile of exactly the code its server last sent for the file it names (one use per
- * reply, see {@link RUNNER_VERIFY}). With no verifier published (no worker setup ran first: vitest without the
- * `@cldmv/slothlet/vite` plugin, or no vitest at all), a compile of the shape vitest's runner makes cannot be told
- * apart by its code, and is answered null.
+ * reply, see {@link RUNNER_VERIFY}). Under vitest with no verifier published (no worker setup ran first: vitest without
+ * the `@cldmv/slothlet/vite` plugin), a compile of the shape vitest's runner makes cannot be told apart by its code,
+ * and is answered null. Outside vitest no compile is the runner's.
  * @param {string} key - The `vm` function.
  * @param {Array<*>} args - Its arguments.
  * @param {*} filename - The name it compiles under.
- * @returns {boolean|null} True for that compile; null for a runner-shaped compile no verifier can check.
+ * @returns {boolean|null} True for that compile; null for a runner-shaped compile under vitest no verifier can check.
  * @private
  */
 function runtime_runnerCompile(key, args, filename) {
 	if (typeof filename !== "string" || !ArrayMethods.includes(RUNNER_COMPILES, key)) return false;
-	if (RUNNER_VERIFY === null) return null;
+	if (RUNNER_VERIFY === null) return UNDER_VITEST_RUNNER ? null : false;
 	try {
 		return RUNNER_VERIFY(filename, args[0]) === true;
 	} catch {
