@@ -31,13 +31,21 @@
  * runs there, not where the caller awaits it.
  *
  * A child process runs each configuration, with Node's default async context and, where the Node running the suite has
- * the switch, with `AsyncContextFrame` off.
+ * the switch, with `AsyncContextFrame` off. The suite's own process runs the same routes once more as on a Node whose
+ * async hooks cannot leave promises out (Node 22.15, 24.0), where a promise's job is told by walking the stack: the
+ * install-time probe's answer is put in place for it.
  */
 
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { AsyncResource, executionAsyncResource } from "node:async_hooks";
+import v8 from "node:v8";
+import vm from "node:vm";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { answerPromiseProbe } from "#handlers/context-async";
+import { stackReadCount } from "#helpers/stack-read";
 
 const ROOT = path.join(process.cwd(), "tmp", "flow-self-reentry");
 const PROBE = path.join(ROOT, "probe.mjs");
@@ -219,5 +227,121 @@ describe.each(FRAMES)("Permissions > a flow's own promise or tick job re-entered
 		it("a native promise returned from run() comes back as before", () => {
 			expect(result.nativeRun).toBe("alice");
 		});
+	});
+});
+
+/**
+ * Run `fn` where no callback Node began is running: in a `FinalizationRegistry` cleanup callback, which Node runs with
+ * no async hook around it.
+ * @param {Function} fn - The code to run.
+ * @returns {Promise<*>} What it returned.
+ */
+async function outsideEveryCallback(fn) {
+	v8.setFlagsFromString("--expose-gc");
+	const gc = vm.runInNewContext("gc");
+	let settled = null;
+	const registry = new FinalizationRegistry(() => {
+		try {
+			settled = { value: fn() };
+		} catch (error) {
+			settled = { error };
+		}
+	});
+	(() => registry.register({}, 0))();
+	for (let attempt = 0; settled === null && attempt < 50; attempt++) {
+		gc();
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	if (settled === null) throw new Error("the cleanup callback never ran");
+	if (settled.error) throw settled.error;
+	return settled.value;
+}
+
+describe.each([
+	["told by the second async hook", null],
+	["told by the stack", false]
+])("Permissions > a flow's own promise job re-entered by module code where no callback runs > %s", (_label, answer) => {
+	let api;
+
+	beforeAll(async () => {
+		answerPromiseProbe(answer);
+		api = await slothlet({ base: path.join(ROOT, "api"), silent: true, runtime: "async" });
+	});
+
+	afterAll(async () => {
+		answerPromiseProbe(null);
+		await api?.slothlet.shutdown();
+	});
+
+	it("the module's own code entering the promise's scope sees no run; the host's own code keeps it", async () => {
+		const kept = {};
+		await api.slothlet.context.run({ user: "alice" }, () => {
+			kept.promise = Promise.resolve(1);
+			api.evil.take(kept.promise, new AsyncResource("host"), Promise.resolve(2));
+		});
+		const seen = await outsideEveryCallback(() => ({
+			module: api.evil.peek("promise"),
+			nested: api.evil.peek("nested"),
+			host: AsyncResource.prototype.runInAsyncScope.call(kept.promise, () => api.job.peek())
+		}));
+		expect(seen.module.user).toBeNull();
+		expect(seen.module.self).toMatch(/^evil(\.|$)/);
+		expect(seen.nested.user).toBeNull();
+		expect(seen.host).toBe("alice");
+	});
+});
+
+describe("Permissions > a flow's own promise or tick job re-entered by module code > promise jobs told by the stack", () => {
+	let api;
+
+	beforeAll(async () => {
+		answerPromiseProbe(false);
+		api = await slothlet({ base: path.join(ROOT, "api"), silent: true, runtime: "async" });
+	});
+
+	afterAll(async () => {
+		answerPromiseProbe(null);
+		await api?.slothlet.shutdown();
+	});
+
+	it("the module's own code in a job's scope sees no run, the host's keeps it, and the flow's continuations keep it", async () => {
+		const kept = {};
+		const continuations = await api.slothlet.context.run({ user: "alice" }, async () => {
+			kept.promise = Promise.resolve(1);
+			api.evil.take(kept.promise, new AsyncResource("host"), Promise.resolve(2));
+			await new Promise((resolve) => process.nextTick(() => ((kept.tick = executionAsyncResource()), api.evil.grab(), resolve())));
+			await null;
+			const afterAwait = api.job.peek();
+			const inThen = await Promise.resolve().then(() => api.job.peek());
+			return { afterAwait, inThen };
+		});
+		expect(continuations).toEqual({ afterAwait: "alice", inThen: "alice" });
+		for (const which of ["promise", "tick", "nested"]) {
+			const outside = api.evil.peek(which);
+			const bob = await api.slothlet.context.run({ user: "bob" }, () => api.evil.peek(which));
+			expect([which, outside.user, bob.user]).toEqual([which, null, null]);
+			expect(outside.self).toMatch(/^evil(\.|$)/);
+			expect(bob.self).toMatch(/^evil(\.|$)/);
+		}
+		for (const which of ["promise", "tick"]) {
+			expect([which, AsyncResource.prototype.runInAsyncScope.call(kept[which], () => api.job.peek())]).toEqual([which, "alice"]);
+		}
+	});
+
+	it("a promise's job of the flow reads the stack once it is told by the stack, and not otherwise", async () => {
+		const reads = async () =>
+			api.slothlet.context.run({ user: "alice" }, async () => {
+				await null;
+				const before = stackReadCount();
+				await Promise.resolve().then(() => api.job.peek());
+				return stackReadCount() - before;
+			});
+		const walked = await reads();
+		answerPromiseProbe(null);
+		try {
+			expect(walked).toBeGreaterThan(await reads());
+		} finally {
+			answerPromiseProbe(false);
+		}
 	});
 });

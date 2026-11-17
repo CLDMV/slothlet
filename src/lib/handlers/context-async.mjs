@@ -248,6 +248,27 @@ export function jobHookCount() {
 }
 
 /**
+ * What the suite puts in place of the install-time probe's answer (see {@link AsyncContextManager#holdScopeHook}):
+ * `false` as on a Node that runs every async hook for a promise's job, or null for the probe's own answer.
+ * @type {false|null}
+ * @private
+ */
+let promiseProbeAnswer = null;
+
+/**
+ * Answer the install-time probe as a Node that runs every async hook for a promise's job does (`false`), so a promise's
+ * job of a flow is told by walking the stack, or go back to the probe's own answer (`null`). For the suite, which runs
+ * on a Node that leaves promises out. Only the slower of the two checks can be put in place: anything but `false`
+ * restores the probe's answer.
+ * @param {false|null} answer - The answer.
+ * @returns {void}
+ * @internal
+ */
+export function answerPromiseProbe(answer) {
+	promiseProbeAnswer = answer === false ? false : null;
+}
+
+/**
  * What {@link SealedStorage} records for a callback run outside every store (`exit()`).
  * @type {object}
  * @private
@@ -754,11 +775,9 @@ export class AsyncContextManager {
 		if (made !== undefined && made.slot !== "callback") return true;
 		if (this.#jobStack.length !== 1) return false;
 		if (made !== undefined) return made.entries === 1;
-		if (this.#promiseJobsLeftOut === true) return this.#scriptBegun !== resource;
-		// Node runs every hook for a promise's job (Node 22 and 24 releases before async hooks could leave promises out,
-		// or before the probe's job has run): what put the scope in place is on the stack. The suite's coverage runs on a
-		// Node that leaves them out; its Node 22.15 leg runs this.
-		/* v8 ignore start */
+		if ((promiseProbeAnswer ?? this.#promiseJobsLeftOut) === true) return this.#scriptBegun !== resource;
+		// Node runs every hook for a promise's job (Node 22.15, Node 24.0, or any Node before the probe's job has run):
+		// what put the scope in place is on the stack.
 		const entry = this.#entry;
 		if (entry.stretch === this.#stretch && entry.resource === resource) return entry.byNode;
 		let byNode;
@@ -772,7 +791,6 @@ export class AsyncContextManager {
 		entry.resource = resource;
 		entry.byNode = byNode;
 		return byNode;
-		/* v8 ignore stop */
 	}
 
 	/**

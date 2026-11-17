@@ -4280,16 +4280,21 @@ const RUN_IN_ASYNC_SCOPE = typeof AsyncResource?.prototype?.runInAsyncScope === 
  * job that the engine calls by itself) collects none either; the caller tells that apart by another callback running
  * below the job (see `begunByNode` in `handlers/context-async`). A stack that cannot be read counts as entered by code.
  *
- * Used only on a Node whose async hooks cannot leave promises out (22.15, 24.0); the suite's coverage runs on one that
- * can, and its Node 22.15 leg runs this.
+ * Used where Node runs every async hook for a promise's job (Node 22.15 and 24.0, whose hooks cannot leave promises
+ * out), and before the install-time probe has answered.
  * @returns {boolean} True when a call of `runInAsyncScope()` is on the stack, or the stack cannot say.
  * @internal
  */
-/* v8 ignore start */
 function scopeEnteredByCode() {
+	// Only the async runtime asks, which runs only where `node:async_hooks` (and so `runInAsyncScope`) exists.
+	/* v8 ignore next */
 	if (RUN_IN_ASYNC_SCOPE === null) return true;
 	const read = readStack(runtime_siteCount, { limit: 1, skip: RUN_IN_ASYNC_SCOPE });
-	return read === null || read.value !== 0;
+	// A read that cannot be trusted (the stack settings fixed in place where no realm of slothlet's own can be made) can
+	// happen, and counts as entered by code; the suite cannot make a realm fail to be made.
+	/* v8 ignore next */
+	if (read === null) return true;
+	return read.value !== 0;
 }
 
 /**
@@ -4302,7 +4307,6 @@ function scopeEnteredByCode() {
 function runtime_siteCount(_error, callSites) {
 	return callSites.length;
 }
-/* v8 ignore stop */
 
 /**
  * The definer of the code doing an access while no call runs, read from frames already captured (see
