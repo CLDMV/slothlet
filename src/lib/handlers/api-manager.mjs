@@ -1149,6 +1149,38 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The loaded module mounted at `apiPath` that owns nothing on the api, when nothing is live at the path.
+	 *
+	 * @param {string} apiPath - The path a removal names.
+	 * @param {string[]} ownerless - Loaded modules that own nothing on the api.
+	 * @returns {?string} That module's id, or null.
+	 * @private
+	 *
+	 * @description
+	 * A scoped removal that empties a module's mount prunes the namespace and its ownership, but the module stays
+	 * loaded with the path as its endpoint. Removing the path then removes the module. A module is matched by its exact
+	 * endpoint only; a path that holds anything is left to the other forms.
+	 *
+	 * @example
+	 * this.#ownerlessMountAt("guest.kid", ["kid"]); // "kid" once remove("kid", "guest.kid.x") pruned guest.kid
+	 */
+	#ownerlessMountAt(apiPath, ownerless) {
+		if (ownerless.length === 0) return null;
+		let normalized;
+		try {
+			normalized = this.normalizeApiPath(apiPath);
+		} catch {
+			return null;
+		}
+		if (normalized.parts.length === 0 || this.#memberAtPath(this.slothlet.api, normalized.parts) !== undefined) return null;
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		for (let i = ownerless.length - 1; i >= 0; i--) {
+			if (cacheManager.get(ownerless[i])?.endpoint === normalized.apiPath) return ownerless[i];
+		}
+		return null;
+	}
+
+	/**
 	 * Remove an alias (#625): the member at `apiPath` holding another node, which is left whole. Module code removes
 	 * it where it may write that member, the node it stands for aside; the host removes any.
 	 *
@@ -4702,9 +4734,16 @@ export class ApiManager extends ComponentBase {
 					apiPath = pathOrModuleId;
 					moduleID = owner.moduleID;
 				} else {
-					// Neither moduleID nor a registered path. A path holding an alias — another node stored there — is
-					// removed as the member holding it, never as the node it stands for (#625); anything else is not found.
-					return this.#removeAlias(pathOrModuleId, options);
+					// A loaded module mounted exactly here whose members a scoped removal pruned owns nothing on the api,
+					// yet its mount is still this path: removing the path removes that module, as it did while the path
+					// was live. Only while nothing is live at the path, and only by its exact endpoint.
+					const mounted = this.#ownerlessMountAt(pathOrModuleId, ownerless);
+					if (mounted === null) {
+						// Neither moduleID nor a registered path. A path holding an alias — another node stored there — is
+						// removed as the member holding it, never as the node it stands for (#625); anything else is not found.
+						return this.#removeAlias(pathOrModuleId, options);
+					}
+					moduleID = mounted;
 				}
 			}
 		} else {
