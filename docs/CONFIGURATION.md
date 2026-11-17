@@ -17,7 +17,6 @@ const api = await slothlet({
 	helpers: "instance", // "instance" | "module" — one copy of each helper file per instance, or per importing api file
 	apiDepth: Infinity, // number | Infinity
 	hidden: [], // string | string[] — globs hiding files/folders from the API
-	scanHiddenFolders: false, // DEPRECATED escape hatch — scan "."/"__"-prefixed folders (removed in v4)
 
 	// Collision control
 	api: {
@@ -231,24 +230,24 @@ const api = await slothlet({ base: "./api", hidden: ["drafts", "internal/**", "m
 
 `api.slothlet.api.add(path, dir, { hidden })` accepts the same option per call, with globs relative to the **added** folder.
 
-Hidden entries are skipped during scanning, on top of the built-in rule below. A folder whose entire contents are hidden does not create an API key at all.
+Hidden entries are skipped during scanning. A folder whose entire contents are hidden does not create an API key at all.
 
-> **Built-in rule:** files **and** folders whose names start with `.` or `__` are hidden by default — no configuration needed (`.`/`__`-prefixed _folders_ can be restored via the deprecated `scanHiddenFolders` below; files stay hidden).
-
----
-
-### `scanHiddenFolders`
-
-**Type**: `boolean`
-**Default**: `false`
-**Deprecated** — temporary escape hatch, removed in v4.
-
-Before v3.11, the `.`/`__` hidden-name rule applied only to files; folders with such names were scanned and surfaced in the API (a dot-prefixed folder appeared under its sanitized name). Folders are now hidden by default. If you depended on the old behavior, `scanHiddenFolders: true` restores hidden-**folder** scanning while you migrate; supplying the option emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning (unless `silent: true`). Also accepted per call on `api.slothlet.api.add(path, dir, { scanHiddenFolders })`.
+**The built-in rule and `!`.** Files **and** folders whose names start with `.` or `__` are hidden by default, with no configuration. Your globs sit over that rule: they apply in order, the last glob that matches an entry decides, and an entry no glob matches falls to the built-in rule. A glob starting with `!` brings back what an earlier glob, or the built-in rule, hid (gitignore-style); a glob ending in `/` names folders only; a name's leading `.` is part of the name, in either form (`**/.*`, `.env`, `a..git`).
 
 ```javascript
-// Temporary: keep loading .legacy/ as api.legacy while migrating
-const api = await slothlet({ base: "./api", scanHiddenFolders: true });
+// Bring back every __-prefixed file and folder
+await slothlet({ base: "./api", hidden: "!**/__*" });
+
+// Bring back .- and __-prefixed folders only (what v3's scanHiddenFolders: true did); files stay hidden
+await slothlet({ base: "./api", hidden: ["!**/.*/", "!**/__*/"] });
+
+// Bring back __internal, but keep one folder inside it hidden
+await slothlet({ base: "./api", hidden: ["!__internal/", "__internal/drafts"] });
 ```
+
+A name the framework reserves (`__metadata`, `_impl`, …) is still refused when a `!` glob brings it back (`MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_DIRNAME`). As in gitignore, a folder that stays hidden is never scanned, so a `!` glob cannot reach an entry inside it; bring the folder back first. In a browser, the manifest `generateManifest()` writes leaves `.`/`__`-prefixed entries out, so a `!` glob can only bring back entries a hand-written manifest lists.
+
+The v3 `scanHiddenFolders` option is gone; `hidden: ["!**/.*/", "!**/__*/"]` does what `scanHiddenFolders: true` did.
 
 ---
 

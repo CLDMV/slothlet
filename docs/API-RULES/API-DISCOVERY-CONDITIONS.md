@@ -42,17 +42,17 @@ if (extensions.includes(ext)) {
 **Related Rule**: [Rule 14](../API-RULES.md#rule-14-api-directory-scan--inclusion)
 **Status**: ✅ Active
 
-**Pattern**: A folder whose name starts with `.` or `__` is skipped, unless the deprecated `scanHiddenFolders` opt-out is set.
+**Pattern**: A folder whose name starts with `.` or `__` is skipped, unless a `hidden` glob matches it: the last matching glob decides (a `!` glob brings it back).
 
 **Source(s)**: `src/lib/processors/loader.mjs:491-495` · `src/lib/helpers/generate-manifest.mjs:116,173` (build, no opt-out)
 
 **Condition Check**:
 
 ```javascript
-if (!scanHiddenFolders && hasHiddenPrefix(entry.name)) { continue; }
+if (isHiddenEntry(hiddenMatcher, apiRel(fullPath), entry.name, true)) { continue; }
 ```
 
-**Trigger**: `!scanHiddenFolders && hasHiddenPrefix(entry.name)`
+**Trigger**: no `hidden` glob matches and `isHiddenEntryName(entry.name)`, or the last matching glob hides it
 **Result**: `continue` — the folder (and its subtree) never becomes a namespace.
 
 ---
@@ -62,17 +62,17 @@ if (!scanHiddenFolders && hasHiddenPrefix(entry.name)) { continue; }
 **Related Rule**: [Rule 14](../API-RULES.md#rule-14-api-directory-scan--inclusion)
 **Status**: ✅ Active
 
-**Pattern**: A file whose name starts with `.` or `__` is skipped unconditionally — unlike folders (G02), there is no `scanHiddenFolders` opt-out for files.
+**Pattern**: A file whose name starts with `.` or `__` is skipped, unless a `hidden` glob matches it: the last matching glob decides, as for folders (G02).
 
 **Source(s)**: `src/lib/processors/loader.mjs:523-526` · `src/lib/helpers/generate-manifest.mjs:116` (build)
 
 **Condition Check**:
 
 ```javascript
-if (hasHiddenPrefix(entry.name)) { continue; }
+if (isHiddenEntry(hiddenMatcher, apiRel(path.join(dir, nameWithoutExt)), entry.name, false)) { continue; }
 ```
 
-**Trigger**: `hasHiddenPrefix(entry.name)`
+**Trigger**: no `hidden` glob matches and `isHiddenEntryName(entry.name)`, or the last matching glob hides it
 **Result**: `continue` — the file never becomes a leaf.
 
 ---

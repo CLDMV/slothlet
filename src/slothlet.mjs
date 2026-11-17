@@ -1294,18 +1294,13 @@ class Slothlet {
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
-		// Deprecated escape hatch: warn whenever scanHiddenFolders is supplied at all.
-		if (this.config.scanHiddenFolders !== undefined && !this.config.silent) {
-			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
-		}
 		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			// #471: a null dir means the instance has no base directory — an empty root.
 			noBase: this.config.dir === null,
 			mode: this.config.mode,
 			moduleID: baseModuleId,
-			hidden: this.config.hidden ?? null,
-			scanHiddenFolders: this.config.scanHiddenFolders === true
+			hidden: this.config.hidden ?? null
 		});
 
 		// Temporarily assign baseApi to this.api for buildFinalAPI
@@ -2433,10 +2428,11 @@ export default slothlet;
  * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
  * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
  *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
- *   `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are
- *   hidden by default (`.`/`__`-prefixed folders can be restored via the deprecated `scanHiddenFolders`; files stay hidden). Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
- * @property {boolean} [scanHiddenFolders=false] - Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed
- *   folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
+ *   `!` re-includes, a trailing `/` names folders only, a name's leading `.` is part of the name). Files match on their
+ *   extension-stripped path. The globs sit over the built-in rule that hides `.`/`__`-prefixed names: they apply in order, the
+ *   last one that matches an entry decides, and an entry no glob matches falls to the built-in rule, so `"!**\/__*"` brings back
+ *   `__`-prefixed files and folders and `["!**\/.*\/", "!**\/__*\/"]` the folders only. Framework-reserved names are still refused.
+ *   Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
  * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
  * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and, with `diagnostics: true`, readable as `api.slothlet.diag.reference`.
  * @property {{merge?: "shallow"|"deep", isolation?: "partial"|"full"}} [scope] - Defaults for `api.slothlet.scope()` / `api.slothlet.context.scope()` runs.

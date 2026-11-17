@@ -104,7 +104,6 @@ export class Builder extends ComponentBase {
 			cacheBust = null,
 			fileFilter = null,
 			hidden = null,
-			scanHiddenFolders = false,
 			collisionMode = null,
 			syntheticExports = null,
 			syntheticName = "synthetic",
@@ -211,7 +210,6 @@ export class Builder extends ComponentBase {
 					cacheBust,
 					fileFilter,
 					hidden,
-					scanHiddenFolders,
 					preloadedStructure,
 					rootUnwrap
 				});
@@ -226,7 +224,6 @@ export class Builder extends ComponentBase {
 					cacheBust,
 					fileFilter,
 					hidden,
-					scanHiddenFolders,
 					preloadedStructure,
 					rootUnwrap
 				});

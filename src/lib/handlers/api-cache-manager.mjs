@@ -397,7 +397,6 @@ export class ApiCacheManager extends ComponentBase {
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
 			collisionMode: entry.collisionMode,
 			hidden: entry.hidden ?? null,
-			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "api",
 			cacheBust: Dates.now(),
 			...(file ? { fileFilter: (fileName) => fileName === file.name, rootUnwrap: true } : {}),
