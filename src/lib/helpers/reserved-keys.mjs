@@ -21,7 +21,7 @@
  * @description
  * `ComponentBase.INTERNAL_KEYS` (`#factories/component-base`) and `IMPL_METADATA_KEYS`
  * (`#handlers/unified-wrapper`) are these exact Set objects. They live here so
- * `helpers/defaults` can build `slothlet.defaults.reservedExports` without loading the wrapper
+ * `helpers/defaults` can build `slothlet.defaults.reserved` without loading the wrapper
  * classes, whose import graph reaches `helpers/platform` and its top-level await. index.mjs imports
  * `helpers/defaults` statically and index.cjs loads index.mjs through Node's synchronous
  * require(esm), which rejects any module graph containing top-level await.

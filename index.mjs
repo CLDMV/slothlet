@@ -150,10 +150,10 @@ export { slothlet };
 // implementation lazily, inside the call — so it carries none of the inner function's static
 // properties. Attach the identical, single-sourced value here too (see the static import above),
 // so `slothlet.defaults` is available synchronously through every entry point.
-/** @type {Readonly<{routines: ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>, reservedExports: ReadonlySet<string>}>} */
+/** @type {Readonly<{routines: ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>, reserved: ReadonlySet<string>}>} */
 slothlet.defaults = Object.freeze({
 	routines: DEFAULT_ROUTINES,
-	reservedExports: RESERVED_EXPORTS
+	reserved: RESERVED_EXPORTS
 });
 
 // The named alias as a property too, so the function carries the same own keys however the package

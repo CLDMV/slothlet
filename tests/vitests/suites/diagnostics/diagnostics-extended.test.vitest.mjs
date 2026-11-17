@@ -130,23 +130,23 @@ describe("api.slothlet.diag.caches.get()", () => {
 		const result = api.slothlet.diag.caches.get();
 		expect(result).toBeDefined();
 		expect(typeof result).toBe("object");
-		// `getCacheDiagnostics()` returns { totalCaches, caches[] }
-		expect(typeof result.totalCaches).toBe("number");
+		// `getCacheDiagnostics()` returns { caches[] }
 		expect(Array.isArray(result.caches)).toBe(true);
+		expect("totalCaches" in result).toBe(false);
 	});
 
-	it("totalCaches is at least 1 after initial load", () => {
+	it("has at least 1 cache after initial load", () => {
 		const result = api.slothlet.diag.caches.get();
-		expect(result.totalCaches).toBeGreaterThanOrEqual(1);
+		expect(result.caches.length).toBeGreaterThanOrEqual(1);
 	});
 
-	it("caches array entries have moduleID and endpoint fields", () => {
+	it("caches array entries carry module, path, folder, mode, count and at", () => {
 		const result = api.slothlet.diag.caches.get();
-		if (result.caches.length > 0) {
-			const first = result.caches[0];
-			expect(first).toHaveProperty("moduleID");
-			expect(first).toHaveProperty("endpoint");
-		}
+		expect(result.caches.length).toBeGreaterThan(0);
+		const first = result.caches[0];
+		expect(Object.keys(first).sort()).toEqual(["at", "count", "folder", "mode", "module", "path"]);
+		expect(Array.isArray(first.path)).toBe(true);
+		expect(typeof first.at).toBe("number");
 	});
 });
 

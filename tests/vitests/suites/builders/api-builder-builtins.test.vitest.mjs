@@ -262,7 +262,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 
 		const diag = api.slothlet.diag.caches.get();
 		expect(typeof diag).toBe("object");
-		expect("totalCaches" in diag || "caches" in diag).toBe(true);
+		expect(Array.isArray(diag.caches)).toBe(true);
 	});
 
 	it("diagnostics.caches.getAllModuleIDs returns array (line 1079)", async () => {

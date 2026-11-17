@@ -874,10 +874,24 @@ console.log(diag.context); // { db, logger } or {}
 
 ### `diag.inspect()`
 
-Returns internal instance state from `getDiagnostics()` - config snapshot, handler state, and materialization stats.
+Returns a snapshot of this instance. It describes this instance only, never the other instances in the process.
 
 ```javascript
 const state = diag.inspect();
+// {
+//   instance: "slothlet_…",           // this instance's id
+//   loaded: true,                     // whether it is loaded
+//   at: 1708012345,                   // when its context record was made (the instance clock)
+//   config: { base: "/app/api", … }, // the resolved config, defaults filled in, derived fields left out
+//   runtime: { type: "async", running: false }, // the runtime, and whether a call of this instance is running now
+//   context: { tenant: "acme" },      // its context data now
+//   self: ["math", "util"],           // the top-level names `self` shows
+//   ownership: {                      // the ownership summary
+//     count: 45,                                               // registered api paths
+//     modules: [{ module: "base_abc", count: 45 }],            // paths per module
+//     conflicts: [{ path: ["math"], owners: ["base_abc", "plugins_xyz"] }] // paths more than one module holds
+//   }
+// }
 ```
 
 ### `diag.owner.get(apiPath)`
@@ -898,10 +912,9 @@ Returns cache diagnostics summarizing all active API caches.
 ```javascript
 const info = diag.caches.get();
 // {
-//   totalCaches: 2,
 //   caches: [
-//     { moduleID: "base_abc", endpoint: ".", pathCount: 45, ... },
-//     { moduleID: "plugins_xyz", endpoint: "plugins", pathCount: 12, ... }
+//     { module: "base_abc", path: [], folder: "/app/api", mode: "eager", count: 45, at: 1708012345 },
+//     { module: "plugins_xyz", path: ["plugins"], folder: "/app/plugins", mode: "eager", count: 12, at: 1708012399 }
 //   ]
 // }
 ```

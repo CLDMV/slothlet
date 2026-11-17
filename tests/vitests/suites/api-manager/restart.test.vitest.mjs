@@ -32,6 +32,16 @@ import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
+/**
+ * Every instance id the process-wide context managers hold a store for: `diag.inspect()` describes one instance only
+ * (#837), so the registry is read on the managers themselves.
+ * @returns {Promise<string[]>} The ids.
+ */
+async function contextRegistryIds() {
+	const { asyncContextManager, liveContextManager } = await import("#factories/context");
+	return [...asyncContextManager.instances.keys(), ...liveContextManager.instances.keys()];
+}
+
 const BASE = path.join(path.dirname(TEST_DIRS.API_TEST), "api_test_restart");
 const EXTRA = path.join(path.dirname(TEST_DIRS.API_TEST), "api_test_restart_extra");
 
@@ -284,7 +294,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		// The old generation's shutdown routine ran exactly once.
 		expect(fixtureState().shutdowns).toEqual([1]);
 		// The old context store is gone; only the new instance's remains for this api.
-		const ids = api.slothlet.diag.inspect().context.instances.map((entry) => entry.id);
+		const ids = await contextRegistryIds();
 		expect(ids).toContain(newID);
 		expect(ids.some((id) => id === oldID || id.startsWith(`${oldID}__run_`))).toBe(false);
 
@@ -574,7 +584,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 			throw new Error("hook failure");
 		};
 		await expect(api.slothlet.restart()).rejects.toThrow("hook failure");
-		const ids = api.slothlet.diag.inspect().context.instances.map((entry) => entry.id);
+		const ids = await contextRegistryIds();
 		expect(ids).not.toContain(oldID);
 		expect(await api.counter.increment()).toBe(1);
 	});

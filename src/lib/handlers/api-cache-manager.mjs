@@ -34,6 +34,7 @@
  * });
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
@@ -246,9 +247,8 @@ export class ApiCacheManager extends ComponentBase {
 	 * @example
 	 * const diag = cacheManager.getCacheDiagnostics();
 	 * // {
-	 * //   totalCaches: 3,
 	 * //   caches: [
-	 * //     { moduleID: "base_abc123", endpoint: ".", pathCount: 42, timestamp: ... },
+	 * //     { module: "base_abc123", path: [], folder: "/app/api", mode: "eager", count: 42, at: 1708012345 },
 	 * //     ...
 	 * //   ]
 	 * // }
@@ -263,19 +263,16 @@ export class ApiCacheManager extends ComponentBase {
 			const pathCount = this._countPaths(entry.api);
 
 			listPush(caches, {
-				moduleID,
-				endpoint: entry.endpoint,
-				folderPath: entry.folderPath,
+				module: moduleID,
+				path: segmentsOf(entry.endpoint),
+				folder: entry.folderPath,
 				mode: entry.mode,
-				pathCount,
-				timestamp: entry.timestamp
+				count: pathCount,
+				at: entry.timestamp
 			});
 		}
 
-		return {
-			totalCaches: MapMethods.size(this.caches),
-			caches
-		};
+		return { caches };
 	}
 
 	/**

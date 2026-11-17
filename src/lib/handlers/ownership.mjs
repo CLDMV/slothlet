@@ -1211,23 +1211,24 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
-	 * Get diagnostic info about ownership
-	 * @returns {Object} Diagnostic information
+	 * Diagnostic summary of ownership: how many api paths are registered, how many each module owns, and the paths
+	 * more than one module holds (their owners, oldest first).
+	 * @returns {{ count: number, modules: Array<{ module: string, count: number }>, conflicts: Array<{ path: string[], owners: string[] }> }}
+	 *   The summary.
 	 * @public
 	 */
 	getDiagnostics() {
 		return {
-			totalModules: MapMethods.size(this.moduleToPath),
-			totalPaths: MapMethods.size(this.pathToModule),
+			count: MapMethods.size(this.pathToModule),
 			modules: mapList(mapEntriesToArray(this.moduleToPath), (entry2) => {
 				const id = entry2[0],
 					paths = entry2[1];
 				return {
-					moduleID: id,
-					pathCount: SetMethods.size(paths)
+					module: id,
+					count: SetMethods.size(paths)
 				};
 			}),
-			conflictedPaths: mapList(
+			conflicts: mapList(
 				filterList(mapEntriesToArray(this.pathToModule), (entry3) => {
 					const _ = entry3[0],
 						stack = entry3[1];
@@ -1237,8 +1238,8 @@ export class OwnershipManager extends ComponentBase {
 					const path = entry4[0],
 						stack = entry4[1];
 					return {
-						apiPath: path,
-						ownerStack: mapList(stack, (e) => e.moduleID)
+						path: segmentsOf(path),
+						owners: mapList(stack, (e) => e.moduleID)
 					};
 				}
 			)

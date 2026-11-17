@@ -301,11 +301,12 @@ describe("slothlet.getDiagnostics() — branch coverage (lines 721-728)", () => 
 	it("returns a diagnostics snapshot with all fields when everything is present", () => {
 		const result = engine.getDiagnostics();
 		expect(result).toBeDefined();
-		expect(result).toHaveProperty("instanceID");
-		expect(result).toHaveProperty("isLoaded");
-		expect(result).toHaveProperty("config");
-		expect(result).toHaveProperty("context");
-		expect(result).toHaveProperty("ownership");
+		expect(Object.keys(result).sort()).toEqual(["at", "config", "context", "instance", "loaded", "ownership", "runtime", "self"]);
+		expect(result.instance).toBe(engine.instanceID);
+		expect(result.loaded).toBe(true);
+		expect(Array.isArray(result.self)).toBe(true);
+		expect(typeof result.runtime.type).toBe("string");
+		expect(result.runtime.running).toBe(false);
 	});
 
 	it("returns null for context when contextManager is null (L726 || null branch)", () => {
