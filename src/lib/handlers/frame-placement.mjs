@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:39:51-08:00 (1794933591)
+ *	@Last modified time: 2026-11-17T09:14:21-08:00 (1794935661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4160,9 +4160,11 @@ function frameDefiner(running = null) {
  * @param {string} instanceID - The instance the flow belongs to.
  * @param {ReadonlyArray<object>} owners - The calls of the flow: the call it names and the calls above it. Empty for a
  *   flow the host opened.
- * @returns {{outside: false, clean: boolean}|{outside: true, reader: object|null}|null} For the flow's code, whether
- *   every frame up to where the code's job began or slothlet entered a call is the flow's (`clean`); otherwise the leaf
- *   the code is (null when no single leaf of the instance stands for it). Null when the instance is not running.
+ * @returns {{outside: false, clean: boolean, found: boolean}|{outside: true, reader: object|null}|null} For the flow's
+ *   code, whether every frame up to where the code's job began or slothlet entered a call is the flow's (`clean`), and
+ *   whether a frame of the flow's own code was found (`found`; false when nothing but slothlet's and Node's code is on
+ *   the stack, as when Node runs a job it was handed); otherwise the leaf the code is (null when no single leaf of the
+ *   instance stands for it). Null when the instance is not running.
  * @internal
  */
 function runningOutsideFlow(instanceID, owners) {
@@ -4257,15 +4259,16 @@ function runningOutsideFlow(instanceID, owners) {
 			}
 		}
 		if (!ended && !cut && !frames.truncated) ended = true;
-		if (!ended && own === undefined && frames.truncated) return { own: undefined, clean: false };
+		if (!ended && own === undefined && frames.truncated) return { own: undefined, clean: false, found: false };
+		const found = own === true;
 		own ??= !foreign && !switched;
-		return { own, clean: own && ended && !foreign && !switched };
+		return { own, clean: own && ended && !foreign && !switched, found };
 	};
 	// The deciding frame is nearly always a few frames below slothlet's own: a short capture settles it, and the stack is
 	// read further only when it does not. Cut off even then, the code is not taken for the flow's.
 	let answer = decide(runtime_captureFrames(NEAR_FRAMES));
 	if (answer.own === undefined) answer = decide(runtime_captureFrames(FAR_FRAMES));
-	if (answer.own === true) return { outside: false, clean: answer.clean };
+	if (answer.own === true) return { outside: false, clean: answer.clean, found: answer.found };
 	// The leaf the code running is, read as code run while no call runs is read.
 	const definer = runtime_definerAt(runtime_captureFrames(24), instanceID);
 	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null };

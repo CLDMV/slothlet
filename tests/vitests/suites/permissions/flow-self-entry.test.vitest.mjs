@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:41:56-08:00 (1794933716)
+ *	@Last modified time: 2026-11-17T09:15:53-08:00 (1794935753)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -188,6 +188,50 @@ beforeAll(() => {
 		"}",
 		"export function hostTimerReader() {",
 		'\treturn adopt(shared().hostTimer, () => handReader("evilTimer"));',
+		"}",
+		"// Another module's api node, read by its own code inside a flow it entered by itself, handed to Node.",
+		"function handPeek(tag, peek = self.job.peek) {",
+		"\treturn new Promise((resolve) => {",
+		"\t\tPromise.resolve(tag).then(peek).then(resolve);",
+		"\t});",
+		"}",
+		"export function hostResourcePeek() {",
+		'\treturn shared().hostResource.runInAsyncScope(() => handPeek("evilResourcePeek"));',
+		"}",
+		"export function hostTimerPeek() {",
+		'\treturn adopt(shared().hostTimer, () => handPeek("evilTimerPeek"));',
+		"}",
+		"// The node is read before an await; after it the module only hands it to Node.",
+		"export function hostResourcePeekAwait() {",
+		"\treturn shared().hostResource.runInAsyncScope(async () => {",
+		"\t\tconst peek = self.job.peek;",
+		"\t\tawait null;",
+		'\t\treturn handPeek("evilResourcePeekAwait", peek);',
+		"\t});",
+		"}",
+		"export function resourcePeek() {",
+		'\treturn shared().resource.runInAsyncScope(() => handPeek("evilAdminPeek"));',
+		"}"
+	]);
+	// A module whose calls hand out a plain function and an async function that read the context they run in.
+	write("api/job/job.mjs", [
+		'import { context } from "@cldmv/slothlet/runtime";',
+		"export function peek(tag) {",
+		"\tconst seen = context.user ?? null;",
+		"\tif (typeof tag === 'string') globalThis.__flowSelfEntry.seen[tag] = seen;",
+		"\treturn seen;",
+		"}",
+		"const asyncReader = async function asyncReader(tag) {",
+		"\tconst before = context.user ?? null;",
+		"\tawait null;",
+		"\tconst after = context.user ?? null;",
+		"\tawait new Promise((resolve) => setTimeout(resolve, 1));",
+		"\tconst seen = [before, after, context.user ?? null, this?.mark ?? null];",
+		"\tglobalThis.__flowSelfEntry.seen[tag] = seen;",
+		"\treturn seen;",
+		"};",
+		"export function getAsyncReader() {",
+		"\treturn asyncReader;",
 		"}"
 	]);
 	write("probe.mjs", [
@@ -211,13 +255,13 @@ beforeAll(() => {
 		"\t}",
 		"\tconst api = await slothlet(config);",
 		'\tawait api.slothlet.api.add("evil", root + "evil", { id: "evil" });',
-		"\tglobalThis.__flowSelfEntry = {};",
+		"\tglobalThis.__flowSelfEntry = { seen: {} };",
 		"\tawait api.evil.plant();",
 		"\treturn api;",
 		"}",
 		"const out = {};",
 		"// One request (root) holds admin's call open while another (mallory) runs evil.",
-		'for (const route of ["own", "resource", "resourceAwait", "snapshot", "bound", "timer", "adminCode"]) {',
+		'for (const route of ["own", "resource", "resourceAwait", "snapshot", "bound", "timer", "adminCode", "resourcePeek"]) {',
 		"\tconst api = await make();",
 		"\tlet release;",
 		"\tconst hold = new Promise((resolve) => (release = resolve));",
@@ -315,6 +359,48 @@ beforeAll(() => {
 		"\t\tout[route] = codeOf(error);",
 		"\t}",
 		"\tclearTimeout(shared.hostTimer);",
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// Another module's api node handed to Node by a module's own code that entered a run() the host opened by itself.",
+		'for (const route of ["hostResourcePeek", "hostTimerPeek", "hostResourcePeekAwait"]) {',
+		"\tconst api = await make();",
+		"\tconst shared = globalThis.__flowSelfEntry;",
+		'\tawait api.slothlet.context.run({ user: "root" }, () => {',
+		'\t\tshared.hostResource = new AsyncResource("host");',
+		"\t\tshared.hostTimer = setTimeout(() => {}, 60000);",
+		"\t});",
+		"\ttry {",
+		'\t\tout[route] = await api.slothlet.context.run({ user: "mallory" }, () => api.evil[route]());',
+		"\t} catch (error) {",
+		"\t\tout[route] = codeOf(error);",
+		"\t}",
+		"\tclearTimeout(shared.hostTimer);",
+		"\t// The host's own use of its resource afterwards still runs in its run (as a pool uses a requester's resource).",
+		"\tout[route + ':hostAfter'] = await new Promise((resolve) =>",
+		"\t\tshared.hostResource.runInAsyncScope(() => Promise.resolve('hostAfter').then(api.job.peek).then(resolve))",
+		"\t);",
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// A module's async function a call hands the run's own code, awaited by the host and called by Node later.",
+		"{",
+		"\tconst api = await make();",
+		"\tconst shared = globalThis.__flowSelfEntry;",
+		"\tconst outside = api.job.getAsyncReader();",
+		'\tawait api.slothlet.context.run({ user: "root" }, async () => {',
+		"\t\tconst reader = api.job.getAsyncReader();",
+		"\t\tout.asyncReaderSame = reader === api.job.getAsyncReader();",
+		"\t\tout.asyncReaderShape = [typeof reader, reader.name, reader.length];",
+		'\t\tconst pending = reader("direct");',
+		"\t\tout.asyncReaderPromise = pending instanceof Promise;",
+		"\t\tout.asyncReaderResult = await pending;",
+		'\t\tawait Promise.resolve("then").then(reader);',
+		'\t\tsetTimeout(reader, 0, "timeout");',
+		"\t\tawait new Promise((resolve) => setTimeout(resolve, 30));",
+		"\t\tawait null;",
+		'\t\tawait Reflect.apply(reader, { mark: "this" }, ["afterAwait"]);',
+		"\t});",
+		'\tawait outside("outside");',
+		"\tout.asyncReaderSeen = shared.seen;",
 		"\tawait api.slothlet.shutdown();",
 		"}",
 		"console.log(JSON.stringify(out));"
@@ -441,15 +527,45 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 			expect(result.readerSeen.outside).toEqual([null, null]);
 		});
 
-		// Where functions are bound to the run they are read in (every setting but "precise" with the permission system on,
-		// whose stand-ins are its module's calls), code that entered the run by itself is not handed one.
-		if (!(checks && attribution === "precise")) {
-			it.each(["hostResourceReader", "hostTimerReader"])(
-				"the function read by a module's own code that entered a run() by itself through the host's %s is not bound to the run",
-				(route) => {
-					expect(result[route][0]).toBeNull();
-				}
-			);
-		}
+		// Code that entered the run by itself acts outside it, and so does every job it hands Node: the function it is
+		// handed runs outside the run, whether it comes back as itself or as a stand-in of its module's.
+		it.each(["hostResourceReader", "hostTimerReader"])(
+			"the function read by a module's own code that entered a run() by itself through the host's %s is not bound to the run",
+			(route) => {
+				expect(result[route][0]).toBeNull();
+			}
+		);
+
+		it.each(["hostResourcePeek", "hostTimerPeek", "hostResourcePeekAwait"])(
+			"an api node a module's own code that entered a run() by itself through the host's %s hands Node runs outside the run",
+			(route) => {
+				expect(result[route]).toBeNull();
+			}
+		);
+
+		it.each(["hostResourcePeek", "hostTimerPeek", "hostResourcePeekAwait"])(
+			"after a module entered the run by itself through %s, the host's own resource still runs in the run",
+			(route) => {
+				expect(result[route + ":hostAfter"]).toBe("root");
+			}
+		);
+
+		it("an api node a module's own code hands Node from another request's resource runs outside that request", () => {
+			expect(result.resourcePeek).toBeNull();
+			expect(result["resourcePeek:first"]).toEqual({ user: "root" });
+		});
+
+		it("a module's async function a call hands the run's own code keeps the run after its awaits", () => {
+			for (const tag of ["direct", "then", "timeout"]) expect(result.asyncReaderSeen[tag]).toEqual(["root", "root", "root", null]);
+			expect(result.asyncReaderSeen.afterAwait).toEqual(["root", "root", "root", "this"]);
+			expect(result.asyncReaderResult).toEqual(["root", "root", "root", null]);
+			expect(result.asyncReaderPromise).toBe(true);
+		});
+
+		it("the async function is the same value in one run, shaped as itself, and outside every run sees no run", () => {
+			expect(result.asyncReaderSame).toBe(true);
+			expect(result.asyncReaderShape).toEqual(["function", "asyncReader", 1]);
+			expect(result.asyncReaderSeen.outside).toEqual([null, null, null, null]);
+		});
 	});
 });

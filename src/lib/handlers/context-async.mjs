@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:39:51-08:00 (1794933591)
+ *	@Last modified time: 2026-11-17T09:14:20-08:00 (1794935660)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,8 +59,16 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, isRunBindable, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
-	framePlacementInternals("lib/handlers/context-async");
+const {
+	attributeResult,
+	enterCall,
+	isRunBindable,
+	outerCallerCeiling,
+	ownReceiver,
+	resolveSupplier,
+	runningOutsideFlow,
+	sampleStoreScripts
+} = framePlacementInternals("lib/handlers/context-async");
 
 /**
  * Marks the stand-in store {@link AsyncContextManager} hands code that entered a flow by itself when no single leaf
@@ -69,6 +77,15 @@ const { attributeResult, enterCall, isRunBindable, ownReceiver, resolveSupplier,
  * @private
  */
 const OUTSIDE_FLOW = Symbol("slothlet.outsideFlow");
+
+/**
+ * The flow a stand-in store {@link AsyncContextManager#outsideView} made stands outside of: code that entered that flow
+ * by itself runs in the stand-in from then on, and so does every job it hands Node (see
+ * {@link AsyncContextManager#activeStore}).
+ * @type {symbol}
+ * @private
+ */
+const FLOW_OF = Symbol("slothlet.flowOf");
 
 /**
  * The run-bound stand-ins {@link AsyncContextManager} hands out (see {@link AsyncContextManager#bindToRun}), each with
@@ -271,6 +288,31 @@ class SealedStorage {
 	}
 
 	/**
+	 * Enter a store for the rest of the code running now, as `enterWith()` does, and say how to take it back off the async
+	 * resource it was put on. While `AsyncContextFrame` is off Node keeps the store on the resource running now, which can
+	 * be one its owner runs again later (an `AsyncResource`, an interval's timer); with frames on, the scope Node opened
+	 * for the code ends where the code does, and nothing is left to take back.
+	 * @param {object} store - The store.
+	 * @returns {(function(): void)|null} Puts back what the resource held, unless something has entered another store on
+	 *   it since; null when nothing has to.
+	 */
+	enterAdopted(store) {
+		const storage = this.#storage;
+		const token = sealStore(store);
+		const key = storage.kResourceStore;
+		const resource = typeof key === "symbol" && executionAsyncResource !== null ? executionAsyncResource() : null;
+		if (resource === null || (typeof resource !== "object" && typeof resource !== "function")) {
+			storage.enterWith(token);
+			return null;
+		}
+		const previous = resource[key];
+		storage.enterWith(token);
+		return () => {
+			if (resource[key] === token) resource[key] = previous;
+		};
+	}
+
+	/**
 	 * @param {Function} fn - The callback.
 	 * @param {...*} args - Its arguments.
 	 * @returns {*} What it returned.
@@ -429,9 +471,10 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * A stand-in of a module's function that runs it in the flow it is called in, entered by slothlet (see
-	 * {@link AsyncContextManager#bindToRun}). Everything else (its name, length, properties, prototype, `this`, `new`,
-	 * what it returns and throws) is the function's own.
+	 * A stand-in of a module's function that runs it in the flow it is called in as a call of the leaf whose call handed
+	 * it out, entered by slothlet (see {@link AsyncContextManager#bindToRun}), as `"precise"` runs a module's code it
+	 * hands out: what the function runs after an `await` is then the call's code, and stays in the flow. Everything else
+	 * (its name, length, properties, prototype, `this`, `new`, what it returns and throws) is the function's own.
 	 * @param {Function} fn - The function.
 	 * @param {object} hander - The wrapper of the leaf whose call handed it out.
 	 * @returns {Function} The stand-in.
@@ -444,17 +487,38 @@ export class AsyncContextManager {
 			apply(target, thisArg, args) {
 				const store = manager.activeStore();
 				if (store === undefined) return Reflect.apply(target, thisArg, args);
-				return manager.store.run(store, Reflect.apply, target, thisArg, args);
+				return manager.#runAsCallOf(hander, store, target, thisArg, args);
 			},
 			construct(target, args, newTarget) {
 				const store = manager.activeStore();
 				if (store === undefined) return Reflect.construct(target, args, newTarget);
-				return manager.store.run(store, Reflect.construct, target, args, newTarget);
+				return manager.#runAsCallOf(hander, store, Reflect.construct, undefined, [target, unbindArgsForLeaf(args, hander), newTarget]);
 			}
 		});
 		WeakMapMethods.set(RUN_BOUND, standIn, { original: fn, hander });
 		runBoundMade++;
 		return standIn;
+	}
+
+	/**
+	 * Run a module's function as a call of the leaf whose call handed it out, in the flow running now (see
+	 * {@link AsyncContextManager#bindToRun}). What it returns and throws comes back as it is: nothing is handed back
+	 * through slothlet. With the permission system on, whoever runs it is its ceiling, as for any code a module hands out.
+	 * A flow of another instance (the function handed on to code that runs it there) is entered as it is.
+	 * @param {object} hander - The wrapper of the leaf.
+	 * @param {object} store - The store of the flow running now.
+	 * @param {Function} fn - The function.
+	 * @param {*} thisArg - Its receiver.
+	 * @param {Array<*>} args - Its arguments.
+	 * @returns {*} What it returned.
+	 */
+	#runAsCallOf(hander, store, fn, thisArg, args) {
+		const instanceID = hander.slothlet?.instanceID;
+		if (instanceID === undefined || (store.instanceID !== instanceID && store.parentInstanceID !== instanceID))
+			return this.store.run(store, Reflect.apply, fn, thisArg, args);
+		const checks = attributesResults(hander);
+		const ceiling = checks ? outerCallerCeiling(this, instanceID, hander.slothlet, null) : null;
+		return this.runInContext(instanceID, fn, thisArg, args, hander, true, false, ceiling, null, false, checks, store);
 	}
 
 	/**
@@ -474,6 +538,9 @@ export class AsyncContextManager {
 		const store = this.als.getStore();
 		if (store === undefined || this.#telling || this.store === null) return store;
 		if (this.store.entered() === store) return store;
+		// Code that entered a flow by itself put the rest of its run outside the flow: told again against that flow.
+		const outsideOf = store[FLOW_OF];
+		if (outsideOf !== undefined) return this.#stillOutside(store, outsideOf);
 		// Only a call's flow or a `run()` / `scope()` flow carries anything of another's; a file's load is told by its own.
 		if (store.moduleLoad || (!store.currentWrapper && !store.record && !store.parentInstanceID)) return store;
 		// Inside an async resource's scope the flow was put in place by whoever called it: told every time.
@@ -490,7 +557,11 @@ export class AsyncContextManager {
 			this.#telling = false;
 		}
 		if (answer === null) return store;
-		if (answer.outside) return this.outsideView(store, instanceID, answer.reader);
+		if (answer.outside) {
+			const view = this.outsideView(store, instanceID, answer.reader);
+			if (view !== undefined) this.#adopt(view);
+			return view;
+		}
 		// Every frame of this stretch is the flow's: the rest of the stretch is told by the mark, until it ends. Code queued
 		// before now never sees the mark, and the clearing runs before anything queued after it.
 		if (answer.clean && !scoped) {
@@ -502,6 +573,44 @@ export class AsyncContextManager {
 			});
 		}
 		return store;
+	}
+
+	/**
+	 * Put the rest of the code running now, and everything it hands Node to run later (a promise's `then()`, a timer, an
+	 * `await`), outside the flow it entered by itself: a job it schedules runs with nothing of its own on the stack, the
+	 * shape of a job the flow's own code handed Node, so it has to carry the stand-in store from where it was made. While
+	 * `AsyncContextFrame` is off the store is put on the async resource running now, and taken back off it once this
+	 * stretch of synchronous code ends, so the resource's owner running it again later runs in its own flow.
+	 * @param {object} view - The stand-in store (see {@link AsyncContextManager#outsideView}).
+	 * @returns {void}
+	 */
+	#adopt(view) {
+		const restore = this.store.enterAdopted(view);
+		if (restore !== null) queueMicrotask(restore);
+	}
+
+	/**
+	 * The store code acts in where code that entered a flow by itself put a stand-in store (see
+	 * {@link AsyncContextManager#activeStore}): told by the frames against the flow it stands outside of. Code of anyone else's
+	 * stays outside, as the leaf it is; the flow's own code (the host's code the module's code calls, a resource of the
+	 * flow's its owner runs again in the same stretch) acts in the flow; and code with nothing of anyone's on the stack (a
+	 * job the module's code handed Node, an api node called by Node) stays in the stand-in.
+	 * @param {object} view - The stand-in store.
+	 * @param {object} flow - The flow it stands outside of.
+	 * @returns {object|undefined} The store.
+	 */
+	#stillOutside(view, flow) {
+		const instanceID = flow.parentInstanceID ?? flow.instanceID;
+		this.#telling = true;
+		let answer;
+		try {
+			answer = runningOutsideFlow(instanceID, this.#ownersOf(flow));
+		} finally {
+			this.#telling = false;
+		}
+		if (answer === null) return view;
+		if (answer.outside) return answer.reader === view.currentWrapper ? view : this.outsideView(flow, instanceID, answer.reader);
+		return answer.found ? flow : view;
 	}
 
 	/**
@@ -549,6 +658,7 @@ export class AsyncContextManager {
 				record: reader ? { wrapper: reader, parent: null, flagged: false, ceiling: null } : null
 			};
 			if (!reader) Objects.defineProperty(view, OUTSIDE_FLOW, { __proto__: null, value: true });
+			Objects.defineProperty(view, FLOW_OF, { __proto__: null, value: store });
 			MapMethods.set(views, reader, view);
 		}
 		return view;
@@ -651,6 +761,9 @@ export class AsyncContextManager {
 	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
 	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
 	 *   (#597): the call is always checked for code another module made running inside it.
+	 * @param {object} [told] - The store of the flow running now, already told (see {@link AsyncContextManager#activeStore}),
+	 *   for a run-bound stand-in's call (see {@link AsyncContextManager#bindToRun}): what `fn` returns or throws is handed
+	 *   back as it is.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -665,10 +778,12 @@ export class AsyncContextManager {
 		ceiling = null,
 		resolved = null,
 		attribute = false,
-		madeCode = false
+		madeCode = false,
+		told = undefined
 	) {
 		// Check if we're already in an active ALS context
-		const activeStore = this.activeStore();
+		const asIs = told !== undefined;
+		const activeStore = asIs ? told : this.activeStore();
 		let baseStore;
 
 		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
@@ -742,7 +857,12 @@ export class AsyncContextManager {
 		// stand-in of its module (`"precise"` with the permission system on). Code that entered the flow by itself acts
 		// in the instance's own store, which belongs to no run.
 		const bindsToRun =
-			currentWrapper && !asHost && isActiveOurInstance && activeStore.parentInstanceID !== undefined && !handsOutAsModule(currentWrapper);
+			!asIs &&
+			currentWrapper &&
+			!asHost &&
+			isActiveOurInstance &&
+			activeStore.parentInstanceID !== undefined &&
+			!handsOutAsModule(currentWrapper);
 		const attributed = attributes
 			? bindsToRun
 				? (value) =>
@@ -760,6 +880,9 @@ export class AsyncContextManager {
 			args = unbindArgsForLeaf(args, currentWrapper);
 			thisArg = unbindForLeaf(thisArg, currentWrapper);
 		}
+
+		// A run-bound stand-in's call: the function's own result and errors, as plain JavaScript gives them.
+		if (asIs) return this.als.run(executionStore, enterCall, currentWrapper, fn, thisArg, args);
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
