@@ -161,19 +161,21 @@ export class ApiAssignment extends ComponentBase {
 				});
 				continue;
 			}
-			Objects.defineProperty(keptWrapper, folderKey, {
-				__proto__: null,
-				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
-				// the members that are not wrapper children at all: a callable folder module's impl keeps
-				// its function's own enumerable properties (`fn.extra = …`) on the function, where the
-				// traps serve them, so they never appear among the folder wrapper's own keys and only the
-				// extracted product (the function itself) carries them across. Eager merges the same members
-				// from the losing module's function in modes-processor (pair/fnprop pins both modes).
-				value: MapMethods.has(folderChildren, folderKey) ? MapMethods.get(folderChildren, folderKey) : folderProduct[folderKey],
-				writable: false,
-				enumerable: true,
-				configurable: true
-			});
+			// The folder's own children (wrapper proxies) move across as the nodes they are. A member that is not a
+			// child at all — a callable folder module's impl keeps its function's own enumerable properties
+			// (`fn.tag = …`, a getter, `fn.me = fn`) on the function, where the traps serve them — is adopted from the
+			// folder's function the way the folder's own node serves it: an accessor stays live and an object or
+			// function becomes a child node at the kept slot's path (#874). Eager adopts the same members from the
+			// losing module's function in modes-processor (pair/fnprop pins both modes against pair/fnsolo).
+			if (MapMethods.has(folderChildren, folderKey)) {
+				Objects.defineProperty(keptWrapper, folderKey, {
+					__proto__: null,
+					value: MapMethods.get(folderChildren, folderKey),
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
+			} else keptWrapper.___adoptForeignMember(folderKey, folderProduct);
 		}
 	}
 

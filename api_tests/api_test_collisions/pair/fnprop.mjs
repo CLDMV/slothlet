@@ -15,9 +15,9 @@
 
 /**
  * @fileoverview File side of a nested file+directory collision whose folder callable carries members
- * on its own function (`fn.tag = …`) rather than as named exports. Those members stay on the folder's
- * impl, never become children of its wrapper, and reach the surviving slot only through the collision
- * merge's snapshot of that impl.
+ * on its own function (`fn.tag = …`, a live getter, `fn.me = fn`) rather than as named exports. Those
+ * members stay on the folder's impl, never become children of its wrapper, and are adopted onto the
+ * surviving slot by the collision merge. pair/fnsolo is the same folder with no file beside it.
  * @module api_test_collisions.pair.fnprop
  * @memberof module:api_test_collisions
  */

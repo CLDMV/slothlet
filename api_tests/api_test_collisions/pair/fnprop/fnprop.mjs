@@ -34,5 +34,21 @@ export default function folderFnprop() {
 /** @type {string} Member carried on the function itself, not exported by name. */
 folderFnprop.tag = "folder-fn-tag";
 
+/** @type {number} Backing state for the live accessor below. */
+let reads = 0;
+
+// A live accessor on the function: every read runs the getter, so two reads see two values.
+Object.defineProperty(folderFnprop, "live", {
+	get() {
+		reads += 1;
+		return reads;
+	},
+	enumerable: true,
+	configurable: true
+});
+
+/** @type {Function} Self-reference: the member is the module's own callable. */
+folderFnprop.me = folderFnprop;
+
 /** @type {string} Ordinary named export merged from the losing folder. */
 export const origin = "dir";
