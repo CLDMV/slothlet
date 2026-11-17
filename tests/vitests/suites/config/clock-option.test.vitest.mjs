@@ -279,11 +279,13 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		it("a module's api.add options and context cannot supply one", async () => {
 			api = await slothlet({ ...config, base: PLAIN, silent: true });
 			const real = Date.now();
-			await api.slothlet.api.add("guest", PERMISSIONS, {
-				id: "guest",
-				clock: { now: () => 1 },
-				context: { clock: { now: () => 1 } }
-			});
+			// api.add takes neither a `clock` nor a `context` option: the strict option check refuses both outright.
+			for (const options of [{ clock: { now: () => 1 } }, { context: { clock: { now: () => 1 } } }]) {
+				await expect(api.slothlet.api.add("guest", PERMISSIONS, { id: "guest", ...options })).rejects.toMatchObject({
+					code: "INVALID_CONFIG_UNKNOWN_KEY"
+				});
+			}
+			await api.slothlet.api.add("guest", PERMISSIONS, { id: "guest" });
 			const metas = [];
 			api.slothlet.event.on("clock.guest", (_payload, meta) => metas.push(meta.at));
 			await api.slothlet.event.emit("clock.guest", {});

@@ -79,7 +79,7 @@ describe.each([
 				mode,
 				runtime,
 				silent: true,
-				permissions: { policy: "allow", caller: { attribution }, rules: RULES, ...(provenance ? {} : { provenance: false }) }
+				permissions: { policy: "allow", caller: { attribution, ...(provenance ? {} : { provenance: false }) }, rules: RULES }
 			});
 		}
 

@@ -102,12 +102,12 @@ async function expectLeaves(node, leaves) {
 /**
  * Create an instance with add/remove/reload enabled.
  * @param {object} config - Matrix config.
- * @param {string} [collisionApi] - `api.collision.api` to use; the matrix config's when omitted.
+ * @param {string} [collisionApi] - `api.collision.mode.api` to use; the matrix config's when omitted.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 function createInstance(config, collisionApi) {
 	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true }, collision: { override: true } };
-	if (collisionApi) apiConfig.collision = { ...(config.api?.collision ?? {}), api: collisionApi };
+	if (collisionApi) apiConfig.collision = { ...apiConfig.collision, mode: { ...(config.api?.collision?.mode ?? {}), api: collisionApi } };
 	// allowCollisionOverride lets a per-call `collisionMode` take effect.
 	return slothlet({ ...config, base: TEST_DIRS.API_TEST, silent: true, api: apiConfig });
 }

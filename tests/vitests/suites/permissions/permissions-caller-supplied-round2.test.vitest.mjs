@@ -221,12 +221,12 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 		});
 
 		it('with ceiling "chain", it survives a pin and a second callee the pinned code hands code to', async () => {
-			await build({ ceiling: "chain" });
+			await build({ caller: { ceiling: "chain" } });
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.nestedPin())).toEqual(DENIED);
 		});
 
 		it('ceiling must be "leaf" or "chain", and provenance a boolean', async () => {
-			for (const permissions of [{ ceiling: "yes" }, { ceiling: true }, { provenance: "yes" }]) {
+			for (const permissions of [{ caller: { ceiling: "yes" } }, { caller: { ceiling: true } }, { caller: { provenance: "yes" } }]) {
 				await expect(
 					slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "deny", ...permissions } })
 				).rejects.toMatchObject({ code: "INVALID_CONFIG" });
@@ -234,7 +234,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 		});
 
 		it('with ceiling "chain", the module\'s own code is not held to anything', async () => {
-			await build({ ceiling: "chain" });
+			await build({ caller: { ceiling: "chain" } });
 			expect(await api.supplier.probe.ownCallThroughCallee2()).toEqual({ ok: true, value: "supplied" });
 		});
 	});

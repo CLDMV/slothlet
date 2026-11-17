@@ -96,7 +96,7 @@ describe.each(CONFIGS)("the api root function runs as the api root > $mode / $ru
 			let api;
 
 			beforeAll(async () => {
-				const permissions = policy.permissions === undefined ? undefined : { attribution, ...policy.permissions };
+				const permissions = policy.permissions === undefined ? undefined : { caller: { attribution }, ...policy.permissions };
 				api = await slothlet({ base: path.join(FIXTURE, folder), mode, runtime, silent: true, permissions });
 			}, 60000);
 

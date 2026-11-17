@@ -78,11 +78,12 @@ afterEach(async () => {
 
 /**
  * An instance of the fixture, with the nodes the tests touch loaded.
- * @param {object} options - `mode`, `runtime` and the `permissions` fields to add.
+ * @param {object} options - `mode`, `runtime`, `attribution` and `provenance` (placed under `permissions.caller`) and the other `permissions` fields to add.
  * @returns {Promise<object>} The api.
  */
-async function open({ mode, runtime, ...permissions }) {
-	api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { policy: "deny", rules: RULES, ...permissions } });
+async function open({ mode, runtime, attribution, provenance, ...permissions }) {
+	const caller = { ...(attribution === undefined ? {} : { attribution }), ...(provenance === undefined ? {} : { provenance }) };
+	api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { policy: "deny", rules: RULES, ...permissions, caller } });
 	await api.vault.get();
 	await api.shared.take();
 	await api.bag.echo(1);
@@ -99,7 +100,7 @@ describe("Permissions > attribution > validation (#726)", () => {
 			(e) => e
 		);
 		expect(error).toMatchObject({ name: "SlothletError", code: "INVALID_CONFIG" });
-		expect(error.message).toContain("permissions.attribution");
+		expect(error.message).toContain("permissions.caller.attribution");
 		expect(error.message).toContain('"precise" | "fast"');
 	});
 
@@ -325,9 +326,9 @@ describe.each(MODES)("Permissions > attribution > permissions not on > $name (#7
 	const CONFIGS = [
 		["no permissions config", undefined],
 		['mode: "off"', { mode: "off" }],
-		["enabled: false", { enabled: false }],
+		["permissions: false", false],
 		['mode: "disabled"', { mode: "disabled" }],
-		['mode: "off", attribution: "fast"', { mode: "off", attribution: "fast" }]
+		['mode: "off", caller.attribution: "fast"', { mode: "off", caller: { attribution: "fast" } }]
 	];
 	it.each(CONFIGS)("%s: nothing is wrapped, and handed-out code still runs with self", async (_label, permissions) => {
 		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions });

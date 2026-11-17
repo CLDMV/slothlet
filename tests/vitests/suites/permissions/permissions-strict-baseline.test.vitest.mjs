@@ -90,8 +90,8 @@ const MET_NODE = {
 
 describe("permissions mode strict > config", () => {
 	it("is accepted as a mode and as the shorthand, and counts as on", () => {
-		expect(normalizePermissionsConfig({ mode: "strict" })).toMatchObject({ mode: "strict", enabled: true });
-		expect(normalizePermissionsConfig("strict")).toMatchObject({ mode: "strict", enabled: true });
+		expect(normalizePermissionsConfig({ mode: "strict" })).toMatchObject({ mode: "strict" });
+		expect(normalizePermissionsConfig("strict")).toMatchObject({ mode: "strict" });
 	});
 
 	it("still refuses an unknown mode", () => {

@@ -57,7 +57,7 @@ const POLICIES = [
 	// Off keeps the framework's built-in protections: a module is refused `slothlet.permissions.principal` and `control`.
 	{ label: "permissions off", permissions: () => undefined, exact: false },
 	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }), exact: true },
-	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }), exact: false },
+	{ label: "permissions on, default allow", permissions: (attribution) => ({ caller: { attribution } }), exact: false },
 	{
 		label: "permissions on, default deny, the probe allowed everything",
 		permissions: (attribution) => ({
@@ -387,7 +387,7 @@ describe.each(CONFIGS)("self() runs the root as the api root > $mode / $runtime 
 		let api;
 
 		beforeAll(async () => {
-			const permissions = policy.permissions === undefined ? undefined : { attribution, ...policy.permissions };
+			const permissions = policy.permissions === undefined ? undefined : { caller: { attribution }, ...policy.permissions };
 			api = await slothlet({ base: path.join(FIXTURE, "ownleaf"), mode, runtime, silent: true, permissions });
 		}, 60000);
 
@@ -434,7 +434,7 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "permissions on, no rule",
-		permissions: (attribution) => ({ attribution }),
+		permissions: (attribution) => ({ caller: { attribution } }),
 		config: { settings: SETTINGS },
 		hidden: 2,
 		principal: DENIED,

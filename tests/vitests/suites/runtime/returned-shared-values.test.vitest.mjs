@@ -534,7 +534,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	// With provenance off no frames are read, so what a module returns is searched for code when it is handed out and
 	// the code stands for the module that made it: turning the stack check off gives up nothing a return value carries.
 	it.each(HOLDERS)("runs the module's code a %s holds as that module with provenance off", async (kind) => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
@@ -568,7 +568,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	// With provenance off nothing reads the frames of what it yields, so it comes back as the module's: a stand-in the
 	// engine's own `next` refuses, never the iterator itself.
 	it.each(DISGUISED)("hands out $kind as the module's with provenance off", async ({ kind, next }) => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const held = await api.slots.holding(kind);
 		expect(types.isProxy(held)).toBe(true);
 		expect(await stepAndRun(held, next)).toBe("not stepped");
@@ -581,7 +581,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("hands out data with the prototype of plain data as itself with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const held = await api.slots.plainData();
 		expect(types.isProxy(held)).toBe(false);
 		expect(types.isProxy(held.nested)).toBe(false);
@@ -593,7 +593,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	it.each(["error", "typeError", "aggregate", "causeAndMembers", "stackRead"])(
 		"hands out data holding an error (%s) as itself with provenance off",
 		async (kind) => {
-			await create({ provenance: false });
+			await create({ caller: { provenance: false } });
 			const held = await api.slots.errorData(kind);
 			expect(types.isProxy(held)).toBe(false);
 			expect(types.isProxy(held.error)).toBe(false);
@@ -606,7 +606,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	it.each(["iteratorHoldingError", "iteratorPosingAsError", "errorBesideIterator", "prototypeReplaced", "stackGetter"])(
 		"hands out data holding what only looks like plain data and an error (%s) as the module's with provenance off",
 		async (kind) => {
-			await create({ provenance: false });
+			await create({ caller: { provenance: false } });
 			const held = await api.slots.errorData(kind);
 			expect(types.isProxy(held)).toBe(true);
 			expect(await api.slots.stackGetterCount()).toBe(0);
@@ -614,7 +614,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	);
 
 	it("hands out data holding an error without formatting its stack, with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const saved = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
 		let formatted = 0;
 		Error.prepareStackTrace = () => {
@@ -634,7 +634,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(types.isProxy(await api.slots.script())).toBe(true);
 		expect(await api.esm.viaScript()).toBe("PERMISSION_DENIED");
 	});

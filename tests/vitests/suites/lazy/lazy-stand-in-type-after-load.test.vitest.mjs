@@ -34,11 +34,13 @@ const FIXTURE = resolve("api_tests/api_test_lazy_held_standin");
 const KEYS = ["map", "set", "date", "err", "arr", "obj", "fn", "str", "num"];
 
 const configs = ["async", "live"].flatMap((runtime) =>
-	[{ attribution: "precise" }, { attribution: "fast" }, { mode: "off" }, { mode: "disabled" }].map((permissions) => ({
-		runtime,
-		permissions,
-		name: permissions.attribution ?? `permissions ${permissions.mode}`
-	}))
+	[{ caller: { attribution: "precise" } }, { caller: { attribution: "fast" } }, { mode: "off" }, { mode: "disabled" }].map(
+		(permissions) => ({
+			runtime,
+			permissions,
+			name: permissions.caller?.attribution ?? `permissions ${permissions.mode}`
+		})
+	)
 );
 
 /**

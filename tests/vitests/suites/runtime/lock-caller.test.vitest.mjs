@@ -56,7 +56,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	/**
 	 * Build the lock-caller fixture API and register the producer's emitter listener.
-	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
+	 * @param {object} [extra] - Further permission options (`{ caller: { provenance: false } }`).
 	 * @returns {Promise<object>} The Slothlet API proxy.
 	 */
 	async function makeApi(extra = {}) {
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	it("a plain (un-pinned) callback inherits the ambient (wrong) caller identity", async () => {
 		// With provenance off, nothing tells the callback's code apart from the module running it.
-		await makeApi({ provenance: false });
+		await makeApi({ caller: { provenance: false } });
 		const plainProbe = await api.consumer.probe.makePlainIdentityProbe();
 		// No pinning — the callback is attributed to whatever module is ambient.
 		expect(await api.producer.relay.viaEmitter(plainProbe)).toBe("producer");
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	it("a plain callback is denied because the ambient caller fails the permission rule", async () => {
 		// The ambient caller decides only with provenance off; with it on, see provenance-native (#597).
-		await makeApi({ provenance: false });
+		await makeApi({ caller: { provenance: false } });
 		const plainGuarded = await api.consumer.probe.makePlainGuardedCall();
 		await withSuppressedSlothletErrorOutput(async () => {
 			let error;
@@ -272,7 +272,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	it.skipIf(!config.hook?.enabled)("an unpinned hook runs as the call it fires in when provenance is off", async () => {
 		// With provenance off no frames are read, so nothing tells the handler's code from the call running it.
-		await makeApi({ provenance: false });
+		await makeApi({ caller: { provenance: false } });
 		api.slothlet.hook.pin.disable();
 		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
 		await api.producer.relay.viaSelf();

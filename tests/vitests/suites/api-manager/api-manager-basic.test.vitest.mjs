@@ -146,9 +146,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(api.extra2?.mathCjs).toBeTypeOf("object");
 	});
 
-	// TODO: allowAddApiOverwrite isn't in v3...
 	it("reloads using the latest api.slothlet.api.add overwrite", async () => {
-		api = await createApiInstance(config, { allowAddApiOverwrite: true });
+		api = await createApiInstance(config);
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "module-x" });
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { id: "module-x" });
 

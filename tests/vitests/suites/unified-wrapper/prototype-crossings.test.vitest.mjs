@@ -93,8 +93,8 @@ const ROUTES = {
  */
 async function mount(options) {
 	// Event payloads reach every subscriber, so what a listener is handed is decided by the write rules alone.
-	const events = { default: "allow" };
-	const permissions = options.permissions ? { ...options.permissions, events } : { enabled: false, events };
+	const events = { policy: "allow" };
+	const permissions = options.permissions ? { ...options.permissions, events } : { mode: "off", events };
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: { enabled: true }, ...options, permissions });
 	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
 	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });

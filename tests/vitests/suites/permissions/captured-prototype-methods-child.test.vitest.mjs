@@ -251,7 +251,7 @@ beforeAll(() => {
 		"};",
 		"const out = {};",
 		"const api = await slothlet({",
-		"\tdir: API, mode, runtime, hook: true, silent: true,",
+		"\tbase: API, mode, runtime, hook: true, silent: true,",
 		"\tpermissions: { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution } }",
 		"});",
 		"await api.slothlet.api.add('owner', OWNER, { id: 'owner' });",

@@ -246,7 +246,7 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > $na
 		it.each(FAILURES)(
 			"%s/%s/%s: with provenance off, what slothlet reads of the error still never runs as a",
 			async (how, inherited, prop) => {
-				await setup({ provenance: false });
+				await setup({ caller: { provenance: false } });
 				const label = failureLabel(how, inherited, prop);
 				expect(await api.a.use.fails("failWithGetter", "secret", how, inherited, prop)).toBe(true);
 				expect(await api.b.give.drain(), label).not.toContainEqual(expect.objectContaining({ ok: true }));

@@ -111,12 +111,12 @@ async function expectLeaves(api, leaves) {
 /**
  * Create an instance with the api collision mode set and every mutation enabled.
  * @param {object} config - Matrix config.
- * @param {string} [collisionApi] - `api.collision.api` to use; the matrix config's when omitted.
+ * @param {string} [collisionApi] - `api.collision.mode.api` to use; the matrix config's when omitted.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 async function createInstance(config, collisionApi) {
 	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true } };
-	if (collisionApi) apiConfig.collision = { ...(config.api?.collision ?? {}), api: collisionApi };
+	if (collisionApi) apiConfig.collision = { ...apiConfig.collision, mode: { ...(config.api?.collision?.mode ?? {}), api: collisionApi } };
 	return slothlet({ ...config, base: TEST_DIRS.API_TEST, api: apiConfig });
 }
 
@@ -127,7 +127,7 @@ async function createInstance(config, collisionApi) {
  * @param {string} extID - moduleID for that folder.
  * @param {object} [options] - Options.
  * @param {string} [options.otherDir] - Folder to mount as `other`.
- * @param {string} [options.collisionApi] - `api.collision.api` to use.
+ * @param {string} [options.collisionApi] - `api.collision.mode.api` to use.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 async function createComounted(config, extDir = EXT_DIR, extID = "ext", { otherDir = OTHER_DIR, collisionApi } = {}) {
