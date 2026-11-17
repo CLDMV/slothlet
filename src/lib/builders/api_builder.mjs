@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
+ *	@Last modified time: 2026-11-17T15:07:34-08:00 (1794956854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,6 +60,7 @@ import {
 	NativeProxy,
 	NumberMethods,
 	Objects,
+	Promise,
 	Reflect,
 	RegExpMethods,
 	Set,
@@ -278,15 +279,25 @@ function runtime_ownerModuleIDs(identity) {
 }
 
 /**
- * What a `run()` / `scope()` callback returned, taken up in the store it ran in (async runtime): a native promise and a
- * plain value as they are, and anything else through a promise of slothlet's own resolved with it there, so the `then` of
- * a thenable that is no native promise runs in the run, as the callback's own code, and not wherever the caller awaits it.
+ * What a `run()` / `scope()` callback returned, taken up in the store it ran in (async runtime): a plain value and a
+ * promise `await` settles by itself as they are, and anything else through a promise of slothlet's own resolved with it
+ * there, so the `then` of a thenable runs in the run, as the callback's own code, and not wherever the caller awaits it.
+ * A promise `await` settles by itself is an engine promise whose prototype is `Promise.prototype` with no `then` or
+ * `constructor` of its own: `await` reads its `constructor`, and for any other calls its `then`. A `Promise` subclass
+ * (whose `then` can be overridden) and a promise given a `then` or a `constructor` of its own are taken up in the run.
  * @param {*} value - What the callback returned.
  * @returns {*} The value, or a promise settled as the thenable settles.
  * @private
  */
 function runtime_adoptInStore(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function") || util.types.isPromise(value)) return value;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	if (
+		util.types.isPromise(value) &&
+		Reflect.getPrototypeOf(value) === Promise.prototype &&
+		Objects.getOwnPropertyDescriptor(value, "then") === undefined &&
+		Objects.getOwnPropertyDescriptor(value, "constructor") === undefined
+	)
+		return value;
 	return settledWith(value);
 }
 
