@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:39:54-08:00 (1794933594)
+ *	@Last modified time: 2026-11-17T12:09:03-08:00 (1794946143)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3026,6 +3026,62 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 		runtime_markCallerLocked(viewed);
 	}
 	return viewed;
+}
+
+/**
+ * A proxy trap that writes a member of `wrapper`, wrapped so ownership follows what module code stores: a node the
+ * write builds for an object or function belongs to the module owning the member, and a member the write creates is
+ * recorded as the writing module's own once the write stands; a deleted member a module created is no one's (see
+ * {@link ApiManager#writeOwnerOf}, {@link ApiManager#recordCreated}, {@link ApiManager#forgetCreated}). Host code, the
+ * framework's own writes, the build, symbol keys and framework-reserved keys are written as the trap writes them.
+ *
+ * @param {object} wrapper - The node whose trap it is.
+ * @param {function(...*): boolean} trap - The `set`, `defineProperty` or `deleteProperty` trap.
+ * @param {(function(Array<*>): *)|null} valueOf - The value the trap's arguments store; null for a deletion.
+ * @returns {function(...*): boolean} The wrapped trap.
+ * @private
+ *
+ * @example
+ * const set = runtime_placingTrap(wrapper, setTrap, (args) => args[2]);
+ */
+function runtime_placingTrap(wrapper, trap, valueOf) {
+	return (...args) => {
+		const prop = args[1];
+		const slothlet = wrapper.slothlet;
+		if (
+			typeof prop !== "string" ||
+			isFrameworkReservedKey(prop) ||
+			MapMethods.has(FRAMEWORK_WRITES, wrapper) ||
+			slothlet.____buildDepth > 0
+		)
+			return FunctionMethods.apply(trap, undefined, args);
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		const writer = identity && !identity.unresolved ? (identity.currentWrapper ?? null) : null;
+		if (writer === null) return FunctionMethods.apply(trap, undefined, args);
+		const internal = wrapper.____slothletInternal;
+		const parts = filterList(splitText(String(internal.apiPath), "."), Boolean);
+		listPush(parts, prop);
+		const apiManager = slothlet.handlers.apiManager;
+		if (valueOf === null) {
+			const removed = FunctionMethods.apply(trap, undefined, args);
+			if (removed) apiManager.forgetCreated(parts);
+			return removed;
+		}
+		// The node loads first, as the trap would load it, so what it already holds is known and adopted as its own.
+		if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper.___materialize();
+		const placed = apiManager.writeOwnerOf(parts, writer);
+		if (placed === null) return FunctionMethods.apply(trap, undefined, args);
+		const priorOwner = internal.adoptOwner;
+		internal.adoptOwner = placed.owner;
+		let written;
+		try {
+			written = FunctionMethods.apply(trap, undefined, args);
+		} finally {
+			internal.adoptOwner = priorOwner;
+		}
+		if (written && placed.created) apiManager.recordCreated(parts, placed.owner, valueOf(args));
+		return written;
+	};
 }
 
 /**
@@ -21424,100 +21480,106 @@ class UnifiedWrapper extends ComponentBase {
 				return bound === descriptor.value ? descriptor : { __proto__: null, ...descriptor, value: bound };
 			},
 			ownKeys: ownKeysTrap,
-			set: setTrap,
+			// What a module's write stores is owned by the module owning the member, or by the writer for one it creates.
+			set: runtime_placingTrap(wrapper, setTrap, (args) => args[2]),
 			// A callable `then` is refused here, as in the set trap. A callable node's target is a bare function shell
 			// while its members live on the wrapper, so a definition lands on the wrapper, where reads find
 			// it; the shell takes it too only when the proxy invariants bind it there (a non-configurable
 			// definition, a sealed shell, a key the shell holds non-configurably). Any other target, and any
 			// framework-reserved key, is defined on the target as before.
-			defineProperty: (target, prop, descriptor) => {
-				if (prop === "then" && isAwaitableThen(descriptor)) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
-				}
-				// A definition that changes nothing (freezing an already frozen node) is no write (#667).
-				if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;
-				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625),
-				// and never a framework-reserved key (the built-in write rules).
-				runtime_assertOwnedWrite(wrapper, prop);
-				// A view `self` handed out stands for its node: the node is what is defined (#625).
-				if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
-				// An object defined after the api was built is data, as one assigned is (#826).
-				if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
-				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
-				if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
-				// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.
-				if (
-					"value" in descriptor &&
-					!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
-					runtime_definitionFixes(wrapper, target, prop, descriptor)
-				) {
-					runtime_refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
-				}
-				// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is
-				// read through it is gated at its own path and a write through it is held to its owner. The module's own
-				// object keeps the value itself.
-				const raw = descriptor;
-				const heldNode = runtime_definedValueNode(wrapper, target, prop, descriptor);
-				if (heldNode !== null) descriptor = { __proto__: null, ...descriptor, value: heldNode };
-				if (target === wrapper) {
-					if (!Reflect.defineProperty(target, prop, descriptor)) return false;
-					if (heldNode !== null) SetMethods.add((wrapper.____slothletInternal.userAssignedKeys ??= new Set()), prop);
-					return true;
-				}
-				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
-				// changes them as it would on the object, a value going through the node's own write.
-				if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
-				// An accessor defined at runtime runs as the node's module, as an exported one does (#597).
-				descriptor = runtime_adoptDefinedAccessor(wrapper, descriptor);
-				// An array member defines on its current array (#602), unless the position lies past a read-only length.
-				if (Arrays.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
-				const internal = wrapper.____slothletInternal;
-				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
-				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper.___materialize();
-				const bindsTarget = runtime_bindsTarget(target, wrapper, prop, descriptor);
-				// A partial definition binding the shell (`{ configurable: false }`) keeps the member as it is: the shell
-				// takes the rest of its descriptor from the member, its value as the node holds it (#603 review).
-				let shellDescriptor = descriptor;
-				if (bindsTarget && !hasOwn(target, prop) && !("get" in descriptor) && !("set" in descriptor)) {
-					const member = getOwnPropertyDescriptorTrap(target, prop, false);
-					if (member && "value" in member) {
-						shellDescriptor = {
-							__proto__: null,
-							value: runtime_shellValue(wrapper, prop),
-							writable: true,
-							enumerable: member.enumerable,
-							configurable: member.configurable,
-							...descriptor
-						};
+			defineProperty: runtime_placingTrap(
+				wrapper,
+				(target, prop, descriptor) => {
+					if (prop === "then" && isAwaitableThen(descriptor)) {
+						throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 					}
-				}
-				// A node built from a copy of a module's own object defines the member on that object too, as the same
-				// definition of the object does (#746).
-				const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
-				// All are checked before any changes, so a refusal by one leaves the others as they were.
-				if (
-					(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
-					!runtime_canDefine(wrapper, prop, descriptor) ||
-					(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw))
-				)
-					return false;
-				if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, raw)) return false;
-				if (moduleObject !== null && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(moduleObject), prop);
-				// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
-				// node's own store keeps every member read-only, so what was asked for is remembered beside it.
-				const wasData = hasOwn(wrapper, prop) && "value" in Reflect.getOwnPropertyDescriptor(wrapper, prop);
-				const wasWritable = wasData && runtime_reportsWritable(wrapper, prop);
-				if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
-				if (!Reflect.defineProperty(wrapper, prop, descriptor)) return false;
-				const isAccessor = "get" in descriptor || "set" in descriptor;
-				const staysWritable = !isAccessor && ("writable" in descriptor ? descriptor.writable === true : wasWritable);
-				if (isAccessor || staysWritable) {
-					if (internal.readOnlyKeys) SetMethods.delete(internal.readOnlyKeys, prop);
-				} else SetMethods.add((internal.readOnlyKeys ??= new Set()), prop);
-				if (heldNode !== null) SetMethods.add((internal.userAssignedKeys ??= new Set()), prop);
-				return true;
-			},
-			deleteProperty: deletePropertyTrap,
+					// A definition that changes nothing (freezing an already frozen node) is no write (#667).
+					if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;
+					// Defining a member is a write to its path: a module defines only under the subtree it owns (#625),
+					// and never a framework-reserved key (the built-in write rules).
+					runtime_assertOwnedWrite(wrapper, prop);
+					// A view `self` handed out stands for its node: the node is what is defined (#625).
+					if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+					// An object defined after the api was built is data, as one assigned is (#826).
+					if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
+					// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
+					if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+					// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.
+					if (
+						"value" in descriptor &&
+						!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+						runtime_definitionFixes(wrapper, target, prop, descriptor)
+					) {
+						runtime_refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
+					}
+					// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is
+					// read through it is gated at its own path and a write through it is held to its owner. The module's own
+					// object keeps the value itself.
+					const raw = descriptor;
+					const heldNode = runtime_definedValueNode(wrapper, target, prop, descriptor);
+					if (heldNode !== null) descriptor = { __proto__: null, ...descriptor, value: heldNode };
+					if (target === wrapper) {
+						if (!Reflect.defineProperty(target, prop, descriptor)) return false;
+						if (heldNode !== null) SetMethods.add((wrapper.____slothletInternal.userAssignedKeys ??= new Set()), prop);
+						return true;
+					}
+					// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
+					// changes them as it would on the object, a value going through the node's own write.
+					if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
+					// An accessor defined at runtime runs as the node's module, as an exported one does (#597).
+					descriptor = runtime_adoptDefinedAccessor(wrapper, descriptor);
+					// An array member defines on its current array (#602), unless the position lies past a read-only length.
+					if (Arrays.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
+					const internal = wrapper.____slothletInternal;
+					// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
+					if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper.___materialize();
+					const bindsTarget = runtime_bindsTarget(target, wrapper, prop, descriptor);
+					// A partial definition binding the shell (`{ configurable: false }`) keeps the member as it is: the shell
+					// takes the rest of its descriptor from the member, its value as the node holds it (#603 review).
+					let shellDescriptor = descriptor;
+					if (bindsTarget && !hasOwn(target, prop) && !("get" in descriptor) && !("set" in descriptor)) {
+						const member = getOwnPropertyDescriptorTrap(target, prop, false);
+						if (member && "value" in member) {
+							shellDescriptor = {
+								__proto__: null,
+								value: runtime_shellValue(wrapper, prop),
+								writable: true,
+								enumerable: member.enumerable,
+								configurable: member.configurable,
+								...descriptor
+							};
+						}
+					}
+					// A node built from a copy of a module's own object defines the member on that object too, as the same
+					// definition of the object does (#746).
+					const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+					// All are checked before any changes, so a refusal by one leaves the others as they were.
+					if (
+						(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
+						!runtime_canDefine(wrapper, prop, descriptor) ||
+						(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw))
+					)
+						return false;
+					if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, raw)) return false;
+					if (moduleObject !== null && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(moduleObject), prop);
+					// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
+					// node's own store keeps every member read-only, so what was asked for is remembered beside it.
+					const wasData = hasOwn(wrapper, prop) && "value" in Reflect.getOwnPropertyDescriptor(wrapper, prop);
+					const wasWritable = wasData && runtime_reportsWritable(wrapper, prop);
+					if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
+					if (!Reflect.defineProperty(wrapper, prop, descriptor)) return false;
+					const isAccessor = "get" in descriptor || "set" in descriptor;
+					const staysWritable = !isAccessor && ("writable" in descriptor ? descriptor.writable === true : wasWritable);
+					if (isAccessor || staysWritable) {
+						if (internal.readOnlyKeys) SetMethods.delete(internal.readOnlyKeys, prop);
+					} else SetMethods.add((internal.readOnlyKeys ??= new Set()), prop);
+					if (heldNode !== null) SetMethods.add((internal.userAssignedKeys ??= new Set()), prop);
+					return true;
+				},
+				(args) => ("value" in args[2] ? args[2].value : undefined)
+			),
+			// A member a module created at runtime is no one's once deleted.
+			deleteProperty: runtime_placingTrap(wrapper, deletePropertyTrap, null),
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
 			// resolve. Generalized beyond arrays for a wrap-on-set/add() GRAFTED subtree (#340,
 			// gated on `deferChildAdopt` — the same flag that marks that whole subtree), AND for any

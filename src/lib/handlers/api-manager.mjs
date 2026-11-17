@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:56:10-08:00 (1794930970)
+ *	@Last modified time: 2026-11-17T12:09:02-08:00 (1794946142)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -138,6 +138,14 @@ const UNSAFE_PATH_SEGMENTS = setFrom(["__proto__", "constructor", "prototype"]);
  * @private
  */
 const FRAMEWORK_ROOT_SEGMENTS = setFrom(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * The ownership source of a member module code created at runtime: the module that wrote it owns it, as a module owns
+ * what it loads, until it is deleted, its module is removed, or the api is rebuilt.
+ * @type {string}
+ * @private
+ */
+const CREATED_SOURCE = "created";
 
 /**
  * Where an `api.add`'s history record keeps how each of its `permissions` rules was placed (#625), so a reload replays
@@ -738,6 +746,8 @@ export class ApiManager extends ComponentBase {
 		}
 		// A view `self` handed out stands for its node: the node is what is stored (#625).
 		value = runtime_unwrapSelfView(value);
+		// A member the write creates is the writing module's own once written.
+		const placed = this.writeOwnerOf(parts, callerWrapper);
 
 		// Walk to the parent container, creating namespace wrappers as needed.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
@@ -766,6 +776,7 @@ export class ApiManager extends ComponentBase {
 		} else {
 			parent[finalKey] = value;
 		}
+		if (placed?.created) this.recordCreated(parts, placed.owner, value);
 	}
 
 	/**
@@ -891,6 +902,120 @@ export class ApiManager extends ComponentBase {
 		}
 		if (!exists && this.slothlet.handlers.ownership.getCurrentOwner(ArrayMethods.join(parts, ".")) !== null) exists = true;
 		return { exists, accessor: false, filePath };
+	}
+
+	/**
+	 * Who owns what a module's write at `parts` stores: the module that owns the member already there, or, for a member
+	 * that does not exist yet, the writing module, which creates it. Replacing another module's member transfers nothing.
+	 * A node built for an object or function the write stores is attributed to that owner, and a member it creates is
+	 * recorded for it once written ({@link ApiManager#recordCreated}).
+	 *
+	 * @param {string[]} parts - Segments of the api path written.
+	 * @param {object|null} writer - The executing module's wrapper, or null for host code.
+	 * @returns {{owner: string, created: boolean}|null} The owning moduleID and whether the write creates the member;
+	 *   null for host code, a writer with no recorded owner, the framework's own roots, and an unowned member.
+	 * @public
+	 *
+	 * @example
+	 * const placed = apiManager.writeOwnerOf(["p", "counter"], writer); // { owner: "B", created: true }
+	 */
+	writeOwnerOf(parts, writer) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!writer || !ownership || parts.length === 0 || SetMethods.has(FRAMEWORK_ROOT_SEGMENTS, parts[0])) return null;
+		const existing = ownership.getCurrentOwner(ArrayMethods.join(parts, "."));
+		if (existing !== null) return { owner: existing.moduleID, created: false };
+		if (this.#memberAt(parts).exists) return null;
+		const callerPath = String(writer.____slothletInternal?.apiPath ?? "");
+		const owner = callerPath ? (ownership.getCurrentOwner(callerPath)?.moduleID ?? null) : null;
+		return owner === null ? null : { owner, created: true };
+	}
+
+	/**
+	 * Record the module that created a member at `parts` as its owner, once the write that created it stood: plain
+	 * JavaScript's creator owns what it creates. The entry is an ordinary ownership entry, so removing the module
+	 * removes the member with its other paths, and the owner grant, module privacy, and the write rules read it as they
+	 * read a loaded member's. A node the write built for an object or function registered it already, for the same
+	 * module ({@link ApiManager#writeOwnerOf}); the entry is marked as created either way. A runtime write is not
+	 * replayed by a reload, and neither is its entry: the rebuilt api records only what it loads.
+	 *
+	 * @param {string[]} parts - Segments of the api path created.
+	 * @param {string} moduleID - The creating module.
+	 * @param {*} value - The value written: recorded for a primitive, which no node stands for.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * apiManager.recordCreated(["p", "counter"], "B", 1);
+	 */
+	recordCreated(parts, moduleID, value) {
+		const ownership = this.slothlet.handlers.ownership;
+		const apiPath = ArrayMethods.join(parts, ".");
+		if (!ownership || !this.#memberAt(parts).exists) return;
+		const wrapped = value !== null && (typeof value === "object" || typeof value === "function");
+		ownership.register({
+			moduleID,
+			apiPath,
+			value: wrapped ? undefined : value,
+			source: CREATED_SOURCE,
+			collisionMode: "merge"
+		});
+		// What a created object holds is created with it, as what a loaded object holds is loaded with it.
+		if (wrapped && typeof value === "object" && !Arrays.isArray(value)) this.#recordCreatedMembers(value, moduleID, apiPath, new WeakSet());
+	}
+
+	/**
+	 * Record the members a created object holds as its creator's, read off the object itself (own data members with a
+	 * string key; an accessor is not run), down through the plain objects it holds, as
+	 * {@link OwnershipManager#registerSubtree} records a loaded subtree.
+	 *
+	 * @param {object} object - The object the module created.
+	 * @param {string} moduleID - The creating module.
+	 * @param {string} apiPath - The object's api path.
+	 * @param {WeakSet<object>} visited - Objects already walked, for a cycle.
+	 * @returns {void}
+	 * @private
+	 */
+	#recordCreatedMembers(object, moduleID, apiPath, visited) {
+		if (WeakSetMethods.has(visited, object)) return;
+		WeakSetMethods.add(visited, object);
+		const ownership = this.slothlet.handlers.ownership;
+		for (let ofIndex = 0, ofList = Objects.keys(object); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+			if (!descriptor || !("value" in descriptor) || descriptor.value === undefined || isFrameworkReservedKey(key)) continue;
+			const member = descriptor.value;
+			const memberPath = `${apiPath}.${key}`;
+			const isObject = member !== null && typeof member === "object";
+			ownership.register({
+				moduleID,
+				apiPath: memberPath,
+				value: isObject || typeof member === "function" ? undefined : member,
+				source: CREATED_SOURCE,
+				collisionMode: "merge"
+			});
+			if (isObject && !Arrays.isArray(member)) this.#recordCreatedMembers(member, moduleID, memberPath, visited);
+		}
+	}
+
+	/**
+	 * Drop the record of a member module code created at runtime once it is deleted: nothing is left to own, and a module
+	 * that creates the member anew creates it as its own. A member anything else contributed to keeps its record, as a
+	 * loaded member deleted at runtime does.
+	 *
+	 * @param {string[]} parts - Segments of the api path deleted.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * apiManager.forgetCreated(["p", "counter"]);
+	 */
+	forgetCreated(parts) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership) return;
+		const apiPath = ArrayMethods.join(parts, ".");
+		const history = ownership.getPathHistory(apiPath);
+		if (history.length === 0 || !ArrayMethods.every(history, (entry) => entry.source === CREATED_SOURCE)) return;
+		ownership.forgetPath(apiPath);
 	}
 
 	/**
