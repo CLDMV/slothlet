@@ -21,7 +21,9 @@
  * plugin's worker setup records the code vitest's server sends; the compile of exactly that code, for a file the
  * instance is loading, is the loader's own and goes through, once per reply. Module code compiling under the file's
  * name is still refused: its own source, the recorded code replayed with imports it chose, and a fetch reply it
- * changed before vitest's runner read it.
+ * changed before vitest's runner read it. The same holds for the `self` module the plugin writes for an instance's
+ * runtime import: vitest's compile of the code its server sent for this instance's goes through while the instance has
+ * a load running; module code compiling under that name, or under another instance's, is refused.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -51,17 +53,29 @@ describe("vitest runner compile — the worker setup", () => {
 
 describe.each(CONFIGS)("vitest runner compile — $mode / $runtime", ({ mode, runtime }) => {
 	let api;
+	let other;
 
 	afterEach(async () => {
 		if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
+		if (other?.slothlet?.shutdown) await other.slothlet.shutdown();
 		api = null;
+		other = null;
 	});
 
 	it("loads a module file with the permission system on, and refuses the file's code compiling under its name", async () => {
+		// Another instance first, so its `self` module is one the probe can name.
+		other = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: {} });
+		await withSuppressedSlothletErrorOutput(() => other.probe.result());
 		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: {} });
-		// The file loading at all is vitest's genuine compile verifying under the vitest in use.
+		// The file loading at all is vitest's genuine compile verifying under the vitest in use (the file, and the `self`
+		// module its runtime import is given).
 		const report = await withSuppressedSlothletErrorOutput(() => api.probe.result());
 		expect(report).toEqual({
+			self: "object",
+			selfOwnCode: "CAPABILITY_REFUSED",
+			selfReplay: "CAPABILITY_REFUSED",
+			selfOther: "CAPABILITY_REFUSED",
+			selfOtherSeen: true,
 			runner: true,
 			ownCodeAtPath: "CAPABILITY_REFUSED",
 			ownCodeAtId: "CAPABILITY_REFUSED",

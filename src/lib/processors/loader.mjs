@@ -554,6 +554,17 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
+	 * Whether this loader is loading any file now (see {@link Loader#loadingFile}).
+	 * @returns {boolean} True while a load runs.
+	 * @public
+	 * @example
+	 * loader.isLoading(); // false
+	 */
+	isLoading() {
+		return SetMethods.size(this.#loadingFiles) > 0;
+	}
+
+	/**
 	 * Every load of a file this loader is running now, by the file's comparable path (see {@link Loader#loadingFile}),
 	 * however many there are.
 	 * @param {string} path - The file, in comparable form.

@@ -23,6 +23,7 @@
 import vm from "node:vm";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { self } from "@cldmv/slothlet/runtime";
 
 const OWN_PATH = fileURLToPath(import.meta.url);
 const FORGED_FLAG = Symbol.for("slothlet.test.vitestRunnerCompile.forgedRan");
@@ -78,6 +79,27 @@ function ownNode() {
 
 const node = ownNode();
 const ownId = node?.id ?? null;
+const ownInstance = ownId === null ? null : (/[?&]slothlet_instance=([^&#]+)/.exec(String(ownId))?.[1] ?? null);
+
+/**
+ * vitest's records of the `self` modules slothlet's vite plugin writes (`slothlet-self:<instanceID>|…`): this
+ * instance's, and another instance's.
+ * @returns {{own: object|null, other: object|null}} The module nodes.
+ */
+function selfNodes() {
+	const found = { own: null, other: null };
+	const modules = globalThis.__vitest_mocker__?.moduleRunner?.evaluatedModules?.idToModuleMap;
+	if (!modules || ownInstance === null) return found;
+	for (const entry of modules.values()) {
+		const match = /slothlet-self:([^|]+)\|/.exec(String(entry?.id ?? ""));
+		if (!match || typeof entry.meta?.code !== "string") continue;
+		if (match[1] === ownInstance) found.own ??= entry;
+		else found.other ??= entry;
+	}
+	return found;
+}
+
+const selves = selfNodes();
 
 const outcomes = {
 	runner: node !== null,
@@ -128,6 +150,21 @@ const outcomes = {
 			Map.prototype.set = set;
 		}
 	}),
+	// This instance's `self` module name, with code the server never sent for it, and with the code it did send, which
+	// vitest has compiled already.
+	selfOwnCode: await attempt(() =>
+		vm.runInThisContext(wrap(fs.readFileSync(OWN_PATH, "utf8")), { filename: selves.own?.id ?? `\0slothlet-self:${ownInstance}|x` })
+	),
+	selfReplay: await attempt(() => {
+		if (selves.own === null) throw new Error("no self module");
+		return vm.runInThisContext(wrap(selves.own.meta.code), { filename: selves.own.id });
+	}),
+	// Another instance's `self` module, with the code the server sent for it.
+	selfOther: await attempt(() => {
+		if (selves.other === null) return "none";
+		return vm.runInThisContext(wrap(selves.other.meta.code), { filename: selves.other.id });
+	}),
+	selfOtherSeen: selves.other !== null,
 	forgedRan: () => globalThis[FORGED_FLAG] === true,
 	replayRan: () => globalThis[REPLAY_FLAG] === true
 };
@@ -147,6 +184,11 @@ export function result() {
 		replay: outcomes.replay,
 		forged: outcomes.forged,
 		forgedRan: outcomes.forgedRan(),
-		replayRan: outcomes.replayRan()
+		replayRan: outcomes.replayRan(),
+		selfOwnCode: outcomes.selfOwnCode,
+		selfReplay: outcomes.selfReplay,
+		selfOther: outcomes.selfOther,
+		selfOtherSeen: outcomes.selfOtherSeen,
+		self: typeof self
 	};
 }

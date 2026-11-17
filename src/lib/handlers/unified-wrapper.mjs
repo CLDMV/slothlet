@@ -463,15 +463,24 @@ const RUNNER_COMPILED_LOADS = new WeakSet();
 
 /**
  * Whether a compile vitest's module runner makes of the code its server sent (see `helpers/vitest-worker-setup`) is
- * the compile of a file this instance is loading now: the name it compiles under carries this instance's tag and names
- * a file the loader is loading, and that load's file has not been compiled yet. The load is then marked compiled.
+ * the loader's: the compile of a file this instance is loading now (the name it compiles under carries this instance's
+ * tag and names a file the loader is loading, and that load's file has not been compiled yet; the load is then marked
+ * compiled), or of this instance's own `self` module, which the vite plugin writes for a runtime import of one of the
+ * instance's files (`slothlet-self:<instanceID>|…`), while the instance has a load running.
  * @param {object} slothlet - The instance.
  * @param {*} filename - The name the code is compiled under (the module's id).
- * @returns {boolean} True for the load's first such compile.
+ * @returns {boolean} True for such a compile.
  * @private
  */
 function runtime_runnerCompilesLoad(slothlet, filename) {
 	if (typeof filename !== "string") return false;
+	// vite names a virtual module with a leading NUL.
+	const selfName = StringMethods.startsWith(filename, "\0") ? StringMethods.slice(filename, 1) : filename;
+	if (StringMethods.startsWith(selfName, "slothlet-self:")) {
+		if (!StringMethods.startsWith(selfName, `slothlet-self:${String(slothlet.instanceID)}|`)) return false;
+		const loader = slothlet?.processors?.loader;
+		return typeof loader?.isLoading === "function" && loader.isLoading();
+	}
 	if (RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] !== String(slothlet.instanceID)) return false;
 	const load = runtime_loadingFileRunning(slothlet, filename);
 	if (load === null || WeakSetMethods.has(RUNNER_COMPILED_LOADS, load)) return false;
