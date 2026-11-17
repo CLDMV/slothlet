@@ -44,4 +44,4 @@ jobs:
             node_version: "lts/*"
             # Satellite packages (same value as publish.yml's extra_packages);
             # empty disables. See docs/conventions/satellite-packages.md.
-            extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }, { "name": "@cldmv/slothlet-types", "dir": "dist-packages/slothlet-types" }]'
+            extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }, { "name": "@cldmv/slothlet-migrate", "dir": "dist-packages/slothlet-migrate" }, { "name": "@cldmv/slothlet-types", "dir": "dist-packages/slothlet-types" }]'
