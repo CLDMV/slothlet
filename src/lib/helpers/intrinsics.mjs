@@ -1903,11 +1903,12 @@ export function regExpReplace(regexp, text, replacement) {
 		const position = match.index;
 		let piece;
 		if (typeof replacement === "function") {
+			// Built through `put`, never `args[i] =`: a plain index write runs a setter module code put on the shared prototypes.
 			const args = [];
-			for (let i = 0; i < match.length; i++) args[i] = match[i];
-			args[args.length] = position;
-			args[args.length] = text;
-			if (match.groups !== undefined) args[args.length] = match.groups;
+			for (let i = 0; i < match.length; i++) put(args, i, match[i]);
+			put(args, args.length, position);
+			put(args, args.length, text);
+			if (match.groups !== undefined) put(args, args.length, match.groups);
 			piece = NativeString(apply(replacement, undefined, args));
 		} else piece = substitution(NativeString(replacement), match, text, position, match.groups);
 		out += StringMethods.slice(text, from, position) + piece;
