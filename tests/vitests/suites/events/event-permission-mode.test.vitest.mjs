@@ -236,12 +236,12 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 			await api.emitter.fire("news.item", { n: 1 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([{ n: 1 }]);
 
-			api.slothlet.permissions.control.enable();
+			api.slothlet.permissions.control.mode("on");
 			expect(api.slothlet.event.level("subscriber.subscribe", "news.item")).toBe("notify");
 			await api.emitter.fire("news.item", { n: 2 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([undefined]);
 
-			api.slothlet.permissions.control.disable();
+			api.slothlet.permissions.control.mode("off");
 			expect(api.slothlet.event.level("subscriber.subscribe", "news.item")).toBe("allow");
 			await api.emitter.fire("news.item", { n: 3 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([{ n: 3 }]);

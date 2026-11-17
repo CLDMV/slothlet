@@ -285,13 +285,13 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			base: `${BASE}/callers`,
 			permissions: {
 				policy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.control.enabled", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.control.sealed", effect: "deny" }]
 			}
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.controlCaller.callReadPermissionsEnabledViaDescriptorGetter();
+				await api.controlCaller.callReadPermissionsSealedViaDescriptorGetter();
 				expect.unreachable("Should have thrown PERMISSION_DENIED");
 			} catch (err) {
 				expect(err.message).toContain("PERMISSION_DENIED");

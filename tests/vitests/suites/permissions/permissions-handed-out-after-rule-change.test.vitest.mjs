@@ -145,9 +145,9 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 		expect(await api.holder.keep()).toEqual(["leafRef", "boundLeaf", "inData", "closure"]);
 		api.slothlet.permissions.rules.add({ caller: "holder.**", target: "vault.**", effect: "deny" });
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "off");
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 		expectAnswers(await api.holder.runKept(), { node: S, leafRef: S, boundLeaf: S, inData: S, closure: DENIED }, "on");
-		api.slothlet.permissions.control.disable();
+		api.slothlet.permissions.control.mode("off");
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "off again");
 	});
 });

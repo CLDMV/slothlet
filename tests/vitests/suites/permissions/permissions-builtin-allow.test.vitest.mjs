@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		const global = api.slothlet.permissions.global;
 		// The built-in allows are scoped to pin/bind only — nothing else is carved out.
 		expect(global.check.access("anyModule", "slothlet.api.add")).toBe(false);
-		expect(global.check.access("anyModule", "slothlet.permissions.control.enable")).toBe(false);
+		expect(global.check.access("anyModule", "slothlet.permissions.control.mode")).toBe(false);
 	});
 
 	it("a more specific user deny rule still overrides the built-in pin allow", async () => {

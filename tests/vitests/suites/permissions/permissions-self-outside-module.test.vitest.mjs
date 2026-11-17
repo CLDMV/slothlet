@@ -21,7 +21,7 @@
  * to the module making it. Code that is not a module has no such attribution — so if `self` resolved
  * for it, it would resolve as the host, which is exempt from the rules. Any script able to
  * `import { self } from "@cldmv/slothlet/runtime"` would then hold full authority over a running
- * instance, including `slothlet.permissions.control.disable()`, regardless of what the rules say.
+ * instance, including `slothlet.permissions.control.mode("off")`, regardless of what the rules say.
  *
  * The async runtime refuses this for free: with no AsyncLocalStorage store there is nothing to read
  * through. The live runtime keeps its store in a field that stays populated for the instance's whole
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 			permissions: { policy: "deny", rules: [{ caller: "**", target: "callers.**", effect: "allow" }] }
 		});
 
-		// The worst version of the read above: `control.disable()` would drop enforcement wholesale.
+		// The worst version of the read above: `control.mode("off")` would drop enforcement wholesale.
 		expect(() => self.slothlet).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 

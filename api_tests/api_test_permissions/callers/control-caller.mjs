@@ -28,7 +28,7 @@ let cachedMaterializedGetterRef = null;
  * @example
  * api.callers.controlCaller.callEnable();
  */
-export const callEnable = () => self.slothlet.permissions.control.enable();
+export const callEnable = () => self.slothlet.permissions.control.mode("on");
 
 /**
  * Attempt to seal the permission control surface via inter-module call.
@@ -48,7 +48,7 @@ export const callSeal = () => self.slothlet.permissions.control.seal();
  * @example
  * api.callers.controlCaller.callDisable();
  */
-export const callDisable = () => self.slothlet.permissions.control.disable();
+export const callDisable = () => self.slothlet.permissions.control.mode("off");
 
 /**
  * Attempt to add a permission rule via inter-module call.
@@ -267,18 +267,18 @@ export const cacheMaterializedGetterReference = () => {
 export const callCachedMaterializedGetterReference = () => cachedMaterializedGetterRef();
 
 /**
- * Read permissions.control.enabled by extracting and invoking its accessor
+ * Read permissions.control.sealed by extracting and invoking its accessor
  * getter via descriptor reflection.
  * Used in tests verifying configurable accessor descriptors cannot bypass
  * route-level permission enforcement.
  *
- * @returns {boolean} Current permissions enabled state.
+ * @returns {boolean} Whether the control surface is sealed.
  * @example
- * const enabled = api.controlCaller.callReadPermissionsEnabledViaDescriptorGetter();
+ * const sealed = api.controlCaller.callReadPermissionsSealedViaDescriptorGetter();
  */
-export const callReadPermissionsEnabledViaDescriptorGetter = () => {
+export const callReadPermissionsSealedViaDescriptorGetter = () => {
 	const controlNamespace = self.slothlet.permissions.control;
-	const descriptor = Object.getOwnPropertyDescriptor(controlNamespace, "enabled");
+	const descriptor = Object.getOwnPropertyDescriptor(controlNamespace, "sealed");
 	return descriptor?.get();
 };
 

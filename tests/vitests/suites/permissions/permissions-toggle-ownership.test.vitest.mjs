@@ -16,7 +16,7 @@
 /**
  * @fileoverview The permission system's three modes, and what a module does while it is off (#625).
  *
- * `mode: "on"` applies every rule. `mode: "off"` (no `permissions` config, `enabled: false`, or `control.disable()`)
+ * `mode: "on"` applies every rule. `mode: "off"` (no `permissions` config, `enabled: false`, or `control.mode("off")`)
  * refuses no write on ownership or by a `:write` rule, but the built-in write rules still keep module code off the
  * framework's own namespace, root functions, and keys on api nodes, wherever the module reached them. `mode:
  * "disabled"` checks nothing; `slothlet`, `shutdown` and `destroy` stay reserved names on `self` even then.
@@ -104,7 +104,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			self.plantedTop = writeVictim;
 		};
 		await api.guest.x.runWithSelf(PROBE);
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 		const report = await withSuppressedSlothletErrorOutput(async () => ({
 			root: await api.plantedRoot(),
 			top: await api.plantedTop()
@@ -118,9 +118,9 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		["captured references on", true]
 	])("holds a later change through a view a module read while the system was off, once it is on (%s)", async (_label, capture) => {
 		await load({ permissions: { caller: { capture } } });
-		api.slothlet.permissions.control.disable();
+		api.slothlet.permissions.control.mode("off");
 		await api.guest.x.keepVictimFrozenMembers();
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 		const later = await api.guest.x.keepVictimFrozenMembers();
 		const report = withSuppressedSlothletErrorOutputSync(() => later());
 		// The closure the module handed back runs as that module (#597), held to its ownership.
@@ -170,7 +170,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 
 		it("reports its mode", async () => {
 			await load(options);
-			expect(api.slothlet.permissions.control.mode).toBe(systemMode);
+			expect(api.slothlet.permissions.control.mode()).toBe(systemMode);
 		});
 
 		it("keeps a module off the permission system's namespace unless the system is disabled", async () => {
@@ -378,14 +378,14 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	});
 
 	it.each([
-		["on, from disabled", { permissions: { mode: "disabled" } }, "enable", "on"],
-		["off, from on", { permissions: {} }, "disable", "off"],
-		["on, from off", { permissions: { mode: "off" } }, "enable", "on"]
+		["on, from disabled", { permissions: { mode: "disabled" } }, "on", "on"],
+		["off, from on", { permissions: {} }, "off", "off"],
+		["on, from off", { permissions: { mode: "off" } }, "on", "on"]
 	])("keeps the mode the host moved the system to across a reload (%s)", async (_label, options, move, expected) => {
 		await load(options);
-		api.slothlet.permissions.control[move]();
+		api.slothlet.permissions.control.mode(move);
 		await api.slothlet.reload();
-		expect(api.slothlet.permissions.control.mode).toBe(expected);
+		expect(api.slothlet.permissions.control.mode()).toBe(expected);
 	});
 
 	it("refuses an unknown mode in the config", async () => {
@@ -398,10 +398,10 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 
 	it("turns a disabled system on and off from the host, the namespace kept from module code once it is", async () => {
 		await load({ permissions: { mode: "disabled" } });
-		api.slothlet.permissions.control.enable();
-		expect(api.slothlet.permissions.control.mode).toBe("on");
-		api.slothlet.permissions.control.disable();
-		expect(api.slothlet.permissions.control.mode).toBe("off");
+		api.slothlet.permissions.control.mode("on");
+		expect(api.slothlet.permissions.control.mode()).toBe("on");
+		api.slothlet.permissions.control.mode("off");
+		expect(api.slothlet.permissions.control.mode()).toBe("off");
 		globalThis[Symbol.for(PROBE)] = (self) =>
 			outcome(() => {
 				self.slothlet.metadata.planted = 1;

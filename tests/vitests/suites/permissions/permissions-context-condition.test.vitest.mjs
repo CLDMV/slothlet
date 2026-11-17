@@ -286,7 +286,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(denied).toBe(false);
 	});
 
-	it("control.enable caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
+	it("control.mode caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -875,9 +875,9 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(r2.ok).toBe(true);
 	});
 
-	// ── control.enable/disable: ctx.context undefined (no context.run) ────────────
+	// ── control.mode(on/off): ctx.context undefined (no context.run) ────────────
 
-	it("control.enable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+	it('control.mode("on") called without context.run() — ctx.context is undefined, runtimeContext falls back to null', async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -892,7 +892,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		await Promise.resolve(api.callers.controlCaller.callEnable());
 	});
 
-	it("control.disable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+	it('control.mode("off") called without context.run() — ctx.context is undefined, runtimeContext falls back to null', async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,

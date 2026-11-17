@@ -42,11 +42,11 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		P.control.seal();
 		expect(P.control.sealed).toBe(true);
 
-		expect(() => P.control.enable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.control.disable()).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.mode("on")).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.mode("off")).toThrow(/PERMISSION_SEALED/);
 		expect(() => P.rules.add({ caller: "a.**", target: "b.**", effect: "deny" })).toThrow(/PERMISSION_SEALED/);
 		expect(() => P.rules.remove("perm-1")).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.control.readGating(false)).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.gating.read(false)).toThrow(/PERMISSION_SEALED/);
 	});
 
 	it("seal() is idempotent and enforcement still evaluates after sealing", async () => {
@@ -97,7 +97,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		await api.slothlet.reload();
 
 		expect(api.slothlet.permissions.control.sealed).toBe(true);
-		expect(() => api.slothlet.permissions.control.disable()).toThrow(/PERMISSION_SEALED/);
+		expect(() => api.slothlet.permissions.control.mode("off")).toThrow(/PERMISSION_SEALED/);
 		expect(() => api.slothlet.permissions.rules.add({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
 	});
 

@@ -535,11 +535,10 @@ export type SlothletAPI = {
         };
         permissions: {
             control: {
-                enabled: boolean;
-                enable: () => void;
-                disable: () => void;
-                readGatingEnabled: boolean;
-                readGating: (arg0: boolean) => void;
+                mode: (arg0: ("on" | "off" | boolean) | undefined) => ("on" | "strict" | "off" | "disabled");
+                gating: {
+                    read: (arg0: boolean | undefined) => boolean;
+                };
                 seal: () => void;
                 sealed: boolean;
                 report: () => {

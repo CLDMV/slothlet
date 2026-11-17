@@ -88,7 +88,7 @@ describe("permission baseline in a browser with a Content Security Policy that r
 		if (MET) {
 			expect(started).toBe("started");
 			expect(api.slothlet.permissions.control.report().mode).toBe("strict");
-			expect(() => api.slothlet.permissions.control.disable()).toThrow(expect.objectContaining({ code: "PERMISSION_STRICT_FIXED" }));
+			expect(() => api.slothlet.permissions.control.mode("off")).toThrow(expect.objectContaining({ code: "PERMISSION_STRICT_FIXED" }));
 		} else {
 			expect(started?.code).toBe("PERMISSION_BASELINE_UNMET");
 			for (const id of IDS) expect(started.message).toContain(id);

@@ -524,7 +524,7 @@ export class PermissionManager extends ComponentBase {
 	#disabled = false;
 
 	/**
-	 * Whether the mode is `"strict"`: as on, chosen in the config only, so `enable()` and `disable()` refuse.
+	 * Whether the mode is `"strict"`: as on, chosen in the config only, so `control.mode(value)` refuses.
 	 * @type {boolean}
 	 * @private
 	 */
@@ -798,7 +798,7 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		// Built-in deny rule: block all modules from calling control.enable/disable by default.
+		// Built-in deny rule: block all modules from the control surface (control.mode, control.gating.read, seal, …) by default.
 		this.addRule({ caller: "**", target: "slothlet.permissions.control.**", effect: "deny" }, "__builtin__");
 
 		// Built-in deny rules (#529): `slothlet.reload` and `slothlet.shutdown` are the framework's own
@@ -2950,6 +2950,46 @@ export class PermissionManager extends ComponentBase {
 		// The event pool follows the mode: levels resolved under the old one are resolved again.
 		this.#eventRulesEpoch++;
 		this.#clearCache();
+	}
+
+	/**
+	 * Switch the permission system's mode at runtime: `"on"` (or `true`) turns it on, `"off"` (or `false`) off.
+	 * `"strict"` is chosen in the config only, so it can be neither entered nor left here. `"disabled"` is also chosen
+	 * in the config only: an instance started disabled can be switched on or off, but none can be switched to it (asking
+	 * for it while already disabled changes nothing). Refused once the control surface is sealed.
+	 *
+	 * @param {"on"|"off"|"strict"|"disabled"|boolean} value - The mode to switch to.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_STRICT_FIXED under strict, or when `value` is `"strict"`; PERMISSION_SEALED
+	 *   once sealed; INVALID_ARGUMENT for `"disabled"` (unless already disabled) or any other value.
+	 * @example
+	 * pm.setMode("on");
+	 * pm.setMode(false);
+	 */
+	setMode(value) {
+		const mode = value === true ? "on" : value === false ? "off" : value;
+		if (mode !== "on" && mode !== "off" && mode !== "strict" && mode !== "disabled") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false',
+				received: typeof value === "string" ? `"${value}"` : typeof value,
+				validationError: true
+			});
+		}
+		this.#assertNotStrict("mode");
+		if (mode === "strict") throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method: "mode" }, null, { validationError: true });
+		this.#assertNotSealed();
+		if (mode === "disabled") {
+			if (this.#disabled) return;
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false ("disabled" is chosen in the config only)',
+				received: '"disabled"',
+				validationError: true
+			});
+		}
+		if (mode === "on") this.enable();
+		else this.disable();
 	}
 
 	/**
