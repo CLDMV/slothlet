@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
+ *	@Last modified time: 2026-11-17T07:49:34-08:00 (1794930574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -569,6 +569,22 @@ export class ApiManager extends ComponentBase {
 			current = next;
 		}
 		return current;
+	}
+
+	/**
+	 * Materialize every lazy, not yet loaded namespace on the live api from the root down to `parts`' parent.
+	 * @param {string[]} parts - Path segments.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #materializeAlong(parts) {
+		let current = this.slothlet.api;
+		for (let index = 0; index < parts.length - 1; index++) {
+			current = this.#memberAtPath(current, [parts[index]]);
+			const raw = resolveWrapper(current);
+			if (!raw) return;
+			if (raw.____slothletInternal.mode === "lazy" && !raw.____slothletInternal.state.materialized) await raw.___materialize();
+		}
 	}
 
 	/**
@@ -4137,18 +4153,18 @@ export class ApiManager extends ComponentBase {
 	 * removal by apiPath or moduleID uniformly, and preserves partial removals
 	 * (a sub-path is removed but the endpoint still resolves → entry kept).
 	 * Base modules (endpoint ".") own the whole tree and are never swept.
-	 * @param {?string} [keepModuleID=null] - A module that stays loaded whatever the tree shows at its endpoint.
+	 * @param {string[]} [keep=[]] - Modules that stay loaded whatever the tree shows at their endpoints.
 	 * @returns {void}
 	 * @private
 	 */
-	#sweepOrphanedCaches(keepModuleID = null) {
+	#sweepOrphanedCaches(keep = []) {
 		const cacheManager = this.slothlet.handlers?.apiCacheManager;
 		/* v8 ignore next */
 		if (!cacheManager) return;
 		const root = this.slothlet.boundApi;
 		for (let ofIndex = 0, ofList = cacheManager.getAllModuleIDs(); ofIndex < ofList.length; ofIndex++) {
 			const moduleID = ofList[ofIndex];
-			if (moduleID === keepModuleID) continue;
+			if (ArrayMethods.includes(keep, moduleID)) continue;
 			const entry = cacheManager.get(moduleID);
 			// Base modules own the whole tree — never orphaned by a path removal.
 			if (!entry || entry.endpoint === "." || entry.endpoint === "") continue;
@@ -4560,15 +4576,19 @@ export class ApiManager extends ComponentBase {
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
 		let moduleID;
+		// Loaded modules a scoped removal left owning nothing on the api: they stay loaded until removed by their own
+		// moduleID, whatever else a removal takes off the api (a reload brings their members back).
+		let ownerless = [];
 
 		if (this.slothlet.handlers.ownership) {
 			const ownedModules = mapKeysToArray(this.slothlet.handlers.ownership.moduleToPath);
 			// A loaded module whose every path a scoped removal pruned owns nothing on the api, yet is still loaded (a
-			// reload brings its members back), so it is still removable by its moduleID. Listed first, so a module with
-			// live paths wins a prefix match.
+			// reload brings its members back), so it is still removable by its moduleID. Only by its exact id: an auto id
+			// is "<path>_<hash>", so a prefix match would take such a module for remove(path) and remove it instead of
+			// whatever is now at the path.
 			const cacheManager = this.slothlet.handlers.apiCacheManager;
-			const ownerless = filterList(cacheManager.getAllModuleIDs(), (id) => !ArrayMethods.includes(ownedModules, id));
-			const registeredModules = concatLists(ownerless, ownedModules);
+			ownerless = filterList(cacheManager.getAllModuleIDs(), (id) => !ArrayMethods.includes(ownedModules, id));
+			const registeredModules = ownedModules;
 			let matchingModule = null;
 
 			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
@@ -4583,7 +4603,7 @@ export class ApiManager extends ComponentBase {
 			// most recently registered module when several match, as stale entries from prior add/remove cycles may
 			// linger due to async lazy materialization. A module whose id merely starts with "<base>_" is never taken
 			// for a module that has the exact id (#625).
-			if (ArrayMethods.includes(registeredModules, candidateModuleID)) {
+			if (ArrayMethods.includes(registeredModules, candidateModuleID) || ArrayMethods.includes(ownerless, candidateModuleID)) {
 				matchingModule = candidateModuleID;
 			} else {
 				for (let i = registeredModules.length - 1; i >= 0; i--) {
@@ -4642,8 +4662,14 @@ export class ApiManager extends ComponentBase {
 		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.
 		if (scopedApiPath !== null) {
 			const ownership = this.slothlet.handlers.ownership;
-			const normalizedScoped = this.normalizeApiPath(scopedApiPath).apiPath;
-			const ownedPaths = ownership?.moduleToPath ? MapMethods.get(ownership.moduleToPath, moduleID) : undefined;
+			const { apiPath: normalizedScoped, parts: scopedParts } = this.normalizeApiPath(scopedApiPath);
+			let ownedPaths = ownership?.moduleToPath ? MapMethods.get(ownership.moduleToPath, moduleID) : undefined;
+			if (ownedPaths && !SetMethods.has(ownedPaths, normalizedScoped)) {
+				// A lazy namespace on the way that nothing has read yet has not registered its members: load it, as
+				// reading the path would, and look again.
+				await this.#materializeAlong(scopedParts);
+				ownedPaths = MapMethods.get(ownership.moduleToPath, moduleID);
+			}
 			if (!ownedPaths || !SetMethods.has(ownedPaths, normalizedScoped)) {
 				return false;
 			}
@@ -4677,9 +4703,20 @@ export class ApiManager extends ComponentBase {
 				// The module is going away entirely: its principals (#459), rules (#625), and event listeners (#497) with it.
 				this.#forgetRemovedModule(scopedModuleIDKey, recordHistory);
 			}
+			const restoreContext = { restored: new Set(), removedPaths: setFrom(targets) };
 			for (let ofIndex = 0, ofList = targets; ofIndex < ofList.length; ofIndex++) {
 				const target = ofList[ofIndex];
 				const targetParts = this.normalizeApiPath(target).parts;
+				// Whether the live node at the path is this module's own: a cross-module replace swapped its wrapper in
+				// and detached the earlier owner's, with that owner's members still on it.
+				const liveNodes = mapList([this.slothlet.api, this.slothlet.boundApi], (tree) =>
+					resolveWrapper(this.#memberAtPath(tree, targetParts))
+				);
+				const ownLive = ArrayMethods.some(
+					ownership.getPathHistory(target),
+					(entry) =>
+						entry.moduleID === scopedModuleIDKey && resolveWrapper(entry.value) !== null && resolveWrapper(entry.value) === liveNodes[0]
+				);
 				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
 				// A merge-loser's raw routine contribution at this exact path is never pruned by
 				// impl:removed on a "restore" outcome (the live tree already showed the current
@@ -4693,19 +4730,36 @@ export class ApiManager extends ComponentBase {
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
 					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
-					/* v8 ignore else */
-					if (revertValue !== undefined && revertOwner) {
-						const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
-						await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
-						await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+					const sources = ownLive ? this.#survivingContributions(target, liveNodes[0]) : [];
+					if (sources.length > 0) {
+						// This module's node was the live one, so the earlier owner's node is detached with its members on it.
+						// Restore those into the live node, exactly as removing the whole module does: setting the earlier
+						// owner's impl alone leaves out every member it had that this module does not provide.
+						const rolledBackNodes = this.#collectRolledBackNodes([{ apiPath: target }]);
+						for (let i = 0; i < liveNodes.length; i++) {
+							const live = liveNodes[i];
+							if (!live || SetMethods.has(restoreContext.restored, live)) continue;
+							await this.#restoreInto(live, this.#survivingContributions(target, live), target, restoreContext, {
+								impl: revertValue,
+								moduleID: revertOwner
+							});
+						}
+						for (let i = 0; i < rolledBackNodes.length; i++) this.#restoreNamespaceFunction(rolledBackNodes[i][1], target);
 					} else {
-						// Unreachable defensive mirror of the single-node restore path: removePath only returns
-						// "restore" when an owner remains on the node's stack, and every ownership entry carries a
-						// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
-						// never undefined for a restored node — revertValue is always defined and this else never
-						// runs. Kept so the scoped path degrades the same way the single-node path would if that
-						// invariant were ever broken.
-						await this.restoreApiPath(target, scopedResult.restoreModuleId);
+						/* v8 ignore else */
+						if (revertValue !== undefined && revertOwner) {
+							const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
+							await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
+							await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+						} else {
+							// Unreachable defensive mirror of the single-node restore path: removePath only returns
+							// "restore" when an owner remains on the node's stack, and every ownership entry carries a
+							// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
+							// never undefined for a restored node — revertValue is always defined and this else never
+							// runs. Kept so the scoped path degrades the same way the single-node path would if that
+							// invariant were ever broken.
+							await this.restoreApiPath(target, scopedResult.restoreModuleId);
+						}
 					}
 				} else {
 					// action "delete": this module was the node's last owner (an owned target never resolves
@@ -4735,7 +4789,7 @@ export class ApiManager extends ComponentBase {
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
 			// any cache entry the removed nodes orphaned. A module that keeps paths outside the scoped one stays
 			// loaded even when the removal pruned its endpoint: a reload or a later add there brings the endpoint back.
-			this.#sweepOrphanedCaches(isFullRemoval ? null : scopedModuleIDKey);
+			this.#sweepOrphanedCaches(isFullRemoval ? ownerless : concatLists(ownerless, [scopedModuleIDKey]));
 			// Record a SCOPED remove for reload replay — carrying both the moduleID and the apiPath so the
 			// replay re-runs it as the two-argument form, not a whole-path removal. This is safe because a
 			// module's id survives a reload: the "add" op records `options.moduleID` and it is reused on
@@ -4804,7 +4858,7 @@ export class ApiManager extends ComponentBase {
 			// The apiPath branch (unlike the moduleID branch) does not call
 			// ownership.unregister(), so the cache entry would otherwise be
 			// orphaned.
-			this.#sweepOrphanedCaches();
+			this.#sweepOrphanedCaches(filterList(ownerless, (id) => id !== String(moduleID)));
 			// Track in operation history for reload replay
 			listPush(this.state.operationHistory, {
 				type: "remove",
@@ -4956,6 +5010,9 @@ export class ApiManager extends ComponentBase {
 			// Delete paths with no owners
 			for (let ofIndex = 0, ofList = pathsToDelete; ofIndex < ofList.length; ofIndex++) {
 				const removedPath = ofList[ofIndex];
+				// What of it another module's replace holds off the api goes too: the detached node it sits on is what
+				// removing that module restores from, and would bring it back.
+				this.#forgetHiddenMember(removedPath, moduleIDKey);
 				if (ArrayMethods.some(restoredRoots, (prefix) => StringMethods.startsWith(removedPath, prefix))) continue;
 				const { parts } = this.normalizeApiPath(removedPath);
 				await this.deletePath(this.slothlet.api, parts);
@@ -5110,7 +5167,7 @@ export class ApiManager extends ComponentBase {
 
 			// Sweep any cache entries cascade-orphaned by this removal (e.g. a
 			// module that was stacked under the one just removed).
-			this.#sweepOrphanedCaches();
+			this.#sweepOrphanedCaches(filterList(ownerless, (id) => id !== String(moduleID)));
 
 			// Track in operation history for reload replay. The recorded apiPath is only a replay
 			// handle: replay calls removeApiComponent(apiPath), which re-resolves it to the path’s
