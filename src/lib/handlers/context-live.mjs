@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:23:39-08:00 (1794943419)
+ *	@Last modified time: 2026-11-17T12:09:57-08:00 (1794946197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -149,12 +149,49 @@ const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
 const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
 
 /**
- * The call each promise was created in, while it ran synchronously or in a flow such a promise's reaction ran: the
- * flow's starter. Keyed weakly by the promise.
- * @type {WeakMap<Promise<*>, object>}
+ * A class whose constructor hands back the object it is given, so a subclass can put a private field on an object it did
+ * not make (see {@link PromiseFlow}).
  * @private
  */
-const FLOW_STARTERS = new WeakMap();
+class Adopt {
+	/**
+	 * @param {object} target - The object.
+	 */
+	constructor(target) {
+		return target;
+	}
+}
+
+/**
+ * The flow each promise was made in (the store id the active-instance field named), and with permissions on the call it
+ * was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter. Kept in a
+ * private field slothlet puts on the promise as the engine makes it: no code but this class's can read or change it, and
+ * putting it there costs a promise far less than an entry in a weak map would.
+ * @private
+ */
+class PromiseFlow extends Adopt {
+	/** @type {string|null|{flow: string|null, starter: object}} */
+	#record;
+
+	/**
+	 * Record a promise's flow.
+	 * @param {Promise<*>} promise - The promise, as the engine makes it.
+	 * @param {string|null|{flow: string|null, starter: object}} record - Its flow, or its flow and starter.
+	 */
+	constructor(promise, record) {
+		super(promise);
+		this.#record = record;
+	}
+
+	/**
+	 * A promise's recorded flow.
+	 * @param {Promise<*>} promise - The promise.
+	 * @returns {string|null|{flow: string|null, starter: object}|undefined} The record; undefined when it has none.
+	 */
+	static of(promise) {
+		return #record in promise ? promise.#record : undefined;
+	}
+}
 
 /**
  * The identity of code running as no module: none, and not the host's either, so enforcement fails closed (#597).
@@ -510,14 +547,12 @@ let liveContextManagerRef = null;
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
- * Concurrency boundary: the active instance is tracked in a single global field
- * ({@link LiveContextManager#currentInstanceID}), so this manager isolates *sequential*
- * `run()`/`scope()` calls (each restores the prior instance on exit) but NOT *interleaved*
- * concurrent calls on the same instance — across an `await`, a sibling `run()` overwrites the
- * global and a resumed callback reads the wrong context. True per-async-flow isolation requires
- * AsyncLocalStorage (see {@link module:@cldmv/slothlet/handlers/context-async}); the live manager
- * is the deliberate trade-off for environments without `node:async_hooks` (browser/worker, see
- * #123) and for the lowest-overhead single-flow case. See docs/CONTEXT-PROPAGATION.md.
+ * Concurrency: the active instance is tracked in a single field ({@link LiveContextManager#currentInstanceID}),
+ * carried into every callback registered through a boundary slothlet patches (see `carryFlow` in
+ * {@link LiveContextManager#registerEventEmitterContextChecker}) and, in Node, across every promise job by V8's
+ * promise hooks (see {@link LiveContextManager#holdFlowHooks}), so interleaved `run()` / `scope()` flows each see their
+ * own store. No `node:async_hooks` is used. Without promise hooks (a browser) the code after a bare `await` is not
+ * carried while flows interleave. See docs/CONTEXT-PROPAGATION.md.
  * @public
  */
 
@@ -535,7 +570,7 @@ function framesOf(frames) {
 }
 
 /**
- * Run a `run()` / `scope()` callback, waiting for what it returns (see {@link LiveContextManager#runBody}). Its frame,
+ * Run a `run()` / `scope()` callback, waiting for what it returns (see {@link LiveContextManager#runFlowBody}). Its frame,
  * synchronous or an `await` further out, marks code that runs as part of a `run()` / `scope()` callback.
  * @param {Function} fn - The callback.
  * @param {Array<*>} args - Its arguments.
@@ -614,23 +649,41 @@ export class LiveContextManager {
 	#pinSource = null;
 
 	/**
-	 * The live instances with permissions on: while there are any, the promise hooks that record who started a flow
-	 * are installed.
+	 * The live instances with permissions on: while there are any, the promise hooks also record who started a flow.
 	 * @type {number}
 	 */
 	#flowStarterInstances = 0;
 
 	/**
+	 * The live instances: while there are any, the promise hooks that carry each flow across its promise jobs are
+	 * installed (see {@link LiveContextManager#holdFlowHooks}).
+	 * @type {number}
+	 */
+	#flowHookInstances = 0;
+
+	/**
 	 * Removes the promise hooks, while they are installed.
 	 * @type {Function|null}
 	 */
-	#stopFlowStarterHooks = null;
+	#stopFlowHooks = null;
 
 	/**
 	 * The starter of the flow whose promise reaction is running.
 	 * @type {object|null}
 	 */
 	#runningStarter = null;
+
+	/**
+	 * The active-instance field as it was when each running promise job began, put back when the job ends.
+	 * @type {Array<string|null>}
+	 */
+	#jobOuter = [];
+
+	/**
+	 * How many promise jobs are running inside one another (at most one: the engine runs them from an empty stack).
+	 * @type {number}
+	 */
+	#jobDepth = 0;
 
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
@@ -648,6 +701,19 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Whether each flow is carried across its promise jobs (the code after an `await`, a reaction) by the engine's
+	 * promise hooks: in Node while a live instance exists. Then the active-instance field names the flow the code running
+	 * now is part of, and slothlet puts it back as soon as the synchronous code that set it returns. Without promise hooks
+	 * (a browser) the field keeps naming the last `run()` / `scope()` entered until it returns, so that its own code after
+	 * a bare `await` can find it.
+	 * @type {boolean}
+	 * @private
+	 */
+	get #carriesAwaits() {
+		return this.#stopFlowHooks !== null;
+	}
+
+	/**
 	 * The call that started the flow running now, once that call has returned: the module call the promise whose
 	 * reaction is running was created in, directly or in a flow it started. Null for a flow the host started, and where
 	 * Node's promise hooks are not available (a browser), or no live instance has permissions on.
@@ -659,50 +725,105 @@ export class LiveContextManager {
 	}
 
 	/**
-	 * Count a live instance with permissions on, installing the promise hooks for the first.
+	 * Count a live instance, installing the engine's promise hooks for the first (Node; a browser has none). Each promise
+	 * records the flow it was made in, the store the active-instance field names then, and each of its jobs runs in that
+	 * flow: a `run()` / `scope()` waiting at an `await` picks up in its own store whichever flow was entered last, and
+	 * code outside every flow never sees one. With permissions on (see {@link LiveContextManager#holdFlowStarters}) the
+	 * record also names the call that started the flow.
 	 * @returns {void}
 	 * @private
 	 */
-	#holdFlowStarters() {
-		this.#flowStarterInstances++;
-		if (this.#stopFlowStarterHooks || !CREATE_PROMISE_HOOK) return;
+	#holdFlowHooks() {
+		this.#flowHookInstances++;
+		if (this.#stopFlowHooks || !CREATE_PROMISE_HOOK) return;
 		const manager = this;
-		this.#stopFlowStarterHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
+		this.#stopFlowHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
 			{
-				// A promise made while a module's call runs synchronously is that call's; one made in a reaction of a
-				// flow a call started is that flow's. Anything else (the host's own, with no call running) is left alone.
+				// The flow the promise is made in. With permissions on, a promise made while a module's call runs
+				// synchronously is also that call's; one made in a reaction of a flow a call started is that flow's.
+				// Anything else (the host's own, with no call running) records no starter.
 				init(promise) {
+					// Inside a resource scope whose code has read nothing yet, the scope is told now, as a read would tell it
+					// (see settleScope): the maker's own code keeps the pin, so its promise carries the maker's flow past an
+					// `await`; anyone else's code takes the pin back out, and its promise carries the flow the resource was
+					// used in. A scope that cannot be told from here holds no pin across the `await`.
+					const scopes = manager.#scopes;
+					const scope = scopes.length === 0 ? null : scopes[scopes.length - 1];
+					let flow = manager.#activeID;
+					if (scope !== null && !scope.own && !scope.swapped) {
+						if (!manager.#tellingScope) manager.#settleScope();
+						if (!scope.own && !scope.swapped && manager.#tellingScope) flow = scope.before;
+						else flow = manager.#activeID;
+					}
+					if (manager.#flowStarterInstances === 0) {
+						new PromiseFlow(promise, flow);
+						return;
+					}
 					let starter = manager.#runningStarter;
 					if (manager.#syncDepth > 0) {
-						const entered = MapMethods.get(manager.instances, manager.#activeID)?.__enteredCalls;
+						const entered = MapMethods.get(manager.instances, flow)?.__enteredCalls;
 						const top = entered?.[entered.length - 1];
 						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
 						else if (top?.wrapper) starter = top;
 					}
-					if (starter) WeakMapMethods.set(FLOW_STARTERS, promise, starter);
+					new PromiseFlow(promise, starter ? { flow, starter } : flow);
 				},
 				// Reactions run one at a time from the microtask queue, never inside one another.
 				before(promise) {
-					manager.#runningStarter = WeakMapMethods.get(FLOW_STARTERS, promise) ?? null;
+					manager.#jobOuter[manager.#jobDepth++] = manager.#activeID;
+					const record = PromiseFlow.of(promise);
+					// A promise made before the hooks were installed carries no flow: the field is left as it is.
+					if (record === undefined) {
+						manager.#runningStarter = null;
+						return;
+					}
+					if (record !== null && typeof record === "object") {
+						manager.#activeID = record.flow;
+						manager.#runningStarter = record.starter;
+					} else {
+						manager.#activeID = record;
+						manager.#runningStarter = null;
+					}
 				},
 				after() {
 					manager.#runningStarter = null;
+					if (manager.#jobDepth > 0) manager.#activeID = manager.#jobOuter[--manager.#jobDepth];
 				}
 			}
 		]);
 	}
 
 	/**
-	 * Uncount a live instance with permissions on, removing the promise hooks after the last.
+	 * Uncount a live instance, removing the promise hooks after the last.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseFlowHooks() {
+		if (--this.#flowHookInstances > 0 || !this.#stopFlowHooks) return;
+		const stop = this.#stopFlowHooks;
+		this.#stopFlowHooks = null;
+		this.#runningStarter = null;
+		stop();
+	}
+
+	/**
+	 * Count a live instance with permissions on: while there are any, the promise hooks record who started each flow
+	 * (see {@link LiveContextManager#runningFlowStarter}).
+	 * @returns {void}
+	 * @private
+	 */
+	#holdFlowStarters() {
+		this.#flowStarterInstances++;
+	}
+
+	/**
+	 * Uncount a live instance with permissions on.
 	 * @returns {void}
 	 * @private
 	 */
 	#releaseFlowStarters() {
-		if (--this.#flowStarterInstances > 0 || !this.#stopFlowStarterHooks) return;
-		const stop = this.#stopFlowStarterHooks;
-		this.#stopFlowStarterHooks = null;
-		this.#runningStarter = null;
-		stop();
+		this.#flowStarterInstances = Math.max(0, this.#flowStarterInstances - 1);
+		if (this.#flowStarterInstances === 0) this.#runningStarter = null;
 	}
 
 	/**
@@ -1481,8 +1602,10 @@ export class LiveContextManager {
 		 * @returns {Function[]} Each callback, pinned where there is a caller to pin it to.
 		 */
 		const pinMany = (listeners) => {
-			// The store of the instance actually executing (#592), and who on it registered the callbacks.
-			const store = this.tryGetContext();
+			// The store of the instance actually executing (#592) — of the run() / scope() flow the registering code is part
+			// of, never one a sibling flow left in the active field — and who on it registered the callbacks.
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
 			const registration = store ? this.#registrationIdentity(store) : null;
 			// Registered by a file's own top level while slothlet loads it (#726): pinned to the load, so what the file
 			// starts runs as the file's module, as the async runtime's store for the load has it.
@@ -1494,12 +1617,37 @@ export class LiveContextManager {
 			if (!store) return listeners;
 			const { wrapper, ceiling, inFlight, ambiguous, loading } = registration;
 			if (loading) return mapList(listeners, (listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
-			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
-			// alone. Unattributable module code: not handed the host's standing either.
-			if (ambiguous || (!wrapper && !inFlight)) return listeners;
+			// Registered by the host with nothing in flight: no identity to pin. Unattributable module code: not handed the
+			// host's standing either. Either way the callback still runs in the flow it was registered in, so it never
+			// sees the context of a run() / scope() flow open when it fires.
+			if (ambiguous || (!wrapper && !inFlight))
+				return mapList(listeners, (listener) => (typeof listener === "function" ? carryFlow(listener, store.instanceID) : listener));
 			return mapList(listeners, (listener) =>
-				typeof listener === "function" ? pinListener(listener, store.instanceID, wrapper, ceiling ?? null) : listener
+				typeof listener === "function"
+					? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling ?? null), store.instanceID)
+					: listener
 			);
+		};
+		/**
+		 * The replacement for one callback that runs it in the flow it was registered in: the store's id is the active
+		 * one for its synchronous run, and what was active is put back after. A `run()` / `scope()` store that has gone
+		 * since stands for its instance's own (see removedRunBase).
+		 * @param {Function} listener - The callback, pinned or not.
+		 * @param {string} flowID - The store it was registered in.
+		 * @returns {Function} The callback, run in that flow.
+		 */
+		const carryFlow = (listener, flowID) => {
+			if (this.#pinSource === false) this.#pinSource = { instanceID: flowID, wrapper: null, ceiling: null, loading: null };
+			return function slothlet_flowCarriedListener(...args) {
+				const manager = liveContextManagerRef;
+				const previous = manager.#activeID;
+				manager.#activeID = flowID;
+				try {
+					return FunctionMethods.apply(listener, this, args);
+				} finally {
+					manager.#activeID = previous;
+				}
+			};
 		};
 		/**
 		 * The pinned replacement for one callback.
@@ -2004,15 +2152,37 @@ export class LiveContextManager {
 	}
 
 	/**
-	 * Run a `run()` / `scope()` callback of the live runtime and wait for what it returns, marked on the stack as one (see
-	 * {@link LiveContextManager#runParent}).
+	 * Run a `run()` / `scope()` callback in its store, marked on the stack as one (see {@link slothlet_liveRunBody}).
+	 * Where each flow is carried across its promise jobs (see {@link LiveContextManager#holdFlowHooks}) the store is the
+	 * active one only while the callback runs synchronously, and its own promise jobs pick up in it; code after the
+	 * `run()` call goes on in the flow it was in. Without promise hooks (a browser) the store stays active until the
+	 * callback's promise settles, so the callback's own code after a bare `await` finds it.
+	 * @param {string} flowID - The `run()` / `scope()` store's id.
 	 * @param {Function} fn - The callback.
 	 * @param {Array<*>} args - Its arguments.
 	 * @returns {Promise<*>} What it returned.
 	 * @internal
 	 */
-	runBody(fn, args) {
-		return slothlet_liveRunBody(fn, args);
+	runFlowBody(flowID, fn, args) {
+		if (this.#carriesAwaits) {
+			const previous = this.#activeID;
+			this.#activeID = flowID;
+			try {
+				return slothlet_liveRunBody(fn, args);
+			} finally {
+				this.#activeID = previous;
+			}
+		}
+		const previous = this.currentInstanceID;
+		this.#activeID = flowID;
+		const manager = this;
+		return (async function slothlet_liveRunFlow() {
+			try {
+				return await slothlet_liveRunBody(fn, args);
+			} finally {
+				manager.#activeID = previous;
+			}
+		})();
 	}
 
 	/**
@@ -2021,8 +2191,8 @@ export class LiveContextManager {
 	 * `await` would hand its context to a sibling `run()` opened meanwhile from elsewhere. That store is the parent only
 	 * when the code opening the new one is part of its flow: a call of the instance is executing on it, a call waiting on
 	 * it is the code that picked up, or a `run()` / `scope()` callback is on the stack (synchronously or at an `await`
-	 * further out). Otherwise the instance's own store is the parent. Which of several interleaved `run()` callbacks the
-	 * code is part of is not told apart.
+	 * further out). Otherwise the instance's own store is the parent. Where each flow is carried across its promise jobs
+	 * (Node) the field names the code's own flow, and is taken as it is.
 	 * @param {string} instanceID - The instance.
 	 * @returns {object|undefined} The store; undefined when the instance has none.
 	 * @internal
@@ -2032,13 +2202,43 @@ export class LiveContextManager {
 		const activeID = this.currentInstanceID;
 		const store = activeID && this.#flowBelongsToInstance(activeID, instanceID) ? MapMethods.get(this.instances, activeID) : undefined;
 		if (!store || store === base) return base;
-		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return store;
+		// With each flow carried across its promise jobs, the field names the code's own flow.
+		if (this.#carriesAwaits) return store;
+		return this.#partOfFlow(store) ? store : base;
+	}
+
+	/**
+	 * The store of the flow the code running now is part of, given the store the active field resolves to: that store
+	 * when it is an instance's own or the code is part of its `run()` / `scope()` flow (see
+	 * {@link LiveContextManager#runParent}), otherwise its instance's own store.
+	 * @param {object} store - The active store.
+	 * @returns {object} The store of the code's flow.
+	 * @private
+	 */
+	#flowStoreOf(store) {
+		const family = store.parentInstanceID;
+		// With each flow carried across its promise jobs, the field names the code's own flow.
+		if (!family || family === store.instanceID || this.#carriesAwaits) return store;
+		const base = MapMethods.get(this.instances, family);
+		if (!base || this.#partOfFlow(store)) return store;
+		return base;
+	}
+
+	/**
+	 * Whether the code running now is part of a `run()` / `scope()` store's flow: a call of the instance is executing on
+	 * it, a call waiting on it is the code that picked up, or a `run()` / `scope()` callback is on the stack.
+	 * @param {object} store - The store.
+	 * @returns {boolean} True when it is.
+	 * @private
+	 */
+	#partOfFlow(store) {
+		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return true;
 		const suspended = this.#suspendedFor(store);
 		if (SetMethods.size(suspended)) {
 			const resolved = this.#resolveSuspendedFromStack(suspended);
-			if (resolved && typeof resolved === "object" && !resolved.tied) return store;
+			if (resolved && typeof resolved === "object" && !resolved.tied) return true;
 		}
-		return this.#runBodyOnStack() ? store : base;
+		return this.#runBodyOnStack();
 	}
 
 	/**
@@ -2125,10 +2325,12 @@ export class LiveContextManager {
 		store.__authoritativeWrapper = null;
 		store.__authoritativeCeiling = null;
 		let restored = false;
+		// Put back once the synchronous part returns when the flow is carried across promise jobs (see runInContext).
+		const carriesAwaits = this.#carriesAwaits;
 		const restore = () => {
 			if (restored) return;
 			restored = true;
-			this.#activeID = previousInstanceID;
+			if (!carriesAwaits) this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
@@ -2144,6 +2346,7 @@ export class LiveContextManager {
 			throw error;
 		} finally {
 			this.#syncDepth--;
+			if (carriesAwaits) this.#activeID = previousInstanceID;
 			ArrayMethods.pop(entered);
 			store.__authoritativeWrapper = previousAuthoritative;
 			store.__authoritativeCeiling = previousAuthoritativeCeiling;
@@ -2211,6 +2414,9 @@ export class LiveContextManager {
 		};
 
 		MapMethods.set(this.instances, instanceID, store);
+		// Every flow is carried across its promise jobs for as long as the instance lives (see holdFlowHooks).
+		store.__holdsFlowHooks = true;
+		this.#holdFlowHooks();
 		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
 		const permissions = config?.permissions;
 		if (
@@ -2354,6 +2560,10 @@ export class LiveContextManager {
 		// Restore previous state. Idempotent: the sync and settle paths must never both apply it,
 		// or a nested call's saved state would be restored twice.
 		let restored = false;
+		// With the flow carried across promise jobs, the field is put back as soon as the synchronous part returns: the
+		// call's own code after an `await` picks up in the flow its promises were made in, and the caller's code goes on
+		// in its own (see holdFlowHooks).
+		const carriesAwaits = this.#carriesAwaits;
 		const restore = () => {
 			// Idempotence guard. The sync and settle paths are mutually exclusive by construction, so the
 			// second call this protects against does not occur — but restoring twice would roll a nested
@@ -2361,7 +2571,7 @@ export class LiveContextManager {
 			/* v8 ignore next */
 			if (restored) return;
 			restored = true;
-			this.#activeID = previousInstanceID;
+			if (!carriesAwaits) this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
@@ -2413,6 +2623,7 @@ export class LiveContextManager {
 				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : FunctionMethods.apply(fn, thisArg, args);
 			} finally {
 				this.#syncDepth--;
+				if (carriesAwaits) this.#activeID = previousInstanceID;
 				if (hostStores) this.#leaveHost(hostStores);
 				else ArrayMethods.pop(entered);
 				if (withdrawAuthoritative) {
@@ -2737,6 +2948,21 @@ export class LiveContextManager {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
 		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		const previousInstanceID = this.#activeID;
+		if (this.#carriesAwaits) {
+			// The flow is carried across `fn`'s promise jobs: the field names it only while `fn` runs synchronously.
+			try {
+				let pending;
+				this.#activeID = childStore.instanceID;
+				try {
+					pending = fn();
+				} finally {
+					this.#activeID = previousInstanceID;
+				}
+				return await pending;
+			} finally {
+				MapMethods.delete(this.instances, childStore.instanceID);
+			}
+		}
 		try {
 			this.#activeID = childStore.instanceID;
 			return await fn();
@@ -2794,6 +3020,10 @@ export class LiveContextManager {
 		if (store.__recordsFlowStarters) {
 			store.__recordsFlowStarters = false;
 			this.#releaseFlowStarters();
+		}
+		if (store.__holdsFlowHooks) {
+			store.__holdsFlowHooks = false;
+			this.#releaseFlowHooks();
 		}
 		// A promise followed for one of its callbacks that never settles would keep the settle hook installed (#597).
 		runtime_unfollowInstance(store.parentInstanceID ?? instanceID);

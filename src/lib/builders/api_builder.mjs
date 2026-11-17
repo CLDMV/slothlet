@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:23:39-08:00 (1794943419)
+ *	@Last modified time: 2026-11-17T12:09:57-08:00 (1794946197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4974,17 +4974,12 @@ export class ApiBuilder extends ComponentBase {
 
 					// Register child instance
 					MapMethods.set(contextManager.instances, childInstanceID, childStore);
-					const previousInstanceID = contextManager.currentInstanceID;
 
 					try {
-						// Set as current instance
-						contextManager.currentInstanceID = childInstanceID;
-
-						// Execute callback, marked on the stack as a run()/scope() callback (see runParent).
-						return await contextManager.runBody(fn, args);
+						// Execute callback in the child store, marked on the stack as a run()/scope() callback (see runParent).
+						return await contextManager.runFlowBody(childInstanceID, fn, args);
 					} finally {
-						// Restore previous instance ID and cleanup child
-						contextManager.currentInstanceID = previousInstanceID;
+						// Cleanup child
 						MapMethods.delete(contextManager.instances, childInstanceID);
 					}
 				}

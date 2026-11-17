@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:24:41-08:00 (1794943481)
+ *	@Last modified time: 2026-11-17T12:11:05-08:00 (1794946265)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,6 +62,12 @@ beforeAll(() => {
 		"\tshared.snapshot = AsyncLocalStorage.snapshot();",
 		"\tshared.adminRead = () => ({ user: context.user ?? null });",
 		"\tshared.adminBound = AsyncLocalStorage.bind(() => ({ user: context.user ?? null }));",
+		"\t// The call's own async functions, which await before they read anything.",
+		"\tshared.adminAwaitRead = async () => {",
+		"\t\tawait null;",
+		"\t\treturn { user: context.user ?? null };",
+		"\t};",
+		"\tshared.adminBoundAwait = AsyncLocalStorage.bind(shared.adminAwaitRead);",
 		"\tawait hold;",
 		"\treturn { user: context.user ?? null, token: context.token ?? null };",
 		"}"
@@ -136,6 +142,27 @@ beforeAll(() => {
 		"}",
 		"export function adminBound() {",
 		"\treturn shared().adminBound();",
+		"}",
+		"export function adminCodeAwait() {",
+		"\treturn shared().resource.runInAsyncScope(shared().adminAwaitRead);",
+		"}",
+		"export function adminSnapshotAwait() {",
+		"\treturn shared().snapshot(shared().adminAwaitRead);",
+		"}",
+		"export function adminBoundAwait() {",
+		"\treturn shared().adminBoundAwait();",
+		"}",
+		"export function snapshotAwait() {",
+		"\treturn shared().snapshot(async () => {",
+		"\t\tawait null;",
+		"\t\treturn probe();",
+		"\t});",
+		"}",
+		"export function boundAwait() {",
+		"\treturn shared().resource.bind(async () => {",
+		"\t\tawait null;",
+		"\t\treturn probe();",
+		"\t})();",
 		"}",
 		"export function loadResource() {",
 		"\treturn loaded().resource.runInAsyncScope(probe);",
@@ -228,7 +255,7 @@ beforeAll(() => {
 		"}",
 		"const out = {};",
 		"// One request (root) holds admin's call open while another (mallory) runs evil.",
-		'const routes = ["own", "resource", "resourceAwait", "snapshot", "bound", "adminCode", "adminBound", "loadResource", "loadSnapshot", "loadOwn", "stealRunner", "tamper"];',
+		'const routes = ["own", "resource", "resourceAwait", "snapshot", "snapshotAwait", "bound", "boundAwait", "adminCode", "adminBound", "adminCodeAwait", "adminSnapshotAwait", "adminBoundAwait", "loadResource", "loadSnapshot", "loadOwn", "stealRunner", "tamper"];',
 		"for (const route of routes) {",
 		"\tconst api = await make();",
 		"\tlet release;",
@@ -312,7 +339,7 @@ const CONFIGS = [
 ];
 
 // Another request's resource, snapshot and bound function, and a resource and a snapshot a file made while it loaded.
-const SELF_ENTRY_ROUTES = ["resource", "resourceAwait", "snapshot", "bound", "loadResource", "loadSnapshot"];
+const SELF_ENTRY_ROUTES = ["resource", "resourceAwait", "snapshot", "snapshotAwait", "bound", "boundAwait", "loadResource", "loadSnapshot"];
 
 describe.each(FRAMES)("Permissions > live runtime > a flow entered by module code itself > %s", (_label, nodeFlags) => {
 	describe.each(CONFIGS)("%s", (_name, mode, provenance, attribution) => {
@@ -338,7 +365,15 @@ describe.each(FRAMES)("Permissions > live runtime > a flow entered by module cod
 		});
 
 		it("the other request's own call still sees its own context", () => {
-			for (const route of [...SELF_ENTRY_ROUTES, "own", "adminCode", "adminBound"])
+			for (const route of [
+				...SELF_ENTRY_ROUTES,
+				"own",
+				"adminCode",
+				"adminBound",
+				"adminCodeAwait",
+				"adminSnapshotAwait",
+				"adminBoundAwait"
+			])
 				expect(result[route + ":first"]).toEqual({ user: "root", token: "T-root" });
 		});
 
@@ -346,6 +381,13 @@ describe.each(FRAMES)("Permissions > live runtime > a flow entered by module cod
 			expect(result.adminCode).toEqual({ user: "root" });
 			expect(result.adminBound).toEqual({ user: "root" });
 		});
+
+		it.each(["adminCodeAwait", "adminSnapshotAwait", "adminBoundAwait"])(
+			"the other call's own async function run through %s still sees its request after awaiting before it reads",
+			(route) => {
+				expect(result[route]).toEqual({ user: "root" });
+			}
+		);
 
 		it("the loading file's own function, run through the resource it made while loading, still runs as its module", () => {
 			expect(result.loadOwn.self).toBe("loader");

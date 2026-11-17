@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T08:00:00-08:00 (1794585600)
+ *	@Last modified time: 2026-11-17T12:10:38-08:00 (1794946238)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,10 +22,8 @@
  * the next host api call threw `CONTEXT_NOT_FOUND`. A host call made once every `run()` has returned runs with the
  * host's own context, as on the async runtime; a new `run()` gets its own.
  *
- * What the resumed calls themselves see differs by runtime and is documented (CONTEXT-PROPAGATION.md, "Runtime caveat"
- * and "Overlapping calls"): the async runtime gives each call its own flow's context; the live runtime does not isolate
- * interleaved `run()` flows, so each call sees the context of whichever flow the active field names when it picks up:
- * one of the flows, or the instance's own once another flow has returned.
+ * Each resumed call sees its own flow's context on both runtimes: `run()` flows are isolated from each other (the live
+ * runtime carries each flow across its promise jobs in Node).
  *
  * Fixture `api_test_live_interleaved_run`: `m.slow` and `n.slow` wait in the exported function, `m.nested` in an unnamed
  * function nested in it; every one reports `context.tag`. The instance's own context is `{ tag: "base" }`.
@@ -76,16 +74,13 @@ describe.each(matrix)("calls of interleaved context.run() flows > $mode / $runti
 	const run = (tag, fn) => api.slothlet.context.run({ tag }, fn);
 
 	/**
-	 * What each resumed call may report: its own flow's context on the async runtime. The live runtime does not
-	 * isolate interleaved flows: a call sees the context of whichever flow the active field names when it picks up,
-	 * one of the flows, or the instance's own once another flow has returned and restored the field.
+	 * Each resumed call reports its own flow's context, on both runtimes.
 	 * @param {string[]} seen - What the calls reported, in start order.
 	 * @param {string} prefix - The report's prefix.
 	 * @returns {void}
 	 */
 	function expectFlowContexts(seen, prefix) {
-		if (runtime === "async") expect(seen).toEqual([`${prefix}one`, `${prefix}two`]);
-		else for (const value of seen) expect([`${prefix}one`, `${prefix}two`, `${prefix}base`]).toContain(value);
+		expect(seen).toEqual([`${prefix}one`, `${prefix}two`]);
 	}
 
 	/**
@@ -135,12 +130,7 @@ describe.each(matrix)("calls of interleaved context.run() flows > $mode / $runti
 		const second = run("two", () => api.n.slow(g2.promise));
 		g1.release();
 		g2.release();
-		const [a, b] = [await first, await second];
-		if (runtime === "async") expect([a, b]).toEqual(["slow:one", "n:two"]);
-		else {
-			expect(["slow:one", "slow:two", "slow:base"]).toContain(a);
-			expect(["n:one", "n:two", "n:base"]).toContain(b);
-		}
+		expect([await first, await second]).toEqual(["slow:one", "n:two"]);
 		await expectHostContext();
 	});
 
