@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:14-08:00 (1794797714)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,8 +51,8 @@
  * and does not bound.
  */
 
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, closeLayer, isActiveLayer, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { openLayer, closeLayer, isActiveLayer, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	EventTarget,
 	filterList,
@@ -64,8 +64,8 @@ import {
 	WeakMapMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 import { isSlothletProxy } from "#handlers/framework-internals";
 
 /**

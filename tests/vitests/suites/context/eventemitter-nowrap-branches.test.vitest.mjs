@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T16:16:44-08:00 (1794874604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { EventEmitter } from "events";
-import { enableEventEmitterPatching, disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { enableEventEmitterPatching, disableEventEmitterPatching } from "#helpers/eventemitter-context";
 
 // Enable patching once for this file; restore afterwards.
 beforeAll(() => {

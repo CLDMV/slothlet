@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:04-08:00 (1794635284)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,9 +30,9 @@
 // Node-only: this module patches EventEmitter.prototype to propagate ALS context to listeners —
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
-import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { EventEmitter, AsyncResource } from "#helpers/platform";
+import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
 import {
 	ArrayMethods,
@@ -53,8 +53,8 @@ import {
 	WeakMapMethods,
 	WeakRef,
 	WeakRefMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { recordSharedExports } = sharedValuesInternals("lib/helpers/eventemitter-context");
 
 /**

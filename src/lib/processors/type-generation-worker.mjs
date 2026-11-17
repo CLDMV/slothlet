@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,9 +33,9 @@
 import * as nodeUrl from "node:url";
 import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { JSON, NativeProcess, Processes, PromiseMethods } from "@cldmv/slothlet/helpers/intrinsics";
+import { generateTypes } from "#processors/type-generator";
+import { SlothletError } from "#errors";
+import { JSON, NativeProcess, Processes, PromiseMethods } from "#helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.

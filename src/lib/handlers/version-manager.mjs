@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:00-08:00 (1794635280)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * @package
  */
 
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
@@ -57,7 +57,7 @@ import {
 	StringMethods,
 	Symbol,
 	Symbols
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { markFrameworkInternal, registerVersionDispatcher } = frameworkInternalsInternals("lib/handlers/version-manager");
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the

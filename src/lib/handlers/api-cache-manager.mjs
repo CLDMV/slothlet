@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
 	ArrayMethods,
 	Dates,
@@ -48,7 +48,7 @@ import {
 	splitText,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.

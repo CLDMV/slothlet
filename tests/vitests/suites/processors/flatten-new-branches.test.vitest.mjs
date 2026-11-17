@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T16:17:26-08:00 (1794874646)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,7 +43,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { Flatten } from "@cldmv/slothlet/processors/flatten";
+import { Flatten } from "#processors/flatten";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**

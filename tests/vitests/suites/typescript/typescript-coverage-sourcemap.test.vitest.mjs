@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,17 +71,17 @@ afterAll(async () => {
 
 describe("coverage-run detection", () => {
 	it("detects a vitest coverage run from the worker global", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: COVERAGE_WORKER, env: {} })).toBe(true);
 	});
 
 	it("detects a native/c8 run from NODE_V8_COVERAGE", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: null, env: { NODE_V8_COVERAGE: "/some/dir" } })).toBe(true);
 	});
 
 	it("reports no coverage run for a plain test run or plain process", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: PLAIN_WORKER, env: {} })).toBe(false);
 		expect(isCoverageRun({ worker: null, env: {} })).toBe(false);
 		expect(isCoverageRun({ worker: null, env: { NODE_V8_COVERAGE: "" } })).toBe(false);
@@ -92,7 +92,7 @@ describe("coverage-run detection", () => {
 
 describe("resolveSourcemap", () => {
 	it("turns source maps on under a coverage run when sourcemap is not set", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast" }, { worker: COVERAGE_WORKER, env: {} })).toBe(true);
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: null }, { worker: null, env: { NODE_V8_COVERAGE: "/x" } })).toBe(
 			true
@@ -100,18 +100,18 @@ describe("resolveSourcemap", () => {
 	});
 
 	it("leaves source maps off outside a coverage run when sourcemap is not set", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast" }, { worker: PLAIN_WORKER, env: {} })).toBe(false);
 	});
 
 	it("lets an explicit sourcemap value win over detection", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: false }, { worker: COVERAGE_WORKER, env: {} })).toBe(false);
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: true }, { worker: null, env: {} })).toBe(true);
 	});
 
 	it("keeps an unset sourcemap unset through config normalization", async () => {
-		const { Config } = await import("@cldmv/slothlet/helpers/config");
+		const { Config } = await import("#helpers/config");
 		const { SlothletError, SlothletWarning } = await import("@cldmv/slothlet/errors");
 		const cfg = new Config({
 			config: {},
@@ -133,7 +133,7 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
-		const { warnIfCoverageWithoutSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { warnIfCoverageWithoutSourcemap } = await import("#processors/loader");
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
 		const prior = SlothletWarning.suppressConsole;

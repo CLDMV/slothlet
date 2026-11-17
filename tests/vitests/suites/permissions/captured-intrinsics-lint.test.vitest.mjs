@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:50:06-08:00 (1794635406)
+ *	@Last modified time: 2026-11-16T16:17:03-08:00 (1794874623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ function lint(code) {
 		.map((m) => `${m.line}: ${m.message}`);
 }
 
-const IMPORT = 'import { Error, Dates, String, Processes } from "@cldmv/slothlet/helpers/intrinsics";\nconst value = 1;\n';
+const IMPORT = 'import { Error, Dates, String, Processes } from "#helpers/intrinsics";\nconst value = 1;\n';
 
 describe("slothlet/captured-intrinsics", () => {
 	it.each([
@@ -93,9 +93,7 @@ describe("slothlet/captured-intrinsics", () => {
 			"3: `Error.captureStackTrace` reads a member module code can replace on the shared constructor. Use Errors.captureStackTrace."
 		]);
 		expect(
-			lint(
-				'import { Error as Pristine, Date } from "@cldmv/slothlet/helpers/intrinsics";\nPristine.captureStackTrace(this);\nDate.now();\n'
-			)
+			lint('import { Error as Pristine, Date } from "#helpers/intrinsics";\nPristine.captureStackTrace(this);\nDate.now();\n')
 		).toEqual([
 			"2: `Error.captureStackTrace` reads a member module code can replace on the shared constructor. Use Errors.captureStackTrace.",
 			"3: `Date.now` reads a member module code can replace on the shared constructor. Use Dates.now."
@@ -107,7 +105,7 @@ describe("slothlet/captured-intrinsics", () => {
 
 	const NODE_MEMBER = "reads a member of a Node built-in module after slothlet loaded";
 	const NODE_BINDING = "is a live binding of a Node built-in module";
-	const PROCESSES = 'import { Processes, Objects } from "@cldmv/slothlet/helpers/intrinsics";\n';
+	const PROCESSES = 'import { Processes, Objects } from "#helpers/intrinsics";\n';
 
 	it.each([
 		[

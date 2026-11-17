@@ -148,7 +148,7 @@ Automatic context preservation across all asynchronous boundaries:
 Run slothlet in the browser, web workers, and Electron renderers — anywhere there is no filesystem:
 
 - **Manifest-driven loading**: a build-time manifest replaces `readdir`; API leaves load via your `resolveModuleSpecifier`
-- **One-call setup**: `generateBrowserAssets(apiDir)` returns both the API `manifest` **and** the `importmap` for slothlet's own modules, so consumers never hand-roll module resolution
+- **One-call setup**: `files.assets(apiDir)` from `@cldmv/slothlet/files` returns both the API `manifest` **and** the `importmap` for slothlet's own modules, so consumers never hand-roll module resolution
 - **Bundler-friendly**: bundled apps need only the manifest; raw-ESM pages and Electron renderers get the importmap too
 - **Full parity**: `self`, hooks, permissions, metadata, i18n, lifecycle events, and api mutation all work in-browser (live-binding context manager)
 

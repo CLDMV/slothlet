@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,8 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
-import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
-import { Arrays, Reflect, RegExpMethods, regExpReplace, String } from "@cldmv/slothlet/helpers/intrinsics";
+import { DEFAULT_API_DEPTH } from "#helpers/defaults";
+import { Arrays, Reflect, RegExpMethods, regExpReplace, String } from "#helpers/intrinsics";
 
 /**
  * Lazy mode component - builds APIs with deferred (on-demand) loading.

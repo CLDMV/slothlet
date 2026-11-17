@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:46-07:00 (1791091726)
+ *	@Last modified time: 2026-11-16T16:17:36-08:00 (1794874656)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@ import path from "node:path";
 import ts from "typescript";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/typegen";
-import { generateTypes as generateFromInstance } from "@cldmv/slothlet/processors/type-generator";
+import { generateTypes as generateFromInstance } from "#processors/type-generator";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 

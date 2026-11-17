@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-16T16:17:02-08:00 (1794874622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
 
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
+import { validateModuleManifest } from "#helpers/module-manifest-validator";
 
 const TEST_PACKAGE_ROOT = "/srv/repos/slothlet/tests/vitests/suites/modules";
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T10:40:00-08:00 (1794681600)
+ *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
+import { normalizeClockConfig } from "#helpers/config";
 import { OwnershipManager } from "#handlers/ownership";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 

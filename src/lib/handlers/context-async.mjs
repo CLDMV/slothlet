@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,12 +20,12 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
-import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
-import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
-import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { AsyncLocalStorage, inheritsFrom } from "#helpers/platform";
+import { nativeThen } from "#helpers/promise-context";
+import { SlothletError } from "#errors";
+import { DEFAULT_CLOCK } from "#helpers/clock";
+import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
+import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import {
 	carriesCallerCode,
@@ -49,8 +49,8 @@ import {
 	Promise,
 	Reflect,
 	WeakMap
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
@@ -181,7 +181,7 @@ export class AsyncContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
-	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
+	 * @param {import("#helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */

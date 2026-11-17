@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:11:37-08:00 (1794802297)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,18 +22,14 @@
  * @internal
  */
 
-import { fileParts, util } from "@cldmv/slothlet/helpers/platform";
+import { fileParts, util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { translate } from "@cldmv/slothlet/i18n";
+import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
+import { translate } from "#i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
-import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
-import { runBaseline } from "@cldmv/slothlet/helpers/permission-baseline";
-import {
-	isFrameworkWriteTarget,
-	writeTargetLiteralPrefix,
-	internals as reservedKeysInternals
-} from "@cldmv/slothlet/helpers/reserved-keys";
+import { DEFAULT_ROUTINES } from "#helpers/defaults";
+import { runBaseline } from "#helpers/permission-baseline";
+import { isFrameworkWriteTarget, writeTargetLiteralPrefix, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
@@ -69,7 +65,7 @@ import {
 	Symbol,
 	WeakMap,
 	WeakMapMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/permission-manager");
 const { runtime_selfModuleCeilings, runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/permission-manager");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permission-manager");

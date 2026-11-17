@@ -168,24 +168,22 @@ function deriveName(coreName, folder) {
 }
 
 /**
- * Consumer-facing surface only (2026-09 scoping decision). Everything else this package exposes as
- * an `exports` subpath — `./modes/*`, `./builders/*`, `./processors/*`, `./handlers/*`/`./factories/*`
- * (via the internal `#imports` map), the rest of `./helpers/*`, `./i18n`, and the
- * mode-specific `./runtime/async` / `./runtime/live` — exists so this package's OWN source files can
- * reference each other cleanly; none of it was ever a supported external contract. Publishing full
- * types for it just invites consumers to depend on implementation details that can change at any
- * time. The four here are the real, documented consumer surface: the `slothlet()` factory itself
- * (`.` / `./slothlet`), the unified runtime context interface (not its mode-specific
- * implementations), the property-name sanitizer (carved out of the `./helpers/*` wildcard below —
- * every other helper stays internal), the thrown/emitted error classes, and the standalone
- * `slothlet typegen` generator (explicitly documented as CLI-and-programmatic, docs/TYPESCRIPT.md).
+ * Consumer-facing surface only (2026-09 scoping decision, v4 entry points). Slothlet's internals are
+ * package-private `imports` (`#builders/*`, `#handlers/*`, `#helpers/*`, …), and `./i18n` and the
+ * mode-specific `./runtime/async` / `./runtime/live` are not typed consumer contracts. Publishing full
+ * types for those just invites consumers to depend on implementation details that can change at any
+ * time. The ones here are the real, documented consumer surface (with the root `.`, the `slothlet()`
+ * factory): the unified runtime context interface (not its mode-specific implementations), the
+ * thrown/emitted error classes, the standalone `slothlet typegen` generator (explicitly documented as
+ * CLI-and-programmatic, docs/TYPESCRIPT.md), the vite/vitest plugin, the browser file-list helpers and
+ * the property-name sanitizer.
  * @internal
  */
-const CONSUMER_EXACT_EXPORTS = new Set(["./slothlet", "./runtime", "./errors", "./typegen"]);
+const CONSUMER_EXACT_EXPORTS = new Set(["./runtime", "./errors", "./typegen", "./vite", "./files", "./sanitize"]);
 
 /**
  * Build the standalone types package's export map from the core export map, restricted to
- * {@link CONSUMER_EXACT_EXPORTS} (plus the one carved-out `./helpers/sanitize` entry). Core's
+ * {@link CONSUMER_EXACT_EXPORTS}. Core's
  * `default` types condition now points at the shipped stubs, so the canonical declaration layout is
  * read from the `slothlet-dev` condition (./types/src/X) instead — the satellite carries a copy of
  * that same tree (./X). The root `.` maps to the generated aggregator (./index.d.mts). Anything not
@@ -210,17 +208,7 @@ export function computeTypesExports(coreExports) {
 		const dev = value["slothlet-dev"];
 		const devTypes = dev && typeof dev === "object" && typeof dev.types === "string" ? dev.types : null;
 		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue; // skips any export whose dev types are not under ./types/src/
-		const rest = devTypes.slice(srcPrefix.length); // lib/helpers/*.d.mts | slothlet.d.mts
-		if (key === "./helpers/*") {
-			// Carve exactly the sanitize export out of the wildcard; the rest of ./helpers/* stays internal.
-			// Global regex, not a string literal — a plain `.replace("*", ...)` only ever replaces the
-			// first occurrence (CodeQL js/incomplete-sanitization); harmless for today's single-`*`
-			// wildcard shape, but the correct, robust form regardless.
-			const sanitizeRest = rest.replace(/\*/g, "sanitize"); // lib/helpers/sanitize.d.mts
-			if (!fs.existsSync(path.join(srcDir, sanitizeRest))) continue;
-			out["./helpers/sanitize"] = { types: "./" + sanitizeRest };
-			continue;
-		}
+		const rest = devTypes.slice(srcPrefix.length); // lib/runtime/runtime.d.mts | vite.d.mts
 		if (!CONSUMER_EXACT_EXPORTS.has(key)) continue;
 		const probe = rest.includes("*") ? path.posix.dirname(rest) : rest;
 		if (!fs.existsSync(path.join(srcDir, probe))) continue; // only what the satellite actually ships
@@ -231,8 +219,8 @@ export function computeTypesExports(coreExports) {
 
 /**
  * Build the standalone types package's `imports` map from the core `imports` map. Core keeps its
- * internal-only handlers/factories out of the public `exports` (they resolve via package `imports`
- * as `#handlers/*` / `#factories/*`). The carved declarations still reference those `#`-specifiers in
+ * internals out of the public `exports` (they resolve via package `imports` as `#builders/*`,
+ * `#handlers/*`, `#helpers/*`, `#slothlet`, …). The carved declarations still reference those `#`-specifiers in
  * type positions (e.g. `import("#factories/component-base")`), so the satellite must republish the
  * same subpath-imports — pointing at its own copied `.d.mts` mirror — or a consumer's type-checker
  * cannot resolve them. Types-only: a single `types` condition per key.
@@ -371,7 +359,7 @@ const RULES = {
 			const typesImports = computeTypesImports(core.imports);
 			return {
 				exports: computeTypesExports(core.exports),
-				// Republish core's `#handlers/*` / `#factories/*` subpath-imports so the carved
+				// Republish core's `#…` subpath-imports so the carved
 				// declarations' internal `import("#…")` type references resolve inside the satellite.
 				...(Object.keys(typesImports).length ? { imports: typesImports } : {}),
 				files,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T21:00:00-07:00 (1791604800)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@
  * The registry lives on the global object under a `Symbol.for` key, so every copy shares it.
  */
 
-import { Objects, Reflect, Symbols, WeakMap, WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+import { Objects, Reflect, Symbols, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 
 /**
  * Where the registry lives on the global object.

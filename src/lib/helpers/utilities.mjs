@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,18 +21,8 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import {
-	Arrays,
-	Date,
-	DateMethods,
-	FunctionMethods,
-	mapList,
-	Math,
-	NumberMethods,
-	Objects,
-	StringMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { cloneTakingViews } from "@cldmv/slothlet/helpers/clone-context";
+import { Arrays, Date, DateMethods, FunctionMethods, mapList, Math, NumberMethods, Objects, StringMethods } from "#helpers/intrinsics";
+import { cloneTakingViews } from "#helpers/clone-context";
 
 /**
  * General utility functions

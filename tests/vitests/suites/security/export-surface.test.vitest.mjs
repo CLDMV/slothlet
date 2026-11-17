@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-16T16:17:33-08:00 (1794874653)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateImportMap } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateImportMap } from "#helpers/generate-manifest";
 
 // Build specifiers at runtime so the bundler/module-runner cannot statically resolve (and reject)
 // them at transform time — the point is to observe the resolver rejecting a no-longer-exported subpath.

@@ -99,7 +99,7 @@ export function fileParts(filePath: string): {
  * @param {Function} fn - Callback to run.
  * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
  *   schedulers to pick from: the host's own unless a test hands in others.
- * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock.
+ * @param {import("#helpers/clock").Clock} [clock] - The instance's clock.
  * @returns {void}
  * @internal
  *
@@ -110,7 +110,7 @@ export function scheduleMacrotask(fn: Function, hosts?: {
     setImmediate: Function | undefined;
     MessageChannel: Function | undefined;
     setTimeout: Function;
-}, clock?: import("@cldmv/slothlet/helpers/clock").Clock): void;
+}, clock?: import("#helpers/clock").Clock): void;
 /**
  * `value instanceof ctor` as the language answers it, without any `Symbol.hasInstance` a module gave the class: a
  * module can give a global class (`Promise`, `Error`) one of its own, which an `instanceof` in slothlet's code would run

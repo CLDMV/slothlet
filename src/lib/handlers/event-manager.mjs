@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,7 @@ import {
 	StringMethods,
 	WeakMap,
 	WeakMapMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
 /** The functions the dispatcher uses, taken when slothlet loaded. */

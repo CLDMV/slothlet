@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:33-07:00 (1793485473)
+ *	@Last modified time: 2026-11-16T16:16:41-08:00 (1794874601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
-import { stackReadCount } from "@cldmv/slothlet/helpers/stack-read";
+import { stackReadCount } from "#helpers/stack-read";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**

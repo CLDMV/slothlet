@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:45-08:00 (1794635325)
+ *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,8 +35,8 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
+import { generateManifest } from "#helpers/generate-manifest";
+import { scheduleMacrotask } from "#helpers/platform";
 import { Lifecycle } from "#handlers/lifecycle";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getBrowserMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";

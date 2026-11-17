@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:15:30-08:00 (1794824130)
+ *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,30 +87,31 @@
 // enters the static-import graph a browser must parse (#123). Only the Node
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
-import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
+import { isNode, fs, fsp, path, url, createRequire } from "#helpers/platform";
 import { internals as contextInternals } from "#factories/context";
-import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
-import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
+import { warnIfCoverageWithoutImporter } from "#processors/loader";
+import { SlothletError, SlothletWarning } from "#errors";
+import { SlothletDebug } from "#helpers/debug";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
-import { internals as translationsInternals } from "@cldmv/slothlet/i18n";
-import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { internals as schedulerContextInternals } from "@cldmv/slothlet/helpers/scheduler-context";
-import { internals as eventtargetContextInternals } from "@cldmv/slothlet/helpers/eventtarget-context";
-import { internals as eventtargetPropertyContextInternals } from "@cldmv/slothlet/helpers/eventtarget-property-context";
-import { internals as observerContextInternals } from "@cldmv/slothlet/helpers/observer-context";
-import { internals as promiseContextInternals } from "@cldmv/slothlet/helpers/promise-context";
-import { internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
-import { internals as asyncResourceContextInternals } from "@cldmv/slothlet/helpers/async-resource-context";
-import { internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
-import { internals as capabilityContextInternals } from "@cldmv/slothlet/helpers/capability-context";
-import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
-import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { isGuardedInternal, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
-import { normalizePermissionsConfig, normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
-import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
+import { internals as translationsInternals } from "#i18n";
+import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
+import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
+import { internals as eventtargetContextInternals } from "#helpers/eventtarget-context";
+import { internals as eventtargetPropertyContextInternals } from "#helpers/eventtarget-property-context";
+import { internals as observerContextInternals } from "#helpers/observer-context";
+import { internals as promiseContextInternals } from "#helpers/promise-context";
+import { internals as cloneContextInternals } from "#helpers/clone-context";
+import { internals as asyncResourceContextInternals } from "#helpers/async-resource-context";
+import { internals as functionSourceContextInternals } from "#helpers/function-source-context";
+import { internals as capabilityContextInternals } from "#helpers/capability-context";
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
+import { dataMemberOf, isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { isGuardedInternal, internals as instanceImportsInternals } from "#helpers/instance-imports";
+import { normalizePermissionsConfig, normalizeClockConfig } from "#helpers/config";
+import { DEFAULT_CLOCK } from "#helpers/clock";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -138,7 +139,7 @@ import {
 	StringMethods,
 	URLSearchParams,
 	URLSearchParamsMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const {
 	resolveWrapper,
 	releaseModuleMakers,
@@ -339,13 +340,13 @@ class Slothlet {
 	/**
 	 * The clock this instance reads the time and schedules its deferred work with (the `clock` option): held here alone,
 	 * never part of the config the instance hands out, so only the host that created the instance can supply it.
-	 * @type {import("@cldmv/slothlet/helpers/clock").Clock}
+	 * @type {import("#helpers/clock").Clock}
 	 */
 	#clock = DEFAULT_CLOCK;
 
 	/**
 	 * The instance's clock: the functions the host gave in the `clock` option, or the ones slothlet loaded with.
-	 * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The frozen clock.
+	 * @returns {import("#helpers/clock").Clock} The frozen clock.
 	 * @internal
 	 * @example
 	 * slothlet.clock.now();
@@ -548,10 +549,10 @@ class Slothlet {
 		// skipped by the filter below, so extras in this list are harmless.
 		const BROWSER_COMPONENT_SPECIFIERS = [
 			// builders
-			"@cldmv/slothlet/builders/api-assignment",
-			"@cldmv/slothlet/builders/api_builder",
-			"@cldmv/slothlet/builders/builder",
-			"@cldmv/slothlet/builders/modes-processor",
+			"#builders/api-assignment",
+			"#builders/api_builder",
+			"#builders/builder",
+			"#builders/modes-processor",
 			// handlers
 			"#handlers/api-cache-manager",
 			"#handlers/api-manager",
@@ -566,18 +567,18 @@ class Slothlet {
 			"#handlers/routine-manager",
 			"#handlers/version-manager",
 			// helpers
-			"@cldmv/slothlet/helpers/config",
-			"@cldmv/slothlet/helpers/hint-detector",
-			"@cldmv/slothlet/helpers/modes-utils",
-			"@cldmv/slothlet/helpers/resolve-from-caller",
-			"@cldmv/slothlet/helpers/sanitize",
-			"@cldmv/slothlet/helpers/utilities",
+			"#helpers/config",
+			"#helpers/hint-detector",
+			"#helpers/modes-utils",
+			"#helpers/resolve-from-caller",
+			"#helpers/sanitize",
+			"#helpers/utilities",
 			// modes
-			"@cldmv/slothlet/modes/eager",
-			"@cldmv/slothlet/modes/lazy",
+			"#modes/eager",
+			"#modes/lazy",
 			// processors
-			"@cldmv/slothlet/processors/flatten",
-			"@cldmv/slothlet/processors/loader"
+			"#processors/flatten",
+			"#processors/loader"
 		];
 
 		for (let ofIndex = 0, ofList = BROWSER_COMPONENT_SPECIFIERS; ofIndex < ofList.length; ofIndex++) {
@@ -2244,9 +2245,7 @@ class Slothlet {
 			SetMethods.clear(this._typescriptCacheDirs);
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
-			typescriptInternals ??= PromiseMethods.then(import("@cldmv/slothlet/processors/typescript"), (typescript) =>
-				typescript.internals("slothlet")
-			);
+			typescriptInternals ??= PromiseMethods.then(import("#processors/typescript"), (typescript) => typescript.internals("slothlet"));
 			await (await typescriptInternals).releaseSecureFallbackRoot();
 		}
 
@@ -2515,7 +2514,7 @@ export default slothlet;
  *   - Omitted / `null` — the full `process.env` snapshot is captured.
  * @property {string[]} [env.include] - Allowlist of environment variable names to capture. Only string entries are used.
  * @property {{files: Array<{path:string,name:string,fullName:string}>, directories: Array}} [manifest] - Pre-generated directory structure for browser mode.
- *   Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`.
+ *   Produced at build time by `generateManifest()` from `#helpers/generate-manifest`. Required when `platform: "browser"`.
  *   Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`.
  * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
  *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.

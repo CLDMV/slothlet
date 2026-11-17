@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-16T16:16:50-08:00 (1794874610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
+import { detectHint } from "#helpers/hint-detector";
 
 describe("HintDetector.detectHint — HINT_RULES pattern-match returns rule hintKey (line 62)", () => {
 	it("returns HINT_MODULE_NOT_FOUND for an error matching /Cannot find module/i (line 62)", () => {

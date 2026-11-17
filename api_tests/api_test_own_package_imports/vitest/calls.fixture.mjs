@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:56:52-08:00 (1794185812)
+ *	@Last modified time: 2026-11-16T16:15:10-08:00 (1794874510)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview Run by `helper-import-own-package` in a vitest of its own (#715): runs the own-package fixture through
- * vitest's module runner with the `slothletInstanceImports()` plugin and prints what every case gave as one JSON line.
+ * vitest's module runner with the `@cldmv/slothlet/vite` plugin and prints what every case gave as one JSON line.
  * @module api_test_own_package_imports.vitest.calls
  */
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:52:03-08:00 (1794797523)
+ *	@Last modified time: 2026-11-16T16:13:53-08:00 (1794874433)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ const CODE_STRINGS_REL = "api_tests/api_test_code_strings_browser";
 
 export default defineConfig(async () => {
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.
-	const { manifest, importmap } = await generateBrowserAssets(FIXTURE_DIR, { slothletBase: "/" });
+	const { manifest, importmap } = await generateBrowserAssets(FIXTURE_DIR, { base: "/" });
 	const helperManifest = await generateManifest(resolve(REPO, HELPER_REL));
 	const routesManifest = await generateManifest(resolve(REPO, ROUTES_REL));
 	const rootLeafManifest = await generateManifest(resolve(REPO, ROOT_LEAF_REL));

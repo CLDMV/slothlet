@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: Verzeichnis \"{dir}\" kann nicht gelesen werden: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" ist kein Verzeichnis",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase muss ein String sein (Pfad, unter dem @cldmv/slothlet im Browser bereitgestellt wird), erhalten: {received}",
+		"FILES_REQUIRES_NODE": "{operation} benötigt Node.js: Es liest das Dateisystem, das ein Browser nicht hat. Rufen Sie es im Build-Schritt auf und übergeben Sie das Ergebnis an die Seite.",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "Modul-Manifest für Paket '{packageName}' unter '{manifestPath}' enthält nicht erkanntes Feld auf oberster Ebene '{field}'. Unbekannte Felder werden abgelehnt; verwenden Sie den dedizierten 'metadata'-Block für entwicklerdefinierte Zusätze.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Wenn '{field}' ein Tippfehler ist, korrigieren Sie ihn. Wenn es sich um beabsichtigte Entwicklermetadaten handelt, verschieben Sie sie in das 'metadata'-Objekt.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "Modul-Manifest für Paket '{packageName}' deklariert Namen '{manifestName}', der nicht mit dem Namen in package.json '{packageName}' übereinstimmt.",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "Die Seite erlaubt, Code aus Zeichenketten zu erzeugen: Ihre Content Security Policy erlaubt 'unsafe-eval', oder sie hat keine.",
 		"BASELINE_CSP_BLOB_ALLOWED": "Die Seite führt Skripte von blob:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
 		"BASELINE_CSP_DATA_ALLOWED": "Die Seite führt Skripte von data:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das slothletInstanceImports()-Plugin von slothlet in der vitest-Konfiguration."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das @cldmv/slothlet/vite-Plugin von slothlet in der vitest-Konfiguration."
 	},
 	"metadata": {
 		"code": "de-de",

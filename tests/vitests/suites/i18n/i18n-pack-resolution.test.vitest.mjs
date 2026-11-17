@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:18:13-08:00 (1794813493)
+ *	@Last modified time: 2026-11-16T16:16:54-08:00 (1794874614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	});
 
 	it("generateImportMap enumerates the pack's locales when it's installed", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		const { imports } = await generateImportMap("/node_modules/@cldmv/slothlet/");
 		expect(imports).toHaveProperty(
 			`@cldmv/slothlet-i18n/language/${PACK_LOCALE}.json`,
@@ -53,7 +53,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	});
 
 	it("generateImportMap derives the pack base from a versioned CDN base (preserves @version)", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		const { imports } = await generateImportMap("https://cdn.example.com/@cldmv/slothlet@3/");
 		// The pack base must swap the final `@cldmv/slothlet` segment while keeping the `@3` version —
 		// not leave pack locales pointing into the (versioned) slothlet base.
@@ -64,7 +64,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	});
 
 	it("omits pack locale entries when the base has no @cldmv/slothlet segment to swap", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		// A custom base served at the site root has no `@cldmv/slothlet` segment, so the pack-base swap is
 		// a no-op; emitting `${base}languages/*` would point into the slothlet base, not the pack. Expect
 		// no pack entries rather than wrong ones.
@@ -137,8 +137,8 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		// URL) still works, so the module loads; only the pack-path resolution lands in the catch and the
 		// loader falls through to the internal copy.
 		vi.resetModules();
-		const platform = await vi.importActual("@cldmv/slothlet/helpers/platform");
-		vi.doMock("@cldmv/slothlet/helpers/platform", () => ({
+		const platform = await vi.importActual("#helpers/platform");
+		vi.doMock("#helpers/platform", () => ({
 			...platform,
 			url: {
 				...platform.url,
@@ -154,7 +154,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 			expect(i18n.getLanguage()).toBe("es-mx"); // pack path threw → catch → internal copy
 			i18n.setLanguage("en-us");
 		} finally {
-			vi.doUnmock("@cldmv/slothlet/helpers/platform");
+			vi.doUnmock("#helpers/platform");
 			vi.resetModules();
 		}
 	});

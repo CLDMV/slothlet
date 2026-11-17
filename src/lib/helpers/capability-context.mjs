@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
  * file, so it already has no module's standing.
  */
 
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	ArrayMethods,
 	decodeURIComponent,
@@ -58,9 +58,9 @@ import {
 	Symbol,
 	URL,
 	URLMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { readStack, stackSites } from "@cldmv/slothlet/helpers/stack-read";
-import { isOwnTopLevelOf, ownBindingsRefusal, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { readStack, stackSites } from "#helpers/stack-read";
+import { isOwnTopLevelOf, ownBindingsRefusal, internals as instanceImportsInternals } from "#helpers/instance-imports";
 
 const { setCapabilityCheck } = instanceImportsInternals("lib/helpers/capability-context");
 

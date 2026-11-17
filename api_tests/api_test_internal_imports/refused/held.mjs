@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T12:00:00-08:00 (1794600000)
+ *	@Last modified time: 2026-11-16T16:14:42-08:00 (1794874482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview An api file importing one of slothlet's own files at its top: it does not load.
  * @module api_test_internal_imports.refused.held
  */
-import { instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
+import { instanceImporters } from "#helpers/instance-imports";
 
 /**
  * What the import gave.

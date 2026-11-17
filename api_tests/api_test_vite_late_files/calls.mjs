@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:28:57-08:00 (1794025737)
+ *	@Last modified time: 2026-11-16T16:15:48-08:00 (1794874548)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview The host of the late-files fixture (#714): it creates the instance, and only then imports a package's
  * files and hands their context to a module, has one module hand another a function, and mounts a module that imports a
  * JSON file. The same code runs under
- * Node's own loader (`probe.mjs`) and under vitest with the `slothletInstanceImports()` plugin (`vitest/`).
+ * Node's own loader (`probe.mjs`) and under vitest with the `@cldmv/slothlet/vite` plugin (`vitest/`).
  * @module api_test_vite_late_files.calls
  */
 import path from "node:path";

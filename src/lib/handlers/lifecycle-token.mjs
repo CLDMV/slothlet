@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
  * @package
  */
 
-import { Symbol, WeakMap, WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+import { Symbol, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 
 /**
  * Module-private map of Slothlet instance → per-instance capability token.

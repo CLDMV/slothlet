@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-16T16:17:38-08:00 (1794874658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,8 @@
  * `tools/` nor `src/` is in `package.json` `files`, so strict mode could only work inside this repo.
  *
  * The worker must sit inside the source tree the build copies into `dist/` (`src/lib/...` →
- * `dist/lib/...`), and import only Node builtins or `@cldmv/slothlet` self-references, which resolve
- * to `src/` under the `slothlet-dev` condition and to `dist/` in an installed package.
+ * `dist/lib/...`), and import only Node builtins, `@cldmv/slothlet` self-references or the package's own
+ * `#…` imports, which resolve to `src/` under the `slothlet-dev` condition and to `dist/` in an installed package.
  *
  * @module tests/vitests/suites/typescript/typescript-strict-mode-packaged
  */
@@ -31,8 +31,8 @@ import { mkdir, writeFile, rm } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { typeGenerationWorkerPath } from "@cldmv/slothlet/processors/loader";
-import { runTypeGeneration, runIfEntry } from "@cldmv/slothlet/processors/type-generation-worker";
+import { typeGenerationWorkerPath } from "#processors/loader";
+import { runTypeGeneration, runIfEntry } from "#processors/type-generation-worker";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -46,12 +46,12 @@ describe("strict mode type-generation worker ships with the package (#500)", () 
 		expect(relative.startsWith("..") || path.isAbsolute(relative)).toBe(false);
 	});
 
-	it("imports only Node builtins and @cldmv/slothlet self-references", () => {
+	it("imports only Node builtins, @cldmv/slothlet self-references and the package's own #imports", () => {
 		const source = readFileSync(typeGenerationWorkerPath(), "utf8");
 		const specifiers = [...source.matchAll(/^\s*import\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gm)].map((m) => m[1]);
 		expect(specifiers.length).toBeGreaterThan(0);
 		const builtins = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
-		const unpublished = specifiers.filter((spec) => !builtins.has(spec) && !spec.startsWith("@cldmv/slothlet"));
+		const unpublished = specifiers.filter((spec) => !builtins.has(spec) && !spec.startsWith("@cldmv/slothlet") && !spec.startsWith("#"));
 		expect(unpublished).toEqual([]);
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:55:18-08:00 (1794797718)
+ *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,8 +41,8 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { internals as sharedValuesInternals } from "#handlers/shared-values";
 // This module's own namespace, recorded below as made by no module.
 import * as runtimeNamespace from "./runtime.mjs";
-import { Reflect, NativeProxy, Objects, Symbols } from "@cldmv/slothlet/helpers/intrinsics";
-import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+import { Reflect, NativeProxy, Objects, Symbols } from "#helpers/intrinsics";
+import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime");
 const { recordSharedExports } = sharedValuesInternals("lib/runtime/runtime");
 const { registerOwnModule, registerSelfForms, callableSelfOf, bindInstanceSelf, SELF_BIND_KEY } =
@@ -50,8 +50,8 @@ const { registerOwnModule, registerSelfForms, callableSelfOf, bindInstanceSelf, 
 const { asyncRuntime, liveRuntime } = contextInternals("lib/runtime/runtime");
 
 // Pre-load both runtime modules at initialization
-const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
-const liveRuntimeModule = await import("@cldmv/slothlet/runtime/live");
+const asyncRuntimeModule = await import("#runtime/async");
+const liveRuntimeModule = await import("#runtime/live");
 
 /**
  * Determine which runtime to use by checking which context manager has an active context

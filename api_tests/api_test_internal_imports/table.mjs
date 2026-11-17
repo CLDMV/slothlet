@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T12:00:00-08:00 (1794600000)
+ *	@Last modified time: 2026-11-16T16:14:42-08:00 (1794874482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,7 +68,10 @@ const RUNTIME = slothletFile("runtime/runtime.mjs");
 
 /**
  * The files of slothlet the loads aim at, each with how a file in a given folder names it. `internal` marks slothlet's
- * own files; the rest are what a module's files may import.
+ * own files; the rest are what a module's files may import. The `@cldmv/slothlet/helpers/…`, `/processors/…`,
+ * `/builders/…`, `/modes/…` and `/slothlet` subpaths left `exports` in v4: they fail to resolve for the host and the
+ * module alike. Their `#…` package imports resolve for any file inside slothlet's package (these fixtures are), and
+ * slothlet refuses a module's load of them.
  * @type {Array<{name: string, internal: boolean, spell: function(string): string}>}
  */
 export const TARGETS = [
@@ -81,6 +84,17 @@ export const TARGETS = [
 	{ name: "i18n subpath", internal: true, spell: () => "@cldmv/slothlet/i18n" },
 	{ name: "slothlet subpath", internal: true, spell: () => "@cldmv/slothlet/slothlet" },
 	{ name: "package import", internal: true, spell: () => "#handlers/context-async" },
+	{ name: "helpers package import", internal: true, spell: () => "#helpers/instance-imports" },
+	{ name: "another helpers package import", internal: true, spell: () => "#helpers/sanitize" },
+	{ name: "processors package import", internal: true, spell: () => "#processors/loader" },
+	{ name: "builders package import", internal: true, spell: () => "#builders/builder" },
+	{ name: "modes package import", internal: true, spell: () => "#modes/eager" },
+	{ name: "errors package import", internal: true, spell: () => "#errors" },
+	{ name: "i18n package import", internal: true, spell: () => "#i18n" },
+	{ name: "slothlet package import", internal: true, spell: () => "#slothlet" },
+	{ name: "vite subpath", internal: true, spell: () => "@cldmv/slothlet/vite" },
+	{ name: "files subpath", internal: true, spell: () => "@cldmv/slothlet/files" },
+	{ name: "sanitize subpath", internal: true, spell: () => "@cldmv/slothlet/sanitize" },
 	{ name: "file URL", internal: true, spell: () => pathToFileURL(HELPER).href },
 	{ name: "absolute path", internal: true, spell: () => HANDLER },
 	{ name: "relative path", internal: true, spell: (dir) => relativeTo(dir, HELPER) },

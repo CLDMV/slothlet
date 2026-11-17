@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // Node-only on-disk locale loading resolved via the platform module so fs/url/path stay out of the
 // browser static graph (#123). The default (en-us) is bundled via the JSON import above; additional
 // on-disk locales load only under Node — a browser keeps the bundled default.
-import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platform";
+import { isNode, fs, path, url, loadJson } from "#helpers/platform";
 import {
 	Boolean,
 	filterList,
@@ -42,8 +42,8 @@ import {
 	String,
 	StringMethods,
 	stringOf
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * Get current directory path

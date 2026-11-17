@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:30-07:00 (1791091710)
+ *	@Last modified time: 2026-11-16T16:16:50-08:00 (1794874610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import * as nodeModule from "node:module";
 import { fileURLToPath } from "node:url";
-import { scanCommonJSExports, commonJSExportNames } from "@cldmv/slothlet/helpers/cjs-export-names";
+import { scanCommonJSExports, commonJSExportNames } from "#helpers/cjs-export-names";
 import {
 	requireInInstance,
 	releaseInstanceScope,
@@ -33,7 +33,7 @@ import {
 	isCommonJSFile,
 	installInstanceImportHooks,
 	slothletInstanceImports
-} from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/instance-imports";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 /** Import a module with Node's own loader: the function is a CommonJS file's. */

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeFile, rm, mkdir } from "node:fs/promises";
-import { transformTypeScript, transformTypeScriptStrict, writeTransformedToCache } from "@cldmv/slothlet/processors/typescript";
+import { transformTypeScript, transformTypeScriptStrict, writeTransformedToCache } from "#processors/typescript";
 import { writeFileSync } from "node:fs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 

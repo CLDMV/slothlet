@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:00:38-08:00 (1794182438)
+ *	@Last modified time: 2026-11-16T16:15:39-08:00 (1794874539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * @fileoverview The host of the shared-helper fixture (#715): two instances in each mode and runtime, each with module
  * `a` (imports the helper by path and by `file:` URL) and module `b` (imports it by package name). The same code runs
- * under Node's own loader (`probe.mjs`) and under vitest with the `slothletInstanceImports()` plugin (`vitest/`).
+ * under Node's own loader (`probe.mjs`) and under vitest with the `@cldmv/slothlet/vite` plugin (`vitest/`).
  * @module api_test_shared_helper_import_split.calls
  */
 import path from "node:path";

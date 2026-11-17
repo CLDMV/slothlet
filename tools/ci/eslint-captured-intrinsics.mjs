@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:51:35-08:00 (1794635495)
+ *	@Last modified time: 2026-11-16T16:17:42-08:00 (1794874662)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -247,10 +247,10 @@ const KEPT_MEMBERS = {
 };
 
 /** The import source of the captured copies. */
-const INTRINSICS = "@cldmv/slothlet/helpers/intrinsics";
+const INTRINSICS = "#helpers/intrinsics";
 
 /** The helper that hands out Node's built-in modules (`fs`, `path`, …) and slothlet's own copies of them. */
-const PLATFORM = "@cldmv/slothlet/helpers/platform";
+const PLATFORM = "#helpers/platform";
 
 /** A directive comment that turns rules off, with the rules it names (none: every rule). */
 const DIRECTIVE = /^\s*eslint-disable(?:-next-line|-line)?(?:\s+(?<rules>.*))?$/s;
@@ -262,10 +262,9 @@ const rule = {
 		docs: { description: "Use the built-ins helpers/intrinsics captured when slothlet loaded, not the globals" },
 		schema: [],
 		messages: {
-			global:
-				"`{{name}}` here is the global, which module code can replace after slothlet loads. Import {{use}} from @cldmv/slothlet/helpers/intrinsics.",
+			global: "`{{name}}` here is the global, which module code can replace after slothlet loads. Import {{use}} from #helpers/intrinsics.",
 			unknown:
-				"`{{name}}` here is a global, which module code can replace after slothlet loads. Take it in @cldmv/slothlet/helpers/intrinsics and import it, or read the current one as `globalThis.{{name}}` with a one-line reason.",
+				"`{{name}}` here is a global, which module code can replace after slothlet loads. Take it in #helpers/intrinsics and import it, or read the current one as `globalThis.{{name}}` with a one-line reason.",
 			member: "`{{name}}.{{member}}` reads a member module code can replace on the shared constructor.{{use}}",
 			directive: "slothlet/captured-intrinsics has no exemptions: import the captured copy, or read the current global as `globalThis.X`.",
 			nodeMember:
@@ -548,7 +547,7 @@ const prototypeRule = {
 		],
 		messages: {
 			method:
-				"`{{text}}` looks `{{name}}` up on the value's prototype when it runs, which module code can replace after slothlet loads. Call the copy taken at load (`ArrayMethods.{{name}}(value, …)`, `StringMethods.…`, `MapMethods.…`) from @cldmv/slothlet/helpers/intrinsics.",
+				"`{{text}}` looks `{{name}}` up on the value's prototype when it runs, which module code can replace after slothlet loads. Call the copy taken at load (`ArrayMethods.{{name}}(value, …)`, `StringMethods.…`, `MapMethods.…`) from #helpers/intrinsics.",
 			forOf:
 				"`for…of` asks the value for its iterator and steps it with `next`, both of which module code can replace. Walk an array by index, or a Map, Set or generator through mapEntries, mapKeys, mapValues, setValues or generatorSteps.",
 			spread:
@@ -558,7 +557,7 @@ const prototypeRule = {
 				"`yield*` walks the value with its iterator, which module code can replace. Loop over it by index or through a safe iterator.",
 			iterating: "`{{text}}` walks its argument with the argument's iterator, which module code can replace. Use {{use}}.",
 			arrayWrite:
-				"`ArrayMethods.{{name}}` writes elements through any setter module code put at an index of the shared prototypes, or reads the array's `constructor` and `Symbol.species`. Use {{use}} from @cldmv/slothlet/helpers/intrinsics.",
+				"`ArrayMethods.{{name}}` writes elements through any setter module code put at an index of the shared prototypes, or reads the array's `constructor` and `Symbol.species`. Use {{use}} from #helpers/intrinsics.",
 			descriptor:
 				"A property descriptor slothlet makes inherits `Object.prototype`, where module code can add `get`, `set` or `value`: give it `__proto__: null`.",
 			construct:

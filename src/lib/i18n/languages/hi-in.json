@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: निर्देशिका \"{dir}\" पढ़ने में असमर्थ: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" एक निर्देशिका नहीं है",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase एक स्ट्रिंग होनी चाहिए (जहाँ ब्राउज़र में @cldmv/slothlet परोसा जाता है), प्राप्त {received}",
+		"FILES_REQUIRES_NODE": "{operation} को Node.js चाहिए: यह फ़ाइल सिस्टम पढ़ता है, जो ब्राउज़र में नहीं होता। इसे अपने बिल्ड चरण में कॉल करें और इसका परिणाम पेज को दें।",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "पैकेज '{packageName}' के लिए '{manifestPath}' पर मॉड्यूल मेनिफ़ेस्ट में अपरिचित शीर्ष-स्तरीय फ़ील्ड '{field}' है। अज्ञात फ़ील्ड अस्वीकार किए जाते हैं; डेवलपर-परिभाषित अतिरिक्त के लिए समर्पित 'metadata' ब्लॉक का उपयोग करें।",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "यदि '{field}' टाइपो है, तो इसे ठीक करें। यदि यह जानबूझकर डेवलपर मेटाडेटा है, तो इसे 'metadata' ऑब्जेक्ट के अंदर ले जाएँ।",
 		"MODULE_MANIFEST_NAME_MISMATCH": "पैकेज '{packageName}' के लिए मॉड्यूल मेनिफ़ेस्ट नाम '{manifestName}' घोषित करता है जो package.json के नाम '{packageName}' से मेल नहीं खाता।",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "पेज स्ट्रिंग से कोड बनाने देता है: उसकी Content Security Policy 'unsafe-eval' की अनुमति देती है, या कोई नीति नहीं है।",
 		"BASELINE_CSP_BLOB_ALLOWED": "पेज blob: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
 		"BASELINE_CSP_DATA_ALLOWED": "पेज data: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest कॉन्फ़िग में slothlet के slothletInstanceImports() प्लगइन के बिना vitest के तहत चल रहा है।"
+		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest कॉन्फ़िग में slothlet के @cldmv/slothlet/vite प्लगइन के बिना vitest के तहत चल रहा है।"
 	},
 	"metadata": {
 		"code": "hi-in",

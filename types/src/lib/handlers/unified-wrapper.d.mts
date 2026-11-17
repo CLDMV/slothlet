@@ -158,12 +158,12 @@ export function isCallableValue(value: unknown): Promise<boolean>;
  * @internal
  */
 export function internals(consumer: string): object;
-export { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+export { IMPL_METADATA_KEYS } from "#helpers/reserved-keys";
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
     let IN_FLIGHT: symbol;
 }
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 /** @type {typeof runtime_frameworkWrite} */
 declare const guarded_runtime_frameworkWrite: typeof runtime_frameworkWrite;
 /** @type {typeof runtime_unwrapSelfView} */
