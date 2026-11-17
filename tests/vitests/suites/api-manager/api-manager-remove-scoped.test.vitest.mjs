@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview api.remove() accepts an optional second apiPath to scope removal to one module's node.
+ * @fileoverview api.remove() accepts an optional second module id: remove(apiPath, id) removes only that module's node.
  *
  * @description
  * `remove(id)` removes every path a moduleID owns; `remove(apiPath)` removes that path's whole subtree
@@ -37,7 +37,7 @@ const CONFIGS = [
 	{ name: "lazy", config: { mode: "lazy", runtime: "async", hook: { enabled: true } } }
 ];
 
-describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ config }) => {
+describe.each(CONFIGS)("remove(apiPath, id) scoped removal — $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -53,7 +53,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		expect(api.svc.b()).toBe("B");
 
 		// Scoped to modA at svc.a — modB's svc.b must survive.
-		expect(await api.slothlet.api.remove("modA", "svc.a")).toBe(true);
+		expect(await api.slothlet.api.remove("svc.a", "modA")).toBe(true);
 		expect(api.svc?.a).toBeUndefined();
 		expect(api.svc.b()).toBe("B");
 	});
@@ -63,7 +63,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		await api.slothlet.api.add("alpha", () => "A", { moduleID: "dup" });
 		await api.slothlet.api.add("beta", () => "B", { moduleID: "dup" });
 
-		expect(await api.slothlet.api.remove("dup", "alpha")).toBe(true);
+		expect(await api.slothlet.api.remove("alpha", "dup")).toBe(true);
 		expect(api.alpha).toBeUndefined();
 		expect(api.beta()).toBe("B"); // dup's other mount survives
 	});
@@ -72,7 +72,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("alpha", () => "A", { moduleID: "dup" });
 
-		expect(await api.slothlet.api.remove("dup", "not.there")).toBe(false);
+		expect(await api.slothlet.api.remove("not.there", "dup")).toBe(false);
 		expect(api.alpha()).toBe("A"); // untouched
 	});
 
@@ -80,7 +80,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("svc.b", () => "B", { moduleID: "modB" });
 
-		expect(await api.slothlet.api.remove("noSuchModule", "svc.b")).toBe(false);
+		expect(await api.slothlet.api.remove("svc.b", "noSuchModule")).toBe(false);
 		expect(api.svc.b()).toBe("B"); // modB's node is not removed by another module's scoped call
 	});
 
@@ -94,9 +94,20 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		expect(api.beta).toBeUndefined();
 	});
 
-	it("rejects a non-string apiPath argument", async () => {
+	it("rejects a non-string id argument", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await expect(api.slothlet.api.remove("dup", 123)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+		await expect(api.slothlet.api.remove("dup", 123)).rejects.toMatchObject({
+			code: "INVALID_ARGUMENT",
+			context: expect.objectContaining({ argument: "id" })
+		});
+	});
+
+	it("a v3-order call (module id first) is read as a path scoped to a module, and matches nothing", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("svc.a", () => "A", { moduleID: "modA" });
+
+		expect(await api.slothlet.api.remove("modA", "svc.a")).toBe(false);
+		expect(api.svc.a()).toBe("A");
 	});
 
 	it("recursively removes the module's own subtree under the scoped container, no orphans", async () => {
@@ -111,7 +122,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
 		expect(ownership.moduleToPath.get("modA")).toBeDefined();
 
-		expect(await api.slothlet.api.remove("modA", "svc")).toBe(true);
+		expect(await api.slothlet.api.remove("svc", "modA")).toBe(true);
 		expect(api.svc).toBeUndefined();
 		expect(ownership.moduleToPath.get("modA")).toBeUndefined(); // no orphaned ownership
 		expect(api.keep()).toBe("K"); // unrelated module untouched
@@ -128,7 +139,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
 		expect(ownership.moduleEndpoints.get("modA")).toBeDefined();
 
-		expect(await api.slothlet.api.remove("modA", "svc")).toBe(true);
+		expect(await api.slothlet.api.remove("svc", "modA")).toBe(true);
 		expect(ownership.moduleEndpoints.get("modA")).toBeUndefined(); // endpoint cleared, not leaked
 	});
 
@@ -142,7 +153,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		expect(api.shop.a()).toBe("A");
 		expect(api.shop.b()).toBe("B");
 
-		expect(await api.slothlet.api.remove("modA", "shop")).toBe(true);
+		expect(await api.slothlet.api.remove("shop", "modA")).toBe(true);
 		expect(api.shop).toBeDefined(); // container survives for modB
 		expect(api.shop?.a).toBeUndefined(); // modA's node gone
 		expect(api.shop.b()).toBe("B"); // modB's node untouched
@@ -157,7 +168,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		await api.slothlet.api.add("leaf", () => "B", { moduleID: "modB" });
 		expect(typeof api.leaf).toBe("function"); // both owners registered at "leaf"
 
-		expect(await api.slothlet.api.remove("modB", "leaf")).toBe(true);
+		expect(await api.slothlet.api.remove("leaf", "modB")).toBe(true);
 		expect(api.leaf()).toBe("A"); // reverted to modA underneath, not deleted
 	});
 
@@ -168,7 +179,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { mutations: { add: true, remove: true, reload: true } } });
 		await api.slothlet.api.add("shop.a", TEST_DIRS.API_TEST_MIXED, { moduleID: "modA" });
 		await api.slothlet.api.add("shop.b", TEST_DIRS.API_TEST_MIXED, { moduleID: "modB" });
-		expect(await api.slothlet.api.remove("modA", "shop")).toBe(true);
+		expect(await api.slothlet.api.remove("shop", "modA")).toBe(true);
 		expect(api.shop?.a).toBeUndefined();
 		expect(api.shop?.b).toBeDefined();
 
@@ -184,7 +195,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { mutations: { add: true, remove: true, reload: true } } });
 		await api.slothlet.api.add("shop.a", () => "A", { moduleID: "modA" });
 		await api.slothlet.api.add("shop.b", () => "B", { moduleID: "modB" });
-		expect(await api.slothlet.api.remove("modA", "shop")).toBe(true);
+		expect(await api.slothlet.api.remove("shop", "modA")).toBe(true);
 		expect(api.shop?.a).toBeUndefined();
 		expect(api.shop.b()).toBe("B");
 

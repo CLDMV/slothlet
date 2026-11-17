@@ -642,14 +642,14 @@ export async function addAt(apiPath, folder, options = {}) {
 /**
  * Remove a mount from this module's code.
  * @param {string} target - Api path or moduleID.
- * @param {string} [scopedApiPath] - With a moduleID, the path to remove only its share of.
+ * @param {string} [id] - With an api path, the module whose share of it alone is removed.
  * @returns {Promise<*>} What `api.remove` returned, or the error code it was refused with.
  * @example
  * await removeAt("guest.sub");
  */
-export async function removeAt(target, scopedApiPath) {
+export async function removeAt(target, id) {
 	try {
-		return scopedApiPath === undefined ? await self.slothlet.api.remove(target) : await self.slothlet.api.remove(target, scopedApiPath);
+		return id === undefined ? await self.slothlet.api.remove(target) : await self.slothlet.api.remove(target, id);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

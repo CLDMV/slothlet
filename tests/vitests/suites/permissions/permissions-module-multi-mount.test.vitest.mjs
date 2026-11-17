@@ -151,7 +151,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 		it.each([
 			["by moduleID", (a) => a.guest.x.removeAt("kid")],
 			["by path", (a) => a.guest.x.removeAt("guest.k")],
-			["scoped", (a) => a.guest.x.removeAt("kid", "guest.k.zone")]
+			["scoped", (a) => a.guest.x.removeAt("guest.k.zone", "kid")]
 		])("refuses the caller removing it %s, and changes nothing", async (_label, remove) => {
 			await nested();
 			expect(await withSuppressedSlothletErrorOutput(() => remove(api))).toBe("LOOSE_SET_NOT_OWNED");
@@ -162,7 +162,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 		it("lets the caller remove what it mounted when no host mount is inside it", async () => {
 			await boot();
 			expect(await api.guest.x.addAt("guest.k", GUEST, { moduleID: "kid" })).toBe("done");
-			expect(await api.guest.x.removeAt("kid", "guest.k.x")).toBe(true);
+			expect(await api.guest.x.removeAt("guest.k.x", "kid")).toBe(true);
 			expect(await api.guest.x.removeAt("kid")).toBe(true);
 			expect(api.guest.k).toBeUndefined();
 		});

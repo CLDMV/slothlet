@@ -169,18 +169,18 @@ Enumeration is a disclosure surface, so the answer is scoped to the caller: [mod
 
 ## `api.slothlet.api.remove()`
 
-Removes API modules from the live API by API path, by moduleID, or — with the optional second argument — by **one module scoped to a path**.
+Removes API modules from the live API by API path, by moduleID, or — with the optional second argument, a module id — by **one module scoped to a path**.
 
 ```javascript
-await api.slothlet.api.remove(pathOrModuleID);
-await api.slothlet.api.remove(moduleID, apiPath); // scoped: only this module's nodes under apiPath
+await api.slothlet.api.remove(target); // an api path or a module id
+await api.slothlet.api.remove(apiPath, id); // scoped: only module id's nodes under apiPath
 ```
 
-| Form               | Example                     | Behavior                                                                                                                                                                                                                                                                                                              |
-| ------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node. When another module also holds the path itself (a later add replaced it), only the path's current owner comes off, as with `remove(moduleID, apiPath)`, and the path reverts to the earlier owner |
-| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                                                                                                                                                                                                |
-| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched                                                                                                                                                                          |
+| Form               | Example                     | Behavior                                                                                                                                                                                                                                                                                                        |
+| ------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node. When another module also holds the path itself (a later add replaced it), only the path's current owner comes off, as with `remove(apiPath, id)`, and the path reverts to the earlier owner |
+| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                                                                                                                                                                                          |
+| apiPath + moduleID | `"plugins", "core-plugins"` | **Scoped:** removes only the nodes the module owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched                                                                                                                                                                    |
 
 ```javascript
 // Remove a namespace by path (whole subtree)
@@ -192,12 +192,14 @@ await api.slothlet.api.remove("core-plugins");
 // Scoped: remove only modA's nodes under "shop" — modB's shop.b and the container survive
 await api.slothlet.api.add("shop.a", "./a", { moduleID: "modA" });
 await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
-await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api.shop.b intact
+await api.slothlet.api.remove("shop", "modA"); // → true; api.shop.a gone, api.shop.b intact
 ```
 
 A path removed whole is gone for every module that held something under it: a later `add()` at that path is then its only owner, so removing that add removes the path again rather than bringing back what the first removal took.
 
-The scoped `remove(moduleID, apiPath)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `apiPath` with `INVALID_ARGUMENT`.
+In v3 the scoped form took its arguments the other way round (`remove(moduleID, apiPath)`); v4 puts the path first, as every other form does. A v3 call such as `remove("modA", "shop")` is now read as path `"modA"` scoped to module `"shop"`, and returns `false` when nothing matches; `npx @cldmv/slothlet-migrate audit` flags these calls.
+
+The scoped `remove(apiPath, id)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `id` with `INVALID_ARGUMENT`.
 
 Removing a module emits `impl:removed` lifecycle events for each affected path, triggers metadata cleanup for those paths, and cleans up the wrapper state.
 

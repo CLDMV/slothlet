@@ -231,7 +231,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 		expect(Object.keys(api)).toContain("pnull");
 		expect(Object.keys(api.zz.folder)).toContain("inner");
 
-		expect(await api.slothlet.api.remove("zz", "zz.pnull")).toBe(true);
+		expect(await api.slothlet.api.remove("zz.pnull", "zz")).toBe(true);
 		expect("pnull" in api.zz).toBe(false);
 		expect(api.zz.pundef).toBe(undefined);
 		expect(Object.keys(api.zz)).toContain("pundef");
