@@ -1111,7 +1111,7 @@ const api = await slothlet({
 });
 ```
 
-`permissions.private.scope` picks what a member is private to. `"module"` is the default described above. `"folder"` makes it private to the folder of files that exports it, the rule before 3.25.0: the other files of that folder read it, and a subfolder is a module of its own. The folder is compared by the two files' paths (a URL's folder in a browser).
+`permissions.private.scope` picks what a member is private to. `"module"` is the default described above. `"folder"` makes it private to the folder of files that exports it, the rule in 3.x: the other files of that folder read it, and a subfolder is a module of its own. The folder is compared by the two files' paths (a URL's folder in a browser), never by its name: two modules that each have a `billing` folder are two folders.
 
 ```text
 api/billing/internals.mjs   export const __rate = 0.2
@@ -1135,6 +1135,7 @@ await api.reporting.peek.rate(); // PERMISSION_DENIED (another folder)
 Under either scope:
 
 - A module added with `api.slothlet.api.add("ext", "./ext", { moduleID: "ext" })` and the base module do not read each other's private members. An add without a moduleID is a module of its own under the generated one.
+- A module whose folder has the same name as another module's (`./ext/billing` beside the base's `./api/billing`) does not read that module's private members, nor they its.
 - A later add that takes over a member's path (`forceOverwrite`) owns the member there: its own files read it, the base module's do not.
 - A module mounted at two paths keeps reading its members at one after the other is removed, and a reload changes no answer.
 - An in-memory leaf added as an object (`api.slothlet.api.add("obj", { _secret: 1, read() { … } }, { moduleID: "obj" })`) is a module of its own at its path. Under `"module"` its function reads its own `_secret`. No other module reads it under either scope.
