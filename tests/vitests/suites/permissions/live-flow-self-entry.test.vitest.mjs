@@ -358,5 +358,13 @@ describe.each(FRAMES)("Permissions > live runtime > a flow entered by module cod
 				expect(result[route + ":host"]).toBe("root");
 			}
 		);
+
+		it("the runner handed to Node's runInAsyncScope runs nothing it was not given as the resource's maker", () => {
+			expect(result.stealRunner).toMatchObject({ stolen: true, user: "mallory", self: "evil.stealRunner" });
+		});
+
+		it("the registry the boundary patches share can neither be replaced nor used to switch them off", () => {
+			expect(result.tamper).toEqual({ registryKept: true, after: { user: "root" } });
+		});
 	});
 });

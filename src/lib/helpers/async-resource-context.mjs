@@ -81,6 +81,33 @@ const RESOURCE_PINS = new WeakMap();
 let isTakingSnapshot = false;
 
 /**
+ * The functions a patched runner is about to run in a scope it pinned, each with how many runs of it are in progress.
+ * A pinned runner is handed to Node's own code (Node's `runInAsyncScope`, which module code can replace on the class's
+ * prototype), so it runs only a function slothlet's runner put there; anything else runs as it is, pinned to no one.
+ * @type {WeakMap<Function, number>}
+ * @private
+ */
+const ARMED = new WeakMap();
+
+/**
+ * Run a function through a pinned runner, marked as the one the runner may run.
+ * @param {Function} fn - The function.
+ * @param {function(): *} run - Hands it to the pinned runner.
+ * @returns {*} What the runner returned.
+ * @private
+ */
+function runtime_armed(fn, run) {
+	WeakMapMethods.set(ARMED, fn, (WeakMapMethods.get(ARMED, fn) ?? 0) + 1);
+	try {
+		return run();
+	} finally {
+		const left = WeakMapMethods.get(ARMED, fn) - 1;
+		if (left > 0) WeakMapMethods.set(ARMED, fn, left);
+		else WeakMapMethods.delete(ARMED, fn);
+	}
+}
+
+/**
  * Calls a function with a receiver and arguments. Pinned to a caller, it runs the function as that caller.
  * @param {Function} fn - The function.
  * @param {*} thisArg - Its receiver.
@@ -102,7 +129,12 @@ function runtime_pinNow() {
 	// A fresh function each time: a pin belongs to the callback it was made for.
 	const given = (fn, thisArg, args) => runtime_runGiven(fn, thisArg, args);
 	const pinned = pinScopeToCurrentCaller(given);
-	return pinned === given ? null : pinned;
+	if (pinned === given) return null;
+	// Handed to Node's code, so module code can come to hold it: it runs only what slothlet's runner armed.
+	return function slothlet_resourceRunner(fn, thisArg, args) {
+		if (typeof fn !== "function" || !WeakMapMethods.has(ARMED, fn)) return Reflect.apply(fn, thisArg, args);
+		return pinned(fn, thisArg, args);
+	};
 }
 
 /**
@@ -137,6 +169,14 @@ const ASYNC_HOOKS = runtime_builtin("node:async_hooks");
  * @private
  */
 const SYNC_BUILTIN_ESM_EXPORTS = runtime_builtin("node:module")?.syncBuiltinESMExports;
+
+/**
+ * Node's own `AsyncResource.prototype.runInAsyncScope`, taken as slothlet loads (see `belowRun` in
+ * {@link enableAsyncResourcePatching}). Undefined where the platform has no `node:async_hooks`.
+ * @type {Function|undefined}
+ * @private
+ */
+const NODE_RUN_IN_ASYNC_SCOPE = ASYNC_HOOKS?.AsyncResource?.prototype?.runInAsyncScope;
 
 /**
  * Install a wrapper over `host[name]` and remember it for removal.
@@ -203,7 +243,8 @@ function enableAsyncResourcePatching() {
 			const pinned = layer.active ? runtime_pinNow() : null;
 			if (!pinned) return run;
 			return function runInAsyncScope(fn, ...args) {
-				return typeof fn === "function" ? run(pinned, fn, this, args) : Reflect.apply(run, undefined, concatLists([fn], args));
+				if (typeof fn !== "function") return Reflect.apply(run, undefined, concatLists([fn], args));
+				return runtime_armed(fn, () => run(pinned, fn, this, args));
 			};
 		};
 	});
@@ -219,6 +260,10 @@ function enableAsyncResourcePatching() {
 	const Original = hooks.AsyncResource;
 	runtime_install(hooks, "AsyncResource", (layer) => {
 		const Below = layer.below;
+		// Node's `runInAsyncScope` as slothlet loaded, or the one of the class patched over (another copy of slothlet's) as
+		// it is now: called through this reference, so code that replaces the method on the class's prototype later is
+		// never handed a pinned runner.
+		const belowRun = Below === Original && NODE_RUN_IN_ASYNC_SCOPE ? NODE_RUN_IN_ASYNC_SCOPE : Below.prototype.runInAsyncScope;
 		/**
 		 * `AsyncResource`, remembering the caller that made each resource.
 		 */
@@ -242,9 +287,8 @@ function enableAsyncResourcePatching() {
 			 */
 			runInAsyncScope(fn, thisArg, ...args) {
 				const pinned = layer.active ? WeakMapMethods.get(RESOURCE_PINS, this) : undefined;
-				if (!pinned || typeof fn !== "function")
-					return Reflect.apply(Below.prototype.runInAsyncScope, this, concatLists([fn, thisArg], args));
-				return super.runInAsyncScope(pinned, undefined, fn, thisArg, args);
+				if (!pinned || typeof fn !== "function") return Reflect.apply(belowRun, this, concatLists([fn, thisArg], args));
+				return runtime_armed(fn, () => Reflect.apply(belowRun, this, [pinned, undefined, fn, thisArg, args]));
 			}
 
 			/**
