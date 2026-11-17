@@ -1219,6 +1219,33 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Drop every module's entries at `apiPath` and below: the namespace left the api because nothing was left in it.
+	 * @param {string} apiPath - The pruned namespace's path.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * A removal that empties a namespace prunes it from the api. The owner of a path is whoever's value is live there,
+	 * and nothing is, so no module owns it any more. A module that later puts something there again (a reload or an
+	 * add) creates the namespace anew and owns it.
+	 *
+	 * @example
+	 * ownership.forgetPath("p"); // "p" is no longer anyone's
+	 */
+	forgetPath(apiPath) {
+		this.removeSubtree(apiPath);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
+		if (!stack) return;
+		for (let ofIndex = 0, ofList = stack; ofIndex < ofList.length; ofIndex++) {
+			const pathSet = MapMethods.get(this.moduleToPath, ofList[ofIndex].moduleID);
+			if (!pathSet) continue;
+			SetMethods.delete(pathSet, apiPath);
+			if (SetMethods.size(pathSet) === 0) MapMethods.delete(this.moduleToPath, ofList[ofIndex].moduleID);
+		}
+		MapMethods.delete(this.pathToModule, apiPath);
+	}
+
+	/**
 	 * Get current owner of API path
 	 * @param {string} apiPath - API path to check
 	 * @returns {Object|null} Current owner entry or null

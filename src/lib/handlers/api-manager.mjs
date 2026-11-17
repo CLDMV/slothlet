@@ -2391,6 +2391,10 @@ export class ApiManager extends ComponentBase {
 			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
+				// Pruned from the api, so nobody owns it any more: the owner of a path is whoever's value is live there.
+				if (root === this.slothlet.api) {
+					this.slothlet.handlers.ownership.forgetPath(ArrayMethods.join(copyList(parts, 0, i + 1), "."));
+				}
 			}
 		}
 
@@ -4133,16 +4137,18 @@ export class ApiManager extends ComponentBase {
 	 * removal by apiPath or moduleID uniformly, and preserves partial removals
 	 * (a sub-path is removed but the endpoint still resolves → entry kept).
 	 * Base modules (endpoint ".") own the whole tree and are never swept.
+	 * @param {?string} [keepModuleID=null] - A module that stays loaded whatever the tree shows at its endpoint.
 	 * @returns {void}
 	 * @private
 	 */
-	#sweepOrphanedCaches() {
+	#sweepOrphanedCaches(keepModuleID = null) {
 		const cacheManager = this.slothlet.handlers?.apiCacheManager;
 		/* v8 ignore next */
 		if (!cacheManager) return;
 		const root = this.slothlet.boundApi;
 		for (let ofIndex = 0, ofList = cacheManager.getAllModuleIDs(); ofIndex < ofList.length; ofIndex++) {
 			const moduleID = ofList[ofIndex];
+			if (moduleID === keepModuleID) continue;
 			const entry = cacheManager.get(moduleID);
 			// Base modules own the whole tree — never orphaned by a path removal.
 			if (!entry || entry.endpoint === "." || entry.endpoint === "") continue;
@@ -4556,7 +4562,13 @@ export class ApiManager extends ComponentBase {
 		let moduleID;
 
 		if (this.slothlet.handlers.ownership) {
-			const registeredModules = mapKeysToArray(this.slothlet.handlers.ownership.moduleToPath);
+			const ownedModules = mapKeysToArray(this.slothlet.handlers.ownership.moduleToPath);
+			// A loaded module whose every path a scoped removal pruned owns nothing on the api, yet is still loaded (a
+			// reload brings its members back), so it is still removable by its moduleID. Listed first, so a module with
+			// live paths wins a prefix match.
+			const cacheManager = this.slothlet.handlers.apiCacheManager;
+			const ownerless = filterList(cacheManager.getAllModuleIDs(), (id) => !ArrayMethods.includes(ownedModules, id));
+			const registeredModules = concatLists(ownerless, ownedModules);
 			let matchingModule = null;
 
 			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
@@ -4721,8 +4733,9 @@ export class ApiManager extends ComponentBase {
 			// A mount of this module at or below the path goes with its share; the last one takes the module (#625).
 			if (!isFullRemoval) this.#releaseMountsUnder(normalizedScoped, recordHistory, scopedModuleIDKey);
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
-			// any cache entry the removed nodes orphaned.
-			this.#sweepOrphanedCaches();
+			// any cache entry the removed nodes orphaned. A module that keeps paths outside the scoped one stays
+			// loaded even when the removal pruned its endpoint: a reload or a later add there brings the endpoint back.
+			this.#sweepOrphanedCaches(isFullRemoval ? null : scopedModuleIDKey);
 			// Record a SCOPED remove for reload replay — carrying both the moduleID and the apiPath so the
 			// replay re-runs it as the two-argument form, not a whole-path removal. This is safe because a
 			// module's id survives a reload: the "add" op records `options.moduleID` and it is reused on
@@ -4818,6 +4831,10 @@ export class ApiManager extends ComponentBase {
 			// owns its whole subtree and is removed wholesale. (Mapping "." to "" also keeps it out of
 			// normalizeApiPath, which rejects "." on empty segments.)
 			const isRootMount = !mountEndpoint || mountEndpoint === ".";
+			// A loaded module a scoped removal left owning nothing (its endpoint was pruned) is still removed whole.
+			const ownerlessLoaded =
+				!MapMethods.has(this.slothlet.handlers.ownership.moduleToPath, moduleIDKey) &&
+				this.slothlet.handlers.apiCacheManager.has(moduleIDKey);
 			let mountRoot = isRootMount ? "" : mountEndpoint;
 			// Every mount of the module: a host may mount one moduleID at several paths, and a removal by moduleID takes
 			// them all (#625).
@@ -5116,9 +5133,12 @@ export class ApiManager extends ComponentBase {
 							? moduleIDKey
 							: mountRoot || splitText(pathsToDelete[0], ".")[0]
 				});
+			} else if (recordHistory && ownerlessLoaded) {
+				// Nothing of it is on the api to name by path, so a reload replays the removal by its moduleID.
+				listPush(this.state.operationHistory, { type: "remove", apiPath: moduleIDKey });
 			}
 			// Return true if we actually removed something
-			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
+			return pathsToDelete.length > 0 || pathsToRollback.length > 0 || ownerlessLoaded;
 		}
 
 		// remove() is always called with a valid apiPath in tests; the guard throw is unreachable.

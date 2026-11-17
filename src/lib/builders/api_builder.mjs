@@ -2275,18 +2275,24 @@ export class ApiBuilder extends ComponentBase {
 					// Treat as API path - validate it exists in the user-facing API
 					const normalizedPath = slothlet.handlers.apiManager.normalizeApiPath(pathOrModuleId).apiPath;
 					const pathParts = splitText(normalizedPath, ".");
+					// A loaded module's endpoint is reloadable even while nothing is live there: a scoped removal that
+					// emptied it pruned the namespace, and the reload puts the module's members back.
+					const cacheManager = slothlet.handlers.apiCacheManager;
+					const isLoadedEndpoint = ArrayMethods.some(
+						cacheManager.getAllModuleIDs(),
+						(id) => cacheManager.get(id).endpoint === normalizedPath
+					);
 					let current = slothlet.api;
 					for (let i = 0; i < pathParts.length; i++) {
 						const part = pathParts[i];
 						if (!current || (typeof current !== "object" && typeof current !== "function")) {
-							throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
-								path: segmentsOf(pathOrModuleId)
-							});
+							current = undefined;
+							break;
 						}
 						current = current[part];
 					}
 
-					if (current === undefined) {
+					if (current === undefined && !isLoadedEndpoint) {
 						throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
 							path: segmentsOf(pathOrModuleId)
 						});
