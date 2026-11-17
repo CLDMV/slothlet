@@ -85,6 +85,13 @@ for (const e of ENTRIES) {
 	OPTION_MOVES.get(key).push({ id: e.id, from: from.path, to: to ? to.path : null });
 }
 
+// addModule / addModules options carry the discovery options as a nested `discover` group.
+const SCAN_ROOT = "option|api.slothlet.api.modules.discover(options).scanRoot";
+for (const key of ["api.modules.addModule#1", "api.modules.addModules#1"]) {
+	if (!OPTION_MOVES.has(key)) OPTION_MOVES.set(key, []);
+	OPTION_MOVES.get(key).push({ id: SCAN_ROOT, from: ["discover", "scanRoot"], to: ["discover", "root"] });
+}
+
 /**
  * Rewrite an options argument (an object literal, or a const object literal it names).
  * @param {object} node - Argument node.
@@ -180,6 +187,14 @@ export function rewriteApiAdd(call, ctx) {
 	const opts = args[2];
 	const vc = args[3];
 	const extra = addOptionsExtra(ctx);
+	// Inline form: api.add(path, { exports, ...options }); the siblings of `exports` are the options.
+	const inline = args[1];
+	if (
+		inline &&
+		inline.type === "ObjectExpression" &&
+		inline.properties.some((p) => p.type === "Property" && !p.computed && propName(p) === "exports")
+	)
+		rewriteOptions(inline, "api.add", 2, ctx, { extra });
 	if (!vc) {
 		if (opts) rewriteOptions(opts, "api.add", 2, ctx, { extra });
 		return;
@@ -265,6 +280,15 @@ export function rewriteApiAdd(call, ctx) {
 	} else {
 		ctx.result.manual(foldId, vc.start);
 	}
+}
+
+/**
+ * Static name of a property.
+ * @param {object} p - Property node.
+ * @returns {string|undefined} Name.
+ */
+function propName(p) {
+	return p.key.type === "Identifier" ? p.key.name : p.key.value;
 }
 
 /**

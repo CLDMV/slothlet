@@ -75,6 +75,7 @@ function createContext(code, comments, result, json) {
 		quote: '"',
 		consts: new Map(),
 		resolveConst: () => null,
+		aliases: new Map(),
 		visited: new Map(),
 		processed: new Set(),
 		deferred: [],
@@ -195,6 +196,35 @@ function constResolver(ast) {
 }
 
 /**
+ * Local names bound to a `.slothlet` chain: `const mm = api.slothlet.api.modules`. An alias is
+ * proven when it is a `const` declared once in the file (parameters and catch bindings count).
+ * @param {object} ast - Program.
+ * @returns {Map<string, { segs: string[], proven: boolean }>} Aliases by name.
+ */
+function slothletAliases(ast) {
+	const declared = new Map();
+	const count = (name) => declared.set(name, (declared.get(name) ?? 0) + 1);
+	const candidates = [];
+	walk(ast, (n) => {
+		if (n.type === "VariableDeclaration") {
+			for (const d of n.declarations) {
+				if (d.id.type !== "Identifier") continue;
+				count(d.id.name);
+				if (d.init && (d.init.type === "MemberExpression" || d.init.type === "ChainExpression")) candidates.push({ d, kind: n.kind });
+			}
+		}
+		for (const p of n.params ?? (n.type === "CatchClause" && n.param ? [n.param] : [])) if (p.type === "Identifier") count(p.name);
+	});
+	const aliases = new Map();
+	for (const { d, kind } of candidates) {
+		const found = slothletTail(d.init);
+		if (!found || !found.segments.every((s) => s.plain && s.name)) continue;
+		aliases.set(d.id.name, { segs: found.segments.map((s) => s.name), proven: kind === "const" && declared.get(d.id.name) === 1 });
+	}
+	return aliases;
+}
+
+/**
  * Migrate JavaScript source.
  * @param {string} code - Source text.
  * @param {MigrateOptions} [options] - Options.
@@ -213,6 +243,7 @@ export function migrateSource(code, options = {}) {
 	const ctx = createContext(code, comments, result, false);
 	ctx.quote = dominantQuote(ast, code);
 	ctx.resolveConst = constResolver(ast);
+	ctx.aliases = slothletAliases(ast);
 	const factories = factoryNames(ast);
 	for (const name of options.callees ?? []) factories.add(name);
 	const handledLiterals = new Set();
