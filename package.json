@@ -222,6 +222,8 @@
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
 		"test:node": "node tests/run-all-tests.mjs",
+		"test:runtime-floor": "node --conditions=slothlet-dev tests/smoke/runtime-floor.mjs",
+		"test:runtime-floor:dist": "node tests/smoke/runtime-floor.mjs",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",
 		"test:typestubs": "node tests/validate-typestubs.mjs",

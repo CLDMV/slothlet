@@ -177,3 +177,7 @@ slothlet reads `Date.now` and the timers from the copies it took when it loaded,
 ## Scope
 
 The `.mjs` artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else. The TypeScript requirements (source maps and the cache directory in `include`) apply in every setup, including inlined slothlet and slothlet's own repo.
+
+## Node.js floors
+
+slothlet has two Node.js floors. `engines.node` (`>=22.15.0`) is what the package supports at run time; `devEngines` (`>=22.22.0`) is what its own test and build toolchain (vitest, tsup) needs. The main CI matrix starts at the dev floor, so a separate workflow (`.github/workflows/runtime-floor.yml`) installs and builds on the dev floor, then runs `tests/smoke/runtime-floor.mjs` on Node 22.15.0: a plain-Node script with no dev dependencies that builds a small api in eager and lazy mode, loads the CJS entry and `@cldmv/slothlet/runtime`, boots once with permissions on, and checks an AsyncContextFrame canary. It runs against src (`npm run test:runtime-floor`) and the built dist (`npm run test:runtime-floor:dist`); below the dev floor npm refuses `npm run`, so call `node tests/smoke/runtime-floor.mjs` directly there (add `--conditions=slothlet-dev` for src).
