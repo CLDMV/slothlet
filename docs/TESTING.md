@@ -164,6 +164,12 @@ A package an api file imports is the one other case the plugin changes. vitest e
 
 vitest 5 keeps transformed modules on disk between runs (`fsModuleCache`), keyed by each file's content and the configured plugins' names, so a transform cached under an earlier slothlet version is reused after an upgrade; clear `node_modules/.vitest-cache` after upgrading slothlet.
 
+### The permission system under vitest
+
+vitest compiles every module file it loads with `vm.runInThisContext`, a route of `capability:code`, which the permission system refuses to module code. A module file's top-level code runs as the file's module, so with the permission system on, the compile of a file slothlet is loading would be refused. The plugin adds a worker setup file at the front of `setupFiles` that records the code the vitest server sends for each module, and slothlet treats vitest's compile of exactly that code, for a file the instance is loading, as the loader's own (see [PERMISSIONS.md](PERMISSIONS.md#built-in-capabilities)). Any other code compiled under a loading file's name stays refused.
+
+This needs vitest's `forks` pool, which is vitest's default. Under the `threads` pool the setup records nothing, so a module file loading with the permission system on (an eager instance, or a lazy node's first access) is refused with `CAPABILITY_REFUSED`. The setup reads vitest's internal message and wrapper shapes; a vitest release that changes them makes the compile refused rather than allowed, and slothlet's own suite has a test that fails when that happens.
+
 ## Fake timers and the instance's clock
 
 slothlet reads `Date.now` and the timers from the copies it took when it loaded, so `vi.useFakeTimers()` after an instance exists does not move it: a principal's `maxAge` still runs on real time, and the timestamps it records are real. To drive an instance's time from a test, give it the `clock` option ([CONFIGURATION.md](CONFIGURATION.md#clock)): `clock: { now: () => time }` for a time you set yourself, or, with fake timers installed before the instance is created, `clock: { now: Date.now, setTimeout, clearTimeout }`.

@@ -56,6 +56,7 @@ import {
 	RegExpMethods,
 	StringMethods,
 	Symbol,
+	Symbols,
 	URL,
 	URLMethods
 } from "#helpers/intrinsics";
@@ -77,15 +78,18 @@ const CHECKS = new Map();
  * @param {string} name - The capability.
  * @param {string} route - What the code used.
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
+ * @param {*} [filename=null] - The file name the code is compiled under, when one is given.
+ * @param {boolean} [runnerCompile=false] - Whether the compile is vitest's own compile of the code its server sent
+ *   for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}).
  * @returns {void}
  * @throws {SlothletError} `CAPABILITY_REFUSED`.
  * @internal
  * @example
  * checkCapability("code", "setTimeout");
  */
-export function checkCapability(name, route, importer = null, filename = null) {
+export function checkCapability(name, route, importer = null, filename = null, runnerCompile = false) {
 	if (MapMethods.size(CHECKS) === 0) return;
-	for (const check of mapValues(CHECKS)) check(name, route, importer, filename);
+	for (const check of mapValues(CHECKS)) check(name, route, importer, filename, runnerCompile);
 }
 
 /**
@@ -191,6 +195,59 @@ function runtime_builtin(id) {
 	} catch {
 		/* v8 ignore next -- a platform that refuses the lookup has no such builtin to patch. */
 		return null;
+	}
+}
+
+/**
+ * The verifier the vitest worker setup published (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}): its
+ * `verify(filename, code)`, bound, or null. The slot is fixed in place when the setup publishes it; when no setup ran
+ * before slothlet loaded, slothlet fixes it in place as null, so no code running later can publish one.
+ * @type {function(*, *): boolean|null}
+ * @private
+ */
+const RUNNER_VERIFY = (() => {
+	const slot = Symbols.for("@cldmv/slothlet.vitestFetched");
+	let held;
+	try {
+		held = Reflect.getOwnPropertyDescriptor(globalThis, slot);
+		if (held === undefined) {
+			Reflect.defineProperty(globalThis, slot, { __proto__: null, value: null, writable: false, configurable: false, enumerable: false });
+			return null;
+		}
+	} catch {
+		/* v8 ignore next -- a global object that refuses the read or the definition gets no verifier. */
+		return null;
+	}
+	if (!("value" in held) || held.writable !== false || held.configurable !== false) return null;
+	const verifier = held.value;
+	if (verifier === null || typeof verifier !== "object" || !Objects.isFrozen(verifier)) return null;
+	const verify = Reflect.getOwnPropertyDescriptor(verifier, "verify")?.value;
+	return typeof verify === "function" ? FunctionMethods.bind(verify, verifier) : null;
+})();
+
+/**
+ * The `vm` functions vitest's module evaluator compiles a module with, and where each takes the code.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const RUNNER_COMPILES = ["runInThisContext", "runInContext", "Script", "createScript"];
+
+/**
+ * Whether a `vm` call is vitest's compile of exactly the code its server last sent for the file it names (one use per
+ * reply, see {@link RUNNER_VERIFY}).
+ * @param {string} key - The `vm` function.
+ * @param {Array<*>} args - Its arguments.
+ * @param {*} filename - The name it compiles under.
+ * @returns {boolean} True for that compile.
+ * @private
+ */
+function runtime_runnerCompile(key, args, filename) {
+	if (RUNNER_VERIFY === null || typeof filename !== "string" || !ArrayMethods.includes(RUNNER_COMPILES, key)) return false;
+	try {
+		return RUNNER_VERIFY(filename, args[0]) === true;
+	} catch {
+		/* v8 ignore next -- the setup's verifier does not throw; one that did verifies nothing. */
+		return false;
 	}
 }
 
@@ -362,7 +419,10 @@ function runtime_enable() {
 			ofIndex++
 		) {
 			const key = ofList[ofIndex];
-			runtime_install(VM, key, (args) => checkCapability("code", `vm.${key}`, null, runtime_compiledName(key, args) ?? null));
+			runtime_install(VM, key, (args) => {
+				const filename = runtime_compiledName(key, args) ?? null;
+				checkCapability("code", `vm.${key}`, null, filename, runtime_runnerCompile(key, args, filename));
+			});
 		}
 	}
 	// `Module#_compile` is how Node's own loader runs every CommonJS file: only a call from anything else is checked.

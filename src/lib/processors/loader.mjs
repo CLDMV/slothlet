@@ -554,6 +554,21 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
+	 * Every load of a file this loader is running now, by the file's comparable path (see {@link Loader#loadingFile}),
+	 * however many there are.
+	 * @param {string} path - The file, in comparable form.
+	 * @returns {Array<{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}>} The loads.
+	 * @public
+	 * @example
+	 * loader.loadsOfFile("/app/api/ext/render.mjs"); // [{ path, moduleID: "ext", paths: ["ext.render"] }]
+	 */
+	loadsOfFile(path) {
+		const found = [];
+		for (const entry of setValues(this.#loadingFiles)) if (entry.path === path) listPush(found, entry);
+		return found;
+	}
+
+	/**
 	 * Load a single module, inside its load context (see {@link Loader#loadModule}).
 	 * @param {string} filePath - Path to module file.
 	 * @param {string} [instanceID] - Slothlet instance ID.

@@ -145,7 +145,9 @@ export const TEST_DIRS = {
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
 	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
 	// #653 — writes through a lazy node that has not loaded yet.
-	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`)
+	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`),
+	// A module file compiling code under its own name as vitest's module runner compiles it.
+	API_TEST_VITEST_RUNNER_COMPILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_vitest_runner_compile`)
 };
 
 /**

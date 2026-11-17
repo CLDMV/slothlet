@@ -80,6 +80,7 @@ import {
 	JSON,
 	listPush,
 	listSplice,
+	listUnshift,
 	Map,
 	mapEntries,
 	mapKeys,
@@ -4123,6 +4124,24 @@ export function slothletInstanceImports() {
 	return {
 		name: "slothlet-instance-imports",
 		enforce: "pre",
+		/**
+		 * Put slothlet's worker setup first in the project's `setupFiles` (see
+		 * {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}): it runs in each worker before any other setup file
+		 * and any test file, and records the code vitest's server sends, so vitest's own compile of a module file is told
+		 * from module code's.
+		 * @param {{project: {config: {setupFiles: string[]}}}} context - vitest's plugin context.
+		 * @returns {void}
+		 */
+		configureVitest({ project }) {
+			if (NODE === null) return;
+			const setup = NODE.url.fileURLToPath(new URL("./vitest-worker-setup.mjs", import.meta.url));
+			const list = project?.config?.setupFiles;
+			if (!Arrays.isArray(list)) return;
+			const at = ArrayMethods.indexOf(list, setup);
+			if (at === 0) return;
+			if (at > 0) listSplice(list, at, 1);
+			listUnshift(list, setup);
+		},
 		/**
 		 * Resolve a relative/`file:` import of a slothlet leaf with the leaf's instance query, and record the files no
 		 * instance tags that a module imports by such a specifier or through a file a module loaded (#714).
