@@ -392,7 +392,7 @@ try {
 - **[Configuration Reference](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)** — every option with defaults, validation rules, and the `api.slothlet.diag.*` namespace
 - **[Generated API Reference](https://github.com/CLDMV/slothlet/blob/master/docs/generated/API.md)** — auto-generated from JSDoc; the complete public surface
 - **[Changelog](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/)** — all release notes (v2 + v3)
-- **[Migration Guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md)** — upgrading from v2.x
+- **[Migration Guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md)** — upgrading from v3.x (v2.x: [v2 → v3](https://github.com/CLDMV/slothlet/blob/master/docs/migration/v2-to-v3.md))
 
 ### Technical Guides
 

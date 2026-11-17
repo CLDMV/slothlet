@@ -515,4 +515,4 @@ function sanitize(
 - [API-FLATTENING.md](./API-RULES/API-FLATTENING.md) - How sanitization integrates with API generation
 - [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md) - Module loading and naming conventions
 - [API-RULES.md](./API-RULES.md) - Complete API generation rule system
-- [MIGRATION.md](./MIGRATION.md#6-sanitize-helper-export-renamed) - V2 → V3 migration and behavior changes
+- [migration/v2-to-v3.md](./migration/v2-to-v3.md#6-sanitize-helper-export-renamed) - V2 → V3 migration and behavior changes

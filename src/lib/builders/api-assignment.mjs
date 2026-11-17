@@ -667,7 +667,7 @@ export class ApiAssignment extends ComponentBase {
 						valueWrapper.___adoptImplChildren();
 					}
 
-					// Documented collision table (MIGRATION.md): under merge the FIRST loaded wins conflicts
+					// Documented collision table (docs/migration/v2-to-v3.md): under merge the FIRST loaded wins conflicts
 					// and non-conflicting contributions from BOTH sources are added — and callability is the
 					// second source's non-conflicting contribution when the first has none. A file+directory
 					// collision lands here with the file (first) holding the slot as a namespace and the
