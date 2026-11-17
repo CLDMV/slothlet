@@ -770,6 +770,10 @@ class Slothlet {
 			// never rejects; emit() isolates its own handler errors), so it never makes this handler async
 			// and never defers the registration into a later microtask (which raced settle/leaves()).
 			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
+				// Read at dispatch, not at subscription: the ownership handler can be gone by the time a leaf is built (an
+				// instance whose ownership tracking was taken away), and then there is nothing to register with.
+				const ownership = this.handlers.ownership;
+				if (!ownership) return;
 				// Get collision mode from config or use default
 				// config.api.collision.mode.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -788,7 +792,7 @@ class Slothlet {
 				// and without the real mode it was recorded as a merge loser wherever another module's
 				// function already sat — including a lazy leaf materializing after the add returned (#524).
 				const collisionMode =
-					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. On a LAZY construction event `wrapper.____impl` is still null (the leaf
 				// hasn't materialized), so fall back to the real wrapper (`____wrapperRef`) exactly as the
@@ -806,7 +810,7 @@ class Slothlet {
 				if (typeof implValue === "function" && implValue.____slothletRoutineStack === true) {
 					return;
 				}
-				this.handlers.ownership.register({
+				ownership.register({
 					moduleID: data.moduleID,
 					apiPath: data.apiPath,
 					value: recordedValue(data, implValue),
@@ -822,7 +826,7 @@ class Slothlet {
 				// A merge-loser or a skipped/"warn" registration never becomes the current owner, so it
 				// never fires publicly (fixing "impl:created announces a leaf that merge then discards").
 				// The public payload carries the wrapped callable + metadata, never the raw impl.
-				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+				if (ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
 					// its own handler errors and never rejects, so no unhandled rejection can escape.
 					void this.handlers.lifecycle.emit(
@@ -851,6 +855,9 @@ class Slothlet {
 			// Also subscribe (INTERNAL) to impl:changed for replacements (when wrapper already exists but
 			// impl changes) — handles a module replacing another module's impl on reload/reassignment.
 			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
+				// Read at dispatch, as the impl:created subscriber above does.
+				const ownership = this.handlers.ownership;
+				if (!ownership) return;
 				// Get collision mode from config or use default
 				// config.api.collision.mode.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -858,7 +865,7 @@ class Slothlet {
 				// Same placement lookup and clamp as the impl:created subscriber above, and for the same
 				// reasons — see its comments.
 				const collisionMode =
-					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. data.wrapper.____impl is normally set for impl:changed events; the
 				// `?? data.____wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
@@ -872,9 +879,9 @@ class Slothlet {
 
 				// Only register if this moduleID doesn't already own this path
 				// This prevents duplicate registrations from multiple impl:changed events
-				const currentOwner = this.handlers.ownership.getCurrentOwner(data.apiPath);
+				const currentOwner = ownership.getCurrentOwner(data.apiPath);
 				if (currentOwner?.moduleID !== data.moduleID) {
-					this.handlers.ownership.register({
+					ownership.register({
 						moduleID: data.moduleID,
 						apiPath: data.apiPath,
 						value: recordedValue(data, implValue),
@@ -887,7 +894,7 @@ class Slothlet {
 				} else {
 					// Same owner, new impl (a lazy leaf materializing, a hot reload): the entry stays put, but
 					// its module origin follows the impl that actually arrived (#484).
-					this.handlers.ownership.refreshOrigin(data.moduleID, data.apiPath, {
+					ownership.refreshOrigin(data.moduleID, data.apiPath, {
 						filePath: data.filePath,
 						exportPath: data.exportPath ?? null,
 						memberExportPaths: data.memberExportPaths ?? null
@@ -896,7 +903,7 @@ class Slothlet {
 				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
 				// the placed owner of the path (a change to a shadowed/merge-lost contribution is not a
 				// public change). Wrapped callable + metadata, never the raw impl.
-				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+				if (ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget — see the impl:created subscriber's note.
 					void this.handlers.lifecycle.emit(
 						"impl:changed",
