@@ -394,7 +394,8 @@ export class Lifecycle extends ComponentBase {
 				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
 				// event only: the instance's token is the framework's own.
 				const apiManager = this.slothlet.handlers?.apiManager;
-				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
+				// Only a public subscriber has a reader, and the public payload names the module `module`.
+				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.module)) continue;
 				// What the subscriber returns is settled inside its own call, as an event listener's is: the promise made
 				// there is slothlet's, and settles to `undefined` whatever the subscriber's result resolves to.
 				const settle = (...args) => runAndSettle(handler, args);

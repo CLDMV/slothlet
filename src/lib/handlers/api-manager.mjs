@@ -1203,7 +1203,7 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * apiManager.isOwnRetired(reader, data.moduleID);
+	 * apiManager.isOwnRetired(reader, data.module);
 	 */
 	isOwnRetired(callerWrapper, moduleID) {
 		const internal = callerWrapper?.____slothletInternal;
